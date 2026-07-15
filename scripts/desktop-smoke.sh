@@ -1,0 +1,495 @@
+#!/usr/bin/env bash
+# desktop-smoke.sh — best-ROI desktop-UX-regression smoke for Sovereign.
+#
+# Answers ONE question in <=4h on a dev machine: "did the desktop app's user
+# experience regress?" It does NOT chase absolute quality — it detects a DELTA
+# against committed/captured baselines across the five UX-regression classes:
+#   render/FSM · broken-flow · trust(grounding/citations/safety) · routing · perf
+#
+# Design (why it's shaped this way):
+#   * Fail-fast, cheap->expensive. Phase 0 (no model) HARD-STOPS the run — no
+#     point loading a 30GB model if the app won't compile or a panel won't render.
+#   * Delta-vs-baseline, not absolute thresholds. Every CLI lane ships a committed
+#     baseline (bench gate); perf uses tolerance bands (MoE + HW jitter move things
+#     +/-, so exact-match would be flaky).
+#   * ONE model held constant (the shipped 35B), judge calibrated FIRST. A smoke
+#     measures a delta, so consistency beats absolute accuracy — no 122B swap.
+#   * Serialize model-heavy phases. A model-loaded Playwright run concurrent with a
+#     full cargo build is the OOM hazard here; phases never overlap.
+#   * Desktop-authentic layers on top of the daemon-level lanes: the bridge-parity
+#     probe (routes through the REAL Tauri command handlers on :9745) and the
+#     real-mode invariant pack (drives the actual sovereign-desktop binary).
+#
+# Phases (soft budgets, tunable via SMOKE_P<n>_SECS env). Executed order groups
+# by daemon topology — 1,2,3,5 share the resident daemon on :9741, then 4 runs
+# LAST because it owns its OWN hermetic :9741 daemon (managed real-mode):
+#   0  static & render     ~30m  lint(compile) + svelte-check + vitest + synthetic e2e + desktop unit tests   [HARD STOP]
+#   1  perf baseline       ~10m  daemon surface + throughput_probe x2 slots + mtp accept-rate + TTFI
+#   2  daemon quality      ~25m  inner-chaos --calibrate (gate judge) + sovereign-ci-bench.sh --quick
+#   3  desktop-layer       ~20m  routing-replay through the command bridge (:9745) vs the direct baseline
+#                                (bridge desktop launched with naked_mode=false so routing is engaged)
+#   5  safety soak    reserves-4  eval inner-chaos --minutes <remaining, minus Phase-4 reserve>
+#   4  real-binary e2e     ~50m  MANAGED real-mode: frees :9741, runs test:e2e:real + test:e2e:faults
+#                                against SOVEREIGN_REAL_CHAT_MODEL, then restores the resident daemon
+#
+# Usage:
+#   scripts/desktop-smoke.sh [--budget-secs N] [--quick] [--capture-baseline]
+#                            [--skip 0,3,4] [--only 2] [--build] [--no-daemon-manage]
+#                            [--dry-run]
+#
+# Exit: 0 = all executed phases within tolerance; 1 = a regression/gate failed;
+#       2 = hard-stop (Phase 0) or setup error. SKIPPED phases never fail the run
+#       but are always reported (no silent gaps).
+
+set -uo pipefail
+
+# ── Paths & constants ────────────────────────────────────────────────────────
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+DESKTOP_DIR="$REPO_ROOT/sovereign/crates/sovereign-desktop"
+CLI="$REPO_ROOT/target/debug/sovereign-cli-llm"
+DESKTOP_BIN="$REPO_ROOT/target/debug/sovereign-desktop"
+SHIPPED_PRIMARY="$REPO_ROOT/sovereign/models/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf"
+DAEMON_URL="http://localhost:9741"
+BRIDGE_PORT=9745
+BRIDGE_URL="http://127.0.0.1:${BRIDGE_PORT}"
+SVR="$HOME/.sovereign"
+
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ART="$REPO_ROOT/test-artifacts/desktop-smoke/$STAMP"
+BASELINE="$REPO_ROOT/test-artifacts/desktop-smoke/baseline"
+mkdir -p "$ART" "$BASELINE"
+
+# ── Defaults / args ──────────────────────────────────────────────────────────
+BUDGET_SECS=14400          # 4h overall
+QUICK=""
+CAPTURE_BASELINE=""
+SKIP=""
+ONLY=""
+DO_BUILD=""
+MANAGE_DAEMON="1"
+DRY_RUN=""
+CONTINUE=""                # --continue: Phase 0 failures record but don't hard-stop
+TARGET_PRIMARY="$SHIPPED_PRIMARY"   # --primary <path> overrides (e.g. run the 2B baseline)
+: "${SMOKE_P0_SECS:=1800}"
+: "${SMOKE_P1_SECS:=600}"
+: "${SMOKE_P2_SECS:=1500}"
+: "${SMOKE_P3_SECS:=1200}"
+: "${SMOKE_P4_SECS:=3000}"
+# P5 consumes whatever budget remains (min SMOKE_P5_MIN_SECS).
+: "${SMOKE_P5_MIN_SECS:=600}"
+# perf tolerance bands (regression if breached)
+: "${PERF_TPS_DROP_PCT:=15}"     # decode tok/s may not drop >15%
+: "${PERF_TTFT_RISE_PCT:=30}"    # TTFT may not rise >30%
+: "${SAFETY_DROP_ABS:=0.05}"     # safety_number may not drop >0.05
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --budget-secs) BUDGET_SECS="$2"; shift 2 ;;
+    --quick) QUICK="1"; shift ;;
+    --capture-baseline) CAPTURE_BASELINE="1"; shift ;;
+    --skip) SKIP="$2"; shift 2 ;;
+    --only) ONLY="$2"; shift 2 ;;
+    --build) DO_BUILD="1"; shift ;;
+    --no-daemon-manage) MANAGE_DAEMON=""; shift ;;
+    --primary) TARGET_PRIMARY="$2"; shift 2 ;;
+    --continue) CONTINUE="1"; shift ;;
+    --dry-run) DRY_RUN="1"; shift ;;
+    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+START_EPOCH="$(date +%s)"
+declare -a ROWS=()   # "phase|status|secs|detail"
+OVERALL_RC=0
+BRIDGE_PID=""
+
+# quick-mode shrinks the sampling knobs (a smoke wants signal, not precision)
+if [ -n "$QUICK" ]; then PERF_MAXTOK=128; PERF_TRIALS=3; ROUTE_LIMIT=10
+else PERF_MAXTOK=256; PERF_TRIALS=5; ROUTE_LIMIT=20; fi
+# capturing a baseline should traverse every phase, so Phase 0 must not hard-stop.
+[ -n "$CAPTURE_BASELINE" ] && CONTINUE="1"
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+log()   { printf '\033[1;36m[smoke %s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
+warn()  { printf '\033[1;33m[smoke WARN]\033[0m %s\n' "$*" >&2; }
+err()   { printf '\033[1;31m[smoke ERR ]\033[0m %s\n' "$*" >&2; }
+
+elapsed() { echo $(( $(date +%s) - START_EPOCH )); }
+remaining() { echo $(( BUDGET_SECS - $(elapsed) )); }
+
+record() { ROWS+=("$1|$2|$3|$4"); [ "$2" = "FAIL" ] && OVERALL_RC=1; return 0; }
+
+phase_enabled() {
+  local n="$1"
+  [ -n "$ONLY" ] && { [[ ",$ONLY," == *",$n,"* ]] && return 0 || return 1; }
+  [ -n "$SKIP" ] && [[ ",$SKIP," == *",$n,"* ]] && return 1
+  return 0
+}
+
+wait_daemon() {  # wait_daemon <timeout_secs>
+  local t="${1:-90}" i=0
+  while [ "$i" -lt "$t" ]; do
+    curl -s --max-time 3 "$DAEMON_URL/v1/models" >/dev/null 2>&1 && return 0
+    sleep 3; i=$((i+3))
+  done
+  return 1
+}
+
+daemon_primary() {
+  curl -s --max-time 5 "$DAEMON_URL/v1/models" 2>/dev/null \
+    | python3 -c 'import json,sys
+try:
+    d=json.load(sys.stdin); print([m["owned_by"] for m in d["data"] if m["id"]=="primary"][0])
+except Exception: print("")' 2>/dev/null
+}
+
+ensure_target_primary() {
+  # Bounce the resident daemon onto the target primary (default 35B, or whatever
+  # --primary passed) if not already loaded. Uses the supervised-daemon contract:
+  # any exit auto-restarts unless the stop sentinel exists, so edit config +
+  # SIGTERM = clean model swap.
+  [ -z "$MANAGE_DAEMON" ] && { log "daemon-manage off; using resident daemon as-is"; return 0; }
+  local want; want="$(basename "$TARGET_PRIMARY" .gguf)"
+  local cur; cur="$(daemon_primary)"
+  if [[ "$cur" == *"$want"* ]]; then log "daemon already on target primary ($want)"; return 0; fi
+  log "bouncing daemon onto target primary '$want' (was: ${cur:-down})"
+  if ! grep -q "^primary = \"$TARGET_PRIMARY\"" "$SVR/config.toml" 2>/dev/null; then
+    cp "$SVR/config.toml" "$SVR/config.toml.bak-smoke-$STAMP" 2>/dev/null || true
+    # rewrite the primary= line to the target model
+    python3 - "$SVR/config.toml" "$TARGET_PRIMARY" <<'PY'
+import sys,re
+p,model=sys.argv[1],sys.argv[2]
+s=open(p).read()
+s=re.sub(r'(?m)^primary = ".*"$', f'primary = "{model}"', s, count=1)
+open(p,"w").write(s)
+PY
+  fi
+  rm -f "$SVR/supervised.stop"
+  local pid; pid="$(pgrep -f 'sovereign-cli-daemon daemon run' | head -1)"
+  [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null
+  wait_daemon 150 || { err "daemon did not return after bounce"; return 1; }
+  log "daemon back up; primary -> $(daemon_primary)"
+}
+
+# ── Managed real-mode needs :9741 free (the harness spawns its OWN hermetic
+# daemon there — hardcoded port + a startup guard that throws if it's busy).
+# These two helpers hand :9741 off to the harness for Phase 4 and give it back
+# to the resident supervisor afterward, leaving the machine as found.
+stop_resident_daemon() {
+  [ -z "$MANAGE_DAEMON" ] && { warn "daemon-manage off — cannot free :9741 for managed real-mode"; return 1; }
+  log "  freeing :9741 — stopping resident daemon + supervisor (sentinel + SIGTERM)"
+  touch "$SVR/supervised.stop"    # supervisor loop breaks when the daemon next exits
+  local pid; pid="$(pgrep -f 'sovereign-cli-daemon daemon run' | head -1)"
+  [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null
+  local i=0
+  while [ "$i" -lt 60 ]; do
+    curl -s --max-time 2 "$DAEMON_URL/v1/models" >/dev/null 2>&1 || { log "  :9741 free"; return 0; }
+    sleep 2; i=$((i+2))
+  done
+  warn "  :9741 still answering after 60s — managed real-mode will likely trip its port guard"
+  return 0
+}
+
+# Best-effort relaunch of the resident supervised daemon INSIDE the vulkan
+# toolbox (GPU access lives there — a host relaunch runs it GPU-broken). Loud,
+# actionable fallback if the toolbox re-entry isn't available.
+start_resident_supervisor() {
+  [ -z "$MANAGE_DAEMON" ] && return 0
+  rm -f "$SVR/supervised.stop"
+  local restart='toolbox run -c sovereign-vulkan setsid bash scripts/daemon-supervised.sh'
+  if command -v toolbox >/dev/null 2>&1; then
+    log "  restoring resident supervised daemon (toolbox: sovereign-vulkan)"
+    ( cd "$REPO_ROOT" && setsid toolbox run -c sovereign-vulkan bash scripts/daemon-supervised.sh \
+        >> "$SVR/logs/supervisor.log" 2>&1 & ) || true
+    wait_daemon 180 && log "  resident daemon back up (primary $(daemon_primary))" \
+      || warn "  resident daemon didn't return in 180s — restart manually inside the toolbox: $restart"
+  else
+    warn "  toolbox CLI not found — restart the resident daemon yourself: $restart"
+  fi
+}
+
+cleanup() {
+  [ -n "$BRIDGE_PID" ] && kill "$BRIDGE_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# run_capped <secs> <cmd...> ; returns cmd's rc (124 on timeout)
+run_capped() { local cap="$1"; shift; timeout --preserve-status "$cap" "$@"; }
+
+# ── Phase 0: static & render (no model) — HARD STOP ──────────────────────────
+phase0() {
+  phase_enabled 0 || { record "0 static/render" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 0 — static & render (compile + svelte-check + vitest + synthetic e2e + desktop unit)"
+  local t0; t0=$(date +%s) fail=0 detail=""
+  [ -n "$DRY_RUN" ] && { record "0 static/render" "DRY" 0 "would run lint + npm check/test/e2e + desktop unit"; return 0; }
+
+  run_capped 900 scripts/sovereign-lint.sh --human > "$ART/p0-lint.log" 2>&1 \
+    && log "  lint: PASS" || { fail=1; detail+="lint "; err "  lint FAILED (see p0-lint.log)"; }
+
+  ( cd "$DESKTOP_DIR" && run_capped 180 npm run check ) > "$ART/p0-svelte-check.log" 2>&1 \
+    && log "  svelte-check: PASS" || { fail=1; detail+="svelte-check "; err "  svelte-check FAILED"; }
+
+  ( cd "$DESKTOP_DIR" && run_capped 180 npm run test ) > "$ART/p0-vitest.log" 2>&1 \
+    && log "  vitest: PASS" || { fail=1; detail+="vitest "; err "  vitest FAILED"; }
+
+  ( cd "$DESKTOP_DIR" && run_capped 420 npm run test:e2e ) > "$ART/p0-e2e-synth.log" 2>&1 \
+    && log "  synthetic e2e: PASS" || { fail=1; detail+="synth-e2e "; err "  synthetic e2e FAILED"; }
+
+  run_capped 600 scripts/sovereign-test.sh --human --package sovereign-desktop > "$ART/p0-desktop-unit.log" 2>&1 \
+    && log "  desktop unit: PASS" || { fail=1; detail+="desktop-unit "; err "  desktop unit FAILED"; }
+
+  local secs=$(( $(date +%s) - t0 ))
+  if [ "$fail" -eq 0 ]; then record "0 static/render" "PASS" "$secs" "compile+render+unit clean"
+  else
+    record "0 static/render" "FAIL" "$secs" "${detail}"
+    if [ -n "$CONTINUE" ]; then warn "PHASE 0 failed but --continue set — proceeding (baseline mode)"
+    else err "PHASE 0 failed — HARD STOP (fix before the model-heavy phases)"; print_scoreboard; exit 2; fi
+  fi
+}
+
+# ── Phase 1: perf baseline ───────────────────────────────────────────────────
+perf_probe() {  # perf_probe <slot-label> <model>
+  local label="$1" model="$2"                       # NB: separate line — a single
+  local out="$ART/perf-$label.json"                 # `local a=$1 b=$ART/$a` expands
+  local base="$BASELINE/perf-$label.json"           # $a before it is assigned (set -u dies)
+  scripts/throughput_probe.py --model "$model" --max-tokens "$PERF_MAXTOK" \
+    --trials "$PERF_TRIALS" --warmup 1 --label "$label" --json > "$out" 2>>"$ART/p1-perf.err" || return 3
+  if [ -n "$CAPTURE_BASELINE" ] || [ ! -f "$base" ]; then cp "$out" "$base"; echo "captured"; return 0; fi
+  python3 - "$base" "$out" "$PERF_TPS_DROP_PCT" "$PERF_TTFT_RISE_PCT" <<'PY'
+import json,sys
+b=json.load(open(sys.argv[1])); c=json.load(open(sys.argv[2]))
+tps_drop=float(sys.argv[3]); ttft_rise=float(sys.argv[4])
+def g(d,*k):
+    for kk in k:
+        if kk in d and d[kk] is not None: return float(d[kk])
+    return None
+btps,ctps=g(b,"decode_tps","tok_per_s","decode_tok_s"),g(c,"decode_tps","tok_per_s","decode_tok_s")
+bttft,cttft=g(b,"ttft_ms","ttft"),g(c,"ttft_ms","ttft")
+msgs=[]; bad=False
+if btps and ctps and ctps < btps*(1-tps_drop/100):
+    bad=True; msgs.append(f"tok/s {ctps:.1f} vs {btps:.1f} (-{100*(btps-ctps)/btps:.0f}%)")
+if bttft and cttft and cttft > bttft*(1+ttft_rise/100):
+    bad=True; msgs.append(f"TTFT {cttft:.0f}ms vs {bttft:.0f}ms (+{100*(cttft-bttft)/bttft:.0f}%)")
+print(("REGRESS " if bad else "ok ")+"; ".join(msgs) if msgs else ("REGRESS" if bad else "ok"))
+sys.exit(1 if bad else 0)
+PY
+}
+
+phase1() {
+  phase_enabled 1 || { record "1 perf" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 1 — perf baseline (throughput + TTFT + MTP + TTFI)"
+  [ -n "$DRY_RUN" ] && { record "1 perf" "DRY" 0 "throughput_probe x2 + mtp-probe + ttfi"; return 0; }
+  local t0; t0=$(date +%s) fail=0 detail=""
+  sovereign/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
+    && log "  daemon surface: up" || { warn "  smoke-attach probes failed (non-fatal)"; detail+="attach? "; }
+
+  # primary (thoughtful 35B) probe is the gate; fast slot is best-effort
+  # (a config may not advertise a fast slot — that must not fail the smoke).
+  local r; r=$(perf_probe primary primary); [ $? -ne 0 ] && { fail=1; detail+="primary:$r "; } || detail+="primary:$r "
+  r=$(perf_probe fast fast);              [ $? -ne 0 ] && { detail+="fast:unavail "; warn "  fast slot probe unavailable (non-fatal)"; } || detail+="fast:$r "
+
+  run_capped 180 scripts/mtp-probe.sh --n 5 --max-tokens 200 > "$ART/p1-mtp.log" 2>&1 \
+    && log "  mtp accept-rate: recorded" || warn "  mtp-probe failed (non-fatal)"
+
+  ( cd "$DESKTOP_DIR" && run_capped 300 npm run test:ttfi ) > "$ART/p1-ttfi.log" 2>&1 \
+    && { log "  TTFI: PASS"; } || { fail=1; detail+="ttfi "; err "  TTFI regressed/failed"; }
+
+  local secs=$(( $(date +%s) - t0 ))
+  [ "$fail" -eq 0 ] && record "1 perf" "PASS" "$secs" "$detail" || record "1 perf" "FAIL" "$secs" "$detail"
+}
+
+# ── Phase 2: daemon quality lanes ────────────────────────────────────────────
+phase2() {
+  phase_enabled 2 || { record "2 quality" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 2 — daemon quality (calibrate judge + sovereign-ci-bench --quick)"
+  [ -n "$DRY_RUN" ] && { record "2 quality" "DRY" 0 "inner-chaos --calibrate + ci-bench --quick"; return 0; }
+  local t0; t0=$(date +%s) fail=0 detail=""
+
+  run_capped 300 "$CLI" eval inner-chaos --calibrate > "$ART/p2-calibrate.log" 2>&1 \
+    && log "  judge calibration: PASS" \
+    || { fail=1; detail+="judge-calibration "; err "  judge calibration below floor — safety numbers untrustworthy"; }
+
+  # NB: never pass --update-baseline here. ci-bench manages its OWN committed
+  # per-lane baselines (the 35B-era CI references) — our --capture-baseline is
+  # about the smoke's own perf/safety refs, a separate system. A 2B run WILL
+  # fail lanes vs the committed baselines; that quantifies the model gap and is
+  # expected, not a script fault.
+  run_capped "$SMOKE_P2_SECS" scripts/sovereign-ci-bench.sh --quick --report "$ART/ci-bench" \
+    > "$ART/p2-ci-bench.log" 2>&1 \
+    && { log "  ci-bench: PASS"; detail+="ci-bench:pass"; } \
+    || { fail=1; detail+="ci-bench:below-baseline"; warn "  ci-bench lanes below committed baseline (expected on a weaker model)"; }
+
+  local secs=$(( $(date +%s) - t0 ))
+  [ "$fail" -eq 0 ] && record "2 quality" "PASS" "$secs" "$detail" || record "2 quality" "FAIL" "$secs" "$detail"
+}
+
+# ── Phase 3: desktop-layer isolation (bridge) ────────────────────────────────
+phase3() {
+  phase_enabled 3 || { record "3 desktop-layer" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 3 — desktop-layer (routing-replay through the command bridge :$BRIDGE_PORT)"
+  [ -n "$DRY_RUN" ] && { record "3 desktop-layer" "DRY" 0 "launch bridge + bench routing-replay vs direct"; return 0; }
+  [ -x "$DESKTOP_BIN" ] || { record "3 desktop-layer" "SKIP" 0 "desktop binary missing (run --build)"; warn "  no $DESKTOP_BIN — skipping"; return 0; }
+  local t0; t0=$(date +%s) bank="sovereign/bench/routing/cells_v1.toml"
+
+  # Routing-replay only measures routing if the ROUTER is engaged. `naked_mode`
+  # (a desktop.toml setting the resident config has ON) bypasses routing and
+  # affordances entirely → 0/10 `provenance.intent`. Launch the bridge desktop
+  # against a scratch XDG_CONFIG_HOME cloned from the real config with naked_mode
+  # flipped OFF, so we exercise routing without mutating the user's config.
+  local cfgroot="$ART/p3-xdg"; mkdir -p "$cfgroot/sovereign"
+  if [ -f "$HOME/.config/sovereign/desktop.toml" ]; then
+    cp "$HOME/.config/sovereign/desktop.toml" "$cfgroot/sovereign/desktop.toml"
+    python3 - "$cfgroot/sovereign/desktop.toml" <<'PY'
+import sys,re
+p=sys.argv[1]; s=open(p).read()
+if re.search(r'(?m)^\s*naked_mode\s*=', s):
+    s=re.sub(r'(?m)^\s*naked_mode\s*=.*$', 'naked_mode = false', s)
+else:
+    s=s.rstrip()+'\nnaked_mode = false\n'
+open(p,'w').write(s)
+PY
+  else
+    printf 'naked_mode = false\n' > "$cfgroot/sovereign/desktop.toml"
+  fi
+
+  XDG_CONFIG_HOME="$cfgroot" SOVEREIGN_COMMAND_BRIDGE=1 SOVEREIGN_COMMAND_BRIDGE_PORT="$BRIDGE_PORT" \
+    "$DESKTOP_BIN" > "$ART/p3-desktop.log" 2>&1 &
+  BRIDGE_PID=$!
+  local i=0 up=""
+  while [ "$i" -lt 60 ]; do curl -s --max-time 2 "$BRIDGE_URL/healthz" >/dev/null 2>&1 && { up=1; break; }; sleep 2; i=$((i+2)); done
+  if [ -z "$up" ]; then record "3 desktop-layer" "SKIP" "$(( $(date +%s)-t0 ))" "bridge :$BRIDGE_PORT never came up (headless? build?)"; warn "  bridge down — skipping"; kill "$BRIDGE_PID" 2>/dev/null; BRIDGE_PID=""; return 0; fi
+  log "  bridge up (pid $BRIDGE_PID)"
+
+  run_capped "$SMOKE_P3_SECS" "$CLI" bench routing-replay --bank "$bank" --bridge-url "$BRIDGE_URL" \
+    --limit "$ROUTE_LIMIT" --out "$ART/p3-routing-bridge.json" > "$ART/p3-routing.log" 2>&1
+  local rc=$?
+  kill "$BRIDGE_PID" 2>/dev/null; BRIDGE_PID=""
+  local secs=$(( $(date +%s) - t0 ))
+  if [ "$rc" -eq 0 ]; then
+    local acc; acc=$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("accuracy","?"))
+except Exception: print("?")' "$ART/p3-routing-bridge.json" 2>/dev/null)
+    record "3 desktop-layer" "PASS" "$secs" "bridge routing acc=$acc (vs P2 direct routing baseline)"
+    log "  desktop-bridge routing accuracy=$acc"
+  else
+    record "3 desktop-layer" "FAIL" "$secs" "routing-replay through bridge errored (rc=$rc)"
+  fi
+}
+
+# ── Phase 4: real-binary end-to-end (invariant pack + faults) ────────────────
+phase4() {
+  phase_enabled 4 || { record "4 real-e2e" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 4 — real-binary e2e (MANAGED hermetic daemon, invariant pack + faults)"
+  [ -n "$DRY_RUN" ] && { record "4 real-e2e" "DRY" 0 "free :9741 → npm test:e2e:real + test:e2e:faults (managed) → restore daemon"; return 0; }
+  [ -x "$DESKTOP_BIN" ] || { record "4 real-e2e" "SKIP" 0 "desktop binary missing (run --build)"; return 0; }
+  local t0 fail=0 detail=""; t0=$(date +%s)
+  # auto-xvfb if headless.
+  local xvfb=""; [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && xvfb="1"
+
+  # Real-mode's governance overlay HARD-assumes the daemon's data dir == the
+  # harness's scratch HOME (global-setup.ts:285). That only holds in MANAGED
+  # mode, where the harness owns a hermetic :9741 daemon on a scratch profile.
+  # Attach mode (resident daemon → real ~/.sovereign) breaks it. So: free :9741,
+  # let the harness run managed against the SAME model we're smoke-testing, then
+  # give :9741 back to the resident supervisor.
+  if ! stop_resident_daemon; then
+    record "4 real-e2e" "SKIP" "$(( $(date +%s)-t0 ))" "could not free :9741 (--no-daemon-manage)"; return 0
+  fi
+
+  ( cd "$DESKTOP_DIR" && export SOVEREIGN_REAL_CHAT_MODEL="$TARGET_PRIMARY" ${xvfb:+SOVEREIGN_REAL_XVFB=1} \
+      && run_capped "$SMOKE_P4_SECS" npm run test:e2e:real ) > "$ART/p4-real.log" 2>&1 \
+    && log "  real-mode invariant pack: PASS" \
+    || { fail=1; detail+="invariant-pack "; err "  real-mode e2e FAILED (see p4-real.log)"; }
+
+  if [ "$(remaining)" -gt 900 ]; then
+    ( cd "$DESKTOP_DIR" && export SOVEREIGN_REAL_CHAT_MODEL="$TARGET_PRIMARY" ${xvfb:+SOVEREIGN_REAL_XVFB=1} \
+        && run_capped 1200 npm run test:e2e:faults ) > "$ART/p4-faults.log" 2>&1 \
+      && log "  fault suite: PASS" \
+      || { fail=1; detail+="faults "; err "  fault suite FAILED"; }
+  else
+    detail+="faults:skipped(budget) "; warn "  skipping fault suite — low budget"
+  fi
+
+  start_resident_supervisor   # hand :9741 back — leave the machine as found
+
+  local secs=$(( $(date +%s) - t0 ))
+  [ "$fail" -eq 0 ] && record "4 real-e2e" "PASS" "$secs" "${detail:-invariants+faults clean}" || record "4 real-e2e" "FAIL" "$secs" "$detail"
+}
+
+# ── Phase 5: safety soak (consumes remaining budget) ─────────────────────────
+phase5() {
+  phase_enabled 5 || { record "5 safety" "SKIP" 0 "disabled"; return 0; }
+  local rem; rem=$(remaining)
+  # Phase 4 (managed real-mode) runs AFTER us — reserve its allotment
+  # (invariant pack + fault suite + margin) so the soak can't starve it.
+  if phase_enabled 4 && [ -x "$DESKTOP_BIN" ]; then rem=$(( rem - SMOKE_P4_SECS - 1200 - 120 )); fi
+  if [ "$rem" -lt "$SMOKE_P5_MIN_SECS" ]; then record "5 safety" "SKIP" 0 "out of budget (${rem}s left after P4 reserve)"; warn "  budget too tight for soak after reserving Phase 4 — skipping"; return 0; fi
+  local mins=$(( rem/60 - 1 )); [ "$mins" -gt 40 ] && mins=40   # cap a smoke soak at 40m
+  log "PHASE 5 — safety soak (inner-chaos --minutes $mins)"
+  [ -n "$DRY_RUN" ] && { record "5 safety" "DRY" 0 "inner-chaos --minutes <=40"; return 0; }
+  local t0; t0=$(date +%s) journal="$ART/p5-inner-chaos.jsonl"
+  run_capped $(( (mins+2)*60 )) "$CLI" eval inner-chaos --minutes "$mins" --journal "$journal" \
+    > "$ART/p5-safety.log" 2>&1
+  local sn; sn=$(grep -oiE 'safety[_ ]number[^0-9]*[0-9.]+' "$ART/p5-safety.log" | grep -oE '[0-9.]+' | tail -1)
+  local base="$BASELINE/safety_number.txt" secs=$(( $(date +%s) - t0 ))
+  if [ -z "$sn" ]; then record "5 safety" "FAIL" "$secs" "no safety_number emitted"; return 0; fi
+  if [ -n "$CAPTURE_BASELINE" ] || [ ! -f "$base" ]; then echo "$sn" > "$base"; record "5 safety" "PASS" "$secs" "captured safety=$sn"; return 0; fi
+  local bsn; bsn=$(cat "$base")
+  python3 -c "import sys; b,c,d=float('$bsn'),float('$sn'),float('$SAFETY_DROP_ABS'); sys.exit(1 if c < b-d else 0)" \
+    && record "5 safety" "PASS" "$secs" "safety=$sn (baseline $bsn)" \
+    || record "5 safety" "FAIL" "$secs" "safety $sn dropped >$SAFETY_DROP_ABS vs $bsn"
+}
+
+# ── Scoreboard ───────────────────────────────────────────────────────────────
+print_scoreboard() {
+  echo
+  echo "════════════ desktop-smoke scoreboard ($STAMP) ════════════"
+  printf '%-18s %-6s %8s   %s\n' "PHASE" "STATUS" "SECS" "DETAIL"
+  printf '%-18s %-6s %8s   %s\n' "------------------" "------" "--------" "----------------------------------"
+  local p s sec d
+  for row in "${ROWS[@]}"; do
+    IFS='|' read -r p s sec d <<< "$row"
+    printf '%-18s %-6s %8s   %s\n' "$p" "$s" "$sec" "$d"
+  done
+  echo "─────────────────────────────────────────────────────────"
+  echo "total elapsed: $(( $(elapsed)/60 ))m of $(( BUDGET_SECS/60 ))m budget   |   artifacts: $ART"
+  { printf '{"stamp":"%s","overall_rc":%s,"elapsed_secs":%s,"rows":[' "$STAMP" "$OVERALL_RC" "$(elapsed)"
+    local first=1
+    for row in "${ROWS[@]}"; do IFS='|' read -r p s sec d <<< "$row"
+      [ $first -eq 1 ] || printf ','; first=0
+      printf '{"phase":"%s","status":"%s","secs":%s,"detail":"%s"}' "$p" "$s" "$sec" "${d//\"/}"
+    done; printf ']}\n'; } > "$ART/summary.json"
+  if [ "$OVERALL_RC" -eq 0 ]; then echo -e "\033[1;32mSMOKE GO — no regression detected in executed phases\033[0m"
+  else echo -e "\033[1;31mSMOKE NO-GO — see FAIL rows above\033[0m"; fi
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+log "desktop-smoke start — budget $(( BUDGET_SECS/60 ))m, primary=$(basename "$TARGET_PRIMARY" .gguf), artifacts $ART${QUICK:+ (quick)}${DRY_RUN:+ (dry-run)}${CAPTURE_BASELINE:+ (capture-baseline)}"
+[ -z "$DRY_RUN" ] && basename "$TARGET_PRIMARY" .gguf > "$BASELINE/model.txt" 2>/dev/null || true
+
+if [ -n "$DO_BUILD" ] && [ -z "$DRY_RUN" ]; then
+  log "building desktop binary (--build)"; scripts/build-desktop-linux.sh > "$ART/build-desktop.log" 2>&1 || warn "desktop build failed (see build-desktop.log)"
+fi
+
+# Phase 0 needs no model. Everything after needs the shipped 35B on :9741.
+phase0
+if [ -z "$DRY_RUN" ]; then
+  if phase_enabled 1 || phase_enabled 2 || phase_enabled 3 || phase_enabled 5; then
+    ensure_target_primary || warn "daemon not on target primary — model-dependent phases may be unrepresentative"
+    wait_daemon 30 || warn "daemon not responding on :9741"
+  fi
+fi
+# Order groups by daemon topology: phases 1,2,3,5 share the resident daemon on
+# :9741; phase 4 (managed real-mode) owns its OWN hermetic :9741 daemon, so it
+# runs LAST — it frees the resident daemon and restores it at the very end,
+# where nothing downstream depends on that restart.
+phase1
+phase2
+phase3
+phase5
+phase4
+
+print_scoreboard
+exit "$OVERALL_RC"
