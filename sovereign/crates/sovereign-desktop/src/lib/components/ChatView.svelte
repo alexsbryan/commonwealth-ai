@@ -350,6 +350,32 @@
   // to produce the unified `isLoading` derived below.
   let docOpInFlight = $state(false);
 
+  // Synchronous re-entry latch for handleSend. `isLoading` is a $derived
+  // off the machine snapshot, and Svelte flushes derives on a microtask —
+  // so two Send activations dispatched in the SAME synchronous task (a
+  // frustrated spam-click, a key-repeat on Enter) can both read
+  // `isLoading === false` and each fire `send_message_stream`. The second
+  // SEND_START is then dropped in the `streaming` substate, orphaning the
+  // first placeholder and wedging the turn (the completed message targets
+  // an id the FSM never installed). This plain boolean flips SYNCHRONOUSLY,
+  // before any await, closing that window regardless of reactivity timing.
+  // It is intentionally NOT $state — it gates control flow, not the UI —
+  // and is released by the effect below when the turn returns to idle.
+  let sendInFlight = false;
+
+  // Wall-clock of the current turn's start (rising edge of isLoading),
+  // used by handleStop's swap-race guard. SEND_INITIATED flips isLoading,
+  // which swaps the Send button for Stop at the SAME screen position; a
+  // fast double-click (or a click the browser dispatches mid-swap by
+  // coordinate) can land the second press on Stop and cancel the turn the
+  // user just started. handleStop treats a press that is still in `preparing`
+  // AND within STOP_ARM_MS of the turn start as that swap race and ignores it;
+  // a mid-stream or deliberate Stop is always honoured. Not $state — read only
+  // inside the (non-reactive) handler.
+  const STOP_ARM_MS = 350;
+  let turnStartedAt = 0;
+  let wasLoading = false;
+
   // Transient doc-progress / doc-op progress text. Not worth modelling
   // as state — it's label soup emitted by the tools layer.
   let docProgressText: string | null = $state(null);
@@ -411,6 +437,18 @@
       $snapshot.matches({ turn: "streaming" }) ||
       docOpInFlight,
   );
+
+  // Turn-lifecycle edge tracker. Rising edge (idle→loading) stamps
+  // `turnStartedAt` for handleStop's swap-race guard; falling edge
+  // (loading→idle) releases the synchronous send-latch. Both terminals
+  // — streaming complete, doc-op finally, SEND_FAILED, CANCELLED — funnel
+  // through isLoading, so this one effect governs both signals.
+  $effect(() => {
+    const loading = isLoading;
+    if (loading && !wasLoading) turnStartedAt = Date.now();
+    if (!loading) sendInFlight = false;
+    wasLoading = loading;
+  });
 
   // Time-to-First-Intelligence: surface the most recent narration in
   // the loading slot so the user sees a calm, specific signal of what
@@ -1157,7 +1195,12 @@
 
   async function handleSend() {
     let text = inputText.trim();
-    if (!text || isLoading) return;
+    // `isLoading` is the reactive guard; `sendInFlight` is the synchronous
+    // one that beats derive-flush timing under rapid re-entry (see the latch
+    // declaration above). The latch itself is armed at the streaming-path
+    // entry below — after the doc-asset branch — where a SEND_INITIATED →
+    // idle cycle is guaranteed to release it.
+    if (!text || isLoading || sendInFlight) return;
 
     // ── Document asset path (non-streaming) ─────────────────
     // When a DocumentAsset is attached, route through the
@@ -1232,6 +1275,16 @@
       content: text,
       created_at: Math.floor(Date.now() / 1000),
     };
+    // Arm the synchronous re-entry latch AND stamp the turn-start clock in
+    // lock-step with the state transition that raises `isLoading`:
+    // SEND_INITIATED enters `preparing` now, and every terminal
+    // (MESSAGE_COMPLETE/ERROR, SEND_FAILED, CANCELLED) funnels back to idle,
+    // where the effect above clears the latch. `turnStartedAt` is set here,
+    // synchronously, rather than relying on the rising-edge effect: the swap-
+    // race Stop click can fire in the same task as the swap, before the effect
+    // flushes, so handleStop must see a current timestamp, not a stale one.
+    sendInFlight = true;
+    turnStartedAt = Date.now();
     send({ type: "SEND_INITIATED", userMessage: userMsg });
     inputText = "";
     attachment = null;
@@ -1308,6 +1361,23 @@
    *  fired best-effort so the backend also stops as soon as it reaches a
    *  checkpoint, and its late terminal lands in `idle` (ignored). */
   async function handleStop() {
+    // Swap-race guard (see turnStartedAt). SEND_INITIATED flips isLoading and
+    // Svelte swaps the Send button for Stop at the same position; a buffered
+    // double-click or a mid-swap coordinate dispatch can land the second press
+    // on Stop and cancel the turn the user just started — orphaning the message
+    // (SEND_START then lands in idle and is dropped). That orphaning is unique
+    // to the `preparing` window (before the stream begins); once we're
+    // `streaming` a Stop cancels a real, existing placeholder and must always
+    // fire — that's a legitimate mid-stream cancel, however fast. So only a
+    // press that is BOTH still-in-preparing AND within STOP_ARM_MS of the turn
+    // starting is the mis-click; ignore just that. A deliberate Stop of a hung
+    // preparing (cold daemon) lands well past the arm window and is honoured.
+    if (
+      $snapshot.matches({ turn: "preparing" }) &&
+      Date.now() - turnStartedAt < STOP_ARM_MS
+    ) {
+      return;
+    }
     send({ type: "CANCELLED" });
     const convoId = activeConversationId;
     if (!convoId) return;

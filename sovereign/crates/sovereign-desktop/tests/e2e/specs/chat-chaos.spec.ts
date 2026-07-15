@@ -283,11 +283,16 @@ test.describe("chat chaos: user-input chaos", () => {
     await page.locator(".input-area textarea").fill("spam");
     const send = page.locator(".send-btn");
 
-    // Click as fast as Playwright can dispatch. After the first click,
-    // the button transitions to Stop — subsequent clicks miss the
-    // selector entirely (`send-btn` no longer in the DOM).
+    // Click as fast as Playwright can dispatch. After the first click that
+    // lands, the button transitions to Stop — subsequent clicks miss the
+    // selector entirely (`send-btn` no longer in the DOM). Every click is
+    // bounded + swallowed: Playwright's allSettled does not guarantee which
+    // click dispatches first, so an unbounded click that loses the race would
+    // block for the full test timeout waiting for `.send-btn` to reappear
+    // (it only does once the turn completes). At least one click always
+    // lands, which is all the "exactly one stream" invariant below needs.
     await Promise.allSettled([
-      send.click(),
+      send.click({ timeout: 4000 }).catch(() => {}),
       send.click({ timeout: 50 }).catch(() => {}),
       send.click({ timeout: 50 }).catch(() => {}),
       send.click({ timeout: 50 }).catch(() => {}),
@@ -367,18 +372,48 @@ test.describe("chat chaos: bridge failures", () => {
     await expect(page.locator(".typing-indicator")).toBeVisible();
     await expect(page.locator(".stop-btn")).toBeVisible();
 
-    // User clicks Stop to escape. cancel_stream resolves; the FSM
-    // doesn't transition on its own (no message-complete will ever
-    // arrive). Simulate the backend sending message-error after the
-    // cancel — the `preparing` state's MESSAGE_ERROR handler should
-    // bring us back to idle.
+    // User clicks Stop to escape. handleStop optimistically sends CANCELLED
+    // (snapping the machine straight to idle) and fires cancel_stream
+    // best-effort, since a conversation id bound before the stream hung.
+    // The wait clears the swap-race arm window so this deliberate Stop is
+    // honoured (a real user staring at a hung turn always is well past it).
+    await page.waitForTimeout(400);
     await page.locator(".stop-btn").click();
     await expect.poll(() => chat.api.lastCancel()).not.toBeNull();
-    await chat.api.errorMessage("cancelled");
 
+    // Optimistic-cancel contract: the surface is immediately usable again.
+    // No assistant bubble is injected — the user cancelled, nothing errored —
+    // and the user's message stays put. This is the better behaviour than the
+    // old "inject an Error: bubble" one: a deliberate Stop shouldn't read as a
+    // failure in the transcript.
     await expect(page.locator(".send-btn")).toBeVisible();
+    await expect(page.locator(".bubble.user .content")).toHaveText("hang");
+    await expect(page.locator(".sv-ai-msg")).toHaveCount(0);
+
+    // A LATE backend terminal for the abandoned turn lands in idle and is
+    // ignored — it must NOT materialise a phantom bubble a turn later.
+    await chat.api.errorMessage("cancelled");
+    await page.waitForTimeout(50);
+    await expect(page.locator(".sv-ai-msg")).toHaveCount(0);
+
+    // And a fresh turn still streams cleanly after the cancel.
+    await page.evaluate(() => {
+      window.__sovereign_test__.setHandler("send_message_stream", (args) => {
+        const messageId = "asst-after-cancel";
+        window.__sovereign_test__._lastStreamStart = {
+          conversationId: args.conversationId,
+          messageId,
+        };
+        return { message_id: messageId };
+      });
+    });
+    await page.locator(".input-area textarea").fill("again");
+    await page.locator(".send-btn").click();
+    await expect.poll(() => chat.api.lastStreamStart()).not.toBeNull();
+    const resumed = (await chat.api.lastStreamStart())!;
+    await chat.api.completeMessage(resumed.messageId, "recovered");
     await expect(page.locator(".sv-ai-msg .sv-prose")).toContainText(
-      "Error: cancelled",
+      "recovered",
     );
   });
 
@@ -449,24 +484,28 @@ test.describe("chat chaos: race conditions", () => {
     await expect(page.locator(".typing-indicator")).toBeVisible();
     await expect(page.locator(".stop-btn")).toBeVisible();
 
-    // Click Stop. It's a no-op when activeConversationId is null
-    // (the early return in handleStop). The FSM is still in
-    // `preparing`. Without a separate escape, the user is stuck.
-    await page.locator(".stop-btn").click();
-    await page.waitForTimeout(50);
-
-    // Belt-and-braces escape: the chat machine accepts MESSAGE_ERROR
-    // in `preparing` and bails to idle. The Stop click + missing
-    // conversation id means the backend escape doesn't fire, but
-    // simulating an error event MUST recover the surface so the user
-    // isn't permanently stuck.
+    // Deliberate Stop, past the swap-race arm window. Even with NO
+    // conversation id bound (create_conversation is still hanging), handleStop
+    // sends CANCELLED first — so the machine snaps back to idle regardless.
+    // This is the "works even before activeConversationId resolves" guarantee:
+    // the user is never trapped in `preparing`, no belt-and-braces backend
+    // error required.
     //
     // INVARIANT: there's always a path back to idle from `preparing`.
-    await chat.api.errorMessage("user-cancelled");
+    await page.waitForTimeout(400);
+    await page.locator(".stop-btn").click();
+
     await expect(page.locator(".send-btn")).toBeVisible();
-    await expect(page.locator(".sv-ai-msg .sv-prose")).toContainText(
-      "Error: user-cancelled",
-    );
+    await expect(page.locator(".bubble.user .content")).toHaveText("trapped");
+    // No conversation id was bound, so cancel_stream is not fired — the
+    // optimistic FSM reset IS the escape.
+    expect(await chat.api.lastCancel()).toBeNull();
+
+    // A LATE backend terminal for the abandoned turn is ignored in idle —
+    // no phantom error bubble is injected.
+    await chat.api.errorMessage("user-cancelled");
+    await page.waitForTimeout(50);
+    await expect(page.locator(".sv-ai-msg")).toHaveCount(0);
   });
 
   // Rapid conversation switching: user toggles A/B/A/B/A in <100ms.
