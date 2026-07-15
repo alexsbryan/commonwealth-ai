@@ -603,6 +603,18 @@ export interface MessageCompletePayload {
   metadata?: Record<string, unknown>;
 }
 
+/** `message-error` payload from the streaming send / redirect / resume
+ *  paths (`commands/chat.rs`). Carries conversation_id + message_id so a
+ *  turn that fails while the user is viewing a DIFFERENT conversation is
+ *  still attributable — and recoverable from the live-turns registry on
+ *  return — rather than silently vanishing. The generic `error` /
+ *  `backend-error` events keep using the leaner `ErrorPayload`. */
+export interface MessageErrorPayload {
+  conversation_id: string;
+  message_id: string;
+  message: string;
+}
+
 export interface HardwareInfo {
   system_ram_gb: number;
   gpu_available: boolean;

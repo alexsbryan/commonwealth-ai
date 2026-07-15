@@ -40,6 +40,20 @@ pub struct StreamStartedResponse {
     pub streaming: bool,
 }
 
+/// `message-error` payload. Carries `conversation_id` + `message_id` (not
+/// just the message) so a turn that fails while the user is viewing a
+/// DIFFERENT conversation is still attributable on the desktop side —
+/// the live-turns registry keys on `conversation_id` to recover the
+/// errored turn when the user returns, instead of the error silently
+/// vanishing. The generic `error` / `backend-error` events keep using
+/// `crate::approval::ErrorPayload`.
+#[derive(Serialize, Clone)]
+pub struct MessageErrorPayload {
+    pub conversation_id: String,
+    pub message_id: String,
+    pub message: String,
+}
+
 /// Start a streaming chat response. Returns the assigned message_id immediately;
 /// the frontend should listen for `message-chunk` and `message-complete` events
 /// (or `message-error`) filtered by the returned message_id.
@@ -156,7 +170,9 @@ pub async fn send_message_stream(
                         Err(e) => {
                             let _ = app.emit(
                                 "message-error",
-                                crate::approval::ErrorPayload {
+                                MessageErrorPayload {
+                                    conversation_id: conversation_id_owned.clone(),
+                                    message_id: message_id.clone(),
                                     message: e.to_string(),
                                 },
                             );
@@ -684,7 +700,9 @@ pub async fn redirect_turn(
                 Err(e) => {
                     let _ = app.emit(
                         "message-error",
-                        crate::approval::ErrorPayload {
+                        MessageErrorPayload {
+                            conversation_id: conversation_id_owned.clone(),
+                            message_id: message_id.clone(),
                             message: e.to_string(),
                         },
                     );
@@ -787,7 +805,9 @@ pub async fn resume_session(
                 Err(e) => {
                     let _ = app.emit(
                         "message-error",
-                        crate::approval::ErrorPayload {
+                        MessageErrorPayload {
+                            conversation_id: conversation_id_owned.clone(),
+                            message_id: message_id.clone(),
                             message: e.to_string(),
                         },
                     );
