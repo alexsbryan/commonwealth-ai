@@ -411,10 +411,79 @@ async fn continue_truncated_synthesis(
     }
 }
 
+/// First few distinct chunk titles in rank order — the "what was
+/// pulled" payload for `RetrievalComplete.top_titles`, so the waiting
+/// UI can show the user's own document titles instead of bare counts.
+fn top_passage_titles(chunks: &[corpus_engine::ScoredChunk], cap: usize) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for c in chunks {
+        let Some(t) = c.title.as_deref() else { continue };
+        let t = t.trim();
+        if t.is_empty() || !seen.insert(t.to_lowercase()) {
+            continue;
+        }
+        out.push(t.chars().take(96).collect());
+        if out.len() == cap {
+            break;
+        }
+    }
+    out
+}
+
+/// Sink + ids the gate-progress narration reader needs to forward the
+/// ladder's claim-check frames (`ClaimCheckStart` / `ClaimVerdict` /
+/// `ClaimRevisionStart` / `ClaimCheckComplete`) to the desktop. Built
+/// inside the synthesis spawns from the same clones the token-count
+/// heartbeat uses; `None` (no sink / headless callers) keeps the gate
+/// silent exactly as before.
+struct GateProgressWiring {
+    events: Arc<dyn crate::traits::RoutingEventSink>,
+    session_id: String,
+    conversation_id: String,
+    started: std::time::Instant,
+}
+
+/// Model-voice line for a gate-progress frame. Claim frames carry
+/// their payload for the structured panel; the text is the fallback
+/// line surfaces without the panel (mobile, logs) can show.
+fn gate_progress_text(phase: &NarrationPhase) -> String {
+    match phase {
+        NarrationPhase::ClaimCheckStart { claims, recheck } => {
+            if claims.is_empty() {
+                "Reading the draft back against your sources.".to_string()
+            } else if *recheck {
+                format!("Re-checking the revised answer — {} claims.", claims.len())
+            } else {
+                format!("Checking {} claims against your sources.", claims.len())
+            }
+        }
+        NarrationPhase::ClaimRevisionStart { failed } => format!(
+            "Couldn't confirm {failed} — revising from the sources.",
+        ),
+        NarrationPhase::ClaimCheckComplete { confirmed, flagged } => {
+            if *flagged == 0 {
+                format!("{confirmed} claims confirmed.")
+            } else {
+                format!("{confirmed} claims confirmed, {flagged} revised.")
+            }
+        }
+        // ClaimVerdict frames are panel-only: the stamped row IS the
+        // presentation, a per-claim sentence would be noise.
+        _ => String::new(),
+    }
+}
+
 /// Run the production grounding gate on the HELD answer (shared by the
 /// KnowledgeQuery and DeepQuery spawns). Skipped for cancelled turns; on judge
 /// failure `gate_answer` itself fails open. Mutates `full_text` to the gated
 /// text and returns the glassbox meta when the gate ran, else `None`.
+///
+/// When `progress` wiring is supplied, the ladder's claim-check frames are
+/// forwarded live as `turn-narration` events (the desktop's verification
+/// panel). Forwarding is fire-and-forget: a lagging UI can never slow the
+/// gate (`try_send`, drop-on-full inside the ladder).
+#[allow(clippy::too_many_arguments)]
 async fn gate_held_answer(
     inference: &Arc<dyn InferenceProvider>,
     gate_on: bool,
@@ -424,8 +493,45 @@ async fn gate_held_answer(
     evidence: &crate::runtime::grounding::EvidenceContext,
     request: &CompletionRequest,
     profile: &crate::runtime::grounding::GroundingProfile,
+    progress: Option<GateProgressWiring>,
 ) -> Option<serde_json::Value> {
     if gate_on && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
+        // Gate-progress narration reader (mirrors the token-count
+        // heartbeat pattern above): the ladder try_sends claim-check
+        // frames into this channel; the reader forwards each as a
+        // turn-narration event. The reader task ends when the sender
+        // side drops after the gate returns.
+        let gate_progress_tx: Option<crate::runtime::grounding::GateProgressSender> =
+            progress.map(|w| {
+                let (tx, mut rx) = tokio::sync::mpsc::channel::<NarrationPhase>(64);
+                tokio::spawn(async move {
+                    while let Some(phase) = rx.recv().await {
+                        let text = gate_progress_text(&phase);
+                        w.events
+                            .emit_turn_narration(TurnNarration {
+                                session_id: w.session_id.clone(),
+                                conversation_id: w.conversation_id.clone(),
+                                event: NarrationEvent {
+                                    phase,
+                                    text,
+                                    elapsed_ms: w.started.elapsed().as_millis() as u64,
+                                },
+                            })
+                            .await;
+                    }
+                });
+                tx
+            });
+        // Audit-open frame: the verification window lights the moment
+        // the gate takes the held draft — claim extraction itself takes
+        // seconds, so the claim list follows on a second frame (the
+        // two-frame contract documented on `ClaimCheckStart`).
+        if let Some(tx) = &gate_progress_tx {
+            let _ = tx.try_send(NarrationPhase::ClaimCheckStart {
+                claims: Vec::new(),
+                recheck: false,
+            });
+        }
         // Pre-gate citation pass (2026-07-01): snap/strip the DRAFT's `[Source:]`
         // garbles before the audit sees them — otherwise the specifics scan flags
         // each garbled label as a fabricated specific and burns a rewrite cycle on
@@ -453,15 +559,17 @@ async fn gate_held_answer(
         // so we can localize a mid-`[Source:` cut to the draft vs the gate.
         let draft_len = full_text.chars().count();
         let draft_tail = tail_chars(full_text, 48);
-        let outcome = crate::runtime::grounding::gate_answer(
+        let outcome = crate::runtime::grounding::gate_answer_with_progress(
             inference,
             question,
             std::mem::take(full_text),
             evidence,
             request,
             profile,
+            gate_progress_tx.as_ref(),
         )
         .await;
+        drop(gate_progress_tx); // close the channel → the reader task ends
         let gate_action = outcome
             .meta
             .get("action")
@@ -974,6 +1082,7 @@ impl Runtime {
                 NarrationPhase::RetrievalComplete {
                     chunks_in: plan.chunks.len(),
                     corpora: plan.source_map.keys().cloned().collect(),
+                    top_titles: top_passage_titles(&plan.chunks, 3),
                 },
                 txt,
             ) {
@@ -1294,6 +1403,16 @@ impl Runtime {
             // grounding::gate_answer (shared with the non-streaming
             // path). Runs on the HELD answer before anything
             // reaches the user; fail-open on judge failure.
+            let gate_progress_wiring = match (collab_routing_events.clone(), collab_session_id.clone())
+            {
+                (Some(events), Some(session_id)) => Some(GateProgressWiring {
+                    events,
+                    session_id,
+                    conversation_id: conversation_id_owned.clone(),
+                    started,
+                }),
+                _ => None,
+            };
             let grounding_gate_meta = gate_held_answer(
                 &inference,
                 gate_on,
@@ -1303,6 +1422,7 @@ impl Runtime {
                 &gate_evidence,
                 &request,
                 &gate_profile,
+                gate_progress_wiring,
             )
             .await;
 
@@ -1817,6 +1937,7 @@ impl Runtime {
                 NarrationPhase::RetrievalComplete {
                     chunks_in: kc.chunks.len(),
                     corpora: kc.sources.iter().map(|s| s.origin.clone()).collect(),
+                    top_titles: top_passage_titles(&kc.chunks, 3),
                 },
                 txt,
             ) {
@@ -2171,6 +2292,16 @@ impl Runtime {
 
             // Production grounding gate (deep): held answer → shared
             // ladder. Long-form deep answers take the per-claim audit.
+            let gate_progress_wiring =
+                match (routing_events_for_spawn.clone(), session_id_for_spawn.clone()) {
+                    (Some(events), Some(session_id)) => Some(GateProgressWiring {
+                        events,
+                        session_id,
+                        conversation_id: conversation_id_owned.clone(),
+                        started,
+                    }),
+                    _ => None,
+                };
             let grounding_gate_meta = gate_held_answer(
                 &inference,
                 deep_gate_on,
@@ -2180,6 +2311,7 @@ impl Runtime {
                 &deep_gate_evidence,
                 &request,
                 &deep_gate_profile,
+                gate_progress_wiring,
             )
             .await;
 

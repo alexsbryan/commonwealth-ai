@@ -59,6 +59,7 @@
   import InterpretationBanner from "./InterpretationBanner.svelte";
   import ClarificationCard from "./ClarificationCard.svelte";
   import NarrationChip from "./NarrationChip.svelte";
+  import CounterCard from "./CounterCard.svelte";
   import DraftPreview from "./DraftPreview.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import CorpusFilterStrip from "./CorpusFilterStrip.svelte";
@@ -535,6 +536,37 @@
   // `$snapshot` changes (which is on every event send).
   let messages = $derived($snapshot.context.messages);
   let streamingMessageId = $derived($snapshot.context.streamingMessageId);
+
+  // Verification counter (grounded turns): while active it OWNS the
+  // wait — the chip stack and the promoted narration line are
+  // suppressed so the user sees one calm surface instead of three
+  // renditions of the same progress. String-form narration (tool
+  // turns, doc ops, the Playwright fixtures) never sets counter
+  // signal, so those flows keep today's indicators untouched.
+  //
+  // Activation ladder:
+  //   • Gate signal (claim-check panel open, or the held-token
+  //     heartbeat) — unambiguous: the answer is held, the counter owns
+  //     the wait.
+  //   • Retrieval-only signal — provisional: RetrievalStart/Complete
+  //     fire on UNGATED streaming turns too, and those stream tokens
+  //     live. The moment the bubble shows content with no gate signal,
+  //     this is an ungated turn — deactivate, or the card would sit on
+  //     "warming up" underneath a visibly streaming answer.
+  let counterStreamHasContent = $derived.by(() => {
+    if (!streamingMessageId) return false;
+    const m = messages.find((msg) => msg.id === streamingMessageId);
+    return !!m && m.content.length > 0;
+  });
+  let counterActive = $derived.by(() => {
+    if (
+      routingStore.counter?.check != null ||
+      routingStore.synthesisProgress !== null
+    ) {
+      return true;
+    }
+    return routingStore.counter !== null && !counterStreamHasContent;
+  });
   let pendingInfoRequest = $derived($snapshot.context.pendingInfoRequest);
   let pendingLessonProposal = $derived($snapshot.context.pendingLessonProposal);
   let activeConversationId = $derived($snapshot.context.conversationId);
@@ -1649,10 +1681,18 @@
 
       <!-- Antifragile-routing UI. All three read from `routingStore`
            and render only when the FSM context has a live payload;
-           when empty they render nothing. -->
+           when empty they render nothing. The chip stack yields to the
+           verification counter while a grounded turn is in flight \u2014
+           the counter is the single calm surface for that wait. -->
       <InterpretationBanner />
       <ClarificationCard />
-      <NarrationChip />
+      <!-- Suppressed on counterActive alone (not && isLoading): when a
+           gated turn completes, the counter state persists until the
+           next turn's CLEAR_NARRATION, so the chip stack doesn't pop
+           back in above the freshly served answer. -->
+      {#if !counterActive}
+        <NarrationChip />
+      {/if}
 
       {#if isLoading}
         <!-- Draft-preview experiment: the unverified draft forming behind
@@ -1665,6 +1705,10 @@
             <span class="progress-mark pulse">{"\u25C8"}</span>
             <span class="progress-text">{docProgressText}{staleSuffix}</span>
           </div>
+        {:else if counterActive}
+          <!-- The verification counter: Gather \u2192 Draft \u2192 Check stations
+               driven by live narration frames (see CounterCard). -->
+          <CounterCard />
         {:else if latestNarrationText}
           <div
             class="doc-progress-indicator"

@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
 import {
+  applyCounter,
   applyNarration,
   applySynthesisProgress,
   routingMachine,
@@ -469,6 +470,176 @@ describe("applySynthesisProgress — heartbeat reducer", () => {
       elapsed_ms: 100,
     };
     expect(applySynthesisProgress(null, retrieval)).toBeNull();
+  });
+});
+
+describe("applyCounter — verification-counter reducer", () => {
+  function frame(
+    phase: NarrationEvent["phase"],
+    elapsed = 1_000,
+    text = "",
+  ): NarrationEvent {
+    return { phase, text, elapsed_ms: elapsed };
+  }
+
+  it("retrieval_start opens the gather station; struct retrieval_complete fills it", () => {
+    const searching = applyCounter(null, frame("retrieval_start", 200));
+    expect(searching?.retrieval).toEqual({
+      complete: false,
+      chunksIn: 0,
+      corpora: [],
+      topTitles: [],
+    });
+    const done = applyCounter(
+      searching,
+      frame(
+        {
+          retrieval_complete: {
+            chunks_in: 14,
+            corpora: ["project-notes", "meetings"],
+            top_titles: ["Pipeline convergence", "Standup 06-09"],
+          },
+        },
+        6_100,
+      ),
+    );
+    expect(done?.retrieval).toEqual({
+      complete: true,
+      chunksIn: 14,
+      corpora: ["project-notes", "meetings"],
+      topTitles: ["Pipeline convergence", "Standup 06-09"],
+    });
+    expect(done?.elapsedMs).toBe(6_100);
+  });
+
+  it("legacy retrieval_complete without top_titles defaults to an empty list", () => {
+    const done = applyCounter(
+      null,
+      frame({ retrieval_complete: { chunks_in: 8, corpora: ["sep"] } }),
+    );
+    expect(done?.retrieval?.topTitles).toEqual([]);
+  });
+
+  it("the audit-open frame (empty claims) opens check without wiping a later list", () => {
+    const opened = applyCounter(
+      null,
+      frame({ claim_check_start: { claims: [], recheck: false } }, 55_000),
+    );
+    expect(opened?.check).toEqual({
+      recheck: false,
+      claims: [],
+      revising: null,
+      complete: null,
+    });
+    const listed = applyCounter(
+      opened,
+      frame(
+        { claim_check_start: { claims: ["A", "B"], recheck: false } },
+        58_000,
+      ),
+    );
+    expect(listed?.check?.claims).toEqual([
+      { text: "A", verdict: "pending" },
+      { text: "B", verdict: "pending" },
+    ]);
+    // A stray empty frame after the list must NOT wipe it.
+    const stray = applyCounter(
+      listed,
+      frame({ claim_check_start: { claims: [], recheck: false } }, 59_000),
+    );
+    expect(stray?.check?.claims).toHaveLength(2);
+  });
+
+  it("verdicts stamp rows in place; revision and completion mark the pass", () => {
+    let state = applyCounter(
+      null,
+      frame({ claim_check_start: { claims: ["A", "B"], recheck: false } }),
+    );
+    state = applyCounter(
+      state,
+      frame({ claim_verdict: { index: 0, supported: true } }),
+    );
+    state = applyCounter(
+      state,
+      frame({ claim_verdict: { index: 1, supported: false } }),
+    );
+    expect(state?.check?.claims).toEqual([
+      { text: "A", verdict: "supported" },
+      { text: "B", verdict: "unsupported" },
+    ]);
+    state = applyCounter(state, frame({ claim_revision_start: { failed: 1 } }));
+    expect(state?.check?.revising).toBe(1);
+    state = applyCounter(
+      state,
+      frame({ claim_check_complete: { confirmed: 2, flagged: 1 } }),
+    );
+    expect(state?.check?.revising).toBeNull();
+    expect(state?.check?.complete).toEqual({ confirmed: 2, flagged: 1 });
+  });
+
+  it("a recheck claim_check_start replaces the list and resets verdicts", () => {
+    let state = applyCounter(
+      null,
+      frame({ claim_check_start: { claims: ["A", "B"], recheck: false } }),
+    );
+    state = applyCounter(
+      state,
+      frame({ claim_verdict: { index: 0, supported: false } }),
+    );
+    state = applyCounter(
+      state,
+      frame({ claim_check_start: { claims: ["A2", "B2"], recheck: true } }),
+    );
+    expect(state?.check?.recheck).toBe(true);
+    expect(state?.check?.claims).toEqual([
+      { text: "A2", verdict: "pending" },
+      { text: "B2", verdict: "pending" },
+    ]);
+  });
+
+  it("out-of-range verdicts and orphan frames are ignored", () => {
+    const opened = applyCounter(
+      null,
+      frame({ claim_check_start: { claims: ["A"], recheck: false } }),
+    );
+    const oob = applyCounter(
+      opened,
+      frame({ claim_verdict: { index: 7, supported: true } }),
+    );
+    expect(oob?.check?.claims).toEqual([{ text: "A", verdict: "pending" }]);
+    // A verdict with no open check panel leaves state untouched.
+    expect(
+      applyCounter(null, frame({ claim_verdict: { index: 0, supported: true } })),
+    ).toBeNull();
+  });
+
+  it("unrelated frames pass through; heartbeats do not create counter state", () => {
+    expect(
+      applyCounter(null, frame({ synthesis_progress: { tokens: 40 } })),
+    ).toBeNull();
+    expect(applyCounter(null, frame("routing_committed"))).toBeNull();
+  });
+
+  it("machine routes claim frames to counter, keeps them out of narrationLog, and clears on CLEAR_NARRATION", () => {
+    const actor = createActor(makeMachine());
+    actor.start();
+    actor.send({
+      type: "TURN_NARRATION_EMITTED",
+      payload: {
+        session_id: "s",
+        conversation_id: "c",
+        event: frame(
+          { claim_check_start: { claims: ["A"], recheck: false } },
+          60_000,
+          "Checking 1 claim against your sources.",
+        ),
+      },
+    });
+    const snap = actor.getSnapshot();
+    expect(snap.context.counter?.check?.claims).toHaveLength(1);
+    expect(snap.context.narrationLog).toHaveLength(0);
+    actor.send({ type: "CLEAR_NARRATION" });
+    expect(actor.getSnapshot().context.counter).toBeNull();
   });
 });
 

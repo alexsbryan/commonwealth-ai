@@ -438,7 +438,15 @@ export type NarrationPhase =
   | "presentation_start"
   // Struct variants — serialised as `{key: payload}` objects.
   | { routing_complete: { intent: string; register: string; confidence: number } }
-  | { retrieval_complete: { chunks_in: number; corpora: string[] } }
+  // `top_titles` is `#[serde(default)]` on the Rust side — optional here
+  // so older recordings and test fixtures without it still typecheck.
+  | {
+      retrieval_complete: {
+        chunks_in: number;
+        corpora: string[];
+        top_titles?: string[];
+      };
+    }
   | {
       curation_complete: {
         chunks_kept: number;
@@ -473,7 +481,17 @@ export type NarrationPhase =
   // the narration log) and rendered as a visually-provisional section
   // that collapses when the gated answer lands. The affordance contract:
   // draft text must never be styled as final.
-  | { draft_delta: { delta: string } };
+  | { draft_delta: { delta: string } }
+  // ── Grounding-gate claim-check frames (the verification counter) ──
+  // Live per-claim progress from the gate ladder. Routed to the
+  // `counter` context field (never the narration log — see
+  // `applyCounter` in routing.machine.ts) and rendered by CounterCard.
+  // Two-frame contract on claim_check_start: an empty-claims frame the
+  // moment the audit opens, then a frame carrying the extracted list.
+  | { claim_check_start: { claims: string[]; recheck: boolean } }
+  | { claim_verdict: { index: number; supported: boolean } }
+  | { claim_revision_start: { failed: number } }
+  | { claim_check_complete: { confirmed: number; flagged: number } };
 
 export interface NarrationEvent {
   phase: NarrationPhase;

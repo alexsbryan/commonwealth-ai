@@ -226,6 +226,11 @@ pub enum NarrationPhase {
         chunks_in: usize,
         /// Corpora the chunks came from — rendered in the chip label.
         corpora: Vec<String>,
+        /// Top passage titles in rank order (deduped, capped small) —
+        /// lets the UI show WHAT was pulled, not just how much.
+        /// `#[serde(default)]` keeps older emitters/recordings loading.
+        #[serde(default)]
+        top_titles: Vec<String>,
     },
     /// Curator began (Fast slot, structured output).
     CurationStart,
@@ -348,6 +353,50 @@ pub enum NarrationPhase {
     DraftDelta {
         /// Draft text appended since the previous frame.
         delta: String,
+    },
+
+    // ── Grounding-gate claim-check frames (the verification window) ──
+    //
+    // Emitted live from the gate ladder so the desktop can render the
+    // held stretch as visible diligence — claims stamped one by one —
+    // instead of a silent stall. Like the tool frames these bypass the
+    // 3-event cap and 5s suppression (emit via `emit_turn_narration`
+    // directly); the desktop REPLACES its claim-check panel state
+    // rather than appending log entries. Claim texts stay on the local
+    // event bus like `DraftDelta` — they never leave the machine.
+    /// The gate began auditing the held draft. Two-frame contract:
+    /// the first frame arrives with `claims: []` the moment the audit
+    /// starts (claim extraction itself takes seconds); a second frame
+    /// follows with the extracted claim texts. A `recheck: true` frame
+    /// re-opens the panel for the corrective rewrite's re-audit.
+    ClaimCheckStart {
+        /// Claims under audit in check order (wire-truncated). Empty on
+        /// the audit-started frame that precedes extraction.
+        claims: Vec<String>,
+        /// True when this audits the corrective rewrite, not the draft.
+        recheck: bool,
+    },
+    /// One claim's verdict landed.
+    ClaimVerdict {
+        /// Index into the most recent `ClaimCheckStart.claims`.
+        index: usize,
+        /// Whether the sealed evidence supports the claim. Fail-open
+        /// (unverifiable) claims report `true` — they ship unflagged.
+        supported: bool,
+    },
+    /// One or more claims failed and the corrective rewrite is running
+    /// (replace-from-source, never delete — see `gate_longform`).
+    ClaimRevisionStart {
+        /// Number of failed claims being revised.
+        failed: usize,
+    },
+    /// The claim-check pass finished; the answer is about to release
+    /// (or abstain). Counts cover the FINAL audited text.
+    ClaimCheckComplete {
+        /// Claims the evidence supported.
+        confirmed: usize,
+        /// Claims that failed and were revised/annotated.
+        flagged: usize,
     },
 }
 

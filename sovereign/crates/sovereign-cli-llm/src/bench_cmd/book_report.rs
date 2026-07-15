@@ -2281,6 +2281,7 @@ mod tests {
             evt(NarrationPhase::RetrievalComplete {
                 chunks_in: 8,
                 corpora: vec!["sep".into()],
+                top_titles: Vec::new(),
             }),
             evt(NarrationPhase::DraftingStart),
         ];

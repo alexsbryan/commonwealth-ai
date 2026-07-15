@@ -132,6 +132,13 @@ export const routingStore = {
   get draftPreview() {
     return _snapshot.context.draftPreview;
   },
+  /** Verification-counter state for the in-flight grounded turn —
+   *  retrieval shape + live claim-check rows (see `CounterState`).
+   *  CounterCard renders it; `null` until a grounded turn emits a
+   *  counter-relevant frame. */
+  get counter() {
+    return _snapshot.context.counter;
+  },
   /** New-assistant-message-id produced by the most recent successful
    *  redirect. ChatView watches this to wire up the chat.machine
    *  placeholder before the first chunk arrives; after consuming it,

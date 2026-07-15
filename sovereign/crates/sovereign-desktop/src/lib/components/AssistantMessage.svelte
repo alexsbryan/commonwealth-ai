@@ -223,6 +223,41 @@
     return claims;
   });
 
+  // The verification RECEIPT — the affirmative counterpart of the
+  // verificationNotes disclosure, and the trust artifact that outlives
+  // the counter card's wait. When the gate RELEASED this answer, say
+  // so in one quiet line: what was checked and whether a corrective
+  // revision happened. Only release actions earn the stamp; annotated
+  // and abstained answers keep the ⚠ disclosure, and fail-open
+  // verdicts (judge unavailable) earn nothing — the receipt must never
+  // claim a verification that didn't run.
+  let verificationReceipt = $derived.by(() => {
+    const gg = metadata?.grounding_gate as
+      | {
+          action?: string;
+          retried?: boolean;
+          mode?: string;
+          claims_checked?: number;
+          failed_claims?: string[];
+        }
+      | undefined
+      | null;
+    if (!gg?.action) return null;
+    const released = [
+      "released",
+      "rewrite_released",
+      "retry_released",
+      "citation_grounded",
+    ].includes(gg.action);
+    if (!released) return null;
+    if ((gg.failed_claims?.length ?? 0) > 0) return null; // ⚠ owns it
+    return {
+      claims: gg.mode === "per_claim" ? (gg.claims_checked ?? 0) : 1,
+      revised: gg.retried === true,
+      quoted: gg.action === "citation_grounded",
+    };
+  });
+
   // Set by chat.machine when the user redirected away from this
   // message's Propose banner. The bubble stays in history (so the
   // redirect decision is legible later) but renders de-emphasised.
@@ -541,6 +576,23 @@
     </div>
   {/if}
 
+  {#if !isStreaming && verificationReceipt}
+    <!-- The verification receipt — the counter card's trust artifact,
+         persisted on the bubble. Quiet, affirmative, factual. -->
+    <div class="verification-receipt" role="note" data-testid="verification-receipt">
+      <span class="vr-mark" aria-hidden="true">✓</span>
+      {#if verificationReceipt.quoted}
+        Grounded in your sources with a verbatim quote
+      {:else}
+        Verified against your sources{#if verificationReceipt.claims > 0}
+          · {verificationReceipt.claims} claim{verificationReceipt.claims === 1
+            ? ""
+            : "s"} checked{/if}{#if verificationReceipt.revised}
+          · revised once{/if}
+      {/if}
+    </div>
+  {/if}
+
   {#if verificationNotes.length > 0}
     <details class="verification-notes" role="note">
       <summary>
@@ -773,6 +825,22 @@
      the source URLs that fed the re-synthesis. Persistent: stays
      on the bubble for the lifetime of the conversation so a later
      reader can tell which answers were web-augmented. */
+  /* Verification receipt — the affirmative counterpart of the notes
+     disclosure. One quiet growth-toned line; never louder than the
+     answer it certifies. */
+  .verification-receipt {
+    margin-top: 0.5rem;
+    font-size: 0.74rem;
+    font-style: italic;
+    color: var(--text-muted);
+  }
+  .verification-receipt .vr-mark {
+    color: var(--growth);
+    font-style: normal;
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+
   /* Verification-notes disclosure — the gate's audit trail, honest but
      out of the prose channel (never the answer's final words). */
   .verification-notes {
