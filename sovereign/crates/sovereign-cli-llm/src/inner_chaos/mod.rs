@@ -34,6 +34,7 @@ pub mod judge;
 pub mod personas;
 pub mod recall;
 pub mod recall_stream;
+pub mod rejudge;
 pub mod report;
 pub mod runner;
 pub mod synth;
@@ -137,6 +138,13 @@ pub async fn run_inner_chaos(args: &[String]) -> i32 {
     }
     if has_flag(&flags, "recall") {
         return run_recall_mode(&flags, bench_dir).await;
+    }
+
+    // Offline re-judge: re-score an existing (usually `--no-judge`)
+    // transcript journal with a pinned `--judge-model`. Decouples the 2h
+    // collection run from a slow, stronger judge (the 122B).
+    if let Some(journal) = get_flag(&flags, "rejudge") {
+        return rejudge::run(&flags, PathBuf::from(journal), bench_dir).await;
     }
 
     let minutes = match get_flag(&flags, "minutes").map(|v| v.parse::<f64>()) {
