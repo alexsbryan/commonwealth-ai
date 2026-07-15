@@ -182,7 +182,7 @@ run_watched() {  # run_watched <label> <log> <cmd...>
     say "▶ $label  (log: $log)"
     "$@" >"$log" 2>&1 &
     local pid=$!
-    local last_size=-1 quiet=0 size idle
+    local last_size=-1 quiet=0 size load
     # macOS has no setsid; kill the tracked pid AND the known build-script
     # names (podman client + cargo can outlive the parent), then reap any of
     # our build containers directly.
@@ -192,13 +192,28 @@ run_watched() {  # run_watched <label> <log> <cmd...>
         if [ "$size" != "$last_size" ]; then
             last_size="$size"; quiet=0; continue
         fi
-        # Log idle for 60s. Is the VM genuinely idle (hung) or grinding a big
-        # crate on a capped core (healthy)? Only the former is a stall.
-        idle="$(podman machine ssh "top -bn1 | awk '/Cpu/{print int(\$8)}'" 2>/dev/null | tail -1 || echo 0)"
-        if [ "${idle:-0}" -gt 85 ]; then
+        # Log quiet for 60s. Is real work happening (healthy slow compile) or
+        # nothing (hung)? "Busy" must cover BOTH execution surfaces and must
+        # NOT rely on aggregate CPU-idle%: the Linux leg is taskset-pinned to 1
+        # of 8 VM cores, so top shows ~87% idle while fully pegged.
+        #   • host legs (mac CLI/desktop): the compile runs as host `cargo`/
+        #     `rustc` (matched by exact NAME — -x — so we don't false-match
+        #     podman's "cargo build …" arg string).
+        #   • container legs (linux/windows): host sees only `podman`; the work
+        #     is in the VM, so we read the VM 1-min load average. A pegged core
+        #     ⇒ load ≈ 1.0; the glslc-reap deadlock ⇒ load ≈ 0.02.
+        local busy=0
+        if pgrep -x cargo >/dev/null 2>&1 || pgrep -x rustc >/dev/null 2>&1 \
+           || pgrep -x cargo-tauri >/dev/null 2>&1; then
+            busy=1
+        else
+            load="$(podman machine ssh 'cat /proc/loadavg' 2>/dev/null | awk '{print $1+0}' | tail -1 || echo 1)"
+            if awk "BEGIN{exit !(${load:-1} >= 0.5)}"; then busy=1; fi
+        fi
+        if (( busy == 0 )); then
             quiet=$(( quiet + 60 ))
             if (( quiet >= STALL_SECS )); then
-                warn "STALL: '$label' produced no output for ${quiet}s and the VM is ${idle}% idle — treating as hung."
+                warn "STALL: '$label' produced no output for ${quiet}s with no active compile (host cargo/rustc absent, VM load=${load:-?}) — treating as hung."
                 warn "  last log line: $(tail -1 "$log" 2>/dev/null | cut -c1-140)"
                 kill -TERM "$pid" 2>/dev/null || true
                 pkill -TERM -f "$KILL_PATTERN" 2>/dev/null || true
