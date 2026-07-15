@@ -39,8 +39,23 @@
 #   --package <name>        Run only the named package (e.g.
 #                           `--package sovereign-cli`). Repeatable or
 #                           comma-separated. Maps to cargo's `-p` flag.
-#   --filter <pattern>      Pass <pattern> to cargo test as a name
-#                           filter — useful for targeted reruns.
+#                           SCOPES BUILD + RUN — the real lean-run lever.
+#   --changed               Auto-scope to the crates that own git-changed
+#                           .rs / Cargo.toml files (vs HEAD, plus
+#                           untracked). Expands to `-p <crate>` for each,
+#                           so cargo builds + runs ONLY the touched crates
+#                           and their dependents' tests — "just the
+#                           packages we touched." Unions with any explicit
+#                           --package. Falls back to the full workspace
+#                           (with a loud note) when no crate is detected,
+#                           so the gate never silently under-covers.
+#   --filter <pattern>      Pass <pattern> to cargo test as a libtest
+#                           NAME filter. This narrows which tests RUN, not
+#                           which crates COMPILE: a name filter can't tell
+#                           cargo to skip building a crate, so the whole
+#                           selected scope still compiles. For a lean
+#                           BUILD, reach for --changed / --package; use
+#                           --filter to focus the run within that scope.
 #   --no-default-features   Skip the corpus-engine treesitter feature
 #                           (and any others). Default off.
 #   --keep-logs             Preserve adapter logs even on success
@@ -65,6 +80,7 @@ LOG_DIR="${REPO_ROOT}/target/sovereign-test"
 PACKAGES=()
 HUMAN=0
 KEEP_LOGS=0
+CHANGED=0
 FILTER=""
 EXTRA_FEATURES="--features corpus-engine/treesitter"
 
@@ -81,6 +97,7 @@ while [[ $# -gt 0 ]]; do
             for p in "${parts[@]}"; do PACKAGES+=("$p"); done
             shift
             ;;
+        --changed) CHANGED=1; shift ;;
         --filter)
             shift
             FILTER="$1"
@@ -98,6 +115,85 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# ── --changed → owning crates ──────────────────────────────────────────────
+# Map each git-changed .rs / Cargo.toml file to the crate that owns it,
+# then feed those crate names into PACKAGES so the existing `-p` plumbing
+# builds + runs ONLY the touched crates (and their dependents' tests).
+# This is a genuine INPUT filter: cargo never compiles an untouched crate.
+#
+# "Owns" = nearest ancestor directory holding a Cargo.toml with a
+# `[package]` section (the virtual workspace-root manifest has only
+# `[workspace]`, so it's skipped — a change to a non-crate path like
+# scripts/ resolves to no crate and is reported, not silently swallowed).
+crate_for_path() {
+    # Walk up from the file's directory to REPO_ROOT looking for the
+    # nearest crate manifest; echo its package name, or nothing.
+    local dir="$REPO_ROOT/$1"
+    dir="$(dirname "$dir")"
+    while :; do
+        local manifest="$dir/Cargo.toml"
+        if [[ -f "$manifest" ]] && grep -q '^\[package\]' "$manifest"; then
+            awk '
+                /^\[package\]/ { inpkg=1; next }
+                /^\[/          { inpkg=0 }
+                inpkg && /^name[[:space:]]*=/ {
+                    gsub(/^name[[:space:]]*=[[:space:]]*"/, "")
+                    gsub(/".*$/, "")
+                    print; exit
+                }
+            ' "$manifest"
+            return 0
+        fi
+        [[ "$dir" == "$REPO_ROOT" || "$dir" == "/" ]] && return 0
+        dir="$(dirname "$dir")"
+    done
+}
+
+if [[ $CHANGED -eq 1 ]]; then
+    changed_crates=()
+    skipped_paths=()
+    # Tracked changes vs HEAD + untracked files, restricted to Rust build
+    # inputs. A Cargo.toml change means dependency/feature churn — include
+    # its crate too.
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        case "$f" in
+            *.rs|*/Cargo.toml|Cargo.toml) ;;
+            *) continue ;;
+        esac
+        c="$(crate_for_path "$f")"
+        if [[ -n "$c" ]]; then
+            changed_crates+=("$c")
+        else
+            skipped_paths+=("$f")
+        fi
+    done < <(
+        { git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null
+          git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null
+        } | sort -u
+    )
+
+    # De-dup crate names into PACKAGES (union with any explicit --package).
+    if [[ ${#changed_crates[@]} -gt 0 ]]; then
+        while IFS= read -r c; do
+            [[ -z "$c" ]] && continue
+            already=0
+            for p in ${PACKAGES[@]+"${PACKAGES[@]}"}; do
+                [[ "$p" == "$c" ]] && { already=1; break; }
+            done
+            [[ $already -eq 0 ]] && PACKAGES+=("$c")
+        done < <(printf '%s\n' "${changed_crates[@]}" | sort -u)
+    fi
+
+    if [[ ${#PACKAGES[@]} -gt 0 ]]; then
+        echo "sovereign-test: --changed scoped to: ${PACKAGES[*]}" >&2
+        [[ ${#skipped_paths[@]} -gt 0 ]] && \
+            echo "sovereign-test: --changed ignored ${#skipped_paths[@]} non-crate path(s) (e.g. ${skipped_paths[0]})" >&2
+    else
+        echo "sovereign-test: --changed found no touched crate — running FULL workspace (never under-cover)" >&2
+    fi
+fi
 
 # `sovereign-cli/dev-tools` re-enables the feature-gated dev-verb
 # suites (aliases, phase3 serve/init, phase6 retirement). The
@@ -162,36 +258,76 @@ elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
 exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
 
 # ── Aggregate ───────────────────────────────────────────────────────────────
+# ONE python pass over the adapter JSONL — not three-forks-per-line.
+#
+# The prior implementation spawned up to three `python3` processes for
+# EVERY record just to pull one field: on a full ~7.7k-test run that is
+# ~20k process spawns at ~30-80ms each on macOS — minutes of pure fork
+# overhead to recompute two counters the adapter already emits in its
+# trailing `summary` record. This single invocation:
+#   - reads the authoritative pass/fail counts from that summary record,
+#   - collects failing test names into a sidecar file, and
+#   - in daemon mode (HUMAN=0), streams every non-summary record straight
+#     to stdout (our own `final_summary` below, with the real elapsed_ms,
+#     replaces the adapter's ms=0 one).
+# Counts come ONLY from the summary record, matching the prior behaviour:
+# a build error with no summary leaves both at 0 (and exit_val carries the
+# failure signal downstream).
 total_pass=0
 total_fail=0
 failed_names=""
+fails_file="${RUN_DIR}/failed_names.txt"
+counts_file="${RUN_DIR}/counts.env"
 
-while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    kind=$(echo "$line" | python3 -c "
-import sys, json
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('t', ''))
-except Exception:
-    pass
-" 2>/dev/null) || continue
+HUMAN="$HUMAN" python3 - "$out_jsonl" "$counts_file" "$fails_file" <<'PY'
+import sys, json, os
 
-    case "$kind" in
-        summary)
-            total_pass=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('pass',0))" 2>/dev/null || echo 0)
-            total_fail=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('fail',0))" 2>/dev/null || echo 0)
-            ;;
-        fail)
-            n=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('n',''))" 2>/dev/null || echo "")
-            [[ -n "$n" ]] && failed_names+="${n}"$'\n'
-            [[ $HUMAN -eq 0 ]] && echo "$line"
-            ;;
-        pass|*)
-            [[ $HUMAN -eq 0 ]] && echo "$line"
-            ;;
-    esac
-done < "$out_jsonl"
+in_path, counts_path, fails_path = sys.argv[1], sys.argv[2], sys.argv[3]
+human = os.environ.get("HUMAN", "0") == "1"
+emit = not human  # daemon mode streams the JSONL through to stdout
+
+total_pass = 0
+total_fail = 0
+failed = []
+out = sys.stdout
+
+with open(in_path, "r", errors="replace") as fh:
+    for line in fh:
+        s = line.strip()
+        if not s:
+            continue
+        try:
+            d = json.loads(s)
+        except Exception:
+            # Non-JSON noise: pass through in daemon mode, drop otherwise.
+            if emit:
+                out.write(line if line.endswith("\n") else line + "\n")
+            continue
+        kind = d.get("t", "")
+        if kind == "summary":
+            # Authoritative counts; our final_summary replaces this record.
+            total_pass = d.get("pass", 0)
+            total_fail = d.get("fail", 0)
+            continue
+        if kind == "fail":
+            n = d.get("n", "")
+            if n:
+                failed.append(n)
+        if emit:
+            out.write(line if line.endswith("\n") else line + "\n")
+
+with open(counts_path, "w") as cf:
+    cf.write("total_pass=%d\n" % int(total_pass))
+    cf.write("total_fail=%d\n" % int(total_fail))
+with open(fails_path, "w") as ff:
+    ff.write("\n".join(failed))
+PY
+
+if [[ -f "$counts_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$counts_file"
+fi
+failed_names="$(cat "$fails_file" 2>/dev/null || true)"
 
 final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":0,\"ms\":${elapsed_ms}}"
 
@@ -226,6 +362,7 @@ if [[ $HUMAN -eq 1 ]]; then
             echo "   - Adapter JSONL:     ${LOG_DIR}/latest/cargo.jsonl"
             echo "   - Rerun a name filter: $0 --human --filter <pattern>"
             echo "   - Rerun one package:   $0 --human --package <crate>"
+            echo "   - Rerun touched crates: $0 --human --changed"
             echo
         else
             echo " ✓ All green."
