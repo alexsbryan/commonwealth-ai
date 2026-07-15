@@ -142,34 +142,97 @@ impl CorpusIndex {
             return Ok(HashMap::new());
         }
         let wanted: HashSet<&str> = section_ids.iter().map(String::as_str).collect();
-        let all = self.all_chunks_full().await?;
+        self.scan_section_chunk_map(Some(&wanted)).await
+    }
+
+    /// Full `section_id → first chunk_id` map for the whole corpus, via
+    /// one projected `(id, metadata)` scan. The desktop atom-detail path
+    /// builds this ONCE per corpus and caches it, then resolves every
+    /// evidence row from memory — instead of rescanning chunks.lance on
+    /// every click (a 2.8 GB / ~90s scan on Wikipedia). O(corpus_size);
+    /// call it off the interaction path (background warm).
+    pub async fn section_chunk_index(&self) -> Result<HashMap<String, u64>> {
+        self.scan_section_chunk_map(None).await
+    }
+
+    /// Shared projected scan for the two section→chunk resolvers.
+    ///
+    /// Projects ONLY (id, metadata) — never `content`. `section_id`
+    /// lives inside the metadata JSON blob, so there's no scalar column
+    /// to push a filter onto and we must scan; but pulling `content`
+    /// too (as `all_chunks_full` did) reads the ENTIRE chunk table
+    /// (4.4 GB on Wikipedia's 1.9M rows) to map a single section.
+    /// With `wanted`, filters to those sections and early-exits once all
+    /// are found; with `None`, returns the complete map.
+    async fn scan_section_chunk_map(
+        &self,
+        wanted: Option<&HashSet<&str>>,
+    ) -> Result<HashMap<String, u64>> {
+        let mut stream = self
+            .table
+            .query()
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "metadata".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("resolve_sections scan: {e}")))?;
+
         let mut by_section: HashMap<String, u64> = HashMap::new();
-        for row in all {
-            let Some(meta_raw) = row.metadata_raw.as_deref() else {
-                continue;
-            };
-            let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_raw) else {
-                continue;
-            };
-            let Some(section_id) = meta
-                .as_object()
-                .and_then(|obj| obj.get("section_id"))
-                .and_then(|v| v.as_str())
+        'outer: while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Database(format!("resolve_sections collect: {e}")))?
+        {
+            let id_col = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let Some(metadatas) = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
             else {
                 continue;
             };
-            if !wanted.contains(section_id) {
-                continue;
-            }
-            // First chunk wins (lowest id within the section).
-            by_section
-                .entry(section_id.to_string())
-                .and_modify(|existing| {
-                    if row.id < *existing {
-                        *existing = row.id;
+            for i in 0..batch.num_rows() {
+                if metadatas.is_null(i) {
+                    continue;
+                }
+                let Ok(meta) =
+                    serde_json::from_str::<serde_json::Value>(metadatas.value(i))
+                else {
+                    continue;
+                };
+                let Some(section_id) = meta
+                    .as_object()
+                    .and_then(|obj| obj.get("section_id"))
+                    .and_then(|v| v.as_str())
+                else {
+                    continue;
+                };
+                if let Some(wanted) = wanted {
+                    if !wanted.contains(section_id) {
+                        continue;
                     }
-                })
-                .or_insert(row.id);
+                }
+                let id = id_col.value(i) as u64;
+                // First chunk wins (lowest id within the section).
+                by_section
+                    .entry(section_id.to_string())
+                    .and_modify(|existing| {
+                        if id < *existing {
+                            *existing = id;
+                        }
+                    })
+                    .or_insert(id);
+                // Early-exit only when a specific set was requested.
+                if let Some(wanted) = wanted {
+                    if by_section.len() == wanted.len() {
+                        break 'outer;
+                    }
+                }
+            }
         }
         Ok(by_section)
     }

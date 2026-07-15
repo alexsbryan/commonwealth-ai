@@ -362,6 +362,10 @@ pub fn read_atlas_atoms(atlas_dir: &Path) -> io::Result<AtomsFile> {
 /// Read the edges file back from disk. Companion to
 /// [`read_atlas_atoms`].
 pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
+    // NOTE: callers on the hot atom-detail path must go through
+    // `atlas_view::atom_detail::cached_edges`, not this directly — the
+    // Wikipedia atlas ships a 1.3 GB edges.json and this does a full
+    // fs::read + serde parse every call. See the edges cache there.
     let path = atlas_dir.join("edges.json");
     let data = fs::read(&path)?;
     serde_json::from_slice(&data)

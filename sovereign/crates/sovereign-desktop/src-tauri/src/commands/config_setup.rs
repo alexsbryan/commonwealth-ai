@@ -526,6 +526,27 @@ pub async fn is_setup_complete(state: State<'_, Arc<AppState>>) -> Result<bool, 
     Ok(state.config.read().await.setup_complete)
 }
 
+/// Pull-based readiness probe — the race-safe complement to the
+/// push-only `backend-ready` Tauri event (emitted once from main.rs
+/// after `bootstrap_with_progress`).
+///
+/// The native Tauri event system has NO replay: only listeners
+/// registered at emit time receive an event. In Attach mode boot
+/// finishes in ~1.4s, which can beat the webview's JS mount +
+/// `initEventListeners` subscription — the `backend-ready` emit is then
+/// lost and `App.svelte` hangs on the loading splash forever (there is
+/// no timeout or re-probe). The command-bridge sticky buffer only
+/// covers the Playwright harness, not the real webview.
+///
+/// `state.runtime` is set to `Some` inside `bootstrap_with_progress`
+/// immediately before that emit, so `is_some()` is true exactly when
+/// (or after) the event fired. The frontend calls this on mount, after
+/// wiring its listeners, to catch a `backend-ready` it may have missed.
+#[tauri::command]
+pub async fn is_backend_ready(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    Ok(state.runtime.read().await.is_some())
+}
+
 /// Auto-config first-launch flow. Takes no input — runs hardware
 /// probe → catalog selection → 3-model download → DB open → model
 /// load → smoke test, narrating progress on the `setup-progress`

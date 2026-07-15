@@ -5,13 +5,21 @@
 //!
 //! This builds on [`atom_browse`](super::atom_browse)'s in-memory
 //! atoms cache: looking up an atom is a `Vec::iter().find()` over the
-//! cached vec. Edges and cross-corpus edges are read fresh from disk
-//! per call — atom detail is a click-driven interaction, not a
-//! per-keystroke one, so the simpler "no edges cache" path is fine
-//! at Phase 1 scale.
+//! cached vec. Edges and cross-corpus edges are likewise cached
+//! process-globally by file mtime+size (see [`cached_edges`]).
+//!
+//! The original design read edges.json fresh per click on the
+//! assumption that atom detail is click-driven, not per-keystroke, so
+//! the parse cost didn't matter. That assumption broke on the Wikipedia
+//! atlas, whose edges.json is 1.3 GB: re-deserialising it on every
+//! article click cost ~a minute EACH time. The edges cache makes the
+//! first click on a corpus pay the parse once and every later click a
+//! read-lock + Arc clone, mirroring the atoms cache.
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock, RwLock};
+use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ResolutionStatus};
 use corpus_engine::enrichment::atlas::cross_corpus::CrossCorpusEdge;
@@ -160,6 +168,7 @@ impl FileAtlasReader {
         let target = AtomId::from_raw(atom_id);
         let corpus_id_owned = corpus_id.to_string();
 
+        let started = Instant::now();
         let detail =
             tokio::task::spawn_blocking(move || -> Result<Option<AtomDetail>, AtomDetailError> {
                 build_detail(&corpus_id_owned, &atlas_dir, &target)
@@ -170,6 +179,7 @@ impl FileAtlasReader {
         tracing::debug!(
             corpus_id,
             atom_id,
+            elapsed_ms = started.elapsed().as_millis() as u64,
             found = detail.is_some(),
             related_count = detail.as_ref().map(|d| d.related.len()).unwrap_or(0),
             cross_corpus_count = detail.as_ref().map(|d| d.cross_corpus.len()).unwrap_or(0),
@@ -183,13 +193,135 @@ impl FileAtlasReader {
     }
 }
 
+// ── Edge caches ──────────────────────────────────────────────
+//
+// Mirrors `atom_browse::cached_atoms`. Keyed by the edge file's
+// mtime+size so an external atlas rebuild invalidates the entry. The
+// first atom-detail click on a corpus pays the deserialisation (1.3 GB
+// for Wikipedia); every later click is a read-lock + Arc clone.
+
+struct CachedEdges {
+    mtime_ms: u64,
+    size_bytes: u64,
+    edges: Arc<Vec<Edge>>,
+}
+
+fn edges_cache() -> &'static RwLock<HashMap<PathBuf, CachedEdges>> {
+    static CACHE: OnceLock<RwLock<HashMap<PathBuf, CachedEdges>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+struct CachedCrossEdges {
+    mtime_ms: u64,
+    size_bytes: u64,
+    edges: Arc<Vec<CrossCorpusEdge>>,
+}
+
+fn cross_edges_cache() -> &'static RwLock<HashMap<PathBuf, CachedCrossEdges>> {
+    static CACHE: OnceLock<RwLock<HashMap<PathBuf, CachedCrossEdges>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn file_mtime_size(meta: &std::fs::Metadata) -> (u64, u64) {
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    (mtime_ms, meta.len())
+}
+
+/// Intra-corpus edges for an atlas, cached by edges.json mtime+size.
+/// A missing edges.json is a normal fresh-corpus state — the
+/// `io::Error` propagates and the caller renders without related links.
+fn cached_edges(atlas_dir: &Path) -> std::io::Result<Arc<Vec<Edge>>> {
+    let path = atlas_dir.join("edges.json");
+    let (mtime_ms, size_bytes) = file_mtime_size(&std::fs::metadata(&path)?);
+    {
+        let read = edges_cache().read().expect("edges cache rwlock poisoned");
+        if let Some(entry) = read.get(atlas_dir) {
+            if entry.mtime_ms == mtime_ms && entry.size_bytes == size_bytes {
+                return Ok(Arc::clone(&entry.edges));
+            }
+        }
+    }
+    // Cold path — the expensive full parse. Log it: this is the ~1-min
+    // Wikipedia stall, and the log makes "why did the first click hang?"
+    // self-answering (and any regression re-parsing per click visible).
+    let started = Instant::now();
+    let file = read_atlas_edges(atlas_dir)?;
+    let count = file.edges.len();
+    let edges = Arc::new(file.edges);
+    edges_cache()
+        .write()
+        .expect("edges cache rwlock poisoned")
+        .insert(
+            atlas_dir.to_path_buf(),
+            CachedEdges {
+                mtime_ms,
+                size_bytes,
+                edges: Arc::clone(&edges),
+            },
+        );
+    tracing::info!(
+        target: "atlas_view",
+        atlas_dir = %atlas_dir.display(),
+        edges = count,
+        bytes = size_bytes,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "atlas_view: parsed + cached edges.json (cold path; subsequent atom clicks reuse this)",
+    );
+    Ok(edges)
+}
+
+/// Cross-corpus edges for an atlas, cached like [`cached_edges`].
+/// Usually absent (returns `Err`, treated as "no bridges"), but a
+/// large cross_corpus_edges.json would hit the same per-click cost.
+fn cached_cross_corpus_edges(atlas_dir: &Path) -> std::io::Result<Arc<Vec<CrossCorpusEdge>>> {
+    let path = atlas_dir.join("cross_corpus_edges.json");
+    let (mtime_ms, size_bytes) = file_mtime_size(&std::fs::metadata(&path)?);
+    {
+        let read = cross_edges_cache()
+            .read()
+            .expect("cross edges cache rwlock poisoned");
+        if let Some(entry) = read.get(atlas_dir) {
+            if entry.mtime_ms == mtime_ms && entry.size_bytes == size_bytes {
+                return Ok(Arc::clone(&entry.edges));
+            }
+        }
+    }
+    let file = read_atlas_cross_corpus_edges(atlas_dir)?;
+    let edges = Arc::new(file.edges);
+    cross_edges_cache()
+        .write()
+        .expect("cross edges cache rwlock poisoned")
+        .insert(
+            atlas_dir.to_path_buf(),
+            CachedCrossEdges {
+                mtime_ms,
+                size_bytes,
+                edges: Arc::clone(&edges),
+            },
+        );
+    Ok(edges)
+}
+
 fn build_detail(
     corpus_id: &str,
     atlas_dir: &Path,
     target: &AtomId,
 ) -> Result<Option<AtomDetail>, AtomDetailError> {
     let atoms = cached_atoms(atlas_dir).map_err(AtomDetailError::ReadAtoms)?;
-    let Some(atom) = atoms.iter().find(|a| a.id() == target) else {
+    // Index atoms by id ONCE (one O(n) pass) so the target lookup and the
+    // per-neighbour / per-reference lookups below are O(1) instead of a
+    // full Vec scan each. Wikipedia has 1.69M atoms and hub entities carry
+    // 1000+ edges, so the old `atoms.iter().find()` per neighbour was
+    // O(neighbours × atoms) — ~20s for a hub node even with edges cached.
+    // Keyed by the id's string form to avoid requiring Hash on AtomId.
+    let by_id: HashMap<&str, &AtomEnvelope> =
+        atoms.iter().map(|a| (a.id().as_str(), a)).collect();
+    let Some(atom) = by_id.get(target.as_str()).copied() else {
         return Ok(None);
     };
 
@@ -197,31 +329,27 @@ fn build_detail(
     // edges.json is normal on fresh corpora (no extraction yet);
     // an unreadable one degrades the detail view but shouldn't fail
     // the request.
-    let edges = read_atlas_edges(atlas_dir)
-        .map(|f| f.edges)
-        .unwrap_or_else(|e| {
-            tracing::warn!(
-                atlas_dir = %atlas_dir.display(),
-                error = %e,
-                "atlas_view:get_atom_detail: edges.json unreadable; rendering without related links",
-            );
-            Vec::new()
-        });
-    let cross = read_atlas_cross_corpus_edges(atlas_dir)
-        .map(|f| f.edges)
-        .unwrap_or_else(|e| {
-            tracing::debug!(
-                atlas_dir = %atlas_dir.display(),
-                error = %e,
-                "atlas_view:get_atom_detail: cross_corpus_edges.json absent or unreadable",
-            );
-            Vec::new()
-        });
+    let edges = cached_edges(atlas_dir).unwrap_or_else(|e| {
+        tracing::warn!(
+            atlas_dir = %atlas_dir.display(),
+            error = %e,
+            "atlas_view:get_atom_detail: edges.json unreadable; rendering without related links",
+        );
+        Arc::new(Vec::new())
+    });
+    let cross = cached_cross_corpus_edges(atlas_dir).unwrap_or_else(|e| {
+        tracing::debug!(
+            atlas_dir = %atlas_dir.display(),
+            error = %e,
+            "atlas_view:get_atom_detail: cross_corpus_edges.json absent or unreadable",
+        );
+        Arc::new(Vec::new())
+    });
 
-    let related = build_related(target, &atoms, &edges);
+    let related = build_related(target, &by_id, &edges);
     let cross_corpus = build_cross_corpus(target, &cross);
     let evidence_excerpts = build_evidence(atom);
-    let referenced_atoms = build_referenced_atoms(atom, &atoms);
+    let referenced_atoms = build_referenced_atoms(atom, &by_id);
 
     let detail = AtomDetail {
         corpus_id: corpus_id.to_string(),
@@ -242,7 +370,11 @@ fn build_detail(
     Ok(Some(detail))
 }
 
-fn build_related(target: &AtomId, atoms: &[AtomEnvelope], edges: &[Edge]) -> Vec<RelatedAtom> {
+fn build_related(
+    target: &AtomId,
+    by_id: &HashMap<&str, &AtomEnvelope>,
+    edges: &[Edge],
+) -> Vec<RelatedAtom> {
     let mut out: Vec<RelatedAtom> = edges
         .iter()
         .filter(|e| e.source == *target || e.target == *target)
@@ -252,7 +384,7 @@ fn build_related(target: &AtomId, atoms: &[AtomEnvelope], edges: &[Edge]) -> Vec
             } else {
                 (&e.source, "source".to_string())
             };
-            let other = atoms.iter().find(|a| a.id() == other_id)?;
+            let other = by_id.get(other_id.as_str()).copied()?;
             Some(RelatedAtom {
                 atom_id: other_id.clone(),
                 atom_type: atom_type_of(other),
@@ -301,7 +433,7 @@ fn build_cross_corpus(target: &AtomId, edges: &[CrossCorpusEdge]) -> Vec<CrossCo
 /// `Entity · David Hume` chips instead of opaque ids.
 fn build_referenced_atoms(
     atom: &AtomEnvelope,
-    atoms: &[AtomEnvelope],
+    by_id: &HashMap<&str, &AtomEnvelope>,
 ) -> BTreeMap<String, ReferencedAtom> {
     let mut refs: Vec<&AtomId> = Vec::new();
     match atom {
@@ -366,7 +498,7 @@ fn build_referenced_atoms(
         if out.contains_key(&key) {
             continue;
         }
-        if let Some(target) = atoms.iter().find(|a| a.id() == id) {
+        if let Some(target) = by_id.get(id.as_str()).copied() {
             out.insert(
                 key,
                 ReferencedAtom {

@@ -5,6 +5,7 @@
   import {
     detectBootstrap,
     isSetupComplete,
+    isBackendReady,
     startDefaultCorpusInstall,
   } from "./lib/api";
   import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
@@ -99,6 +100,12 @@
 
   let backendReady = $state(false);
   let backendError: string | null = $state(null);
+  // Boot watchdog: `backend-ready`/`backend-error` are push-only Tauri
+  // events with no replay, so a missed one would strand us on the splash
+  // forever. `bootStalled` flips after a generous window with no readiness,
+  // turning the infinite spinner into a self-reporting state + retry.
+  let bootStalled = $state(false);
+  let bootPoll: ReturnType<typeof setInterval> | undefined;
   let selectedConversationId: string | null = $state(null);
   let showInsights = $state(false);
 
@@ -281,11 +288,63 @@
       if (!complete) {
         // First launch: show the threshold screen before the wizard.
         view = "welcome";
+      } else if (view === "loading" && (await isBackendReady())) {
+        // Race guard for a MISSED `backend-ready`. That event is a
+        // push-only Tauri emit with no replay (the sticky buffer in
+        // command_bridge.rs only serves the Playwright harness). In
+        // Attach mode bootstrap completes in ~1.4s and can fire the
+        // emit before this webview finished subscribing (the
+        // `initEventListeners` await just above) — the event is then
+        // lost and we hang on the loading splash forever. Now that our
+        // listener IS wired, re-probe readiness directly; if the backend
+        // is already up, adopt the ready state the missed event would
+        // have delivered. Ordering is fully covered: if the emit hasn't
+        // happened yet, `state.runtime` is still None here (returns
+        // false) and the wired listener catches the imminent emit.
+        backendReady = true;
+        backendError = null;
+        view = "chat";
       }
-      // If complete, wait for backend-ready event (async bootstrap).
+      // If complete but not yet ready, the backend-ready listener wired
+      // above flips us to chat when bootstrap finishes.
     } catch {
-      // Backend not ready yet — stay on loading.
+      // Backend not ready yet — stay on loading (the event will arrive).
     }
+
+    // Boot readiness safety net. The one-shot re-probe above closes the
+    // common fast-boot race; this poll covers everything else. Because
+    // `backend-ready`/`backend-error` are push-only with no replay, a
+    // missed event would otherwise hang the splash indefinitely — polling
+    // bounds that to one interval. It self-cancels the instant we leave
+    // `loading` (event won the race, re-probe caught it, or setup routed
+    // us to welcome). After STALL_MS with no readiness, flag `bootStalled`
+    // so the splash offers a manual retry instead of a forever spinner;
+    // the poll keeps running, so a late-arriving backend still promotes us.
+    const POLL_MS = 2000;
+    const STALL_MS = 45000;
+    let waited = 0;
+    bootPoll = setInterval(async () => {
+      if (view !== "loading") {
+        clearInterval(bootPoll);
+        bootPoll = undefined;
+        return;
+      }
+      try {
+        if (await isBackendReady()) {
+          backendReady = true;
+          backendError = null;
+          bootStalled = false;
+          view = "chat";
+          clearInterval(bootPoll);
+          bootPoll = undefined;
+          return;
+        }
+      } catch {
+        // Command not reachable yet — keep waiting.
+      }
+      waited += POLL_MS;
+      if (waited >= STALL_MS) bootStalled = true;
+    }, POLL_MS);
 
     // Fire-and-forget bootstrap probe. Failure leaves `bootstrap`
     // null, which hides the badge — acceptable: the badge is
@@ -336,6 +395,25 @@
 
   function handleConsentRecorded() {
     view = "chat";
+  }
+
+  // Manual escape from a stalled boot. Re-probe once; if the backend came
+  // up (we just missed the event), promote to chat. Otherwise reload the
+  // webview to re-run the whole mount + listener-wiring path — the cheapest
+  // way to recover a webview that lost the handshake.
+  async function handleBootRetry() {
+    bootStalled = false;
+    try {
+      if (await isBackendReady()) {
+        backendReady = true;
+        backendError = null;
+        view = "chat";
+        return;
+      }
+    } catch {
+      // fall through to reload
+    }
+    window.location.reload();
   }
 
   function handleConversationSelect(id: string | null) {
@@ -419,6 +497,7 @@
   // component swaps stack a chain of dead callbacks that all fire).
   onDestroy(() => {
     readingSession.setConversationOpener(null);
+    if (bootPoll) clearInterval(bootPoll);
   });
 </script>
 
@@ -450,6 +529,11 @@
       <p class="loading-tagline">ai for the rest of us</p>
       {#if backendError}
         <p class="error">{backendError}</p>
+      {:else if bootStalled}
+        <p class="loading-text stalled">
+          Still initializing — this is taking longer than usual.
+        </p>
+        <button class="boot-retry" onclick={handleBootRetry}>Retry</button>
       {:else}
         <div class="loading-progress">
           <div class="loading-bar"></div>
@@ -795,6 +879,34 @@
     max-width: 380px;
     text-align: center;
     line-height: 1.5;
+  }
+
+  .loading-text.stalled {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    max-width: 320px;
+    text-align: center;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .boot-retry {
+    padding: 7px 18px;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+
+  .boot-retry:hover {
+    border-color: var(--accent);
+    background: var(--bg-secondary);
   }
 
   @keyframes mark-breathe {
