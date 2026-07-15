@@ -1376,7 +1376,9 @@ impl Runtime {
             None,
         );
         let provenance = ResponseProvenance {
-            intent: "KnowledgeQuery".to_string(),
+            // Actual routed intent, not a hardcoded label — this handler serves
+            // both KnowledgeQuery and ComparisonQuery (see the streaming twin).
+            intent: format!("{intent:?}"),
             search_method: Some("CorpusEngine".to_string()),
             sources: sources_for_prov,
             inference_backend: completion.model_id.clone(),
