@@ -35,6 +35,7 @@ pub mod personas;
 pub mod recall;
 pub mod recall_stream;
 pub mod rejudge;
+pub mod replay;
 pub mod report;
 pub mod runner;
 pub mod synth;
@@ -55,6 +56,7 @@ const BOOLEAN_FLAGS: &[&str] = &[
     "recall-stream",
     "recall-synth",
     "no-judge",
+    "only-breach-threads",
     "help",
     "h",
 ];
@@ -145,6 +147,14 @@ pub async fn run_inner_chaos(args: &[String]) -> i32 {
     // collection run from a slow, stronger judge (the 122B).
     if let Some(journal) = get_flag(&flags, "rejudge") {
         return rejudge::run(&flags, PathBuf::from(journal), bench_dir).await;
+    }
+
+    // Offline witness replay: re-run the SUT over the RECORDED user
+    // turns of an existing journal (semi-deterministic), for A/B-ing a
+    // witness-prompt change against the exact pressure a prior run
+    // captured. Writes a fresh journal to rejudge; does not judge.
+    if let Some(journal) = get_flag(&flags, "replay-witness") {
+        return replay::run(&flags, PathBuf::from(journal), bench_dir).await;
     }
 
     let minutes = match get_flag(&flags, "minutes").map(|v| v.parse::<f64>()) {
