@@ -35,9 +35,12 @@ impl Runtime {
         };
         self.store.save_message(&user_msg).await?;
 
-        // Tag the conversation with the active skill on first message
-        // (idempotent — see the streaming-path equivalent).
-        if let Some(skill_id) = self.skills.primary_skill_id_for_conversation() {
+        // Tag the conversation with the ambient BACKGROUND skill on
+        // first message (idempotent — see the streaming-path equivalent).
+        // Background-only, never Workspace: workspace ownership is a
+        // create-time surface declaration, not a dispatch-time inference
+        // (regression 2026-07-15).
+        if let Some(skill_id) = self.skills.background_skill_id_for_conversation() {
             if let Err(e) = self
                 .store
                 .set_conversation_skill_if_unset(conversation_id, &skill_id)

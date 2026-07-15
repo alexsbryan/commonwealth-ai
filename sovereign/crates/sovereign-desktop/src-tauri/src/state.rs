@@ -443,13 +443,14 @@ pub async fn bootstrap_with_progress(
     if config.skills_dir.exists() && config.skills_dir != std::path::PathBuf::new() {
         skills.load_and_register(&config.skills_dir);
     }
-    // Activate configured skills (or all if none specified).
+    // Activate configured skills (or all background skills if none
+    // specified). Both paths skip Workspace skills — those are
+    // navigation-scoped surfaces, never globally activated from config
+    // (see SkillRegistry::activate_configured / activate_all).
     if config.active_skills.is_empty() {
         skills.activate_all();
     } else {
-        for id in &config.active_skills {
-            skills.activate(id);
-        }
+        skills.activate_configured(&config.active_skills);
     }
     tracing::info!("Skills: {} loaded", skills.list().len());
     let skills = Arc::new(skills);
