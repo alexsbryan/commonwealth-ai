@@ -162,6 +162,12 @@ def build():
             elif n.type=="index_expression":
                 kids=[c for c in n.named_children]
                 if len(kids)>=2: add_sink(q,rel,n,"panic:index",kids[1],src,lm)
+            elif n.type=="binary_expression":
+                ops=[txt(c,src) for c in n.children if not c.is_named]
+                if "-" in ops:
+                    kids=[c for c in n.named_children]
+                    if len(kids)==2 and not any(k.type=="integer_literal" for k in kids):
+                        add_sink(q,rel,n,"arith:sub",n,src,lm)
             for c in n.named_children: walk(c)
         walk(body)
         # interproc param-bind: caller arg_i -> callee @p:param_i

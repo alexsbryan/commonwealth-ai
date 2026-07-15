@@ -2195,7 +2195,12 @@ fn levenshtein_capped(a: &str, b: &str, cap: usize) -> usize {
     let (a, b) = if a.len() < b.len() { (a, b) } else { (b, a) };
     let m = a.chars().count();
     let n = b.chars().count();
-    if n - m > cap {
+    // NOTE: the swap above orders by BYTE length, but m/n are CHAR counts —
+    // for multibyte input the shorter-byte string can have more chars (m > n),
+    // so this length-gap early-out must use abs_diff, not `n - m` (which would
+    // underflow: `levenshtein_capped("abcd", "𝕏𝕏", …)` gave 2 - 4). Found by the
+    // taint arith-underflow sink; the LLM verifier missed it (byte/char conflation).
+    if n.abs_diff(m) > cap {
         return cap + 1;
     }
     let a_chars: Vec<char> = a.chars().collect();
@@ -3468,6 +3473,23 @@ fn strip_think_block(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn levenshtein_capped_no_underflow_on_multibyte() {
+        // Regression: the a/b swap orders by BYTE length while m/n are CHAR
+        // counts, so the shorter-byte arg can have MORE chars (m > n). The old
+        // `n - m` length-gap early-out then underflowed. "abcd" = 4 bytes/4
+        // chars; "𝕏𝕏" = 8 bytes/2 chars → no swap → m=4, n=2 → 2 - 4 panics.
+        // Pre-fix these panicked in `n - m` (2 - 4). The soft cap only bails
+        // when a whole DP row exceeds `cap`, so the true distance (4: two subs +
+        // two deletes) is returned here rather than cap+1 — the point is that it
+        // returns at all instead of underflowing.
+        assert_eq!(levenshtein_capped("abcd", "𝕏𝕏", 2), 4);
+        assert_eq!(levenshtein_capped("𝕏𝕏", "abcd", 2), 4); // symmetric
+        // Sanity: ordinary ASCII behaviour unchanged.
+        assert_eq!(levenshtein_capped("kitten", "sitting", 10), 3);
+        assert_eq!(levenshtein_capped("abc", "abc", 5), 0);
+    }
 
     #[test]
     fn keeplist_keeps_exec_command_and_web_search() {
