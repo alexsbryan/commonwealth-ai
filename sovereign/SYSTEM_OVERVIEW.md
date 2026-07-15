@@ -2005,6 +2005,28 @@ No tests require GPU, models, or network. Sovereign uses
 functional tests. Commonwealth's harness runs simulated meshes
 deterministically.
 
+**Regression gate — `scripts/sovereign-test.sh`.** The same
+`cargo test --workspace` surface the watcher polls, wrapped for on-demand
+use: it pipes cargo through `sovereign-cargo-test-adapter` (Tier 2 JSONL)
+and, with `--human`, prints a compact pass/fail summary + failing-test list.
+Aggregation is a *single* pass over the adapter JSONL — it reads the
+authoritative counts from the adapter's trailing `summary` record rather
+than re-parsing every line (the prior per-line `python3` fork storm cost
+minutes on a ~7.7k-test run). Three scoping levers, with **different reach**:
+- `--package <name>` → `cargo test -p <name>`: scopes BUILD **and** RUN to
+  that crate + its dep graph. The real lean lever.
+- `--changed` → auto-maps git-changed `.rs`/`Cargo.toml` (vs HEAD + untracked)
+  to their owning crates (nearest-ancestor `[package]` manifest) and unions
+  them into `-p` — "just the crates you touched." Non-crate paths (scripts/,
+  root virtual manifest) resolve to nothing → loud fall-back to full
+  `--workspace`, so the gate never silently under-covers.
+- `--filter <pat>` → a libtest **name** filter (`cargo test … -- <pat>`):
+  narrows which tests RUN within the selected scope, but a name filter cannot
+  shrink the compile — use it to focus a run, not to skip building crates.
+Mind treesitter feature-unification thrash on narrow `-p` builds (a bare
+`-p` flip rebuilds `corpus-engine` + its dependents); the script already
+carries `-F corpus-engine/treesitter` to stay on the watcher's resolution.
+
 ### Run
 
 ```sh
