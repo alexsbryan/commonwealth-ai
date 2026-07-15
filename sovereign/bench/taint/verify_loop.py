@@ -166,8 +166,10 @@ Refute if ANY of these hold:
   - the claim references behavior not present in the shown code.
 CONFIRM only if you can state a concrete input that (a) is type-valid, (b) reaches the cited line past every earlier guard, and (c) produces the harm. When you cannot construct that, answer REFUTED. If genuinely undecidable from the shown code, answer UNCERTAIN.
 
-Respond with ONLY a JSON object:
-  {{"verdict":"CONFIRMED"|"REFUTED"|"UNCERTAIN","reason":"one sentence citing the deciding line or type","killed_by":"guard|type|absent-code|none"}}"""
+REASON FIRST, THEN COMMIT. For any arithmetic/index/stride claim, actually compute the expression for the smallest inputs the provenance allows (e.g. len = 1, 5, 19) and SHOW the arithmetic before deciding — a surface `.max(1)`/guard may not cover the operation that overflows (e.g. `len.max(1) / 20` is still 0 for len<20). Do not emit the verdict until after the reasoning.
+
+Respond with ONLY a JSON object, reasoning BEFORE verdict:
+  {{"reasoning":"the arithmetic/logic you worked out for small inputs","verdict":"CONFIRMED"|"REFUTED"|"UNCERTAIN","killed_by":"guard|type|absent-code|none","reason":"one sentence citing the deciding line or type"}}"""
 
 # ---- select candidate functions from the graph ---------------------------
 def qual_by_name(name):

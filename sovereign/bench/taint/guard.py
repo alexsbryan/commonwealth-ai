@@ -144,6 +144,26 @@ def positivity_guard(sink_node, offset_vars, src):
             if cond is not None and _lower_bound(txt(cond,src), offset_vars): return True
         if a.type=="function_item": break
         frm=a; a=a.parent
+    # guard-and-return: `if x < 1 { return }` / `if x == 0 { ? }` upstream lower-bounds x
+    return _guard_and_return_lb(sink_node, offset_vars, src)
+
+def _guard_and_return_lb(sink_node, offset_vars, src):
+    """An early-exit `if <x..> (< 1 | <= 0 | == 0 | .is_empty()) { return/?/break }`
+    that mentions an offset var lower-bounds it past the guard (so `x - 1` is safe)."""
+    if not offset_vars: return False
+    def is_lb_return(txt_):
+        if not ("return" in txt_ or "break" in txt_ or "continue" in txt_ or "?" in txt_): return False
+        return any(re.search(rf'\b{re.escape(v)}\b[\w.]*\s*(<\s*1\b|<=\s*0\b|==\s*0\b)', txt_)
+                   or re.search(rf'\b{re.escape(v)}\b[\w.]*\.is_empty\(\)', txt_) for v in offset_vars)
+    a=sink_node.parent
+    while a is not None:
+        if a.type=="block":
+            for c in a.named_children:
+                if c.start_point[0] >= sink_node.start_point[0]: break
+                if c.type in ("expression_statement","if_expression") and is_lb_return(txt(c,src)):
+                    return True
+        if a.type=="function_item": break
+        a=a.parent
     return False
 
 def loop_bound_guard(sink_node, offs, src):
@@ -175,8 +195,54 @@ def _bounds_of_index(sink_node):
         return base, [c for c in sub.named_children]     # start/end (0,1, or 2)
     return base, [sub]
 
+# ---- arithmetic underflow: bare `a - b` (usize wraps -> huge / panics in debug) ----
+def _sizelike(node, src):
+    """Operand plausibly an unsigned integer size (so `-` can underflow)."""
+    t=node.type
+    if t in ("identifier","field_expression","integer_literal"): return True
+    if t=="call_expression":
+        return bool(re.search(r"\.(len|count|chars|bytes|position|find|rfind)\s*\(", txt(node,src)))
+    if t in ("parenthesized_expression","type_cast_expression","cast_expression"):
+        return bool(re.search(r"\b(usize|u8|u16|u32|u64|u128)\b", txt(node,src))) or any(
+            _sizelike(c,src) for c in node.named_children)
+    return False
+
+def _dominates_ge(sub_node, a_text, b_text, src):
+    """A dominating `a > b` / `a >= b` / `b < a` / `b <= a` (in if/while/&&) proves `a-b` safe."""
+    pats=[rf'{re.escape(a_text)}\s*>=?\s*{re.escape(b_text)}',
+          rf'{re.escape(b_text)}\s*<=?\s*{re.escape(a_text)}']
+    def hit(s): return any(re.search(p,s) for p in pats)
+    node=sub_node.parent
+    while node is not None:
+        if node.type in ("if_expression","while_expression","match_arm"):
+            cond=node.child_by_field_name("condition") or node.child_by_field_name("value")
+            if cond is not None and hit(txt(cond,src)): return True
+        if node.type=="binary_expression":
+            ops=[txt(c,src) for c in node.children if not c.is_named]
+            if "&&" in ops and hit(txt(node,src)): return True
+        if node.type=="function_item": break
+        node=node.parent
+    return False
+
+def sub_underflow(sub_node, src):
+    """(verdict,reason) for a bare `a - b` subtraction of two size-like, non-literal operands."""
+    kids=[c for c in sub_node.named_children]
+    if len(kids)!=2: return ("UNCERTAIN","not a-b")
+    a,b=kids
+    if a.type=="integer_literal" or b.type=="integer_literal":  # `x - 1` = index-offset shape, handled elsewhere
+        return ("UNCERTAIN","literal operand")
+    if not (_sizelike(a,src) and _sizelike(b,src)): return ("UNCERTAIN","not size-like")
+    at,bt=txt(a,src),txt(b,src)
+    if re.search(r"\bas\s+i(8|16|32|64|128|size)\b",txt(sub_node,src)):  # signed can't underflow-panic
+        return ("SAFE","signed operands (goes negative, no panic)")
+    if re.search(r"saturating_sub|checked_sub|wrapping_sub",txt(sub_node,src)): return ("SAFE","checked sub")
+    if _dominates_ge(sub_node,at,bt,src): return ("UNCERTAIN",f"dominating `{at}>={bt}` guard")
+    return ("UNGUARDED",f"usize underflow: `{at} - {bt}` with no dominating `{at}>={bt}`")
+
 def sink_guard(kind, sink_node, letmap, src):
     """Return (verdict, reason)."""
+    if kind=="arith:sub":
+        return sub_underflow(sink_node, src)
     if kind.startswith("panic:index"):
         base,offs=_bounds_of_index(sink_node)
         base_text=txt(base,src) if base is not None else ""
