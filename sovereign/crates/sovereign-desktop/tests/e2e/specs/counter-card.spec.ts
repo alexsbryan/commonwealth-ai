@@ -190,6 +190,47 @@ test.describe("verification counter", () => {
     ).toBeVisible();
   });
 
+  test("gate frames outrank the document-progress line (attached-doc consolidation)", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await page.locator(".input-area textarea").fill("doc-flavoured turn");
+    await page.locator(".send-btn").click();
+    await expect.poll(() => chat.api.lastStreamStart()).not.toBeNull();
+    const ctx = (await chat.api.lastStreamStart())!;
+
+    // Early doc phases narrate via the doc-progress line…
+    await page.evaluate(() => {
+      window.__sovereign_test__.emit("document:operation", {
+        type: "Retrieving",
+      });
+    });
+    await expect(page.locator(".doc-progress-indicator")).toBeVisible();
+    await expect(page.locator(".doc-progress-indicator")).toContainText(
+      "Retrieving relevant passages",
+    );
+
+    // …but the moment the gate opens the claim check, the counter owns
+    // the wait — on every gated surface alike.
+    await page.evaluate((cid) => {
+      window.__sovereign_test__.emit("turn-narration", {
+        session_id: "s1",
+        conversation_id: cid,
+        event: {
+          phase: { claim_check_start: { claims: [], recheck: false } },
+          text: "Reading the draft back against your sources.",
+          elapsed_ms: 30_000,
+        },
+      });
+    }, ctx.conversationId);
+    await expect(page.locator('[data-testid="counter-card"]')).toBeVisible();
+    await expect(
+      page.locator('[data-testid="counter-card"]'),
+    ).toHaveAttribute("data-station", "check");
+    await expect(page.locator(".doc-progress-indicator")).toHaveCount(0);
+  });
+
   test("string-form narration alone never wakes the counter", async ({
     sovereignPage: page,
     chat,

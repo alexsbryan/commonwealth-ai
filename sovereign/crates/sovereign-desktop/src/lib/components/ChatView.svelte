@@ -1243,6 +1243,12 @@
       const asset = attachedAsset;
       const convoId = await ensureConversation();
 
+      // Per-turn narration state (chips, counter) must reset here too —
+      // this branch returns before the streaming path's clear, and a
+      // previous gated turn's verification counter would otherwise leak
+      // into this doc ask.
+      routingStore.send({ type: "CLEAR_NARRATION" });
+
       send({
         type: "ASSISTANT_MESSAGE_RECEIVED",
         message: {
@@ -1267,7 +1273,15 @@
             role: "assistant",
             content: result.response,
             created_at: Math.floor(Date.now() / 1000),
-            metadata: { operation: result.operation, sources: result.sources },
+            // Legacy operation/sources as defaults, then the persisted
+            // metadata verbatim (provenance, retrieved_chunks,
+            // grounding_gate → the verification receipt) so the live
+            // bubble matches a reload from the store.
+            metadata: {
+              operation: result.operation,
+              sources: result.sources,
+              ...(result.metadata ?? {}),
+            },
           },
         });
       } catch (e) {
@@ -1700,15 +1714,20 @@
              contract). Unmounts when the gated answer starts streaming,
              which reads as the draft collapsing into the real reply. -->
         <DraftPreview />
-        {#if docProgressText}
+        {#if counterActive}
+          <!-- The verification counter: Gather \u2192 Draft \u2192 Check stations
+               driven by live narration frames (see CounterCard). Ranked
+               above the doc-progress line: on attached-doc turns the
+               `document:operation` phases narrate the EARLY stages
+               (routing / retrieving / synthesising) and go quiet once
+               the gate takes the draft \u2014 from that moment the claim
+               check is the story, on every gated surface alike. -->
+          <CounterCard />
+        {:else if docProgressText}
           <div class="doc-progress-indicator" aria-label="svrnmesh is processing document">
             <span class="progress-mark pulse">{"\u25C8"}</span>
             <span class="progress-text">{docProgressText}{staleSuffix}</span>
           </div>
-        {:else if counterActive}
-          <!-- The verification counter: Gather \u2192 Draft \u2192 Check stations
-               driven by live narration frames (see CounterCard). -->
-          <CounterCard />
         {:else if latestNarrationText}
           <div
             class="doc-progress-indicator"

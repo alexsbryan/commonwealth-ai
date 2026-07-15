@@ -434,14 +434,52 @@ fn top_passage_titles(chunks: &[corpus_engine::ScoredChunk], cap: usize) -> Vec<
 /// Sink + ids the gate-progress narration reader needs to forward the
 /// ladder's claim-check frames (`ClaimCheckStart` / `ClaimVerdict` /
 /// `ClaimRevisionStart` / `ClaimCheckComplete`) to the desktop. Built
-/// inside the synthesis spawns from the same clones the token-count
-/// heartbeat uses; `None` (no sink / headless callers) keeps the gate
-/// silent exactly as before.
-struct GateProgressWiring {
-    events: Arc<dyn crate::traits::RoutingEventSink>,
-    session_id: String,
-    conversation_id: String,
-    started: std::time::Instant,
+/// inside the streaming synthesis spawns (from the same clones the
+/// token-count heartbeat uses) and by the non-streaming attached-doc
+/// gate; `None` (no sink / headless callers) keeps the gate silent
+/// exactly as before.
+pub(crate) struct GateProgressWiring {
+    pub(crate) events: Arc<dyn crate::traits::RoutingEventSink>,
+    pub(crate) session_id: String,
+    pub(crate) conversation_id: String,
+    /// Turn-relative zero for `elapsed_ms` on the forwarded frames —
+    /// the synthesis start on the streaming spawns, the turn start on
+    /// the attached-doc handler.
+    pub(crate) started: std::time::Instant,
+}
+
+impl GateProgressWiring {
+    /// Open the gate-progress channel: spawns the reader task that
+    /// forwards each frame as a `turn-narration` event, emits the
+    /// audit-open frame (the two-frame `ClaimCheckStart` contract —
+    /// the verification window lights before claim extraction lands),
+    /// and returns the sender to pass into
+    /// `gate_answer_with_progress`. Dropping the sender ends the
+    /// reader.
+    pub(crate) fn spawn_reader(self) -> crate::runtime::grounding::GateProgressSender {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<NarrationPhase>(64);
+        tokio::spawn(async move {
+            while let Some(phase) = rx.recv().await {
+                let text = gate_progress_text(&phase);
+                self.events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: self.session_id.clone(),
+                        conversation_id: self.conversation_id.clone(),
+                        event: NarrationEvent {
+                            phase,
+                            text,
+                            elapsed_ms: self.started.elapsed().as_millis() as u64,
+                        },
+                    })
+                    .await;
+            }
+        });
+        let _ = tx.try_send(NarrationPhase::ClaimCheckStart {
+            claims: Vec::new(),
+            recheck: false,
+        });
+        tx
+    }
 }
 
 /// Model-voice line for a gate-progress frame. Claim frames carry
@@ -499,39 +537,10 @@ async fn gate_held_answer(
         // Gate-progress narration reader (mirrors the token-count
         // heartbeat pattern above): the ladder try_sends claim-check
         // frames into this channel; the reader forwards each as a
-        // turn-narration event. The reader task ends when the sender
-        // side drops after the gate returns.
+        // turn-narration event and opens with the audit-open frame.
+        // The reader task ends when the sender drops after the gate.
         let gate_progress_tx: Option<crate::runtime::grounding::GateProgressSender> =
-            progress.map(|w| {
-                let (tx, mut rx) = tokio::sync::mpsc::channel::<NarrationPhase>(64);
-                tokio::spawn(async move {
-                    while let Some(phase) = rx.recv().await {
-                        let text = gate_progress_text(&phase);
-                        w.events
-                            .emit_turn_narration(TurnNarration {
-                                session_id: w.session_id.clone(),
-                                conversation_id: w.conversation_id.clone(),
-                                event: NarrationEvent {
-                                    phase,
-                                    text,
-                                    elapsed_ms: w.started.elapsed().as_millis() as u64,
-                                },
-                            })
-                            .await;
-                    }
-                });
-                tx
-            });
-        // Audit-open frame: the verification window lights the moment
-        // the gate takes the held draft — claim extraction itself takes
-        // seconds, so the claim list follows on a second frame (the
-        // two-frame contract documented on `ClaimCheckStart`).
-        if let Some(tx) = &gate_progress_tx {
-            let _ = tx.try_send(NarrationPhase::ClaimCheckStart {
-                claims: Vec::new(),
-                recheck: false,
-            });
-        }
+            progress.map(GateProgressWiring::spawn_reader);
         // Pre-gate citation pass (2026-07-01): snap/strip the DRAFT's `[Source:]`
         // garbles before the audit sees them — otherwise the specifics scan flags
         // each garbled label as a fabricated specific and burns a rewrite cycle on

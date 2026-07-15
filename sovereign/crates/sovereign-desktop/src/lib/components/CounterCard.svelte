@@ -66,8 +66,29 @@
     return "Reading the draft back against your sources…";
   });
 
-  const elapsedMs = $derived(
+  // Ticking clock. Frames carry turn-relative `elapsed_ms`, but they
+  // can be seconds apart during a long judge call — a frozen clock
+  // reads as a hang. Anchor on the latest frame's elapsed and tick
+  // locally between frames: displayed = frame elapsed + wall time
+  // since that frame arrived. Honest by construction — the base is
+  // always the backend's own number.
+  const frameElapsedMs = $derived(
     Math.max(counter?.elapsedMs ?? 0, heartbeat?.elapsedMs ?? 0),
+  );
+  let frameArrivedAt = $state(0);
+  $effect(() => {
+    void frameElapsedMs;
+    frameArrivedAt = Date.now();
+  });
+  let nowMs = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      nowMs = Date.now();
+    }, 1_000);
+    return () => clearInterval(id);
+  });
+  const elapsedMs = $derived(
+    frameElapsedMs + Math.max(0, nowMs - frameArrivedAt),
   );
 
   function formatElapsed(ms: number): string {

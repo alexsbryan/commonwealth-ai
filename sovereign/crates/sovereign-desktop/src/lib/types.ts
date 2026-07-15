@@ -1282,6 +1282,11 @@ export interface DocumentAskResponse {
    *  conversation pipeline — no operation badge is shown in that case. */
   operation?: DocumentAssetOperation;
   sources: string[];
+  /** The persisted assistant-message metadata, verbatim — provenance +
+   *  retrieved_chunks (document-op path) or the runtime turn's full
+   *  metadata incl. `grounding_gate` (fallback path). Merged into the
+   *  live bubble so it renders identically to a reload. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface DocumentProgressPayload {
