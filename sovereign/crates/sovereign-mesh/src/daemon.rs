@@ -205,6 +205,18 @@ pub struct EmbeddedDaemon {
     /// set during bootstrap before `start_daemon`. When `None`,
     /// `start_daemon` falls back to the legacy in-memory MeshStore.
     mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
+    /// Fired by the `POST /v1/mesh/leave` HTTP handler after a
+    /// *user-initiated* leave, to ask a standalone `daemon run`
+    /// process to exit so the service manager relaunches it into a
+    /// fresh solo mesh (the relaunch re-creates the solo mesh because
+    /// `leave()` cleared persistence). See [`Self::request_leave_relaunch`].
+    ///
+    /// Deliberately NOT fired inside `leave()`/`stop_inner`: `join_mesh`'s
+    /// internal auto-leave also calls `leave()`, and switching meshes must
+    /// not restart the process. The embedded/desktop daemon never runs the
+    /// standalone wait-for-shutdown loop, so this notify simply has no
+    /// consumer there (a harmless stored permit).
+    leave_relaunch_notify: Arc<tokio::sync::Notify>,
 }
 
 enum DaemonState {
@@ -307,6 +319,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            leave_relaunch_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -342,6 +355,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            leave_relaunch_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -1265,6 +1279,30 @@ impl EmbeddedDaemon {
             crate::gossip::announce_departure(&app_state).await;
         }
         self.stop_inner(StopMode::Leave).await
+    }
+
+    /// Signal that a **user-initiated** leave just completed and, on a
+    /// standalone `daemon run` process, the daemon should exit so the
+    /// service manager relaunches it into a fresh solo mesh.
+    ///
+    /// Called ONLY by the `POST /v1/mesh/leave` HTTP handler — never by
+    /// `leave()` itself, because `join_mesh`'s auto-leave and the
+    /// deprecated `stop()` also route through `leave()` and must NOT
+    /// restart the process. The standalone daemon awaits this via
+    /// [`Self::leave_relaunch_requested`]; the embedded/desktop daemon
+    /// never awaits it, so this is a harmless no-op there.
+    pub fn request_leave_relaunch(&self) {
+        // notify_one stores a permit even if the waiter hasn't parked
+        // yet, so the signal can't be lost to a startup race.
+        self.leave_relaunch_notify.notify_one();
+    }
+
+    /// Await a user-initiated leave-relaunch request (see
+    /// [`Self::request_leave_relaunch`]). The standalone daemon selects
+    /// on this alongside SIGINT/SIGTERM so the UI "Leave" button exits
+    /// the process and lets launchd/systemd relaunch it clean.
+    pub async fn leave_relaunch_requested(&self) {
+        self.leave_relaunch_notify.notified().await;
     }
 
     /// **Shutdown** the daemon for process exit. Stops gossip,

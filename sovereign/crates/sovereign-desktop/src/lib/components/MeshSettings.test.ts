@@ -5,7 +5,7 @@
 // deep-link handler works and rejects malformed URLs before they hit
 // the parser.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/svelte";
+import { render, screen, fireEvent, within } from "@testing-library/svelte";
 import MeshSettings from "./MeshSettings.svelte";
 
 // The component calls several api.ts functions on mount — make them
@@ -155,5 +155,140 @@ describe("MeshSettings — refresh after membership change", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// Leaving a mesh makes the standalone daemon exit so the service manager
+// relaunches it into a fresh solo mesh — ~10-20s where every :9741 call
+// fails at the transport layer. The old code called refresh() straight
+// after leave and flashed a hard "Failed to load mesh state" the instant
+// the daemon went away. It must now show a reconnecting state and poll
+// through the outage, then render the fresh solo mesh.
+describe("MeshSettings — resilient leave (daemon bounce)", () => {
+  beforeEach(() => {
+    joinLinkStore.clear();
+    meshMembership.clear();
+    vi.mocked(api.meshIsRunning).mockResolvedValue(true);
+    vi.mocked(api.meshGetState).mockResolvedValue(JOINED_STATE as never);
+    vi.mocked(api.meshLeave).mockResolvedValue(undefined as never);
+  });
+
+  it("shows reconnecting (not a hard error) while the daemon restarts, then recovers", async () => {
+    vi.useFakeTimers();
+    try {
+      render(MeshSettings);
+      await vi.advanceTimersByTimeAsync(0);
+      // In a mesh.
+      expect(screen.getByText("Lab Squad")).toBeInTheDocument();
+
+      // Open the leave confirmation modal.
+      await fireEvent.click(
+        screen.getByRole("button", { name: /^leave$/i }),
+      );
+      const dialog = screen.getByRole("dialog");
+
+      // Model the bounce: leave() succeeds, then the first two readiness
+      // probes fail at the transport layer before the relaunched daemon
+      // answers into a fresh solo mesh.
+      let probes = 0;
+      vi.mocked(api.meshIsRunning).mockImplementation(async () => {
+        probes += 1;
+        if (probes <= 2) {
+          throw new Error(
+            "error sending request for url (http://localhost:9741/v1/mesh/status)",
+          );
+        }
+        return true;
+      });
+      const SOLO_STATE = {
+        ...JOINED_STATE,
+        status: {
+          ...JOINED_STATE.status,
+          name: "My Solo Mesh",
+          members_total: 1,
+          members_online: 1,
+        },
+      };
+      vi.mocked(api.meshGetState).mockResolvedValue(SOLO_STATE as never);
+
+      // Confirm the leave (danger button inside the dialog).
+      await fireEvent.click(
+        within(dialog).getByRole("button", { name: /^leave$/i }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      // During the outage: reconnecting message, NOT a hard error.
+      expect(screen.getByText(/restarting the daemon/i)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Failed to load mesh state/i),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Failed to leave mesh/i),
+      ).not.toBeInTheDocument();
+
+      // Drive the reconnect poll to completion (800ms head start +
+      // two 1000ms retry gaps + success).
+      await vi.advanceTimersByTimeAsync(3200);
+
+      // Recovered into the fresh solo mesh, reconnecting cleared, no error.
+      expect(screen.getByText("My Solo Mesh")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/restarting the daemon/i),
+      ).not.toBeInTheDocument();
+      expect(vi.mocked(api.meshLeave)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// "Leaving" a solo (one-node) mesh only bounces the daemon into another
+// identical solo mesh — pointless and jarring. So for solo we hide Leave
+// and promote joining another mesh (which uses an in-process auto-leave,
+// no bounce). Leave stays for real groups where it's meaningful.
+describe("MeshSettings — solo mesh promotes join over leave", () => {
+  beforeEach(() => {
+    joinLinkStore.clear();
+    meshMembership.clear();
+  });
+
+  const SOLO_STATE = {
+    ...JOINED_STATE,
+    status: {
+      ...JOINED_STATE.status,
+      name: "My Mesh",
+      members_online: 1,
+      members_total: 1,
+      join_link: "sovereign://join/cwth-aaaa-bbbb-cccc",
+    },
+  };
+
+  it("hides Leave and promotes 'Join another mesh' when solo", async () => {
+    vi.mocked(api.meshIsRunning).mockResolvedValue(true);
+    vi.mocked(api.meshGetState).mockResolvedValue(SOLO_STATE as never);
+
+    render(MeshSettings);
+    expect(await screen.findByText("My Mesh")).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole("button", { name: /^leave$/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/join another mesh/i)).toBeInTheDocument();
+  });
+
+  it("shows Leave (and no solo join-promotion) when the mesh has other members", async () => {
+    vi.mocked(api.meshIsRunning).mockResolvedValue(true);
+    // JOINED_STATE has members_total: 3.
+    vi.mocked(api.meshGetState).mockResolvedValue(JOINED_STATE as never);
+
+    render(MeshSettings);
+    expect(await screen.findByText("Lab Squad")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", { name: /^leave$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/join another mesh/i),
+    ).not.toBeInTheDocument();
   });
 });

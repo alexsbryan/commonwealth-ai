@@ -111,6 +111,18 @@
   // Leave-mesh confirmation
   let showLeaveConfirm = $state(false);
   let leaving = $state(false);
+  // True while the daemon is bouncing after a leave: leaving the mesh
+  // makes the standalone daemon exit so the service manager relaunches
+  // it into a fresh solo mesh (~10-20s of :9741 downtime). We poll
+  // through that window instead of hard-erroring on the expected outage.
+  let reconnecting = $state(false);
+
+  // A solo mesh (just this node) is the node's default posture. "Leaving"
+  // it only bounces the daemon into another identical solo mesh —
+  // pointless AND jarring — so for solo we hide Leave and promote joining
+  // another mesh instead (which uses join_mesh's in-process auto-leave, so
+  // it doesn't bounce the daemon at all).
+  const isSolo = $derived(!!meshState && meshState.status.members_total <= 1);
 
   // Rotate-invite confirmation. Rotating revokes the link the user
   // already shared, which is destructive enough to warrant an
@@ -391,6 +403,31 @@
     showLeaveConfirm = false;
   }
 
+  /** Poll `:9741` until the daemon answers again, then refresh. Leaving
+   *  a mesh makes the standalone daemon exit so the service manager
+   *  relaunches it into a fresh solo mesh — a bounded window (~10-20s)
+   *  where every mesh call fails at the transport layer. Treat those
+   *  throws as "still restarting" and keep waiting; only give up after
+   *  `timeoutMs`. `meshIsRunning()` succeeding (even returning false)
+   *  proves the daemon is serving again, so it's our readiness probe. */
+  async function waitForDaemonAndRefresh(timeoutMs = 45000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    // Small head start: the daemon flushes the 204 and then takes a beat
+    // to drop its listener, so an immediate probe can spuriously succeed
+    // against the still-closing old process.
+    await new Promise((r) => setTimeout(r, 800));
+    while (Date.now() < deadline) {
+      try {
+        await meshIsRunning();
+        await refresh();
+        return true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    return false;
+  }
+
   async function confirmLeave() {
     if (leaving) return;
     leaving = true;
@@ -398,11 +435,23 @@
     try {
       await meshLeave();
       showLeaveConfirm = false;
-      await refresh();
+      // The daemon is exiting to relaunch clean. Show a reconnecting
+      // state and poll through the outage rather than flashing a hard
+      // "Failed to load mesh state" the instant :9741 goes away.
+      running = false;
+      meshState = null;
+      reconnecting = true;
+      const back = await waitForDaemonAndRefresh();
+      if (!back) {
+        error =
+          "Left the mesh, but the daemon is taking longer than expected to restart. It should reconnect on its own shortly.";
+      }
     } catch (e) {
       error = `Failed to leave mesh: ${e}`;
+    } finally {
+      leaving = false;
+      reconnecting = false;
     }
-    leaving = false;
   }
 
   // ── Rotate flow ────────────────────────────────────────
@@ -434,15 +483,46 @@
 
 </script>
 
+<!-- Paste-a-join-link affordance, shared by the idle state and the solo
+     active-mesh view (where we promote joining over the pointless "leave
+     your own mesh" action). Closes over joinLinkInput / joinLinkError /
+     submitJoinLink from the component scope. -->
+{#snippet joinBox(heading: string)}
+  <div class="join-section">
+    <p class="section-label">{heading}</p>
+    <p class="hint">
+      Open the <code>sovereign://join/…</code> link someone sent, or
+      paste it below.
+    </p>
+    <div class="join-row">
+      <input
+        type="text"
+        class="join-input"
+        placeholder="sovereign://join/cwth-xxxx-xxxx-xxxx"
+        bind:value={joinLinkInput}
+        onkeydown={(e) => e.key === "Enter" && submitJoinLink()}
+      />
+      <button class="primary" onclick={submitJoinLink}>Preview</button>
+    </div>
+    {#if joinLinkError}
+      <div class="alert error small">{joinLinkError}</div>
+    {/if}
+  </div>
+{/snippet}
+
 <div class="mesh-settings">
   {#if loading}
     <div class="muted">Checking mesh status…</div>
+  {:else if reconnecting}
+    <div class="muted reconnecting" role="status" aria-live="polite">
+      Left the mesh — restarting the daemon and reconnecting…
+    </div>
   {:else if error}
     <div class="alert error">{error}</div>
   {/if}
 
   <!-- ─── Idle state: not in a mesh ─────────────────────── -->
-  {#if !running && !showCreateForm}
+  {#if !running && !showCreateForm && !reconnecting}
     <div class="empty">
       <p class="lead">
         Pool AI resources with people you trust. A mesh shares spare
@@ -453,26 +533,7 @@
         <button class="primary" onclick={openCreateForm}>Create a mesh</button>
       </div>
 
-      <div class="join-section">
-        <p class="section-label">Joining a friend's mesh?</p>
-        <p class="hint">
-          Open the <code>sovereign://join/…</code> link they sent, or
-          paste it below.
-        </p>
-        <div class="join-row">
-          <input
-            type="text"
-            class="join-input"
-            placeholder="sovereign://join/cwth-xxxx-xxxx-xxxx"
-            bind:value={joinLinkInput}
-            onkeydown={(e) => e.key === "Enter" && submitJoinLink()}
-          />
-          <button class="primary" onclick={submitJoinLink}>Preview</button>
-        </div>
-        {#if joinLinkError}
-          <div class="alert error small">{joinLinkError}</div>
-        {/if}
-      </div>
+      {@render joinBox("Joining a friend's mesh?")}
     </div>
   {/if}
 
@@ -578,7 +639,9 @@
             {/if}
           </div>
         </div>
-        <button class="leave-btn" onclick={openLeaveConfirm}>Leave</button>
+        {#if !isSolo}
+          <button class="leave-btn" onclick={openLeaveConfirm}>Leave</button>
+        {/if}
       </div>
 
       {#if meshState.status.knowledge_corpora.length > 0}
@@ -590,6 +653,20 @@
         </div>
       {/if}
     </div>
+
+    <!-- Solo mesh: promote joining. "Leaving" your own one-node mesh is a
+         no-op that just bounces the daemon, so we don't offer it (see the
+         gated leave-btn above); joining another mesh is the meaningful
+         action, and join_mesh's in-process auto-leave means no bounce. -->
+    {#if isSolo}
+      <div class="join-promote">
+        <p class="join-promote-lead">
+          It's just you here so far. Join someone else's mesh, or invite
+          people to yours with the link below.
+        </p>
+        {@render joinBox("Join another mesh")}
+      </div>
+    {/if}
 
     <!-- Invite card — present whenever the daemon has cached the
          plaintext key. Hidden for legacy meshes (no join_key.secret
@@ -1054,6 +1131,26 @@
     font-size: 0.85rem;
   }
 
+  .reconnecting {
+    animation: reconnect-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes reconnect-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reconnecting {
+      animation: none;
+    }
+  }
+
   .alert {
     padding: 10px 12px;
     border-radius: var(--radius);
@@ -1112,6 +1209,22 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted);
+  }
+
+  /* Solo-mesh "join another mesh" promotion — a soft accent card so the
+     meaningful action reads as primary where "Leave" used to sit. */
+  .join-promote {
+    margin-top: 14px;
+    padding: 14px 16px 16px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+    border-radius: var(--radius-lg);
+  }
+  .join-promote-lead {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
   }
 
   .join-row {

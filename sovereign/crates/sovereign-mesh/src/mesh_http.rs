@@ -550,7 +550,18 @@ async fn mesh_leave(
         return r;
     }
     match daemon.leave().await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            // A user-initiated leave should return the node to a fresh
+            // solo mesh. On the standalone `daemon run` process that
+            // means exiting so launchd/systemd relaunches (the relaunch
+            // re-creates the solo mesh, because `leave()` just cleared
+            // persistence). Signal that HERE — not inside `leave()` —
+            // because `join_mesh`'s auto-leave also calls `leave()` and
+            // must not restart the process. Embedded/desktop daemons
+            // have no consumer for this signal, so it's a no-op there.
+            daemon.request_leave_relaunch();
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -628,6 +639,77 @@ mod tests {
         assert_eq!(body["running"], true);
         assert_eq!(body["mesh_name"], "test mesh");
         assert_eq!(body["members_total"], 1);
+    }
+
+    /// The user-facing `POST /v1/mesh/leave` must fire the leave-relaunch
+    /// signal so a standalone `daemon run` exits and the service manager
+    /// relaunches into a fresh solo mesh. Regression guard for the bug
+    /// where leaving a mesh killed `:9741` with no way back (the daemon
+    /// stopped its servers but never exited, so launchd never restarted).
+    #[tokio::test]
+    async fn http_leave_fires_relaunch_signal() {
+        let (daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        // Bring the daemon up so leave() succeeds (a Stopped daemon
+        // returns NotRunning and the handler 409s without signalling).
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let resp = client
+            .post(format!("{base}/v1/mesh/leave"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 204);
+
+        // The relaunch signal must have fired. notify_one stores a permit
+        // even though it was raised before we await here, so this resolves
+        // immediately; a missing signal would hang until the timeout.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            daemon.leave_relaunch_requested(),
+        )
+        .await
+        .expect("POST /v1/mesh/leave should fire the leave-relaunch signal");
+    }
+
+    /// A DIRECT `leave()` — the path `join_mesh`'s auto-leave and the
+    /// deprecated `stop()` take when switching meshes — must NOT fire the
+    /// relaunch signal. If it did, joining a new mesh (which leaves the
+    /// old one first) would restart the whole daemon mid-join.
+    #[tokio::test]
+    async fn direct_leave_does_not_fire_relaunch_signal() {
+        let (daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        // Leave via the library method, exactly as join_mesh's auto-leave does.
+        daemon.leave().await.unwrap();
+
+        // The relaunch signal must NOT have fired: awaiting it times out.
+        let fired = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            daemon.leave_relaunch_requested(),
+        )
+        .await
+        .is_ok();
+        assert!(
+            !fired,
+            "direct leave() must not fire the relaunch signal (would restart the daemon mid mesh-switch)"
+        );
     }
 
     #[tokio::test]

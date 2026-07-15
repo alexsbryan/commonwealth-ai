@@ -52,6 +52,7 @@ mod serve_cmd;
 mod sibling;
 mod status_cmd;
 mod stop_cmd;
+mod update_cmd;
 mod util;
 
 use std::io::{self, BufRead, Write};
@@ -237,6 +238,10 @@ const HELP: Help = Help {
                 "daemon",
                 "(internal) Long-running service managed by launchd/systemd",
             ),
+            (
+                "update",
+                "Check for and install a newer CLI release (--check to only report)",
+            ),
         ]),
         HelpSection::Flags(&[
             ("--model <path>", "Quick responder GGUF (REPL mode only)"),
@@ -363,6 +368,7 @@ const ALL_VERBS: &[&str] = &[
     "status",
     "stop",
     "tools",
+    "update",
     "voice",
     "workflow",
 ];
@@ -834,6 +840,13 @@ async fn async_main() {
             }
             "refresh" => {
                 let code = refresh_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "update" => {
+                // Self-update: check the release shelf + re-run the canonical
+                // installer. In-process (owned by the dispatcher) because it
+                // must replace ALL sibling binaries, not just one.
+                let code = update_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "project" => {

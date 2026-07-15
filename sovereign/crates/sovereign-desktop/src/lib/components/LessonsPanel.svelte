@@ -196,6 +196,42 @@
 </section>
 
 <style>
+  /* ── Document chrome ──────────────────────────────────────────
+     The shared .doc-* rules live in SettingsPanel and are scoped to
+     THAT component, so this child panel inherited none of them — it
+     rendered flush to the container with an unstyled heading. Re-
+     declare them here (scoped to this panel) so it matches its
+     siblings, with a little extra breathing room. */
+  .doc-section {
+    flex: 1;
+    padding: 30px 30px 28px;
+    max-width: 660px;
+  }
+  .section-eyebrow {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--lavender);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .doc-h2 {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+  }
+  .doc-intro {
+    margin: 0 0 22px;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+  }
+
   .lp-muted {
     color: var(--text-muted);
     font-size: 0.88rem;
@@ -205,30 +241,50 @@
     font-size: 0.88rem;
   }
   .lp-empty {
-    padding: 18px 0 6px;
+    margin-top: 4px;
+    padding: 22px;
+    text-align: center;
+    background: color-mix(in srgb, var(--accent) 3%, var(--bg-secondary));
+    border: 1px dashed color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: var(--radius-lg);
   }
   .lp-empty-title {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
     font-weight: 600;
     color: var(--text-secondary);
   }
 
   .lp-list {
     list-style: none;
-    margin: 12px 0 0;
+    margin: 16px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
   .lp-row {
-    padding: 12px 14px;
+    padding: 14px 16px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
+    transition:
+      border-color 140ms ease,
+      background 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .lp-row:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--accent) 4%, var(--bg-secondary));
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
   }
   .lp-row.lp-retired {
     opacity: 0.65;
+  }
+  .lp-row.lp-retired:hover {
+    /* Retired rows are history, not actionable — don't invite a click. */
+    border-color: var(--border);
+    background: var(--bg-secondary);
+    box-shadow: none;
   }
 
   .lp-main {
