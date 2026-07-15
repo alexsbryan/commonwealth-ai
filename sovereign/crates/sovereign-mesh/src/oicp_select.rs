@@ -512,7 +512,7 @@ mod tests {
         // Speed::Slow, which the v0.3 tests below cover.
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let _ = provider.model_id_for(Speed::Fast);
     }
@@ -522,7 +522,7 @@ mod tests {
         // Non-mesh callers: no OICP envelope → Slow default.
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let req = CompletionRequest::new("x");
         assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
@@ -536,7 +536,7 @@ mod tests {
     fn pick_slot_v03_latency_fast_picks_fast_slot() {
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let envelope = InferenceRequirements::new()
             .with_hint(CapabilityHint::general())
@@ -549,7 +549,7 @@ mod tests {
     fn pick_slot_v03_latency_normal_picks_slow_slot() {
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let envelope = InferenceRequirements::new()
             .with_hint(CapabilityHint::general())
@@ -562,7 +562,7 @@ mod tests {
     fn pick_slot_v03_latency_extended_picks_slow_slot() {
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let envelope = InferenceRequirements::new()
             .with_hint(CapabilityHint::general())
@@ -577,7 +577,7 @@ mod tests {
         // returns Normal → Slow slot.
         let provider = StubProvider {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
-            slow_model: "Qwen3.5-27B.Q8_0".into(),
+            slow_model: "Qwen3.5-35B-A3B-Q4_K_M".into(),
         };
         let envelope = InferenceRequirements::new().with_hint(CapabilityHint::general());
         let req = CompletionRequest::new("hint-only").with_oicp(envelope);
