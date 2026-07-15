@@ -54,6 +54,32 @@ fn expected_intents(category: &str) -> &'static [&'static str] {
     }
 }
 
+/// Canonicalise an intent name for comparison: lowercase, alphanumerics only.
+/// Lets the bank's snake_case `expected_intent` override (`knowledge_query`)
+/// match the CamelCase `provenance.intent` the router fires (`KnowledgeQuery`).
+fn norm_intent(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// Expected intents for a cell. A per-cell `expected_intent` override is
+/// AUTHORITATIVE — the bank re-adjudicates specific cells whose category
+/// default is wrong for them (e.g. `regression_meta_named_source`, a definition
+/// lookup tagged `metalingual` that must RETRIEVE via KnowledgeQuery). Only when
+/// no override is present do we fall back to the category→intent mapping. Prior
+/// to this the override was ignored, false-failing every re-adjudicated cell.
+fn cell_expected(q: &BankQuestion) -> Vec<String> {
+    match &q.expected_intent {
+        Some(ei) if !ei.trim().is_empty() => vec![ei.clone()],
+        _ => expected_intents(&q.category)
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct Bank {
     #[serde(default)]
@@ -67,6 +93,10 @@ struct BankQuestion {
     question: String,
     #[serde(default)]
     category: String,
+    /// Optional per-cell authoritative expected intent (snake_case, e.g.
+    /// `knowledge_query`). Overrides the category→intent default when present.
+    #[serde(default)]
+    expected_intent: Option<String>,
 }
 
 pub async fn cmd_routing_replay(args: &[String]) -> i32 {
@@ -126,7 +156,7 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
     let known: Vec<&BankQuestion> = bank
         .questions
         .iter()
-        .filter(|q| !expected_intents(&q.category).is_empty())
+        .filter(|q| !cell_expected(q).is_empty())
         .collect();
     let skipped = bank.questions.len() - known.len();
     let take = limit.unwrap_or(known.len()).min(known.len());
@@ -173,8 +203,9 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
                 (String::new(), false)
             }
         };
-        let expected = expected_intents(&q.category);
-        let pass = glassbox_ok && expected.contains(&fired.as_str());
+        let expected = cell_expected(q);
+        let fired_norm = norm_intent(&fired);
+        let pass = glassbox_ok && expected.iter().any(|e| norm_intent(e) == fired_norm);
         let bucket = per_category.entry(q.category.clone()).or_insert((0, 0));
         bucket.1 += 1;
         if pass {

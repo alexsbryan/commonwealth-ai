@@ -1407,7 +1407,16 @@ impl Runtime {
                 );
             }
             let provenance = ResponseProvenance {
-                intent: "KnowledgeQuery".to_string(),
+                // Report the ACTUAL routed intent, not a hardcoded label. This
+                // handler serves both KnowledgeQuery AND ComparisonQuery
+                // (turn.rs dispatch), so hardcoding "KnowledgeQuery" made every
+                // ComparisonQuery turn LIE in its glassbox provenance — the
+                // desktop routing-meta showed "KnowledgeQuery" for a correctly
+                // classified comparison, and the routing-replay gate false-failed
+                // on it. `inherits_prior_knowledge_intent` already treats
+                // comparisonquery as knowledge-family, so thread inheritance is
+                // unaffected. Mirrors the deep-stream path's `intent_label`.
+                intent: format!("{intent:?}"),
                 search_method: Some("CorpusEngine".to_string()),
                 sources: sources_for_prov,
                 inference_backend: model_id,
