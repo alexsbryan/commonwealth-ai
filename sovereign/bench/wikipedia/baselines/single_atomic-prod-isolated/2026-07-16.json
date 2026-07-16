@@ -1,0 +1,232 @@
+{
+  "bank_name": "single-atomic-bombings",
+  "corpus": "wikipedia",
+  "limit": 30,
+  "started_at_unix": 1784232546,
+  "results": [
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.08198924,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bombings were unnecessary for the war's end and were a war crime, raising moral and ethical implications."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
+          "score": 0.07642962,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  all major belligerents during World War II was not prohibited by positive or specific customary international humanitarian law.  In 1963 the bombings were subjected to judicial review in Ryuichi Shimoda v. The State. The District Court of Tokyo ruled the use of nuclear weapons in warfare was not illegal, but held in its obiter dictum that the atomic bombings of both Hiroshima and Nagasaki were illegal under international law of that time, as an indiscriminate bombardment of undefended cities. The court denied the appellants compensation on the grounds…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.07619487,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.039772727,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.03731343,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.07687794,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.0390625,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.040384617,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  on 26 July 1945, the alternative being \"prompt and utter destruction\". The Japanese government ignored the ultimatum.  The consent of the United Kingdom was obtained for the bombing, as was required by the Quebec Agreement, and orders were issued on 25 July by General Thomas Handy, the acting chief of staff of the United States Army, for atomic bombs to be used against Hiroshima, Kokura, Niigata, and Nagasaki. These targets were chosen because they were large urban areas that also held militarily significant facilities. On 6 August, a Little Boy was d…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.03731343,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.041666668,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  On 6 and 9 August 1945, the United States detonated two atomic bombs over the Japanese cities of Hiroshima and Nagasaki. The bombings killed between 150,000 and 246,000 people, most of whom were civilians, and remain the only use of nuclear weapons in an armed conflict. Japan surrendered to the Allies on 15 August, six days after the bombing of Nagasaki and the Soviet Union's declaration of war against Japan and invasion of Japanese-occupied Manchuria. The Japanese government signed the instrument of surrender on 2 September, effectively ending the wa…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
+          "score": 0.02734375,
+          "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
+          "score": 0.023809526,
+          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated a uranium gun-type fission bomb nicknamed \" Little Boy \" over the Japanese city of Hiroshima; three days later, on August 9, the USAAF detonated a plutonium implosion-type fission bomb nicknamed \" Fat Man \" over the Japanese city of Nagasaki. These bombings caused injuries that resulted in the deaths of approximately 200,000 civilians and military personnel. The ethics of these bombings and their r…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Sports",
+          "score": 0.022916667,
+          "snippet": "Nagasaki is represented in the J. League of football with its local club, V-Varen Nagasaki."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#Other_sports",
+          "score": 0.022916667,
+          "snippet": "Hiroshima  The Woodone Open Hiroshima was part of the Japan Golf Tour between 1973 and 2007. The city also hosted the 1994 Asian Games, using the Big Arch stadium, which is now used for the annual Mikio Oda Memorial International Amateur Athletic Game. The now-called Hiroshima Prefectural Sports Center was one of the host arenas of the 2006 FIBA World Championship (basketball)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Harry S. Truman",
+          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman#Dropping_atomic_bombs_on_Japan",
+          "score": 0.023076924,
+          "snippet": "Harry S. Truman  bomb, Stalin was already aware of the bomb project—having learned about it through atomic espionage long before Truman did.  Hiroshima was bombed on August 6, and Nagasaki three days later, leaving 105,000 dead. The Soviet Union declared war on Japan on August 9 and invaded Manchuria. Japan agreed to surrender the following day.  Supporters of Truman's decision argue that, given the tenacious Japanese defense of the outlying islands, the bombings saved hundreds of thousands of lives of Allied prisoners, Japanese civilians, and combatants on both sides that would have been lost…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#University",
+          "score": 0.022540983,
+          "snippet": "Hiroshima  Notable art institutions include the Elisabeth University of Music and Actor's School Hiroshima."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Cities",
+          "score": 0.022540983,
+          "snippet": "Nagasaki Prefecture  Thirteen cities are located in Nagasaki Prefecture:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 0.019927537,
+          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Ethics",
+          "score": 0.018382354,
+          "snippet": "Nuclear weapon  Even before the first nuclear weapons had been developed, scientists involved with the Manhattan Project were divided over the use of the weapon. The role of the two atomic bombings of the country in Japan's surrender and the U.S.'s ethical justification for them has been the subject of scholarly and popular debate for decades. The question of whether nations should have nuclear weapons, or test them, has been continually and nearly universally controversial."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#Prefectural_Route",
+          "score": 0.022916667,
+          "snippet": "Hiroshima Prefectural Route 37 (Hiroshima-Miyoshi Route), Hiroshima Prefectural Route 70 (Hiroshima-Nakashima Route), Hiroshima Prefectural Route 84 (Higashi Kaita Hiroshima Route), Hiroshima Prefectural Route 164 (Hiroshima-Kaita Route), and Hiroshima Prefectural Route 264 (Nakayama-Onaga Route)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 1.0,
+          "snippet": "Air raids on Japan  During the Pacific War, Allied forces conducted air raids on Japan from 1942 to 1945, causing extensive destruction to the country's cities and killing between 241,000 and 900,000 people. During the first years of the Pacific War these attacks were limited to the Doolittle Raid in April 1942 and small-scale raids on military positions in the Kuril Islands from mid-1943. Strategic bombing raids began in June 1944 and continued until the end of the war in August 1945. Allied naval and land-based tactical air units also attacked Japan during 1945. The United States Army Air Fo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 1.0,
+          "snippet": "Air raids on Japan  From June 1944 until January 1945, B-29s stationed in India staged through bases in China to make a series of nine raids on targets in western Japan, but this effort proved ineffective. The strategic bombing campaign was greatly expanded from November 1944 when bases in the Mariana Islands became available as a result of the Mariana Islands Campaign. Initial attempts to target industrial facilities using high-altitude daylight \"precision\" bombing were largely ineffective. From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon",
+          "score": 1.0,
+          "snippet": "Nuclear weapon  A nuclear weapon is an explosive device that derives its destructive force from nuclear reactions, either fission or a combination of fission and fusion reactions, producing a nuclear explosion. Both bomb types release large quantities of energy from relatively small amounts of matter. The first test of a fission (\"atomic\") bomb released an amount of energy approximately equal to 20,000 tons of TNT (84 TJ). The first thermonuclear (\"hydrogen\") bomb test released energy approximately equal to 10 million tons of TNT (42 PJ). Nuclear bombs have had yields between 10 tons TNT and 5…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon",
+          "score": 1.0,
+          "snippet": "Nuclear weapons have been deployed twice in war, both by the United States against the Japanese cities of Hiroshima and Nagasaki in 1945 during World War II."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Harry S. Truman",
+          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "score": 1.0,
+          "snippet": "Harry S. Truman was the 33rd president of the United States, serving from 1945 to 1953. A member of the Democratic Party, he previously served as a United States senator from Missouri from 1935 to 1945 and briefly as the 34th vice president in 1945 under Franklin D. Roosevelt. Assuming the presidency after Roosevelt's death, Truman implemented the Marshall Plan in the wake of World War II to rebuild the economy of Western Europe and established both the Truman Doctrine and NATO to contain the expansion of Soviet communism. He proposed numerous liberal domestic reforms, but few were enacted by …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Harry S. Truman",
+          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "score": 1.0,
+          "snippet": "Harry S. Truman  Between 1940 and 1944, he gained national prominence as chairman of the Truman Committee, which was aimed at reducing waste and inefficiency in wartime contracts. Truman was elected vice president in the 1944 presidential election and assumed the presidency upon Roosevelt's death in April 1945. It was only when Truman assumed the presidency that he was informed about the ongoing Manhattan Project and the atomic bomb. Truman authorized the first and only use of nuclear weapons in war against the Japanese cities of Hiroshima and Nagasaki. Truman's administration engaged in an in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Harry S. Truman",
+          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "score": 1.0,
+          "snippet": "Harry S. Truman  He oversaw the Berlin Airlift and Marshall Plan in 1948. With the involvement of the US in the Korean War of 1950–1953, South Korea repelled the invasion by North Korea. Domestically, the postwar economic challenges such as strikes and inflation created a mixed reaction over the effectiveness of his administration. In 1948, he proposed Congress pass comprehensive civil rights legislation. Congress refused, so Truman issued Executive Order 9980 and Executive Order 9981, which prohibited discrimination in federal agencies and desegregated the U.S. Armed Forces. Investigations re…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 5143,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

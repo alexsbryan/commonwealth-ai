@@ -84,6 +84,10 @@ impl CorpusIndex {
         if chunks.is_empty() {
             return Ok(());
         }
+        // Row count changes — drop the cached search gate (see gate_cache).
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = None;
+        }
 
         // Allocate ids from the persisted high-water mark, NOT the row
         // count. `chunk_count()` diverges from the max id after any
@@ -206,6 +210,9 @@ impl CorpusIndex {
             .delete(&format!("source_doc_id = '{safe_id}'"))
             .await
             .map_err(|e| Error::Database(format!("delete_chunks_by_source_doc: {e}")))?;
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = None;
+        }
         Ok(())
     }
 
@@ -224,6 +231,9 @@ impl CorpusIndex {
             .delete(&format!("id IN ({list})"))
             .await
             .map_err(|e| Error::Database(format!("delete_chunks_by_ids: {e}")))?;
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = None;
+        }
         Ok(())
     }
 

@@ -268,6 +268,7 @@ impl CorpusIndex {
             table,
             corpus_id: corpus_id.to_string(),
             embedding_dimensions: embedding_dim,
+            gate_cache: Default::default(),
         })
     }
 
@@ -723,6 +724,13 @@ impl CorpusIndex {
         let count = self.chunk_count().await?;
         if count == 0 {
             return Ok(());
+        }
+        // Index existence is about to change — drop the cached search
+        // gate so post-build searches see the new IVF/FTS immediately
+        // (a stale "no IVF" on a >10k-row corpus silently skips the
+        // vector leg; see the gate_cache field doc).
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = None;
         }
 
         let dir = Path::new(self.db.uri()).to_path_buf();
