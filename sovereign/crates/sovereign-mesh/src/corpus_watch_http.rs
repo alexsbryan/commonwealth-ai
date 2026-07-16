@@ -102,6 +102,13 @@ pub fn corpus_watch_router() -> Router {
             "/internal/corpus/watch/{corpus_id}/enrich/rebuild",
             post(enrich_rebuild_handler),
         )
+        // Re-enrich a SINGLE note (the "flag a wrong summary" revision
+        // loop). The correction ledger row is written desktop-side first;
+        // this just re-runs that one note's RAPTOR with the hint applied.
+        .route(
+            "/internal/corpus/watch/{corpus_id}/enrich/reenrich-note",
+            post(reenrich_note_handler),
+        )
         // One-shot enrichment for a corpus the *desktop* ingested with its own
         // provider-less manager — e.g. a drag-drop DocumentFolder. Registers it
         // into the daemon's tiered-capable manager (no sweep worker) and runs a
@@ -1312,6 +1319,42 @@ async fn enrich_reset_handler(
         Err(e) => {
             error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response()
         }
+    }
+}
+
+/// Body for [`reenrich_note_handler`]. `corpus_id` rides in the path;
+/// only the note id is in the body. The correction hint itself is NOT
+/// sent here — the desktop persists it to `conv_summary_corrections`
+/// before calling, and the provider reads it back during the build.
+#[derive(Debug, serde::Deserialize)]
+struct ReenrichNoteRequest {
+    source_doc_id: String,
+}
+
+/// `POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` — body
+/// `{ "source_doc_id": "…" }`. The "flag a wrong summary → re-enrich just
+/// this note" revision loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). Awaits
+/// the (~1-min) single-note RAPTOR rebuild, which regenerates the summary
+/// with the user's correction injected. Returns the driver's friendly
+/// "busy" message (BAD_REQUEST) if a full build currently holds the permit.
+async fn reenrich_note_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(corpus_id): Path<String>,
+    Json(req): Json<ReenrichNoteRequest>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(manager) = watched_folder_runtime::manager() else {
+        return service_unavailable("watched-folder runtime not installed").into_response();
+    };
+    match manager.reenrich_note(&corpus_id, &req.source_doc_id).await {
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
+        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 

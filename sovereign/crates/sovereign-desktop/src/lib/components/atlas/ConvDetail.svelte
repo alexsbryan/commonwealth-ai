@@ -13,7 +13,7 @@
   // Read-only today; future "open chunks in reading surface" hook
   // would live on the chunk-id badges below each leaf.
   import { onMount } from "svelte";
-  import { atlasGetConvDetail } from "../../api";
+  import { atlasGetConvDetail, lcReenrichNote } from "../../api";
   import type { ConvDetailView, ConvRaptorNodeView } from "../../types";
   import EntityDrawer from "./EntityDrawer.svelte";
 
@@ -59,6 +59,47 @@
 
   function formatTimestamp(unix: number): string {
     return new Date(unix * 1000).toLocaleString();
+  }
+
+  function formatDay(unix: number): string {
+    return new Date(unix * 1000).toLocaleDateString();
+  }
+
+  // ── Summary revision loop ────────────────────────────────────────
+  // Flag a wrong summary → re-enrich just this note, guided by an
+  // optional correction hint (docs/specs/SUMMARY_REVISION_LOOP.md).
+  // The button is per-cluster (captures the specific wrong summary as
+  // context), but the rebuild is note-wide, so node ids change and we
+  // reload the whole detail on success.
+  let flaggingNodeId: string | null = $state(null);
+  let hintText = $state("");
+  let reenriching = $state(false);
+  let reenrichError: string | null = $state(null);
+
+  function openFlag(node: ConvRaptorNodeView) {
+    flaggingNodeId = node.node_id;
+    hintText = "";
+    reenrichError = null;
+  }
+
+  function cancelFlag() {
+    flaggingNodeId = null;
+    reenrichError = null;
+  }
+
+  async function submitFlag(node: ConvRaptorNodeView) {
+    reenriching = true;
+    reenrichError = null;
+    try {
+      await lcReenrichNote(corpusId, convUuid, hintText, node.summary);
+      // Node ids are regenerated on rebuild — reload the whole detail.
+      detail = await atlasGetConvDetail(corpusId, convUuid);
+      flaggingNodeId = null;
+    } catch (e) {
+      reenrichError = e instanceof Error ? e.message : String(e);
+    } finally {
+      reenriching = false;
+    }
   }
 
   /** True when the tree warrants hierarchical rendering — more than
@@ -187,6 +228,12 @@
         <span>{detail.raptor_nodes.length} topic cluster{detail.raptor_nodes.length === 1 ? "" : "s"}</span>
         <span>{detail.max_level + 1} level{detail.max_level === 0 ? "" : "s"} of summary</span>
         <span>updated {formatTimestamp(detail.updated_at)}</span>
+        {#if detail.correction?.status === "applied"}
+          <span
+            class="revised-badge"
+            title={detail.correction.correction_hint ?? "You corrected this summary"}
+          >✓ revised by you · {formatDay(detail.correction.created_at)}</span>
+        {/if}
       </div>
     </section>
 
@@ -261,8 +308,48 @@
       {#if node.evidence_chunk_count > 0}
         <span class="evidence">{node.evidence_chunk_count} message{node.evidence_chunk_count === 1 ? "" : "s"}</span>
       {/if}
+      <button
+        type="button"
+        class="flag-button"
+        title="Flag this summary as wrong and re-enrich this note"
+        onclick={() => openFlag(node)}
+        disabled={reenriching}
+      >⚑ fix</button>
     </div>
     <p class="summary">{node.summary}</p>
+    {#if flaggingNodeId === node.node_id}
+      <div class="flag-form">
+        <label class="flag-label" for={`hint-${node.node_id}`}>
+          What did it get wrong?
+          <span class="flag-hint-note">optional, but a hint makes the fix far better</span>
+        </label>
+        <textarea
+          id={`hint-${node.node_id}`}
+          class="flag-textarea"
+          bind:value={hintText}
+          rows="3"
+          placeholder="e.g. Yakumo is the village/setting; Grandmother Sato is the character who keeps the journal."
+          disabled={reenriching}
+        ></textarea>
+        {#if reenrichError}
+          <p class="flag-error" role="alert">{reenrichError}</p>
+        {/if}
+        <div class="flag-actions">
+          <button
+            type="button"
+            class="flag-cancel"
+            onclick={cancelFlag}
+            disabled={reenriching}
+          >Cancel</button>
+          <button
+            type="button"
+            class="flag-submit"
+            onclick={() => submitFlag(node)}
+            disabled={reenriching}
+          >{reenriching ? "Re-enriching this note…" : "Re-enrich this note"}</button>
+        </div>
+      </div>
+    {/if}
     {#if node.primary_entities.length > 0}
       <div class="entity-row">
         {#each node.primary_entities as ent (ent)}
@@ -519,5 +606,121 @@
   .status.empty {
     text-align: center;
     padding: 32px 4px;
+  }
+  /* ── Summary revision loop — flag + inline correction form + badge ── */
+  .revised-badge {
+    font-size: 0.72rem;
+    color: var(--growth);
+    background: var(--growth-dim);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .flag-button {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 1px 8px;
+    font-size: 0.72rem;
+    font-family: inherit;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease,
+      background 120ms ease;
+  }
+  .flag-button:hover:not(:disabled) {
+    opacity: 1;
+    color: var(--coral);
+    border-color: var(--coral-dim);
+    background: var(--coral-dim);
+  }
+  .flag-button:disabled {
+    cursor: default;
+    opacity: 0.3;
+  }
+  .flag-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+  }
+  .flag-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .flag-hint-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+  .flag-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+  }
+  .flag-textarea:focus-visible {
+    outline: 2px solid var(--lavender);
+    outline-offset: 1px;
+  }
+  .flag-error {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--error);
+  }
+  .flag-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .flag-cancel,
+  .flag-submit {
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: 1px solid var(--border-mid);
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .flag-cancel {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .flag-cancel:hover:not(:disabled) {
+    border-color: var(--border-bright);
+    color: var(--text-primary);
+  }
+  .flag-submit {
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
+    border-color: var(--lavender);
+  }
+  .flag-submit:hover:not(:disabled) {
+    background: var(--lavender-glow);
+    color: var(--text-primary);
+  }
+  .flag-cancel:disabled,
+  .flag-submit:disabled {
+    cursor: default;
+    opacity: 0.5;
   }
 </style>

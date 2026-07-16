@@ -1150,6 +1150,81 @@ async fn corpus_raptor_version_returns_scoped_max_created_at() {
     assert_eq!(store.corpus_raptor_version("missing").await.unwrap(), 0);
 }
 
+/// The summary-correction ledger (the "flag a wrong summary" revision
+/// loop, docs/specs/SUMMARY_REVISION_LOOP.md): upsert writes a `pending`
+/// row, `get_active_correction` reads it back, `set_correction_status`
+/// flips `pending` → `applied`, re-flagging supersedes (clears
+/// `applied_at`), and rows are scoped per (corpus, note).
+#[tokio::test]
+async fn summary_correction_ledger_roundtrips_and_flips_status() {
+    let store = SqliteStateStore::open_in_memory().unwrap();
+
+    // No correction yet.
+    assert!(store
+        .get_active_correction("vault", "Note.md")
+        .await
+        .unwrap()
+        .is_none());
+
+    // Flag it (pending).
+    store
+        .upsert_summary_correction(
+            "vault",
+            "Note.md",
+            Some("Yakumo is the village, not a person"),
+            Some("Following Yakumo's death…"),
+            "pending",
+            1000,
+        )
+        .await
+        .unwrap();
+    let c = store
+        .get_active_correction("vault", "Note.md")
+        .await
+        .unwrap()
+        .expect("correction present after upsert");
+    assert_eq!(c.status, "pending");
+    assert_eq!(
+        c.correction_hint.as_deref(),
+        Some("Yakumo is the village, not a person")
+    );
+    assert_eq!(c.applied_at, None);
+
+    // Provider flips it to applied after the guided re-enrich.
+    store
+        .set_correction_status("vault", "Note.md", "applied", Some(1005))
+        .await
+        .unwrap();
+    let c = store
+        .get_active_correction("vault", "Note.md")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(c.status, "applied");
+    assert_eq!(c.applied_at, Some(1005));
+
+    // Re-flagging supersedes: status back to pending, applied_at cleared.
+    store
+        .upsert_summary_correction("vault", "Note.md", Some("still wrong"), None, "pending", 2000)
+        .await
+        .unwrap();
+    let c = store
+        .get_active_correction("vault", "Note.md")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(c.status, "pending");
+    assert_eq!(c.applied_at, None);
+    assert_eq!(c.correction_hint.as_deref(), Some("still wrong"));
+
+    // Scoped per (corpus, note): a sibling note is unaffected.
+    assert!(store
+        .get_active_correction("vault", "Other.md")
+        .await
+        .unwrap()
+        .is_none());
+}
+
 // ─── T1 memory embeddings + T3 mem-raptor (tiered memory port) ────
 
 /// T1: `update_memory_embedding` persists and round-trips through the

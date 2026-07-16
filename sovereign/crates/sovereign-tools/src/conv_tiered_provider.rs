@@ -765,9 +765,17 @@ impl FolderTieredProvider {
     /// daemon wired an index-dir resolver. Returns `(None, None)` for
     /// resolver-less paths (unit tests) — the build path tolerates
     /// missing checkpoints + sinks by skipping the durable bits.
+    ///
+    /// The checkpoint is keyed **per note** (`conv_uuid`), not per
+    /// corpus: in a folder/vault corpus each conversation is enriched by
+    /// its own `enrich_conversation` call, and a shared slot would let
+    /// each note stomp the previous note's manifest — turning a mid-vault
+    /// restart into a full re-run of every already-built note. See
+    /// `RaptorCheckpointHandle::at_note`.
     fn build_checkpoint_and_sink(
         &self,
         corpus_id: &str,
+        conv_uuid: &str,
         chunks: &[EnrichmentChunkRow],
         embeddings: &[Vec<f32>],
     ) -> (
@@ -786,8 +794,9 @@ impl FolderTieredProvider {
             &chunk_ids,
             embedding_dim,
         );
-        let checkpoint =
-            crate::raptor_checkpoint::RaptorCheckpointHandle::at(&index_dir, input_hash);
+        let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
+            &index_dir, conv_uuid, input_hash,
+        );
         let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
             Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
                 index_dir,
@@ -1089,6 +1098,25 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         use corpus_engine::enrichment::state::EnrichmentPhase;
         let chunk_count = chunks.len();
         let updated_at = Utc::now().timestamp();
+        // Durable summary-revision loop: consult the correction ledger
+        // ONCE up front so every rebuild path (targeted flag, sweep,
+        // resume, full) re-applies the user's fix. `correction_hint` is
+        // injected into the RAPTOR summary prompt; `force_rebuild` (set
+        // only for a freshly-flagged 'pending' correction) wipes the
+        // content-hash checkpoint below so the summary actually
+        // regenerates. See docs/specs/SUMMARY_REVISION_LOOP.md.
+        let active_correction = self
+            .store
+            .get_active_correction(corpus_id, conv_uuid)
+            .await
+            .ok()
+            .flatten();
+        let correction_hint = active_correction
+            .as_ref()
+            .and_then(|c| c.correction_hint.as_deref());
+        let force_rebuild = active_correction
+            .as_ref()
+            .is_some_and(|c| c.status == "pending");
         // Publish the entry point so the UI flips off the
         // indistinguishable "starting…" state the moment the
         // provider claims the corpus. Without this stamp, daemons
@@ -1153,11 +1181,28 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     );
                     // Construct the per-cluster checkpoint handle +
                     // progress sink if we know where the index dir is.
-                    // The handle is shaped against the input chunk IDs
-                    // + embedding dim so re-runs after the chunk set
-                    // changes invalidate cleanly.
-                    let (checkpoint_owned, progress_sink_owned) =
-                        self.build_checkpoint_and_sink(corpus_id, &chunks, embeddings.as_slice());
+                    // The handle is keyed by conv_uuid (per-note slot) and
+                    // shaped against the input chunk IDs + embedding dim,
+                    // so an unchanged note short-circuits on resume while a
+                    // note whose chunks changed invalidates cleanly.
+                    let (checkpoint_owned, progress_sink_owned) = self.build_checkpoint_and_sink(
+                        corpus_id,
+                        conv_uuid,
+                        &chunks,
+                        embeddings.as_slice(),
+                    );
+                    // A freshly-flagged ('pending') correction must FORCE a
+                    // rebuild: the note's content is unchanged, so the
+                    // checkpoint would otherwise short-circuit to the cached
+                    // WRONG summary with no LLM call. Wipe it so the summary
+                    // regenerates with the hint. ('applied' corrections need
+                    // no force — content-changed rebuilds re-inject it, and
+                    // unchanged ones already hold the fix.)
+                    if force_rebuild {
+                        if let Some(cp) = checkpoint_owned.as_ref() {
+                            cp.reset();
+                        }
+                    }
                     let checkpoint_ref = checkpoint_owned.as_ref();
                     let progress_ref = progress_sink_owned.as_ref();
                     build_folder_artifacts(
@@ -1170,6 +1215,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         updated_at,
                         checkpoint_ref,
                         progress_ref,
+                        correction_hint,
                     )
                     .await
                 }
@@ -1237,6 +1283,18 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
+                // The pending correction (if any) has now been applied —
+                // the corrected summary is persisted. Flip the ledger so
+                // later rebuilds don't needlessly force again (the hint is
+                // still re-injected regardless via correction_hint). The
+                // provider owns this transition because it is the thing
+                // that actually applies the fix.
+                if force_rebuild {
+                    let _ = self
+                        .store
+                        .set_correction_status(corpus_id, conv_uuid, "applied", Some(updated_at))
+                        .await;
+                }
                 // NOTE: we deliberately do NOT stamp the corpus-level
                 // `_enrichment_state.json` to `Complete` here. This
                 // provider is called once PER DOCUMENT against a state
@@ -1384,6 +1442,7 @@ async fn build_folder_artifacts(
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    correction_hint: Option<&str>,
 ) -> std::result::Result<(Vec<ConvRaptorNodeRow>, Vec<ConvMotifRow>), Error> {
     let raptor_chunks: Vec<ChunkInput> = chunks
         .iter()
@@ -1400,6 +1459,7 @@ async fn build_folder_artifacts(
         doc_type,
         checkpoint,
         progress,
+        correction_hint,
     )
     .await
     .map_err(|e| {

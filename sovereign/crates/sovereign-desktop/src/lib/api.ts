@@ -885,6 +885,27 @@ export async function lcEnrichReset(corpusId: string): Promise<void> {
   return invoke("lc_enrich_reset", { corpusId });
 }
 
+/** Flag a wrong RAPTOR summary and re-enrich just that one note, guided
+ *  by the user's correction (the revision loop —
+ *  docs/specs/SUMMARY_REVISION_LOOP.md). Persists the correction, then
+ *  awaits the ~1-min single-note rebuild; on resolve the caller should
+ *  re-fetch `atlasGetConvDetail` to show the corrected summary + badge.
+ *  Rejects with the daemon's "busy" message if a full build is running.
+ *  `correctionHint` / `originalSummary` may be empty strings. */
+export async function lcReenrichNote(
+  corpusId: string,
+  sourceDocId: string,
+  correctionHint: string,
+  originalSummary: string,
+): Promise<void> {
+  return invoke("lc_reenrich_note", {
+    corpusId,
+    sourceDocId,
+    correctionHint,
+    originalSummary,
+  });
+}
+
 export async function removeCorpus(corpusId: string): Promise<number> {
   return invoke("remove_corpus", { corpusId });
 }

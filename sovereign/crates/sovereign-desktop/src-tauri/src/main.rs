@@ -628,6 +628,7 @@ fn main() -> ExitCode {
             local_corpus_commands::lc_ingest,
             local_corpus_commands::lc_enrich_now,
             local_corpus_commands::lc_enrich_reset,
+            local_corpus_commands::lc_reenrich_note,
             local_corpus_commands::lc_list,
             local_corpus_commands::lc_remove,
             local_corpus_commands::lc_incomplete_jobs,

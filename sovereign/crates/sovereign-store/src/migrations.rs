@@ -681,6 +681,10 @@ pub fn run_mem_raptor_migration(conn: &Connection) -> rusqlite::Result<()> {
 /// - `conv_raptor_nodes` — per-conv RAPTOR tree (flat node list,
 ///   level + children + chunk membership + quote spans)
 /// - `conv_motifs` — TF-IDF motif index per conv
+/// - `conv_summary_corrections` — user-authored revisions of a note's
+///   RAPTOR summary (the "flag a wrong summary" revision loop); one row
+///   per note, re-applied on every rebuild (spec
+///   `docs/specs/SUMMARY_REVISION_LOOP.md`)
 pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "
@@ -733,6 +737,20 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
 
         CREATE INDEX IF NOT EXISTS idx_conv_motifs_distinctive
             ON conv_motifs(corpus_id, conv_uuid, is_distinctive DESC, tf_idf_score DESC);
+
+        CREATE TABLE IF NOT EXISTS conv_summary_corrections (
+            corpus_id        TEXT    NOT NULL,
+            conv_uuid        TEXT    NOT NULL,    -- = source_doc_id (root-relative note path)
+            correction_hint  TEXT,                -- user's 'what's wrong' note (may be empty); injected into the RAPTOR summary prompt
+            original_summary TEXT,                -- the summary the user flagged (LLM context + audit)
+            status           TEXT    NOT NULL,    -- 'pending' | 'applied'
+            created_at       INTEGER NOT NULL,
+            applied_at       INTEGER,
+            PRIMARY KEY (corpus_id, conv_uuid)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conv_summary_corrections_status
+            ON conv_summary_corrections(corpus_id, status);
         ",
     )
 }

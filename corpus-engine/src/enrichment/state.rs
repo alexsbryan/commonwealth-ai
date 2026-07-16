@@ -92,6 +92,19 @@ impl EnrichmentPhase {
         matches!(self, Self::Complete | Self::Failed | Self::Stalled)
     }
 
+    /// True when a build left in this phase by a process that has since
+    /// died (a `tauri dev` hot-reload, an app update, a crash) should be
+    /// RESUMED on the next boot. `Complete` finished cleanly; `Failed` is
+    /// a genuine error the operator retries deliberately (auto-retrying it
+    /// every boot would loop). Everything else — any non-terminal phase a
+    /// killed process left mid-run, or `Stalled` (that same corpse after
+    /// the boot stall-sweep re-labelled it) — is a resumable interruption.
+    /// Note this is deliberately NOT `!is_terminal()`: `Stalled` IS
+    /// terminal but IS resumable.
+    pub fn is_resumable_interruption(self) -> bool {
+        !matches!(self, Self::Complete | Self::Failed)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Starting => "starting",
@@ -643,6 +656,21 @@ mod tests {
         .unwrap();
         assert_eq!(after.started_at, initial.started_at);
         assert!(after.last_progress_at >= after.started_at);
+    }
+
+    #[test]
+    fn resumable_interruption_covers_stalled_and_nonterminal_but_not_done_or_failed() {
+        // Resume the corpses a killed process leaves behind...
+        assert!(EnrichmentPhase::Starting.is_resumable_interruption());
+        assert!(EnrichmentPhase::RaptorLeaves.is_resumable_interruption());
+        assert!(EnrichmentPhase::Persisting.is_resumable_interruption());
+        // ...including Stalled (terminal, but the boot stall-sweep just
+        // re-labelled an interrupted non-terminal build).
+        assert!(EnrichmentPhase::Stalled.is_resumable_interruption());
+        assert!(EnrichmentPhase::Stalled.is_terminal());
+        // ...but never a clean finish or a genuine failure (would loop).
+        assert!(!EnrichmentPhase::Complete.is_resumable_interruption());
+        assert!(!EnrichmentPhase::Failed.is_resumable_interruption());
     }
 
     #[test]

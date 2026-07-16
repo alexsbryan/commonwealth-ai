@@ -132,6 +132,101 @@ impl SqliteStateStore {
         Ok(row)
     }
 
+    /// Upsert the user's summary correction for one note. One active
+    /// correction per note (PK `(corpus_id, conv_uuid)`) — re-flagging
+    /// supersedes. `status` is `"pending"` on flag, flipped to
+    /// `"applied"` by [`set_correction_status`] once the guided
+    /// re-enrich lands. Part of the summary-revision loop
+    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`).
+    pub async fn upsert_summary_correction(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        correction_hint: Option<&str>,
+        original_summary: Option<&str>,
+        status: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO conv_summary_corrections
+                (corpus_id, conv_uuid, correction_hint, original_summary,
+                 status, created_at, applied_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)
+             ON CONFLICT(corpus_id, conv_uuid) DO UPDATE SET
+                correction_hint  = excluded.correction_hint,
+                original_summary = excluded.original_summary,
+                status           = excluded.status,
+                created_at       = excluded.created_at,
+                applied_at       = NULL",
+            rusqlite::params![
+                corpus_id,
+                conv_uuid,
+                correction_hint,
+                original_summary,
+                status,
+                created_at,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Read the active correction for one note, or `None` if the user
+    /// has never flagged it. The enrichment provider consults this on
+    /// EVERY rebuild (`enrich_conversation`) to re-inject the hint so
+    /// the correction persists; the desktop reads it to render the
+    /// "revised by you" badge.
+    pub async fn get_active_correction(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Option<SummaryCorrectionRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT corpus_id, conv_uuid, correction_hint, original_summary,
+                        status, created_at, applied_at
+                 FROM conv_summary_corrections
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2",
+                rusqlite::params![corpus_id, conv_uuid],
+                |r| {
+                    Ok(SummaryCorrectionRow {
+                        corpus_id: r.get(0)?,
+                        conv_uuid: r.get(1)?,
+                        correction_hint: r.get(2)?,
+                        original_summary: r.get(3)?,
+                        status: r.get(4)?,
+                        created_at: r.get(5)?,
+                        applied_at: r.get(6)?,
+                    })
+                },
+            )
+            .ok();
+        Ok(row)
+    }
+
+    /// Flip a correction's lifecycle status (e.g. `pending` →
+    /// `applied`) after the guided re-enrich completes. No-op if the
+    /// note has no correction row.
+    pub async fn set_correction_status(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        status: &str,
+        applied_at: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE conv_summary_corrections
+                SET status = ?3, applied_at = ?4
+              WHERE corpus_id = ?1 AND conv_uuid = ?2",
+            rusqlite::params![corpus_id, conv_uuid, status, applied_at],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
     /// Replace the RAPTOR node set for one conversation. Atomic
     /// delete + insert in one transaction — mirrors the attached-doc
     /// `save_raptor_nodes` semantics so a partial provider crash

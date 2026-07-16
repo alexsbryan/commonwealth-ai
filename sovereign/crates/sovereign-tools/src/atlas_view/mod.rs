@@ -40,7 +40,7 @@ pub use atom_detail::{
 };
 pub use conv::{
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
-    ConvSummary,
+    ConvSummary, SummaryCorrectionView,
 };
 pub use reader::{AtlasCorpusSummary, AtlasViewError, CurationStatus, FileAtlasReader};
 pub use stable_key::{compute_stable_key, StableAtomKey};

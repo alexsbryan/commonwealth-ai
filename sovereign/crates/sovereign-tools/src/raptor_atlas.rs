@@ -84,7 +84,8 @@ pub async fn build_raptor_atlas(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
 ) -> Result<Vec<RaptorNode>> {
-    build_raptor_atlas_with_checkpoint(inference, chunks, embeddings, doc_type, None, None).await
+    build_raptor_atlas_with_checkpoint(inference, chunks, embeddings, doc_type, None, None, None)
+        .await
 }
 
 /// Variant with a caller-chosen leaf-cluster target size. The default
@@ -107,6 +108,7 @@ pub async fn build_raptor_atlas_with_leaf_target(
         chunks,
         embeddings,
         doc_type,
+        None,
         None,
         None,
         leaf_target.max(2),
@@ -150,6 +152,9 @@ pub async fn build_raptor_atlas_with_checkpoint(
     doc_type: DocumentTypeTag,
     checkpoint: Option<&RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    // Optional user-authored correction (the "flag a wrong summary"
+    // revision loop) injected into every cluster's summarization prompt.
+    correction_hint: Option<&str>,
 ) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_impl(
         inference,
@@ -158,6 +163,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
         doc_type,
         checkpoint,
         progress,
+        correction_hint,
         LEAF_TARGET_CLUSTER_SIZE,
     )
     .await
@@ -171,6 +177,9 @@ async fn build_raptor_atlas_impl(
     doc_type: DocumentTypeTag,
     checkpoint: Option<&RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    // Note-level correction hint, re-applied at every RAPTOR tree level
+    // (rides on each `ClusterSummarizationInput`).
+    correction_hint: Option<&str>,
     leaf_target: usize,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.len() != embeddings.len() {
@@ -346,6 +355,7 @@ async fn build_raptor_atlas_impl(
                 quote_spans: inp.quote_spans,
                 centroid_embedding: inp.centroid,
                 cluster_coherence: inp.coherence,
+                correction_hint: correction_hint.map(|s| s.to_string()),
             },
         ));
     }
@@ -479,6 +489,7 @@ async fn build_raptor_atlas_impl(
                 quote_spans: all_child_spans,
                 centroid_embedding: centroid,
                 cluster_coherence: coherence,
+                correction_hint: correction_hint.map(|s| s.to_string()),
             });
         }
 
@@ -655,6 +666,11 @@ struct ClusterSummarizationInput {
     quote_spans: Vec<QuoteSpan>,
     centroid_embedding: Vec<f32>,
     cluster_coherence: f32,
+    /// Optional user-authored correction (the "flag a wrong summary"
+    /// revision loop). Populated for every cluster of a note that has an
+    /// active correction; injected into the summarization prompt so
+    /// regeneration is guided, not a blind re-roll.
+    correction_hint: Option<String>,
 }
 
 /// Dispatch summarization for many clusters in parallel via
@@ -722,6 +738,20 @@ async fn summarize_one_cluster(
         DocumentTypeTag::Unknown => "section-level summary: topic and what is said about it",
     };
 
+    // A user-authored correction (the "flag a wrong summary" revision
+    // loop) is authoritative — inject it so regeneration fixes the
+    // specific error instead of re-rolling into the same mistake. Rides
+    // on every rebuild via the ledger lookup in enrich_conversation.
+    let correction_block = match input.correction_hint.as_deref() {
+        Some(hint) if !hint.trim().is_empty() => format!(
+            "IMPORTANT — a reader reviewed a previous summary of this material and gave an \
+             authoritative correction. Honor it precisely and let it override any conflicting \
+             reading of the passages below:\n{}\n\n",
+            hint.trim()
+        ),
+        _ => String::new(),
+    };
+
     let prompt = format!(
         "You are summarizing a group of related passages from a {doc_type} document.\n\
          Produce a {cue}. The summary is a paraphrase — do NOT include any quotation marks \
@@ -730,7 +760,7 @@ async fn summarize_one_cluster(
          appear in the passages.\n\n\
          Respond with a single JSON object only:\n\
          {{\"summary\": \"<2-4 sentences, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
-         Passages:\n{body}\n\nJSON:",
+         {correction_block}Passages:\n{body}\n\nJSON:",
         doc_type = doc_type.label(),
         cue = doc_cue,
     );
