@@ -1,13 +1,19 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { corpusProgressStore } from "../stores/corpusProgress.svelte";
+  import {
+    corpusProgressStore,
+    etaSecondsFor,
+    formatEta,
+  } from "../stores/corpusProgress.svelte";
 
   interface Props {
-    onOpenSettings?: () => void;
+    /** Navigate to the knowledge surface (Library) where the in-progress
+     *  corpus is shown with full glassbox detail + peer-assist controls. */
+    onOpenLibrary?: () => void;
   }
 
-  let { onOpenSettings }: Props = $props();
+  let { onOpenLibrary }: Props = $props();
 
   // Single shared listener lives in the store; this component just
   // reads from it. Multiple instances of the banner (or KnowledgeStatus
@@ -61,7 +67,15 @@
   }
 
   function displayName(id: string): string {
-    return NAMES[id] ?? id;
+    if (NAMES[id]) return NAMES[id];
+    // Local user corpora carry a synthesized `<kind>-<hash>` id with no
+    // catalog name. Show the kind rather than the raw hash; the Library
+    // in-progress view (where clicking lands) shows the real folder name.
+    if (id.startsWith("obsidian-vault-")) return "Obsidian vault";
+    if (id.startsWith("watched-")) return "Watched folder";
+    if (id.startsWith("document-folder-") || id.startsWith("folder-"))
+      return "Folder";
+    return id;
   }
 </script>
 
@@ -71,10 +85,11 @@
        screen readers as the text updates, without stealing focus. -->
   <div class="corpus-banner" role="status" aria-live="polite">
     {#each visible as item (item.corpus_id)}
+      {@const eta = formatEta(etaSecondsFor(item))}
       <button
         class="banner-row"
-        onclick={() => onOpenSettings?.()}
-        title="Click to view in settings"
+        onclick={() => onOpenLibrary?.()}
+        title="Click to view in Library"
       >
         <span class="icon" aria-hidden="true">📚</span>
         <span class="name">{displayName(item.corpus_id)}</span>
@@ -88,6 +103,9 @@
             style="width: {Math.max(item.percent, 2)}%"
           ></div>
         </div>
+        {#if eta !== "—"}
+          <span class="eta" title="Estimated time remaining (approximate)">{eta} left</span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -144,6 +162,14 @@
     color: var(--text-secondary);
     font-weight: 500;
     margin-left: auto;
+  }
+
+  .eta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .progress-bar {

@@ -633,7 +633,7 @@
               conversationId={selectedConversationId}
               {taskSteps}
               onClearTask={clearTaskState}
-              onOpenSettings={() => (view = "settings")}
+              onOpenLibrary={() => handleRailNavigate("library")}
               onConversationCreated={handleConversationCreated}
             />
           </main>

@@ -60,6 +60,18 @@
   let loadError = $state<string | null>(null);
   let unlistenDrop: UnlistenFn | null = null;
 
+  // `lcList()` returns EVERY registered config — including watched folders,
+  // which the same LocalCorpusManager also serves to `lcWatchList()`. Those
+  // have their own dedicated "Watched folders" section (with the correct
+  // detail panel + sweep/enrich lifecycle), so they must NOT also appear in
+  // the one-shot "Folders" list, where they showed up mislabeled as Obsidian
+  // vaults. Keep only the one-shot sources here.
+  function isWatchedSource(c: LocalCorpusConfig): boolean {
+    const st = c.source_type;
+    return !!st && typeof st === "object" && "WatchedFolder" in st;
+  }
+  let folderCorpora = $derived(corpora.filter((c) => !isWatchedSource(c)));
+
   // Periodic refresh while idle so a sweep state change (Idle →
   // Sweeping → Idle, or Idle → PausedAwaitingConfirmation) shows up
   // without the user navigating away. 5s cadence matches the
@@ -236,13 +248,13 @@
         />
       </section>
 
-      {#if corpora.length > 0}
+      {#if folderCorpora.length > 0}
         <section class="plate">
           <div class="plate-head">
             <p class="lk-label">Folders</p>
-            <span class="plate-count lk-folio">{corpora.length}</span>
+            <span class="plate-count lk-folio">{folderCorpora.length}</span>
           </div>
-          <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
+          <LocalKnowledgeList corpora={folderCorpora} onRemove={handleRemove} {onOpenChatWithSeed} />
         </section>
       {/if}
 
@@ -267,9 +279,9 @@
       <section class="plate">
         <div class="plate-head">
           <p class="lk-label">Sources</p>
-          <span class="plate-count lk-folio">{corpora.length}</span>
+          <span class="plate-count lk-folio">{folderCorpora.length}</span>
         </div>
-        <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
+        <LocalKnowledgeList corpora={folderCorpora} onRemove={handleRemove} {onOpenChatWithSeed} />
       </section>
 
       {#if watchedCorpora.length > 0}

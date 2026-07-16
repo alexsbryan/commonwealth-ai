@@ -76,6 +76,7 @@ pub async fn install_corpus(
         percent: 0.0,
         chunks_processed: 0,
         message: Some("Starting…".into()),
+        ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
         map.insert(corpus_id.clone(), initial.clone());
@@ -126,6 +127,7 @@ pub async fn lc_expand_corpus(
         percent: 0.0,
         chunks_processed: 0,
         message: Some("Expanding scope…".into()),
+        ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
         map.insert(corpus_id.clone(), initial.clone());
@@ -375,6 +377,7 @@ pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppSt
                         percent: 100.0,
                         chunks_processed: 0,
                         message: Some("Done".into()),
+                        ..Default::default()
                     };
                     if let Ok(mut map) = state.install_progress.try_write() {
                         map.insert(gone.clone(), final_payload.clone());
@@ -520,11 +523,27 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
         }
     };
 
+    // Throughput for the glassbox ETA — the engine already computes both
+    // inside the embed phase; forward them so the banner + in-progress view
+    // can show "how long is left", not just a percent. Indexing carries a
+    // total but no per-batch rate (ETA falls back to indeterminate there).
+    let (chunks_total, chunks_per_sec) = match entry.progress.as_ref() {
+        Some(P::Embedding {
+            total,
+            chunks_per_sec,
+            ..
+        }) => (*total, *chunks_per_sec),
+        Some(P::Indexing { total, .. }) => (*total, 0.0),
+        _ => (0, 0.0),
+    };
+
     CorpusProgressPayload {
         corpus_id: entry.corpus_id.clone(),
         phase,
         percent,
         chunks_processed,
+        chunks_total,
+        chunks_per_sec,
         message,
     }
 }

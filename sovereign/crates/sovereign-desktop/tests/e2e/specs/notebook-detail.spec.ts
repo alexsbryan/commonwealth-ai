@@ -72,8 +72,11 @@ test.describe("Notebook detail", () => {
     await bootToChat(page, chat);
     await seedOneNotebook(page, CATALOG_NB);
 
-    // Track the enrich kickoff (init scaffolds the atlas config, build
-    // runs it) and hand back a streaming job handle.
+    // Track the enrich kickoff. "Make explorable" now fires the in-process
+    // daemon enrich (lc_enrich_now) and polls lc_enrichment_status — no CLI
+    // sibling, no separate init/build. The status handler is stateful: it
+    // reports "off" until the enrich has been kicked off, so the mount probe
+    // leaves the CTA in place and only the click drives the transition.
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
@@ -81,22 +84,34 @@ test.describe("Notebook detail", () => {
         };
       };
       (window as unknown as { __enrichCalls: string[] }).__enrichCalls = [];
-      w.__sovereign_test__.setHandler("recipe_enrich_init_from_corpus", (args) => {
+      let started = false;
+      w.__sovereign_test__.setHandler("lc_enrich_now", (args) => {
         const a = args as { corpusId?: string };
         (window as unknown as { __enrichCalls: string[] }).__enrichCalls.push(
-          `init:${a.corpusId}`,
+          `enrich:${a.corpusId}`,
         );
-        return "literary_atlas";
+        started = true;
+        return null;
       });
-      w.__sovereign_test__.setHandler("enrich_build_async", (args) => {
-        const a = args as { corpusId?: string };
-        (window as unknown as { __enrichCalls: string[] }).__enrichCalls.push(
-          `build:${a.corpusId}`,
-        );
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => {
+        if (!started) {
+          return {
+            state: null,
+            is_terminal: false,
+            is_stalled: false,
+            fraction_complete: 0,
+          };
+        }
         return {
-          job_id: "nb-job-1",
-          corpus_id: a.corpusId,
-          channel: "enrich://progress/nb-job-1",
+          state: {
+            phase: "raptor_leaves",
+            step_current: 2,
+            step_total: 5,
+            message: "Summarizing sections",
+          },
+          is_terminal: false,
+          is_stalled: false,
+          fraction_complete: 0.4,
         };
       });
     });
@@ -105,13 +120,87 @@ test.describe("Notebook detail", () => {
     await page.getByTestId("notebook-explore").first().click();
     await page.getByTestId("notebook-make-explorable").click();
 
-    // The init + build pair fired against this corpus, and the live
-    // build surface (the shared EnrichmentStage) is up.
+    // The in-process enrich fired against this corpus, and the live build
+    // surface is up.
     await expect(page.getByText("Building the map…")).toBeVisible();
     const calls = await page.evaluate(
       () => (window as unknown as { __enrichCalls: string[] }).__enrichCalls,
     );
-    expect(calls).toEqual(["init:wikipedia", "build:wikipedia"]);
+    expect(calls).toEqual(["enrich:wikipedia"]);
+  });
+
+  test("a build in flight survives navigating away and back (no re-offer, no double-kick)", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedOneNotebook(page, CATALOG_NB);
+
+    // Same stateful pair as the enrich-path test: lc_enrichment_status
+    // reports "off" until lc_enrich_now fires, then a non-terminal build.
+    // The daemon stamps this status synchronously, so remounting the detail
+    // must reflect the in-flight build — NOT re-offer the button (which is
+    // what let a second click double-kick the job).
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      (window as unknown as { __enrichCalls: string[] }).__enrichCalls = [];
+      let started = false;
+      w.__sovereign_test__.setHandler("lc_enrich_now", (args) => {
+        const a = args as { corpusId?: string };
+        (window as unknown as { __enrichCalls: string[] }).__enrichCalls.push(
+          `enrich:${a.corpusId}`,
+        );
+        started = true;
+        return null;
+      });
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => {
+        if (!started) {
+          return {
+            state: null,
+            is_terminal: false,
+            is_stalled: false,
+            fraction_complete: 0,
+          };
+        }
+        return {
+          state: {
+            phase: "raptor_leaves",
+            step_current: 2,
+            step_total: 5,
+            message: "Summarizing sections",
+          },
+          is_terminal: false,
+          is_stalled: false,
+          fraction_complete: 0.4,
+        };
+      });
+    });
+
+    await page.getByTestId("nav-library").click();
+    await page.getByTestId("notebook-explore").first().click();
+    await page.getByTestId("notebook-make-explorable").click();
+    await expect(page.getByText("Building the map…")).toBeVisible();
+
+    // Navigate back to the shelf, then re-open the notebook's Explore tab.
+    // The detail remounts and its mount-probe reads lc_enrichment_status.
+    await page.getByTestId("notebook-detail-back").click();
+    await expect(page.getByTestId("notebook-detail")).toBeHidden();
+    await page.getByTestId("notebook-explore").first().click();
+
+    // The remounted detail reflects the running build — the CTA is gone and
+    // the build surface is up. No second lc_enrich_now was fired.
+    await expect(page.getByText("Building the map…")).toBeVisible();
+    await expect(
+      page.getByTestId("notebook-make-explorable"),
+    ).toBeHidden();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __enrichCalls: string[] }).__enrichCalls,
+    );
+    expect(calls).toEqual(["enrich:wikipedia"]);
   });
 
   test("Ask scopes the conversation to this notebook", async ({

@@ -401,6 +401,14 @@ pub struct EnrichOnceAck {
     pub files_indexed: usize,
     pub chunks_written: u64,
     pub ok: bool,
+    /// True when the request was a no-op because a build for this corpus
+    /// was already in flight (idempotency short-circuit). `files_indexed`
+    /// / `chunks_written` are 0 in that case — the owning request reports
+    /// the real counts. Surfaced for observability; the manual
+    /// `lc_enrich_now` trigger that can race a build ignores the body and
+    /// just polls `/internal/enrichment/status`.
+    #[serde(default)]
+    pub already_running: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -1095,6 +1103,8 @@ async fn enrich_once_handler(
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
+    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+
     // Register the folder in the daemon's manager (idempotent). We deliberately
     // do NOT add it to the sweep registry — this is watched-folder registration
     // WITHOUT the watcher.
@@ -1102,6 +1112,52 @@ async fn enrich_once_handler(
         Ok(id) => id,
         Err(e) => return error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response(),
     };
+
+    // The enrichment lifecycle is mirrored to `<index>/_enrichment_state.json`,
+    // the SSOT that `GET /internal/enrichment/status` reads. Two invariants ride
+    // on stamping it here — synchronously, BEFORE the blocking re-ingest:
+    //
+    //   1. Idempotency. A non-terminal phase means a prior enrich-once is still
+    //      running (register → ingest → tiered build). Re-running would re-ingest
+    //      and double-build. Short-circuit so a second trigger — the user
+    //      clicking "Make explorable" again, or an auto-handoff racing a manual
+    //      kick — is a no-op, not a duplicate job.
+    //   2. Glassbox continuity. Without an early stamp the state file is absent
+    //      for the whole register+ingest window, so the desktop can't tell a
+    //      build is in flight: it re-offers "Make explorable" and a click
+    //      double-kicks. Stamping `Starting` up front keeps status non-null from
+    //      t=0; the tiered pipeline's own sink takes over the phase transitions
+    //      once it begins scanning.
+    let index_dir = manager.index_dir_root().join(&corpus_id);
+    if let Ok(Some(state)) = EnrichmentStateFile::read(&index_dir) {
+        if !state.phase.is_terminal() {
+            tracing::info!(
+                corpus_id = %corpus_id, phase = ?state.phase,
+                "enrich-once: a build is already in flight — no-op (idempotent)"
+            );
+            return Json(EnrichOnceAck {
+                corpus_id,
+                files_indexed: 0,
+                chunks_written: 0,
+                ok: true,
+                already_running: true,
+            })
+            .into_response();
+        }
+    }
+    let _ = std::fs::create_dir_all(&index_dir);
+    if let Err(e) = EnrichmentStateFile::stamp(
+        &index_dir,
+        &corpus_id,
+        Some("folder_tiered"),
+        EnrichmentPhase::Starting,
+        0,
+        0,
+        Some("Preparing to build the map"),
+    ) {
+        tracing::warn!(corpus_id = %corpus_id, "enrich-once: could not stamp Starting state: {e}");
+    }
+
     // Ingest in the daemon (blocking) so the SAME process that writes the index
     // is the one that reads it to enrich. Doing the ingest in the desktop and
     // the enrich here deadlocked `enable_enrichment`'s index open on the
@@ -1109,6 +1165,9 @@ async fn enrich_once_handler(
     let stats = match manager.ingest(&corpus_id, None, None).await {
         Ok(s) => s,
         Err(e) => {
+            // Don't strand the state file at Starting — surface Failed so the
+            // UI stops spinning and can re-offer the build.
+            let _ = EnrichmentStateFile::fail(&index_dir, &corpus_id, &format!("ingest: {e}"));
             return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}")).into_response()
         }
     };
@@ -1117,11 +1176,16 @@ async fn enrich_once_handler(
     // pollable via /internal/enrichment/status.
     let mgr = manager.clone();
     let id = corpus_id.clone();
+    let fail_dir = index_dir.clone();
+    let fail_id = corpus_id.clone();
     tokio::spawn(async move {
         match mgr.enrich_now(&id).await {
             Ok(job) => tracing::info!(corpus_id = %id, job, "enrich-once: tiered build started"),
             Err(e) => {
-                tracing::warn!(corpus_id = %id, "enrich-once: enrichment did not start: {e}")
+                tracing::warn!(corpus_id = %id, "enrich-once: enrichment did not start: {e}");
+                // The tiered sink never took over — mark Failed so status
+                // doesn't hang on the Starting stamp we wrote above.
+                let _ = EnrichmentStateFile::fail(&fail_dir, &fail_id, &format!("enrich start: {e}"));
             }
         }
     });
@@ -1130,6 +1194,7 @@ async fn enrich_once_handler(
         files_indexed: stats.files_indexed,
         chunks_written: stats.chunks_written,
         ok: true,
+        already_running: false,
     })
     .into_response()
 }

@@ -75,7 +75,9 @@
     conversationId: string | null;
     taskSteps: TaskStep[];
     onClearTask: () => void;
-    onOpenSettings?: () => void;
+    /** Navigate to Library (knowledge home) — used by the in-progress
+     *  ingest banner so a running embed/enrich is reachable + glassbox. */
+    onOpenLibrary?: () => void;
     onConversationCreated?: (id: string) => void;
     /** Suppress the scope bar + filter strip. Set inside a notebook's
      *  Ask, where scope is locked to the notebook and the header already
@@ -87,7 +89,7 @@
     conversationId,
     taskSteps,
     onClearTask,
-    onOpenSettings,
+    onOpenLibrary,
     onConversationCreated,
     hideScope = false,
   }: Props = $props();
@@ -1574,7 +1576,7 @@
   <div class="sr-only" role="status" aria-live="polite">
     {#key announceNonce}{announceText}{/key}
   </div>
-  <CorpusProgressBanner {onOpenSettings} />
+  <CorpusProgressBanner {onOpenLibrary} />
   <div class="messages" bind:this={messagesContainer}>
     {#if messages.length === 0 && !isLoading}
       <div class="empty-state">

@@ -49,6 +49,7 @@ pub(crate) fn ingest_progress_to_payload(
             percent: *percent,
             chunks_processed: 0,
             message: Some(format!("{:.1} MB", *bytes_downloaded as f64 / 1_048_576.0)),
+            ..Default::default()
         },
         IngestProgress::Extracting {
             documents_processed,
@@ -58,6 +59,7 @@ pub(crate) fn ingest_progress_to_payload(
             percent: 0.0,
             chunks_processed: *documents_processed,
             message: Some(format!("{} documents", documents_processed)),
+            ..Default::default()
         },
         IngestProgress::Chunking { chunks_created } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
@@ -65,6 +67,7 @@ pub(crate) fn ingest_progress_to_payload(
             percent: 0.0,
             chunks_processed: *chunks_created,
             message: None,
+            ..Default::default()
         },
         IngestProgress::Embedding {
             chunks_embedded,
@@ -94,6 +97,10 @@ pub(crate) fn ingest_progress_to_payload(
                 0.0
             },
             chunks_processed: *chunks_embedded,
+            // Forward the throughput the engine already computes so the
+            // frontend can render a glassbox ETA for the dominant phase.
+            chunks_total: *total,
+            chunks_per_sec: *chunks_per_sec,
             message: Some(format_embed_message(
                 *chunks_embedded,
                 *docs_processed,
@@ -113,7 +120,11 @@ pub(crate) fn ingest_progress_to_payload(
                 0.0
             },
             chunks_processed: *chunks_indexed,
+            // No per-batch rate for indexing, but the total lets the bar
+            // stay honest; ETA falls back to indeterminate (rate 0).
+            chunks_total: *total,
             message: None,
+            ..Default::default()
         },
         IngestProgress::OptimizingIndex { current_chunks } => CorpusProgressPayload {
             corpus_id: corpus_id.into(),
@@ -128,6 +139,7 @@ pub(crate) fn ingest_progress_to_payload(
                 "Retraining vector index over {} chunks",
                 pretty_count(*current_chunks)
             )),
+            ..Default::default()
         },
         IngestProgress::Enriching {
             phase,
@@ -153,6 +165,7 @@ pub(crate) fn ingest_progress_to_payload(
                 .unwrap_or(0.0),
             chunks_processed: 0,
             message: Some(detail.clone()),
+            ..Default::default()
         },
         IngestProgress::Complete {
             total_chunks,
@@ -163,6 +176,7 @@ pub(crate) fn ingest_progress_to_payload(
             percent: 100.0,
             chunks_processed: *total_chunks,
             message: Some(format!("Done in {duration_secs}s")),
+            ..Default::default()
         },
     }
 }

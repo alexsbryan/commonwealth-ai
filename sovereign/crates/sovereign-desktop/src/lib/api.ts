@@ -858,6 +858,13 @@ export async function enrichmentStatus(corpusId: string): Promise<EnrichmentStat
   return invoke("lc_enrichment_status", { corpusId });
 }
 
+/** Make an already-ingested local corpus explorable via the daemon's
+ *  in-process tiered enrichment (no CLI subprocess). Fire-and-forget —
+ *  poll `enrichmentStatus(corpusId)` for phase/percent + completion. */
+export async function lcEnrichNow(corpusId: string): Promise<void> {
+  return invoke("lc_enrich_now", { corpusId });
+}
+
 export async function removeCorpus(corpusId: string): Promise<number> {
   return invoke("remove_corpus", { corpusId });
 }

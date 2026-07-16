@@ -356,6 +356,7 @@ async fn run_conversation_import(
         percent: 0.0,
         chunks_processed: 0,
         message: Some("Starting…".into()),
+        ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
         map.insert(corpus_id.clone(), initial.clone());
@@ -754,6 +755,7 @@ async fn run_email_import(
         percent: 0.0,
         chunks_processed: 0,
         message: Some("Starting…".into()),
+        ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
         map.insert(corpus_id.clone(), initial.clone());

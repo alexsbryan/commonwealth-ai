@@ -899,6 +899,11 @@ export interface CorpusProgressPayload {
   phase: CorpusInstallPhase;
   percent: number;
   chunks_processed: number;
+  /** Total chunks the current phase expects (0/absent when unknown).
+   *  With `chunks_per_sec`, drives the glassbox ETA. */
+  chunks_total?: number;
+  /** Live embedding throughput (chunks/sec, 0/absent when unknown). */
+  chunks_per_sec?: number;
   message?: string;
 }
 
