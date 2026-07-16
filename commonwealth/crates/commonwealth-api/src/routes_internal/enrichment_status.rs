@@ -65,12 +65,17 @@ pub async fn enrichment_status(
     })?;
     let (is_terminal, is_stalled, fraction_complete) = match &parsed {
         Some(s) => {
-            let frac = derive_fraction(s);
-            (
-                s.phase.is_terminal(),
-                matches!(s.phase, EnrichmentPhase::Stalled),
-                frac,
-            )
+            // A non-terminal phase that hasn't advanced within the stall
+            // threshold is wedged — report it as stalled (bar collapsed)
+            // so the desktop stops spinning "Building the map…" forever
+            // and re-offers the retry. Without this, a build whose process
+            // died mid-run (leaving e.g. a `Starting` stamp) reads as a
+            // live build indefinitely. Mirrors the enrich-once idempotency
+            // guard, which supersedes the same stale state on retry.
+            let now = now_unix_secs();
+            let stalled = matches!(s.phase, EnrichmentPhase::Stalled) || s.is_stale(now);
+            let frac = if stalled { 0.0 } else { derive_fraction(s) };
+            (s.phase.is_terminal() || stalled, stalled, frac)
         }
         None => (false, false, 0.0),
     };
@@ -81,6 +86,15 @@ pub async fn enrichment_status(
         is_stalled,
         fraction_complete,
     }))
+}
+
+/// Wall-clock seconds since the Unix epoch, matching
+/// `EnrichmentState::last_progress_at`. Saturates to 0 before 1970.
+fn now_unix_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn derive_fraction(state: &EnrichmentState) -> f32 {

@@ -107,6 +107,10 @@ pub fn corpus_watch_router() -> Router {
         // into the daemon's tiered-capable manager (no sweep worker) and runs a
         // single tiered build. "Watched-folder registration without the watcher."
         .route("/internal/corpus/enrich-once", post(enrich_once_handler))
+        // Clear a "zombie" enrichment / watched-folder status (a stalled or
+        // crashed build stuck at "Preparing to build the map", or a sticky
+        // Errored sweep) so the corpus can be rebuilt / swept again.
+        .route("/internal/corpus/enrich-reset", post(enrich_reset_handler))
         .route("/internal/corpus/watch/{corpus_id}", delete(remove_handler))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
@@ -409,6 +413,12 @@ pub struct EnrichOnceAck {
     /// just polls `/internal/enrichment/status`.
     #[serde(default)]
     pub already_running: bool,
+}
+
+/// Body for `POST /internal/corpus/enrich-reset`.
+#[derive(Debug, Deserialize)]
+pub struct EnrichResetRequest {
+    pub corpus_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1103,7 +1113,9 @@ async fn enrich_once_handler(
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
-    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+    use corpus_engine::enrichment::state::{
+        EnrichmentHeartbeat, EnrichmentPhase, EnrichmentStateFile,
+    };
 
     // Register the folder in the daemon's manager (idempotent). We deliberately
     // do NOT add it to the sweep registry — this is watched-folder registration
@@ -1130,7 +1142,15 @@ async fn enrich_once_handler(
     //      once it begins scanning.
     let index_dir = manager.index_dir_root().join(&corpus_id);
     if let Ok(Some(state)) = EnrichmentStateFile::read(&index_dir) {
-        if !state.phase.is_terminal() {
+        // "In flight" only counts if the state is FRESH. A non-terminal
+        // phase that hasn't advanced within the stall threshold is wedged —
+        // a prior build that crashed, was killed, or (historically) fell
+        // back to a doomed subprocess without ever stamping a terminal
+        // phase. Treating a wedged `Starting` as live would block every
+        // retry, so a stale state falls through to a fresh build below.
+        // Same `is_stale` the status endpoint uses to surface the stall.
+        let now = now_unix_secs();
+        if !state.phase.is_terminal() && !state.is_stale(now) {
             tracing::info!(
                 corpus_id = %corpus_id, phase = ?state.phase,
                 "enrich-once: a build is already in flight — no-op (idempotent)"
@@ -1143,6 +1163,13 @@ async fn enrich_once_handler(
                 already_running: true,
             })
             .into_response();
+        }
+        if !state.phase.is_terminal() {
+            let age_secs = now.saturating_sub(state.last_progress_at);
+            tracing::warn!(
+                corpus_id = %corpus_id, phase = ?state.phase, age_secs,
+                "enrich-once: stale non-terminal enrichment state ({age_secs}s since last progress) — superseding with a fresh build"
+            );
         }
     }
     let _ = std::fs::create_dir_all(&index_dir);
@@ -1158,11 +1185,72 @@ async fn enrich_once_handler(
         tracing::warn!(corpus_id = %corpus_id, "enrich-once: could not stamp Starting state: {e}");
     }
 
+    // The re-ingest below re-embeds the corpus (acquire → chunk → embed →
+    // index) and can run for many minutes on a large vault — all while the phase
+    // would otherwise still read the initial `Starting` stamp above. Two things
+    // keep the glassbox honest and the stall detector from false-firing across
+    // that window:
+    //   1. A `Scanning` phase stamp + a throttled per-batch progress callback,
+    //      so the UI reads "Scanning documents" with a moving bar instead of a
+    //      frozen "Preparing to build the map".
+    //   2. An `EnrichmentHeartbeat` that bumps `last_progress_at` on a timer, so
+    //      a phase quiet on its own progress events can never cross
+    //      `STALL_THRESHOLD_SECS` and read as wedged. The guard drops when this
+    //      handler returns; the spawned tiered build installs its own heartbeat
+    //      for the GliNER + RAPTOR window, so liveness coverage is continuous.
+    if let Err(e) = EnrichmentStateFile::stamp(
+        &index_dir,
+        &corpus_id,
+        Some("folder_tiered"),
+        EnrichmentPhase::Scanning,
+        0,
+        0,
+        Some("Reading and embedding your notes"),
+    ) {
+        tracing::warn!(corpus_id = %corpus_id, "enrich-once: could not stamp Scanning state: {e}");
+    }
+    let _ingest_heartbeat = EnrichmentHeartbeat::spawn(index_dir.clone());
+    let ingest_progress: sovereign_tools::local_corpus::manager::ProgressCallback = {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let stamp_dir = index_dir.clone();
+        let stamp_corpus = corpus_id.clone();
+        // The callback fires per chunk/batch, but each write is a tmp-file +
+        // rename — throttle to ~50 writes across the whole embed pass.
+        let last_bucket = std::sync::Arc::new(AtomicU64::new(u64::MAX));
+        std::sync::Arc::new(
+            move |evt: sovereign_tools::local_corpus::LocalCorpusProgress| {
+                if let sovereign_tools::local_corpus::LocalCorpusProgress::Ingesting {
+                    done,
+                    total,
+                    ..
+                } = evt
+                {
+                    if total == 0 {
+                        return;
+                    }
+                    let bucket = done.saturating_mul(50) / total;
+                    if last_bucket.swap(bucket, Ordering::Relaxed) == bucket {
+                        return;
+                    }
+                    let _ = EnrichmentStateFile::stamp(
+                        &stamp_dir,
+                        &stamp_corpus,
+                        Some("folder_tiered"),
+                        EnrichmentPhase::Scanning,
+                        done,
+                        total,
+                        Some("Reading and embedding your notes"),
+                    );
+                }
+            },
+        )
+    };
+
     // Ingest in the daemon (blocking) so the SAME process that writes the index
     // is the one that reads it to enrich. Doing the ingest in the desktop and
     // the enrich here deadlocked `enable_enrichment`'s index open on the
     // cross-process handoff — keeping writer and reader in one process is the fix.
-    let stats = match manager.ingest(&corpus_id, None, None).await {
+    let stats = match manager.ingest(&corpus_id, None, Some(ingest_progress)).await {
         Ok(s) => s,
         Err(e) => {
             // Don't strand the state file at Starting — surface Failed so the
@@ -1197,6 +1285,34 @@ async fn enrich_once_handler(
         already_running: false,
     })
     .into_response()
+}
+
+/// `POST /internal/corpus/enrich-reset` — body `{ "corpus_id": "…" }`.
+/// Clears the "zombie" enrichment + watched-folder status a crashed,
+/// killed, or stalled build leaves behind (the "Preparing to build the
+/// map" that never advances, or a sticky `Errored` sweep) so the corpus
+/// drops back to "no map yet" and can be rebuilt / swept again. Does NOT
+/// touch the atlas or the index — only the status surfaces. Idempotent.
+async fn enrich_reset_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(req): Json<EnrichResetRequest>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(manager) = watched_folder_runtime::manager() else {
+        return service_unavailable("watched-folder runtime not installed").into_response();
+    };
+    match manager.reset_enrichment_state(&req.corpus_id).await {
+        Ok(()) => Json(AckResponse {
+            corpus_id: req.corpus_id,
+            ok: true,
+        })
+        .into_response(),
+        Err(e) => {
+            error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response()
+        }
+    }
 }
 
 /// `POST /internal/corpus/watch/sync-now/{corpus_id}` — request a
@@ -1286,6 +1402,15 @@ fn service_unavailable(msg: &str) -> (StatusCode, Json<ErrorBody>) {
 
 fn error(status: StatusCode, msg: String) -> (StatusCode, Json<ErrorBody>) {
     (status, Json(ErrorBody { error: msg }))
+}
+
+/// Wall-clock seconds since the Unix epoch, as `i64` to match
+/// `EnrichmentState::last_progress_at`. Saturates to 0 before 1970.
+fn now_unix_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn basename_or_unknown(p: &std::path::Path) -> String {

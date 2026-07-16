@@ -690,13 +690,35 @@ pub async fn bootstrap_with_progress(
         },
     };
 
-    let corpus_engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
+    // In-process tiered-enrichment stack — parity with the standalone
+    // daemon (`sovereign-cli-daemon` bootstrap). The embedded daemon used
+    // to wire NEITHER the engine-side tiered provider NOR the folder
+    // driver's deps, so `enable_enrichment` fell back to the legacy
+    // `sovereign-cli enrich` subprocess: exit 127 in a shipped bundle, and
+    // a build wedged at "Preparing to build the map" even in a dev tree.
+    // The shared builder constructs the same FolderTieredProvider + GLiNER
+    // extractor both daemons use. `gliner_raw` (the NoteStore T2 handle) is
+    // unused here — desktop notes wiring is separate.
+    let (_gliner_raw, chunk_entity_extractor) =
+        sovereign_tools::enrichment_bootstrap::load_gliner_extractor(&config.data_dir);
+    let folder_tiered_provider =
+        sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
+            &config.data_dir,
+            Arc::clone(&raw_inference),
+        );
+    let mut engine_builder =
+        corpus_engine::CorpusEngine::new(recipes_dir.clone(), indexes_dir, embed_fn)
             .with_embedding_model(&embed_model_name)
             .with_batch_embed_fn(batch_embed_fn)
             .with_inference_fn(inference_fn.clone())
-            .with_self_node_id(self_node_id.to_string()),
-    );
+            .with_self_node_id(self_node_id.to_string());
+    if let Some(tiered_provider) = folder_tiered_provider {
+        engine_builder = engine_builder.with_tiered_provider(tiered_provider);
+    }
+    if let Some(extractor) = chunk_entity_extractor.clone() {
+        engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
+    }
+    let corpus_engine = Arc::new(engine_builder);
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
     // Bring up the LocalCorpusManager alongside the engine. Loads any
@@ -711,12 +733,20 @@ pub async fn bootstrap_with_progress(
             .cloned()
             .ok_or_else(|| "state store not ready".to_string())?;
         let snapshot_root = config.data_dir.join("vault-snapshots");
-        match LocalCorpusManager::init(
+        // Thread the ENGINE's recipes dir into the manager so its
+        // synthesized recipe TOMLs land where the engine's
+        // `fetch_recipe` reads them. Plain `init` defaults to
+        // `local-corpus-recipes`, which the engine (overrides_dir =
+        // `~/.sovereign/recipes`) can't see — every watched-folder sweep
+        // then errors "No registry entry for corpus '<id>'". Matches the
+        // standalone daemon's `init_with_recipes_dir` wiring.
+        match LocalCorpusManager::init_with_recipes_dir(
             Arc::clone(&corpus_engine),
             store_for_lcm,
             Some(Arc::clone(&raw_inference)),
             config.data_dir.clone(),
             snapshot_root,
+            recipes_dir.clone(),
         )
         .await
         {
@@ -772,6 +802,29 @@ pub async fn bootstrap_with_progress(
                          per-folder enrichment will return an error \
                          until the user picks models in Settings"
                     );
+                }
+                // Install the tiered-enrichment deps so `enable_enrichment`
+                // routes folder / Obsidian "Make explorable" builds through
+                // the in-process tiered driver (`start_tiered_build`) instead
+                // of the legacy `sovereign-cli enrich` subprocess. Same stack
+                // the standalone daemon installs via `set_tiered_deps`; shares
+                // the GLiNER extractor already loaded for the engine above.
+                match sovereign_tools::enrichment_bootstrap::build_folder_tiered_deps(
+                    &config.data_dir,
+                    Arc::clone(&raw_inference),
+                    chunk_entity_extractor.clone(),
+                ) {
+                    Some(deps) => {
+                        mgr.set_tiered_deps(deps).await;
+                        tracing::info!(
+                            "local_corpus: tiered enrichment deps installed — \
+                             folder/obsidian 'Make explorable' runs in-process"
+                        );
+                    }
+                    None => tracing::warn!(
+                        "local_corpus: tiered deps unavailable (state store) — \
+                         folder enrichment would fall back to the legacy subprocess"
+                    ),
                 }
                 *state.local_corpus.write().await = Some(Arc::new(mgr));
                 tracing::info!("local_corpus manager initialised");

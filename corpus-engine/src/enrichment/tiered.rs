@@ -34,6 +34,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
 use crate::error::Result;
 use crate::index::{CorpusIndex, EnrichmentChunkRow};
 use crate::recipe::Recipe;
@@ -400,6 +401,13 @@ pub async fn run_tiered_enrichment(
         "tiered enrichment: per-conv dispatch finished"
     );
 
+    // Run-level terminal stamp. Same reasoning as the folder variant:
+    // the provider no longer stamps a per-conversation `Complete` on the
+    // shared per-corpus state file, so the runner owns the one terminal
+    // transition once the whole per-conv loop has settled. (The engine
+    // wires `FolderTieredProvider` for both runners, so both must stamp.)
+    stamp_folder_terminal(index_path, &corpus_id, completed, failed);
+
     Ok(plan)
 }
 
@@ -510,6 +518,10 @@ pub async fn run_folder_tiered_enrichment(
             corpus = %corpus_id,
             "tiered enrichment (folder): corpus has no source documents; nothing to enrich"
         );
+        // An empty folder is trivially complete — stamp the terminal so
+        // the UI doesn't sit forever on whatever pre-loop phase (e.g.
+        // EntityExtraction) the driver stamped.
+        stamp_folder_terminal(index_path, &corpus_id, 0, 0);
         return Ok(plan);
     }
 
@@ -593,7 +605,55 @@ pub async fn run_folder_tiered_enrichment(
         );
     }
 
+    // Run-level terminal stamp — the ONE authoritative "this corpus's
+    // folder enrichment finished" signal. The per-document provider
+    // deliberately stamps only NON-terminal progress on the shared
+    // per-corpus `_enrichment_state.json` (a single note completing or
+    // failing must not flip the whole corpus to terminal — that was the
+    // "went silent after one note" bug). So the runner, which alone
+    // knows the full per-document loop settled, owns Complete/Failed.
+    stamp_folder_terminal(index_path, &corpus_id, completed, failed);
+
     Ok(plan)
+}
+
+/// Write the single run-level terminal enrichment stamp for a folder
+/// build. `Complete` normally; `Failed` only when nothing enriched and
+/// at least one document failed (a total wipeout — e.g. inference down
+/// for the whole run). A partial run (some succeeded, some failed) is
+/// `Complete` with the failure count in the message, because the
+/// successful notes' skeletons are real, usable retrieval surface and
+/// the per-note failures are recorded in `conv_skeletons.state`.
+fn stamp_folder_terminal(index_path: &Path, corpus_id: &str, completed: usize, failed: usize) {
+    let result = if completed == 0 && failed > 0 {
+        EnrichmentStateFile::fail(
+            index_path,
+            corpus_id,
+            &format!("all {failed} documents failed to enrich"),
+        )
+    } else {
+        let message = if failed > 0 {
+            format!("enriched {completed} notes ({failed} failed)")
+        } else {
+            format!("enriched {completed} notes")
+        };
+        EnrichmentStateFile::stamp(
+            index_path,
+            corpus_id,
+            Some("folder_tiered"),
+            EnrichmentPhase::Complete,
+            completed as u64,
+            (completed + failed) as u64,
+            Some(&message),
+        )
+    };
+    if let Err(e) = result {
+        tracing::warn!(
+            corpus = %corpus_id,
+            error = %e,
+            "tiered enrichment (folder): terminal state stamp failed; UI may not see completion"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -639,5 +699,45 @@ mod tests {
         assert_eq!(ConvBucket::Medium.label(), "medium");
         assert_eq!(ConvBucket::Large.label(), "large");
         assert_eq!(ConvBucket::LongTail.label(), "long_tail");
+    }
+
+    #[test]
+    fn folder_terminal_all_success_is_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        stamp_folder_terminal(tmp.path(), "vault", 314, 0);
+        let s = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert_eq!(s.phase, EnrichmentPhase::Complete);
+        assert!(s.completed_at.is_some());
+        assert_eq!(s.step_current, 314);
+        assert_eq!(s.step_total, 314);
+        assert!(s.error.is_none());
+    }
+
+    #[test]
+    fn folder_terminal_partial_failure_is_still_complete() {
+        // Some notes failed but others produced real, usable skeletons —
+        // the run is Complete (per-note failures live in conv_skeletons),
+        // and the message surfaces the failure count for the operator.
+        let tmp = tempfile::tempdir().unwrap();
+        stamp_folder_terminal(tmp.path(), "vault", 300, 14);
+        let s = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert_eq!(s.phase, EnrichmentPhase::Complete);
+        assert_eq!(s.step_current, 300);
+        assert_eq!(s.step_total, 314);
+        assert!(s.message.as_deref().unwrap().contains("14 failed"));
+    }
+
+    #[test]
+    fn folder_terminal_total_wipeout_is_failed() {
+        // Nothing enriched and at least one failure → the whole run
+        // failed (e.g. inference down). This is the ONLY path that
+        // stamps a terminal Failed; a single bad note among successes
+        // must never reach here.
+        let tmp = tempfile::tempdir().unwrap();
+        stamp_folder_terminal(tmp.path(), "vault", 0, 12);
+        let s = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert_eq!(s.phase, EnrichmentPhase::Failed);
+        assert!(s.error.is_some());
+        assert!(s.completed_at.is_none());
     }
 }

@@ -203,6 +203,73 @@ test.describe("Notebook detail", () => {
     expect(calls).toEqual(["enrich:wikipedia"]);
   });
 
+  test("a stalled build surfaces a Rebuild CTA and rebuild clears the zombie state", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedOneNotebook(page, CATALOG_NB);
+
+    // The daemon reports the corpus as stalled (a prior build wedged and the
+    // status endpoint flagged is_stalled). Track reset + enrich so we can
+    // assert the rebuild self-heals: reset THEN enrich.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      (window as unknown as { __calls: string[] }).__calls = [];
+      let reset = false;
+      w.__sovereign_test__.setHandler("lc_enrich_reset", (args) => {
+        const a = args as { corpusId?: string };
+        (window as unknown as { __calls: string[] }).__calls.push(`reset:${a.corpusId}`);
+        reset = true;
+        return null;
+      });
+      w.__sovereign_test__.setHandler("lc_enrich_now", (args) => {
+        const a = args as { corpusId?: string };
+        (window as unknown as { __calls: string[] }).__calls.push(`enrich:${a.corpusId}`);
+        return null;
+      });
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => {
+        // After a reset the zombie is cleared → "off"; before it, stalled.
+        if (reset) {
+          return { state: null, is_terminal: false, is_stalled: false, fraction_complete: 0 };
+        }
+        return {
+          state: {
+            phase: "starting",
+            step_current: 0,
+            step_total: 0,
+            message: "Preparing to build the map",
+            error: "stalled — no progress for 3371s",
+          },
+          is_terminal: true,
+          is_stalled: true,
+          fraction_complete: 0,
+        };
+      });
+    });
+
+    await page.getByTestId("nav-library").click();
+    await page.getByTestId("notebook-explore").first().click();
+
+    // The mount-probe sees a stalled build → surfaces it and the CTA reads
+    // "Rebuild the map" (not a silent first-run "Make explorable").
+    await expect(page.getByText(/didn't finish/i)).toBeVisible();
+    const btn = page.getByTestId("notebook-make-explorable");
+    await expect(btn).toHaveText(/Rebuild the map/);
+
+    // Clicking rebuilds: reset (clears the zombie) THEN enrich, in order.
+    await btn.click();
+    await expect(page.getByText("Building the map…")).toBeVisible();
+    const calls = await page.evaluate(
+      () => (window as unknown as { __calls: string[] }).__calls,
+    );
+    expect(calls).toEqual(["reset:wikipedia", "enrich:wikipedia"]);
+  });
+
   test("Ask scopes the conversation to this notebook", async ({
     sovereignPage: page,
     chat,

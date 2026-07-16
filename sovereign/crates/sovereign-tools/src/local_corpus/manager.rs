@@ -549,8 +549,10 @@ impl LocalCorpusManager {
             )));
         }
 
-        let cfg = self.require_enrichable(corpus_id).await?;
-        let source_path = cfg.root_path.clone();
+        // Guard: rejects a corpus that isn't enrichable (unknown or
+        // wrong source type). The tiered path keys off the index dir,
+        // not the source root, so we don't need the config here.
+        self.require_enrichable(corpus_id).await?;
 
         // Mutate the in-memory + persisted config to record the
         // user's choice. The watched-folder side stamps the
@@ -625,14 +627,13 @@ impl LocalCorpusManager {
             },
         )?;
 
-        // Tiered fork: when the in-process tiered driver is wired,
-        // route through it instead of the subprocess. The legacy
-        // path stays as a fallback for daemons without tiered deps
-        // installed (e.g. the gliner-ner feature off, or
-        // FolderTieredProvider not constructed). pipeline_id is
-        // accepted by the validator above but unused in the tiered
-        // path — tiered enrichment is universal across recipe
-        // variants.
+        // In-process tiered path is the ONLY supported path. When the
+        // driver is wired (`set_tiered_deps` at daemon boot), route
+        // through it. pipeline_id is accepted by the validator above
+        // but unused here — tiered enrichment is universal across
+        // recipe variants. If it's NOT wired, we error loudly below
+        // rather than silently shelling out to `sovereign-cli enrich`
+        // (see the comment on the error path).
         if self.enrichment_driver.is_tiered_ready().await {
             let progress_map = Arc::clone(&self.enrichment_progress);
             let corpus_id_for_cb = corpus_id.to_string();
@@ -710,29 +711,34 @@ impl LocalCorpusManager {
                 .await;
         }
 
-        // Legacy subprocess path. Stays in place until the tiered
-        // path has been validated across watched-folder + obsidian-
-        // vault corpora end-to-end.
-        let progress_map = Arc::clone(&self.enrichment_progress);
-        let corpus_id_for_cb = corpus_id.to_string();
-        let progress_cb: crate::enrich::EnrichProgressFn = Arc::new(move |evt| {
-            // Project EnrichProgress onto our runtime mirror.
-            // Only Building→Building transitions go here; the
-            // terminal Complete / Aborted events flow through a
-            // separate watcher path inside the manager (added
-            // alongside the `forget` call below).
-            if let Some(status) = project_enrich_progress(&evt, started_at_unix) {
-                if let Ok(mut guard) = progress_map.write() {
-                    guard.insert(corpus_id_for_cb.clone(), status);
-                }
-            }
-        });
-
-        let job_id = self
-            .enrichment_driver
-            .start_build(corpus_id, &source_path, pipeline_id, progress_cb)
-            .await?;
-        Ok(job_id)
+        // Tiered deps not wired. We deliberately do NOT fall back to a
+        // `sovereign-cli enrich` subprocess here. That shell-out isn't
+        // available in every deployment — the desktop's embedded daemon
+        // doesn't bundle the CLI, so the fallback exited 127 and wedged
+        // the build at "Preparing to build the map" with no visible
+        // cause. Surface a clear, actionable error instead so the
+        // failure is diagnosable (glassbox) rather than silent. The fix
+        // is always daemon-side: wire the tiered provider + GliNER
+        // extractor at boot via `set_tiered_deps`.
+        //
+        // Roll the runtime status back to Failed so the UI drops out of
+        // the "Building…" spinner instead of hanging on the stamp above.
+        self.set_enrichment_runtime_status(
+            corpus_id,
+            super::watched::state::EnrichmentRuntimeStatus::Failed {
+                failed_at_unix: now_unix(),
+                reason: "in-process tiered enrichment is not available on this daemon".into(),
+            },
+        )?;
+        Err(Error::Execution(
+            "in-process tiered enrichment is not available on this daemon: the \
+             tiered provider + GliNER extractor were not installed via \
+             `set_tiered_deps` at boot. Enrichment cannot run — the legacy \
+             `sovereign-cli enrich` subprocess fallback was removed (it isn't \
+             bundled with every deployment and failed silently). Ensure the \
+             daemon wires tiered enrichment deps at startup."
+                .into(),
+        ))
     }
 
     /// Folder-ingest v1 §3.3: disable enrichment on a watched
@@ -850,6 +856,81 @@ impl LocalCorpusManager {
     /// gets. The pipeline id is a formality the tiered path ignores.
     pub async fn enrich_now(&self, corpus_id: &str) -> Result<String> {
         self.enable_enrichment(corpus_id, "referential_atlas").await
+    }
+
+    /// Clear the "zombie" enrichment / watched-folder status a crashed,
+    /// killed, or stalled build leaves behind, so the corpus can be rebuilt
+    /// or swept again. Unlike [`disable_enrichment`] this does NOT tear down
+    /// the atlas or flip config to `Off` — the user wants to REBUILD, not
+    /// disable. It clears only the STATUS surfaces:
+    ///   - removes `_enrichment_state.json` (drops the desktop's "Preparing
+    ///     to build the map" / stalled poll back to "no map yet"),
+    ///   - resets a sticky `Errored` watched-folder status to `Idle` and the
+    ///     `enrichment_status` mirror to `Off`, so the scheduler stops
+    ///     skipping every sweep with `reason=errored`,
+    ///   - cancels + forgets any in-memory driver job / progress entry.
+    /// Idempotent: safe on a corpus with no zombie state.
+    pub async fn reset_enrichment_state(&self, corpus_id: &str) -> Result<()> {
+        // Stop + forget any in-flight or tracked build.
+        self.enrichment_driver.cancel(corpus_id).await;
+        let _ = self.enrichment_driver.forget(corpus_id).await;
+
+        let index_dir = self.engine_index_dir().join(corpus_id);
+
+        // 1. Generic enrichment state file — the surface
+        //    `/internal/enrichment/status` reads.
+        let state_path = corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir);
+        if state_path.exists() {
+            if let Err(e) = std::fs::remove_file(&state_path) {
+                tracing::warn!(
+                    corpus_id = %corpus_id,
+                    "reset_enrichment_state: remove enrichment state file failed: {e}"
+                );
+            }
+        }
+
+        // 2. Watched-folder state mirror: clear a sticky Errored status
+        //    (else the scheduler skips every sweep, reason=errored) and the
+        //    enrichment_status mirror.
+        use super::watched::state::{EnrichmentRuntimeStatus, WatchedFolderState};
+        use super::watched::status::WatchedFolderStatus;
+        match WatchedFolderState::load(&index_dir) {
+            Ok(Some(mut st)) => {
+                let mut changed = false;
+                if matches!(st.status, WatchedFolderStatus::Errored { .. }) {
+                    st.status = WatchedFolderStatus::Idle {
+                        last_sweep_unix: 0,
+                        live_docs: 0,
+                        tombstones: 0,
+                    };
+                    changed = true;
+                }
+                if !matches!(st.enrichment_status, EnrichmentRuntimeStatus::Off) {
+                    st.enrichment_status = EnrichmentRuntimeStatus::Off;
+                    changed = true;
+                }
+                if changed {
+                    st.last_updated_unix = now_unix();
+                    if let Err(e) = st.save(&index_dir) {
+                        tracing::warn!(
+                            corpus_id = %corpus_id,
+                            "reset_enrichment_state: save watched state failed: {e}"
+                        );
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(
+                corpus_id = %corpus_id,
+                "reset_enrichment_state: load watched state failed: {e}"
+            ),
+        }
+
+        tracing::info!(
+            corpus_id = %corpus_id,
+            "reset_enrichment_state: cleared zombie enrichment/watched status"
+        );
+        Ok(())
     }
 
     fn set_enrichment_runtime_status(
@@ -2125,63 +2206,6 @@ fn load_persisted_configs(dir: &Path) -> Result<HashMap<String, LocalCorpusConfi
 
 fn noop_progress() -> ProgressCallback {
     Arc::new(|_| {})
-}
-
-/// Folder-ingest v1 §3.3: map an `EnrichProgress` event onto the
-/// `EnrichmentRuntimeStatus` enum the watched-folder state file
-/// stores. Returns `None` for events that don't change the
-/// runtime status (e.g. step-level fine-grained events the UI
-/// already shows via the chapter counter).
-///
-/// The mapping is deliberately coarse: the live status is what
-/// the UI's progress bar reads, and a one-line "phase X of Y"
-/// summary is enough. Operators who want every event subscribe to
-/// the SSE channel directly.
-fn project_enrich_progress(
-    evt: &corpus_engine::enrichment::pipeline::EnrichProgress,
-    started_at_unix: u64,
-) -> Option<super::watched::state::EnrichmentRuntimeStatus> {
-    use super::watched::state::EnrichmentRuntimeStatus;
-    use corpus_engine::enrichment::pipeline::EnrichProgress as EP;
-    match evt {
-        // BuildStart fires once at the very top; we already
-        // stamped Building when the build was queued, so this
-        // is informational. Re-stamp anyway for resilience.
-        EP::BuildStart { steps, .. } => Some(EnrichmentRuntimeStatus::Building {
-            phase: "starting".into(),
-            current: 0,
-            total: steps.len(),
-            started_at_unix,
-        }),
-        EP::StepStart {
-            step,
-            ordinal,
-            total,
-            ..
-        } => Some(EnrichmentRuntimeStatus::Building {
-            phase: format!("{step:?}"),
-            current: *ordinal,
-            total: *total,
-            started_at_unix,
-        }),
-        EP::ChapterProgress {
-            chapter_id,
-            index,
-            total,
-            ..
-        } => Some(EnrichmentRuntimeStatus::Building {
-            phase: format!("phase1: {chapter_id}"),
-            current: *index,
-            total: *total,
-            started_at_unix,
-        }),
-        // Terminal events are handled separately by the manager's
-        // completion watcher path so we can stamp Complete /
-        // Failed with the right `built_at_unix` and tear down the
-        // in-flight slot. They're returned as `None` here on
-        // purpose — the live-progress map only carries Building.
-        _ => None,
-    }
 }
 
 // ─── SensitiveCorpusOracle impl ─────────────────────────────────────

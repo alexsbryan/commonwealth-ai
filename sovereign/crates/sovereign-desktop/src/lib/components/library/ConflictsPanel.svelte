@@ -24,12 +24,13 @@
     governanceDismiss,
     governanceUndoTension,
     governanceExportWrite,
-    enrichBuildAsync,
+    governancePostBuildSeed,
+    lcEnrichNow,
+    lcEnrichReset,
   } from "../../api";
-  import { enrichProgressStore } from "../../stores/enrichProgress.svelte";
   import { readingNavigation } from "../../stores/readingNavigation.svelte";
   import { save } from "@tauri-apps/plugin-dialog";
-  import EnrichmentStage from "../EnrichmentStage.svelte";
+  import EnrichPollProgress from "../EnrichPollProgress.svelte";
   import type {
     GovernanceViewPayload,
     RuleView,
@@ -73,7 +74,6 @@
 
   // "Update from documents" build, if running.
   let updating = $state(false);
-  let updateJob = $derived(enrichProgressStore.byCorpus(corpusId)[0] ?? null);
 
   // ── Load ──────────────────────────────────────────────────────────
   async function refetch() {
@@ -229,19 +229,34 @@
   async function updateFromDocuments() {
     updating = true;
     try {
-      const handle = await enrichBuildAsync(corpusId, null, null);
-      await enrichProgressStore.track(handle);
+      // In-process tiered re-enrichment — no `sovereign-cli` subprocess
+      // (it isn't bundled with the desktop). Clear any zombie status,
+      // then kick the daemon build; <EnrichPollProgress> polls it.
+      await lcEnrichReset(corpusId);
+      await lcEnrichNow(corpusId);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       updating = false;
     }
   }
-  function onUpdateTerminal(kind: string) {
+  async function onUpdateComplete() {
     updating = false;
-    if (kind === "complete") {
-      void refetch();
-      onChanged?.();
+    // Re-enrichment renumbered atoms and may have surfaced new Claims.
+    // Migrate ids to content-hash + seed any new rules into the
+    // governance baseline BEFORE reloading the view, so it reflects the
+    // fresh rule set. Replaces the old `enrich_build_async` completion
+    // hook. Best-effort — a seed failure shouldn't block the refresh.
+    try {
+      await governancePostBuildSeed(corpusId);
+    } catch (e) {
+      console.warn("governancePostBuildSeed failed:", e);
     }
+    void refetch();
+    onChanged?.();
+  }
+  function onUpdateFailed(reason: string) {
+    updating = false;
+    error = reason;
   }
 
   // ── Exports (the multi-user interface) ────────────────────────────
@@ -332,10 +347,14 @@
     <p class="state err">{error}</p>
   {:else if payload}
     <!-- Weekly cycle: documents changed → re-check. -->
-    {#if updating && updateJob}
+    {#if updating}
       <div class="update-stage">
         <p class="update-title">Re-reading the documents…</p>
-        <EnrichmentStage job={updateJob} onTerminal={onUpdateTerminal} />
+        <EnrichPollProgress
+          corpusId={corpusId}
+          onComplete={onUpdateComplete}
+          onFailed={onUpdateFailed}
+        />
       </div>
     {:else if payload.docs_changed_since_build}
       <div class="banner">

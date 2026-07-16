@@ -18,10 +18,18 @@ vi.mock("../../api", () => ({
   governanceDismiss: vi.fn(async () => ["op1"]),
   governanceUndoTension: vi.fn(async () => "rev1"),
   governanceExportWrite: vi.fn(async () => {}),
-  enrichBuildAsync: vi.fn(async () => ({ job_id: "j1" })),
-}));
-vi.mock("../../stores/enrichProgress.svelte", () => ({
-  enrichProgressStore: { byCorpus: () => [], track: vi.fn(async () => {}) },
+  governancePostBuildSeed: vi.fn(async () => 0),
+  // In-process re-enrichment path (replaces the old `enrichBuildAsync`
+  // CLI subprocess). `EnrichPollProgress` polls `enrichmentStatus`.
+  lcEnrichReset: vi.fn(async () => {}),
+  lcEnrichNow: vi.fn(async () => {}),
+  enrichmentStatus: vi.fn(async () => ({
+    corpus_id: "maple",
+    state: null,
+    is_terminal: false,
+    is_stalled: false,
+    fraction_complete: 0,
+  })),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(async () => "/tmp/rules.md"),
@@ -154,16 +162,19 @@ describe("ConflictsPanel", () => {
     expect(await screen.findByText(/needs attention/i)).toBeInTheDocument();
   });
 
-  it("shows the staleness banner and triggers a rebuild on update", async () => {
+  it("shows the staleness banner and triggers an in-process rebuild on update", async () => {
     vi.mocked(api.governanceGetView).mockResolvedValue(
       payload([openTension()], { docs_changed_since_build: true }),
     );
     render(ConflictsPanel, { corpusId: "maple", notebookName: "Maple" });
     const update = await screen.findByText(/Update from documents/i);
     await fireEvent.click(update);
+    // Clears any zombie enrichment state, then kicks the daemon's
+    // in-process tiered build — no `sovereign-cli` subprocess.
     await waitFor(() =>
-      expect(api.enrichBuildAsync).toHaveBeenCalledWith("maple", null, null),
+      expect(api.lcEnrichReset).toHaveBeenCalledWith("maple"),
     );
+    expect(api.lcEnrichNow).toHaveBeenCalledWith("maple");
   });
 
   it("settled conflicts appear in a collapsed history with no actions on moot", async () => {

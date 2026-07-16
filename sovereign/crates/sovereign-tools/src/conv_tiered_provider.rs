@@ -797,24 +797,6 @@ impl FolderTieredProvider {
         (Some(checkpoint), Some(sink))
     }
 
-    fn fail_state(&self, corpus_id: &str, error: &str) {
-        let Some(resolver) = self.index_dir_resolver.as_ref() else {
-            return;
-        };
-        let Some(index_dir) = resolver.resolve(corpus_id) else {
-            return;
-        };
-        if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
-            &index_dir, corpus_id, error,
-        ) {
-            tracing::warn!(
-                corpus = corpus_id,
-                error = %e,
-                "folder_tiered: enrichment state fail-stamp failed"
-            );
-        }
-    }
-
     /// Re-run per-source RAPTOR for only the source_doc_ids supplied.
     /// Called by the watched-folder sweeper after `apply_watched_diff`
     /// lands new chunks: instead of rebuilding the whole vault's
@@ -920,6 +902,21 @@ impl FolderTieredProvider {
         // Re-fire synthesis so vault_themes reflects post-edit state.
         // finalize_corpus tolerates failure (best-effort logging).
         let _ = self.finalize_corpus(corpus_id).await;
+
+        // Run-level terminal stamp. The per-note `enrich_conversation`
+        // calls above deliberately leave the shared corpus state
+        // NON-terminal (they no longer stamp per-note Complete), so
+        // without this an incremental sweep would leave the file parked
+        // at a per-note `Persisting` — and the next daemon-boot stall
+        // sweep would then wrongly flip the corpus to "stalled". Re-affirm
+        // Complete now that the touched notes have settled.
+        self.stamp_state(
+            corpus_id,
+            corpus_engine::enrichment::state::EnrichmentPhase::Complete,
+            reenriched as u64,
+            (reenriched + skipped_empty) as u64,
+            Some(&format!("re-enriched {reenriched} changed notes")),
+        );
         Ok(())
     }
 
@@ -1202,7 +1199,12 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         updated_at,
                     )
                     .await;
-                    self.fail_state(corpus_id, &format!("save_conv_raptor_nodes: {e}"));
+                    // Per-note failure is recorded in this note's
+                    // `conv_skeletons.state = Failed`; we do NOT stamp the
+                    // shared corpus-level state terminal here (one bad note
+                    // among many must not mark the whole corpus Failed).
+                    // The runner tallies failures and stamps the run-level
+                    // terminal after the loop.
                     return Err(Error::Database(format!(
                         "folder_tiered: save_conv_raptor_nodes({corpus_id}, {conv_uuid}): {e}"
                     )));
@@ -1235,17 +1237,20 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
-                self.stamp_state(
-                    corpus_id,
-                    EnrichmentPhase::Complete,
-                    nodes.len() as u64,
-                    nodes.len() as u64,
-                    Some(&format!(
-                        "complete — {} nodes, {} motifs",
-                        nodes.len(),
-                        motifs.len()
-                    )),
-                );
+                // NOTE: we deliberately do NOT stamp the corpus-level
+                // `_enrichment_state.json` to `Complete` here. This
+                // provider is called once PER DOCUMENT against a state
+                // file that is shared by the WHOLE corpus, so a per-note
+                // `Complete` made the file flicker to terminal after
+                // every note — the desktop poll caught one of those
+                // transient "complete"s and stopped, marking a vault
+                // explorable with hundreds of notes still unenriched.
+                // The run-level terminal stamp is owned by
+                // `run_folder_tiered_enrichment` after the full per-doc
+                // loop settles. This note's success is durably recorded
+                // in `conv_skeletons.state = Ready` above; the last
+                // non-terminal stamp (`Persisting`) keeps the UI showing
+                // live activity between notes.
                 Ok(())
             }
             Err(e) => {
@@ -1259,7 +1264,9 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
-                self.fail_state(corpus_id, &e.to_string());
+                // See the save-failure arm above: per-note failure lives
+                // in `conv_skeletons.state`, not the shared corpus state.
+                // The runner owns the run-level terminal stamp.
                 Err(e)
             }
         }
@@ -1344,6 +1351,22 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         }
 
         Ok(())
+    }
+
+    /// Incremental re-enrichment for the notes whose chunk set changed,
+    /// invoked by the watched-folder sweeper after `apply_watched_diff`
+    /// lands a delta. Delegates to the inherent
+    /// [`FolderTieredProvider::reenrich_changed_sources`], which rebuilds
+    /// only the touched notes' RAPTOR trees (cheap-on-unchanged via the
+    /// per-note checkpoint) and re-runs vault synthesis.
+    ///
+    /// Without this override the trait's default no-op ran, so a note
+    /// ADDED or edited in a watched vault got embeddings + chunk_entities
+    /// but never a `conv_skeleton`/`conv_raptor_nodes` — it silently never
+    /// became a "conversation". This is the wiring that makes newly-added
+    /// vault notes actually enrich incrementally.
+    async fn reenrich_sources(&self, corpus_id: &str, source_doc_ids: &[String]) -> Result<()> {
+        self.reenrich_changed_sources(corpus_id, source_doc_ids).await
     }
 }
 

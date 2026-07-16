@@ -562,11 +562,34 @@ fn seed_at(dir: &Path) -> Result<u32, String> {
 }
 
 /// Manual re-seed (also exercised by tests). The automatic path is
-/// [`governance_post_build`], called from the enrich-build completion
-/// hook.
+/// [`governance_post_build`], invoked via [`governance_post_build_seed`]
+/// from the desktop's enrichment-completion handlers.
 #[tauri::command]
 pub async fn governance_seed(corpus_id: String) -> Result<u32, String> {
     tokio::task::spawn_blocking(move || seed_at(&atlas_dir(&corpus_id)))
+        .await
+        .map_err(|e| format!("join: {e}"))?
+}
+
+/// Automatic governance post-build: migrate atom ids to content-hash
+/// THEN seed the rule baseline (see [`governance_post_build`]).
+///
+/// Called by the desktop after an IN-PROCESS enrichment build of a
+/// governance corpus completes (`lcEnrichNow` → poll → onComplete). This
+/// replaces the old `enrich_build_async` subprocess completion hook that
+/// used to run migrate+seed; that command was removed with the CLI-shell
+/// enrichment path, so this restores the automatic baseline.
+///
+/// Self-gating: a NO-OP returning `Ok(0)` for non-governance corpora, so
+/// completion handlers can call it unconditionally without first checking
+/// the recipe domain. Best-effort — the underlying steps log and continue
+/// on failure rather than blocking.
+#[tauri::command]
+pub async fn governance_post_build_seed(corpus_id: String) -> Result<u32, String> {
+    if !is_governance_corpus(&corpus_id) {
+        return Ok(0);
+    }
+    tokio::task::spawn_blocking(move || governance_post_build(&corpus_id))
         .await
         .map_err(|e| format!("join: {e}"))?
 }

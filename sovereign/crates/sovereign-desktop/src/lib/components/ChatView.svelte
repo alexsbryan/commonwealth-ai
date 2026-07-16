@@ -15,10 +15,15 @@
     getDocumentAsset,
     enrichListCorpora,
     enrichGetStarterQuestions,
+    enrichmentStatus,
     warmupPrimarySlot,
     setConversationEnabledCorpora,
   } from "../api";
-  import type { AttachedFileRef, IngestDocumentResult } from "../api";
+  import type {
+    AttachedFileRef,
+    IngestDocumentResult,
+    EnrichmentStatus,
+  } from "../api";
   import type {
     MessageEntry,
     TaskStep,
@@ -35,8 +40,8 @@
     MessageRefinedPayload,
     NextStepOffer,
     StarterQuestion,
+    EnrichedCorpusSummary,
   } from "../types";
-  import { enrichProgressStore } from "../stores/enrichProgress.svelte";
   import { chatSeedStore } from "../stores/chatSeed.svelte";
   import { outerWorkScopeStore } from "../stores/outerWorkScope.svelte";
   import StarterChips from "./StarterChips.svelte";
@@ -201,22 +206,58 @@
     await handleSend();
   }
 
-  // Watch the enrichment progress store: when any active job flips
-  // to terminal `complete`, refetch starters so the empty-state chip
-  // row upgrades from excerpt-derived (pre-atlas) to atom-derived
-  // (post-atlas). Also update the in-flight count so the empty
-  // state can show "Building atlas · N in flight".
-  let lastSeenCompletions = $state(0);
-  $effect(() => {
-    const allJobs = Object.values(enrichProgressStore.byJobId);
-    const completed = allJobs.filter((j) => j.terminal === "complete").length;
-    const building = allJobs.filter((j) => !j.terminal).length;
-    buildingCorporaCount = building;
-    if (completed > lastSeenCompletions) {
-      lastSeenCompletions = completed;
-      void refreshStarters();
+  // Poll enrichment across all corpora so the empty state can show
+  // "Building the map · N in progress" and refresh its starter chips
+  // the moment a build finishes. This replaces the old push-based
+  // `enrichProgressStore` (fed by a `sovereign-cli enrich build`
+  // subprocess channel, which is structurally broken in shipped
+  // desktop builds — the CLI isn't bundled). The source of truth is
+  // now each corpus's `_enrichment_state.json`, read via
+  // `enrichmentStatus`; there is no job registry to subscribe to, so
+  // we sample it on an interval.
+  //
+  // `seenComplete` de-dupes completion transitions: corpora already
+  // `complete` at mount are seeded silently (mount already ran
+  // `refreshStarters`), so only IN-SESSION completions trigger a
+  // refetch — mirroring the store's prior transition semantics.
+  const ENRICH_SNAPSHOT_INTERVAL_MS = 5000;
+  let enrichSnapshotHandle: ReturnType<typeof setInterval> | null = null;
+  let seenComplete = new Set<string>();
+  let enrichSnapshotSeeded = false;
+
+  async function pollEnrichmentSnapshot() {
+    let corpora: EnrichedCorpusSummary[];
+    try {
+      corpora = await enrichListCorpora();
+    } catch {
+      return; // transient daemon hiccup — keep the last known count
     }
-  });
+    let building = 0;
+    let newlyComplete = false;
+    await Promise.all(
+      corpora.map(async (c) => {
+        let st: EnrichmentStatus;
+        try {
+          st = await enrichmentStatus(c.corpus_id);
+        } catch {
+          return;
+        }
+        const phase = st.state?.phase;
+        if (phase && !st.is_terminal && !st.is_stalled) building += 1;
+        if (phase === "complete") {
+          if (!seenComplete.has(c.corpus_id)) {
+            seenComplete.add(c.corpus_id);
+            if (enrichSnapshotSeeded) newlyComplete = true;
+          }
+        }
+      }),
+    );
+    buildingCorporaCount = building;
+    // First pass only seeds `seenComplete`; don't double-fetch starters
+    // (onMount already did). Subsequent passes react to live finishes.
+    enrichSnapshotSeeded = true;
+    if (newlyComplete) void refreshStarters();
+  }
 
   // Seed-question handoff: any surface (FolderDropFlow, toast action,
   // FirstCorpusFlow, SettingsPanel) can push a seed into
@@ -714,6 +755,16 @@
     // empty state reads `starters` directly.
     void refreshStarters();
 
+    // Sample enrichment state across corpora so the empty state's
+    // "Building the map · N in progress" line stays live and starters
+    // refresh when a build finishes. First pass seeds the completion
+    // baseline (see `pollEnrichmentSnapshot`).
+    void pollEnrichmentSnapshot();
+    enrichSnapshotHandle = setInterval(
+      () => void pollEnrichmentSnapshot(),
+      ENRICH_SNAPSHOT_INTERVAL_MS,
+    );
+
     // Eagerly warm the primary chat slot so the user's first
     // turn doesn't pay the 10–90s lazy-load tax. Fire-and-forget
     // — the backend spawns the load and the user is typing while
@@ -926,6 +977,10 @@
     unlistenInfoRequest?.();
     unlistenLessonProposed?.();
     unlistenMessageRefined?.();
+    if (enrichSnapshotHandle) {
+      clearInterval(enrichSnapshotHandle);
+      enrichSnapshotHandle = null;
+    }
   });
 
   function docProgressLabel(p: DocOpProgress): string {

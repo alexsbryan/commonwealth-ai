@@ -745,6 +745,18 @@ export async function governanceWriteRecipe(
   });
 }
 
+/// Automatic governance post-build: migrate atom ids to content-hash
+/// then seed the rule baseline (`AssertRule` ops). Call after an
+/// in-process enrichment build of a governance corpus completes (it
+/// replaces the removed `enrich_build_async` completion hook). Safe to
+/// call for ANY corpus — it's a no-op (returns 0) for non-governance
+/// ones. Returns the number of rules seeded.
+export async function governancePostBuildSeed(
+  corpusId: string,
+): Promise<number> {
+  return invokeChecked("governance_post_build_seed", { corpusId });
+}
+
 /// Write export text (agenda / current rules) to a user-picked path.
 export async function governanceExportWrite(
   destPath: string,
@@ -863,6 +875,14 @@ export async function enrichmentStatus(corpusId: string): Promise<EnrichmentStat
  *  poll `enrichmentStatus(corpusId)` for phase/percent + completion. */
 export async function lcEnrichNow(corpusId: string): Promise<void> {
   return invoke("lc_enrich_now", { corpusId });
+}
+
+/** Clear a "zombie" enrichment / watched-folder status — a build stuck at
+ *  "Preparing to build the map" that never advanced, or a sticky errored
+ *  sweep — so the corpus drops back to "no map yet" and can be rebuilt.
+ *  Awaited: the caller can re-poll `enrichmentStatus` right after. */
+export async function lcEnrichReset(corpusId: string): Promise<void> {
+  return invoke("lc_enrich_reset", { corpusId });
 }
 
 export async function removeCorpus(corpusId: string): Promise<number> {
@@ -1752,8 +1772,8 @@ export async function lcWatchRemoveRoot(
 
 /** Folder-ingest v1 §3.3: enable atlas enrichment on a watched
  *  folder. Returns `{ corpus_id, job_id, ok }`. The build runs
- *  in a daemon-side subprocess; subscribe to
- *  `enrich://progress/<job_id>` for events. */
+ *  IN-PROCESS in the daemon (tiered RAPTOR/entity); the UI tracks it
+ *  by polling the watched-folder digest, not a subprocess channel. */
 export async function lcWatchEnrichEnable(
   corpusId: string,
   pipelineId: string,
@@ -1789,42 +1809,15 @@ export async function lcWatchIncompleteJobs(): Promise<WatchedFolderIncompleteJo
   return invoke("lc_watch_incomplete_jobs");
 }
 
-// ─── Atlas enrichment (Landing 3.C/3.D) ──────────────────────────────
+// ─── Atlas enrichment (read + install side) ──────────────────────────
 //
-// Wrappers for the enrichment Tauri command surface in
-// sovereign-desktop/src-tauri/src/enrich_commands.rs. One function
-// per command, typed end-to-end against the Rust signatures.
+// Wrappers for the read/install enrichment Tauri commands in
+// sovereign-desktop/src-tauri/src/enrich_commands.rs. Enrichment BUILDS
+// run in-process in the daemon and are observed via `enrichmentStatus`
+// (above); the old `enrich_build_async`/`enrich_init_*` CLI-shell
+// wrappers were removed.
 
-import type {
-  EnrichBuildHandle,
-  EnrichedCorpusSummary,
-  PhaseFailure,
-  SepIngestResult,
-  EnrichEstimate,
-  ActiveEnrichJob,
-  StarterQuestion,
-  SampledDocuments,
-} from "./types";
-
-/** Kick off an async `enrich build` run. Returns immediately with
- *  the channel name; the UI subscribes via
- *  `listen<EnrichProgress>(handle.channel, ...)`.
- *
- *  - `chapters = null` runs `--full`
- *  - `chapters = [ids]` runs `--chapters <csv>`
- *  - `skipSteps` forwards `--skip <step>` flags
- */
-export async function enrichBuildAsync(
-  corpusId: string,
-  chapters: string[] | null,
-  skipSteps: string[] | null,
-): Promise<EnrichBuildHandle> {
-  return invoke("enrich_build_async", {
-    corpusId,
-    chapters,
-    skipSteps,
-  });
-}
+import type { EnrichedCorpusSummary, StarterQuestion } from "./types";
 
 // ── Run a workflow ──────────────────────────────────────────────
 
@@ -1850,104 +1843,10 @@ export async function workflowRun(
   return invoke("workflow_run", { nameOrPath, params });
 }
 
-/** Bridge a freshly-INSTALLED recipe corpus into the atlas-enrichment path.
- *  Scaffolds the atlas config straight from the installed index
- *  (`enrich init --from-corpus`), choosing the pipeline from the recipe's
- *  `[enrichment] domain`. Call this AFTER `installCorpus` resolves and BEFORE
- *  `enrichBuildAsync` — `enrich build` requires this config (plain ingest of a
- *  `type="atlas"` text recipe runs the field-model enricher, which writes no
- *  atoms). `--force` makes it idempotent. Returns the pipeline id chosen
- *  (e.g. `"literary_atlas"`), so the UI can show what it's about to build. */
-export async function recipeEnrichInitFromCorpus(
-  corpusId: string,
-): Promise<string> {
-  return invoke("recipe_enrich_init_from_corpus", { corpusId });
-}
-
-/** Request cancellation of an in-flight build. Returns `true` if
- *  the job was found and flagged, `false` if the job_id isn't
- *  tracked (already finished or never started). Idempotent —
- *  double-clicking Cancel is harmless.
- *
- *  Typical latency to actual subprocess kill is sub-second (the
- *  CLI emits ≥ 1 stdout line per chapter). A terminal
- *  `spawn_failed` event follows carrying "Build cancelled by user". */
-export async function enrichCancelBuild(jobId: string): Promise<boolean> {
-  return invoke("enrich_cancel_build", { jobId });
-}
-
-/** Read the structured-failure aggregate for one corpus. Returns
- *  an array of `PhaseFailure` records the UI groups by kind. */
-export async function enrichErrors(corpusId: string): Promise<PhaseFailure[]> {
-  return invoke("enrich_errors", { corpusId });
-}
-
-/** Scaffold a per-article SEP enrichment corpus from the cached
- *  parquet. `paragraphsPerSection = null` uses the recipe default
- *  (5 paragraphs per section). */
-export async function enrichSepIngest(
-  slug: string,
-  paragraphsPerSection: number | null,
-): Promise<SepIngestResult> {
-  return invoke("enrich_sep_ingest", {
-    slug,
-    paragraphsPerSection,
-  });
-}
-
 /** Inventory of enrichment corpora on disk. Sorted newest-first
  *  by `created_at`. */
 export async function enrichListCorpora(): Promise<EnrichedCorpusSummary[]> {
   return invoke("enrich_list_corpora");
-}
-
-/** Idempotent bridge: wrap the local-corpus staged JSONL for a
- *  folder/Obsidian ingest as a synthetic plaintext source and
- *  invoke `svrn enrich init` against it.
- *
- *  `pipelineId` must be `literary_atlas` or `philosophy_atlas` —
- *  only atlas-producing pipelines are allowed through this path.
- *
- *  `sampleSize` optimises time-to-first-value. When set, only the
- *  first N usable records from the staged JSONL are written to the
- *  synthetic plaintext; the atlas covers that sample only. The
- *  returned `SampledDocuments.total` always reflects every usable
- *  record, so the UI can say "atlas covers 5 of your 47 documents".
- *
- *  Safe to call multiple times; if `config.json` already pins the
- *  same pipeline AND the synthetic source already covers the
- *  requested sample size, it's a no-op. */
-export async function enrichInitForLocalCorpus(
-  corpusId: string,
-  pipelineId: "literary_atlas" | "philosophy_atlas",
-  sampleSize: number | null = null,
-): Promise<SampledDocuments> {
-  return invoke("enrich_init_for_local_corpus", {
-    corpusId,
-    pipelineId,
-    sampleSize,
-  });
-}
-
-/** Pre-run estimate for an atlas build. Requires
- *  `enrich_init_for_local_corpus` (or equivalent) to have written
- *  `~/.svrnmesh/indexes/<corpus>/chapters.json`. The UI surfaces
- *  `minutes_low`..`minutes_high` as a range; the point estimates
- *  (`sections`, `est_tokens`) feed the transparency panel. */
-export async function enrichEstimate(
-  corpusId: string,
-): Promise<EnrichEstimate> {
-  return invoke("enrich_estimate", { corpusId });
-}
-
-/** If a build is currently in flight for this corpus, return the
- *  job_id + progress channel. Lets the UI attach to an existing
- *  subprocess from a different surface (e.g., the onboarding
- *  flow finds a Settings-initiated build). */
-export async function enrichGetActiveJob(
-  corpusId: string,
-): Promise<ActiveEnrichJob | null> {
-  return invoke("enrich_get_active_job", { corpusId });
 }
 
 /** Mined starter questions for the chat empty state + onboarding

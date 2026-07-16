@@ -20,6 +20,7 @@ pub mod document_asset;
 pub mod document_operation;
 pub mod email;
 pub mod enrich;
+pub mod enrichment_bootstrap;
 pub mod enrichment_checker;
 pub mod entity_graph;
 pub mod epistemic;

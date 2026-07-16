@@ -20,6 +20,46 @@ use crate::state::AppState;
 
 use super::ErrorBody;
 
+/// Resolve the CLI binary that can actually run `enrich init/extract`
+/// for the deep Tier-2 referential-atlas pass.
+///
+/// `enrich` is owned ONLY by `sovereign-cli-llm`. **No daemon process
+/// is that binary**, so we must NEVER self-exec `std::env::current_exe()`
+/// here (the historical bug):
+/// - Standalone daemon → `current_exe()` is `sovereign-cli-daemon`,
+///   whose dispatcher rejects `enrich` (exit 2) — a dead pass.
+/// - Desktop embedded in-process daemon → `current_exe()` is the Tauri
+///   GUI binary (`sovereign-desktop`), which has no arg-parser and no
+///   single-instance guard: self-execing it **mis-launches a second GUI
+///   window** and blocks this post-install task on it.
+///
+/// So the deep pass is opt-in via an explicit `$SOVEREIGN_CLI_LLM_BIN`
+/// pointing at a real `sovereign-cli-llm`. When it is unset (every
+/// default deployment) we skip — the structural atlas + inline tiered
+/// enrichment have already landed by this point, so the referential
+/// atlas is an optional publisher-side deepening, not a prerequisite for
+/// retrieval or Explore. We deliberately do NOT auto-discover a sibling
+/// binary or fall back to `which`: that would silently turn on a heavy
+/// LLM pass on the standalone daemon (which has never run it), changing
+/// behaviour no operator asked for.
+fn resolve_enrich_cli() -> Option<std::path::PathBuf> {
+    let raw = std::env::var("SOVEREIGN_CLI_LLM_BIN").ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let path = std::path::PathBuf::from(trimmed);
+    if path.exists() {
+        Some(path)
+    } else {
+        tracing::warn!(
+            configured = %path.display(),
+            "SOVEREIGN_CLI_LLM_BIN is set but the path does not exist — skipping tier-2 deep extraction"
+        );
+        None
+    }
+}
+
 /// Phase C3 — gather peer atlas advice for `corpus_id`.
 ///
 /// Walks the live mesh, builds [`PeerAtlasView`]s from each peer's
@@ -918,8 +958,22 @@ pub async fn spawn_corpus_install_with_parameters(
                             use sovereign_tools::atlas_postinstall::{
                                 launch_tier2_extraction_with_advice, Tier2LaunchOutcome,
                             };
-                            let cli_bin = std::env::current_exe()
-                                .unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
+                            // Deep Tier-2 needs a real `sovereign-cli-llm`.
+                            // If none is configured, skip the pass rather
+                            // than self-execing the daemon/GUI binary (see
+                            // `resolve_enrich_cli`). Nothing runs after this
+                            // block in the spawned task, so an early return
+                            // just ends the (already-detached) task cleanly;
+                            // the structural atlas + inline tiered enrichment
+                            // stamped above stay intact — we do NOT mark the
+                            // corpus failed for skipping an optional pass.
+                            let Some(cli_bin) = resolve_enrich_cli() else {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    "post-install: tier-2 deep extraction skipped — no `sovereign-cli-llm` configured (set $SOVEREIGN_CLI_LLM_BIN to run the referential-atlas pass); structural atlas + inline tiered enrichment already complete"
+                                );
+                                return;
+                            };
                             let enrich_dir = indexes
                                 .parent()
                                 .unwrap_or(std::path::Path::new("."))

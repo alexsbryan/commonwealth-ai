@@ -8,9 +8,9 @@
                 alive across tab switches so an in-flight conversation
                 survives a hop to Explore and back.
     - Explore → <AtlasSurface startingCorpusId=…>. If the notebook has
-                no map yet, a "Make explorable" CTA runs the standard
-                enrich path (`recipe_enrich_init_from_corpus` +
-                `enrich_build_async`) with the shared progress stage.
+                no map yet, a "Make explorable" CTA runs the in-process
+                daemon enrich (`lcEnrichReset` + `lcEnrichNow`) and polls
+                `enrichmentStatus` for phase/percent — no CLI subprocess.
     - Sources → where the notebook came from + the real re-sync action
                 for watched folders.
     - Settings → remove the notebook (+ a stub of the use→make bridge,
@@ -26,6 +26,7 @@
   import { kindLabel, kindTitle, normalizeKind } from "./notebookKind";
   import {
     lcEnrichNow,
+    lcEnrichReset,
     enrichmentStatus,
     lcRemove,
     removeCorpus,
@@ -251,6 +252,11 @@
     enriching = true;
     enrichStatus = null;
     try {
+      // Self-healing: clear any zombie state (a prior build stuck at
+      // "Preparing to build the map", or a sticky errored sweep) BEFORE
+      // kicking a fresh build, so a wedged corpus rebuilds cleanly instead
+      // of being blocked. Idempotent no-op on a healthy corpus.
+      await lcEnrichReset(notebook.id);
       await lcEnrichNow(notebook.id);
       startEnrichPoll();
     } catch (e) {
@@ -280,6 +286,13 @@
           enriching = true;
           enrichStatus = s;
           startEnrichPoll();
+        } else if (s.state && (phase === "failed" || s.is_stalled)) {
+          // A prior build died or stalled (daemon restart, crash). Surface
+          // it so the CTA reads as an explicit rebuild, not a silent
+          // first-run. "Make explorable" self-heals the zombie on click.
+          enrichError = s.state?.error
+            ? `The last build didn't finish: ${s.state.error}`
+            : "The last build stopped before finishing — rebuild to try again.";
         }
       } catch {
         // No status file yet → leave the "No map yet" CTA in place.
@@ -539,7 +552,8 @@
             disabled={enriching}
             data-testid="notebook-make-explorable"
           >
-            {enriching ? "Starting…" : "Make explorable"}
+            {#if enriching}Starting…{:else if enrichError}Rebuild the map{:else}Make
+              explorable{/if}
           </button>
         </div>
       {/if}

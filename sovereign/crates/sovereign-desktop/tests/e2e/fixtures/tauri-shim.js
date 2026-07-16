@@ -177,7 +177,6 @@
     get_sink_status: () => ({ running: false, pending: 0 }),
     enrich_list_corpora: () => [],
     enrich_get_starter_questions: () => [],
-    enrich_get_active_job: () => null,
     mesh_get_state: () => null,
     mesh_is_running: () => false,
     // Match the MeshDiagnostics TS type — MeshDiagnosticsPanel reads
@@ -316,6 +315,7 @@
     // Default status is "off" (no state) so a mounted NotebookDetail leaves its
     // "No map yet" CTA in place — specs that drive the build override these.
     lc_enrich_now: () => null,
+    lc_enrich_reset: () => null,
     lc_enrichment_status: () => ({
       state: null,
       is_terminal: false,
