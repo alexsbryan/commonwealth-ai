@@ -50,63 +50,9 @@ pub(super) fn load_gliner_extractor(
     Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>>,
     Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 ) {
-    let mut gliner_raw: Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>> = None;
-    let chunk_entity_extractor: Option<
-        std::sync::Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
-    > = {
-        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
-            let store_path = data_dir.join("sovereign.db");
-            match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
-                Ok(store_for_extractor) => {
-                    match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
-                        Ok(ex) => {
-                            tracing::info!(
-                                model = model_id,
-                                "conv-tiered: GliNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
-                            );
-                            let ex_arc = Arc::new(ex);
-                            gliner_raw = Some(Arc::clone(&ex_arc));
-                            Some(std::sync::Arc::new(
-                                sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
-                                    Arc::new(store_for_extractor),
-                                    ex_arc,
-                                ),
-                            )
-                                as Arc<
-                                    dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
-                                >)
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                model = model_id,
-                                error = %e,
-                                "conv-tiered: GliNER load failed — tiered ingest will fall back to RAPTOR-only entities"
-                            );
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        store_path = %store_path.display(),
-                        error = %e,
-                        "conv-tiered: cannot open state store for entity extractor — skipping"
-                    );
-                    None
-                }
-            }
-        } else {
-            let root = sovereign_tools::gliner_ner::models_root().join(model_id);
-            tracing::info!(
-                model = model_id,
-                expected_path = %root.display(),
-                "conv-tiered: GliNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
-            );
-            None
-        }
-    };
-    (gliner_raw, chunk_entity_extractor)
+    // Delegated to the shared builder so the desktop's embedded daemon wires
+    // an identical stack. See `sovereign_tools::enrichment_bootstrap`.
+    sovereign_tools::enrichment_bootstrap::load_gliner_extractor(data_dir)
 }
 
 /// Build the single shared `CorpusEngine` (powers `/mcp` tools AND
@@ -263,59 +209,22 @@ pub(super) fn build_corpus_engine(
         let inference_fn =
             sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
         // Conv-tiered enrichment provider — spec
-        // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Opens the
-        // canonical state store at `~/.sovereign/sovereign.db` so the
-        // provider can write `conv_raptor_nodes` / `conv_skeletons` /
-        // `conv_motifs` rows during corp-anthropic ingest. Failing to
-        // open is non-fatal: the tiered runner falls back to its
-        // dispatch-plan-only mode when no provider is injected, which
-        // is still useful diagnostic output.
-        let tiered_provider: Option<
-            std::sync::Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
-        > = {
-            let db_path = data_dir.join("sovereign.db");
-            match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
-                Ok(store) => {
-                    let store_arc = Arc::new(store);
-                    // FolderTieredProvider is used for BOTH conv and
-                    // folder corpora. Its `enrich_conversation` accepts
-                    // an arbitrary `conv_uuid` (matches conv corpora's
-                    // chat-uuid grouping AND folder corpora's
-                    // source_doc_id grouping), and its
-                    // `finalize_corpus` override runs the vault-wide
-                    // synthesis pass — needed for vault_themes to
-                    // populate when ingest takes the folder-dispatch
-                    // path. Wiring ConvTieredProvider here meant
-                    // finalize_corpus resolved to the trait's no-op
-                    // default and the cross-note briefing block was
-                    // always empty.
-                    let indexes_root = data_dir.join("indexes");
-                    let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
-                        Arc::new(
-                            sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                                indexes_root: indexes_root.clone(),
-                            },
-                        );
-                    let prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                        store_arc,
-                        Arc::clone(&provider),
-                    )
-                    .with_index_dir_resolver(resolver);
-                    Some(std::sync::Arc::new(prov))
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        db_path = %db_path.display(),
-                        error = %e,
-                        "conv-tiered: cannot open state store — tiered enrichment will run dispatch-plan-only mode"
-                    );
-                    None
-                }
-            }
-        };
-        // GliNER per-chunk entity extractor hoisted to outer scope
-        // above so the engine and the folder driver can share the
-        // same Arc<dyn> handle. Clone here to reuse.
+        // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Constructed by the
+        // shared builder (same `FolderTieredProvider` the desktop's embedded
+        // daemon wires) so both stay in lockstep. Failing to open the store
+        // is non-fatal: the tiered runner falls back to dispatch-plan-only
+        // mode when no provider is injected. `FolderTieredProvider` (not
+        // `ConvTieredProvider`) is deliberate — its `finalize_corpus`
+        // override runs the vault-wide synthesis pass needed for
+        // `vault_themes`; see the builder's docs.
+        let tiered_provider =
+            sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
+                data_dir,
+                Arc::clone(&provider),
+            );
+        // GliNER per-chunk entity extractor loaded once in the outer scope
+        // (above) so the engine and the folder driver share the same
+        // Arc<dyn> handle. Clone here to reuse.
         let chunk_entity_extractor_for_engine = chunk_entity_extractor.clone();
 
         let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
@@ -345,48 +254,13 @@ pub(super) fn build_folder_tiered_deps(
         Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
     >,
 ) -> Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> {
-    let folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> = {
-        let db_path = data_dir.join("sovereign.db");
-        match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
-            Ok(store) => {
-                let store_arc = Arc::new(store);
-                let indexes_root = data_dir.join("indexes");
-                let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
-                    Arc::new(
-                        sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                            indexes_root: indexes_root.clone(),
-                        },
-                    );
-                let folder_prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                    store_arc,
-                    Arc::clone(&provider),
-                )
-                .with_index_dir_resolver(resolver);
-                let folder_prov_arc: Arc<
-                    dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
-                > = Arc::new(folder_prov);
-                tracing::info!(
-                    "watched_folder:tiered_deps_constructed — \
-                     FolderTieredProvider wired; folder enrichment routes \
-                     through in-process tiered driver"
-                );
-                Some(sovereign_tools::local_corpus::watched::enrich::TieredDeps {
-                    tiered_provider: folder_prov_arc,
-                    gliner_extractor: chunk_entity_extractor,
-                })
-            }
-            Err(e) => {
-                tracing::warn!(
-                    db_path = %db_path.display(),
-                    error = %e,
-                    "watched_folder:tiered_deps_unavailable — cannot open state store; \
-                     folder enrichment will fall back to the legacy subprocess"
-                );
-                None
-            }
-        }
-    };
-    folder_tiered_deps
+    // Delegated to the shared builder so the desktop's embedded daemon wires
+    // an identical stack. See `sovereign_tools::enrichment_bootstrap`.
+    sovereign_tools::enrichment_bootstrap::build_folder_tiered_deps(
+        data_dir,
+        provider,
+        chunk_entity_extractor,
+    )
 }
 
 /// Default bind for an anchor's in-process RPC worker — the value the

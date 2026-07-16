@@ -739,6 +739,38 @@ pub async fn lc_enrich_now(
     Ok(())
 }
 
+/// Tauri command: clear a "zombie" enrichment / watched-folder status —
+/// a build stuck at "Preparing to build the map" that never advanced
+/// (crashed / killed / stalled), or a sticky `Errored` watched-folder
+/// sweep. Drops the corpus back to "no map yet" so the user can rebuild.
+/// Awaited (unlike `lc_enrich_now`) so the caller can immediately re-poll
+/// `lc_enrichment_status` and see the cleared state. Does NOT delete the
+/// index or the atlas — only the status surfaces.
+#[tauri::command]
+pub async fn lc_enrich_reset(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let daemon_url = state.client_base_url();
+    let url = format!("{daemon_url}/internal/corpus/enrich-reset");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "corpus_id": corpus_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/corpus/enrich-reset: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("daemon enrich-reset returned {status}: {body}"));
+    }
+    Ok(())
+}
+
 /// Ingest a folder corpus by running the shipped `notebook` workflow on the
 /// Runner (the substrate adoption path), translating the Runner's
 /// `WorkflowProgress` into the `LocalCorpusProgress` phases the desktop UI already

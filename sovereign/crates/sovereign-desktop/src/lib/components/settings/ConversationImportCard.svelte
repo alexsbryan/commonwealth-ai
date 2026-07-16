@@ -152,17 +152,18 @@
     failed: "Failed",
   };
 
-  // Friendly labels for the enrich-subprocess `BuildStep` enum.
-  const ENRICH_STEP_LABELS: Record<string, string> = {
-    seed: "Seeding topics",
-    extract: "Reading every conversation",
-    cluster: "Grouping by theme",
-    name: "Naming clusters",
-    resolve: "Resolving entities",
-    tensions: "Mapping tensions",
-    gaps: "Finding open questions",
-    configure: "Composing the atlas",
-    report: "Writing the report",
+  // Friendly labels for the in-process enrichment phases. Mirrors the
+  // taxonomy in `corpus-engine::enrichment::state::EnrichmentPhase`
+  // (and `EnrichPollProgress.svelte`), read via `enrichmentStatus`.
+  const ENRICH_PHASE_LABELS: Record<string, string> = {
+    starting: "Starting…",
+    scanning: "Scanning conversations",
+    entity_extraction: "Finding people, places, and ideas",
+    raptor_leaves: "Summarizing sections",
+    raptor_tree: "Building the summary tree",
+    motif_extraction: "Finding recurring themes",
+    atom_extraction: "Extracting claims",
+    persisting: "Saving the map",
   };
 
   let stageLabel = $derived.by(() => {
@@ -173,10 +174,9 @@
       return INGEST_PHASE_LABELS[phase] ?? phase;
     }
     if (importState.stage === "enriching") {
-      const step = importState.enrichStep;
-      if (!step) return "Starting enrichment…";
-      const label = ENRICH_STEP_LABELS[step.step] ?? step.step;
-      return `${label} (${step.ordinal} of ${step.total})`;
+      const phase = importState.enrichStatus?.state?.phase;
+      if (!phase) return "Building the map…";
+      return ENRICH_PHASE_LABELS[phase] ?? "Building the map…";
     }
     if (importState.stage === "complete") return "Done";
     if (importState.stage === "failed") return "Failed";
@@ -190,17 +190,11 @@
       return Math.min(50, (progress?.percent ?? 0) / 2);
     }
     if (importState.stage === "enriching") {
-      // Enrichment is the second half. Steps + chapter progress feed
-      // a coarse linear bar 50 → 100%.
-      const step = importState.enrichStep;
-      if (!step) return 50;
-      const stepFraction = (step.ordinal - 1) / step.total;
-      let intraStep = 0;
-      const ep = importState.enrichProgress;
-      if (ep && ep.kind === "chapter_progress" && ep.total > 0) {
-        intraStep = ep.index / ep.total / step.total;
-      }
-      return 50 + (stepFraction + intraStep) * 50;
+      // Enrichment is the second half. The polled `fraction_complete`
+      // (0→1 over the in-process structural-atlas phases) maps the bar
+      // 50 → 100%.
+      const frac = importState.enrichStatus?.fraction_complete ?? 0;
+      return 50 + frac * 50;
     }
     if (importState.stage === "complete") return 100;
     return 0;

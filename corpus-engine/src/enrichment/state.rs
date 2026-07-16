@@ -169,6 +169,29 @@ fn default_schema_version() -> u32 {
 }
 
 impl EnrichmentState {
+    /// True when a non-terminal phase hasn't recorded progress within
+    /// [`STALL_THRESHOLD_SECS`] — the build is wedged (its process
+    /// crashed, was killed, or never actually started and left a
+    /// `Starting` stamp behind). Terminal phases are never stale.
+    /// Callers use this to (a) surface a stalled build to the UI so the
+    /// user can retry, and (b) let a fresh enrich supersede the corpse
+    /// instead of being blocked by an idempotency guard.
+    pub fn is_stale(&self, now_secs: i64) -> bool {
+        if self.phase.is_terminal() {
+            return false;
+        }
+        // An error stamped on a non-terminal phase means a sweeper or
+        // handler already declared this build dead. The `phase` field can
+        // lag behind — e.g. the stall sweep writes the error while a
+        // concurrent (doomed) writer re-stamps `Starting`, and the sweep's
+        // write also bumps `last_progress_at`, hiding the age. So a
+        // non-terminal phase carrying an error is stale regardless of age.
+        if self.error.is_some() {
+            return true;
+        }
+        now_secs.saturating_sub(self.last_progress_at) > STALL_THRESHOLD_SECS
+    }
+
     pub fn new(corpus_id: impl Into<String>, pipeline_id: Option<String>) -> Self {
         let now = now_secs();
         Self {
@@ -245,6 +268,17 @@ impl EnrichmentStateFile {
         if matches!(phase, EnrichmentPhase::Complete) {
             state.completed_at = Some(state.last_progress_at);
             state.error = None;
+        } else {
+            // Any non-`Complete` stamp means a run is in flight (or a
+            // fresh run has superseded a prior completed one).
+            // `completed_at` must describe *this* run — carrying a stale
+            // value forward from an earlier Complete leaves the file
+            // self-contradictory: a non-terminal `phase` with
+            // `completed_at` set and `last_progress_at > completed_at`.
+            // That contradiction is exactly what tripped the folder
+            // pipeline's per-note-Complete-then-continue bug. Clear it so
+            // `completed_at.is_some()` reliably means "this run finished".
+            state.completed_at = None;
         }
         Self::write(index_dir, &state)?;
         Ok(state)
@@ -260,8 +294,105 @@ impl EnrichmentStateFile {
         state.phase = EnrichmentPhase::Failed;
         state.last_progress_at = now_secs();
         state.error = Some(error.to_string());
+        // A failed run did not complete — a stale `completed_at` from an
+        // earlier successful run would falsely read as "finished OK".
+        state.completed_at = None;
         Self::write(index_dir, &state)?;
         Ok(state)
+    }
+
+    /// Bump `last_progress_at` to now on a *live* state — one that is
+    /// non-terminal and carries no error — while preserving its phase,
+    /// step counters, and message. No-op when the state file is absent,
+    /// already terminal, or already errored (a build a sweeper or
+    /// handler has declared dead must never be silently resurrected by a
+    /// heartbeat tick — [`EnrichmentState::is_stale`] treats a stamped
+    /// error as death regardless of clock).
+    ///
+    /// This is the liveness floor for phases that do real work without
+    /// emitting their own `stamp`s. The pre-RAPTOR ingest embed pass and
+    /// the CPU-bound GliNER NER pass each run for minutes with no phase
+    /// transition in between; without a heartbeat `is_stale` trips at
+    /// [`STALL_THRESHOLD_SECS`] and the UI false-reports a wedge on a
+    /// build that is very much alive. Idempotent; cheap (one read + one
+    /// atomic write).
+    pub fn heartbeat(index_dir: &Path) -> Result<()> {
+        let Some(mut state) = Self::read(index_dir)? else {
+            return Ok(());
+        };
+        if state.phase.is_terminal() || state.error.is_some() {
+            return Ok(());
+        }
+        state.last_progress_at = now_secs();
+        Self::write(index_dir, &state)
+    }
+}
+
+/// How often [`EnrichmentHeartbeat`] touches the state file. An order of
+/// magnitude below [`STALL_THRESHOLD_SECS`] so that even a couple of
+/// missed ticks (a GC pause, a busy runtime) still leave generous margin
+/// before `is_stale` could fire.
+pub const HEARTBEAT_INTERVAL_SECS: u64 = 60;
+
+/// RAII liveness heartbeat for a long-running enrichment phase.
+///
+/// While this guard is alive, a background task calls
+/// [`EnrichmentStateFile::heartbeat`] on `index_dir` every
+/// [`HEARTBEAT_INTERVAL_SECS`], keeping `last_progress_at` fresh so a
+/// phase that legitimately runs for many minutes without emitting its
+/// own progress events (ingest embed, GliNER NER, one long RAPTOR
+/// document) is not mistaken for a stall. Dropping the guard aborts the
+/// task.
+///
+/// The heartbeat only ever *touches the timestamp* of a non-terminal,
+/// error-free state — it never changes the phase and never resurrects a
+/// terminal/errored one — so the pipeline's own terminal `Complete` /
+/// `Failed` stamp always wins the race, and a genuinely abandoned build
+/// (owning process gone, so no heartbeat) still goes stale and is swept
+/// on the next daemon start. Liveness is thereby tied to the *owning
+/// process*, not to how chatty a given phase happens to be.
+#[must_use = "the heartbeat stops the moment the guard is dropped"]
+pub struct EnrichmentHeartbeat {
+    handle: tokio::task::JoinHandle<()>,
+}
+
+impl EnrichmentHeartbeat {
+    /// Spawn a heartbeat over `index_dir` at the default interval.
+    /// Must be called from within a Tokio runtime.
+    pub fn spawn(index_dir: impl Into<PathBuf>) -> Self {
+        Self::spawn_every(
+            index_dir,
+            std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS),
+        )
+    }
+
+    /// Spawn a heartbeat with an explicit interval (tests pass a short
+    /// one). Must be called from within a Tokio runtime.
+    pub fn spawn_every(index_dir: impl Into<PathBuf>, interval: std::time::Duration) -> Self {
+        let index_dir = index_dir.into();
+        let handle = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            // The first `tick()` completes immediately; skip it so the
+            // guard doesn't re-stamp the timestamp the caller just wrote.
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                if let Err(e) = EnrichmentStateFile::heartbeat(&index_dir) {
+                    tracing::warn!(
+                        index_dir = %index_dir.display(),
+                        error = %e,
+                        "enrichment heartbeat: touch failed (state may read stale if this persists)"
+                    );
+                }
+            }
+        });
+        Self { handle }
+    }
+}
+
+impl Drop for EnrichmentHeartbeat {
+    fn drop(&mut self) {
+        self.handle.abort();
     }
 }
 
@@ -512,6 +643,173 @@ mod tests {
         .unwrap();
         assert_eq!(after.started_at, initial.started_at);
         assert!(after.last_progress_at >= after.started_at);
+    }
+
+    #[test]
+    fn stamp_clears_stale_completed_at_when_a_new_run_supersedes() {
+        // The folder-pipeline zombie: a prior run stamped Complete
+        // (setting completed_at), then a fresh run re-enters a
+        // non-terminal phase. The file must NOT keep the old
+        // completed_at — that leaves `phase=non-terminal` +
+        // `completed_at=set`, the exact self-contradiction that made
+        // the desktop chip read "done" while work was still in flight.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut done = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        done.phase = EnrichmentPhase::Complete;
+        done.completed_at = Some(done.last_progress_at);
+        EnrichmentStateFile::write(tmp.path(), &done).unwrap();
+
+        // A fresh run re-enters RaptorLeaves.
+        let after = EnrichmentStateFile::stamp(
+            tmp.path(),
+            "c-1",
+            Some("folder_tiered"),
+            EnrichmentPhase::RaptorLeaves,
+            0,
+            8,
+            Some("building RAPTOR tree"),
+        )
+        .unwrap();
+        assert_eq!(after.phase, EnrichmentPhase::RaptorLeaves);
+        assert!(
+            after.completed_at.is_none(),
+            "a non-terminal stamp must clear the prior run's completed_at"
+        );
+        assert!(!after.phase.is_terminal());
+    }
+
+    #[test]
+    fn is_stale_only_for_old_non_terminal_states() {
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        let now = s.last_progress_at;
+        // Fresh non-terminal build → not stale.
+        assert!(!s.is_stale(now));
+        // Just under the threshold → still live.
+        assert!(!s.is_stale(now + STALL_THRESHOLD_SECS));
+        // Past the threshold → wedged.
+        assert!(s.is_stale(now + STALL_THRESHOLD_SECS + 1));
+        // A terminal phase is never stale, however old.
+        s.phase = EnrichmentPhase::Complete;
+        assert!(!s.is_stale(now + STALL_THRESHOLD_SECS * 100));
+        s.phase = EnrichmentPhase::Failed;
+        assert!(!s.is_stale(now + STALL_THRESHOLD_SECS * 100));
+        // Stalled is already terminal — not double-counted as "stale".
+        s.phase = EnrichmentPhase::Stalled;
+        assert!(!s.is_stale(now + STALL_THRESHOLD_SECS * 100));
+    }
+
+    #[test]
+    fn is_stale_when_error_stamped_on_nonterminal_phase() {
+        // The real-world zombie: a stall sweep stamps an error but a
+        // concurrent writer leaves phase=Starting and bumps
+        // last_progress_at, so the age looks fresh. The error must still
+        // win.
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        let now = s.last_progress_at;
+        s.error = Some("stalled — no progress for 3371s".into());
+        assert!(s.phase == EnrichmentPhase::Starting);
+        assert!(s.is_stale(now)); // fresh clock, but error present → stale
+        // A terminal phase with an error is a normal Failed — not "stale".
+        s.phase = EnrichmentPhase::Failed;
+        assert!(!s.is_stale(now));
+    }
+
+    #[test]
+    fn heartbeat_bumps_live_state_without_changing_phase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        s.phase = EnrichmentPhase::EntityExtraction;
+        s.step_current = 3;
+        s.step_total = 10;
+        s.message = Some("Finding people, places, and ideas".into());
+        // Backdate so a live build looks stale before the heartbeat.
+        let stale_ts = now_secs() - STALL_THRESHOLD_SECS - 60;
+        s.last_progress_at = stale_ts;
+        EnrichmentStateFile::write(tmp.path(), &s).unwrap();
+        assert!(s.is_stale(now_secs()), "precondition: backdated build is stale");
+
+        EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
+
+        let after = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert!(
+            after.last_progress_at > stale_ts,
+            "heartbeat must advance last_progress_at"
+        );
+        assert!(!after.is_stale(now_secs()), "heartbeat must clear staleness");
+        // Phase / step / message are preserved — only the clock moves.
+        assert_eq!(after.phase, EnrichmentPhase::EntityExtraction);
+        assert_eq!(after.step_current, 3);
+        assert_eq!(after.step_total, 10);
+        assert_eq!(after.message.as_deref(), Some("Finding people, places, and ideas"));
+    }
+
+    #[test]
+    fn heartbeat_is_noop_on_terminal_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = EnrichmentState::new("c-1", None);
+        s.phase = EnrichmentPhase::Complete;
+        let ts = now_secs() - 500;
+        s.last_progress_at = ts;
+        s.completed_at = Some(ts);
+        EnrichmentStateFile::write(tmp.path(), &s).unwrap();
+
+        EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
+
+        let after = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert_eq!(after.phase, EnrichmentPhase::Complete);
+        assert_eq!(
+            after.last_progress_at, ts,
+            "heartbeat must not touch a terminal state"
+        );
+    }
+
+    #[test]
+    fn heartbeat_is_noop_on_errored_nonterminal_state() {
+        // A build a sweeper declared dead (error stamped on a still
+        // non-terminal phase) must not be resurrected by a heartbeat.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        s.phase = EnrichmentPhase::Starting;
+        s.error = Some("stalled — no progress for 3371s".into());
+        let ts = now_secs() - 500;
+        s.last_progress_at = ts;
+        EnrichmentStateFile::write(tmp.path(), &s).unwrap();
+
+        EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
+
+        let after = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert_eq!(after.last_progress_at, ts, "errored state must stay untouched");
+        assert!(after.is_stale(now_secs()), "errored state stays stale after heartbeat");
+    }
+
+    #[test]
+    fn heartbeat_is_noop_when_state_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        // No state file yet — heartbeat is a clean no-op, does not create one.
+        EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
+        assert!(EnrichmentStateFile::read(tmp.path()).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn heartbeat_guard_keeps_a_live_build_fresh() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        s.phase = EnrichmentPhase::EntityExtraction;
+        s.last_progress_at = now_secs() - STALL_THRESHOLD_SECS - 60;
+        EnrichmentStateFile::write(tmp.path(), &s).unwrap();
+
+        let guard = EnrichmentHeartbeat::spawn_every(
+            tmp.path().to_path_buf(),
+            std::time::Duration::from_millis(20),
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+        let after = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
+        assert!(
+            !after.is_stale(now_secs()),
+            "guard should have bumped last_progress_at at least once"
+        );
+        assert_eq!(after.phase, EnrichmentPhase::EntityExtraction);
+        drop(guard);
     }
 
     #[test]

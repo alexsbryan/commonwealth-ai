@@ -4,11 +4,10 @@
   import { onDestroy } from "svelte";
 
   import {
-    enrichBuildAsync,
-    enrichCancelBuild,
     enrichGetStarterQuestions,
-    enrichInitForLocalCorpus,
     lcCluster,
+    lcEnrichNow,
+    lcEnrichReset,
     lcGetPreview,
     lcWriteTags,
   } from "../../../api";
@@ -20,8 +19,7 @@
     VaultPreview,
     WriteBackResult,
   } from "../../../types";
-  import { enrichProgressStore } from "../../../stores/enrichProgress.svelte";
-  import EnrichmentStage from "../../EnrichmentStage.svelte";
+  import EnrichPollProgress from "../../EnrichPollProgress.svelte";
   import StarterChips from "../../StarterChips.svelte";
 
   // v1 defaults — spec §6.3 plus the M5.1 additions. The slider in
@@ -69,7 +67,6 @@
         kind: "atlas_running";
         result: WriteBackResult;
         pipelineId: AtlasPipelineId;
-        jobId: string | null;
         initError: string | null;
       }
     | {
@@ -90,10 +87,9 @@
 
   onDestroy(() => {
     if (unlisten) unlisten();
-    // Don't orphan a mid-flight atlas subprocess if the panel unmounts.
-    if (step.kind === "atlas_running" && step.jobId) {
-      void enrichCancelBuild(step.jobId).catch(() => {});
-    }
+    // The tiered build runs in the daemon; unmounting just stops the
+    // <EnrichPollProgress> poll — the build keeps going and the Library
+    // reflects completion.
   });
 
   // ── Atlas enrichment (post-writeback offer) ──────────────────────
@@ -105,16 +101,14 @@
       kind: "atlas_running",
       result: baseResult,
       pipelineId,
-      jobId: null,
       initError: null,
     };
     try {
-      await enrichInitForLocalCorpus(config.id, pipelineId);
-      const handle = await enrichBuildAsync(config.id, null, null);
-      await enrichProgressStore.track(handle);
-      if (step.kind === "atlas_running") {
-        step = { ...step, jobId: handle.job_id };
-      }
+      // In-process tiered enrichment — no `sovereign-cli` subprocess
+      // (it isn't bundled). Clear any zombie status, then kick the daemon
+      // build; progress is polled by <EnrichPollProgress>.
+      await lcEnrichReset(config.id);
+      await lcEnrichNow(config.id);
     } catch (e: unknown) {
       if (step.kind === "atlas_running") {
         step = { ...step, initError: String(e) };
@@ -122,23 +116,21 @@
     }
   }
 
-  async function handleAtlasTerminal(kind: string) {
+  async function handleAtlasComplete() {
     if (step.kind !== "atlas_running") return;
-    if (kind === "complete") {
-      let starters: StarterQuestion[] = [];
-      try {
-        starters = await enrichGetStarterQuestions(config.id, 5);
-      } catch (e) {
-        console.warn("enrichGetStarterQuestions failed:", e);
-      }
-      step = { kind: "atlas_complete", result: step.result, starters };
+    let starters: StarterQuestion[] = [];
+    try {
+      starters = await enrichGetStarterQuestions(config.id, 5);
+    } catch (e) {
+      console.warn("enrichGetStarterQuestions failed:", e);
     }
+    step = { kind: "atlas_complete", result: step.result, starters };
   }
 
-  let activeEnrichJob = $derived.by(() => {
-    if (step.kind !== "atlas_running" || !step.jobId) return null;
-    return enrichProgressStore.get(step.jobId) ?? null;
-  });
+  function handleAtlasFailed(reason: string) {
+    if (step.kind !== "atlas_running") return;
+    step = { ...step, initError: reason };
+  }
 
   function handleStarterPick(question: StarterQuestion) {
     if (onOpenChatWithSeed) {
@@ -325,10 +317,11 @@
       {#if step.initError}
         <p class="completion-skipped">{step.initError}</p>
       {/if}
-      <EnrichmentStage
-        job={activeEnrichJob}
+      <EnrichPollProgress
+        corpusId={config.id}
         label="Atlas pipeline"
-        onTerminal={(kind) => void handleAtlasTerminal(kind)}
+        onComplete={() => void handleAtlasComplete()}
+        onFailed={(r) => handleAtlasFailed(r)}
       />
       <div class="atlas-offer-actions" style="margin-top: 12px;">
         <button class="lk-btn lk-btn--quiet" onclick={closeReview}>

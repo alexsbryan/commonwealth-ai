@@ -8,22 +8,23 @@ import type { Page } from "@playwright/test";
 // "Import Claude export", saw "Starting…", then nothing changed for
 // 20 minutes. Switching tabs reset the button as if the import was
 // never started. Root causes were (a) the import state was held in
-// component-local `$state` and lost on unmount, and (b) the v2 atlas
-// enrichment subprocess never ran post-ingest, so the progress card
-// had nothing to report once the ingest phases completed.
+// component-local `$state` and lost on unmount, and (b) post-ingest
+// enrichment never ran, so the progress card had nothing to report
+// once the ingest phases completed.
 //
-// These tests pin three properties:
+// Enrichment now runs IN-PROCESS in the daemon (there is no
+// `sovereign-cli enrich build` subprocess — the CLI isn't bundled),
+// so the store observes it by polling `lc_enrichment_status` rather
+// than listening on a job channel. These tests pin three properties:
 //
 //   1. State survives navigating away from Settings → Imports and
 //      back — the progress card and stage label persist.
-//   2. After ingest reports `phase: "complete"`, the store fires
-//      `enrich_build_async` and the phase label flips to the
-//      enrichment step ("Reading every conversation", etc.). The
-//      progress bar stays > 0% across the handoff.
-//   3. After the enrichment subprocess emits `kind: "complete"`,
-//      the "Open in Atlas" button appears and clicking it sets
-//      `atlasNavigation.pendingAtom` so App.svelte switches the
-//      rail.
+//   2. After ingest reports `phase: "complete"`, the store enters the
+//      "enriching" stage and polls `lc_enrichment_status`; the phase
+//      label reflects the polled enrichment phase.
+//   3. When the polled status reaches `phase: "complete"`, the "Open
+//      in Atlas" button appears and clicking it sets
+//      `atlasNavigation.pendingAtom` so App.svelte switches the rail.
 
 const CORPUS_ID = "conversations-anthropic";
 
@@ -59,13 +60,6 @@ async function stubBaselineHandlers(page: Page): Promise<void> {
       total_messages: 12_000,
       estimated_minutes: 80,
       canonical_path: "/home/test/.sovereign/conversations/conversations.json",
-    }));
-    // Enrichment subprocess — return a fake job handle. The test
-    // pumps `EnrichProgress` events on the returned channel.
-    w.__sovereign_test__.setHandler("enrich_build_async", () => ({
-      job_id: "test-job-001",
-      corpus_id: "conversations-anthropic",
-      channel: "enrich://progress/test-job-001",
     }));
     // Atom list — one fake atom so "Open in Atlas" finds something
     // to focus on.
@@ -142,12 +136,40 @@ test.describe("Library → Add → Conversations (imports)", () => {
   }) => {
     await openLibraryAdd(page, chat);
     await stubBaselineHandlers(page);
+
+    // Controllable in-process enrichment status: the store polls
+    // `lc_enrichment_status` after ingest completes. A window-attached
+    // phase var lets this test step it building → complete instead of
+    // pumping a (now-removed) subprocess channel.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+        __enrichPhase?: string;
+      };
+      w.__enrichPhase = "entity_extraction";
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => {
+        const phase = w.__enrichPhase ?? null;
+        return {
+          corpus_id: "conversations-anthropic",
+          state: phase
+            ? { phase, message: null, step_current: 0, step_total: 0 }
+            : null,
+          is_terminal: phase === "complete",
+          is_stalled: false,
+          fraction_complete: phase === "complete" ? 1 : 0.4,
+        };
+      });
+    });
+
     await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     await expect(page.getByTestId("imports-progress-card")).toBeVisible();
 
-    // Pump ingest → complete in one go to exercise the auto-handoff.
+    // Pump ingest → complete. autoEnrich (Claude) → the store enters
+    // the "enriching" stage and starts polling `lc_enrichment_status`.
     await page.evaluate((corpusId) => {
       const w = window as unknown as {
         __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
@@ -160,37 +182,17 @@ test.describe("Library → Add → Conversations (imports)", () => {
       });
     }, CORPUS_ID);
 
-    // The store should have called `enrich_build_async` (stubbed
-    // above) and started listening on the returned channel. Drive
-    // a step_start to verify the new stage label rendered.
-    await page.waitForTimeout(50);
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
-      };
-      w.__sovereign_test__.emit("enrich://progress/test-job-001", {
-        kind: "step_start",
-        corpus_id: "conversations-anthropic",
-        step: "extract",
-        ordinal: 2,
-        total: 7,
-      });
-    });
-
+    // First poll returns the `entity_extraction` phase → the card
+    // renders its in-process phase caption.
     await expect(page.getByTestId("imports-phase-label")).toContainText(
-      /Reading every conversation/,
+      /Finding people, places, and ideas/,
     );
 
-    // Drive the enrichment complete event.
+    // Flip the polled status to complete; the next poll tick (≤2s)
+    // flips the store to the terminal `complete` stage.
     await page.evaluate(() => {
-      const w = window as unknown as {
-        __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
-      };
-      w.__sovereign_test__.emit("enrich://progress/test-job-001", {
-        kind: "complete",
-        corpus_id: "conversations-anthropic",
-        steps_completed: 7,
-      });
+      (window as unknown as { __enrichPhase?: string }).__enrichPhase =
+        "complete";
     });
 
     await expect(page.getByTestId("imports-open-in-atlas")).toBeVisible();
@@ -250,11 +252,6 @@ test.describe("Library → Add → Conversations (imports)", () => {
       w.__sovereign_test__.setHandler("atlas_list_atoms", () => ({
         items: [],
         total_matching: 0,
-      }));
-      w.__sovereign_test__.setHandler("enrich_build_async", () => ({
-        job_id: "job-x",
-        corpus_id: "conversations-anthropic",
-        channel: "enrich://progress/job-x",
       }));
       // Capture invocations on a window-attached probe so the test
       // can assert the second call carried `reset_partial: true`.
@@ -584,8 +581,9 @@ test.describe("Library → Add → Conversations (imports)", () => {
   // command as-is (it becomes the recipe's `path` parameter — there is
   // no staging copy), and (b) NO auto-enrichment: the email-archive
   // recipe ships `[enrichment]` off, so ingest `complete` is terminal —
-  // the completion note replaces "Open in Atlas" and
-  // `enrich_build_async` must never fire for this corpus.
+  // the completion note replaces "Open in Atlas" and the store never
+  // enters the enriching stage (so it never polls `lc_enrichment_status`
+  // for this corpus).
   test("email import completes at ingest with no enrichment hop", async ({
     sovereignPage: page,
     chat,
@@ -597,9 +595,9 @@ test.describe("Library → Add → Conversations (imports)", () => {
           setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
         };
         __emailImportArgs?: unknown;
-        __enrichCalls?: number;
+        __enrichPolls?: number;
       };
-      w.__enrichCalls = 0;
+      w.__enrichPolls = 0;
       w.__sovereign_test__.setHandler("plugin:dialog|open", () => {
         return "/tmp/takeout.mbox";
       });
@@ -613,12 +611,20 @@ test.describe("Library → Add → Conversations (imports)", () => {
           canonical_path: "/tmp/takeout.mbox",
         };
       });
-      w.__sovereign_test__.setHandler("enrich_build_async", () => {
-        w.__enrichCalls = (w.__enrichCalls ?? 0) + 1;
+      // Count enrichment polls for the email corpus — must stay 0
+      // because `autoEnrich: false` treats ingest completion as
+      // terminal (no enriching stage, no poll).
+      w.__sovereign_test__.setHandler("lc_enrichment_status", (args) => {
+        const a = args as { corpusId?: string };
+        if (a.corpusId === "email-archive") {
+          w.__enrichPolls = (w.__enrichPolls ?? 0) + 1;
+        }
         return {
-          job_id: "test-job-email",
-          corpus_id: "email-archive",
-          channel: "enrich://progress/test-job-email",
+          corpus_id: a.corpusId ?? "email-archive",
+          state: null,
+          is_terminal: false,
+          is_stalled: false,
+          fraction_complete: 0,
         };
       });
     });
@@ -654,9 +660,11 @@ test.describe("Library → Add → Conversations (imports)", () => {
     });
     await expect(page.getByTestId("imports-email-complete-note")).toBeVisible();
     await expect(page.getByTestId("imports-email-open-in-atlas")).toHaveCount(0);
-    const enrichCalls = await page.evaluate(
-      () => (window as unknown as { __enrichCalls?: number }).__enrichCalls,
+    // Give any stray poll a tick to fire, then assert none did.
+    await page.waitForTimeout(100);
+    const enrichPolls = await page.evaluate(
+      () => (window as unknown as { __enrichPolls?: number }).__enrichPolls,
     );
-    expect(enrichCalls).toBe(0);
+    expect(enrichPolls).toBe(0);
   });
 });

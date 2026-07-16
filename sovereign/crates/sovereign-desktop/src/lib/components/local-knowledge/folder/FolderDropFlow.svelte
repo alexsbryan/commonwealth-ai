@@ -4,17 +4,16 @@
   import { onDestroy, untrack } from "svelte";
 
   import {
-    enrichBuildAsync,
-    enrichCancelBuild,
     enrichGetStarterQuestions,
-    enrichInitForLocalCorpus,
     governanceWriteRecipe,
+    governancePostBuildSeed,
     lcCancel,
+    lcEnrichNow,
+    lcEnrichReset,
     lcIngest,
     lcOcrAvailable,
     lcPreScan,
     meshAssistStart,
-    recipeEnrichInitFromCorpus,
   } from "../../../api";
   import type {
     IngestStats,
@@ -23,7 +22,6 @@
     SampledDocuments,
     StarterQuestion,
   } from "../../../types";
-  import { enrichProgressStore } from "../../../stores/enrichProgress.svelte";
   import { assistProgressStore } from "../../../stores/assistProgress.svelte";
   import { chatSeedStore } from "../../../stores/chatSeed.svelte";
   import { notifyReadyToAsk } from "../../../stores/toast.svelte";
@@ -34,23 +32,12 @@
   import PreScanPanel from "./PreScanPanel.svelte";
   import FolderCompletePanel from "./FolderCompletePanel.svelte";
   import IngestProgressPanel from "../IngestProgressPanel.svelte";
-  import EnrichmentStage from "../../EnrichmentStage.svelte";
+  import EnrichPollProgress from "../../EnrichPollProgress.svelte";
   import StarterChips from "../../StarterChips.svelte";
   import InkStamp from "../../onboarding/InkStamp.svelte";
   import ProgressRule from "../../onboarding/ProgressRule.svelte";
   import RotatingMessage from "../../onboarding/RotatingMessage.svelte";
   import { cleanExcerptTitle } from "../../../onboarding/excerpt_helpers";
-
-  /// Time-to-first-value dial. 5 docs typically lands the sample
-  /// atlas in 2–3 min on an M2 Max. Remaining docs stay searchable
-  /// (full-text + semantic) without atlas dependency.
-  const SAMPLE_SIZE = 5;
-
-  /// Default pipeline for the sample atlas. Literary is more
-  /// forgiving on heterogeneous prose (notes, mixed PDFs, etc.).
-  /// Advanced users can still pin philosophy_atlas from the CLI or
-  /// the Enrichment Settings tab.
-  const DEFAULT_PIPELINE = "literary_atlas" as const;
 
   type Step =
     | { kind: "select"; initialPath?: string }
@@ -72,11 +59,11 @@
         progress: LocalCorpusProgress | null;
       }
     | {
-        /// Ingest has just completed; we're calling
-        /// `enrich_init_for_local_corpus` to scaffold the atlas
-        /// config before spawning the build subprocess. Usually
-        /// sub-second; if it fails we transition to `complete` so
-        /// the user keeps the ingest-only surface.
+        /// Ingest has just completed; brief transient while we write
+        /// any governance recipe and kick the in-process daemon build
+        /// (`lcEnrichReset` + `lcEnrichNow`). Usually sub-second; if
+        /// kicking fails we transition to `complete` so the user keeps
+        /// the ingest-only surface.
         kind: "initializing_atlas";
         corpusId: string;
         displayName: string;
@@ -88,11 +75,8 @@
         displayName: string;
         stats: IngestStats;
         sampled: SampledDocuments;
-        /// job_id from enrichBuildAsync. `null` until the spawn
-        /// callback returns.
-        jobId: string | null;
-        /// Fatal-ish error from init or spawn. Non-null falls through
-        /// to a "continue without atlas" affordance.
+        /// Fatal-ish error from kicking the in-process build. Non-null
+        /// falls through to a "continue without atlas" affordance.
         spawnError: string | null;
       }
     | {
@@ -335,47 +319,32 @@
     const { corpusId, displayName } = step;
     step = { kind: "initializing_atlas", corpusId, displayName, stats };
     try {
-      // Governance corpus: attach the community-governance recipe (so
-      // enrichment takes the custom-ontology path) and build the FULL
-      // corpus — a rule set is small and every decision matters, so we
-      // don't sample. The rule baseline is seeded server-side on build
-      // completion (the enrich hook), so no client seed step is needed.
+      // Governance corpus: attach the community-governance recipe so
+      // enrichment takes the custom-ontology path. The rule baseline is
+      // seeded server-side on build completion (the enrich hook).
       if (ingestTemplate === "governance") {
         await governanceWriteRecipe(corpusId, displayName, ingestPath);
-        await recipeEnrichInitFromCorpus(corpusId);
-        const handle = await enrichBuildAsync(corpusId, null, null);
-        await enrichProgressStore.track(handle);
-        step = {
-          kind: "enriching",
-          corpusId,
-          displayName,
-          stats,
-          sampled: { titles: [], total: stats.files_indexed },
-          jobId: handle.job_id,
-          spawnError: null,
-        };
-        return;
       }
-      const sampled = await enrichInitForLocalCorpus(
-        corpusId,
-        DEFAULT_PIPELINE,
-        SAMPLE_SIZE,
-      );
-      const handle = await enrichBuildAsync(corpusId, null, null);
-      await enrichProgressStore.track(handle);
+      // In-process tiered enrichment: clear any zombie status, then kick
+      // the daemon build (POST /internal/corpus/enrich-once). No
+      // `sovereign-cli` subprocess — that binary isn't bundled with the
+      // desktop. Progress is polled by <EnrichPollProgress> below. Tiered
+      // RAPTOR is per-document, so the whole corpus is enriched (no
+      // client-side sampling step).
+      await lcEnrichReset(corpusId);
+      await lcEnrichNow(corpusId);
       step = {
         kind: "enriching",
         corpusId,
         displayName,
         stats,
-        sampled,
-        jobId: handle.job_id,
+        sampled: { titles: [], total: stats.files_indexed },
         spawnError: null,
       };
     } catch (e: unknown) {
-      // Init or spawn failed. Fall through to the ingest-only
+      // Kicking the build failed. Fall through to the ingest-only
       // completion screen — search still works, just without atlas.
-      console.warn("auto enrich init/spawn failed:", e);
+      console.warn("auto enrich kick failed:", e);
       step = { kind: "complete", stats };
     }
   }
@@ -391,63 +360,68 @@
     }
   }
 
-  async function cancelAtlasBuild() {
-    if (step.kind !== "enriching" || !step.jobId) return;
-    try {
-      await enrichCancelBuild(step.jobId);
-    } catch (e) {
-      console.warn("cancel atlas failed:", e);
+  async function handleAtlasComplete() {
+    if (step.kind !== "enriching") return;
+    const { corpusId, displayName, stats, sampled } = step;
+    // Governance template: atoms.json now exists, so migrate atom ids to
+    // content-hash + seed the rule baseline (replaces the old
+    // `enrich_build_async` completion hook). Non-governance folders skip
+    // this. Best-effort — a seed failure shouldn't block the celebration.
+    if (ingestTemplate === "governance") {
+      try {
+        await governancePostBuildSeed(corpusId);
+      } catch (e) {
+        console.warn("governancePostBuildSeed failed:", e);
+      }
     }
-    // Terminal event will flip the Stage into cancelled; user can
-    // then hit "Continue without atlas".
+    let starters: StarterQuestion[] = [];
+    try {
+      starters = await enrichGetStarterQuestions(corpusId, 5);
+    } catch (e) {
+      console.warn("enrichGetStarterQuestions failed:", e);
+    }
+    step = {
+      kind: "atlas_complete",
+      corpusId,
+      displayName,
+      stats,
+      sampled,
+      starters,
+    };
+    // Fire a global toast so the user gets the news even if they
+    // navigated to chat while the build was running. Route the
+    // "Ask a question" action through `chatSeedStore` — a stable
+    // module-level store that doesn't depend on this component
+    // still being mounted when the toast fires.
+    notifyReadyToAsk({
+      corpusId,
+      titles: sampled.titles,
+      total: sampled.total,
+      firstStarter: starters[0] ?? null,
+      onAsk: (question) => chatSeedStore.set(question),
+    });
   }
 
-  async function handleAtlasTerminal(kind: string) {
+  function handleAtlasFailed(reason: string) {
     if (step.kind !== "enriching") return;
-    if (kind === "complete") {
-      const { corpusId, displayName, stats, sampled } = step;
-      let starters: StarterQuestion[] = [];
-      try {
-        starters = await enrichGetStarterQuestions(corpusId, 5);
-      } catch (e) {
-        console.warn("enrichGetStarterQuestions failed:", e);
-      }
-      step = {
-        kind: "atlas_complete",
-        corpusId,
-        displayName,
-        stats,
-        sampled,
-        starters,
-      };
-      // Fire a global toast so the user gets the news even if they
-      // navigated to chat while the build was running. Route the
-      // "Ask a question" action through `chatSeedStore` — a stable
-      // module-level store that doesn't depend on this component
-      // still being mounted when the toast fires.
-      notifyReadyToAsk({
-        corpusId,
-        titles: sampled.titles,
-        total: sampled.total,
-        firstStarter: starters[0] ?? null,
-        onAsk: (question) => chatSeedStore.set(question),
-      });
-    }
-    // `cancelled` and `aborted`/`spawn_failed` stay on the enriching
-    // screen so the user can read the terminal message + retry.
+    // Stay on the enriching screen so the user can read the failure and
+    // choose to continue without the atlas.
+    step = { ...step, spawnError: reason };
   }
 
   function continueWithoutAtlas() {
     if (step.kind !== "enriching") return;
-    // Leave the subprocess running; the chat empty state will pick
-    // up starter chips when it finishes. Toast will fire then too.
+    // Leave the daemon build running; the toast + Library reflect
+    // completion. Search already works without the atlas.
+    atlasBackgrounded = true;
     step = { kind: "complete", stats: step.stats };
   }
 
   function dropToChatNow() {
     // Fires only when the host wired `onDropToChat`. Atlas keeps
-    // running; chat empty state upgrades on completion via the
-    // progress store.
+    // running in the daemon; the chat empty state upgrades when the
+    // build finishes.
+    atlasBackgrounded = true;
     onDropToChat?.();
   }
 
@@ -463,37 +437,10 @@
     step = { kind: "select" };
   }
 
-  // Live look-up of the progress state for the active job, keyed
-  // by whichever jobId this flow started. Kept reachable across
-  // `enriching` → `complete` transitions so FolderCompletePanel
-  // can note "atlas is still building" when the user skipped
-  // without cancelling.
-  let currentJobId = $derived.by(() => {
-    if (step.kind === "enriching") return step.jobId;
-    return null;
-  });
-  let activeEnrichJob = $derived.by(() => {
-    if (!currentJobId) return null;
-    return enrichProgressStore.get(currentJobId) ?? null;
-  });
-  /// True when a build is still streaming for this corpus on the
-  /// shared progress store — works even after we've transitioned
-  /// past the `enriching` screen (e.g., user hit "Continue without
-  /// atlas" while the subprocess is still running).
-  let atlasStillRunning = $derived.by(() => {
-    let corpusId: string | undefined;
-    if (step.kind === "enriching" || step.kind === "initializing_atlas") {
-      corpusId = step.corpusId;
-    } else if (step.kind === "atlas_complete") {
-      corpusId = step.corpusId;
-    } else if (step.kind === "complete") {
-      corpusId = step.stats.corpus_id;
-    }
-    if (!corpusId) return false;
-    return enrichProgressStore
-      .byCorpus(corpusId)
-      .some((j) => !j.terminal);
-  });
+  /// Set when the user leaves the build to run in the background
+  /// ("Skip atlas" / "Start chatting"). Tells FolderCompletePanel the
+  /// daemon is still building the atlas for this corpus.
+  let atlasBackgrounded = $state(false);
 
   /// Human-friendly list: "A, B, and 3 more" / "A and B" / "A".
   /// Titles are cleaned through `cleanExcerptTitle` so numeric
@@ -606,11 +553,11 @@
       {#if step.spawnError}
         <p class="err-msg">{step.spawnError}</p>
       {/if}
-      <EnrichmentStage
-        job={activeEnrichJob}
+      <EnrichPollProgress
+        corpusId={step.corpusId}
         label="Atlas pipeline"
-        hideCancel={true}
-        onTerminal={(kind) => void handleAtlasTerminal(kind)}
+        onComplete={() => void handleAtlasComplete()}
+        onFailed={(r) => handleAtlasFailed(r)}
       />
       {#if activeAssistJob}
         <AssistProgressPanel
@@ -624,9 +571,6 @@
             Start chatting — atlas keeps building
           </button>
         {/if}
-        <button class="lk-btn lk-btn--quiet" onclick={cancelAtlasBuild}>
-          Cancel atlas
-        </button>
         <button class="lk-btn lk-btn--quiet" onclick={continueWithoutAtlas}>
           Skip atlas
         </button>
@@ -681,7 +625,7 @@
       stats={step.stats}
       onDone={onExit}
       onStartChat={handleStarterPick}
-      atlasStillBuilding={atlasStillRunning}
+      atlasStillBuilding={atlasBackgrounded}
     />
   {:else if step.kind === "error"}
     <section class="error-panel">

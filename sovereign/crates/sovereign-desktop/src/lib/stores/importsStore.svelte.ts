@@ -9,9 +9,10 @@
 // the user-visible "the button resets" bug.
 //
 // This module owns the state for the lifetime of the desktop
-// process, listens to `corpus-progress` (and `enrich://progress/*`
-// once the post-install enrichment subprocess is spawned) globally,
-// and exposes a small store surface the tab reads.
+// process, listens to `corpus-progress` globally, and exposes a
+// small store surface the tab reads. Post-ingest enrichment is
+// observed by polling `enrichmentStatus` (in-process), not by a
+// subprocess event channel.
 //
 // **Multi-source.** The state machine is identical across chat
 // vendors, so it's a `createImportsStore(cfg)` factory keyed on a
@@ -25,24 +26,30 @@
 // Two-stage flow each instance models:
 //   1. **Ingest** — kicked off by the source's import command
 //      (`import_anthropic_zip` / `import_chatgpt_zip`). Progress
-//      arrives on the shared `corpus-progress` event channel. When
-//      that channel reports `phase = "complete"`, the store auto-
-//      invokes `enrich_build_async` to fire the v2 atlas pipeline.
-//      Without that hop, the user's atoms.json never lands and the
-//      Atlas-View row never appears.
-//   2. **Enrich** — the subprocess streams `EnrichProgress` on
-//      `enrich://progress/{job_id}`. The store mirrors those into
-//      its own derived view + flips `stage` to `complete` on the
-//      enrichment `complete` event.
+//      arrives on the shared `corpus-progress` event channel. The
+//      chat recipes declare `[enrichment] type="tiered"`, so the
+//      heavy T2/T3 enrichment runs IN-PROCESS inside `engine.ingest`
+//      — the corpus stays "ingesting" until it finishes.
+//   2. **Enrich** — after ingest reports `phase = "complete"`, the
+//      daemon's detached post-install hook builds the structural
+//      atlas (`atoms.json`) in-process and stamps
+//      `_enrichment_state.json`. The store observes that by polling
+//      `enrichmentStatus(corpusId)` to `complete` — no subprocess,
+//      no CLI (`sovereign-cli` isn't bundled with the desktop, so
+//      the old `enrich_build_async` hop exited 127 in shipped
+//      builds). Sources whose recipe ships `[enrichment]` OFF
+//      (`autoEnrich: false`, e.g. email-archive) skip this stage and
+//      treat ingest completion as terminal.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
-  enrichBuildAsync,
+  enrichmentStatus,
   getCorpusProgress,
   listCorpora,
+  type EnrichmentStatus,
   type ImportStartResponse,
 } from "../api";
-import type { CorpusProgressPayload, EnrichProgress, EnrichBuildStep } from "../types";
+import type { CorpusProgressPayload } from "../types";
 
 export type ImportStage =
   | "idle"
@@ -90,15 +97,11 @@ export interface ImportState {
    *  so terminal-phase pruning there doesn't clobber the
    *  Imports-tab UI. */
   ingestProgress: CorpusProgressPayload | null;
-  /** Latest enrichment-side progress event. */
-  enrichProgress: EnrichProgress | null;
-  /** Step ordinal during enrichment (1..total). Mirrors
-   *  `EnrichProgress::StepStart`. */
-  enrichStep: { step: EnrichBuildStep; ordinal: number; total: number } | null;
-  /** Active enrich job id, if a subprocess is running. */
-  enrichJobId: string | null;
-  /** Per-job channel name for the enrich progress stream. */
-  enrichChannel: string | null;
+  /** Latest polled enrichment status for this corpus, or `null`
+   *  before the enriching stage begins. Drives the card's
+   *  second-half progress bar + phase caption. Read from the
+   *  in-process `_enrichment_state.json` via `enrichmentStatus`. */
+  enrichStatus: EnrichmentStatus | null;
 }
 
 const INITIAL: ImportState = {
@@ -109,10 +112,7 @@ const INITIAL: ImportState = {
   startedAtMs: null,
   errorMessage: null,
   ingestProgress: null,
-  enrichProgress: null,
-  enrichStep: null,
-  enrichJobId: null,
-  enrichChannel: null,
+  enrichStatus: null,
 };
 
 /** Per-source bindings for a {@link createImportsStore} instance. */
@@ -124,10 +124,11 @@ export interface ImportsStoreConfig {
    *  desktop restart restore the message-count + estimate display.
    *  Must be unique per source so two imports don't collide. */
   localStorageKey: string;
-  /** Chain `enrich_build_async` when ingest completes (the chat imports'
-   *  conversation-atlas hop). Default `true`. The email-archive recipe
-   *  ships `[enrichment]` OFF — LLM-bound, hours on a big mailbox — so
-   *  its store completes at ingest instead. */
+  /** Poll `enrichmentStatus` for the in-process structural-atlas hop
+   *  after ingest completes (the chat imports' conversation-atlas
+   *  step). Default `true`. The email-archive recipe ships
+   *  `[enrichment]` OFF, so its store treats ingest completion as
+   *  terminal instead. */
   autoEnrich?: boolean;
 }
 
@@ -139,8 +140,18 @@ export type ImportsStore = ReturnType<typeof createImportsStore>;
 export function createImportsStore(cfg: ImportsStoreConfig) {
   let _state: ImportState = $state({ ...INITIAL });
   let _corpusUnlisten: UnlistenFn | null = null;
-  let _enrichUnlisten: UnlistenFn | null = null;
+  let _enrichPollHandle: ReturnType<typeof setInterval> | null = null;
+  // Consecutive polls where `_enrichment_state.json` had no state yet.
+  // The detached structural-atlas hook stamps state shortly after
+  // ingest commits; if nothing ever stamps (corpus produces no atlas),
+  // we don't hang the card — see `pollEnrichmentOnce`.
+  let _enrichNullPolls = 0;
   let _initStarted: Promise<void> | null = null;
+
+  const ENRICH_POLL_INTERVAL_MS = 2000;
+  // ~16s of null enrichment state → assume nothing is pending and
+  // treat the import as complete (ingest itself already finished).
+  const ENRICH_NULL_POLL_LIMIT = 8;
 
   function applyCorpusProgress(p: CorpusProgressPayload): void {
     if (p.corpus_id !== cfg.corpusId) return;
@@ -152,11 +163,11 @@ export function createImportsStore(cfg: ImportsStoreConfig) {
           // `[enrichment]` off) — ingest complete IS complete.
           _state = { ..._state, stage: "complete", alreadyInstalled: true };
         } else {
-          // Ingest done — kick the v2 atlas enrichment subprocess. Without
-          // this hop, the conversation_atlas pipeline never runs against
-          // the freshly-ingested chunks and `atoms.json` never lands, so
-          // the Atlas-View "Conversations" header never gets a row.
-          void triggerEnrichment();
+          // Ingest done — the daemon's in-process post-install hook
+          // now builds the structural atlas (`atoms.json`) so the
+          // Atlas-View "Conversations" row appears. Observe it by
+          // polling `enrichmentStatus` to `complete` (no subprocess).
+          startEnrichPoll();
         }
       } else if (p.phase === "failed") {
         _state = {
@@ -170,76 +181,63 @@ export function createImportsStore(cfg: ImportsStoreConfig) {
     }
   }
 
-  async function triggerEnrichment(): Promise<void> {
-    _state = { ..._state, stage: "enriching" };
+  /** Enter the enriching stage and start polling the in-process
+   *  enrichment status. Idempotent-ish: a re-import within the same
+   *  session stops the prior poll first. */
+  function startEnrichPoll(): void {
+    stopEnrichPoll();
+    _enrichNullPolls = 0;
+    _state = { ..._state, stage: "enriching", enrichStatus: null };
+    _enrichPollHandle = setInterval(
+      () => void pollEnrichmentOnce(),
+      ENRICH_POLL_INTERVAL_MS,
+    );
+    void pollEnrichmentOnce();
+  }
+
+  async function pollEnrichmentOnce(): Promise<void> {
+    let st: EnrichmentStatus;
     try {
-      const handle = await enrichBuildAsync(cfg.corpusId, null, null);
-      _state = {
-        ..._state,
-        enrichJobId: handle.job_id,
-        enrichChannel: handle.channel,
-      };
-      await ensureEnrichListener(handle.channel);
-    } catch (e) {
+      st = await enrichmentStatus(cfg.corpusId);
+    } catch {
+      return; // transient daemon hiccup — keep polling
+    }
+    _state = { ..._state, enrichStatus: st };
+    const phase = st.state?.phase;
+    if (phase === "complete") {
+      _state = { ..._state, stage: "complete", alreadyInstalled: true };
+      stopEnrichPoll();
+      return;
+    }
+    if (phase === "failed" || st.is_stalled) {
       _state = {
         ..._state,
         stage: "failed",
         errorMessage:
-          e instanceof Error
-            ? `Could not start enrichment: ${e.message}`
-            : `Could not start enrichment: ${String(e)}`,
+          st.state?.error ?? "Enrichment stalled — no progress. Try again.",
       };
+      stopEnrichPoll();
+      return;
     }
-  }
-
-  async function ensureEnrichListener(channel: string): Promise<void> {
-    // Drop the prior listener (if a re-import is firing within the same
-    // session) so we don't pump events from two different job IDs into
-    // the same state slot.
-    if (_enrichUnlisten) {
-      _enrichUnlisten();
-      _enrichUnlisten = null;
-    }
-    _enrichUnlisten = await listen<EnrichProgress>(channel, (event) => {
-      applyEnrichProgress(event.payload);
-    });
-  }
-
-  function applyEnrichProgress(e: EnrichProgress): void {
-    _state = { ..._state, enrichProgress: e };
-    switch (e.kind) {
-      case "step_start":
-        _state = {
-          ..._state,
-          enrichStep: { step: e.step, ordinal: e.ordinal, total: e.total },
-        };
-        break;
-      case "complete":
+    if (st.state === null) {
+      // The detached structural-atlas hook hasn't stamped state yet —
+      // or this corpus produces no atlas. Wait a bounded window; if
+      // nothing ever stamps, ingest is already done, so complete
+      // rather than hang on a phantom build.
+      _enrichNullPolls += 1;
+      if (_enrichNullPolls >= ENRICH_NULL_POLL_LIMIT) {
         _state = { ..._state, stage: "complete", alreadyInstalled: true };
-        detachEnrichListener();
-        break;
-      case "aborted":
-      case "spawn_failed":
-      case "cancelled":
-        _state = {
-          ..._state,
-          stage: "failed",
-          errorMessage:
-            "message" in e
-              ? e.message
-              : e.kind === "aborted"
-                ? `Enrichment aborted at step ${e.failed_step}`
-                : "Enrichment cancelled",
-        };
-        detachEnrichListener();
-        break;
+        stopEnrichPoll();
+      }
+    } else {
+      _enrichNullPolls = 0;
     }
   }
 
-  function detachEnrichListener(): void {
-    if (_enrichUnlisten) {
-      _enrichUnlisten();
-      _enrichUnlisten = null;
+  function stopEnrichPoll(): void {
+    if (_enrichPollHandle) {
+      clearInterval(_enrichPollHandle);
+      _enrichPollHandle = null;
     }
   }
 
@@ -426,7 +424,7 @@ export function createImportsStore(cfg: ImportsStoreConfig) {
      *  state (Retry button). Also drops the persisted pre-flight so
      *  a future desktop restart doesn't restore stale state. */
     reset(): void {
-      detachEnrichListener();
+      stopEnrichPoll();
       clearPersistedStartResponse();
       _state = { ...INITIAL };
     },

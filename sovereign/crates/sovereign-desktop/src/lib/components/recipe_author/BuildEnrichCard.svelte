@@ -5,28 +5,31 @@
   // library uses, in sequence:
   //   1. `installCorpus` — ingest (acquire → extract → chunk → embed → index),
   //      progress on the shared `corpusProgressStore`.
-  //   2. when the recipe will produce atoms (`enrichmentReady`):
-  //      a. `recipeEnrichInitFromCorpus` — the BRIDGE: scaffold the atlas config
-  //         straight from the just-installed index (ingest of a `type="atlas"`
-  //         text recipe runs the field-model enricher, which writes no atoms, so
-  //         `enrich build` needs this config first).
-  //      b. `enrichBuildAsync` — the atlas pipeline that writes `atlas/atoms.json`,
-  //         progress on `enrich://progress/{job}`.
+  //   2. when the recipe will produce atoms (`enrichmentReady`): the daemon's
+  //      detached post-install hook builds the structural atlas
+  //      (`atlas/atoms.json`) IN-PROCESS after ingest commits. We observe it
+  //      by polling `enrichmentStatus(corpusId)` to `complete` — no
+  //      `sovereign-cli enrich build` subprocess (the CLI isn't bundled with
+  //      the desktop, so that shell-out exited 127 in shipped builds).
   // After this, "Verify enrichment" (HarnessLadderCard) confirms the atoms.
-  // No new ingest/enrich engine — orchestration over commands that already exist.
+  // No new ingest/enrich engine — orchestration over the in-process install
+  // + enrichment the daemon already runs.
+  //
+  // NOTE: the in-process hook builds the STRUCTURAL atlas (chunk-metadata
+  // walk, no field-model LLM pass). The richer domain-LLM atlas that the old
+  // `enrich build` produced for `literary_atlas` / `philosophy_atlas` /
+  // `custom_atlas` recipes has no in-process daemon endpoint yet — follow-up.
   import { onMount } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
   import Card from "./Card.svelte";
   import StarterChips from "../StarterChips.svelte";
   import {
     installCorpus,
-    enrichBuildAsync,
-    recipeEnrichInitFromCorpus,
+    enrichmentStatus,
     enrichGetStarterQuestions,
   } from "../../api";
   import { corpusProgressStore } from "../../stores/corpusProgress.svelte";
   import { phaseLabel } from "../knowledgeStatusFormat";
-  import type { EnrichProgress, StarterQuestion } from "../../types";
+  import type { StarterQuestion } from "../../types";
 
   // `onUseInChat` (seed a starter question + navigate) and `onOpenChat`
   // (navigate, no seed) are the "land in use" handoff — the host
@@ -68,13 +71,25 @@
     }
   }
 
-  // One-shot guard + listener handle (plain refs — not display state).
+  // One-shot guard + poll handle (plain refs — not display state).
   let enrichStarted = false;
-  let enrichUnlisten: (() => void) | null = null;
+  let enrichPollHandle: ReturnType<typeof setInterval> | null = null;
+  // Consecutive polls with no enrichment state yet (the detached
+  // structural-atlas hook stamps it shortly after ingest commits).
+  let enrichNullPolls = 0;
+  const ENRICH_POLL_INTERVAL_MS = 2000;
+  const ENRICH_NULL_POLL_LIMIT = 8; // ~16s → assume no atlas pending
+
+  function stopEnrichPoll() {
+    if (enrichPollHandle) {
+      clearInterval(enrichPollHandle);
+      enrichPollHandle = null;
+    }
+  }
 
   onMount(() => {
     void corpusProgressStore.init();
-    return () => enrichUnlisten?.();
+    return stopEnrichPoll;
   });
 
   // Live ingest progress for this corpus (shared reactive store).
@@ -106,8 +121,7 @@
     error = null;
     detail = "";
     enrichStarted = false;
-    enrichUnlisten?.();
-    enrichUnlisten = null;
+    stopEnrichPoll();
     stage = "building";
     try {
       await installCorpus(recipeId);
@@ -117,35 +131,70 @@
     }
   }
 
-  async function startEnrich(id: string) {
+  // Friendly captions for the in-process enrichment phases. Mirrors
+  // `corpus-engine::enrichment::state::EnrichmentPhase`.
+  const ENRICH_PHASE_LABELS: Record<string, string> = {
+    starting: "starting…",
+    scanning: "scanning documents",
+    entity_extraction: "finding people, places, and ideas",
+    raptor_leaves: "summarizing sections",
+    raptor_tree: "building the summary tree",
+    motif_extraction: "finding recurring themes",
+    atom_extraction: "extracting claims",
+    persisting: "saving the map",
+  };
+
+  // Poll the daemon's in-process structural-atlas build (kicked
+  // automatically by `installCorpus`'s post-install hook) until it
+  // reaches `complete`. No `enrich build` subprocess.
+  function startEnrich(id: string) {
     stage = "enriching";
+    detail = "building the map…";
+    enrichNullPolls = 0;
+    stopEnrichPoll();
+    enrichPollHandle = setInterval(
+      () => void pollEnrichOnce(id),
+      ENRICH_POLL_INTERVAL_MS,
+    );
+    void pollEnrichOnce(id);
+  }
+
+  async function pollEnrichOnce(id: string) {
+    let st: Awaited<ReturnType<typeof enrichmentStatus>>;
     try {
-      // Bridge: scaffold the atlas config from the freshly-installed index
-      // before the build (ingest didn't write one for a text atlas recipe).
-      detail = "preparing atlas (reading installed index)…";
-      const pipeline = await recipeEnrichInitFromCorpus(id);
-      detail = `starting ${pipeline} enrichment…`;
-      const handle = await enrichBuildAsync(id, null, null);
-      enrichUnlisten = await listen<EnrichProgress>(handle.channel, (evt) => {
-        const e = evt.payload;
-        if (e.kind === "step_start") {
-          detail = `enriching: ${e.step} (${e.ordinal}/${e.total})`;
-        } else if (e.kind === "complete") {
-          stage = "done";
-          detail = `enriched — ${e.steps_completed} steps`;
-          enrichUnlisten?.();
-          enrichUnlisten = null;
-          void loadStarters();
-        } else if (e.kind === "step_failed" || e.kind === "aborted") {
-          stage = "failed";
-          error = `enrichment ${e.kind.replace("_", " ")}`;
-          enrichUnlisten?.();
-          enrichUnlisten = null;
-        }
-      });
-    } catch (e) {
+      st = await enrichmentStatus(id);
+    } catch {
+      return; // transient — keep polling
+    }
+    const phase = st.state?.phase;
+    if (phase === "complete") {
+      stopEnrichPoll();
+      stage = "done";
+      detail = "enriched — map ready";
+      void loadStarters();
+      return;
+    }
+    if (phase === "failed" || st.is_stalled) {
+      stopEnrichPoll();
       stage = "failed";
-      error = typeof e === "string" ? e : String(e);
+      error = st.state?.error ?? "enrichment stalled — no progress";
+      return;
+    }
+    if (phase) {
+      enrichNullPolls = 0;
+      const pct = Math.round((st.fraction_complete ?? 0) * 100);
+      const label = ENRICH_PHASE_LABELS[phase] ?? "building the map…";
+      detail = pct > 0 ? `${label} · ${pct}%` : label;
+    } else {
+      // No state stamped yet. The structural-atlas hook lands shortly
+      // after ingest; if it never does, don't hang — call it done.
+      enrichNullPolls += 1;
+      if (enrichNullPolls >= ENRICH_NULL_POLL_LIMIT) {
+        stopEnrichPoll();
+        stage = "done";
+        detail = "built";
+        void loadStarters();
+      }
     }
   }
 

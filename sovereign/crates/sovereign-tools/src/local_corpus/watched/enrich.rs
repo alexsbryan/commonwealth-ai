@@ -285,8 +285,10 @@ pub struct EnrichmentDriver {
     /// the daemon's chat slot.
     permits: Arc<Semaphore>,
     /// Tiered-enrichment dependencies. Installed by the daemon at
-    /// boot via `set_tiered_deps`. `None` = the driver only knows the
-    /// legacy subprocess path.
+    /// boot via `set_tiered_deps`. `None` = the in-process path is
+    /// unavailable; `LocalCorpusManager::enable_enrichment` errors
+    /// loudly instead of shelling out (the subprocess fallback was
+    /// removed — it isn't bundled with every deployment).
     tiered_deps: RwLock<Option<TieredDeps>>,
 }
 
@@ -308,9 +310,9 @@ impl EnrichmentDriver {
     }
 
     /// True if the tiered path is wired and `start_tiered_build`
-    /// will succeed. Used by `LocalCorpusManager::enable_enrichment`
-    /// to decide whether to route through the in-process tiered
-    /// driver or fall back to the legacy subprocess.
+    /// will succeed. `LocalCorpusManager::enable_enrichment` gates on
+    /// this: it routes through the in-process tiered driver when
+    /// ready, and errors (no subprocess fallback) when not.
     pub async fn is_tiered_ready(&self) -> bool {
         self.tiered_deps.read().await.is_some()
     }
@@ -338,6 +340,15 @@ impl EnrichmentDriver {
         self.in_flight.lock().await.contains_key(corpus_id)
     }
 
+    /// Legacy CLI-subprocess build. NO LONGER WIRED into
+    /// `LocalCorpusManager::enable_enrichment` — that path now requires
+    /// the in-process tiered driver (`start_tiered_build`) and errors
+    /// when it isn't ready, rather than shelling out here (the
+    /// `sovereign-cli` binary isn't bundled with every deployment, so
+    /// this exited 127 and wedged builds silently). Retained as a
+    /// tested library primitive for tools that run against a full CLI
+    /// install; do not re-wire it into a user-facing enable path.
+    ///
     /// Start a build for `corpus_id` rooted at `source_path`,
     /// running pipeline `pipeline_id`. Returns the assigned job_id
     /// immediately; the actual run happens in a spawned task.
@@ -524,6 +535,21 @@ impl EnrichmentDriver {
                 "tiered_driver: build starting"
             );
 
+            // Liveness floor for the whole T2 + T3 build. GliNER NER is
+            // CPU-bound and emits no enrichment `stamp`s, and a single long
+            // RAPTOR document can summarise for minutes between the provider's
+            // coarse phase stamps. Without a heartbeat either window can cross
+            // `STALL_THRESHOLD_SECS` and the status endpoint reports a wedge on
+            // a build that is very much alive (the "last build stopped before
+            // finishing" false positive). Dropped when this task ends — after
+            // the provider's terminal Complete/Failed stamp has already landed,
+            // and the heartbeat never touches a terminal state, so it cannot
+            // race that stamp.
+            let _build_heartbeat =
+                corpus_engine::enrichment::state::EnrichmentHeartbeat::spawn(
+                    index_path_owned.clone(),
+                );
+
             // T1 is already on disk (corpus-engine ingest stamps
             // embeddings into Lance). The first explicit tier
             // marker is PartiallyReady — UI shifts from
@@ -535,6 +561,26 @@ impl EnrichmentDriver {
             // entities (the conv_entity_graph builder degrades
             // gracefully when chunk_entities is empty).
             if let Some(extractor) = deps.gliner_extractor.as_ref() {
+                // Honest phase label for the CPU-bound NER pass so the UI moves
+                // off "Scanning documents" to "Finding people, places, and
+                // ideas" while entities extract. The build heartbeat above keeps
+                // `last_progress_at` fresh across this pass, which emits no
+                // enrichment stamps of its own.
+                if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::stamp(
+                    &index_path_owned,
+                    &corpus_id_owned,
+                    Some("folder_tiered"),
+                    corpus_engine::enrichment::state::EnrichmentPhase::EntityExtraction,
+                    0,
+                    0,
+                    Some("Finding people, places, and ideas"),
+                ) {
+                    tracing::warn!(
+                        corpus_id = %corpus_id_owned,
+                        error = %e,
+                        "tiered_driver: could not stamp EntityExtraction phase"
+                    );
+                }
                 match extractor
                     .extract_delta_for_corpus(&corpus_id_owned, &index_path_owned)
                     .await
@@ -581,6 +627,18 @@ impl EnrichmentDriver {
                     on_state(AssetState::Failed {
                         reason: reason.clone(),
                     });
+                    // Stamp the enrichment state Failed too. The runner
+                    // only returns Err on a pre-loop error (index open /
+                    // grouping) — it never returns Err after stamping its
+                    // terminal Complete — so this can't clobber a success.
+                    // Without it a pre-loop failure would sit non-terminal
+                    // until the 10-min stall sweep, reading as "still
+                    // building" the whole time.
+                    let _ = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+                        &index_path_owned,
+                        &corpus_id_owned,
+                        &reason,
+                    );
                     tracing::warn!(
                         corpus_id = %corpus_id_owned,
                         error = %reason,

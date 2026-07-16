@@ -6,9 +6,10 @@
   // ChatGPT), each bound to its own module-singleton import store, plus
   // the shared GliNER "smart highlights" model card and a Gemini
   // "Coming soon" placeholder. The cards survive unmount (state lives in
-  // the stores), listen to `corpus-progress` globally, and auto-fire
-  // `enrich_build_async` when ingest completes — so navigating away from
-  // this tab and back never resets an in-flight import.
+  // the stores), listen to `corpus-progress` globally, and poll
+  // `lc_enrichment_status` for the in-process enrichment hop once
+  // ingest completes — so navigating away from this tab and back
+  // never resets an in-flight import.
   //
   // Adding a vendor = one more <ConversationImportCard> + its store
   // instance + extractor/recipe (SYSTEM_OVERVIEW §10.1). Gemini stays a
