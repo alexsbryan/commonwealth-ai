@@ -28,6 +28,7 @@ mod supervisor;
 mod supervisor_setup;
 mod tray;
 mod update_commands;
+mod collaborate_commands;
 mod watched_folder_commands;
 mod workflow_commands;
 
@@ -636,6 +637,10 @@ fn main() -> ExitCode {
             local_corpus_commands::lc_rollback,
             local_corpus_commands::lc_clean,
             local_corpus_commands::lc_cancel,
+            collaborate_commands::mesh_assist_eligible_peers,
+            collaborate_commands::mesh_assist_start,
+            collaborate_commands::mesh_assist_status,
+            collaborate_commands::mesh_assist_revoke,
             watched_folder_commands::lc_watch_register,
             watched_folder_commands::lc_watch_list,
             watched_folder_commands::lc_watch_status,

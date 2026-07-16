@@ -11,7 +11,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
@@ -959,6 +959,94 @@ pub async fn corpus_collaborate(
     );
 
     Ok(Json(handoff))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EligiblePeersRequest {
+    pub corpus_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EligiblePeerDto {
+    /// Full-hex node id (matches the mesh member list + contribution ledger).
+    pub node_id: String,
+    pub name: String,
+    pub online: bool,
+    pub eligible: bool,
+    /// Machine token mirroring the collaborate candidate filter, so the picker
+    /// copy stays in lockstep: `ok` | `offline` | `no_embed_model` |
+    /// `embed_model_mismatch`.
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EligiblePeersResponse {
+    pub peers: Vec<EligiblePeerDto>,
+    /// Whether this corpus may be peer-assisted at all (`[corpus] grantable`).
+    /// The desktop hides the whole offer when false.
+    pub grantable: bool,
+}
+
+/// POST /internal/corpus/collaborate/eligible_peers — which mesh peers can help
+/// with a peer-assisted ingest of `corpus_id`. Reuses the same
+/// `EmbedModelInfo`-equality candidate logic as `corpus_collaborate`, but
+/// returns EVERY peer with an eligibility verdict + reason so the desktop
+/// picker can show ineligible peers dimmed with an explanation (glassbox —
+/// never a silent omission).
+pub async fn corpus_eligible_peers(
+    State(state): State<AppState>,
+    Json(req): Json<EligiblePeersRequest>,
+) -> Result<Json<EligiblePeersResponse>, (StatusCode, Json<ErrorBody>)> {
+    let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        )
+    })?;
+
+    let grantable = engine
+        .load_recipe(&req.corpus_id)
+        .await
+        .map(|r| r.corpus.grantable)
+        .unwrap_or(false);
+
+    let local_embed_model = state.inner.inference_store.get_local_embed_model();
+
+    let mesh = state.inner.mesh.read().await;
+    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let mut peers: Vec<EligiblePeerDto> = Vec::new();
+    for m in mesh.members.values() {
+        if m.node_id == self_id {
+            continue;
+        }
+        let online = m.status == NodeStatus::Online;
+        let (eligible, reason) = if !online {
+            (false, "offline")
+        } else {
+            match (local_embed_model.as_ref(), m.capabilities.embed_model.as_ref()) {
+                (_, None) => (false, "no_embed_model"),
+                (Some(local), Some(em)) if em == local => (true, "ok"),
+                (Some(_), Some(_)) => (false, "embed_model_mismatch"),
+                // We have no local embed model to compare against — cannot
+                // certify a match, so treat as ineligible.
+                (None, Some(_)) => (false, "no_embed_model"),
+            }
+        };
+        peers.push(EligiblePeerDto {
+            node_id: m.node_id.to_hex(),
+            name: m.name.clone(),
+            online,
+            eligible,
+            reason: reason.to_string(),
+        });
+    }
+    drop(mesh);
+    // Eligible + online first, then by name — the picker checks these by default.
+    peers.sort_by(|a, b| b.eligible.cmp(&a.eligible).then(a.name.cmp(&b.name)));
+
+    Ok(Json(EligiblePeersResponse { peers, grantable }))
 }
 
 #[derive(Debug, Deserialize)]

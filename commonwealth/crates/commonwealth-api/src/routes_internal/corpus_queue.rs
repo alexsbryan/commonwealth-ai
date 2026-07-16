@@ -550,11 +550,61 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
             .coordinate_merge(handoff_id, local_node_id, &peer_urls)
             .await
         {
-            Ok(Some(info)) => tracing::info!(
-                handoff = %handoff_id,
-                chunks = info.chunk_count,
-                "complete_unit→merge: queue-mode merge complete"
-            ),
+            Ok(Some(info)) => {
+                tracing::info!(
+                    handoff = %handoff_id,
+                    chunks = info.chunk_count,
+                    "complete_unit→merge: queue-mode merge complete"
+                );
+                // Verification spot-check: re-embed a sample of the merged
+                // corpus locally and compare cosine against the stored
+                // (peer-produced) vectors. Cosine ≈ 1 is expected (same
+                // EmbedModelInfo on both sides); a miss flags corruption or a
+                // wrong/dishonest peer. Non-fatal — we keep the canonical and
+                // surface the report on the collaborate-status endpoint.
+                const VERIFY_SAMPLE_N: usize = 24;
+                const VERIFY_EPSILON: f32 = 1e-3;
+                match commonwealth_knowledge::verify_merge_sample(
+                    &engine,
+                    &info.corpus_id,
+                    VERIFY_SAMPLE_N,
+                    VERIFY_EPSILON,
+                )
+                .await
+                {
+                    Ok(report) => {
+                        if report.all_passed() {
+                            tracing::info!(
+                                handoff = %handoff_id,
+                                sampled = report.sampled,
+                                min_cosine = report.min_cosine,
+                                "complete_unit→merge: verification passed — all sampled chunks matched"
+                            );
+                        } else {
+                            tracing::error!(
+                                handoff = %handoff_id,
+                                sampled = report.sampled,
+                                passed = report.passed,
+                                failures = report.failures.len(),
+                                min_cosine = report.min_cosine,
+                                "complete_unit→merge: verification FAILED — some sampled chunks did \
+                                 not match a local re-embed (possible corruption / wrong model)"
+                            );
+                        }
+                        state
+                            .inner
+                            .verify_reports
+                            .write()
+                            .await
+                            .insert(handoff_id, report);
+                    }
+                    Err(e) => tracing::warn!(
+                        handoff = %handoff_id,
+                        error = %e,
+                        "complete_unit→merge: verification spot-check could not run"
+                    ),
+                }
+            }
             Ok(None) => tracing::info!(
                 handoff = %handoff_id,
                 "complete_unit→merge: not the merge leader (unexpected on coordinator) — no-op"
@@ -711,6 +761,9 @@ pub struct CollaborateStatusResponse {
     /// True when this ingest is backed by a live ephemeral grant.
     pub ephemeral: bool,
     pub grant: Option<GrantStatusDto>,
+    /// Post-merge verification spot-check result, once the merge has run.
+    /// `None` until the coordinator completes the merge + re-embed check.
+    pub verification: Option<commonwealth_knowledge::VerifyReport>,
 }
 
 /// POST /internal/corpus/collaborate/status — glassbox progress for a
@@ -764,6 +817,13 @@ pub async fn corpus_collaborate_status(
         revoked: g.revoked,
         allowed_peers: g.allowed_peers.iter().map(|n| n.to_hex()).collect(),
     });
+    let verification = state
+        .inner
+        .verify_reports
+        .read()
+        .await
+        .get(&req.handoff_id)
+        .cloned();
 
     let resp = CollaborateStatusResponse {
         handoff_id: req.handoff_id.to_string(),
@@ -777,6 +837,7 @@ pub async fn corpus_collaborate_status(
         per_peer,
         ephemeral: grant_dto.is_some(),
         grant: grant_dto,
+        verification,
     };
     (StatusCode::OK, Json(Some(resp)))
 }

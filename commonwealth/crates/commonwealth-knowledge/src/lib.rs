@@ -9,7 +9,7 @@ pub mod work_queue;
 
 pub use ingest_grant::{EphemeralGrantStore, EphemeralIngestGrant};
 pub use mesh_corpus::MeshCorpusManager;
-pub use shard_manager::ShardManager;
+pub use shard_manager::{verify_merge_sample, ShardManager, VerifyReport};
 pub use store_adapter::KnowledgeStateStore;
 pub use work_queue::{
     HandoffQueue, HeartbeatResult, LeasedUnit, QueueError, ReapStats, WorkQueueManager,

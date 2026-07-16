@@ -60,6 +60,57 @@ impl CorpusIndex {
         Ok(out)
     }
 
+    /// Sample up to `n` `(content, embedding)` pairs for post-merge integrity
+    /// verification. The caller re-embeds `content` locally and compares
+    /// cosine against the stored (peer-produced) `embedding` — a cosine ≈ 1
+    /// confirms the peer used the exact same embedding model. Mirrors
+    /// [`Self::sample_embeddings`] but carries the chunk text.
+    pub async fn sample_chunks_with_embeddings(&self, n: usize) -> Result<Vec<(String, Vec<f32>)>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "content".to_string(),
+                "embedding".to_string(),
+            ]))
+            .limit(n)
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("sample_chunks_with_embeddings query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("sample_chunks_with_embeddings collect: {e}")))?;
+
+        let mut out = Vec::new();
+        for batch in &batches {
+            let contents = match batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let embeddings = match batch
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            for i in 0..batch.num_rows() {
+                let content = contents.value(i).to_string();
+                let floats = embeddings
+                    .value(i)
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .map(|a| a.values().to_vec())
+                    .unwrap_or_default();
+                out.push((content, floats));
+            }
+        }
+        Ok(out)
+    }
+
     /// Stream all chunk embeddings from the index.
     /// Returns `(chunk_ids, embeddings)` — columnar projection, does not
     /// load chunk text.

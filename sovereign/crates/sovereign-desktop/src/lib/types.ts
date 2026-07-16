@@ -2728,3 +2728,73 @@ export interface AtomDetail {
   curation_status: CurationStatus;
   overlay_supports: boolean;
 }
+
+// ─── Peer-assisted ingest ("Blanket") ──────────────────────────────
+// Mirrors the daemon DTOs in commonwealth-api routes_internal
+// (corpus_collaborate / corpus_grant / corpus_queue).
+
+/** Why a peer can or can't help with a peer-assisted ingest. Machine token
+ *  kept in lockstep with the backend candidate filter so copy stays honest. */
+export type AssistIneligibleReason =
+  | "ok"
+  | "offline"
+  | "no_embed_model"
+  | "embed_model_mismatch";
+
+export interface AssistEligiblePeer {
+  node_id: string; // full hex
+  name: string;
+  online: boolean;
+  eligible: boolean;
+  reason: AssistIneligibleReason;
+}
+
+export interface AssistEligiblePeersResponse {
+  peers: AssistEligiblePeer[];
+  /** Whether this corpus may be peer-assisted at all (`[corpus] grantable`). */
+  grantable: boolean;
+}
+
+export interface AssistStartResult {
+  corpus_id: string;
+  /** Opaque handoff id — round-trip back to meshAssistStatus unchanged. */
+  handoff_id: unknown;
+  grant_expires_at_ms: number;
+  peer_count: number;
+}
+
+export interface AssistPeerProgress {
+  node_id: string;
+  leased: number;
+  completed: number;
+  failed: number;
+}
+
+export interface AssistGrant {
+  expires_at_ms: number;
+  revoked: boolean;
+  allowed_peers: string[];
+}
+
+export interface AssistVerification {
+  sampled: number;
+  passed: number;
+  min_cosine: number;
+  /** [sample_index, cosine] for each chunk that missed tolerance. */
+  failures: [number, number][];
+}
+
+export interface CollaborateStatus {
+  handoff_id: string;
+  corpus_id: string;
+  phase: string;
+  total_units: number;
+  complete: number;
+  failed: number;
+  leased: number;
+  queued: number;
+  per_peer: AssistPeerProgress[];
+  ephemeral: boolean;
+  grant: AssistGrant | null;
+  verification: AssistVerification | null;
+}

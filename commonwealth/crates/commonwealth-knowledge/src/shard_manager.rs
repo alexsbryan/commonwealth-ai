@@ -718,3 +718,172 @@ pub fn evict_partition_dir(index_dir: &Path, corpus_id: &str, node_id: NodeId) -
     std::fs::remove_file(&tar).ok();
     existed
 }
+
+/// Result of the post-merge integrity spot-check.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VerifyReport {
+    /// How many chunks were sampled and re-embedded.
+    pub sampled: u32,
+    /// How many matched within tolerance (cosine ≥ 1 − ε).
+    pub passed: u32,
+    /// Lowest cosine observed across the sample (1.0 for an empty sample).
+    pub min_cosine: f32,
+    /// `(sample_index, cosine)` for each chunk that missed the tolerance.
+    pub failures: Vec<(u32, f32)>,
+}
+
+impl VerifyReport {
+    /// True when every sampled chunk matched (or nothing was sampled).
+    pub fn all_passed(&self) -> bool {
+        self.failures.is_empty()
+    }
+}
+
+/// Re-embed a sample of the merged corpus's chunks LOCALLY and compare cosine
+/// against the stored (peer-produced) vectors. Because both sides run the exact
+/// same `EmbedModelInfo` (enforced at collaborate time), cosine ≈ 1 is expected
+/// — a miss signals corruption, a wrong model, or tampering by a helper peer.
+/// Non-fatal to the merge; the caller surfaces the report (glassbox
+/// "re-checked N chunks — all matched"). Mirrors the prebuilt-restore re-embed
+/// precedent (`corpus-engine` `try_restore_prebuilt`).
+pub async fn verify_merge_sample(
+    engine: &CorpusEngine,
+    corpus_id: &str,
+    sample_n: usize,
+    epsilon: f32,
+) -> corpus_engine::Result<VerifyReport> {
+    let index = engine.open_index_for_corpus(corpus_id).await?;
+    let samples = index.sample_chunks_with_embeddings(sample_n).await?;
+    let embed = engine.embed_fn();
+
+    let mut passed = 0u32;
+    let mut min_cosine = 1.0f32;
+    let mut failures = Vec::new();
+    for (i, (text, stored)) in samples.iter().enumerate() {
+        let local = match (embed)(text.as_str()).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "verify_merge_sample: local re-embed failed for a sampled chunk"
+                );
+                failures.push((i as u32, 0.0));
+                continue;
+            }
+        };
+        let cos = cosine_similarity(&local, stored);
+        if cos < min_cosine {
+            min_cosine = cos;
+        }
+        if cos >= 1.0 - epsilon {
+            passed += 1;
+        } else {
+            failures.push((i as u32, cos));
+        }
+    }
+
+    Ok(VerifyReport {
+        sampled: samples.len() as u32,
+        passed,
+        min_cosine: if samples.is_empty() { 1.0 } else { min_cosine },
+        failures,
+    })
+}
+
+/// Cosine similarity of two equal-length vectors. Returns 0.0 for a
+/// length mismatch or a zero vector (both are "no match" for our purposes).
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let (mut dot, mut na, mut nb) = (0.0f32, 0.0f32, 0.0f32);
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na == 0.0 || nb == 0.0 {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cosine_identical_vectors_is_one() {
+        let v = vec![0.2, -0.5, 0.9, 0.1];
+        assert!((cosine_similarity(&v, &v) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_scaled_vector_is_still_one() {
+        // Cosine is scale-invariant — a peer that returns the same direction
+        // at a different magnitude must still verify as a match.
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![2.0, 4.0, 6.0];
+        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_orthogonal_is_zero() {
+        assert!(cosine_similarity(&[1.0, 0.0], &[0.0, 1.0]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_guards_mismatch_and_zero_vectors() {
+        // Length mismatch, empty, and zero-norm all read as "no match" (0.0)
+        // so a corrupt/absent embedding can never masquerade as verified.
+        assert_eq!(cosine_similarity(&[1.0, 2.0], &[1.0]), 0.0);
+        assert_eq!(cosine_similarity(&[], &[]), 0.0);
+        assert_eq!(cosine_similarity(&[0.0, 0.0], &[1.0, 1.0]), 0.0);
+    }
+
+    #[test]
+    fn verify_report_all_passed_tracks_failures() {
+        let clean = VerifyReport {
+            sampled: 24,
+            passed: 24,
+            min_cosine: 0.999,
+            failures: vec![],
+        };
+        assert!(clean.all_passed());
+
+        let dirty = VerifyReport {
+            sampled: 24,
+            passed: 23,
+            min_cosine: 0.3,
+            failures: vec![(7, 0.3)],
+        };
+        assert!(!dirty.all_passed());
+    }
+
+    #[test]
+    fn evict_partition_dir_reports_absence_and_wipes_presence() {
+        // No tempfile dependency: build a unique dir under the OS temp root
+        // keyed by pid so parallel test runs don't collide.
+        let base = std::env::temp_dir().join(format!("cw-evict-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        let node = NodeId::from_u128(0xABCD);
+        let corpus = "vault";
+        // Nothing there yet → false, no panic.
+        assert!(!evict_partition_dir(&base, corpus, node));
+
+        // Create the partition dir the coordinator would wipe post-pull.
+        let part = base.join(format!("{corpus}-partition-{node}"));
+        std::fs::create_dir_all(&part).unwrap();
+        std::fs::write(part.join("chunk.jsonl"), b"peer plaintext").unwrap();
+        assert!(part.exists());
+
+        // Evict reports it existed AND removes it — the no-retention guarantee.
+        assert!(evict_partition_dir(&base, corpus, node));
+        assert!(!part.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}

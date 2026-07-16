@@ -11,11 +11,15 @@
     lcWatchRemoveRoot,
     lcWatchState,
   } from "../../api";
+  import { meshAssistStart } from "../../api";
   import type {
     WatchedFolderDetailsResponse,
     WatchedFailedFile,
   } from "../../types";
   import DocumentInspector from "./DocumentInspector.svelte";
+  import { assistProgressStore } from "../../stores/assistProgress.svelte";
+  import PeerAssistOffer from "../mesh/PeerAssistOffer.svelte";
+  import AssistProgressPanel from "../mesh/AssistProgressPanel.svelte";
 
   interface Props {
     corpusId: string;
@@ -165,6 +169,44 @@
   let enrichActionInflight = $state(false);
   let enrichError: string | null = $state(null);
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+
+  // Peer-assist ("Blanket") — the STANDING grant surface. Unlike the one-shot
+  // folder-drop flow, a watched folder keeps ingesting deltas, so the grant is
+  // issued with a long TTL (the backend caps it) and stays live until the user
+  // stops it or it expires. The offer captures the peer selection; the explicit
+  // "Get mesh help" button issues the grant + seeds the collaborative queue.
+  // Local sweeps/enrichment are never gated on any of this.
+  const STANDING_ASSIST_TTL_SECS = 24 * 60 * 60; // backend caps at 24h
+  let assistDecision = $state<{ enabled: boolean; peerNodeIds: string[] }>({
+    enabled: false,
+    peerNodeIds: [],
+  });
+  let assistStarting = $state(false);
+  let assistError: string | null = $state(null);
+  let activeAssistJob = $derived(assistProgressStore.get(corpusId));
+
+  async function startAssist() {
+    if (!assistDecision.enabled || assistDecision.peerNodeIds.length === 0) {
+      return;
+    }
+    assistStarting = true;
+    assistError = null;
+    try {
+      const handle = await meshAssistStart(
+        corpusId,
+        assistDecision.peerNodeIds,
+        STANDING_ASSIST_TTL_SECS,
+      );
+      assistProgressStore.track({
+        corpus_id: handle.corpus_id,
+        handoff_id: handle.handoff_id,
+        grant_expires_at_ms: handle.grant_expires_at_ms,
+      });
+    } catch (e) {
+      assistError = String(e);
+    }
+    assistStarting = false;
+  }
 
   // Honest cost-estimate framing per spec §3.3. The driver's
   // `CostEstimate::from_doc_count` heuristic lives in Rust; we
@@ -609,6 +651,48 @@
 
       {#if enrichError}
         <p class="error">{enrichError}</p>
+      {/if}
+    </section>
+
+    <!-- Peer-assist ("Blanket") — the standing renewable grant. A watched
+         folder keeps embedding + enriching deltas forever; if the user has
+         other mesh machines, they can shoulder that compute. One-time,
+         revocable, verified locally, nothing retained by peers. Renders
+         nothing when the mesh is down / the corpus isn't grantable / no peer
+         is eligible. -->
+    <section class="section mesh-help">
+      <h3 class="section-title">Mesh help</h3>
+      {#if activeAssistJob}
+        <AssistProgressPanel
+          job={activeAssistJob}
+          onRevoke={(c) => assistProgressStore.revoke(c)}
+        />
+      {:else}
+        <p class="section-lede">
+          Hand a set of your mesh machines a one-time, revocable grant to help
+          embed and enrich this folder — including new files as they arrive.
+          The source is never shared standing; peers compute, return results,
+          and discard it. Results are re-checked on this machine before use.
+        </p>
+        <PeerAssistOffer
+          corpusId={details.corpus_id}
+          surface="watched"
+          onChange={(d) => (assistDecision = d)}
+        />
+        {#if assistDecision.enabled && assistDecision.peerNodeIds.length > 0}
+          <div class="actions">
+            <button
+              class="primary"
+              onclick={startAssist}
+              disabled={assistStarting}
+            >
+              {assistStarting ? "Starting…" : "Get mesh help"}
+            </button>
+          </div>
+        {/if}
+        {#if assistError}
+          <p class="error">{assistError}</p>
+        {/if}
       {/if}
     </section>
   {/if}

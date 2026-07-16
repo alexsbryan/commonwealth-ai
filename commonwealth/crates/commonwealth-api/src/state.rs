@@ -18,7 +18,7 @@ use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
-use commonwealth_knowledge::{EphemeralGrantStore, WorkQueueManager};
+use commonwealth_knowledge::{EphemeralGrantStore, VerifyReport, WorkQueueManager};
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
@@ -426,6 +426,11 @@ pub struct AppStateInner {
     /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
     /// loops when the same open handoff is seen across multiple gossip ticks.
     pub active_pull_loops: RwLock<HashSet<HandoffId>>,
+    /// Post-merge verification spot-check reports, keyed by handoff. The merge
+    /// coordinator writes one after re-embedding a sample of the merged corpus
+    /// locally; the collaborate-status endpoint surfaces it for the desktop's
+    /// glassbox "re-checked N chunks — all matched" line.
+    pub verify_reports: RwLock<HashMap<HandoffId, VerifyReport>>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via [`AppState::bump_foreground_active`]
@@ -953,6 +958,7 @@ impl AppState {
                 work_queue: Arc::new(WorkQueueManager::new()),
                 grant_store: Arc::new(EphemeralGrantStore::new()),
                 active_pull_loops: RwLock::new(HashSet::new()),
+                verify_reports: RwLock::new(HashMap::new()),
                 // 0 sentinel = no foreground activity observed yet.
                 // The yield hook treats 0 as "never active", regardless
                 // of the window — so a fresh boot doesn't accidentally

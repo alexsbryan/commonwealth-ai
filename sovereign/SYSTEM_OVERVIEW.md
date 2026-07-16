@@ -494,6 +494,48 @@ clamps published `free_storage_gb` to
 clamp self-enforces for both local installs and peer-driven shard
 distribution.
 
+### Peer-assisted ingest ("Blanket") — one-time mesh help for personal sources
+
+A personal source (Obsidian vault, watched folder, document folder) is
+structurally `mesh_sharing=false` / `scope=local`, so no peer ever helps embed
+or enrich it. Blanket lets the user hand a **chosen subset** of mesh peers a
+**one-time, revocable, ephemeral grant** to shoulder that compute — the source
+is never put into standing sharing, and nothing is retained by peers after the
+job.
+
+It rides the existing collaborative-ingest **work-queue** rather than a new
+engine. Four additions on top:
+
+- **Grantability marker** — `CorpusMeta.grantable` (`corpus-engine/recipe.rs`),
+  set `true` ONLY by the three file-corpus recipe builders
+  (`sovereign-tools/local_corpus/config.rs`). KnowledgeView corpora leave it
+  `false`, so they stay structurally un-assistable even though they share the
+  same `scope=local`.
+- **Peer allowlist** — `CollaborateRequest.allowed_peers` intersects the
+  embed-compatible candidate set; carried to peers via
+  `IngestionHandoff.{allowed_peers, ephemeral}`. Enforced at enrollment
+  (`sovereign-mesh/auto_ingest.rs`) AND in `WorkQueueManager::next_unit`
+  (`QueueError::PeerNotAllowed` → 403).
+- **Ephemeral grant** — `EphemeralGrantStore` (`commonwealth-knowledge/ingest_grant.rs`),
+  in-memory, one live grant per corpus, renewable TTL (6h default, 24h cap). A
+  single gate in `corpus_collaborate`: `mesh_sharing==true` proceeds as today;
+  else requires `grantable && live-grant ⊇ requested peers`, else 403. The
+  on-disk metadata is **never mutated** — that IS the "no standing share".
+  Lifecycle routes: `POST /internal/corpus/grant`, `/grant/revoke`.
+- **Teardown + verification** — coordinator broadcasts `partition_evict` to each
+  peer after pulling its shard, and peers self-evict their partition dir on
+  ephemeral-loop exit (two independent no-retention paths). Post-merge,
+  `verify_merge_sample` re-embeds a sample locally and cosine-checks it against
+  the peer-produced vectors (`shard_manager.rs`) — glassbox "re-checked N
+  chunks, all matched".
+
+Progress is polled via `GET /internal/corpus/collaborate/status`
+(`CollaborateStatus` DTO). Desktop surface: `PeerAssistOffer` /
+`PeerAssistPicker` / `AssistProgressPanel` (`components/mesh/`) driven by the
+poll-based `assistProgress.svelte.ts` store, wired into the folder-drop flow
+(one-shot), the watched-folder detail (standing grant), and installed-recipe
+rows. The local ingest is never gated on any of this.
+
 ### Enrichment
 
 **Three coexisting systems**, selected per-corpus by `[enrichment] type`

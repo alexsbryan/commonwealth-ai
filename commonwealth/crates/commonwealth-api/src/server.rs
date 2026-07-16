@@ -182,6 +182,12 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/corpus/collaborate",
             post(routes_internal::corpus_collaborate),
         )
+        // Which mesh peers can help with a peer-assisted ingest (drives the
+        // desktop peer picker: eligible peers + reasons for ineligible ones).
+        .route(
+            "/internal/corpus/collaborate/eligible_peers",
+            post(routes_internal::corpus_eligible_peers),
+        )
         // Ephemeral ingest-grant lifecycle: authorize a one-off, revocable
         // peer-assisted ingest of an otherwise local-only corpus. The
         // `collaborate` gate above consults the grant issued here.
