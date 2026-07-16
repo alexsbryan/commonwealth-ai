@@ -2,7 +2,7 @@
   "bank_name": "sep-summarize-obscure-v1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784232127,
+  "started_at_unix": 1784234014,
   "results": [
     {
       "question_id": "summary_proof_theory",
@@ -32,17 +32,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "epsilon-calculus",
-          "url": "https://plato.stanford.edu/entries/epsilon-calculus/",
-          "score": 0.015446224,
-          "snippet": "epsilon-calculus  In addition to the traditional, foundational branch of proof theory, today there is a good deal of interest in structural proof theory, a branch of the subject that focuses on logical deductive calculi and their properties. This research is closely linked with issues relevant to computer science, having to do with automated deduction, functional programming, and computer aided verification. Here, too, Gentzen-style methods tend to dominate (see again the  entry on proof theory).  But the epsilon calculus can also provide valuable insights; cf. for example Aguilera &amp; Baaz …"
-        },
-        {
-          "corpus_id": "sep",
           "title": "recursive-functions",
           "url": "https://plato.stanford.edu/entries/recursive-functions/",
           "score": 0.020669991,
           "snippet": "recursive-functions  Section 1 of this entry provides an overview of the foundational developments in logic and mathematics which led to the founding of recursive function theory in the 1930s.  Section 2 surveys different forms of recursive definitions, inclusive of the primitive and partial recursive functions which are most central to the classical development of this subject.  Section 3 provides an overview of computability theory, inclusive of the so-called Recursion Theorem (Section 3.4)—a result which highlights the centrality of recursion to computation in general as well as its relatio…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "learning-formal",
+          "url": "https://plato.stanford.edu/entries/learning-formal/",
+          "score": 0.015245623,
+          "snippet": "learning-formal  Article Overview. Compared to traditional philosphical discussions of inductive inference, learning theory provides a radically new way of thinking about induction and scientific method. The main aim of this article is explain the main concepts of the theory through examples. Running examples are repeated throughout the entry; at the same time, the sections are meant to be as independent of each other as possible. We use the examples to illustrate some theorems of philosophical interest, and to highlight the key philosophical ideas and insights behind learning theory."
         },
         {
           "corpus_id": "sep",
@@ -232,7 +232,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1325,
+      "search_ms": 1875,
       "corpora_hit": [
         "sep"
       ],
@@ -303,7 +303,7 @@
           "corpus_id": "sep",
           "title": "frege-theorem",
           "url": "https://plato.stanford.edu/entries/frege-theorem/",
-          "score": 0.040618338,
+          "score": 0.040336136,
           "snippet": "frege-theorem  With regard to this definition, Frege says:"
         },
         {
@@ -331,14 +331,14 @@
           "corpus_id": "sep",
           "title": "logicism",
           "url": "https://plato.stanford.edu/entries/logicism/",
-          "score": 0.01831502,
+          "score": 0.027993685,
           "snippet": "logicism  This is nowadays called ‘Frege’s  Theorem’.[33]  Frege’s Theorem has Principle (A) as its hypothesis. Curiously, the stress Frege places, in the Grundlagen, on the importance of this principle (that two concepts have the same number just in case they are gleichzahlig) is dissipated in the Grundgesetze, where the two halves of the biconditional appear widely separated: in §53 Frege proves that if two concepts correspond 1–1, then their numbers are identical, and in §69 he proves the converse. But nowhere in the Grundgesetze does he re-assemble the biconditional and accord it prime phi…"
         },
         {
           "corpus_id": "sep",
           "title": "philosophy-mathematics",
           "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
-          "score": 0.018735362,
+          "score": 0.027138725,
           "snippet": "philosophy-mathematics  Frege devoted much of his career to trying to show how mathematics can be reduced to logic (Frege 1884). He managed to derive the principles of (second-order) Peano arithmetic from the basic laws of a system of second-order logic. His derivation was flawless. However, he relied on one principle which turned out not to be a logical principle after all. Even worse, it is untenable. The principle in question is Frege’s Basic Law V:"
         },
         {
@@ -425,7 +425,7 @@
         "ratio": 0.9
       },
       "embed_ms": 0,
-      "search_ms": 955,
+      "search_ms": 1923,
       "corpora_hit": [
         "sep"
       ],
@@ -461,49 +461,42 @@
           "corpus_id": "sep",
           "title": "computer-science",
           "url": "https://plato.stanford.edu/entries/computer-science/",
-          "score": 0.023419203,
+          "score": 0.03595053,
           "snippet": "computer-science  Although a central concern of theoretical computer science, the topics of computability and complexity are covered in existing entries on the  Church-Turing thesis,  computational complexity theory, and  recursive functions."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "church-turing",
-          "url": "https://plato.stanford.edu/entries/church-turing/",
-          "score": 0.016326532,
-          "snippet": "church-turing  The concept of a recursive function is due to Kurt Gödel and Jacques Herbrand (Gödel 1934; Herbrand 1932). The class of lambda-definable functions (of positive integers) and the class of recursive functions (of positive integers) are identical. This was proved by Church and Kleene (Church 1936a; Kleene 1936)."
         },
         {
           "corpus_id": "sep",
           "title": "lambda-calculus",
           "url": "https://plato.stanford.edu/entries/lambda-calculus/",
-          "score": 0.015444016,
+          "score": 0.024735536,
           "snippet": "lambda-calculus  Since the class of recursive functions is an adequate representation of the class of all computable (number-theoretic) functions, thanks to the work above we find that all computable (number-theoretic) functions can be faithfully represented in the \\(\\lambda\\)-calculus."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "computational-complexity",
-          "url": "https://plato.stanford.edu/entries/computational-complexity/",
-          "score": 0.027963525,
-          "snippet": "computational-complexity  Church-Turing Thesis |  computability and complexity |  computer science, philosophy of |  mathematics, philosophy of |  quantum theory: quantum computing |  recursive functions |  Turing machines"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "computing-history",
-          "url": "https://plato.stanford.edu/entries/computing-history/",
-          "score": 0.013842747,
-          "snippet": "computing-history  computability and complexity |  recursive functions |  Turing, Alan |  Turing machines"
         },
         {
           "corpus_id": "sep",
           "title": "church",
           "url": "https://plato.stanford.edu/entries/church/",
-          "score": 0.017857144,
+          "score": 0.028225806,
           "snippet": "church  Church was the first to devise a formalism—the λ-calculus—within which it was possible to define a class of functions that coincide, arguably, with the intuitively computable functions—those that can be evaluated by means of an algorithm, i.e., a computer program. He also provided, again arguably, the first example of a particular significant function that is not computable. (Other examples, due independently to Kleene (1936) and Turing (1936) followed quickly.) He did this by constructing a function that is provably not recursive in the sense defined slightly earlier by Gödel and Herb…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "church-turing",
+          "url": "https://plato.stanford.edu/entries/church-turing/",
+          "score": 0.026089981,
+          "snippet": "church-turing  If attention is restricted to functions of positive integers, Church’s thesis and Turing’s thesis are extensionally equivalent. ‘Extensionally equivalent’ means that the two theses are about one and the same class of functions: in view of the previously mentioned results by Church, Kleene and Turing, the class of lambda-definable functions (of positive integers) is identical to the class of recursive functions (of positive integers) and to the class of computable functions (of positive integers). Notice, though, that while the two theses are equivalent in this sense, they nevert…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computational-complexity",
+          "url": "https://plato.stanford.edu/entries/computational-complexity/",
+          "score": 0.027011279,
+          "snippet": "computational-complexity  It is evident, however, that our justification for such classifications can be no stronger than the stock we place in CT itself. One form of evidence often cited in favor of the thesis is that the coincidence of the class of functions computed by the members of \\(\\Lambda, \\mathfrak{R}\\) and \\(\\mathfrak{T}\\) points to the mathematical robustness of the class of recursive functions. Two related forms of inductive evidence are as follows: (i) many other independently motivated models of computation have subsequently been defined which describe the same class of functions…"
         },
         {
           "corpus_id": "sep",
           "title": "mathematics-constructive",
           "url": "https://plato.stanford.edu/entries/mathematics-constructive/",
-          "score": 0.013605443,
+          "score": 0.021887017,
           "snippet": "mathematics-constructive  In the late 1940s, the Russian mathematician A.A. Markov began the development of an alternative form of constructive mathematics, RUSS, which is, essentially,  recursive function  theory with intuitionistic logic (Markov [1954], Kushner [1985]). In this variety the objects are defined by means of Gödel-numberings, and the procedures are all recursive; the main distinction between RUSS and the classical recursive analysis developed after the work of Turing, Church, and others in 1936 clarified the nature of computable processes is that the logic used in RUSS is intuit…"
         },
         {
@@ -519,6 +512,20 @@
           "url": "https://plato.stanford.edu/entries/propositional-function/",
           "score": 0.017094018,
           "snippet": "propositional-function  This brief history of propositional functions shows that they are useful entities and that they have played a central role in logic as it is used in philosophy and linguistics. I have omitted the more mathematical uses of propositional functions, for example, in Russell's and Ramsey's constructions of classes, and in treatments of general models for higher-order logic. But the topic of propositional functions is a big one and we can't cover it all in a single encyclopedia article."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "learning-formal",
+          "url": "https://plato.stanford.edu/entries/learning-formal/",
+          "score": 0.011558021,
+          "snippet": "learning-formal  Article Overview. Compared to traditional philosphical discussions of inductive inference, learning theory provides a radically new way of thinking about induction and scientific method. The main aim of this article is explain the main concepts of the theory through examples. Running examples are repeated throughout the entry; at the same time, the sections are meant to be as independent of each other as possible. We use the examples to illustrate some theorems of philosophical interest, and to highlight the key philosophical ideas and insights behind learning theory."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.013312853,
+          "snippet": "consciousness  Although there are many general metaphysical/ontological theories of consciousness, the list of specific detailed theories about its nature is even longer and more diverse. No brief survey could be close to comprehensive, but seven main types of theories may help to indicate the basic range of options: higher-order theories, representational theories, interpretative narrative theories, cognitive theories, neural theories, quantum theories and nonphysical theories.  The categories are not mutually exclusive; for example, many cognitive theories also propose a neural substrate for…"
         },
         {
           "corpus_id": "sep",
@@ -540,6 +547,13 @@
           "url": "https://plato.stanford.edu/entries/aristotle-metaphysics/",
           "score": 0.016917294,
           "snippet": "aristotle-metaphysics  In Metaphysics Ζ, Aristotle introduces the distinction between matter and form synchronically, applying it to an individual substance at a particular time. The matter of a substance is the stuff it is composed of; the form is the way that stuff is put together so that the whole it constitutes can perform its characteristic functions. But soon he begins to apply the distinction diachronically, across time. This connects the matter/form distinction to another key Aristotelian distinction, that between potentiality (dunamis) and actuality (entelecheia) or activity (energeia…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-intentionality",
+          "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
+          "score": 0.012400794,
+          "snippet": "consciousness-intentionality  Each of the gates of entry into the topic of intentionality identified above—directedness; conditions of satisfaction; content—arguably opens onto a unitary phenomenon. And some of the connections among them have been hinted at. But there is a fair amount of fragmentation in the conceptions of intentionality in the field, and the complexities just mentioned cannot be ignored. Perhaps the term “intentionality” only roughly indicates an area of inquiry, covering a variety of interestingly (but uncertainly) interrelated phenomena of thought, belief, desire, imaginati…"
         },
         {
           "corpus_id": "sep",
@@ -625,7 +639,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 680,
+      "search_ms": 1112,
       "corpora_hit": [
         "sep"
       ],
@@ -647,15 +661,8 @@
           "corpus_id": "sep",
           "title": "logic-epistemic",
           "url": "https://plato.stanford.edu/entries/logic-epistemic/",
-          "score": 0.017771702,
+          "score": 0.024166193,
           "snippet": "logic-epistemic  Modern treatments of the logic of knowledge and belief grew out of the work of philosophers and logicians writing from 1948 through the 1950s. Rudolf Carnap, Jerzy Łoś, Arthur Prior, Nicholas Rescher, G.H. von Wright and others recognized that our discourse concerning knowledge and belief admits of an axiomatic-deductive treatment. Among the many important papers that appeared in the 1950s, von Wright’s seminal work (1951) is widely acknowledged as having initiated the formal study of epistemic logic as we know it today. Von Wright’s insights were extended by Jaakko Hintikka i…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "logic-ai",
-          "url": "https://plato.stanford.edu/entries/logic-ai/",
-          "score": 0.025466891,
-          "snippet": "logic-ai  Minker 2000b is a comprehensive collection of survey papers and original contributions to the field of logic-based AI, with extensive references to the literature.  Jack Minker’s introduction, Minker 2000a, is a useful orientation to the field. This volume is  a good beginning point for readers who wish to pursue this topic further.  Brachman &amp; Levesque 2004a provides an introduction to the field of knowledge representation in textbook form.   Davis 1991a and Mueller 2006a are book-length treatments of the challenging problem of formalizing commonsense reasoning.   Antonelli 2012…"
         },
         {
           "corpus_id": "sep",
@@ -673,6 +680,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "computational-complexity",
+          "url": "https://plato.stanford.edu/entries/computational-complexity/",
+          "score": 0.022472462,
+          "snippet": "computational-complexity  In particular, it is traditionally required that fully rational agents be able to find an optimal choice among an array of alternatives,  the potential infeasibility of carrying out a search amongst them notwithstanding. These developments serve as part of the background to a debate in epistemology which originated with Cherniak’s (1981; 1984; 1986) theory of minimal rationality. Cherniak attempts to provide a characterization of rationality which is responsive to both traditional normative characterizations as well as complexity theoretic results about the difficulty…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "dynamic-epistemic",
           "url": "https://plato.stanford.edu/entries/dynamic-epistemic/",
           "score": 0.019214705,
@@ -680,10 +694,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "convention",
-          "url": "https://plato.stanford.edu/entries/convention/",
-          "score": 0.018914474,
-          "snippet": "convention  Notably, Lewis introduces the concept of common knowledge. Roughly, \\(p\\) is common knowledge iff everyone knows \\(p\\), everyone knows that everyone knows \\(p\\), everyone knows that everyone knows that everyone knows that \\(p\\), etc. The subsequent game-theoretic and philosophical literature offers several different ways of formalizing this intuitive idea, due to researchers such as Robert Aumann (1976) and Stephen Schiffer (1972). Recently, some controversy has arisen concerning the precise relation between these later formalizations and Lewis’s own informal remarks. Robin Cubitt …"
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.03421907,
+          "snippet": "logic-ai  This cooperative formalization effort (1) seeks to account for many areas of knowledge, and at the same time (2) attempts to see how this formalized knowledge can be brought to bear on moderately complex common-sense reasoning problems.  The first book-length treatment of this topic, Davis 1991, divides the general problem into the following subtopics."
         },
         {
           "corpus_id": "sep",
@@ -694,6 +708,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "logic-probability",
+          "url": "https://plato.stanford.edu/entries/logic-probability/",
+          "score": 0.025710668,
+          "snippet": "logic-probability  Finally, although the success of probability logic is largely due to its various applications, we will not deal with these applications in any detail. For example, we will not assess the use of probability as a formal representation of belief in philosophy (Bayesian epistemology) or artificial intelligence (knowledge representation), and its advantages and disadvantages with respect to alternative representations, such as generalized probability theory (for quantum theory), \\(p\\)-adic probability, and fuzzy logic. For more information about these topics, the reader can consu…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "bounded-rationality",
           "url": "https://plato.stanford.edu/entries/bounded-rationality/",
           "score": 0.016582552,
@@ -701,17 +722,24 @@
         },
         {
           "corpus_id": "sep",
-          "title": "computational-complexity",
-          "url": "https://plato.stanford.edu/entries/computational-complexity/",
-          "score": 0.01598934,
-          "snippet": "computational-complexity  These developments serve as part of the background to a debate in epistemology which originated with Cherniak’s (1981; 1984; 1986) theory of minimal rationality. Cherniak attempts to provide a characterization of rationality which is responsive to both traditional normative characterizations as well as complexity theoretic results about the difficulty of deductive inference of the sort discussed above. According to his account, a minimally rational agent need only make some of the valid inferences which follow from his beliefs in a proof system for classical logic. He…"
+          "title": "logic-information",
+          "url": "https://plato.stanford.edu/entries/logic-information/",
+          "score": 0.020221297,
+          "snippet": "logic-information  Just as adding the common knowledge operator \\(C\\) to multi-agent epistemic logic extends the expressive capabilities of multi-agent epistemic logic, adding \\(C\\) to PAL results in the more expressive public announcement logic with common knowledge, (PAC). The exact relationship between public announcements and common knowledge is captured by the announcement and common knowledge rule of the logic PAC as the following:"
         },
         {
           "corpus_id": "sep",
-          "title": "wisdom",
-          "url": "https://plato.stanford.edu/entries/wisdom/",
-          "score": 0.014844804,
-          "snippet": "wisdom  The Deep Rationality Theory does not require knowledge or perfection. But it does require rationality, and it accommodates degrees of wisdom.  It is a promising theory of wisdom."
+          "title": "logics-for-games",
+          "url": "https://plato.stanford.edu/entries/logics-for-games/",
+          "score": 0.023162223,
+          "snippet": "logics-for-games  In many of the above topics, logics meets game theory. One such interface area is  epistemic game theory  where game play and solution concepts are analyzed and justified in light of various assumptions about players and their epistemic states, such as common knowledge or common belief in rationality. Epistemic game theory may be viewed as a joint offspring of logic and game theory, a form of progeny which constitutes a reliable sign of success of an interdisciplinary contact."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-reference",
+          "url": "https://plato.stanford.edu/entries/self-reference/",
+          "score": 0.015374326,
+          "snippet": "self-reference  Formalising knowledge as a predicate in a first-order logic is referred to as the syntactic treatment of knowledge. Alternatively, one can choose to formalise knowledge as a modal operator in a suitable modal logic. This is referred to as the semantic treatment of knowledge. In the semantic treatment of knowledge one generally avoids problems of self-reference, and thus inconsistency, but it is at the expense of the expressive power of the formalism (the problems of self-reference are avoided by propositional modal logic not admitting anything equivalent to the diagonal lemma f…"
         },
         {
           "corpus_id": "sep",
@@ -726,13 +754,6 @@
           "url": "https://plato.stanford.edu/entries/learning-formal/",
           "score": 0.020897834,
           "snippet": "learning-formal  We first cover the case where inquiry can provide certainty as to whether an empirical hypothesis is correct (relative to background knowledge). Then we consider when and how inquiry can converge to a correct hypothesis without ever arriving at certain conclusions, as described in  Section 1.  We will introduce enough definitions and formal concepts to state the results precisely; the  supplementary document  provides a full formalization."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "logics-for-games",
-          "url": "https://plato.stanford.edu/entries/logics-for-games/",
-          "score": 0.022433132,
-          "snippet": "logics-for-games  The present entry provides a comprehensive survey of logics for analyzing games, arranged under a number of unifying themes and perspectives. Also, occasional connections are made with other strands at the interface of logic and games covered elsewhere in this Encyclopedia. This overview section is a brief tour d’horizon for topics that will return in more detail later on."
         },
         {
           "corpus_id": "sep",
@@ -768,13 +789,6 @@
           "url": "https://plato.stanford.edu/entries/neo-kantianism/",
           "score": 0.017771702,
           "snippet": "neo-kantianism  This article has three parts. After giving an overview of the common features of Neo-Kantians, section 2 is devoted to the Marburg School, and section 3 to the Southwest (SW) School. The Neo-Kantians were systematic and comprehensive philosophers, writing on nearly every area of philosophy. Instead of attempting to cover all areas of their thought, this article will focus on the areas of their philosophies that were most central to their thought, and that were most influential on their contemporaries and successors. Accordingly, each section begins with each school’s conception…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "questions",
-          "url": "https://plato.stanford.edu/entries/questions/",
-          "score": 0.015519569,
-          "snippet": "questions  This section provides an overview of some of the most prominent treatments of elementary questions at the intersection of philosophy of language and formal semantics."
         },
         {
           "corpus_id": "sep",
@@ -846,21 +860,21 @@
           "mutual knowledge",
           "fixed-point definition",
           "Aumann",
-          "Lewis convention",
+          "coordination problems",
           "iterated knowledge hierarchy",
           "agreement theorem",
           "epistemic logic",
           "common belief"
         ],
         "missing": [
-          "coordination problems",
+          "Lewis convention",
           "coordinated attack problem"
         ],
         "total_expected": 10,
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 738,
+      "search_ms": 1182,
       "corpora_hit": [
         "sep"
       ],
@@ -957,17 +971,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "pm-notation",
-          "url": "https://plato.stanford.edu/entries/pm-notation/",
-          "score": 0.018532246,
-          "snippet": "pm-notation  Principia Mathematica [PM] was written jointly by Alfred North Whitehead and Bertrand Russell over several years, and published in three volumes, which appeared between 1910 and 1913. It presents a system of symbolic logic and then turns to the foundations of mathematics to carry out the logicist project of defining mathematical notions in terms of logical notions and proving the fundamental axioms of mathematics as theorems of logic. While hugely important in the development of logic, philosophy of mathematics and more broadly of “Early Analytic Philosophy”, the work itself is no…"
+          "title": "frege",
+          "url": "https://plato.stanford.edu/entries/frege/",
+          "score": 0.02838536,
+          "snippet": "frege  Note that the concept being an author of Principia Mathematica satisfies this condition, since there are distinct objects \\(x\\) and \\(y\\), namely, Bertrand Russell and Alfred North Whitehead, who authored Principia Mathematica and who are such that anything else authoring Principia Mathematica is identical to one of them. In this way, Frege analyzed a statement of number (‘there are two authors of Principia Mathematica’) as higher-order logical statements about concepts."
         },
         {
           "corpus_id": "sep",
-          "title": "frege",
-          "url": "https://plato.stanford.edu/entries/frege/",
-          "score": 0.019214705,
-          "snippet": "frege  Note that the concept being an author of Principia Mathematica satisfies this condition, since there are distinct objects \\(x\\) and \\(y\\), namely, Bertrand Russell and Alfred North Whitehead, who authored Principia Mathematica and who are such that anything else authoring Principia Mathematica is identical to one of them. In this way, Frege analyzed a statement of number (‘there are two authors of Principia Mathematica’) as higher-order logical statements about concepts."
+          "title": "pm-notation",
+          "url": "https://plato.stanford.edu/entries/pm-notation/",
+          "score": 0.039160404,
+          "snippet": "pm-notation  Principia Mathematica [PM] was written jointly by Alfred North Whitehead and Bertrand Russell over several years, and published in three volumes, which appeared between 1910 and 1913. It presents a system of symbolic logic and then turns to the foundations of mathematics to carry out the logicist project of defining mathematical notions in terms of logical notions and proving the fundamental axioms of mathematics as theorems of logic. While hugely important in the development of logic, philosophy of mathematics and more broadly of “Early Analytic Philosophy”, the work itself is no…"
         },
         {
           "corpus_id": "sep",
@@ -1053,7 +1067,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 891,
+      "search_ms": 1716,
       "corpora_hit": [
         "sep"
       ],
@@ -1068,7 +1082,7 @@
           "corpus_id": "sep",
           "title": "medieval-philosophy",
           "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
-          "score": 0.023015874,
+          "score": 0.03471886,
           "snippet": "medieval-philosophy  Ibn Rushd (“Averroes” in Latin; 1126–98) was an Islamic judge and legal theorist, servant of the harshly anti-Jewish and anti-Christian Almohad regime, and also perhaps the most devoted Aristotelian of the Middle Ages. Whereas scholars in the Islamic East used Avicenna for studying falsafa, Averroes commented the letter of Aristotle’s text, as the Baghdad Peripatetics had done. He wrote short and “Middle” paraphrase commentaries on almost the entire Aristotelian corpus, and “Great” (detailed section by section expositions) on some of the texts. These detailed expositions o…"
         },
         {
@@ -1089,7 +1103,7 @@
           "corpus_id": "sep",
           "title": "arabic-islamic-judaic",
           "url": "https://plato.stanford.edu/entries/arabic-islamic-judaic/",
-          "score": 0.018018018,
+          "score": 0.028119028,
           "snippet": "arabic-islamic-judaic  Averroes (Ibn Rushd, 1126–1198) is usually regarded to have been the major “master” of Islamic philosophy among Jews in the Late Middle Ages – although he might have had to share this key position with Avicenna and al-Ghazali. Almost all his philosophical works were translated from Arabic into Hebrew in the period 1230–1330, sometimes even more than once (only one of them was later translated from Latin into Hebrew, around 1480); almost all of them were quoted, summarized, paraphrased, annotated and commented on by a number of philosophers during the 14th and 15th centur…"
         },
         {
@@ -1110,7 +1124,7 @@
           "corpus_id": "sep",
           "title": "albalag",
           "url": "https://plato.stanford.edu/entries/albalag/",
-          "score": 0.017437961,
+          "score": 0.027842123,
           "snippet": "albalag  Isaac Albalag stands out as one of the most rigorous representatives of the school of Jewish Averroism which flourished in Western Europe in the thirteenth century and lasted until the Renaissance. The members of this school, such as Ibn Kaspi, Shem Tov Ibn Falaquera, Moses Narboni, Isaac Polqar, Gersonides, and Elijah Delmedigo, regarded Averroes’ philosophical writings, particularly his commentaries on Aristotle, as the main source for the study of science and philosophy. The impact of Averroes on these philosophers, varied as it was, extended to the question of the relationship bet…"
         },
         {
@@ -1136,59 +1150,31 @@
         },
         {
           "corpus_id": "sep",
-          "title": "suhrawardi",
-          "url": "https://plato.stanford.edu/entries/suhrawardi/",
-          "score": 0.014172336,
-          "snippet": "suhrawardi  Instructed in the Avicennan Peripatetic tradition, Suhrawardi studied the views of Aristotle, Plato, the Neoplatonists, and later philosophers (falasifa) who wrote in Arabic, notably Avicenna’s (d.1037) whose major works remained central. Work is still needed to assess the nature of the influence exerted on him by Avicenna’s other works, for instance, his Discussions (1992) and Notes on Aristotle’s De anima (1984), and by post-Avicennan philosophers, particularly Abu al-Barakat al-Baghdadi (d.ca.1165), the original yet eclectic critic of Avicenna’s logic, psychology and metaphysics…"
+          "title": "ibn-sina",
+          "url": "https://plato.stanford.edu/entries/ibn-sina/",
+          "score": 0.022403449,
+          "snippet": "ibn-sina  Abū-ʿAlī al-Ḥusayn ibn-ʿAbdallāh Ibn-Sīnā [Avicenna] (ca. 970–1037) was the preeminent philosopher and physician of the Islamic  world.[1] In his work he combined the disparate strands of   philosophical/scientific[2]   thinking in Greek late antiquity and early Islam into a rationally rigorous and self-consistent scientific system that encompassed and explained all reality, including the tenets of revealed religion and its theological and mystical elaborations. In its integral and comprehensive articulation of science and philosophy, it represents the culmination of the Hellenic tra…"
         },
         {
           "corpus_id": "sep",
           "title": "falaquera",
           "url": "https://plato.stanford.edu/entries/falaquera/",
-          "score": 0.021077283,
+          "score": 0.031363,
           "snippet": "falaquera  al-Farabi |  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on Judaic thought |  Ibn Daud, Abraham |  Ibn Rushd [Averroes] |  Maimonides"
         },
         {
           "corpus_id": "sep",
           "title": "arabic-islamic-influence",
           "url": "https://plato.stanford.edu/entries/arabic-islamic-influence/",
-          "score": 0.017934445,
+          "score": 0.025164563,
           "snippet": "arabic-islamic-influence  al-Farabi |  Albert the Great [= Albertus magnus] |  Aquinas, Thomas |  -->Arabic and Islamic Philosophy, special topics in: essence and existence--> |  -->Arabic and Islamic Philosophy, special topics in: eternity and time--> |  -->Arabic and Islamic Philosophy, special topics in: intentions and intentionality--> |  Aristotelianism: in the Renaissance |  -->avicenna--> |  -->Book of Causes [= Liber de causis]--> |  Buridan, John [Jean] |  causation: in Arabic and Islamic thought |  condemnation of 1277 |  Duns Scotus, John |  Ficino, Marsilio |  Giles of Rome |  happ…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "dante",
-          "url": "https://plato.stanford.edu/entries/dante/",
-          "score": 0.016483517,
-          "snippet": "dante  Ibn Sina [Avicenna] | medieval philosophy | Ibn Rushd [Averroes] | literary forms of medieval philosophy |  Albert the Great [= Albertus magnus] |  Anselm, Saint [Anselm of Bec, Anselm of Canterbury] |  Aquinas, Thomas |  Arabic and Islamic Philosophy, disciplines in: psychology and philosophy of mind |  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Boethius, Anicius Manlius Severinus |  heaven and hell in Christian thought |  Olivi, Peter John |  political philosophy: medieval |  Pseudo-Dionysius …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "arabic-islamic-causation",
-          "url": "https://plato.stanford.edu/entries/arabic-islamic-causation/",
-          "score": 0.01696021,
-          "snippet": "arabic-islamic-causation  al-Farabi |  al-Kindi |  Arabic and Islamic Philosophy, historical and methodological topics in: Greek sources |  Aristotle |  Ibn Rushd [Averroes] |  Ibn Sina [Avicenna] |  Plato |  Plotinus |  Proclus"
         },
         {
           "corpus_id": "sep",
           "title": "al-farabi-logic",
           "url": "https://plato.stanford.edu/entries/al-farabi-logic/",
-          "score": 0.020408165,
+          "score": 0.029095422,
           "snippet": "al-farabi-logic  al-Farabi |  al-Farabi: philosophy of society and religion |  al-Farabi: psychology and epistemology |  Arabic and Islamic Philosophy, disciplines in: philosophy of language and logic |  Arabic and Islamic Philosophy, historical and methodological topics in: Greek sources |  Aristotle, General Topics: logic |  compositionality |  future contingents: medieval theories of |  Ibn Rushd [Averroes] |  Ibn Sina [Avicenna]: logic |  logical constants |  Neoplatonism |  questions"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "pomponazzi",
-          "url": "https://plato.stanford.edu/entries/pomponazzi/",
-          "score": 0.01978022,
-          "snippet": "pomponazzi  Alexander of Aphrodisias |  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Aristotelianism: in the Renaissance |  Ficino, Marsilio |  Heytesbury, William |  Ibn Rushd [Averroes] |  natural philosophy: in the Renaissance |  Pico della Mirandola, Giovanni"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "arabic-islamic-natural",
-          "url": "https://plato.stanford.edu/entries/arabic-islamic-natural/",
-          "score": 0.017437961,
-          "snippet": "arabic-islamic-natural  al-Kindi |  Aristotle, Special Topics: natural philosophy |  atomism: ancient |  Ibn Rushd [Averroes] |  Ibn Sina [Avicenna] |  Maimonides |  Neoplatonism |  Philoponus"
         },
         {
           "corpus_id": "sep",
@@ -1201,8 +1187,36 @@
           "corpus_id": "sep",
           "title": "tibbon",
           "url": "https://plato.stanford.edu/entries/tibbon/",
-          "score": 0.014466547,
-          "snippet": "tibbon  Throughout Ibn Tibbon’s writings, he returns time and again to a few key problems: divine providence, the possibility of immortality, and the final aim of human existence. These subjects were particularly vexing: Maimonides had discussed them, but did not provide a consistent doctrine; al-Farabi had famously denied that conjunction is possible; while Averroes took up the question of immortality in several works with differing results. Ibn Tibbon, for his part, worked with the biblical texts singled out by Maimonides, but developed ideas drawn from al-Farabi and Averroes. His discussion…"
+          "score": 0.015288982,
+          "snippet": "tibbon  6. Averroes and ‘Abd Allah, “Three Treatises on Conjunction”  The translation of three short treatises on conjunction with the active intellect by Averroes and Averroes’ son ‘Abd Allah was also a pioneering project. They were the first works of Averroes rendered into Hebrew, before any of the commentaries on Aristotle. Ibn Tibbon translated them and attached them to his commentary on Ecclesiastes. He did this, he maintained, because Averroes and Solomon were aiming to do precisely the same thing: to defend the doctrine of conjunction against skeptics who denied that it was possible."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philip-chancellor",
+          "url": "https://plato.stanford.edu/entries/philip-chancellor/",
+          "score": 0.015686275,
+          "snippet": "philip-chancellor  Philip the Chancellor was an influential figure in a number of different circles in the first half of the thirteenth century. He enjoyed a long though rather turbulent ecclesiastical career and was famous for his sermons and his lyric poetry, the latter of which has received attention by a number of musicologists in recent years (see Dronke 1987, Payne 1991, Traill 2003). In the areas of philosophy and theology, his major work, Summa de bono, which was composed sometime in the 1220s–1230s, was a ground-breaking achievement in many ways. Philip was one of the first to organiz…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-moral",
+          "url": "https://plato.stanford.edu/entries/kant-moral/",
+          "score": 0.014690982,
+          "snippet": "kant-moral  Kant’s most influential positions in moral philosophy are found in The Groundwork of the Metaphysics of Morals (hereafter, “Groundwork”) but he developed, enriched, and in some cases modified those views in later works such as The Critique of Practical Reason, The Metaphysics of Morals, Anthropology from a Pragmatic Point of View, Religion within the Boundaries of Mere Reason as well as his essays on history and related topics. Kant’s Lectures on Ethics, which were lecture notes taken by three of his students on the courses he gave in moral philosophy, also include relevant materia…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "david-lewis",
+          "url": "https://plato.stanford.edu/entries/david-lewis/",
+          "score": 0.01484895,
+          "snippet": "david-lewis  Lewis wrote a lot that isn’t covered by the broad categories we’ve discussed so far. The point of this section is to provide a sample of that material. It isn’t close to being comprehensive. It doesn’t include his treatment of  qualia  in (1988h) and (1995b). It doesn’t include his contributions to  causal decision theory  in (1979e) and (1981b). It goes very quickly over his many papers in ethics. And it skips his contributions to debates about non-classical logics, such as (1982c) and (1990). We’ve tried to restrict attention to those areas where Lewis’s contributions were groun…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "imagination",
+          "url": "https://plato.stanford.edu/entries/imagination/",
+          "score": 0.014128729,
+          "snippet": "imagination  Leslie Stevenson (2003: 238) makes arguably the only recent attempt at a somewhat comprehensive inventory of the term’s uses, covering twelve of “the most influential conceptions of imagination” that can be found in recent discussions in “philosophy of mind, aesthetics, ethics, poetry and … religion”."
         },
         {
           "corpus_id": "sep",
@@ -1262,17 +1276,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "al-baghdadi",
-          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
           "score": 1.0,
-          "snippet": "al-baghdadi  The Greek-Arabic sciences penetrated in the Islamic world during the 8th and 9th centuries AD due to the massive activity of the translators and al-Kindi’s vision of knowledge and also through the exegetical activity of the Aristotelian circle of Baghdad. From the end of the 10th, throughout the 11th, and up to the beginning of the 12th centuries, the production of original philosophical literature into Arabic and Persian became the main stream of the Arabic-Islamic philosophy, which was by then increasingly distant from the Greek sources in Arabic translation. Avicenna’s works fu…"
+          "snippet": "medieval-philosophy  [Editor’s Note: The following new entry by John Marenbon replaces the  former entry  on this topic by the previous author.]"
         },
         {
           "corpus_id": "sep",
-          "title": "al-baghdadi",
-          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
           "score": 1.0,
-          "snippet": "al-baghdadi  ‘Abd al-Latif was a philosopher and polymath who lived between the Second Crusade (1147–1149 AD) and the end of the Fifth Crusade (1217–1231 AD). He was born in Baghdad in 1162 and died there on 9 November 1231 after a pilgrimage of more than forty years during which he travelled throughout Iraq, Syria and Egypt looking for a good teacher in philosophy. He grew up in a Shafi‘i family with excellent links with the Nizamiyya madrasa and he received a solid education in Islamic sciences. Then he turned to natural sciences, medicine, philosophy and, critically, to alchemy. His spasmod…"
+          "snippet": "medieval-philosophy  “Medieval philosophy” has changed its meaning among specialists over the last twenty years. The change is not in chronology, where views remain divided (see  §5):  most agree that the period stretches at least from 500–1500, but some push the starting point back and/or the end point forward."
         }
       ],
       "source_score": {
@@ -1289,20 +1303,20 @@
           "philosophy and religion",
           "eternity of the world",
           "Latin Averroism",
-          "demonstrative knowledge",
+          "against al-Ghazali",
           "the Decisive Treatise",
           "natural philosophy"
         ],
         "missing": [
           "unity of the intellect",
           "Tahafut al-Tahafut",
-          "against al-Ghazali"
+          "demonstrative knowledge"
         ],
         "total_expected": 10,
         "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 896,
+      "search_ms": 1807,
       "corpora_hit": [
         "sep"
       ],

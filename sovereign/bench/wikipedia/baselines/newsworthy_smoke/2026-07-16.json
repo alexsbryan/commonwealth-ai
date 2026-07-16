@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-newsworthy-smoke",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784229491,
+  "started_at_unix": 1784233554,
   "results": [
     {
       "question_id": "newsworthy-israel-lebanon-ceasefire",
@@ -60,10 +60,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Israel–Lebanon ceasefire",
-          "url": "https://en.wikipedia.org/wiki/2026_Israel–Lebanon_ceasefire",
-          "score": 0.027432807,
-          "snippet": "On 3 June, Israel and Lebanon agreed to renew the ceasefire, mediated by the US, and plan to establish \"pilot zones\". On 4 June, Hezbollah rejected the truce deal announced the previous day and instead demanded a comprehensive truce and full withdrawal of Israel from Lebanon."
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.026742581,
+          "snippet": "forces monitoring Strait of Hormuz to ensure it stays open|agency=Reuters|publisher=Internazionale|date=20 June 2026}}  In the aftermath of the outbreak of the Gaza war in October 2023, Israel and the Lebanese Shia militia Hezbollah have been engaged in conflict, as part of a longer stretch of hostilities between the two since the latter's founding in 1982. Hezbollah launched strikes against Israel after the 7 October 2023 attacks, which it said was in solidarity with the Palestinians. After a year of fighting, Israel invaded southern Lebanon in October 2024, pulling out after a US-brokered ce…"
         },
         {
           "corpus_id": "wikipedia",
@@ -88,10 +88,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Israel–Lebanon ceasefire",
-          "url": "https://en.wikipedia.org/wiki/2026_Israel–Lebanon_ceasefire",
-          "score": 0.025708634,
-          "snippet": "The ceasefire came into effect shortly after its announcement and marked the first direct diplomatic engagement between Israel and Lebanon in decades. On 17 April, Iran announced that passage of commercial vessels through the Hormuz Strait was completely open during the truce in Lebanon, but closed it again the next day in response to the US refusal to lift its naval blockade. On 23 April, US President Donald Trump announced that Israel and Lebanon agreed to a three-week extension of the ceasefire. On 27 April, Hezbollah leader Naim Qassem stated that the group will not revert to the pre-March…"
+          "title": "2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+          "score": 0.025274726,
+          "snippet": "Iran asserted that Lebanon must be included as part of a ceasefire deal, thereby making a ceasefire conditional on an end to the 2026 Lebanon war against Hezbollah."
         },
         {
           "corpus_id": "wikipedia",
@@ -102,6 +102,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Lebanon",
+          "url": "https://en.wikipedia.org/wiki/Lebanon",
+          "score": 0.02424569,
+          "snippet": "On 1 October 2024, Lebanon was invaded by Israel with the objective of destroying infrastructure belonging to Hezbollah in the south of the country. In November 2024, a ceasefire deal was signed between Israel and the Lebanese armed group Hezbollah to end 13 months of conflict. According to the agreement, Hezbollah was given 60 days to end its armed presence in southern Lebanon and Israeli forces were obliged to withdraw from the area over the same period."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026",
+          "url": "https://en.wikipedia.org/wiki/2026",
+          "score": 0.023504274,
+          "snippet": "ending 16 years of FideszâKDNP rule. 2026 Beninese presidential election: Independent candidate Romuald Wadagni wins in a landslide with over 94% of the vote. April 13 â 2026 Iran war: A blockade of Iranian ports by the United States takes effect, with President Trump warning that any Iranian vessels attempting to challenge it will be \"immediately eliminated\". Maritime authorities advise ships in the region to expect increased military activity and possible interception procedures. April 16 â 2026 Lebanon war: A US-brokered 10-day ceasefire takes effect between Israel and Lebanon, follow…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "2026 Iran war ceasefire",
           "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
           "score": 0.02247191,
@@ -109,24 +123,94 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Lebanon war",
-          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
-          "score": 0.015873017,
-          "snippet": "forces monitoring Strait of Hormuz to ensure it stays open|agency=Reuters|publisher=Internazionale|date=20 June 2026}}  In the aftermath of the outbreak of the Gaza war in October 2023, Israel and the Lebanese Shia militia Hezbollah have been engaged in conflict, as part of a longer stretch of hostilities between the two since the latter's founding in 1982. Hezbollah launched strikes against Israel after the 7 October 2023 attacks, which it said was in solidarity with the Palestinians. After a year of fighting, Israel invaded southern Lebanon in October 2024, pulling out after a US-brokered ce…"
+          "title": "Hezbollah–Israel conflict (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Hezbollah–Israel_conflict_(2023–present)",
+          "score": 0.021507863,
+          "snippet": "On 8 April, Israeli strikes killed 254 people and wounded more than 1,000 others in central Beirut. Israel Katz said that the strikes targeted hundreds of Hezbollah militants and command centers across Lebanon, in the group's largest blow since the pager attacks. On 16 April, President Trump announced that Israel and Lebanon agreed to a 10-day truce. On 27 April, Hezbollah leader Naim Qassem stated that the group will not revert to the pre-March status and will respond to Israeli attacks. On 15 May, the truce was extended by Israel and Lebanon for another 45 days. On 1 June, Israel agreed not …"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Lebanon",
-          "url": "https://en.wikipedia.org/wiki/Lebanon",
-          "score": 0.015625,
-          "snippet": "On 1 October 2024, Lebanon was invaded by Israel with the objective of destroying infrastructure belonging to Hezbollah in the south of the country. In November 2024, a ceasefire deal was signed between Israel and the Lebanese armed group Hezbollah to end 13 months of conflict. According to the agreement, Hezbollah was given 60 days to end its armed presence in southern Lebanon and Israeli forces were obliged to withdraw from the area over the same period."
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.020752687,
+          "snippet": "military will control a \"security zone\" up to the Litani River in southern Lebanon until the threat of Hezbollah is removed.  Nethanyahu followed Katz's and Smotrich's statement on 25 March calling for the creation of a \"security/buffer zone\" in Southern Lebanon. Iran asserted that Lebanon must be included as part of a ceasefire deal with the United States and Israel, thereby conditioning a ceasefire in the 2026 Iran war on a cessation of hostilities against Hezbollah. Two IDF soldiers were killed by Hezbollah attacks on Southern Lebanon on 26 March. One Israeli civilian was killed by Hezbolla…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "2026 Israel–Lebanon ceasefire",
           "url": "https://en.wikipedia.org/wiki/2026_Israel–Lebanon_ceasefire",
-          "score": 0.015151516,
-          "snippet": "ted Press-20260416\" /  The ceasefire took effect on 16â17 April 2026, following continued exchanges of fire in the hours leading up to its implementation.  Israeli officials stated that forces would remain deployed inside southern Lebanon during the truce. Hezbollah, while not formally part of the agreement, indicated it would respond to any violations, raising concerns about the stability of the ceasefire.  Reports of violations and continued tensions emerged shortly after the ceasefire began, with both sides accusing each other of breaches. Lebanese officials and allied groups warned displ…"
+          "score": 0.020075757,
+          "snippet": "operations. According to a statement by the United States Department of State, the agreement included the following provisions:  A cessation of hostilities beginning on 16 April 2026 at 17:00 EST for an initial period of ten days, intended to enable negotiations toward a permanent agreement. The possibility of extending the ceasefire by mutual agreement if progress is made in negotiations and Lebanon demonstrates effective sovereignty. Israel retains the right to act in self-defense against imminent or ongoing threats, while refraining from offensive military operations in Lebanon. Lebanon, wi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hezbollah–Israel conflict (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Hezbollah–Israel_conflict_(2023–present)",
+          "score": 0.01991228,
+          "snippet": "nt for International Peace]]}}  A ceasefire was reached between Israel and Hezbollah at the end of the 2006 Lebanon War, based on the terms of UN Security Council Resolution 1701 which called for a demilitarized zone between the southern border of Lebanon and the Litani river. The UN Security Council resolution mandated only the Lebanese army and United Nations Interim Force in Lebanon (UNIFIL) could be armed in southern Lebanon. It also stated that neither side should cross the Blue Line, which marks the border between Lebanon and the Golan Heights, and divides the village of Ghajar between t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.019838214,
+          "snippet": "destroyed the Qasmiyeh Bridge, the last remaining link between the area south of the Litani River and the rest of the country.  On 16 April, President Trump announced that Israel and Lebanon agreed to a 10-day truce, after his conversations with Prime Minister Netanyahu and President Aoun. The ceasefire entered into force on the night of 16/17 April local time. The IDF said the death of Ali Reda Abbas and other unnamed Hezbollah commanders, and alleged to have eliminated over 150 militants by the end of operations. Israeli defense minister Katz said that the IDF will hold its positions in sout…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Benjamin Netanyahu",
+          "url": "https://en.wikipedia.org/wiki/Benjamin_Netanyahu",
+          "score": 0.019694244,
+          "snippet": "es fresh strikes |url=https://www.theguardian.com/world/2026/apr/09/israel-bombing-lebanon-us-iran-ceasefire-condemnation |work=The Guardian |date=10 April"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.01953835,
+          "snippet": "ork=Reuters}}  Israel and the United States state that Lebanon was not included in the ceasefire; Pakistani (the mediators) and Iranian authorities state it was."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.019227264,
+          "snippet": "|access-date=8 April 2026 |work=Hawar News Agency}}  The Israeli airstrikes in Southern Lebanon continued. Hezbollah fired rockets from Lebanon at northern Israel. At around 17:00 Israel Daylight Time, The Jerusalem Post reported that the 98th Division of the IDF had almost fully taken control of all of the town of Bint Jbeil in southern Lebanon. The clashes that ensued would later transform in a full-fledged battle for the city. US President Donald Trump told NBC News that Israel will be \"scaling back\" its attacks on Lebanon to help support upcoming negotiations between the Iran and the US. I…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Israel",
+          "url": "https://en.wikipedia.org/wiki/Israel",
+          "score": 0.019158836,
+          "snippet": "In April 2024, Israel initiated a wave of airstrikes on Iran, after Iranian strikes targeted Israel, marking the 2024 IranâIsrael conflict the first time in which the two countries have ever directly exchanged fire. In October 2024, Israel invaded Lebanon and exchanged missile barrages with Iran three weeks later, in response of Iranian strikes earlier in that month. After nearly a year of the IsraelâHezbollah conflict from October 2023 due to Hezbollah shooting rockets at Israel to support Hamas in Gaza, Israel assassinated Hezbollah secretary general Hassan Nasrallah in September 2024. A…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hezbollah",
+          "url": "https://en.wikipedia.org/wiki/Hezbollah",
+          "score": 0.018799648,
+          "snippet": "rder |url=https://www.theguardian.com/world/2026/mar/02/israel-idf-strikes-hezbollah-beirut-lebanon-iran-war |access-date=2026-03-02 |work=The Guardian |language=en-GB |issn=0261-3077}}  Since the 2024 IsraelâLebanon ceasefire agreement, Hezbollah is rearming itself. According to Israeli and Arab intelligence sources, the organisation is using the Beirut seaport and its old smuggling land routes form Syria, for bringing in long range missiles, antitank missiles, artillery and rockets. It is also reported that Hezbollah is manufacturing weapons. The efforts take place mainly in the suburbs of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nabatieh",
+          "url": "https://en.wikipedia.org/wiki/Nabatieh",
+          "score": 0.017733628,
+          "snippet": "more than 52. Lebanon accused Israel of carrying out a massacre but Israel claimed they were targeting \"military targets\".  The Israeli military has put a focus on Nabatieh in its 2026 war against Lebanon with the aim of putting pressure on Lebanon's Shia population by destroying their economic engines as Nabatieh is the \"administrative, economic, and symbolic heart of the south\". The IDF issued forced displacement orders for the city on 26 May despite of a ceasefire reached in April and continued airstrikes against it, causing the city to become \"effectively empty\". Israel claims"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hezbollah",
+          "url": "https://en.wikipedia.org/wiki/Hezbollah",
+          "score": 0.0172145,
+          "snippet": "alone, has been designated as a terrorist group by at least 28 countries as of April 2026, including most Western countries.  Since October 2023, Hezbollah has been at war with Israel. During this war, Nasrallah was assassinated after 32 years of leading the group, along with other key members of Hezbollah leadership. The conflict has led to the 2024 Lebanon War, which saw Southern Lebanon invaded by Israel, followed by a ceasefire. On 7 August 2025, in a government meeting specifically addressing the disarmament of Hezbollah, the majority of the government voted to approve the decision. The L…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2006 Lebanon War",
+          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War#Ceasefire",
+          "score": 0.01673586,
+          "snippet": "2006 Lebanon War  Terms for a ceasefire had been drawn and revised several times over the course of the conflict, yet successful agreement between the two sides took several weeks. Hezbollah maintained the desire for an unconditional ceasefire, while Israel insisted upon a conditional ceasefire, including the return of the two seized soldiers. Lebanon frequently pleaded for the United Nations Security Council to call for an immediate, unconditional ceasefire between Israel and Hezbollah. John Bolton confirmed that the US and UK, with support from several Arab leaders, delayed the ceasefire pro…"
         },
         {
           "corpus_id": "wikipedia",
@@ -134,90 +218,6 @@
           "url": "https://en.wikipedia.org/wiki/History_of_Lebanon#Cedar_Revolution_and_2006_War_(2005–2006)",
           "score": 0.015151516,
           "snippet": "History of Lebanon  that it was responsible for the attack and insisted again that it was a domestic action challenging his government's authority.  The 2006 Lebanon War was a 34-day military conflict in Lebanon and northern Israel. The principal parties were Hezbollah paramilitary forces and the Israeli military. The conflict started on 12 July 2006, and continued until a United Nations -brokered ceasefire went into effect in the morning on 14 August 2006, though it formally ended on 8 September 2006 when Israel lifted its naval blockade of Lebanon."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2006 Lebanon War",
-          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War#Analyses",
-          "score": 0.014492754,
-          "snippet": "2006 Lebanon War  Following the UN-brokered ceasefire, there were mixed responses on who had gained or lost the most in the war. Iran and Syria proclaimed a victory for Hezbollah while Olmert declared that the war was a success for Israel."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.014285714,
-          "snippet": "Iran asserted that Lebanon must be included as part of a ceasefire deal, thereby making a ceasefire conditional on an end to the 2026 Lebanon war against Hezbollah."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2006 Lebanon War",
-          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War",
-          "score": 0.014084507,
-          "snippet": "2006 Lebanon War  The 2006 Lebanon War, also called the 2006 Israel–Hezbollah War and known in Lebanon as the July War and in Israel as the Second Lebanon War, was a 34-day armed conflict in Lebanon, northern Israel and the Golan Heights. The principal parties were Hezbollah paramilitary forces and the Israel Defense Forces (IDF). The conflict started on 12 July 2006, and continued until a United Nations-brokered ceasefire went into effect in the morning on 14 August 2006, though it formally ended on 8 September 2006 when Israel lifted its naval blockade of Lebanon. Due to unprecedented Irania…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Ceasefire",
-          "url": "https://en.wikipedia.org/wiki/Ceasefire",
-          "score": 0.013888889,
-          "snippet": "=2020-08-01|website=UN News|language=en}}  The 2024 IsraelâHezbollah ceasefire was announced by United States President Joe Biden on November 26, 2024."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026",
-          "url": "https://en.wikipedia.org/wiki/2026",
-          "score": 0.013888889,
-          "snippet": "ending 16 years of FideszâKDNP rule. 2026 Beninese presidential election: Independent candidate Romuald Wadagni wins in a landslide with over 94% of the vote. April 13 â 2026 Iran war: A blockade of Iranian ports by the United States takes effect, with President Trump warning that any Iranian vessels attempting to challenge it will be \"immediately eliminated\". Maritime authorities advise ships in the region to expect increased military activity and possible interception procedures. April 16 â 2026 Lebanon war: A US-brokered 10-day ceasefire takes effect between Israel and Lebanon, follow…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2006 Lebanon War",
-          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War#Abstract",
-          "score": 0.01369863,
-          "snippet": "2006 Lebanon War  The 2006 Lebanon War, also called the 2006 Israel–Hezbollah War and known in Lebanon as the July War (Arabic: حرب تموز, Ḥarb Tammūz) and in Israel as the Second Lebanon War (Hebrew: מלחמת לבנון השנייה, Milhemet Levanon HaShniya), was a 34-day armed conflict in Lebanon, northern Israel and the Golan Heights. The principal parties were Hezbollah paramilitary forces and the Israel Defense Forces (IDF). The conflict started on 12 July 2006, and continued until a United Nations-brokered ceasefire went into effect in the morning on 14 August 2006, though it formally ended on 8 Sept…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Islamabad Memorandum",
-          "url": "https://en.wikipedia.org/wiki/Islamabad_Memorandum",
-          "score": 0.01369863,
-          "snippet": "After the preliminary MOU was signed, Pakistan and Iran said that the ceasefire halts \"military operations on all fronts, including Lebanon, effective immediately\" but Israel rejected this contention. Israeli Prime Minister Benjamin Netanyahu and the rest of his government said that Israel was not bound by the agreement, with Netanyahu saying that the country would \"preserve its freedom of action\" against threats from Hezbollah in Lebanon. While combat between Israel and Hezbollah was dialed back in the immediate aftermath of the memorandum's signing, the HezbollahâIsrael conflict continued.…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Lebanon war",
-          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
-          "score": 0.013513514,
-          "snippet": "On 15 June, Pakistan, the primary mediator, stated that both the United States and Iran declared the \"immediate and permanent termination of military operations on all fronts, including in Lebanon\" as part of the agreement to end the 2026 Iran war. Israel stated that its forces will remain in Lebanon. In the afternoon, Hezbollah said that it has not conducted any operations since the announcement of the agreement. One person was killed in an Israeli drone strike on a vehicle in Kfar Tibnit. Displaced people began returning home. Israeli shelling was still happening in some areas. Despite relat…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Hezbollah–Israel conflict (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Hezbollah–Israel_conflict_(2023–present)",
-          "score": 0.013333334,
-          "snippet": "nt for International Peace]]}}  A ceasefire was reached between Israel and Hezbollah at the end of the 2006 Lebanon War, based on the terms of UN Security Council Resolution 1701 which called for a demilitarized zone between the southern border of Lebanon and the Litani river. The UN Security Council resolution mandated only the Lebanese army and United Nations Interim Force in Lebanon (UNIFIL) could be armed in southern Lebanon. It also stated that neither side should cross the Blue Line, which marks the border between Lebanon and the Golan Heights, and divides the village of Ghajar between t…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.013333334,
-          "snippet": "Trump claimed victory several times, falsely claiming that Iran had \"nothing left in a military sense,\" and that the US had brought about regime change in Iran, despite the fact that the Islamic Republic remains in power. Iran, the US and Israel agreed to a two-week ceasefire brokered by Pakistan, beginning on 8 April; a ceasefire in Lebanon began on 16 April. The Iranian ceasefire came under strain as Iran refused to re-open the Strait of Hormuz, blaming Israeli attacks on Lebanon. After the failure of the Islamabad Talks, Trump announced a naval blockade of Iran from 13 April. There remained…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Lebanon",
-          "url": "https://en.wikipedia.org/wiki/Lebanon",
-          "score": 0.013157895,
-          "snippet": "f  On 12 July 2006, Hezbollah launched a series of rocket attacks and raids into Israeli territory, where they killed three Israeli soldiers and captured two others. Israel responded with airstrikes and artillery fire on targets in Lebanon, and a ground invasion of southern Lebanon, resulting in the 2006 Lebanon War. The conflict was officially ended by the UNSC Resolution 1701 on 14 August 2006, which ordered a ceasefire, the withdrawal of Israeli forces from Lebanon, and the disarmament of Hezbollah. Some 1,191 Lebanese and 160 Israelis were killed in the conflict. Beirut's southern suburb w…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.012987013,
-          "snippet": "On 15 June 2026, following reports of a preliminary agreement between the United States and Iran that reportedly included provisions for ending the war, including in Lebanon,"
         }
       ],
       "source_score": {
@@ -240,8 +240,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 32,
-      "search_ms": 3173,
+      "embed_ms": 30,
+      "search_ms": 3938,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -303,6 +303,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Qatar as a mediator in conflict",
+          "url": "https://en.wikipedia.org/wiki/Qatar_as_a_mediator_in_conflict",
+          "score": 0.026375405,
+          "snippet": "mic Times]]}}  On 24 June 2025, Qatar gained Iran's approval to the US proposal for a ceasefire in the Twelve-Day War. Pakistan, Qatar, Egypt, and Turkey mediated negotiations between the United States and Iran for nearly three months before the Islamabad Memorandum to end the 2026 Iran war. On 11 June 2026, key gaps regarding the release of frozen Iranian assets, the reopening of the Hormuz, and protocols for managing Iran's nuclear program during a 60-day ceasefire in the 2026 Iran war were narrowed in talks between Iranian officials and Qatari mediators in Tehran, coordinated with the Unite…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.025904205,
+          "snippet": "On 8 April 2026, the United States and Iran agreed to a two-week ceasefire in the 2026 Iran war, mediated by Pakistan. Iran had rejected the draft proposal for a 45-day two-phase ceasefire framework introduced on 5 April by  Pakistan, instead proposing its own 10-point plan for a peace agreement. The proposal was developed as part of ongoing mediation efforts involving regional and international actors during the 2025â2026 negotiations. Since its declaration, the ceasefire has been violated by both sides numerous times. On 21 April, President Trump extended the ceasefire indefinitely."
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "2026 United States naval blockade of Iran",
           "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran",
           "score": 0.025859192,
@@ -338,38 +352,94 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Qatar as a mediator in conflict",
-          "url": "https://en.wikipedia.org/wiki/Qatar_as_a_mediator_in_conflict",
-          "score": 0.016666668,
-          "snippet": "mic Times]]}}  On 24 June 2025, Qatar gained Iran's approval to the US proposal for a ceasefire in the Twelve-Day War. Pakistan, Qatar, Egypt, and Turkey mediated negotiations between the United States and Iran for nearly three months before the Islamabad Memorandum to end the 2026 Iran war. On 11 June 2026, key gaps regarding the release of frozen Iranian assets, the reopening of the Hormuz, and protocols for managing Iran's nuclear program during a 60-day ceasefire in the 2026 Iran war were narrowed in talks between Iranian officials and Qatari mediators in Tehran, coordinated with the Unite…"
+          "title": "2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+          "score": 0.023888428,
+          "snippet": "cial-1964365|title=Trump, Iran's President Sign Deal To End West Asia War|agency=Agence France Presse|website=Deccan Chronicle|date=17 June 2026}}  On 18 June, Pakistan stated that the signing of the US-Iran memorandum of understanding to end the war implies Tehran will reopen the Hormuz \"instantly\" and the American blockade of Iranian ports will end \"immediately.\" On the same day, CENTCOM announced that it had removed the naval blockade of Iranian ports.  According to Israel Hayom, citing three diplomatic officials, the United States reportedly approved a confidential arrangement between Qata…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Pakistan in the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Pakistan_in_the_2026_Iran_war",
-          "score": 0.016393442,
-          "snippet": "Pakistan has adopted a policy of official neutrality in response to the 2026 Iran war, which began on 28 February of that year after joint airstrikes on Iran by the United States and Israel. The Ministry of Foreign Affairs of Pakistan has officially condemned all attacks on Iran (by the United States and Israel), and all attacks on the Gulf states (by Iran). Pakistan has also played a central role in diplomacy by mediating a two-week ceasefire, which was later extended, and subsequently hosting the first round of the Islamabad Talks on 10 and 11 April, with the second round due towards the end…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Islamabad Memorandum",
-          "url": "https://en.wikipedia.org/wiki/Islamabad_Memorandum",
-          "score": 0.016129032,
-          "snippet": "The Islamabad Memorandum, officially the Islamabad Memorandum of Understanding between the United States of America and the Islamic Republic of Iran, is a memorandum of understanding between the United States and Iran aimed at ending the 2026 Iran war. It was primarily brokered by Pakistan, with Qatar, Saudi Arabia, Turkey and Egypt also facilitating negotiations."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic impact of the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.015873017,
-          "snippet": "ation |language=en-US}}  The 2026 Iran conflict began on 28 February, with joint US-Israeli airstrikes targeting Iranian leadership and military infrastructure, including a decapitation strike that assassinated Supreme Leader Ali Khamenei. The operation, codenamed \"Operation Epic Fury\" by the US, involved advanced military equipment costing millions of dollars, such as precision-guided munitions and stealth aircraft. Iran retaliated with missile and drone strikes on US and Israeli targets, as well as Gulf states hosting US forces, leading to airspace closures and attacks on infrastructure. Pri…"
+          "title": "Esmail Baghaei",
+          "url": "https://en.wikipedia.org/wiki/Esmail_Baghaei",
+          "score": 0.02294781,
+          "snippet": "football team members to Australia during the 2026 Asia Cup, he claimed that the players were taken \"hostage\" by Australia.  After the successful April 2026 U.S. rescue operation in Iran, in which the U.S. military rescued two crew members of an F-15E Strike Eagle who had been shot down over Iran by Iranian forces during the 2026 Iran war, Baghaei claimed that the rescue operation had been \"a disaster\" for the United States."
         },
         {
           "corpus_id": "wikipedia",
           "title": "2026 Iran war",
           "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.015625,
+          "score": 0.022717198,
           "snippet": "From 28 February to 17 June 2026, the United States and Israel were at war with Iran and its regional allies. Hostilities broke out after USâIsraeli airstrikes targeting Iranian military and government sites resulted in the assassination of Iranian officials and its leader Ali Khamenei. These attacks were launched amidst ongoing IranâUS negotiations held to address Iran's nuclear program. Iran retaliated by firing missiles and drones on Israel, on US-aligned Arab countries, and on US bases across the region; and by blocking the Strait of Hormuz, which disrupted the global economy by causin…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Asim Munir",
+          "url": "https://en.wikipedia.org/wiki/Asim_Munir",
+          "score": 0.022619048,
+          "snippet": "of five years, with his tenure as army chief deemed to have recommenced from the date of notification of the CDF appointment.  In April 2026, Pakistan played a mediating role between Iran and the United States amid 2026 Iran war. Prime Minister Shehbaz Sharif tasked Munir with maintaining behind-the-scenes contacts with American and Iranian political and military leadership in an effort to de-escalate the crisis. On 6 April 2026, it was reported that Munir has been in contact \"all night long\" with U.S. Vice President JD Vance, U.S. special envoy Steve Witkoff and Iranian Foreign Minister Abbas…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.021829523,
+          "snippet": "a key figure in the negotiations. On April 7, 2026, Iran and the United States announced a temporary two-week ceasefire.  On May 24, 2026, reports indicated that the United States and Iran were nearing a broader peace agreement following months of conflict and stalled negotiations. US President Donald Trump stated that a memorandum of understanding was close to finalisation and suggested that the Strait of Hormuz could soon reopen under a ceasefire framework."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Project Freedom",
+          "url": "https://en.wikipedia.org/wiki/Operation_Project_Freedom",
+          "score": 0.021383777,
+          "snippet": "ref  During the 2026 Iran war and following the Iranian blockade of the Strait of Hormuz, in March 2026, the U.S. dropped 5,000-pound bunker-buster bombs on hardened Iranian anti-ship cruise missile sites along the Strait of Hormuz. U.S. forces also sank 16 Iranian minelayers as Iran was mining the Strait of Hormuz. Over 150 warships across 16 classes of the Iranian navy were destroyed as well as every Iran submarine was also sunk as the 2026 Iran war ceasefire took hold. In April 2026, President Donald Trump announced that the U.S. military destroyed 158 Iranian naval vessels, asserting the I…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran–United States relations",
+          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
+          "score": 0.020562772,
+          "snippet": "them and that the United States should instead be removed as host for failing to ensure the safety of participating teams.  In April 2026, U.S. special envoy Paolo Zampolli proposed that Italy replace Iran at the 2026 FIFA World Cup, prompting swift rejection from Italian officials who called the idea \"not appropriate\" and \"shameful.\" Italian Sports Minister Andrea Abodi stated that qualification \"must be earned on the pitch,\" while FIFA president Gianni Infantino reiterated that Iran would participate as scheduled.  On April 8, 2026, the United States and Iran agreed to a provisional two-week…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Benjamin Netanyahu",
+          "url": "https://en.wikipedia.org/wiki/Benjamin_Netanyahu",
+          "score": 0.01980198,
+          "snippet": "In February 2026, he launched a major air campaign against Iran, alongside the US, with the stated goal of regime change, beginning the 2026 Iran war. In March, escalations with Hezbollah were followed by a second invasion of Lebanon."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Marco Rubio",
+          "url": "https://en.wikipedia.org/wiki/Marco_Rubio",
+          "score": 0.01942356,
+          "snippet": "ico-ecuador-trump-venezuela-814af7f55a904743d73cf496b80848eb |url-status=live}}  on June 17, 2026]] In June 2025, Rubio defended the direct U.S. strikes on Iranian nuclear sites known as Operation Midnight Hammer, which followed a previous wave of Israeli attacks. In January 2026, he expressed strong support for the anti-government protests in Iran.  During the 2026 Iran war, Rubio said the U.S. government knew that Israel was planning to attack Iran and that the U.S. did a preventive attack to avoid higher casualties. Critics of Israel denounced this as US strategy shaped by Israeli military …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "China in the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/China_in_the_2026_Iran_war",
+          "score": 0.019227393,
+          "snippet": "The involvement of the People's Republic of China in the 2026 Iran war has encompassed a range of diplomatic, intelligence, and logistical actions amid the conflict that began with coordinated airstrikes by Israel and the United States against Iran on 28 February 2026. China has maintained a longstanding partnership with Iran, including economic ties and military cooperation. Since the beginning of the conflict, China has focused on diplomatic mediation while Chinese companies have provided dual-use technology, such as missile parts, and geospatial intelligence to Iran. Jasim Al-Azzawi describ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war fuel crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_fuel_crisis",
+          "score": 0.019194176,
+          "snippet": "s.  , the 2022- Russo-Ukrainian war and the 2026 Iran war.]] The 2026 Iran war caused immediate volatility in energy markets, with Brent crude oil prices surging 10â13% to around $80â82 per barrel by 2 March 2026. The conflict has caused the restriction of nearly all traffic through the Strait of Hormuz, leading to what the International Energy Agency has characterised as the \"largest supply disruption in the history of the global oil market\".  The head of the IEA described the situation caused by the war as the \"greatest global energy security challenge in history\".  Iran's closure of the…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran–United States relations",
+          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
+          "score": 0.017103191,
+          "snippet": "May 12, 2026, the war had cost American consumers more than $37.3 billion in additional energy prices since February 28, 2026.  According to a classified United States intelligence assessment from early May 2026, Iran has regained operational access to most of its missile sites. This includes 30 out of the 33 missile sites located along the Str"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran–United States relations",
+          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
+          "score": 0.015645143,
+          "snippet": "to the Iranian authorities that the US would \"intervene\" if the Iranian government did not halt its crackdown on protesters.  In February 2026, following the heightened tensions in January, Iran and the United States held a new round of diplomatic talks in Muscat, Oman, with Oman acting as a mediator. The discussions primarily focused on Iran's nuclear program and the potential easing of economic sanctions. The Iranian delegation was led by Foreign Minister Abbas Araghchi, while the U.S. delegation included senior officials from the State Department.  During the talks, the United States report…"
         },
         {
           "corpus_id": "wikipedia",
@@ -380,52 +450,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Iran war ceasefire",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
-          "score": 0.015151516,
-          "snippet": "On 8 April 2026, the United States and Iran agreed to a two-week ceasefire in the 2026 Iran war, mediated by Pakistan. Iran had rejected the draft proposal for a 45-day two-phase ceasefire framework introduced on 5 April by  Pakistan, instead proposing its own 10-point plan for a peace agreement. The proposal was developed as part of ongoing mediation efforts involving regional and international actors during the 2025â2026 negotiations. Since its declaration, the ceasefire has been violated by both sides numerous times. On 21 April, President Trump extended the ceasefire indefinitely."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.014925373,
-          "snippet": "offensive into Gaza City and targeted Hamas officials in Qatar, before a ceasefire with Hamas halted the Gaza war in October.  In 2026, the U.S. began a rapid military buildup in the region, which culminated in the US and Israel starting a war with surprise airstrikes on sites and cities across Iran on 28&nbsp;February, including the assassination of Iranian supreme leader Ali Khamenei. In response, Iran launched strikes against Israel, US bases, and US-allied countries in the Middle East, and by closing the Strait of Hormuz, disrupting global trade.  The conflict between Hezbollah and Israel …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Bahrain",
-          "url": "https://en.wikipedia.org/wiki/Bahrain",
-          "score": 0.014492754,
-          "snippet": "/index.aspx|access-date=2023-03-07|website=bna.bh|archive-date=2 September 2019|archive-url=https://web.archive.org/web/20190902233604/https://www.bna.bh/en/index.aspx|url-status=live}}  On 28 February 2026, the United States and Israel launched joint airstrikes on Iran, killing the supreme leader of Iran and many other Iranian officials, starting a war with the stated goal of regime change. Iran responded with missile and drone strikes against Israel and US bases and US allies in the region, including Bahrain, which suffered material and civilian ca"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Asim Munir",
-          "url": "https://en.wikipedia.org/wiki/Asim_Munir",
-          "score": 0.014285714,
-          "snippet": "of five years, with his tenure as army chief deemed to have recommenced from the date of notification of the CDF appointment.  In April 2026, Pakistan played a mediating role between Iran and the United States amid 2026 Iran war. Prime Minister Shehbaz Sharif tasked Munir with maintaining behind-the-scenes contacts with American and Iranian political and military leadership in an effort to de-escalate the crisis. On 6 April 2026, it was reported that Munir has been in contact \"all night long\" with U.S. Vice President JD Vance, U.S. special envoy Steve Witkoff and Iranian Foreign Minister Abbas…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Operation Project Freedom",
-          "url": "https://en.wikipedia.org/wiki/Operation_Project_Freedom",
-          "score": 0.014084507,
-          "snippet": "ref  During the 2026 Iran war and following the Iranian blockade of the Strait of Hormuz, in March 2026, the U.S. dropped 5,000-pound bunker-buster bombs on hardened Iranian anti-ship cruise missile sites along the Strait of Hormuz. U.S. forces also sank 16 Iranian minelayers as Iran was mining the Strait of Hormuz. Over 150 warships across 16 classes of the Iranian navy were destroyed as well as every Iran submarine was also sunk as the 2026 Iran war ceasefire took hold. In April 2026, President Donald Trump announced that the U.S. military destroyed 158 Iranian naval vessels, asserting the I…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.014084507,
-          "snippet": "cial-1964365|title=Trump, Iran's President Sign Deal To End West Asia War|agency=Agence France Presse|website=Deccan Chronicle|date=17 June 2026}}  On 18 June, Pakistan stated that the signing of the US-Iran memorandum of understanding to end the war implies Tehran will reopen the Hormuz \"instantly\" and the American blockade of Iranian ports will end \"immediately.\" On the same day, CENTCOM announced that it had removed the naval blockade of Iranian ports.  According to Israel Hayom, citing three diplomatic officials, the United States reportedly approved a confidential arrangement between Qata…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Esmail Baghaei",
-          "url": "https://en.wikipedia.org/wiki/Esmail_Baghaei",
-          "score": 0.013888889,
-          "snippet": "killed Iran's supreme leader Ali Khamenei in Tehran, Baghaei falsely asserted to the press that Khamenei was \"safe and sound\".  On 19 March 2026, during the 2026 Iran war, Baghaei was interviewed by Sarah Ferguson on the Australian ABC Television current affairs program 7.30. In the interview, he accused the United States and Israel of \"terrorist acts\" for assassinating Iran's supreme leader Ali Khamenei and other top figures in Iran in what he called an \"illegal war\" against the country. He also said that Australia's military assets in the Gulf were legitimate targets for Iran to attack in se…"
+          "title": "Reactions to the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Reactions_to_the_2026_Iran_war",
+          "score": 0.014932802,
+          "snippet": "Iranian foreign minister Abbas Araghchi also condemned the attacks on Iranian nuclear facilities and asked compensation.  On 29 March 2026, parliament speaker Mohammad Bagher Ghalibaf rejected negotiations with the United States. Ghalibaf said that entities that hold US bonds are legitimate targets. The IRGC threatened American and Israeli universities. On 15 April, Ali Nikzad said that Iran would avenge the killing of Ali Khamenei and other top commanders.  Iran has sued the US in the Hague Tribunal over the 2026 war, invoking the Algiers Accords."
         },
         {
           "corpus_id": "wikipedia",
@@ -433,34 +461,6 @@
           "url": "https://en.wikipedia.org/wiki/1953_Iranian_coup_d%27%C3%A9tat#Internationally",
           "score": 0.01369863,
           "snippet": "1953 Iranian coup d'état  Egypt, talked about the United States' relationship with Iran, mentioning the role of the U.S. in 1953 Iranian coup saying:  This issue has been a source of tension between the United States and the Islamic Republic of Iran. For many years, Iran has defined itself in part by its opposition to my country, and there is indeed a tumultuous history between us. In the middle of the Cold War, the United States played a role in the overthrow of a democratically elected Iranian government. Since the Islamic Revolution, Iran has played a role in acts of hostage-taking and viol…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.01369863,
-          "snippet": "about regime change. Iran responded with missile and drone strikes against Israel, US bases and allies in the region.  On 8 June, following reported alleged ceasefire violations in Lebanon, including Israeli strikes on the Dahiyeh suburb of Beirut, hostilities escalated further between Israel and Iran. Iran launched strikes against Israel in response, including an attack on Ramat David Airbase, followed by Israeli airstrikes on multiple Iranian cities, with explosions reported in several locations in western and central Iran. Iran subsequently carried out additional missile attacks against Isr…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.013513514,
-          "snippet": "The 2026 war began with joint airstrikes by Israel and the US against military and government sites in Tehran, Isfahan, Qom, Karaj, and Kermanshah. Ali Khamenei was assassinated in a strike on his compound, and other Iranian officials were also killed. Israeli and US attacks resulted in civilian casualties and damage to schools, hospitals, the Grand Bazaar in Tehran, and the Golestan Palace. In retaliation, Iran launched hundreds of drones and ballistic missiles at targets in Israel and at US military bases in Qatar, Bahrain, the United Arab Emirates, Kuwait, Iraq, Jordan, and Saudi Arabia. Ir…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Islamabad Memorandum",
-          "url": "https://en.wikipedia.org/wiki/Islamabad_Memorandum",
-          "score": 0.013333334,
-          "snippet": "Iran war. It was primarily brokered by Pakistan, with Qatar, Saudi Arabia, Turkey and Egypt also facilitating negotiations.  Pakistani Prime Minister Shehbaz Sharif said that the U.S. and Iran had reached agreement on final text to end the war on 12 June 2026. On 15 June, U.S. Vice President JD Vance announced that the memorandum was digitally signed by representatives of the U.S. and Iran on the previous day. On 17 June, Trump and Iranian President Masoud Pezeshkian signed remotely the memorandum of understanding to end the war, with Trump signing it during dinner with French President Emmanu…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 United States F-15E rescue operation in Iran",
-          "url": "https://en.wikipedia.org/wiki/2026_United_States_F-15E_rescue_operation_in_Iran",
-          "score": 0.013157895,
-          "snippet": "ef  On 28 February 2026, the United States and Israel started a series of surprise attacks on a variety of military and industrial targets across Iran, thus starting the war with Iran. On 24 March, U.S. President Donald Trump claimed that Iran was unable to \"do a thing\" about U.S. aircraft operating in its airspace.  On 3 April, an American F-15E Strike Eagle (call sign Dude 44) was shot down by Iran with a shoulder-fired missile, which the BBC described as a \"significant blow\" to Trump's administration. The two crew members ejected and landed in Iranian territory."
         }
       ],
       "source_score": {
@@ -484,8 +484,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 29,
-      "search_ms": 1889,
+      "embed_ms": 30,
+      "search_ms": 974,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -502,13 +502,6 @@
           "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
           "score": 0.032522473,
           "snippet": "countries including the UAE, Qatar, Bahrain, Kuwait, and Iraq, and disruption to the strait can cause severe supply shortages.  Before the 2026 Iran War, the strait had not been closed for any extended time during Middle East conflicts (unlike the Straits of Tiran/Bab-el-Mandeb) although Iran occasionally threatened to close the strait, and preparations to mine it have been undertaken. The closure of the strait caused by Iranian blockades became a major focus during the 2026 Iran war, resulting in the 2026 Strait of Hormuz crisis."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 United States naval blockade of Iran",
-          "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran",
-          "score": 0.030000001,
-          "snippet": "Before the United States and Israel launched their 2026 war against Iran, the Strait of Hormuz was open and about 25% of the world's seaborne oil trade and 20% of the world's liquefied natural gas passed through it.  On 28 February 2026, the US and Israel launched surprise airstrikes on Iran, targeting military and government sites, as well as assassinating Supreme Leader Ali Khamenei and other Iranian officials, starting the 2026 Iran war. In response, Iran blocked the Strait of Hormuz, prompting the US military to begin a military campaign to reopen it."
         },
         {
           "corpus_id": "wikipedia",
@@ -575,10 +568,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz campaign",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_campaign",
-          "score": 0.025807526,
-          "snippet": "On 19 March 2026, the United States began an aerial campaign against Iranian targets to reopen the Strait of Hormuz following its closure by Iran in response to the attacks by the United States and Israel. The operation was announced as part of a plan to reopen the passage to international shipping by destroying Iranian naval vessels and drones targeting shipping in the strait. Israel assassinated Alireza Tangsiri, the naval officer overseeing the blockade of the Strait of Hormuz."
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.026022913,
+          "snippet": "Shipping traffic through the Strait of Hormuz, a major maritime choke point for world energy trade, has been largely blocked by Iran since 28February 2026, when the United States and Israel launched an air war against Iran and assassinated its supreme leader, Ali Khamenei. In retaliation, Iran launched missile and drone attacks on Israel, USmilitary bases in the region, and US-allied Gulf states. The Iranian Revolutionary Guard Corps (IRGC) issued warnings forbidding passage through the strait, boarded and attacked merchant ships, and laid sea mines in the strait. From 13 April to 29 May 2026,…"
         },
         {
           "corpus_id": "wikipedia",
@@ -589,122 +582,129 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Persian Gulf Strait Authority",
-          "url": "https://en.wikipedia.org/wiki/Persian_Gulf_Strait_Authority",
-          "score": 0.016666668,
-          "snippet": "The Persian Gulf Strait Authority (PGSA) is an Iranian government agency mandated to authorize and regulate maritime transit through the strait of Hormuz after contacting the authority. It was founded on 5 May 2026 during the ongoing Strait of Hormuz crisis."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz campaign",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_campaign",
-          "score": 0.015873017,
-          "snippet": "April 2026 }}  Re-opening of the Strait of Hormuz is considered not to be feasible with military means, especially after U.S. failure to form a coalition with its allies or with the affected Asian countries.  The International Maritime Organization (IMO) confirmed 46 attacks on ships, as June 11, resulting in 14 deaths of innocent seafarers, with attacks continued during the April 8, 2026 declared ceasefire. The IMO reported that an estimated 1,000 ships and 20,000 crew remained stranded in the Arabian Gulf at that date, then exceeding 100 days."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.015625,
-          "snippet": "ndle/20.500.14283/cd8875en |language=English}}  Tensions between Iran and the United States resulted in the 1988 Operation Praying Mantis, included some European countries in the 2011â2012 Strait of Hormuz dispute, and again in 2019.  Tensions between Iran, the United States, and Israel escalated in the lead-up to 2026, stemming from failed nuclear negotiations in Geneva and a prior 12-day air conflict in 2025. Iran had signaled potential disruptions to the Strait of Hormuz in response to threats, including a temporary partial closure earlier in the month as a warning. From 15 to 20 February…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.015384615,
-          "snippet": "Shipping traffic through the Strait of Hormuz, a major maritime choke point for world energy trade, has been largely blocked by Iran since 28February 2026, when the United States and Israel launched an air war against Iran and assassinated its supreme leader, Ali Khamenei. In retaliation, Iran launched missile and drone attacks on Israel, USmilitary bases in the region, and US-allied Gulf states. The Iranian Revolutionary Guard Corps (IRGC) issued warnings forbidding passage through the strait, boarded and attacked merchant ships, and laid sea mines in the strait. From 13 April to 29 May 2026,…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.015384615,
-          "snippet": "coalition for reopening the Strait of Hormuz on a phone call the previous day, and that they also spoke about military options.  In May 2026, the United Kingdom announced the deployment of drones, fighter aircraft and a Royal Navy warship to participate in an international defensive mission aimed at securing commercial shipping through the Strait of Hormuz. British officials stated that the deployment was intended to protect maritime traffic and maintain freedom of navigation, amid growing regional instability and disruptions to global energy transit routes.  The deployment followed statements…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "2026 Iran war fuel crisis",
           "url": "https://en.wikipedia.org/wiki/2026_Iran_war_fuel_crisis",
-          "score": 0.015151516,
+          "score": 0.024410775,
           "snippet": "[[File:Oil prices.webp|thumb|  ]]  The 2026 Iran war fuel crisis is a worldwide fuel crisis caused by the war between Iran and the U.S.-Israel coalition. The closure of the Strait of Hormuz, through which around 20% of the world's oil trade passes, and attacks on energy infrastructure in Iran and several Gulf Cooperation Council countries led to a large disruption in global oil supplies. The disruption led to global oil prices rising and caused fuel shortages in countries which imported most of their fuel from the Persian Gulf region. Much of the world has been affected by panic buying and sev…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "2026 Strait of Hormuz crisis",
           "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.015151516,
-          "snippet": "ary 'setting conditions' to clear mines from Strait of Hormuz |url=https://www.reuters.com/world/asia-pacific/trump-says-us-forces-are-clearing-strait-hormuz-2026-04-11}}"
+          "score": 0.024156544,
+          "snippet": "coalition for reopening the Strait of Hormuz on a phone call the previous day, and that they also spoke about military options.  In May 2026, the United Kingdom announced the deployment of drones, fighter aircraft and a Royal Navy warship to participate in an international defensive mission aimed at securing commercial shipping through the Strait of Hormuz. British officials stated that the deployment was intended to protect maritime traffic and maintain freedom of navigation, amid growing regional instability and disruptions to global energy transit routes.  The deployment followed statements…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Lebanon war",
-          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
-          "score": 0.014925373,
-          "snippet": "026/06/20/us-forces-monitoring-strait-of-hormuz-to-ensure-it-stays-open|title=US forces monitoring Strait of Hormuz to ensure it stays open|agency=Reuters|publisher=Internazionale|date=20 June 2026}}"
+          "title": "China in the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/China_in_the_2026_Iran_war",
+          "score": 0.023513328,
+          "snippet": "il 2026 |work=Reuters}}  On March 31, 2026, China and Pakistan announced a five-point proposal that includes calling for ceasefire and resumption of normal navigation in Strait of Hormuz.  African Union expressed support for the proposal, saying : \"The initiative constitutes a timely and constructive contribution to ongoing international efforts to de-escalate tensions.\" Associated Press reports that the Trump administration appears to have little enthusiasm for the prospect of China's mediation.  On April 7, China along with Russia vetoed a Bahrain-sponsored draft resolution in the UN Securit…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "2026 Strait of Hormuz campaign",
           "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_campaign",
-          "score": 0.014705882,
-          "snippet": "The Iran war began on 28 February 2026 after the United States and Israel conducted airstrikes on various Iranian military targets, which included the assassination of Ali Khamenei, the Supreme Leader of Iran. In response, Iran closed the Strait of Hormuz to all foreign shipping. The Islamic Revolutionary Guard Corps (IRGC) transmitted warnings via VHF radio to vessels in the Straits, stating that \"no ship is allowed to pass the Strait of Hormuz.\" The British Royal Navy said that the closure was not legally binding though safety cannot be guaranteed, so several ships stayed in port or turned b…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.014705882,
-          "snippet": "ial sea up to a limit not exceeding 12 nautical miles.\"  In May 2026, the Islamic Revolutionary Guard Corps Navy announced that Iran had redifined the Strait of Hormuz into what officials described as a \"vast operational area\". According to IRGC official Mohammad Akbarzadeh, the strait was no longer viewed as the narrow maritime corridor surrounding the islands of Hormuz and Hengam, rather as a broader strategic zone extending from the Iranian port city of Jask to Siri Island."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Strait of Hormuz",
-          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
-          "score": 0.014492754,
-          "snippet": "-busting-in-the-strait-of-hormuz | access-date=8 April 2026}}  ==Event"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026",
-          "url": "https://en.wikipedia.org/wiki/2026",
-          "score": 0.014285714,
-          "snippet": "f Hormuz |url=https://www.nytimes.com/2026/03/24/world/middleeast/iran-strait-of-hormuz-ships.html |access-date=2026-03-25 |work=The New York Times |language=en-US |issn=0362-4331}}"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Strait of Hormuz",
-          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
-          "score": 0.014084507,
-          "snippet": "restrictions on shipping in the Strait has led to disruptions that are raising energy and agricultural input costs worldwide.  On 28 February 2026, amid the 2026 Iran war and after the assassination of Iranian supreme leader Ali Khamenei, Iran's Revolutionary Guards began issuing VHF transmissions stating that ship passages through the Strait of Hormuz were \"not allowed\". Although the closure is not legally binding, military and industry sources say that safety cannot be guaranteed, and many ships stayed in port or turned back, while at least 17 oil tankers continued traveling through the stra…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.013888889,
-          "snippet": "On 20 June, Iran announced the closure of the Strait of Hormuz, citing Israeli actions as a violation of its agreement with the US, a claim the US military denied. Shipping was stalled in the Strait of Hormuz following Iran's claimed closure of the strait. Some vessels approaching the strait deactivated their automatic identification systems to cross near the Omani shoreline and avoid Iranian military detection."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Operation Project Freedom",
-          "url": "https://en.wikipedia.org/wiki/Operation_Project_Freedom",
-          "score": 0.013513514,
-          "snippet": "ref  During the 2026 Iran war and following the Iranian blockade of the Strait of Hormuz, in March 2026, the U.S. dropped 5,000-pound bunker-buster bombs on hardened Iranian anti-ship cruise missile sites along the Strait of Hormuz. U.S. forces also sank 16 Iranian minelayers as Iran was mining the Strait of Hormuz. Over 150 warships across 16 classes of the Iranian navy were destroyed as well as every Iran submarine was also sunk as the 2026 Iran war ceasefire took hold. In April 2026, President Donald Trump announced that the U.S. military destroyed 158 Iranian naval vessels, asserting the I…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.013333334,
-          "snippet": "times and increased shipping costs. The crisis disrupted global energy supplies and stranded tankers in the Persian Gulf.  On 3 April, a French ship crossed the Strait of Hormuz.  On 9 April, there was no sign that a recent agreement to lift the Iranian blockade of Strait of Hormuz was being implemented, with ships once again being prevented from passing through the strait. Abu Dhabi National Oil Company CEO Sultan Al Jaber said on that day that the strait was still not open, despite the Iran war ceasefire, because Iran is restricting and conditioning traffic. He added that 230 loaded oil tank…"
+          "score": 0.023280423,
+          "snippet": "April 2026 }}  Re-opening of the Strait of Hormuz is considered not to be feasible with military means, especially after U.S. failure to form a coalition with its allies or with the affected Asian countries.  The International Maritime Organization (IMO) confirmed 46 attacks on ships, as June 11, resulting in 14 deaths of innocent seafarers, with attacks continued during the April 8, 2026 declared ceasefire. The IMO reported that an estimated 1,000 ships and 20,000 crew remained stranded in the Arabian Gulf at that date, then exceeding 100 days."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Second presidency of Donald Trump",
           "url": "https://en.wikipedia.org/wiki/Second_presidency_of_Donald_Trump",
-          "score": 0.013157895,
+          "score": 0.023157895,
           "snippet": "an extension he later stated was a result of Iran allowing oil-carrying ships to safely pass through the Strait of Hormuz.  On April 4 and 5, 2026, Trump resumed posting threats of US attack on Iranian infrastructure, stating April 7, 2026, as the deadline for the Strait of Hormuz to be opened. On April 7, Trump posted to Truth Social that \"a whole civilization will die tonight, never to be brought back again\", causing domestic concern that Trump would use nuclear weapons, and resulting in a number of bipartisan calls for the 25th Amendment to be invoked. The White House confirmed in an offici…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.02267731,
+          "snippet": "026/06/20/us-forces-monitoring-strait-of-hormuz-to-ensure-it-stays-open|title=US forces monitoring Strait of Hormuz to ensure it stays open|agency=Reuters|publisher=Internazionale|date=20 June 2026}}"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026",
+          "url": "https://en.wikipedia.org/wiki/2026",
+          "score": 0.022550177,
+          "snippet": "f Hormuz |url=https://www.nytimes.com/2026/03/24/world/middleeast/iran-strait-of-hormuz-ships.html |access-date=2026-03-25 |work=The New York Times |language=en-US |issn=0362-4331}}"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Pakistan in the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Pakistan_in_the_2026_Iran_war",
+          "score": 0.021728918,
+          "snippet": "nd security implications ==  The dispute triggered an energy crisis in Pakistan by disrupting oil flows in the Gulf. Remittances from millions of Pakistani workers in Saudi Arabia and other Gulf states were also at risk.  In response to the partial closure of the Strait of Hormuz and threats to Gulf shipping lanes following Iran's retaliatory actions, the Pakistan Navy launched Operation Muhafiz-ul-Bahr on 9 March 2026. The operation deploys naval assets to protect Pakistani merchant ships, ensure communication systems, disrupt energy flows, and ensure the smooth flow of the sea. On which the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.02157738,
+          "snippet": "ndle/20.500.14283/cd8875en |language=English}}  Tensions between Iran and the United States resulted in the 1988 Operation Praying Mantis, included some European countries in the 2011â2012 Strait of Hormuz dispute, and again in 2019.  Tensions between Iran, the United States, and Israel escalated in the lead-up to 2026, stemming from failed nuclear negotiations in Geneva and a prior 12-day air conflict in 2025. Iran had signaled potential disruptions to the Strait of Hormuz in response to threats, including a temporary partial closure earlier in the month as a warning. From 15 to 20 February…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strait of Hormuz",
+          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
+          "score": 0.021527778,
+          "snippet": "appeared to escape from the Persian Gulf by taking a new route close to the Omani coastline, bypassing the normal Hormuz route.  On 7 April 2026, Russia and China blocked a UN resolution, aimed to protect commercial shipping in the Strait of Hormuz. Out of 15 members, 11 voted in favor of the resolution, two were neutral, Russia and China called it biased against Iran."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.021057202,
+          "snippet": "mns-iran-linked-drone-attacks-on-vital-facilities/ |access-date=9 April 2026 |website=arabtimes |language=en}}  At midnight (local time), Hezbollah launched a rocket attack on the border town of Metula. Later on, sirens were heard in Tel Aviv, Haifa, and Ashdod in response to an incoming Hezbollah strike. Trump accused Iran of doing a \"very poor job\" in its handling of oil passing through the pivotal Strait of Hormuz, arguing it was \"not the agreement we have\". By 10 March 2026 only 15 ships made it through the Strait of Hormuz."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.02022792,
+          "snippet": "diesel\" on 22 March 2026 as the country was hit by a fuel shortage due to its reliance on shipping via the Strait of Hormuz]]  The crisis has been described as the largest disruption to the energy supply since the 1970s oil crises and as the largest in the history of the global oil market. Analysts from institutions like Barclays and Goldman Sachs highlighted risks of sustained high oil prices if the strait is restricted over a longer period. The disruptions also raised concerns over inflation and potential economic downturns in oil-importing nations."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Project Freedom",
+          "url": "https://en.wikipedia.org/wiki/Operation_Project_Freedom",
+          "score": 0.019501537,
+          "snippet": "ref  During the 2026 Iran war and following the Iranian blockade of the Strait of Hormuz, in March 2026, the U.S. dropped 5,000-pound bunker-buster bombs on hardened Iranian anti-ship cruise missile sites along the Strait of Hormuz. U.S. forces also sank 16 Iranian minelayers as Iran was mining the Strait of Hormuz. Over 150 warships across 16 classes of the Iranian navy were destroyed as well as every Iran submarine was also sunk as the 2026 Iran war ceasefire took hold. In April 2026, President Donald Trump announced that the U.S. military destroyed 158 Iranian naval vessels, asserting the I…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Economic impact of the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
+          "score": 0.01769275,
+          "snippet": "The war has precipitated a second major energy crisis and subsequently economic crisis for Europe, primarily through the suspension of Qatari liquefied natural gas (LNG) and the closure of the Strait of Hormuz. The conflict coincided with historically low European gas storage levelsâestimated at just 30% capacity following a harsh 2025â2026 winterâcausing Dutch TTF gas benchmarks to nearly double to over â¬60/MWh by mid-March. Consequently, the European Central Bank (ECB) postponed its planned interest rate reductions on 19 March, raising its 2026 inflation forecast and cutting GDP grow…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Economic impact of the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
+          "score": 0.017266609,
+          "snippet": "Arab states of the Persian Gulf as well as Iran itself rely on the Strait of Hormuz for their energy exports and grocery imports, with only Saudi Arabia and UAE having alternative, albeit limited, routes. The war has caused a systemic collapse of the Gulf Cooperation Council economic model. Following the closure of the Strait of Hormuz on 4 March 2026, oil and LNG exports were stranded, causing Brent Crude to surge past $120 per barrel and forcing QatarEnergy to declare force majeure on all exports. The oil production of Kuwait, Iraq, Saudi Arabia, and the United Arab Emirates collectively dro…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+          "score": 0.017053396,
+          "snippet": "From 28 February to 17 June 2026, the United States and Israel were at war with Iran and its regional allies. Hostilities broke out after USâIsraeli airstrikes targeting Iranian military and government sites resulted in the assassination of Iranian officials and its leader Ali Khamenei. These attacks were launched amidst ongoing IranâUS negotiations held to address Iran's nuclear program. Iran retaliated by firing missiles and drones on Israel, on US-aligned Arab countries, and on US bases across the region; and by blocking the Strait of Hormuz, which disrupted the global economy by causin…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strait of Hormuz",
+          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
+          "score": 0.016806724,
+          "snippet": "critical shipping routes; the broader refusal highlights a significant rift between Washington and its traditional partners.  Trump has warned that the planned summit with Chinese leader Xi Jinping may be at risk if China does not assist the U.S. in securing the Strait of Hormuz. This crucial waterway, through which 20% of global oil passes, is facing disruptions due to ongoing tensions between the U.S., Israel, and Iran. Trump emphasized that China, which relies on the strait for 90% of its energy imports, should share the responsibility of keeping it open, rather than leaving it solely to th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Persian Gulf Strait Authority",
+          "url": "https://en.wikipedia.org/wiki/Persian_Gulf_Strait_Authority",
+          "score": 0.016666668,
+          "snippet": "The Persian Gulf Strait Authority (PGSA) is an Iranian government agency mandated to authorize and regulate maritime transit through the strait of Hormuz after contacting the authority. It was founded on 5 May 2026 during the ongoing Strait of Hormuz crisis."
         }
       ],
       "source_score": {
@@ -725,8 +725,8 @@
         "total_expected": 3,
         "ratio": 1.0
       },
-      "embed_ms": 30,
-      "search_ms": 1882,
+      "embed_ms": 32,
+      "search_ms": 929,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -776,8 +776,29 @@
           "corpus_id": "wikipedia",
           "title": "Iran–United States relations",
           "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
+          "score": 0.027304966,
+          "snippet": "April, Trump stated that Iranians want direct negotiations. IranâUnited States negotiations began on April 12, 2025.  In April 2025, U.S. congressmen Joe Wilson and Jimmy Panetta introduced a 'Free Iraq from Iran' bill. The legislation mandates the development of a comprehensive U.S. strategy to irreversibly dismantle Iran-backed militias, including the Popular Mobilization Forces (PMF), and calls for the suspension of U.S. assistance to Iraq until these militias are fully removed. The bill also imposes sanctions on Iraqi political and military figures aligned with Iran, and provides support…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran–United States relations",
+          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
           "score": 0.026785715,
           "snippet": "them and that the United States should instead be removed as host for failing to ensure the safety of participating teams.  In April 2026, U.S. special envoy Paolo Zampolli proposed that Italy replace Iran at the 2026 FIFA World Cup, prompting swift rejection from Italian officials who called the idea \"not appropriate\" and \"shameful.\" Italian Sports Minister Andrea Abodi stated that qualification \"must be earned on the pitch,\" while FIFA president Gianni Infantino reiterated that Iran would participate as scheduled.  On April 8, 2026, the United States and Iran agreed to a provisional two-week…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Qatar as a mediator in conflict",
+          "url": "https://en.wikipedia.org/wiki/Qatar_as_a_mediator_in_conflict",
+          "score": 0.026567657,
+          "snippet": "mic Times]]}}  On 24 June 2025, Qatar gained Iran's approval to the US proposal for a ceasefire in the Twelve-Day War. Pakistan, Qatar, Egypt, and Turkey mediated negotiations between the United States and Iran for nearly three months before the Islamabad Memorandum to end the 2026 Iran war. On 11 June 2026, key gaps regarding the release of frozen Iranian assets, the reopening of the Hormuz, and protocols for managing Iran's nuclear program during a 60-day ceasefire in the 2026 Iran war were narrowed in talks between Iranian officials and Qatari mediators in Tehran, coordinated with the Unite…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.026294433,
+          "snippet": "On April 12, 2025, Iran and the United States began a series of negotiations aimed at reaching a nuclear peace agreement, following a letter from US president Donald Trump to Iranian supreme leader Ali Khamenei. Trump set a 60-day deadline for Iran to reach an agreement. After the deadline passed without an agreement, Israel launched numerous strikes against Iran, igniting a war between the two countries in June."
         },
         {
           "corpus_id": "wikipedia",
@@ -788,6 +809,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Islamabad Memorandum",
+          "url": "https://en.wikipedia.org/wiki/Islamabad_Memorandum",
+          "score": 0.024234172,
+          "snippet": "The Islamabad Memorandum, officially the Islamabad Memorandum of Understanding between the United States of America and the Islamic Republic of Iran, is a memorandum of understanding between the United States and Iran aimed at ending the 2026 Iran war. It was primarily brokered by Pakistan, with Qatar, Saudi Arabia, Turkey and Egypt also facilitating negotiations."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.023821339,
+          "snippet": "The first round was held on April 12, 2025, in Muscat, Oman. The talks were led by US Special Envoy Steve Witkoff and Iranian Foreign Minister Abbas Araghchi; each delegation was in separate rooms, with messages relayed through Omani mediators. The discussions were described as constructive. Afterwards, the leaders of both negotiating teams spoke briefly in person. An Iranian news outlet reported that during the talks in Oman, Iran proposed a three-step plan to reach a deal with the United States: Iran would agree to temporarily lower its uranium enrichment to 3.67% in return for access to fro…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Iran–United States relations",
           "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
           "score": 0.023812898,
@@ -795,157 +830,122 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Qatar as a mediator in conflict",
-          "url": "https://en.wikipedia.org/wiki/Qatar_as_a_mediator_in_conflict",
-          "score": 0.016666668,
-          "snippet": "mic Times]]}}  On 24 June 2025, Qatar gained Iran's approval to the US proposal for a ceasefire in the Twelve-Day War. Pakistan, Qatar, Egypt, and Turkey mediated negotiations between the United States and Iran for nearly three months before the Islamabad Memorandum to end the 2026 Iran war. On 11 June 2026, key gaps regarding the release of frozen Iranian assets, the reopening of the Hormuz, and protocols for managing Iran's nuclear program during a 60-day ceasefire in the 2026 Iran war were narrowed in talks between Iranian officials and Qatari mediators in Tehran, coordinated with the Unite…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Iran–United States relations",
-          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
-          "score": 0.016666668,
-          "snippet": "April, Trump stated that Iranians want direct negotiations. IranâUnited States negotiations began on April 12, 2025.  In April 2025, U.S. congressmen Joe Wilson and Jimmy Panetta introduced a 'Free Iraq from Iran' bill. The legislation mandates the development of a comprehensive U.S. strategy to irreversibly dismantle Iran-backed militias, including the Popular Mobilization Forces (PMF), and calls for the suspension of U.S. assistance to Iraq until these militias are fully removed. The bill also imposes sanctions on Iraqi political and military figures aligned with Iran, and provides support…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.016393442,
-          "snippet": "On April 12, 2025, Iran and the United States began a series of negotiations aimed at reaching a nuclear peace agreement, following a letter from US president Donald Trump to Iranian supreme leader Ali Khamenei. Trump set a 60-day deadline for Iran to reach an agreement. After the deadline passed without an agreement, Israel launched numerous strikes against Iran, igniting a war between the two countries in June."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.016129032,
-          "snippet": "The first round was held on April 12, 2025, in Muscat, Oman. The talks were led by US Special Envoy Steve Witkoff and Iranian Foreign Minister Abbas Araghchi; each delegation was in separate rooms, with messages relayed through Omani mediators. The discussions were described as constructive. Afterwards, the leaders of both negotiating teams spoke briefly in person. An Iranian news outlet reported that during the talks in Oman, Iran proposed a three-step plan to reach a deal with the United States: Iran would agree to temporarily lower its uranium enrichment to 3.67% in return for access to fro…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.015873017,
-          "snippet": "Israel | date=August 20, 2025 | url=https://www.timesofisrael.com/iran-says-its-not-ready-to-hold-effective-negotiations-on-nuclear-program-with-us/ | access-date=August 21, 2025}}"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.015625,
-          "snippet": "Iran, while a peace deal was described as hinging on the release of $24 billion in Iranian assets frozen by the United States.  On June 15, 2026, U.S. and Iranian officials reportedly reached a preliminary agreement on a framework aimed at extending the ceasefire and reopening the Strait of Hormuz, as well as ending hostilities in Lebanon. The agreement, described as a memorandum of understanding (MoU), is an initial framework and not a final peace agreement. It sets out a 60-day ceasefire period during which further talks are expected to address unresolved issues, including Iranâs nuclear p…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Abbas Araghchi",
-          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
-          "score": 0.015625,
-          "snippet": "in 2021. In April 2025, Araghchi was involved in indirect  negotiations with the United States about Iran's nuclear program.  in November 2025]] In late January 2025, Araghchi met with Hamas leadership following a ceasefire agreement in the Gaza war, to \"hail the victory\" of Hamas. In September  2025, US President Donald Trump proposed that Iran might eventually join the Abraham Accords entered into by Israel and four Arab countries, presenting this as a potential pathway to regional peace in the aftermath of a Gaza peace plan in the Israel-Hamas conflict. Araghchi firmly rejected these remark…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Iran–United States relations",
-          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
-          "score": 0.015384615,
-          "snippet": "to the Iranian authorities that the US would \"intervene\" if the Iranian government did not halt its crackdown on protesters.  In February 2026, following the heightened tensions in January, Iran and the United States held a new round of diplomatic talks in Muscat, Oman, with Oman acting as a mediator. The discussions primarily focused on Iran's nuclear program and the potential easing of economic sanctions. The Iranian delegation was led by Foreign Minister Abbas Araghchi, while the U.S. delegation included senior officials from the State Department.  During the talks, the United States report…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Islamabad Memorandum",
-          "url": "https://en.wikipedia.org/wiki/Islamabad_Memorandum",
-          "score": 0.015384615,
-          "snippet": "The Islamabad Memorandum, officially the Islamabad Memorandum of Understanding between the United States of America and the Islamic Republic of Iran, is a memorandum of understanding between the United States and Iran aimed at ending the 2026 Iran war. It was primarily brokered by Pakistan, with Qatar, Saudi Arabia, Turkey and Egypt also facilitating negotiations."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Second presidency of Donald Trump",
           "url": "https://en.wikipedia.org/wiki/Second_presidency_of_Donald_Trump",
-          "score": 0.015151516,
-          "snippet": "munich-vance-free-speech-election-33e720b820e61db9d5e478e63b4a4dc7 |website=Associated Press News}}  at Turnberry, Scotland, July 28, 2025]] While meeting with British prime minister Keir Starmer in February 2025, Trump accepted a request from King Charles III for a state visit in the U.K.; both Trump and Starmer praised the U.S.âU.K. \"Special Relationship\". The state visit occurred between September 16â18, 2025. Relations became strained in March 2026 due to Starmer's refusal to join the U.S.âIsraeli strikes on Iran during the 2026 Iran war or support the U.S. naval blockade of Iran, pr…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.014925373,
-          "snippet": "e of talks with US, source says|url=https://www.reuters.com/world/asia-pacific/middle-east-needs-long-term-solution-uae-says-ahead-us-iran-crisis-talks-2026-02-03/|publisher=Reuters}}  On February 6, 2026, the United States and Iran held indirect talks in Muscat, Oman, mediated by Oman's foreign minister Badr bin Hamad Al Busaidi. American officials cast doubt over the efficacy of the talks, with Secretary of State, Marco Rubio saying that \"I'm not sure you can reach a deal with these guys\" and Vice President JD Vance expressed frustration over the fact that the Supreme Leader, who ran the cou…"
+          "score": 0.023191094,
+          "snippet": "deal with the Houthis.  during strikes on Iran]] Trump reinstated his \"maximum pressure\" campaign against Iran and sought a new set of negotiations to limit Iran's nuclear program. In March 2025, Trump sent a letter to Iranian supreme leader Ali Khamenei urging new negotiations and warning of military action if talks fail.  On June 13, 2025, Israeli planes bombed sites in Iran associated with Iran's nuclear program. President Trump stated he was not involved, although Iranian leaders have said they do not believe this. There have been reports that Trump vetoed a plan to kill Iran's Ayatollah K…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Abbas Araghchi",
           "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
-          "score": 0.014925373,
+          "score": 0.023184545,
+          "snippet": "lashes out at Zelensky after he slams protest crackdown |url=https://www.timesofisrael.com/confused-clown-iranian-fm-lashes-out-at-zelensky-after-he-slams-protest-crackdown/ |work=The Times of Israel |date=23 January 2026}}  In early February 2026, Araghchi stated that Iran would not agree to stop enriching uranium entirely. He also said that Iran would not negotiate about its ballistic missile program or its proxy network, calling  demands to discuss them \"absolutely\" off the table.  On 25 February 2026, Araghchi said that a \"historic\" agreement with the United States to avert military confli…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.023184132,
+          "snippet": "estimated that global fertilizer prices could average 15â20% higher during the first half of 2026 if the crisis continues.  Iran denied having conducted any negotiations with Trump. The state affiliated Tasnim news agency insisted that the strait would not return to pre-war levels of travel, and it also suggested that the negotiations were an effort to sow discord within Iran. At the same time, the Iranian Foreign Ministry acknowledged that it was reviewing a proposal it received from the United States. According to an analysis in Iran International, Trump's statements succeeding in lowering…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abbas Araghchi",
+          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
+          "score": 0.023122095,
           "snippet": "Muscat before talks with US | website=The National | date=2025-04-26 | url=https://www.thenationalnews.com/news/mena/2025/04/26/iran-foreign-minister-launches-book-on-negotiation-skills-in-muscat-before-talks-with-us/ | access-date=2026-04-02}}  [[Order of the R"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Esmail Baghaei",
-          "url": "https://en.wikipedia.org/wiki/Esmail_Baghaei",
-          "score": 0.014492754,
-          "snippet": "Iran, then Hossein Amir-Abdollahian.  On 2 October 2024, foreign minister of Iran Abbas Araghchi appointed Baghaei as the spokesman for the Iranian Ministry of Foreign Affairs.  He succeeded Nasser Kanaani.  In January 2026, he said that Iran had full confidence in its defensive capabilities in a war, warned that Iran would launch a \"regretâinducing response\" if it were attacked, and alluded to Iran's \"heroic battle\" â his description of the Twelve-Day War in June 2025. On 10 February 2026, he  warned that if Iran were attacked by the United States and Israel, Iran would respond with crush…"
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.023063201,
+          "snippet": "On October 13, 2025, Trump stated that the United States was ready to reach an agreement with Iran. He expressed optimism that an agreement could be achieved. In response, Iranian foreign minister Araghchi said Tehran would consider any proposal from the United States that was \"fair and balanced\", although he noted that no concrete framework for talks had yet been presented and that messages between the two sides were exchanged through intermediaries. Despite the conciliatory language from Trump, his administration maintained a firm stance towards Iran, and observers noted that significant bar…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Abbas Araghchi",
-          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
-          "score": 0.014285714,
-          "snippet": "on 11 April 2026. These talks were face-to-face talks with one of the most high-level delegations sent by the United States.  On 27 April 2026, Araghchi met with Russia's  President Vladimir Putin in Moscow to discuss the war.  Russia has supplied  military intelligence to Iran, including satellite imagery showing the locations of U.S. warships and military personnel, according to American officials.  On 13 June 2026, Iranian hardliners chanted against Araghchi and Parliament Speaker and chief negotiator Mohammad Bagher Ghalibaf as they protested the deal with the United States outside the Ira…"
+          "title": "Middle Eastern crisis (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
+          "score": 0.023042072,
+          "snippet": "contemporary history\". On 11 February 2026, Iranian President Masoud Pezeshkian apologized to the nation for the massacres.  Beginning in late January 2026, the United States carried out its largest military buildup in the Middle East since the 2003 invasion of Iraq, deploying air, naval, and missile defense assets amid escalating tensions with Iran, which the United States has attributed to Iran's nuclear program, the 2025â2026 Iranian protests, and a government crackdown that killed thousands of demonstrators. On 28 February 2026, this culminated in joint military strikes on Iran by the Un…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.02291527,
+          "snippet": "Israel | date=August 20, 2025 | url=https://www.timesofisrael.com/iran-says-its-not-ready-to-hold-effective-negotiations-on-nuclear-program-with-us/ | access-date=August 21, 2025}}"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Iran–United States relations",
           "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
-          "score": 0.014084507,
-          "snippet": "s/iran-says-it-temporarily-closed-strait-hormuz-it-held-more-indirect-talks |access-date=February 25, 2026 |website=Outrider}}  and Iranian Foreign Minister Mohammad Javad Zarif in Lausanne, Switzerland to discuss the Iranian nuclear program, March 16, 2015]]  IranâUnited States relations during the Obama administration (2009â2017) were defined by a shift from confrontation to cautious engagement, culminating in the landmark nuclear agreement of 2015."
+          "score": 0.022527473,
+          "snippet": "to the Iranian authorities that the US would \"intervene\" if the Iranian government did not halt its crackdown on protesters.  In February 2026, following the heightened tensions in January, Iran and the United States held a new round of diplomatic talks in Muscat, Oman, with Oman acting as a mediator. The discussions primarily focused on Iran's nuclear program and the potential easing of economic sanctions. The Iranian delegation was led by Foreign Minister Abbas Araghchi, while the U.S. delegation included senior officials from the State Department.  During the talks, the United States report…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abbas Araghchi",
+          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
+          "score": 0.02077922,
+          "snippet": "on 11 April 2026. These talks were face-to-face talks with one of the most high-level delegations sent by the United States.  On 27 April 2026, Araghchi met with Russia's  President Vladimir Putin in Moscow to discuss the war.  Russia has supplied  military intelligence to Iran, including satellite imagery showing the locations of U.S. warships and military personnel, according to American officials.  On 13 June 2026, Iranian hardliners chanted against Araghchi and Parliament Speaker and chief negotiator Mohammad Bagher Ghalibaf as they protested the deal with the United States outside the Ira…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.02,
+          "snippet": "and threatened to hit US military bases. Revolutionary Guard General Salami warned that IRGC would open hell gates on invaders.  The fourth round of negotiations, originally scheduled for May 3, 2025, in Rome, was postponed amid rising tensions. Iranian officials cited US sanctions, military action against the Houthis, and what they described as \"contradictory behaviour and provocative statements\" by Washington as contributing factors, while stating that a new date would depend on the US approach. Oman, which mediated previous rounds, referred to logistical reasons for the delay. A source fami…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.01988304,
+          "snippet": "ndle/20.500.14283/cd8875en |language=English}}  Tensions between Iran and the United States resulted in the 1988 Operation Praying Mantis, included some European countries in the 2011â2012 Strait of Hormuz dispute, and again in 2019.  Tensions between Iran, the United States, and Israel escalated in the lead-up to 2026, stemming from failed nuclear negotiations in Geneva and a prior 12-day air conflict in 2025. Iran had signaled potential disruptions to the Strait of Hormuz in response to threats, including a temporary partial closure earlier in the month as a warning. From 15 to 20 February…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.019864477,
+          "snippet": "US offered to lift sanctions and normalize relations, while warning that failure to negotiate would result in military strikes.  Initially, Khamenei did not acknowledge the letter, indicating that Iran would not meet the new expectations. During March 2025, Iran and the US engaged in indirect exchanges over Trump's letter, with both sides issuing threats. Khamenei reportedly changed his mind about the negotiations after his advisors warned that the threat of war with the United States and the deepening economic crisis could bring down the government. By the end of March, the Iranian leadership…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+          "score": 0.019764706,
+          "snippet": "negotiations.  on 7 June 2026, in the presence of State Secretary Marco Rubio and French president Emmanuel Macron]]  After concluding that continued hostilities would risk economic calamity, Donald Trump signed a Memorandum of Understanding (MOU) on behalf of the United States during a ceremony at the Palace of Versailles on 17 June 2026. The signing followed an earlier, digital signing of the MOU by the foreign ministers of the two principal belligerents. In the MOU, the United States and Iran agreed to suspend hostilities for 60 days and to establish a framework for a permanent peace under …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.019729206,
+          "snippet": "On 11 April 2026 US Vice President JD Vance with President Trump's special envoy, Steve Witkoff, and son-in-law, Jared Kushner, arrived in Islamabad for peace talks with Iranian officials. The Iranian delegation, which includes Foreign Minister Abbas Araghchi and the speaker of Iran's Parliament Mohammad Bagher Ghalibaf arrived there earlier. On 12 April, Vance left Pakistan, saying that the negotiations had not led to an agreement. Trump told reporters the same day that he did not care about the outcome of the negotiations, instead choosing to spend time at a Ultimate Fighting Championship UF…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abbas Araghchi",
+          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
+          "score": 0.018620914,
+          "snippet": "forces.â However, just seven days later, on 8 December 2024,  Syrian President Bashar Assadâs government collapsed.  Later that month he said that \"2025 will be an important year regarding Iran's nuclear issue.\" This came as a reaction to Donald Trump's soon to start role as the new US president; talks of new economic sanctions; an inflation rate of 35% in Iran; and the Iranian rial's reaching an all-time low of 820,500 to the dollar.  In January 2025, Araghchi met with Taliban leaders in Afghanistan. He became the first Iranian foreign minister to visit Afghanistan since 2017, and the fir…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Iran",
           "url": "https://en.wikipedia.org/wiki/Iran",
-          "score": 0.014084507,
-          "snippet": "Iran has since been involved in proxy wars with Israel and Saudi Arabia; in 2025, Israeli strikes on Iran escalated tensions into the Twelve-Day War. Following the war and amid a growing economic crisis, the largest protests since 1979 erupted in 2025. The United States and Israel launched a war with Iran in 2026, after they assassinated supreme leader Ali Khamenei. His son, Mojtaba Khamenei, was subsequently elected as his successor."
+          "score": 0.018219218,
+          "snippet": "2025, Iran's government ordered a mass deportation of an estimated four million Afghan migrants and refugees living in Iran.  with Saudi Arabia's Defense Minister Khalid bin Salman and Major General Mohammad Bagheri on 17 April 2025]] The weakening of Iran's key allies and proxies since 2023 left Iran's government weakened and isolated. In early 2025, Iran was rapidly advancing its nuclear program. Analysts warned such activity exceeded any plausible civilian justification. Iran and the United States entered negotiations for a new nuclear agreement, but progress stalled. In June, IAEA found Ir…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.013888889,
-          "snippet": "On October 13, 2025, Trump stated that the United States was ready to reach an agreement with Iran. He expressed optimism that an agreement could be achieved. In response, Iranian foreign minister Araghchi said Tehran would consider any proposal from the United States that was \"fair and balanced\", although he noted that no concrete framework for talks had yet been presented and that messages between the two sides were exchanged through intermediaries. Despite the conciliatory language from Trump, his administration maintained a firm stance towards Iran, and observers noted that significant bar…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Internet censorship in Iran",
-          "url": "https://en.wikipedia.org/wiki/Internet_censorship_in_Iran",
-          "score": 0.013888889,
-          "snippet": "-protesters |title=Iran: Internet shutdown hides violations in escalating deadly crackdown on protesters |publisher=Amnesty International |date=2026-01-09 |access-date=2026-01-22}}  Following the 28 February IsraeliâUnited States strikes on Iran, there was a renewed \"near total\" internet blackout in Iran, as NetBlocks reported internet connectivity in Iran dropping to 4% of ordinary levels. Iranians abroad have also reported that they have been unable to connect with family members in Iran or access the Iranian intrenet. As of 6 March, internet was measuring at about 1% of normal connectivit…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Mohammad Bagher Ghalibaf",
-          "url": "https://en.wikipedia.org/wiki/Mohammad_Bagher_Ghalibaf",
-          "score": 0.01369863,
-          "snippet": "stationed in the region. According to an insider, Ghalibaf acts only with approval from Iran's supreme leader Mojtaba Khamenei.  Asim Munir and Ghalibaf, 16 April 2026 ]] On 29 March 2026, Ghalibaf rejected the ongoing negotiations with the United States, saying that Iran could not be forced into submission. On 5 April, he called US President Donald Trump's threats to strike Iranian infrastructure 'reckless.' On 8 April, he said that the two-week  2026 Iran war ceasefire had been violated, and argued that \"a bilateral ceasefire or negotiations is unreasonable.\" On 9 April, he said that \"time i…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.013513514,
-          "snippet": "passed without an agreement, Israel launched numerous strikes against Iran, igniting a war between the two countries in June.  The first round of high-level meetings was held in Oman on April 12, 2025, led by US Special Envoy Steve Witkoff and Iranian Foreign Minister Abbas Araghchi. At the time, both the White House and the Iranian Foreign Ministry said that the discussions held were constructive. A second round of Omani-mediated talks took place in Rome on April 19, 2025, again with indirect discussions between Witkoff and Araghchi. This was followed by a third round in Muscat around a week …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Israel–Lebanon ceasefire",
-          "url": "https://en.wikipedia.org/wiki/2026_Israel–Lebanon_ceasefire",
-          "score": 0.013513514,
-          "snippet": "The 2026 IsraelâLebanon ceasefire is a cessation of hostilities agreed between Israel and Lebanon on 16 April 2026, amid the ongoing 2026 Lebanon war and wider regional conflict linked to the 2026 Iran war. The agreement, brokered by the United States, established a 10-day truce intended to halt active fighting and create conditions for further negotiations toward a longer-term settlement."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.013333334,
-          "snippet": "ith-iaea-reports-2025-04-24/ | title=China, Russia and Iran jointly discuss Iran's nuclear programme with IAEA, reports Xinhua | website=Reuters | date=April 24, 2025 }}  The third round of high-level negotiations took place on April 26, 2025, along with the first round of expert-level talks. The high-level talks were described as serious and productive, with both sides aiming for an agreement based on mutual respect. Araghchi reported progress but noted that key differences remained. Trump's special envoy Witkoff aimed to finalize the deal within 60 days; however it was reported that mistrust…"
+          "title": "Reactions to the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Reactions_to_the_2026_Iran_war",
+          "score": 0.016390318,
+          "snippet": "Iranian foreign minister Abbas Araghchi also condemned the attacks on Iranian nuclear facilities and asked compensation.  On 29 March 2026, parliament speaker Mohammad Bagher Ghalibaf rejected negotiations with the United States. Ghalibaf said that entities that hold US bonds are legitimate targets. The IRGC threatened American and Israeli universities. On 15 April, Ali Nikzad said that Iran would avenge the killing of Ali Khamenei and other top commanders.  Iran has sued the US in the Hague Tribunal over the 2026 war, invoking the Algiers Accords."
         }
       ],
       "source_score": {
@@ -967,8 +967,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 28,
-      "search_ms": 1862,
+      "embed_ms": 30,
+      "search_ms": 915,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -992,13 +992,6 @@
           "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
           "score": 0.032786883,
           "snippet": "[[File:Oil prices.webp|thumb|  ]] during Iran War]] The 2026 Iran war, including the closure of the Strait of Hormuz, has led to what the International Energy Agency has characterized as the \"largest supply disruption in the history of the global oil market\". The conflict has echoed the 1970s energy crisis through acute supply shortages, currency volatility, inflation and heightened risks of stagflation and recession. Interest rate reductions were expected to be postponed or conversely increased in light of higher inflation caused by supply shortages and speculation. Stock markets experienced …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic impact of the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.031513646,
-          "snippet": "ain disruptions.  , the 2022- Russo-Ukrainian war and the 2026 Iran war.]]  The head of the International Energy Agency described the situation caused by the war as the \"greatest global energy security challenge in history\". The conflict caused immediate volatility in energy markets, with Brent crude oil prices surging 10â13% to around $80â82 per barrel by 2 March 2026. Iran's closure of the Strait of Hormuz disrupted 20% of global oil supplies and significant liquefied natural gas (LNG) volumes. Exports from the region are typically going to Asian countries, with China, India, Japan and S…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1046,8 +1039,120 @@
           "corpus_id": "wikipedia",
           "title": "Economic impact of the 2026 Iran war",
           "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.015873017,
-          "snippet": "ation |language=en-US}}  The 2026 Iran conflict began on 28 February, with joint US-Israeli airstrikes targeting Iranian leadership and military infrastructure, including a decapitation strike that assassinated Supreme Leader Ali Khamenei. The operation, codenamed \"Operation Epic Fury\" by the US, involved advanced military equipment costing millions of dollars, such as precision-guided munitions and stealth aircraft. Iran retaliated with missile and drone strikes on US and Israeli targets, as well as Gulf states hosting US forces, leading to airspace closures and attacks on infrastructure. Pri…"
+          "score": 0.023328735,
+          "snippet": "UAE, and Bahrain have injected uncertainty into global markets and raised alarm bells for economic policymakers in Washington.  A Financial Times investigation found that US$580 million bets on falling oil prices had been placed with the stock market by selling futures just 15 minutes before Donald Trump published his statement on postponing attacks on Iran for talks on 23 March 2026, which caused oil prices to fall for a while. This resulted in speculation about insider trading and calls for further investigation. A second suspicious series of bets, worth US$950 million, on falling oil prices…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+          "score": 0.022108844,
+          "snippet": "atriations(1).pdf|thumb|A map of emergency evacuation of persons to Europe]]  The war had global economic consequences: oil and gas prices surged, aviation and tourism were disrupted, and financial markets shuddered. International Energy Agency (IEA) head Fatih Birol described the situation as the \"greatest global energy security challenge in history\"."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strait of Hormuz",
+          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
+          "score": 0.02146264,
+          "snippet": "On 14 June, Iran reportedly issued a threat to block the strait in response to Israeli attacks targeting its military and nuclear infrastructure. The Financial Times reported that such action could cause oil prices to surge beyond the recent 7â14% increases, possibly exceeding $100 to $150 per barrel. This would likely fuel global inflation and contribute to an economic downturn. Analysts emphasized the vulnerability of regional exporters, noting that \"Saudi Arabia, Kuwait, Iraq and Iran are wholly locked into one tiny passage for exports.\" The strait handles  per day, nearly 20% of global o…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.021111112,
+          "snippet": "=\"CNN-20260617\" /  On 25 February 2026, the United States Department of the Treasury imposed sanctions on more than 30 individuals, entities, and vessels linked to Iranâs oil shipping network and other designated activities.  On 28 February 2026, Israel and the United States launched airstrikes against Iran, killing its supreme leader and many other officials, destroying a large number of military and government targets, and killing civilians. Iran responded with missile and drone strikes against Israel, US bases, and US-allied countries in the Middle East, and by closing the Strait of Hormu…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Economic impact of the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
+          "score": 0.021061966,
+          "snippet": "Several economists and market analysts have suggested that the conflict could also have indirect effects on global real estate investment patterns. Previous geopolitical crises in the Middle East, most notably the 1973 oil crisis and the 1979 Iranian Revolution, were associated with significant increases in petrodollar wealth and capital outflows from the region, part of which was invested in overseas property markets, notably prime real estate in London. Scholars and property market analysts have documented the role of Middle Eastern investment in the internationalization of London's housing …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 United States naval blockade of Iran",
+          "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran",
+          "score": 0.020939019,
+          "snippet": "uilt up even further storage near the border with Pakistan.\"  The US blockade of Iran was expected to negatively impact Iran's economy, as well as further raise oil prices. Global oil supplies could also be disrupted if Iran retaliated against blockade by attempting to close off the Bab al-Mandeb.  In the last 20 years, oil sales have declined in importance as Iran has moved to diversify its economy. Oil exports are crucial for Iran's economy, constituting more than 40% of its export revenue in 2023. Of the remaining exports, about one-third are shipped via land or air.  According to an analys…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 United States naval blockade of Iran",
+          "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran",
+          "score": 0.0207976,
+          "snippet": "On 13 April 2026, the United States imposed a naval blockade on Iran following the failure of the Islamabad Talks to end the 2026 Iran war. The blockade began 10 a.m. ET and applied only to ships going to and from Iran. Iran said that it viewed the entry of US military vessels near the Strait of Hormuz as a breach of the ceasefire agreement that had been reached days earlier and that it would respond accordingly. On 22 April, US president Donald Trump claimed that the naval blockade had cost Iran $500 million daily while the US Department of Defense estimated that Iran had lost $4.8 billion in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Strait of Hormuz crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
+          "score": 0.019922208,
+          "snippet": "estimated that global fertilizer prices could average 15â20% higher during the first half of 2026 if the crisis continues.  Iran denied having conducted any negotiations with Trump. The state affiliated Tasnim news agency insisted that the strait would not return to pre-war levels of travel, and it also suggested that the negotiations were an effort to sow discord within Iran. At the same time, the Iranian Foreign Ministry acknowledged that it was reviewing a proposal it received from the United States. According to an analysis in Iran International, Trump's statements succeeding in lowering…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Censorship during the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Censorship_during_the_2026_Iran_war",
+          "score": 0.019636016,
+          "snippet": "During the 2026 Iran war, the United States, Israel and Iran all implemented severe censorship to hide their actual amount of damage and success in the war."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Shehbaz Sharif",
+          "url": "https://en.wikipedia.org/wiki/Shehbaz_Sharif",
+          "score": 0.019300144,
+          "snippet": "iddle-east/trump-war-iran-oil-crisis-economy-asia-india-pakistan-b2942479.html |work=The Independent |date=21 March 2026}}"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strait of Hormuz",
+          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
+          "score": 0.01924223,
+          "snippet": "|url-status=dead}}  After the U.S. strikes on Iranian nuclear sites on 22 June, the Iranian Parliament voted to close the strait. However, the final decision on closure was left to Iran's Supreme National Security Council. Revolutionary Guards commander Esmaeil Kousari confirmed that shutting the strait would be executed \"whenever necessary\", to protect national sovereignty and deter further foreign aggression. Closure of the strait, through which 20% of the world's oil supply transits, would significantly disrupt global energy markets if implemented. Given the strait's critical role as a mari…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war fuel crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_fuel_crisis",
+          "score": 0.019232549,
+          "snippet": "com/economy/2026/4/6/vietnams-gig-workers-slammed-by-rising-fuel-costs-amid-fallout-of-iran-war |access-date=2026-04-19 |website=Al Jazeera |language=en |archive-date=7 April 2026 |archive-url=https://web.archive.org/web/20260407145935/https://www.aljazeera.com/economy/2026/4/6/vietnams-gig-workers-slammed-by-rising-fuel-costs-amid-fallout-of-iran-war |url-status=live }}  The government of Vietnam has abolished some fuel levies until mid-April, but fuel prices are still way above what they were before the war. Increased shipping costs for local businesses have hurt them economically, with cust…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war fuel crisis",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_fuel_crisis",
+          "score": 0.019109841,
+          "snippet": "of fuel by April. British supermarket chain Asda warned that it was already facing shortages of fuel at their fuel stations.  In addition to broader fuel supply disruptions, reports in April 2026 indicated significant impacts on global energy and aviation markets linked to tensions in the Strait of Hormuz during the IranâUnited States conflict. Restricted maritime traffic was reported to have contributed to supply constraints in oil and jet fuel, affecting global energy flows and increasing market volatility.  The disruption contributed to sharp increases in global energy prices. Reports ind…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States sanctions against Iran",
+          "url": "https://en.wikipedia.org/wiki/United_States_sanctions_against_Iran",
+          "score": 0.016800936,
+          "snippet": "Torbat, \"overall, the sanctions' economic effect\" on Iran \"has been significant, while its political effect has been minimal.\"  According to the United States National Foreign Trade Council, in the medium-term, lifting U.S. sanctions and liberalizing Iran's economic regime would increase Iran's total trade annually by as much as $61 billion (at the 2005 world oil price of $50/bbl), adding 32 percent to Iran's GDP. In the oil-and-gas sector, output and exports would expand by 25-to-50 percent (adding 3 percent to world crude oil production).  Iran could reduce the world price of crude petroleum…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Price of oil",
+          "url": "https://en.wikipedia.org/wiki/Price_of_oil",
+          "score": 0.016311247,
+          "snippet": "global COVID-19 pandemic. The spot price of WTI benchmark crude oil on the NYM on 6 March 2020 dropped to US$42.10 per barrel.  On 8 March, the 2020 RussiaâSaudi Arabia oil price war was launched, in which Saudi Arabia and Russia briefly flooded the market, also contributed to the decline in global oil prices. Later on the same day, oil prices had decreased by 30%, representing the largest one-time drop since the 1991 Gulf War. Oil traded at about $30 a barrel. Very few energy companies can produce oil when the price of oil is this low. Saudi Arabia, Iran, and Iraq had the lowest production …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Petroleum industry in Iran",
+          "url": "https://en.wikipedia.org/wiki/Petroleum_industry_in_Iran",
+          "score": 0.016112909,
+          "snippet": "r 2019 |url-status=live }}  Iran's total oil production reached a peak level of  in 1976. By 1978, Iran had become the second-largest OPEC producer and exporter of crude oil and the fourth-largest producer in the world. After a lengthy decline in the 1980s, caused by the Iraq-Iran War, economic sanctions and the decline of mature oil fields, production of crude oil began to increase steadily in 1987. In 2008 Iran produced  per day (bpd) and exported .  Accounting for 5 percent of world production, it returned to its previous position as OPEC's second-largest producer. In 2005, Iran had the est…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Scott Bessent",
+          "url": "https://en.wikipedia.org/wiki/Scott_Bessent",
+          "score": 0.01589995,
+          "snippet": "stolen from Iranian families to banks and financial institutions around the world. Rest assured, we will track them and you.\"  In response to the 2025â2026 Iranian protests, Bessent said that Iran's economic collapse was partly due to U.S. sanctions and said, \"the Iranian economy is on the ropes\". He also said the U.S. had triggered a dollar shortage in Iran, causing the Iranian rial to collapse. During the 2026 Iran War, Bessent said the U.S. had seized roughly $1 billion in Iranian crypto assets, frozen Iranian bank accounts, and pressured foreign governments to cut ties with Iran."
         },
         {
           "corpus_id": "wikipedia",
@@ -1060,50 +1165,8 @@
           "corpus_id": "wikipedia",
           "title": "Economic impact of the 2026 Iran war",
           "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.014925373,
-          "snippet": "UAE, and Bahrain have injected uncertainty into global markets and raised alarm bells for economic policymakers in Washington.  A Financial Times investigation found that US$580 million bets on falling oil prices had been placed with the stock market by selling futures just 15 minutes before Donald Trump published his statement on postponing attacks on Iran for talks on 23 March 2026, which caused oil prices to fall for a while. This resulted in speculation about insider trading and calls for further investigation. A second suspicious series of bets, worth US$950 million, on falling oil prices…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Strait of Hormuz",
-          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
-          "score": 0.014705882,
-          "snippet": "On 14 June, Iran reportedly issued a threat to block the strait in response to Israeli attacks targeting its military and nuclear infrastructure. The Financial Times reported that such action could cause oil prices to surge beyond the recent 7â14% increases, possibly exceeding $100 to $150 per barrel. This would likely fuel global inflation and contribute to an economic downturn. Analysts emphasized the vulnerability of regional exporters, noting that \"Saudi Arabia, Kuwait, Iraq and Iran are wholly locked into one tiny passage for exports.\" The strait handles  per day, nearly 20% of global o…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic impact of the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
           "score": 0.014705882,
           "snippet": "25% of rice exports in 2024, this dependence may affect global supply chains during periods of regional instability.  While India was a major ally of Iran during the anti-colonial era, New Delhi has strengthened its relationship with Israel, including Prime Minister Narendra Modi's visit to the Knesset in February 2026, which some analysts argue contributed to reduced engagement with Iran, potentially contributing to closer military and economic ties between Iran, China and Russia. To mitigate the energy shock caused by the closure of the Strait of Hormuz, the US Treasury granted India a tempo…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Reactions to the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Reactions_to_the_2026_Iran_war",
-          "score": 0.014492754,
-          "snippet": "[[File:Reactions to the 2026 Iran conflict.svg|thumb|400px|Reactions to the 2026 Iran war:  ]]  On 28 February 2026, the United States and Israel launched joint airstrikes on Iran, starting the 2026 Iran war. The strikes targeted Iranian officials, military commanders, and military assets, assassinating Ali Khamenei, the supreme leader of Iran. Iran responded with missile and drone strikes against Israel, U.S. bases, and Arab countries in the Middle East, as well as closing the Strait of Hormuz.  Most countries did not take a definitive side in the conflict but called for peace. In the Middle …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Price of oil",
-          "url": "https://en.wikipedia.org/wiki/Price_of_oil",
-          "score": 0.014285714,
-          "snippet": "since 2014â$88, concerns were raised about the rising cost of gasolineâwhich hit a record high in the United Kingdom.  In March 2026, international oil prices surpassed the $100 per barrel threshold for the first time since 2022, primarily driven by the outbreak of the 2026 Iran war. On 9 March, the brent crude benchmark surged to an intraday high of $119.50, a 29% increase, following strikes on energy infrastructure near Tehran and the effective closure of the Strait of Hormuz. Prices subsequently moderated to approximately $100 per barrel after G7 finance ministers announced a potential …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.014285714,
-          "snippet": "eporting |website=Salon |url=https://www.salon.com/2026/05/09/axios-accused-of-market-manipulation-with-iran-reporting/ |access-date=1 June 2026}} The Wall Street Journal argued that Trump directly intervened in the oil market by \"jawboning\" it, posting \"positive\" news of supposed negotiations to kill momentum of oil pr"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Syria",
-          "url": "https://en.wikipedia.org/wiki/Syria",
-          "score": 0.014084507,
-          "snippet": "However, amidst the ongoing 2026 Iran war, food and other goods have also seen significant increases in their prices, exceeding 12% to 20% according to the Syrian Arab News Agency, a state-owned news agency.  before the war, 2008]]"
         },
         {
           "corpus_id": "wikipedia",
@@ -1114,20 +1177,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Censorship during the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Censorship_during_the_2026_Iran_war",
-          "score": 0.013888889,
-          "snippet": "During the 2026 Iran war, the United States, Israel and Iran all implemented severe censorship to hide their actual amount of damage and success in the war."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Price of oil",
-          "url": "https://en.wikipedia.org/wiki/Price_of_oil",
-          "score": 0.013888889,
-          "snippet": "22/04/19/war-dims-global-economic-outlook-as-inflation-accelerates/}} The IMF also cautioned that there was a potential for social unrest in poorer nations as the price of food and fuel increases.  A major rise or decline in oil price can have both economic and political impacts. The decline on oil price during 1985â1986 is considered to have contributed to the fall of the Soviet Union. Low oil prices could alleviate some of the negative effects associated with the resource curse, such as authoritarian rule and gender inequality. Lower oil prices could however also lead to domestic turmoil a…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "2026 Iran war",
           "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
           "score": 0.01369863,
@@ -1135,59 +1184,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Strait of Hormuz crisis",
-          "url": "https://en.wikipedia.org/wiki/2026_Strait_of_Hormuz_crisis",
-          "score": 0.01369863,
-          "snippet": "diesel\" on 22 March 2026 as the country was hit by a fuel shortage due to its reliance on shipping via the Strait of Hormuz]]  The crisis has been described as the largest disruption to the energy supply since the 1970s oil crises and as the largest in the history of the global oil market. Analysts from institutions like Barclays and Goldman Sachs highlighted risks of sustained high oil prices if the strait is restricted over a longer period. The disruptions also raised concerns over inflation and potential economic downturns in oil-importing nations."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic impact of the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.013513514,
-          "snippet": "and the Netherlands were at high risk of recession. The OECD expected the UK to be the worst hit major economy globally.  The crisis has further impacted industrial output in the United Kingdom and the EU, where chemical and steel manufacturers have imposed surcharges of up to 30% to offset surging electricity and feedstock costs, potentially leading to permanent deindustrialization in some sectors. The economic impact on Europe has been characterized by a severe energy-supply shock and industrial strain, with the European Central Bank (ECB) warning that a prolonged conflict will likely trigge…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.013333334,
-          "snippet": "The 2026 war began with joint airstrikes by Israel and the US against military and government sites in Tehran, Isfahan, Qom, Karaj, and Kermanshah. Ali Khamenei was assassinated in a strike on his compound, and other Iranian officials were also killed. Israeli and US attacks resulted in civilian casualties and damage to schools, hospitals, the Grand Bazaar in Tehran, and the Golestan Palace. In retaliation, Iran launched hundreds of drones and ballistic missiles at targets in Israel and at US military bases in Qatar, Bahrain, the United Arab Emirates, Kuwait, Iraq, Jordan, and Saudi Arabia. Ir…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Strait of Hormuz",
-          "url": "https://en.wikipedia.org/wiki/Strait_of_Hormuz#U.S.–Iran_tensions_in_2011–2012",
-          "score": 0.013157895,
-          "snippet": "Strait of Hormuz  Nevertheless, Iran continued to discuss the impact of shutting the Strait on world oil markets, saying that any disruption of supply would cause a shock to markets that \"no country\" could manage."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Kuwait in the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Kuwait_in_the_2026_Iran_war",
-          "score": 0.012987013,
-          "snippet": "On 28 February 2026, during the 2026 Iran war, Iran began launching a series of retaliatory strikes on American and Kuwaiti targets within Kuwait."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
-          "score": 0.012820513,
-          "snippet": "the end of March significant shortages of domestic petroleum products emerged in southeast Asia as reserves ran out.  during Operation Epic Fury, March 2026]] Stock markets initially fell, with the Dow Jones Industrial Average falling over 400 points (one percent) on 2 March alone, although by mid-April had recovered and reached record highs.  The UN World Food Programme and various economic analysts warned that the war is driving significant, long-term increases in global food prices.  An analysis performed by The New York Times, comparing the quantities and value of oil and other fuels shipp…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic impact of the 2026 Iran war",
-          "url": "https://en.wikipedia.org/wiki/Economic_impact_of_the_2026_Iran_war",
-          "score": 0.012820513,
-          "snippet": "Iran's economy, already contracting under sanctions, faced further infrastructure damage and revenue losses. Consequently, analysts expect that Iran's economy will shrink by 10% due to the war. Iran imports grain mainly through its Persian Gulf harbours, but struggled to fund it even before the war. Most feed-grain (mainly corn from Brazil) is imported via the Strait of Hormuz to the Bandar-e Emam Khomeini harbour. 30% of wheat is imported. By 6 March nine grain ships were outside the Strait of Hormuz, inbound for Iran. By 6 March, 4,000 civilian buildings had already been damaged by the US-Is…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.012658228,
-          "snippet": "offensive into Gaza City and targeted Hamas officials in Qatar, before a ceasefire with Hamas halted the Gaza war in October.  In 2026, the U.S. began a rapid military buildup in the region, which culminated in the US and Israel starting a war with surprise airstrikes on sites and cities across Iran on 28&nbsp;February, including the assassination of Iranian supreme leader Ali Khamenei. In response, Iran launched strikes against Israel, US bases, and US-allied countries in the Middle East, and by closing the Strait of Hormuz, disrupting global trade.  The conflict between Hezbollah and Israel …"
+          "title": "OPEC",
+          "url": "https://en.wikipedia.org/wiki/OPEC",
+          "score": 0.011764706,
+          "snippet": "OPEC  In the 1970s, restrictions in oil production led to a dramatic rise in oil prices with long-lasting and far-reaching consequences for the global economy. Since the 1980s, OPEC has had a limited impact on world oil-supply and oil-price stability, as there is frequent cheating by members on their commitments to one another, and as member commitments reflect what they would do even in the absence of OPEC. However, since 2020, OPEC countries along with non-OPEC participants had helped in stabilising oil markets after the COVID-19 pandemic resulted in a collapse in oil demand. This has allowe…"
         }
       ],
       "source_score": {
@@ -1209,8 +1209,8 @@
         "total_expected": 3,
         "ratio": 1.0
       },
-      "embed_ms": 29,
-      "search_ms": 1878,
+      "embed_ms": 30,
+      "search_ms": 880,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1300,6 +1300,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 0.02534204,
+          "snippet": "On 15 June 2026, following reports of a preliminary agreement between the United States and Iran that reportedly included provisions for ending the war, including in Lebanon,"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Southern Lebanon",
+          "url": "https://en.wikipedia.org/wiki/Southern_Lebanon",
+          "score": 0.023931624,
+          "snippet": "vernment.  In March 2026, during the 2026 Lebanon war, Israeli Finance Minister Bezalel Smotrich stated that Israel, following the war, should annex territories up to the Litani River.  Israeli Defense minister Israel Katz states that the military will control a \"security zone\" up to the Litani River in southern Lebanon until the threat of Hezbollah is removed."
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Benjamin Netanyahu",
           "url": "https://en.wikipedia.org/wiki/Benjamin_Netanyahu",
           "score": 0.023581635,
@@ -1307,31 +1321,80 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Lebanon",
-          "url": "https://en.wikipedia.org/wiki/Lebanon",
-          "score": 0.015151516,
-          "snippet": "f  On 12 July 2006, Hezbollah launched a series of rocket attacks and raids into Israeli territory, where they killed three Israeli soldiers and captured two others. Israel responded with airstrikes and artillery fire on targets in Lebanon, and a ground invasion of southern Lebanon, resulting in the 2006 Lebanon War. The conflict was officially ended by the UNSC Resolution 1701 on 14 August 2006, which ordered a ceasefire, the withdrawal of Israeli forces from Lebanon, and the disarmament of Hezbollah. Some 1,191 Lebanese and 160 Israelis were killed in the conflict. Beirut's southern suburb w…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 0.014925373,
-          "snippet": "On 15 June 2026, following reports of a preliminary agreement between the United States and Iran that reportedly included provisions for ending the war, including in Lebanon,"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Reactions to the 2026 Iran war",
           "url": "https://en.wikipedia.org/wiki/Reactions_to_the_2026_Iran_war",
-          "score": 0.014925373,
+          "score": 0.023055453,
           "snippet": "[[File:Reactions to the 2026 Iran conflict.svg|thumb|400px|Reactions to the 2026 Iran war:  ]]  On 28 February 2026, the United States and Israel launched joint airstrikes on Iran, starting the 2026 Iran war. The strikes targeted Iranian officials, military commanders, and military assets, assassinating Ali Khamenei, the supreme leader of Iran. Iran responded with missile and drone strikes against Israel, U.S. bases, and Arab countries in the Middle East, as well as closing the Strait of Hormuz.  Most countries did not take a definitive side in the conflict but called for peace. In the Middle …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Middle Eastern crisis (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
+          "score": 0.022244692,
+          "snippet": "The Middle East is experiencing an ongoing series of interrelated wars, conflicts, and heightened instability as a result of the Gaza war and genocide. These have primarily consisted of conflicts between Israel and Iran-backed militias that form the \"Axis of Resistance\", including Hamas in the Gaza Strip, Hezbollah in Lebanon, and the Houthis in Yemen; Iran itself has also been involved. Allies of Israel, including the United States, the United Kingdom, and France, have also intervened militarily in various theaters. The crisis has involved all Middle Eastern countries, significantly affecting…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Hezbollah",
           "url": "https://en.wikipedia.org/wiki/Hezbollah",
-          "score": 0.014705882,
-          "snippet": "ate=2 April 2010}} Israel Defence Minister Shaul Mofaz said that Hezbollah abducted the soldiers and then killed them. The bodies of the slain soldiers were exchanged for Lebanese prisoners in 2004.  The 2006 Lebanon War was a 34-day military conflict in Lebanon and northern Israel. The principal parties were Hezbollah paramilitary forces and the Israeli military. The conflict was precipitated by a cross-border raid during which Hezbollah kidnapped and killed Israeli soldiers. The conflict began on 12 July 2006 when Hezbollah militants fired rockets at Israeli border towns as a diversion for a…"
+          "score": 0.022031963,
+          "snippet": "alone, has been designated as a terrorist group by at least 28 countries as of April 2026, including most Western countries.  Since October 2023, Hezbollah has been at war with Israel. During this war, Nasrallah was assassinated after 32 years of leading the group, along with other key members of Hezbollah leadership. The conflict has led to the 2024 Lebanon War, which saw Southern Lebanon invaded by Israel, followed by a ceasefire. On 7 August 2025, in a government meeting specifically addressing the disarmament of Hezbollah, the majority of the government voted to approve the decision. The L…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lebanon",
+          "url": "https://en.wikipedia.org/wiki/Lebanon",
+          "score": 0.020999469,
+          "snippet": "f  On 12 July 2006, Hezbollah launched a series of rocket attacks and raids into Israeli territory, where they killed three Israeli soldiers and captured two others. Israel responded with airstrikes and artillery fire on targets in Lebanon, and a ground invasion of southern Lebanon, resulting in the 2006 Lebanon War. The conflict was officially ended by the UNSC Resolution 1701 on 14 August 2006, which ordered a ceasefire, the withdrawal of Israeli forces from Lebanon, and the disarmament of Hezbollah. Some 1,191 Lebanese and 160 Israelis were killed in the conflict. Beirut's southern suburb w…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026",
+          "url": "https://en.wikipedia.org/wiki/2026",
+          "score": 0.019904932,
+          "snippet": "ending 16 years of FideszâKDNP rule. 2026 Beninese presidential election: Independent candidate Romuald Wadagni wins in a landslide with over 94% of the vote. April 13 â 2026 Iran war: A blockade of Iranian ports by the United States takes effect, with President Trump warning that any Iranian vessels attempting to challenge it will be \"immediately eliminated\". Maritime authorities advise ships in the region to expect increased military activity and possible interception procedures. April 16 â 2026 Lebanon war: A US-brokered 10-day ceasefire takes effect between Israel and Lebanon, follow…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.019494392,
+          "snippet": "forces monitoring Strait of Hormuz to ensure it stays open|agency=Reuters|publisher=Internazionale|date=20 June 2026}}  In the aftermath of the outbreak of the Gaza war in October 2023, Israel and the Lebanese Shia militia Hezbollah have been engaged in conflict, as part of a longer stretch of hostilities between the two since the latter's founding in 1982. Hezbollah launched strikes against Israel after the 7 October 2023 attacks, which it said was in solidarity with the Palestinians. After a year of fighting, Israel invaded southern Lebanon in October 2024, pulling out after a US-brokered ce…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nabatieh",
+          "url": "https://en.wikipedia.org/wiki/Nabatieh",
+          "score": 0.019480519,
+          "snippet": "more than 52. Lebanon accused Israel of carrying out a massacre but Israel claimed they were targeting \"military targets\".  The Israeli military has put a focus on Nabatieh in its 2026 war against Lebanon with the aim of putting pressure on Lebanon's Shia population by destroying their economic engines as Nabatieh is the \"administrative, economic, and symbolic heart of the south\". The IDF issued forced displacement orders for the city on 26 May despite of a ceasefire reached in April and continued airstrikes against it, causing the city to become \"effectively empty\". Israel claims"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Israel Katz",
+          "url": "https://en.wikipedia.org/wiki/Israel_Katz",
+          "score": 0.019367449,
+          "snippet": "in Gaza, including the bombing of hospitals and infrastructure, and of intercepting aid convoys in international waters.  On 24 March 2026, as part of the ongoing 2026 Iran War, Katz announced that Israel would occupy the south of Lebanon up to the Litani River to serve as what he described a \"defensive buffer\", an announcement which came after calls from Bezalel Smotrich for Israel to annex the area. On 31 March, Katz announced plans to demolish residential structures in Lebanese villages near the border and prevent the return of approximately 600,000 displaced residents to southern Lebanon. …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Lebanon war",
+          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
+          "score": 0.01835093,
+          "snippet": "other settlements in southern Lebanon or northern Israel. Israeli troops destroyed buildings in Khiam and other border towns.  Israel agreed to a two-week ceasefire with Iran as part of the 7 April 2026 Iran war ceasefire. Although Pakistani prime minister Shehbaz Sharif said that the ceasefire includes all fronts of the war, including Lebanon, Israel rejected Sharif's condition, asserting that the ceasefire \"does not include Lebanon.\" The United States has also said that the ceasefire does not include Lebanon. Hezbollah said that it had halted attacks on Israel and on Israeli soldiers in Leba…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of Lebanon",
+          "url": "https://en.wikipedia.org/wiki/History_of_Lebanon#Cedar_Revolution_and_2006_War_(2005–2006)",
+          "score": 0.017099014,
+          "snippet": "History of Lebanon  that it was responsible for the attack and insisted again that it was a domestic action challenging his government's authority.  The 2006 Lebanon War was a 34-day military conflict in Lebanon and northern Israel. The principal parties were Hezbollah paramilitary forces and the Israeli military. The conflict started on 12 July 2006, and continued until a United Nations -brokered ceasefire went into effect in the morning on 14 August 2006, though it formally ended on 8 September 2006 when Israel lifted its naval blockade of Lebanon."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lebanon",
+          "url": "https://en.wikipedia.org/wiki/Lebanon",
+          "score": 0.01547044,
+          "snippet": "It has been the scene of several conflicts with Israel, of which the ongoing war marks the fourth Israeli invasion since 1978.  Lebanon is a developing country, ranked 102nd on the Human Development Index. It has been classified as a lower-middle-income country. The Lebanese liquidity crisis, coupled with nationwide corruption and disasters such as the 2020 Beirut explosion, precipitated the collapse of Lebanon's currency and fomented political instability, widespread resource shortages, and high unemployment and poverty. The World Bank has defined Lebanon's economic crisis as one of the world…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1342,17 +1405,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "2026 Lebanon war",
-          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
-          "score": 0.014492754,
-          "snippet": "of the US, Iran and Pakistan agreed on June 21 to create a joint mechanism of consultation in order to resolve this issue.  As of 20 June, at least 4,057 people have been killed and 12,121 wounded by Israeli strikes in Lebanon during the 2026 Lebanon war. Internal Hezbollah sources said that over 1,000 Hezbollah fighters had been killed in the war while the Israel Defense Forces (IDF) said that it had killed 1,700 fighters.  On 2 March, the first day of the war, Lebanon's Health Ministry reported that at least 31 people had been killed and 149 injured in the initial Israeli strikes, including …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Middle Eastern crisis (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
-          "score": 0.014492754,
-          "snippet": "The Middle East is experiencing an ongoing series of interrelated wars, conflicts, and heightened instability as a result of the Gaza war and genocide. These have primarily consisted of conflicts between Israel and Iran-backed militias that form the \"Axis of Resistance\", including Hamas in the Gaza Strip, Hezbollah in Lebanon, and the Houthis in Yemen; Iran itself has also been involved. Allies of Israel, including the United States, the United Kingdom, and France, have also intervened militarily in various theaters. The crisis has involved all Middle Eastern countries, significantly affecting…"
+          "title": "2006 Lebanon War",
+          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War#Winograd_Commission_report",
+          "score": 0.0146857565,
+          "snippet": "2006 Lebanon War  According to the Winograd Commission report, the Second Lebanon War was regarded as a \"missed opportunity\" and that \"Israel initiated a long war, which ended without a defined military victory\". The report continued to state that \"a semi-military organization of a few thousand men resisted, for a few weeks, the strongest army in the Middle East, which enjoyed full air superiority and size and technology advantages.\" Furthermore, Hezbollah 's rocket attacks continued throughout the war and the IDF did not provide an effective response to it. Following a long period of using st…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1370,66 +1426,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Hezbollah–Israel conflict (2023–present)",
-          "url": "https://en.wikipedia.org/wiki/Hezbollah–Israel_conflict_(2023–present)",
-          "score": 0.01369863,
-          "snippet": "the 2006 Lebanon War. In Arabic, the conflict (2023â2024) is referred to as the \"Support War\" or the \"Gaza Support War.\"  On 8 October 2023, Hezbollah started firing guided rockets and artillery shells at Israeli positions in the Shebaa Farms, which it said was in solidarity with Palestinians following the 7 October Hamas-led attack on Israel and beginning of Israeli bombing of the Gaza Strip. Israel retaliated by launching drone strikes and artillery shells at Hezbollah positions. Israel also carried out airstrikes throughout Lebanon and in Syria. In northern Israel, the ongoing conflict ha…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Hezbollah",
-          "url": "https://en.wikipedia.org/wiki/Hezbollah",
-          "score": 0.01369863,
-          "snippet": "alone, has been designated as a terrorist group by at least 28 countries as of April 2026, including most Western countries.  Since October 2023, Hezbollah has been at war with Israel. During this war, Nasrallah was assassinated after 32 years of leading the group, along with other key members of Hezbollah leadership. The conflict has led to the 2024 Lebanon War, which saw Southern Lebanon invaded by Israel, followed by a ceasefire. On 7 August 2025, in a government meeting specifically addressing the disarmament of Hezbollah, the majority of the government voted to approve the decision. The L…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "History of Lebanon",
-          "url": "https://en.wikipedia.org/wiki/History_of_Lebanon#The_Lebanese_Civil_War:_1975–1990",
-          "score": 0.013513514,
-          "snippet": "History of Lebanon  The Lebanese Civil War had its origin in the conflicts and political compromises of Lebanon's post-Ottoman period and was exacerbated by the nation's changing demographic trends, inter-religious strife, and proximity to Syria, the Palestine Liberation Organization, and Israel. By 1975, Lebanon was a religiously and ethnically diverse country with most dominant groups of Maronite Christians, Eastern Orthodox Christians, Sunni Muslims and Shia Muslims; with significant minorities of Druze, Kurds, Armenians, and Palestinian refugees and their descendants.  Events and political…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2026 Lebanon war",
-          "url": "https://en.wikipedia.org/wiki/2026_Lebanon_war",
-          "score": 0.013513514,
-          "snippet": "On 15 June, Pakistan, the primary mediator, stated that both the United States and Iran declared the \"immediate and permanent termination of military operations on all fronts, including in Lebanon\" as part of the agreement to end the 2026 Iran war. Israel stated that its forces will remain in Lebanon. In the afternoon, Hezbollah said that it has not conducted any operations since the announcement of the agreement. One person was killed in an Israeli drone strike on a vehicle in Kfar Tibnit. Displaced people began returning home. Israeli shelling was still happening in some areas. Despite relat…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2006 Lebanon War",
-          "url": "https://en.wikipedia.org/wiki/2006_Lebanon_War#International_action_and_reaction",
-          "score": 0.013333334,
-          "snippet": "2006 Lebanon War  The governments of the United States, United Kingdom, Germany, Australia, and Canada asserted Israel's right to self-defense. The United States government further responded by authorizing Israel's request for expedited shipment of precision-guided bombs, but did not announce the decision publicly. United States President George W. Bush said he thought the conflict was part of the \" War on Terrorism \". On 20 July 2006, the United States Congress voted overwhelmingly to support Israel's \"right to defend itself\".  Among neighboring Middle Eastern nations, Iran, Syria, and Yemen …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Lebanon",
-          "url": "https://en.wikipedia.org/wiki/Lebanon",
-          "score": 0.013333334,
-          "snippet": "The month-long 2006 war severely damaged Lebanon's fragile economy, especially the tourism sector. According to a preliminary report published by the Lebanese Ministry of Finance on 30 August 2006, a major economic decline was expected as a result of the fighting."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Arab–Israeli conflict",
-          "url": "https://en.wikipedia.org/wiki/Arab%E2%80%93Israeli_conflict#Lebanon",
-          "score": 0.013157895,
-          "snippet": "Arab–Israeli conflict  Armed conflict lasted until July 1971 with the expulsion of the PLO and thousands of Palestinian fighters to Lebanon.  The PLO resettled in Lebanon, where it began to extend a de facto autonomous rule and from which it staged raids into Israel. PLO was one of the major factors for sectarian destabilization of Lebanon and the eruption of the Lebanese Civil War in 1975. In 1978, Israel launched Operation Litani, in which it together with the Free Lebanon Army forced the PLO to retreat north of the Litani river. In 1981 another conflict between Israel and the PLO broke out,…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Disarmament of Hezbollah",
-          "url": "https://en.wikipedia.org/wiki/Disarmament_of_Hezbollah",
-          "score": 0.013157895,
-          "snippet": "capable than the Lebanese Armed Forces (LAF), operates outside the state, undermining national sovereignty and the rule of law.  Since its establishment, Hezbollah has played a central role in many armed conflicts against Lebanon, Israel, and Syria. It played a major role in the Lebanese Civil War, managing to exclude itself from the Taif agreement signed by all other parties of the Lebanese Civil War in 1989. Until 2000, it fought a guerrilla war in Southern Lebanon against Israel, leading to its withdrawal. In 2006, Hezbollah's cross-border raid kidnapping two Israeli soldiers started a 34-d…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Nabatieh",
-          "url": "https://en.wikipedia.org/wiki/Nabatieh",
-          "score": 0.012987013,
-          "snippet": "more than 52. Lebanon accused Israel of carrying out a massacre but Israel claimed they were targeting \"military targets\".  The Israeli military has put a focus on Nabatieh in its 2026 war against Lebanon with the aim of putting pressure on Lebanon's Shia population by destroying their economic engines as Nabatieh is the \"administrative, economic, and symbolic heart of the south\". The IDF issued forced displacement orders for the city on 26 May despite of a ceasefire reached in April and continued airstrikes against it, causing the city to become \"effectively empty\". Israel claims"
+          "title": "Black War",
+          "url": "https://en.wikipedia.org/wiki/Black_War#Deaths",
+          "score": 0.0121951215,
+          "snippet": "Black War  in the north-west conflict should be added to this figure, giving over 1,000 Aboriginal deaths in the conflict across Tasmania.  Ryan states that there were 191 recorded deaths of colonists in the conflict from November 1823 to January 1834, and another 10 deaths after this. Clements, who studied a wider range of sources, states that there were 450 casualties among colonists, including 219 recorded deaths, in the eastern conflict from 1824 to 1831. However, the number killed or wounded was probably under-reported due to administrative inefficiency and because the colonists did not w…"
         }
       ],
       "source_score": {
@@ -1453,8 +1453,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 31,
-      "search_ms": 1886,
+      "embed_ms": 32,
+      "search_ms": 876,
       "corpora_hit": [
         "wikipedia"
       ],

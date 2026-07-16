@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-summarize-pilot-v1",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784232698,
+  "started_at_unix": 1784234597,
   "results": [
     {
       "question_id": "summary_einstein",
@@ -34,7 +34,7 @@
           "corpus_id": "wikipedia",
           "title": "Albert Einstein",
           "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
-          "score": 0.020397209,
+          "score": 0.04273701,
           "snippet": "Albert Einstein  In the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose, he laid the groundwork for Bose-Einstein statistics. For much of the last phase of his academic life, Einstein worked on two endeavors that proved ultimately unsuccessful. First, he advocated against quantum theory's introduction of fundamental randomness into science's picture of t…"
         },
         {
@@ -97,14 +97,14 @@
           "corpus_id": "wikipedia",
           "title": "History of general relativity",
           "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Developing_general_relativity",
-          "score": 0.017921148,
+          "score": 0.017361112,
           "snippet": "History of general relativity  about nature\"; fellow laureate Paul Dirac was quoted saying it was \"probably the greatest scientific discovery ever made\".  There have been claims that scrutiny of the specific photographs taken on the Eddington expedition showed the experimental uncertainty to be comparable to the magnitude of the effect Eddington claimed to have demonstrated, and that a 1962 British expedition concluded that the method was inherently unreliable. The deflection of light during a solar eclipse was confirmed by later, more accurate observations. Some resented the newcomer's fame, …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Isaac Newton",
           "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Fame",
-          "score": 0.018224575,
+          "score": 0.017396186,
           "snippet": "Isaac Newton  has existed such and so great an ornament of the human race! He was born on 25th December 1642, and died on 20th March 1726.  In 2005, a dual survey of both the public and of members of Britain's Royal Society (formerly headed by Newton) asking who had the greater effect on the history of science, Newton or Albert Einstein, both the Royal Society members and the public deemed Newton to have made the greater overall contributions. In 1999, an opinion poll of 100 of the day's leading physicists voted Einstein the \"greatest physicist ever,\" with Newton the runner-up, while a paralle…"
         }
       ],
@@ -133,7 +133,7 @@
         "ratio": 0.5
       },
       "embed_ms": 0,
-      "search_ms": 4843,
+      "search_ms": 5053,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -268,7 +268,7 @@
         "ratio": 0.3
       },
       "embed_ms": 0,
-      "search_ms": 2171,
+      "search_ms": 2244,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -317,15 +317,15 @@
         {
           "corpus_id": "wikipedia",
           "title": "Introduction to evolution",
-          "url": "https://en.wikipedia.org/wiki/Introduction_to_evolution#Modern_synthesis",
-          "score": 0.018852457,
-          "snippet": "Introduction to evolution  The modern evolutionary synthesis is based on the concept that populations of organisms have significant genetic variation caused by mutation and by the recombination of genes during sexual reproduction. It defines evolution as the change in allelic frequencies within a population caused by genetic drift, gene flow between sub populations, and natural selection. Natural selection is emphasised as the most important mechanism of evolution; large changes are the result of the gradual accumulation of small changes over long periods of time."
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_evolution",
+          "score": 0.040064104,
+          "snippet": "Introduction to evolution  These differences accumulate resulting in changes within the population. This process is responsible for the many diverse life forms in the world. The modern understanding of evolution began with the 1859 publication of Charles Darwin's On the Origin of Species. In addition, Gregor Mendel's work with plants helped to explain the hereditary patterns of genetics. Fossil discoveries in palaeontology, advances in population genetics and a global network of scientific research have provided further details into the mechanisms of evolution. Scientists now have a good under…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "On the Origin of Species",
           "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species",
-          "score": 0.01969697,
+          "score": 0.032402985,
           "snippet": "On the Origin of Species  Huxley and his fellow members of the X Club to secularise science by promoting scientific naturalism. Within two decades, there was widespread scientific agreement that evolution, with a branching pattern of common descent, had occurred, but scientists were slow to give natural selection the significance that Darwin thought appropriate. During \"the eclipse of Darwinism\" from the 1880s to the 1930s, various other mechanisms of evolution were given more credit. With the development of the modern evolutionary synthesis in the 1930s and 1940s, Darwin's concept of evolutio…"
         }
       ],
@@ -354,7 +354,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1372,
+      "search_ms": 1424,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -368,23 +368,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "French Revolution",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Directory_(1795–1799)",
-          "score": 1.0,
-          "snippet": "French Revolution  of pressure from below, the Jacobin clubs became supporters of the Directory, largely to prevent restoration of the monarchy.  Removal of price controls and a collapse in the value of the assignat led to inflation and soaring food prices. By April 1796, over 500,000 Parisians were unemployed, resulting in the May insurrection known as the Conspiracy of the Equals. Led by the revolutionary François-Noël Babeuf, their demands included immediate implementation of the 1793 Constitution, and a more equitable distribution of wealth. Despite support from sections of the military, t…"
+          "url": "https://en.wikipedia.org/wiki/French_Revolution",
+          "score": 0.021701388,
+          "snippet": "French Revolution  The French Revolution was a period of political and societal change in France that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central to modern French political discourse. Its causes are generally agreed to be a combination of social, political, and economic factors, which the Ancien Régime proved unable to manage. A financial crisis and widespread social distress…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "French Revolution",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Directory_(1795–1799)",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution",
           "score": 1.0,
-          "snippet": "French Revolution  reforms made allowing steady expansion of French industry. Many of these remained in place for much of the 19th century.  Prior to 1797, three of the five Directors were firmly Republican; Barras, Révellière-Lépeaux and Jean-François Rewbell, as were around 40% of the legislature. The same percentage were broadly centrist or unaffiliated, along with two Directors, Étienne-François Letourneur and Lazare Carnot. Although only 20% were committed Royalists, many centrists supported the restoration of the exiled Louis XVIII of France in the belief this would bring peace. The elec…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "French Revolution",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Directory_(1795–1799)",
-          "score": 0.020128824,
-          "snippet": "French Revolution  The removal of his conservative opponents opened the way for direct conflict between Barras, and those on the left.  Fighting continued despite general war weariness, and the 1798 elections saw a resurgence in Jacobin strength. Napoleon's invasion of Egypt in July 1798 confirmed European fears of French expansionism, and the War of the Second Coalition began in November. Without a majority in the legislature, the Directors relied on the army to enforce decrees, and extract revenue from conquered territories. Generals like Napoleon and Joubert were now central to the politica…"
+          "snippet": "French Revolution  Military defeats following the outbreak of the French Revolutionary Wars in April 1792 resulted in the insurrection of 10 August 1792. The monarchy was replaced by the French First Republic in September, while Louis XVI was executed in January 1793. After another revolt in June 1793, the constitution was suspended, and adequate political power passed from the National Convention to the Committee of Public Safety. About 16,000 people were executed in a Reign of Terror, which ended in July 1794. Weakened by external threats and internal opposition, the Republic was replaced in…"
         },
         {
           "corpus_id": "wikipedia",
@@ -489,7 +482,7 @@
         "ratio": 0.3
       },
       "embed_ms": 0,
-      "search_ms": 2123,
+      "search_ms": 2166,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -510,51 +503,51 @@
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
           "score": 1.0,
-          "snippet": "Immanuel Kant  Kant makes a distinction between two sources of knowledge:  Second, he makes a distinction in terms of the form of knowledge:  An analytic proposition is true by nature of strictly conceptual relations. All analytic propositions are a priori (it is analytically true that no analytic proposition could be a posteriori). By contrast, a synthetic proposition is one the content of which includes something new. The truth or falsehood of a synthetic statement depends upon something more than what is contained in its concepts. The most obvious form of synthetic proposition is a simple e…"
+          "snippet": "Immanuel Kant  of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy \".  In his doctrine of transcendental idealism, Kant argued that space and time are mere \"forms of intuition\" that structure all experience and that the objects of experience are mere \"appearances\". The nature of things as they are in themselves is unknowable to us. In an attempt to counter the philosophical doctrine of skepticism, he wrote the Critique of Pure Reason (1781/1787), his best-known work. Kant drew a parallel to the Copernican Revolution in hi…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
           "score": 1.0,
-          "snippet": "Immanuel Kant  Philosophers such as David Hume believed that these were the only possible kinds of human reason and investigation, which he called \"relations of ideas\" and \"matters of fact\". Establishing the synthetic a priori as a third mode of knowledge would allow Kant to push back against Hume's skepticism about such matters as causation and metaphysical knowledge more generally. This is because, unlike a posteriori cognition, a priori cognition has \"true or strict... universality\" and includes a claim of \"necessity\". Kant himself regards it as uncontroversial that we do have synthetic a p…"
+          "snippet": "Immanuel Kant  the social sciences, particularly sociology and anthropology, which regard human activities as pre-oriented by cultural norms.  Kant believed that reason is the source of morality, and that aesthetics arises from a faculty of disinterested judgment. Kant's religious views were deeply connected to his moral theory. Their exact nature remains in dispute. He hoped that perpetual peace could be secured through an international federation of republican states and international cooperation. His cosmopolitan reputation is called into question by his promulgation of scientific racism fo…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
           "score": 1.0,
-          "snippet": "Immanuel Kant  It is the twofold aim of the Critique both to prove and to explain the possibility of this knowledge. Kant says \"There are two stems of human cognition, which may perhaps arise from a common but to us unknown root, namely sensibility and understanding, through the first of which objects are given to us, but through the second of which they are thought.\""
+          "snippet": "Immanuel Kant  When he nevertheless published a second edition in 1794, the censor was so irate that he arranged for a royal order that required Kant never to publish or even speak publicly about religion. Kant then published his response to the King's reprimand and explained himself in the preface of The Conflict of the Faculties."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
-          "score": 0.021570317,
-          "snippet": "Immanuel Kant  more than what is contained in its concepts. The most obvious form of synthetic proposition is a simple empirical observation."
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  He also wrote a number of semi-popular essays on history, religion, politics, and other topics. These works were well received by Kant's contemporaries and confirmed his preeminent status in eighteenth-century philosophy. There were several journals devoted solely to defending and criticizing Kantian philosophy. Despite his success, philosophical trends were moving in another direction. Many of Kant's most important disciples and followers (including Reinhold, Beck, and Fichte) transformed the Kantian position. The progressive stages of revision of Kant's teachings marked the em…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
           "score": 1.0,
-          "snippet": "Immanuel Kant  Kant's term for the object of sensibility is intuition, and his term for the object of the understanding is concept. In general terms, the former is a non-discursive representation of a particular object, and the latter is a discursive (or mediate) representation of a general type of object. The conditions of possible experience require both intuitions and concepts, that is, the affection of the receptive sensibility and the actively synthesizing power of the understanding. Thus the statement: \"Thoughts without content are empty, intuitions without concepts are blind.\" Kant's ba…"
+          "snippet": "Immanuel Kant  In 1800, a student of Kant named Gottlob Benjamin Jäsche (1762–1842) published a manual of logic for teachers called Logik, which he had prepared at Kant's request. Jäsche prepared the Logik using a copy of a textbook in logic by Georg Friedrich Meier entitled Excerpt from the Doctrine of Reason, in which Kant had written copious notes and annotations. The Logik has been considered of fundamental importance to Kant's philosophy, and the understanding of it. The great 19th-century logician Charles Sanders Peirce remarked, in an incomplete review of Thomas Kingsmill Abbott 's Engl…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
-          "score": 1.0,
-          "snippet": "Immanuel Kant  This insight is known as Kant's \"Copernican revolution\", because, just as Copernicus advanced astronomy by way of a radical shift in perspective, so Kant here claims do the same for metaphysics. The second half of the Critique is the explicitly critical part. In this \"transcendental dialectic\", Kant argues that many of the claims of traditional rationalist metaphysics violate the criteria he claims to establish in the first, \"constructive\" part of his book. As Kant observes, \"human reason, without being moved by the mere vanity of knowing it all, inexorably pushes on, driven by …"
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 0.044188596,
+          "snippet": "Immanuel Kant  but in its position within the whole of Kant's work.\""
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
           "score": 1.0,
-          "snippet": "Immanuel Kant  than what is contained in its concepts. The most obvious form of synthetic proposition is a simple empirical observation."
+          "snippet": "Immanuel Kant  a stance on philosophical questions, Kant opposed these developments and publicly denounced Fichte in an open letter in 1799."
         },
         {
           "corpus_id": "wikipedia",
@@ -581,8 +574,15 @@
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
           "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
-          "score": 0.021929825,
+          "score": 0.042489033,
           "snippet": "Immanuel Kant  Against this, Kant reasserts his own insistence upon the necessity of a sensible component in all genuine knowledge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Anti-war movement",
+          "url": "https://en.wikipedia.org/wiki/Anti-war_movement",
+          "score": 0.035662927,
+          "snippet": "es to warn against or fight against wars.  Immanuel Kant: In (1795) \"Perpetual Peace\" (\"Zum ewigen Frieden\"). Immanuel Kant booklet on \"Perpetual Peace\" in 1795. Politically, Kant was one of the earliest exponents of the idea that perpetual peace could be secured through universal democracy and international cooperation."
         },
         {
           "corpus_id": "wikipedia",
@@ -590,13 +590,6 @@
           "url": "https://en.wikipedia.org/wiki/Kantian_ethics#The_Metaphysics_of_Morals",
           "score": 0.039628483,
           "snippet": "Kantian ethics  as such, and in this way to set forth completely the whole of morals, needs anthropology for its application to human beings.  His promised Metaphysics of Morals, however, was much delayed and did not appear until its two parts, The Doctrine of Right and The Doctrine of Virtue, were published separately in 1797 and 1798. In the twelve years between the Groundwork and The Doctrine of Right, Kant decided that the metaphysics of morals and its application should, after all, be integrated (though still as distinct from practical anthropology). The distinction between its groundwork…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "The World as Will and Representation",
-          "url": "https://en.wikipedia.org/wiki/The_World_as_Will_and_Representation#Relationship_to_earlier_philosophical_work",
-          "score": 0.040444344,
-          "snippet": "The World as Will and Representation  Furthermore, Schopenhauer states at the beginning that his book assumes the reader's prior knowledge of the philosophy of Immanuel Kant. Schopenhauer asserted that his philosophy was the natural continuation of Kant's, and is regarded by some as remaining more faithful to Kant's metaphysical system of transcendental idealism, expounded in the Critique of Pure Reason (1781), than any of the other later German idealists. However, The World as Will and Representation contains an appendix entitled \" Critique of the Kantian philosophy \", in which Schopenhauer r…"
         }
       ],
       "source_score": {
@@ -609,14 +602,14 @@
         "matched": [
           "transcendental idealism",
           "the Critique of Pure Reason",
-          "synthetic a priori knowledge",
           "the distinction between phenomena and noumena",
+          "space and time as a priori forms of intuition",
           "the categories of the understanding",
           "the Critique of Practical Reason",
           "central figure of the Enlightenment"
         ],
         "missing": [
-          "space and time as a priori forms of intuition",
+          "synthetic a priori knowledge",
           "the categorical imperative",
           "deontological / duty-based ethics"
         ],
@@ -624,7 +617,7 @@
         "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2119,
+      "search_ms": 2170,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -644,20 +637,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Middle East",
-          "url": "https://en.wikipedia.org/wiki/Middle_East",
-          "score": 0.018032786,
-          "snippet": "The region served as the intellectual and economic center of the Roman Empire and played an exceptionally important role due to its periphery on the Sasanian Empire. Thus, the Romans stationed up to five or six of their legions in the region for the sole purpose of defending it from Sasanian and Bedouin raids and invasions."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
-          "score": 0.019166667,
-          "snippet": "Ancient Rome  The Roman state evolved from an elective monarchy to a classical republic and then to an increasingly autocratic military dictatorship during the Empire."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Roman Empire",
           "url": "https://en.wikipedia.org/wiki/Roman_Empire",
           "score": 0.02377049,
@@ -667,43 +646,29 @@
           "corpus_id": "wikipedia",
           "title": "Western Roman Empire",
           "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
-          "score": 0.022580644,
+          "score": 0.036866356,
           "snippet": "Western Roman Empire  Roman cultural traditions continued throughout the territory of the Western Empire for long after its disappearance, and a recent school of interpretation argues that the great political changes can more accurately be described as a complex cultural transformation, rather than a fall."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Legacy",
-          "score": 0.022222223,
-          "snippet": "Fall of the Western Roman Empire  The Roman Empire was not only a political unity enforced by the use of military power; it was also the combined and elaborated civilization of the Mediterranean Basin and beyond. It included manufacture, trade, and architecture, widespread secular literacy, written law, and an international language of science and literature. The Western barbarians lost much of these higher cultural practices, but their redevelopment in the Middle Ages by polities aware of the Roman achievement formed the basis for the later development of Europe.  Observing the cultural and a…"
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.03218584,
+          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Byzantine Empire",
           "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
-          "score": 0.02153846,
-          "snippet": "Byzantine Empire  During the earlier Pax Romana period, the western parts of the empire became increasingly Latinised, while the eastern parts largely retained their preexisting Hellenistic culture. This created a dichotomy between the Greek East and Latin West. These cultural spheres continued to diverge after Constantine I (r. 324–337) moved the capital to Constantinople and legalised Christianity. Under Theodosius I (r. 379–395), Christianity became the state religion, and other religious practices were proscribed. Greek gradually replaced Latin for official use as Latin fell into disuse. T…"
+          "score": 0.0368364,
+          "snippet": "Byzantine Empire  The Byzantine Empire, also referred to as the Eastern Roman Empire, was the continuation of the Roman Empire centred in Constantinople during Late Antiquity and the Middle Ages. The eastern half of the Empire survived the conditions that caused the fall of the West in the 5th century AD, and continued to exist until the fall of Constantinople to the Ottoman Empire in 1453. During most of its existence, the empire remained the most powerful economic, cultural, and military force in the Mediterranean world. The term \"Byzantine Empire\" was only coined following the empire's demi…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
-          "score": 0.020895522,
-          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Crisis of the Third Century",
-          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century#Abstract",
-          "score": 0.018939395,
-          "snippet": "Crisis of the Third Century  the eastern provinces of Syria Palaestina and Aegyptus); and, between them, the Italian-centered Roman Empire proper.  The reign of Aurelian (270-275) marks a turning point in the crisis period. Aurelian successfully reunited the empire by defeating the two breakaway states, and carried out a series of reforms which helped restore some measure of stability to the Roman economy. The crisis is said to have ended with Diocletian and his restructuring of the Roman imperial government, economy and military. The last is seen as a pivotal moment in Roman history, signalin…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Crisis of the Third Century",
-          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
-          "score": 0.01796875,
-          "snippet": "Crisis of the Third Century  The last is seen as a pivotal moment in Roman history, signaling the beginning of the Dominate. The crisis resulted in such profound changes in the empire's institutions, society, economic life, and religion that it is increasingly seen by most historians as defining the transition between the historical periods of classical antiquity and late antiquity."
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Background",
+          "score": 0.033761468,
+          "snippet": "Western Roman Empire  Africa (roughly modern Tunisia). Octavian soon took Africa from Lepidus, while adding Sicilia (modern Sicily) to his holdings.  Upon the defeat of Mark Antony, a victorious Octavian controlled a united Roman Empire. The Empire featured many distinct cultures, all experienced a gradual Romanization. While the predominantly Greek culture of the East and the predominantly Latin culture of the West functioned effectively as an integrated whole, political and military developments would ultimately realign the Empire along those cultural and linguistic lines. More often than no…"
         },
         {
           "corpus_id": "wikipedia",
@@ -711,6 +676,13 @@
           "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
           "score": 0.018115941,
           "snippet": "Religion in ancient Rome  for the Imperial cult. The claim was further elaborated and justified in Vergil's poetic, Imperial vision of the past.  In the late Republic, the so-called Marian reforms supposedly did the following: lowered an existing property bar on conscription, increased the efficiency of Rome's armies, and made them available as instruments of political ambition and factional conflict. The consequent civil wars led to changes at every level of Roman society. Augustus' principate established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 0.028361345,
+          "snippet": "Ancient Rome  That empire was among the largest empires in the ancient world, covering around 5 million square kilometres in AD 117, with an estimated 50 to 90 million inhabitants, roughly 20% of the world's population at the time. The Roman state evolved from an elective monarchy to a classical republic and then to an increasingly autocratic military dictatorship during the Empire. Ancient Rome is often grouped into classical antiquity together with ancient Greece, and their similar cultures and societies are known as the Greco-Roman world. Ancient Roman civilisation has contributed to modern…"
         },
         {
           "corpus_id": "wikipedia",
@@ -730,15 +702,29 @@
           "corpus_id": "wikipedia",
           "title": "Crisis of the Third Century",
           "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
-          "score": 0.01764706,
-          "snippet": "Crisis of the Third Century  Roman commanders in the field, although nominally loyal to the state, became increasingly independent of Rome's central authority. During the crisis, there were at least 26 claimants to the title of emperor, mostly prominent Roman generals, who assumed imperial power over all or part of the empire. The same number of men became accepted by the Roman Senate as emperor during this period and so became legitimate emperors. By 268, the empire had split into three competing states: the Gallic Empire; the Palmyrene Empire; and, between them, the Italian-centered Roman Em…"
+          "score": 0.016666668,
+          "snippet": "Crisis of the Third Century  Roman commanders in the field, although nominally loyal to the state, became increasingly independent of Rome's central authority. During the crisis, there were at least 26 claimants to the title of emperor, mostly prominent Roman army generals, who assumed imperial power over all or part of the empire. The same number of men became accepted by the Roman Senate as emperor during this period and so became legitimate emperors. By 268, the empire had split into three competing states: the Gallic Empire; the Palmyrene Empire; and, between them, the Italian-centered Rom…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Migration Period",
-          "url": "https://en.wikipedia.org/wiki/Migration_Period#Viewpoints",
-          "score": 0.022131147,
-          "snippet": "Migration Period  maintenance of their own power. The arrival of the Huns helped prompt many groups to invade the provinces for economic reasons.  Halsall and Noble have argued that such changes stemmed from the breakdown in Roman political control, which exposed the weakness of local Roman rule. Instead of large-scale migrations, there were military takeovers by small groups of warriors and their families, who usually numbered only in the tens of thousands. The process involved active, conscious decision-making by Roman provincial populations.  The collapse of centralized control severely wea…"
+          "title": "History of science",
+          "url": "https://en.wikipedia.org/wiki/History_of_science#Greek_scholarship_under_Roman_rule",
+          "score": 0.015189874,
+          "snippet": "History of science  After the death of the Roman Emperor Marcus Aurelius in 180 CE, the favorable conditions for scholarship and learning in the Roman Empire were upended by political unrest, civil war, urban decay, and looming economic crisis. In around 250 CE, barbarians began attacking and invading the Roman frontiers. These combined events led to a general decline in political and economic conditions. The living standards of the Roman upper class was severely impacted, and their loss of leisure diminished scholarly pursuits. Moreover, during the 3rd and 4th centuries CE, the Roman Empire w…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient history",
+          "url": "https://en.wikipedia.org/wiki/Ancient_history#Late_antiquity",
+          "score": 0.026590483,
+          "snippet": "Ancient history  The Roman Empire underwent considerable social, cultural and organizational change starting with reign of Diocletian, who began the custom of splitting the empire into eastern and western halves ruled by multiple emperors. Constantine the Great began the process of Christianizing the empire and established a new capital at Constantinople. Migrations of Germanic tribes disrupted Roman rule from the late 4th century onwards, culminating in the eventual collapse of the empire in the West in 476, replaced by the so-called barbarian kingdoms. The resultant cultural fusion of Greco-…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Egypt",
+          "url": "https://en.wikipedia.org/wiki/Roman_Egypt#Roman_government_in_Egypt",
+          "score": 0.021852518,
+          "snippet": "Roman Egypt  As Rome overtook the Ptolemaic system in place for areas of Egypt, they made many changes. The effect of the Roman conquest was at first to strengthen the position of the Greeks and of Hellenism against Egyptian influences. Some of the previous offices and names of offices under the Hellenistic Ptolemaic rule were kept, some were changed, and some names would have remained but the function and administration would have changed.  The Romans introduced important changes in the administrative system, aimed at achieving a high level of efficiency and maximizing revenue. The duties of …"
         },
         {
           "corpus_id": "wikipedia",
@@ -756,20 +742,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Alexiad",
-          "url": "https://en.wikipedia.org/wiki/Alexiad#Abstract",
-          "score": 0.02096774,
-          "snippet": "Alexiad  The Alexiad (Greek: Ἀλεξιάς, romanized: Alexias) is a medieval historical and biographical text written around the year 1148, by the Byzantine princess Anna Komnene, daughter of Emperor Alexios I Komnenos. It was written in a form of artificial Attic Greek. Anna described the political and military history of the Byzantine Empire during the reign of her father, thus providing a significant account on the Byzantium of the High Middle Ages. Among other topics, the Alexiad documents the Byzantine Empire's interaction with the Crusades and highlights the conflicting perceptions of the Eas…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Spain",
-          "url": "https://en.wikipedia.org/wiki/Spain#Spanish_Empire",
-          "score": 0.019565217,
-          "snippet": "Spain  The Protestant Reformation increased Spain's involvement in religiously charged wars, forcing ever-expanding military efforts across Europe and in the Mediterranean. By the middle decades of a war- and plague -ridden 17th-century Europe, the Spanish Habsburgs had enmeshed the country in continent-wide religious-political conflicts. These conflicts drained it of resources and undermined the economy generally. Spain managed to hold on to most of the scattered Habsburg empire, and help the imperial forces of the Holy Roman Empire reverse a large part of the advances made by Protestant forc…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Chariot racing",
           "url": "https://en.wikipedia.org/wiki/Chariot_racing",
           "score": 0.0203125,
@@ -777,24 +749,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
-          "score": 1.0,
-          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure. In 376, a large migration of Goths and other non-Roman people, fleeing from the Huns, entered the Empire. Roman forces were unable to exterminate, expel or subjugate them. In 395, after winning two destructive civil wars, Theodosius I died. He left a collapsing field army, and the Empire divided between the warring ministers of his two incapable sons. Goths and other non-Romans became a force that could challenge ei…"
+          "title": "Spain",
+          "url": "https://en.wikipedia.org/wiki/Spain",
+          "score": 0.019852942,
+          "snippet": "the Portuguese Succession, clashes with the Ottomans, intervention in the French Wars of Religion, and the Anglo-Spanish War.  The Protestant Reformation increased Spain's involvement in religiously charged wars, forcing ever-expanding military efforts across Europe and in the Mediterranean. By the middle decades of a war- and plague-ridden 17th-century Europe, the Spanish Habsburgs had enmeshed Spain in continent-wide religious-political conflicts. These conflicts drained Spain of resources and undermined the economy generally. Spain managed to hold on to most of the scattered Habsburg empire…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Roman_Empire",
-          "score": 1.0,
-          "snippet": "Roman Empire  The Roman Empire ruled the Mediterranean and much of Europe, Western Asia and North Africa. The Romans conquered most of this during the Republic, and it was ruled by emperors following Octavian's assumption of effective sole rule in 27 BC. The western empire collapsed in 476 AD, but the eastern empire lasted until the fall of Constantinople in 1453. By 100 BC, Rome had expanded its rule to most of the Mediterranean and beyond. However, it was severely destabilized by civil wars and political conflicts, which culminated in the victory of Octavian over Mark Antony and Cleopatra at…"
+          "title": "First Bulgarian Empire",
+          "url": "https://en.wikipedia.org/wiki/First_Bulgarian_Empire#The_Balkans_during_the_early_Migration_Period",
+          "score": 0.020149253,
+          "snippet": "First Bulgarian Empire  Parts of the eastern Balkan Peninsula were in antiquity inhabited by the Thracians who were a group of Indo-European tribes. The whole region as far north as the Danube River was gradually incorporated into the Roman Empire by the 1st century AD. The decline of the Roman Empire after the 3rd century AD and the continuous invasions of Goths and Huns left much of the region devastated, depopulated and in economic decline by the 5th century. The surviving eastern half of the Roman Empire, called by later historians the Byzantine Empire, could not exercise effective control…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Roman_Empire",
-          "score": 1.0,
-          "snippet": "Roman Empire  The vast Roman territories were organized into senatorial provinces, governed by proconsuls who were appointed by lot annually, and imperial provinces, which belonged to the emperor but were governed by legates. The first two centuries of the Empire saw a period of unprecedented stability and prosperity known as the Pax Romana. Rome reached its greatest territorial extent under Trajan (r. 98–117 AD), but a period of increasing trouble and decline began under Commodus (r. 180–192). In the 3rd century, the Empire underwent a 50-year crisis that threatened its existence due to civil…"
+          "title": "Sociocultural evolution",
+          "url": "https://en.wikipedia.org/wiki/Sociocultural_evolution",
+          "score": 0.020454546,
+          "snippet": "Sociocultural evolution, sociocultural evolutionism or social evolution are theories of sociobiology and cultural evolution that describe how societies and culture change over time. Whereas sociocultural development traces processes that tend to increase the complexity of a society or culture, sociocultural evolution also considers process that can lead to decreases in complexity (degeneration) or that can produce variation or proliferation without any seemingly significant changes in complexity (cladogenesis). Sociocultural evolution is \"the process by which structural reorganization is affec…"
         },
         {
           "corpus_id": "wikipedia",
@@ -805,31 +777,59 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
           "score": 1.0,
-          "snippet": "Western Roman Empire  Though there were periods with more than one emperor ruling jointly before, the view that it was impossible for a single emperor to govern the entire Empire was institutionalized by emperor Diocletian following the disastrous civil wars and disintegrations of the Crisis of the Third Century. He introduced the system of the Tetrarchy in 286, with two senior emperors titled Augustus, one in the East and one in the West, each with an appointed subordinate and heir titled Caesar. Though the tetrarchic system would collapse in a matter of years, the East–West administrative di…"
+          "snippet": "Byzantine Empire  During the earlier Pax Romana period, the western parts of the empire became increasingly Latinised, while the eastern parts largely retained their preexisting Hellenistic culture. This created a dichotomy between the Greek East and Latin West. These cultural spheres continued to diverge after Constantine I (r. 324–337) moved the capital to Constantinople and legalised Christianity. Under Theodosius I (r. 379–395), Christianity became the state religion, and other religious practices were proscribed. Greek gradually replaced Latin for official use as Latin fell into disuse. T…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of Tunisia",
-          "url": "https://en.wikipedia.org/wiki/History_of_Tunisia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
           "score": 1.0,
-          "snippet": "History of Tunisia  The present day Republic of Tunisia, al-Jumhuriyyah at-Tunisiyyah, is situated in Northern Africa. Geographically situated between Libya to the east, Algeria to the west and the Mediterranean Sea to the north. Tunis is the capital and the largest city; it is near the ancient site of the city of Carthage. Throughout its recorded history, the physical features and environment of the land of Tunisia have remained fairly constant, although during ancient times more abundant forests grew in the north, and earlier in prehistory the Sahara to the south was not an arid desert. The …"
+          "snippet": "Byzantine Empire  The appearance of plague and a devastating war with Persia exhausted the empire's resources; the early Muslim conquests that followed saw the loss of the empire's richest provinces—Egypt and Syria—to the Rashidun Caliphate. In 698, Africa was lost to the Umayyad Caliphate, but the empire subsequently stabilised under the Isaurian dynasty. The empire was able to expand once more under the Macedonian dynasty, experiencing a two-century-long renaissance. This came to an end in 1071, with the defeat by the Seljuk Turks at the Battle of Manzikert. Thereafter, periods of civil war …"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of Tunisia",
-          "url": "https://en.wikipedia.org/wiki/History_of_Tunisia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
           "score": 1.0,
-          "snippet": "History of Tunisia  Near the mountainous Algerian border rises Jebel ech Chambi, the highest point in the country at 1544 meters. In the near south, a belt of salt lakes running east–west cuts across the country. Further south lies the Sahara desert, including the sand dunes of the Grand Erg Oriental."
+          "snippet": "Byzantine Empire  The empire was largely dismantled in 1204, following the Sack of Constantinople by Latin armies at the end of the Fourth Crusade; its former territories were then divided into competing Greek rump states and Latin realms. Despite the eventual recovery of Constantinople in 1261, the reconstituted empire would wield only regional power during its final two centuries of existence. Its remaining territories were progressively annexed by the Ottomans in perennial wars fought throughout the 14th and 15th centuries. The fall of Constantinople to the Ottomans in 1453 ultimately broug…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of Tunisia",
-          "url": "https://en.wikipedia.org/wiki/History_of_Tunisia#Abstract",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
           "score": 1.0,
-          "snippet": "History of Tunisia  The present day Republic of Tunisia, al-Jumhuriyyah at-Tunisiyyah, is situated in Northern Africa. Geographically situated between Libya to the east, Algeria to the west and the Mediterranean Sea to the north. Tunis is the capital and the largest city (population over 800,000); it is near the ancient site of the city of Carthage.  Throughout its recorded history, the physical features and environment of the land of Tunisia have remained fairly constant, although during ancient times more abundant forests grew in the north, and earlier in prehistory the Sahara to the south w…"
+          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure. In 376, a large migration of Goths and other non-Roman people, fleeing from the Huns, entered the Empire. Roman forces were unable to exterminate, expel or subjugate them. In 395, after winning two destructive civil wars, Theodosius I died. He left a collapsing field army, and the Empire divided between the warring ministers of his two incapable sons. Goths and other non-Romans became a force that could challenge ei…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 1.0,
+          "snippet": "Fall of the Western Roman Empire  By 476, the position of Western Roman Emperor wielded negligible military, political, or financial power, and had no effective control over the scattered Western domains that could still be described as Roman. Barbarian kingdoms had established their own power in much of the area of the Western Empire. In 476, the Germanic barbarian king Odoacer deposed the last emperor of the Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno. While its legitimacy lasted for centuries longer and its c…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 1.0,
+          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom, the Roman Republic, and the Roman Empire until the fall of the western empire. Ancient Rome began as an Italic settlement, traditionally dated to 753 BC, beside the River Tiber in the Italian Peninsula. The settlement grew into the city and polity of Rome, and came to control its neighbours through a combination of treaties and military strength. It …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 1.0,
+          "snippet": "Ancient Rome  It achieved impressive technological and architectural feats, such as the empire-wide construction of aqueducts and roads, as well as more grandiose monuments and facilities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
+          "score": 1.0,
+          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom (753–509 BC), the Roman Republic (509–27 BC), and the Roman Empire (27 BC–476 AD) until the fall of the western empire."
         }
       ],
       "source_score": {
@@ -840,24 +840,24 @@
       },
       "fact_score": {
         "matched": [
-          "transition from republic to empire under Augustus",
           "the Pax Romana",
           "vast territorial extent around the Mediterranean",
           "the legions and the military",
           "Roman law and administration",
-          "the spread of Christianity and Constantine",
           "division into Western and Eastern empires",
-          "the fall of the Western Roman Empire"
-        ],
-        "missing": [
-          "economy, trade, and infrastructure such as roads and aqueducts",
+          "the fall of the Western Roman Empire",
           "continuation as the Byzantine (Eastern) Empire"
         ],
+        "missing": [
+          "transition from republic to empire under Augustus",
+          "economy, trade, and infrastructure such as roads and aqueducts",
+          "the spread of Christianity and Constantine"
+        ],
         "total_expected": 10,
-        "ratio": 0.8
+        "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2123,
+      "search_ms": 2175,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -871,15 +871,78 @@
         {
           "corpus_id": "wikipedia",
           "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  Genetics is the study of genes and tries to explain what they are and how they work. Genes are how living organisms inherit features or traits from their ancestors; for example, children usually look like their parents because they have inherited their parents' genes. Genetics tries to identify which traits are inherited and to explain how these traits are passed from generation to generation."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  Genetics tries to identify which traits are inherited and to explain how these traits are passed from generation to generation.  Some traits are part of an organism's physical appearance, such as eye color or height. Other sorts of traits are not easily seen and include blood types or resistance to diseases. Some traits are inherited through genes, which is the reason why tall and thin people tend to have tall and thin children. Other traits come from interactions between genes and the environment, so a child who inherited the tendency of being tall will still be shor…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 0.023369566,
+          "snippet": "Introduction to genetics  For example, the chances of somebody dying of cancer or heart disease seems to depend on both their genes and their lifestyle.  Genes are made from a long molecule called DNA, which is copied and inherited across generations. DNA is made of simple units that line up in a particular order within it, carrying genetic information. The language used by DNA is called genetic code, which lets organisms read the information in the genes. This information is the instructions for the construction and operation of a living organism."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  the information in the genes. This information is the instructions for the construction and operation of a living organism.  The information within a particular gene is not always exactly the same between one organism and another, so different copies of a gene do not always give exactly the same instructions. Each unique form of a single gene is called an allele. As an example, one allele for the gene for hair color could instruct the body to produce much pigment, producing black hair, while a different allele of the same gene might give garbled instructions that fail…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  The function of genes is to provide the information needed to make molecules called proteins in cells. Cells are the smallest independent parts of organisms: the human body contains about 100 trillion cells, while very small organisms like bacteria are just a single cell. A cell is like a miniature and very complex factory that can make all the parts needed to produce a copy of itself, which happens when cells divide. There is a simple division of labor in cells—genes give instructions and proteins carry out these instructions, tasks like building a new copy of a cell…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  or less of the protein responsible. Genes tell cells what to do by telling them which proteins to make and in what amounts.  Proteins are made of a chain of 20 different types of amino acid molecules. This chain folds up into a compact shape, rather like an untidy ball of string. The shape of the protein is determined by the sequence of amino acids along its chain and it is this shape that, in turn, determines what the protein does. For example, some proteins have parts of their surface that perfectly match the shape of another molecule, allowing the protein to bind t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 0.026852693,
+          "snippet": "Introduction to genetics  to bind to this molecule very tightly. Other proteins are enzymes, which are like tiny machines that alter other molecules.  The information in DNA is held in the sequence of the repeating units along the DNA chain. These units are four types of nucleotides (A, T, G and C) and the sequence of nucleotides stores information in an alphabet called the genetic code. When a gene is read by a cell the DNA sequence is copied into a very similar molecule called RNA (this process is called transcription). Transcription is controlled by other DNA sequences (such as promoters), …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  active form. The process of moving information from the language of RNA into the language of amino acids is called translation.  If the sequence of the nucleotides in a gene changes, the sequence of the amino acids in the protein it produces may also change—if part of a gene is deleted, the protein produced is shorter and may not work anymore. This is the reason why different alleles of a gene can have different effects on an organism. As an example, hair color depends on how much of a dark substance called melanin is put into the hair as it grows. If a person has a n…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
           "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_are_copied",
           "score": 0.019791668,
           "snippet": "Introduction to genetics  Genes are copied each time a cell divides into two new cells. The process that copies DNA is called DNA replication. It is through a similar process that a child inherits genes from its parents when a copy from the mother is mixed with a copy from the father.  DNA can be copied very easily and accurately because each piece of DNA can direct the assembly of a new copy of its information. This is because DNA is made of two strands that pair together like the two sides of a zipper. The nucleotides are in the center, like the teeth in the zipper, and pair up to hold the t…"
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_are_copied",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  up properly, an A nucleotide must go opposite a T nucleotide, and a G opposite a C. This exact pairing is called base pairing.  When DNA is copied, the two strands of the old DNA are pulled apart by enzymes; then they pair up with new nucleotides and then close. This produces two new pieces of DNA, each containing one strand from the old DNA and one newly made strand. This process is not predictably perfect as proteins attach to a nucleotide while they are building and cause a change in the sequence of that gene. These changes in the DNA sequence are called mutations.…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Heredity",
           "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
-          "score": 0.024590163,
+          "score": 0.04266245,
           "snippet": "Heredity  Heritable traits are known to be passed from one generation to the next via DNA, a molecule that encodes genetic information. DNA is a long polymer that incorporates four types of bases, which are interchangeable. The Nucleic acid sequence (the sequence of bases along a particular DNA molecule) specifies the genetic information: this is comparable to a sequence of letters spelling out a passage of text. Before a cell divides through mitosis, the DNA is copied, so that each of the resulting two cells will inherit the DNA sequence. A portion of a DNA molecule that specifies a single fu…"
         },
         {
@@ -888,188 +951,6 @@
           "url": "https://en.wikipedia.org/wiki/Molecular_genetics#Structure_of_DNA",
           "score": 0.03665454,
           "snippet": "Molecular genetics  genetic code for all biological life and contains the information for all the proteins the organism will be able to synthesize.  Its unique structure allows DNA to store and pass on biological information across generations during cell division. At cell division, cells must be able to copy its genome and pass it on to daughter cells. This is possible due to the double-stranded structure of DNA because one strand is complementary to its partner strand, and therefore each of these strands can act as a template strand for the formation of a new complementary strand. This is wh…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Biology",
-          "url": "https://en.wikipedia.org/wiki/Biology#Genes_and_DNA",
-          "score": 0.019153226,
-          "snippet": "Biology  A gene is a unit of heredity that corresponds to a region of deoxyribonucleic acid (DNA) that carries genetic information that controls form or function of an organism. DNA is composed of two polynucleotide chains that coil around each other to form a double helix. It is found as linear chromosomes in eukaryotes, and circular chromosomes in prokaryotes. The set of chromosomes in a cell is collectively known as its genome. In eukaryotes, DNA is mainly in the cell nucleus. In prokaryotes, the DNA is held within the nucleoid. The genetic information is held within genes, and the complete…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA#Genes_and_genomes",
-          "score": 0.018849207,
-          "snippet": "DNA  Genomic DNA is tightly and orderly packed in the process called DNA condensation, to fit the small available volumes of the cell. In eukaryotes, DNA is located in the cell nucleus, with small amounts in mitochondria and chloroplasts. In prokaryotes, the DNA is held within an irregularly shaped body in the cytoplasm called the nucleoid. The genetic information in a genome is held within genes, and the complete set of this information in an organism is called its genotype. A gene is a unit of heredity and is a region of DNA that influences a particular characteristic in an organism. Genes c…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Genetics",
-          "url": "https://en.wikipedia.org/wiki/Genetics#DNA_and_chromosomes",
-          "score": 0.017463235,
-          "snippet": "Genetics  these histones are called chromosomes. Viruses sometimes use the similar molecule RNA instead of DNA as their genetic material.  DNA normally exists as a double-stranded molecule, coiled into the shape of a double helix. Each nucleotide in DNA preferentially pairs with its partner nucleotide on the opposite strand: A pairs with T, and C pairs with G. Thus, in its two-stranded form, each strand effectively contains all necessary information, redundant with its partner strand. This structure of DNA is the physical basis for inheritance: DNA replication duplicates the genetic informatio…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Central dogma of molecular biology",
-          "url": "https://en.wikipedia.org/wiki/Central_dogma_of_molecular_biology#DNA_replications",
-          "score": 0.017210145,
-          "snippet": "Central dogma of molecular biology  In the sense that DNA replication must occur if genetic material is to be provided for the progeny of any cell, whether somatic or reproductive, the copying from DNA to DNA arguably is the fundamental step in information transfer. A complex group of proteins called the replisome performs the replication of the information from the parent strand to the complementary daughter strand."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA replication",
-          "url": "https://en.wikipedia.org/wiki/DNA_replication#DNA_structure",
-          "score": 0.017418033,
-          "snippet": "DNA replication  DNA exists as a double-stranded structure, with both strands coiled together to form the characteristic double helix. Each single strand of DNA is a chain of four types of nucleotides. Nucleotides in DNA contain a deoxyribose sugar, a phosphate, and a nucleobase. The four types of nucleotide correspond to the four nucleobases adenine, cytosine, guanine, and thymine, commonly abbreviated as A, C, G, and T. Adenine and guanine are purine bases, while cytosine and thymine are pyrimidines. These nucleotides form phosphodiester bonds, creating the phosphate-deoxyribose backbone of …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA#Base_pairing",
-          "score": 0.017045455,
-          "snippet": "DNA  As a result of this base pair complementarity, all the information in the double-stranded sequence of a DNA helix is duplicated on each strand, which is vital in DNA replication. This reversible and specific interaction between complementary base pairs is critical for all the functions of DNA in organisms."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA",
-          "score": 0.015858209,
-          "snippet": "DNA  These compacting structures guide the interactions between DNA and other proteins, helping control which parts of the DNA are transcribed."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Vaccine",
-          "url": "https://en.wikipedia.org/wiki/Vaccine#DNA",
-          "score": 0.017418033,
-          "snippet": "Vaccine  A DNA vaccine uses a DNA plasmid (pDNA)) that encodes for an antigenic protein originating from the pathogen upon which the vaccine will be targeted. pDNA is inexpensive, stable, and relatively safe, making it an excellent option for vaccine delivery.  This approach offers a number of potential advantages over traditional approaches, including the stimulation of both B- and T-cell responses, improved vaccine stability, the absence of any infectious agent and the relative ease of large-scale manufacture."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Base pair",
-          "url": "https://en.wikipedia.org/wiki/Base_pair",
-          "score": 0.01984127,
-          "snippet": "Base pair  A base pair (bp) is a fundamental unit of double-stranded nucleic acids consisting of two nucleobases bound to each other by hydrogen bonds. They form the building blocks of the DNA double helix and contribute to the folded structure of both DNA and RNA. Dictated by specific hydrogen bonding patterns, \"Watson–Crick\" base pairs allow the DNA helix to maintain a regular helical structure that is subtly dependent on its nucleotide sequence. The complementary nature of this based-paired structure provides a redundant copy of the genetic information encoded within each strand of DNA. The…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA#Genes_and_genomes",
-          "score": 0.029897187,
-          "snippet": "DNA  not code protein may still encode functional non-coding RNA molecules, which are involved in the regulation of gene expression.  Some noncoding DNA sequences play structural roles in chromosomes. Telomeres and centromeres typically contain few genes but are important for the function and stability of chromosomes. An abundant form of noncoding DNA in humans are pseudogenes, which are copies of genes that have been disabled by mutation. These sequences are usually just molecular fossils, although they can occasionally serve as raw genetic material for the creation of new genes through the p…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Chromatin",
-          "url": "https://en.wikipedia.org/wiki/Chromatin#Structure_of_DNA",
-          "score": 0.020192308,
-          "snippet": "Chromatin  play a specific role in chromatin structure and transcription because of the properties of the junction between B- and Z-DNA.  At the junction of B- and Z-DNA, one pair of bases is flipped out from normal bonding. These play a dual role of a site of recognition by many proteins and as a sink for torsional stress from RNA polymerase or nucleosome binding.DNA bases are stored as a code structure with four chemical bases such as “Adenine (A), Guanine (G), Cytosine (C), and Thymine (T)”. The order and sequences of these chemical structures of DNA are reflected as information available f…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Base pair",
-          "url": "https://en.wikipedia.org/wiki/Base_pair#Abstract",
-          "score": 0.02016129,
-          "snippet": "Base pair  A base pair (bp) is a fundamental unit of double-stranded nucleic acids consisting of two nucleobases bound to each other by hydrogen bonds. They form the building blocks of the DNA double helix and contribute to the folded structure of both DNA and RNA. Dictated by specific hydrogen bonding patterns, \"Watson–Crick\" (or \"Watson–Crick–Franklin\") base pairs (guanine – cytosine and adenine – thymine) allow the DNA helix to maintain a regular helical structure that is subtly dependent on its nucleotide sequence. The complementary nature of this based-paired structure provides a redundan…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Nucleic acid",
-          "url": "https://en.wikipedia.org/wiki/Nucleic_acid#Abstract",
-          "score": 0.018382354,
-          "snippet": "Nucleic acid  acid (RNA). If the sugar is ribose, the polymer is RNA; if the sugar is deoxyribose, a variant of ribose, the polymer is DNA.  Nucleic acids are chemical compounds that are found in nature. They carry information in cells and make up genetic material. These acids are very common in all living things, where they create, encode, and store information in every living cell of every life-form on Earth. In turn, they send and express that information inside and outside the cell nucleus. From the inner workings of the cell to the young of a living thing, they contain and provide informa…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA repair",
-          "url": "https://en.wikipedia.org/wiki/DNA_repair#Nuclear_versus_mitochondrial",
-          "score": 0.01953125,
-          "snippet": "DNA repair  In human cells, and eukaryotic cells in general, DNA is found in two cellular locations – inside the nucleus and inside the mitochondria. Nuclear DNA (n-DNA) exists as chromatin during non-replicative stages of the cell cycle and is condensed into aggregate structures known as chromosomes during cell division. In either state the DNA is highly compacted and wound up around bead-like proteins called histones. Whenever a cell needs to express the genetic information encoded in its n-DNA the required chromosomal region is unraveled, genes located therein are expressed, and then the re…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "DNA ligase",
-          "url": "https://en.wikipedia.org/wiki/DNA_ligase",
-          "score": 0.017708335,
-          "snippet": "DNA ligase is a type of enzyme that facilitates the joining of DNA strands together by catalyzing the formation of a phosphodiester bond. It plays a role in repairing single-strand breaks in duplex DNA in living organisms, but some forms may specifically repair double-strand breaks. Single-strand breaks are repaired by DNA ligase using the complementary strand of the double helix as a template, with DNA ligase creating the final phosphodiester bond to fully repair the DNA. DNA ligase is used in both DNA repair and DNA replication. In addition, DNA ligase has extensive use in molecular biology …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Genetic linkage",
-          "url": "https://en.wikipedia.org/wiki/Genetic_linkage#Genes_affecting_recombination_frequency",
-          "score": 0.015858209,
-          "snippet": "Genetic linkage  Mutations in genes that encode proteins involved in the processing of DNA often affect recombination frequency. In bacteriophage T4, mutations that reduce expression of the replicative DNA polymerase increase recombination (decrease linkage) several fold. The increase in recombination may be due to replication errors by the defective DNA polymerase that are themselves recombination events such as template switches, i.e. copy choice recombination events. Recombination is also increased by mutations that reduce the expression of DNA ligase (gp30) and dCMP hydroxymethylase (gp42)…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Communication",
-          "url": "https://en.wikipedia.org/wiki/Communication#Communication_studies",
-          "score": 0.023958335,
-          "snippet": "Communication  Many contributions in the field of communication studies focus on developing models and theories of communication. Models of communication aim to give a simplified overview of the main components involved in communication. Theories of communication try to provide conceptual frameworks to accurately present communication in all its complexity. Some theories focus on communication as a practical art of discourse while others explore the roles of signs, experience, information processing, and the goal of building a social order through coordinated interaction. Communication studies…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics",
-          "score": 1.0,
-          "snippet": "Molecular genetics is a branch of biology that addresses how differences in the structures or expression of DNA molecules manifests as variation among organisms. Molecular genetics often applies an \"investigative approach\" to determine the structure and/or function of genes in an organism's genome using genetic screens.  The field of study is based on the merging of several sub-fields in biology: classical Mendelian inheritance, cellular biology, molecular biology, biochemistry, and biotechnology. It integrates these disciplines to explore things like genetic inheritance, gene regulation and e…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics",
-          "score": 1.0,
-          "snippet": "Molecular genetics  Therefore molecular genetics is a powerful methodology for linking mutations to genetic conditions that may aid the search for treatments of various genetics diseases."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#Abstract",
-          "score": 1.0,
-          "snippet": "Molecular genetics is a branch of biology that addresses how differences in the structures or expression of DNA molecules manifests as variation among organisms. Molecular genetics often applies an \"investigative approach\" to determine the structure and/or function of genes in an organism's genome using genetic screens.  The field of study is based on the merging of several sub-fields in biology: classical Mendelian inheritance, cellular biology, molecular biology, biochemistry, and biotechnology. It integrates these disciplines to explore things like genetic inheritance, gene regulation and e…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Heredity",
-          "url": "https://en.wikipedia.org/wiki/Heredity",
-          "score": 1.0,
-          "snippet": "Heredity, also called inheritance or biological inheritance, is the passing on of traits from parents to their offspring; either through asexual reproduction or sexual reproduction, the offspring cells or organisms acquire the genetic information of their parents. Through heredity, variations between individuals can accumulate and cause species to evolve by natural selection. The study of heredity in biology is genetics."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Heredity",
-          "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
-          "score": 1.0,
-          "snippet": "Heredity  In humans, eye color is an example of an inherited characteristic: an individual might inherit the \"brown-eye trait\" from one of the parents. Inherited traits are controlled by genes and the complete set of genes within an organism's genome is called its genotype.  The complete set of observable traits of the structure and behavior of an organism is called its phenotype. These traits arise from the interaction of the organism's genotype with the environment. As a result, many aspects of an organism's phenotype are not inherited. For example, suntanned skin comes from the interaction …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Heredity",
-          "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
-          "score": 1.0,
-          "snippet": "Heredity  If the DNA sequence at a particular locus varies between individuals, the different forms of this sequence are called alleles. DNA sequences can change through mutations, producing new alleles. If a mutation occurs within a gene, the new allele may affect the trait that the gene controls, altering the phenotype of the organism."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Communication",
-          "url": "https://en.wikipedia.org/wiki/Communication",
-          "score": 1.0,
-          "snippet": "Communication is commonly defined as the transmission of information. Its precise definition is disputed and there are disagreements about whether unintentional or failed transmissions are included and whether communication not only transmits meaning but also creates it. Models of communication are simplified overviews of its main components and their interactions. Many models include the idea that a source uses a coding system to express information in the form of a message. The message is sent through a channel to a receiver who has to decode it to understand it. The main field of inquiry in…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Communication",
-          "url": "https://en.wikipedia.org/wiki/Communication",
-          "score": 1.0,
-          "snippet": "Communication  Verbal communication involves the exchange of messages in linguistic form, including spoken and written messages as well as sign language. Non-verbal communication happens without the use of a linguistic system, for example, using body language, touch, and facial expressions. Another distinction is between interpersonal communication, which happens between distinct persons, and intrapersonal communication, which is communication with oneself. Communicative competence is the ability to communicate well and applies to the skills of formulating messages and understanding them. Non-…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Communication",
-          "url": "https://en.wikipedia.org/wiki/Communication",
-          "score": 1.0,
-          "snippet": "Communication through chemicals is particularly important for the relatively immobile plants. For example, maple trees release so-called volatile organic compounds into the air to warn other plants of a herbivore attack. Most communication takes place between members of the same species. The reason is that its purpose is usually some form of cooperation, which is not as common between different species. Interspecies communication happens mainly in cases of symbiotic relationships. For instance, many flowers use symmetrical shapes and distinctive colors to signal to insects where nectar is loca…"
         }
       ],
       "source_score": {
@@ -1080,24 +961,24 @@
       },
       "fact_score": {
         "matched": [
-          "double-helix structure (Watson, Crick, and Franklin)",
           "nucleotides and complementary base pairing (A-T, G-C)",
           "genes and the genetic code",
           "DNA replication",
           "transcription into RNA",
+          "translation into proteins",
           "chromosomes",
-          "mutations",
-          "the molecular basis of heredity"
+          "mutations"
         ],
         "missing": [
+          "double-helix structure (Watson, Crick, and Franklin)",
           "the sugar-phosphate backbone and antiparallel strands",
-          "translation into proteins"
+          "the molecular basis of heredity"
         ],
         "total_expected": 10,
-        "ratio": 0.8
+        "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2082,
+      "search_ms": 2197,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1111,16 +992,58 @@
         {
           "corpus_id": "wikipedia",
           "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Goals",
-          "score": 0.022131147,
-          "snippet": "Artificial intelligence  The general problem of simulating (or creating) intelligence has been broken into subproblems. These consist of particular traits or capabilities that researchers expect an intelligent system to display. The traits described below have received the most attention and cover the scope of AI research."
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 1.0,
+          "snippet": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems. It is a field of research in computer science that develops and studies methods and software that enable machines to perceive their environment and use learning and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs. Some high-profile applications of AI include advanced web search engines; recommendation systems; interacting via human speech; autonomous vehicles; generative and creative tools; and superhuman…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#General_intelligence",
-          "score": 0.020149253,
-          "snippet": "Artificial intelligence  A machine with artificial general intelligence should be able to solve a wide variety of problems with breadth and versatility similar to human intelligence."
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  The traditional goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, perception, and support for robotics. General intelligence—the ability to complete any task performable by a human on an at least equal level—is among the field's long-term goals. To reach these goals, AI researchers have adapted and integrated a wide range of techniques, including search and mathematical optimization, formal logic, artificial neural networks, and methods based on statistics, operations research, and economics. AI also draw…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.01875,
+          "snippet": "Artificial intelligence  This growth accelerated further after 2017 with the transformer architecture, and by the early 2020s hundreds of billions of dollars were being invested in AI. The widespread use of AI in the 21st century exposed several unintended consequences and harms in the present and raised concerns about its risks and long-term effects in the future, prompting discussions about regulatory policies to ensure the safety and benefits of the technology."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems. It is a field of research in computer science that develops and studies methods and software that enable machines to perceive their environment and use learning and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 0.020454546,
+          "snippet": "Artificial intelligence  and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs.  Some high-profile applications of AI include advanced web search engines (e.g., Google Search); recommendation systems (used by YouTube, Amazon, and Netflix); interacting via human speech (e.g., Google Assistant, Siri, and Alexa); autonomous vehicles (e.g., Waymo); generative and creative tools (e.g., ChatGPT, Apple Intelligence, and AI art); and superhuman play and analysis in strategy games (e.g., chess and Go). However, many AI applications are …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  often without being called AI because once something becomes useful enough and common enough it's not labeled AI anymore.\"  The various subfields of AI research are centered around particular goals and the use of particular tools. The traditional goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, perception, and support for robotics. General intelligence —the ability to complete any task performable by a human on an at least equal level—is among the field's long-term goals. To reach these goals, AI researc…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  operations research, and economics. AI also draws upon psychology, linguistics, philosophy, neuroscience, and other fields.  Artificial intelligence was founded as an academic discipline in 1956, and the field went through multiple cycles of optimism, followed by periods of disappointment and loss of funding, known as AI winter. Funding and interest vastly increased after 2012 when deep learning outperformed previous AI techniques. This growth accelerated further after 2017 with the transformer architecture, and by the early 2020s hundreds of billions of dollars were b…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Goals",
+          "score": 0.022131147,
+          "snippet": "Artificial intelligence  The general problem of simulating (or creating) intelligence has been broken into subproblems. These consist of particular traits or capabilities that researchers expect an intelligent system to display. The traits described below have received the most attention and cover the scope of AI research."
         },
         {
           "corpus_id": "wikipedia",
@@ -1132,44 +1055,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 1.0,
-          "snippet": "Artificial intelligence  intelligence laboratories were set up at a number of British and U.S. universities in the latter 1950s and early 1960s.  Researchers in the 1960s and the 1970s were convinced that their methods would eventually succeed in creating a machine with general intelligence and considered this the goal of their field. In 1965 Herbert Simon predicted, \"machines will be capable, within twenty years, of doing any work a man can do\". In 1967 Marvin Minsky agreed, writing, \"within a generation... the problem of creating 'artificial intelligence' will substantially be solved\". They …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 1.0,
-          "snippet": "Artificial intelligence  the approach altogether. The \" AI winter \", a period when obtaining funding for AI projects was difficult, followed.  In the early 1980s, AI research was revived by the commercial success of expert systems, a form of AI program that simulated the knowledge and analytical skills of human experts. By 1985, the market for AI had reached over a billion dollars. At the same time, Japan's fifth generation computer project inspired the U.S. and British governments to restore funding for academic research. However, beginning with the collapse of the Lisp Machine market in 1987…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 1.0,
-          "snippet": "Artificial intelligence  the collapse of the Lisp Machine market in 1987, AI once again fell into disrepute, and a second, longer-lasting winter began.  Up to this point, most of AI's funding had gone to projects that used high-level symbols to represent mental objects like plans, goals, beliefs, and known facts. In the 1980s, some researchers began to doubt that this approach would be able to imitate all the processes of human cognition, especially perception, robotics, learning and pattern recognition, and began to look into \"sub-symbolic\" approaches. Rodney Brooks rejected \"representation\" …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 0.019852942,
-          "snippet": "Artificial intelligence  convolutional neural networks can recognize handwritten digits, the first of many successful applications of neural networks.  AI gradually restored its reputation in the late 1990s and early 21st century by exploiting formal mathematical methods and by finding specific solutions to specific problems. This \" narrow \" and \"formal\" focus allowed researchers to produce verifiable results and collaborate with other fields (such as statistics, economics and mathematics). By 2000, solutions developed by AI researchers were being widely used, although in the 1990s they were r…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 1.0,
-          "snippet": "Artificial intelligence  founded the subfield of artificial general intelligence (or \"AGI\"), which had several well-funded institutions by the 2010s.  Deep learning began to dominate industry benchmarks in 2012 and was adopted throughout the field. For many specific tasks, other methods were abandoned. Deep learning's success was based on both hardware improvements (faster computers, graphics processing units, cloud computing) and access to large amounts of data (including curated datasets, such as ImageNet). Deep learning's success led to an enormous increase in interest and funding in AI. Th…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#History",
-          "score": 1.0,
-          "snippet": "Artificial intelligence  and many researchers re-focussed their careers on these issues. The alignment problem became a serious field of academic study.  In the late teens and early 2020s, AGI companies began to deliver programs that created enormous interest. In 2015, AlphaGo, developed by DeepMind, beat the world champion Go player. The program was taught only the rules of the game and developed strategy by itself. GPT-3 is a large language model that was released in 2020 by OpenAI and is capable of generating high-quality human-like text. These programs, and others, inspired an aggressive A…"
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Narrow_vs._general_AI",
+          "score": 0.02096774,
+          "snippet": "Artificial intelligence  AI researchers are divided as to whether to pursue the goals of artificial general intelligence and superintelligence directly or to solve as many specific problems as possible (narrow AI) in hopes these solutions will lead indirectly to the field's long-term goals. General intelligence is difficult to define and difficult to measure, and modern AI has had more verifiable successes by focusing on specific problems with specific solutions. The experimental sub-field of artificial general intelligence studies this area exclusively."
         },
         {
           "corpus_id": "wikipedia",
@@ -1182,22 +1070,22 @@
           "corpus_id": "wikipedia",
           "title": "Artificial intelligence",
           "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#AI_welfare_and_rights",
-          "score": 0.021428574,
+          "score": 0.02109375,
           "snippet": "Artificial intelligence  the term “AI welfare” and outlined the new field of AI welfare science, which is derived from animal welfare science.  Progress in AI increased interest in the topic. Proponents of AI welfare and rights often argue that AI sentience, if it emerges, would be particularly easy to deny. They warn that this may be a moral blind spot analogous to slavery or factory farming, which could lead to large-scale suffering if sentient AI is created and carelessly exploited."
         },
         {
           "corpus_id": "wikipedia",
           "title": "History of artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Optimism",
-          "score": 0.021666666,
-          "snippet": "History of artificial intelligence  The first generation of AI researchers made these predictions about their work:"
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Soft_computing_and_probabilistic_reasoning",
+          "score": 0.020634921,
+          "snippet": "History of artificial intelligence  problems that precise symbolic methods could not handle. Press accounts often claimed these tools could \"think like a human\".  Judea Pearl 's influential 1988 book brought probability and decision theory into AI. Fuzzy logic, developed by Lofti Zadeh in the 60s, began to be more widely used in AI and robotics. Evolutionary computation and artificial neural networks also handle imprecise information, and are classified as \"soft\". In the 90s and early 2000s many other soft computing tools were developed and put into use, including Bayesian networks, hidden Mar…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Soft_computing_and_probabilistic_reasoning",
-          "score": 0.02096774,
-          "snippet": "History of artificial intelligence  problems that precise symbolic methods could not handle. Press accounts often claimed these tools could \"think like a human\".  Judea Pearl 's influential 1988 book brought probability and decision theory into AI. Fuzzy logic, developed by Lofti Zadeh in the 60s, began to be more widely used in AI and robotics. Evolutionary computation and artificial neural networks also handle imprecise information, and are classified as \"soft\". In the 90s and early 2000s many other soft computing tools were developed and put into use, including Bayesian networks, hidden Mar…"
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
+          "score": 0.019178081,
+          "snippet": "Artificial general intelligence  adult comes to about 100 on average. Similar tests were carried out in 2014, with the IQ score reaching a maximum value of 27.  In 2020, OpenAI developed GPT-3, a language model capable of performing many diverse tasks without specific training. According to Gary Grossman in a VentureBeat article, while there is consensus that GPT-3 is not an example of AGI, it is considered by some to be too advanced to be classified as a narrow AI system.  In the same year, Jason Rohrer used his GPT-3 account to develop a chatbot, and provided a chatbot-developing platform ca…"
         }
       ],
       "source_score": {
@@ -1211,21 +1099,21 @@
           "machine learning",
           "neural networks and deep learning",
           "search and problem-solving",
-          "symbolic / expert systems",
-          "real-world applications"
+          "natural language processing",
+          "ethics, safety risks, and artificial general intelligence"
         ],
         "missing": [
           "early history including Turing and the Dartmouth workshop",
-          "natural language processing",
           "computer vision",
+          "symbolic / expert systems",
           "the AI winters",
-          "ethics, safety risks, and artificial general intelligence"
+          "real-world applications"
         ],
         "total_expected": 10,
         "ratio": 0.5
       },
       "embed_ms": 0,
-      "search_ms": 1353,
+      "search_ms": 1425,
       "corpora_hit": [
         "wikipedia"
       ],

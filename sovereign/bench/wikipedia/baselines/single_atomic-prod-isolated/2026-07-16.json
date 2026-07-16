@@ -2,7 +2,7 @@
   "bank_name": "single-atomic-bombings",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784232546,
+  "started_at_unix": 1784234441,
   "results": [
     {
       "question_id": "contested_atomic_bombings_morality",
@@ -34,15 +34,29 @@
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
-          "score": 0.039772727,
+          "score": 0.067116484,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
-          "score": 0.03731343,
+          "score": 0.06951219,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Ward Wilson believes that the bombing of Hiroshima was not the reason for Japan's surrender, because the preliminary report of the Japanese Army investigation team on the bombing of Hiroshima was not submitted until August 10. Ward Wilson believes that Japan decided to surrender long before its leaders realized the devastation caused by the atomic bombs on Hiroshima and Nagasaki.According to Ward Wilson, Japanese leaders had long concluded: it is possible to fight a decisive battle against a great power attacking from one direction, but it is impossib…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06282364,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06305739,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  During the previous months, the bombing of Tokyo alone had killed more than 100,000 civilians in just one day, so the destruction of Hiroshima and Truman's vague threat did not make much impression on the Japanese commander. Ward Wilson argued that the Japanese Imperial Supreme Council's cancellation of the meeting about the bombing of Hiroshima proved that Council members did not consider this bombing more serious than previous incidents. In Ward Wilson's view, the Soviet campaign had a decisive strategic significance in causing Japan to surrender, w…"
         },
         {
           "corpus_id": "wikipedia",
@@ -55,49 +69,28 @@
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
-          "score": 0.0390625,
+          "score": 0.0703125,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
-          "score": 0.040384617,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  on 26 July 1945, the alternative being \"prompt and utter destruction\". The Japanese government ignored the ultimatum.  The consent of the United Kingdom was obtained for the bombing, as was required by the Quebec Agreement, and orders were issued on 25 July by General Thomas Handy, the acting chief of staff of the United States Army, for atomic bombs to be used against Hiroshima, Kokura, Niigata, and Nagasaki. These targets were chosen because they were large urban areas that also held militarily significant facilities. On 6 August, a Little Boy was d…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
-          "score": 0.03731343,
+          "score": 0.067075334,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
-          "score": 0.041666668,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  On 6 and 9 August 1945, the United States detonated two atomic bombs over the Japanese cities of Hiroshima and Nagasaki. The bombings killed between 150,000 and 246,000 people, most of whom were civilians, and remain the only use of nuclear weapons in an armed conflict. Japan surrendered to the Allies on 15 August, six days after the bombing of Nagasaki and the Soviet Union's declaration of war against Japan and invasion of Japanese-occupied Manchuria. The Japanese government signed the instrument of surrender on 2 September, effectively ending the wa…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Air raids on Japan",
           "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
-          "score": 0.02734375,
+          "score": 0.047931984,
           "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Nuclear weapon",
-          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
-          "score": 0.023809526,
-          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated a uranium gun-type fission bomb nicknamed \" Little Boy \" over the Japanese city of Hiroshima; three days later, on August 9, the USAAF detonated a plutonium implosion-type fission bomb nicknamed \" Fat Man \" over the Japanese city of Nagasaki. These bombings caused injuries that resulted in the deaths of approximately 200,000 civilians and military personnel. The ethics of these bombings and their r…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Nagasaki#Sports",
-          "score": 0.022916667,
+          "score": 0.042282864,
           "snippet": "Nagasaki is represented in the J. League of football with its local club, V-Varen Nagasaki."
         },
         {
@@ -109,13 +102,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Harry S. Truman",
-          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman#Dropping_atomic_bombs_on_Japan",
-          "score": 0.023076924,
-          "snippet": "Harry S. Truman  bomb, Stalin was already aware of the bomb project—having learned about it through atomic espionage long before Truman did.  Hiroshima was bombed on August 6, and Nagasaki three days later, leaving 105,000 dead. The Soviet Union declared war on Japan on August 9 and invaded Manchuria. Japan agreed to surrender the following day.  Supporters of Truman's decision argue that, given the tenacious Japanese defense of the outlying islands, the bombings saved hundreds of thousands of lives of Allied prisoners, Japanese civilians, and combatants on both sides that would have been lost…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Hiroshima",
           "url": "https://en.wikipedia.org/wiki/Hiroshima#University",
           "score": 0.022540983,
@@ -123,31 +109,45 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Historical revisionism",
+          "url": "https://en.wikipedia.org/wiki/Historical_revisionism#Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.03447832,
+          "snippet": "Historical revisionism  The atomic bombings of Hiroshima and Nagasaki have generated controversy and debate. Historians who accepted President Harry Truman 's reasoning in justifying dropping atomic bombs in order to force Japanese surrender end of World War II are known as \"orthodox,\" while \"revisionists\" generally deny that the bombs were necessary. Some also claim that Truman knew they were not necessary but wanted to pressure the Soviet Union. These historians see Truman's decision as a major factor in starting the Cold War. They and others also may charge that Truman ignored or downplayed…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Nagasaki Prefecture",
           "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Cities",
-          "score": 0.022540983,
+          "score": 0.042761568,
           "snippet": "Nagasaki Prefecture  Thirteen cities are located in Nagasaki Prefecture:"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
-          "score": 0.019927537,
-          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
+          "title": "Bertrand Russell",
+          "url": "https://en.wikipedia.org/wiki/Bertrand_Russell#Later_life",
+          "score": 0.033631466,
+          "snippet": "Bertrand Russell  explaining the usefulness of America's atomic arsenal in deterring the USSR from continuing its domination of Eastern Europe.  Just after the atomic bombs exploded over Hiroshima and Nagasaki, Russell wrote letters, and published articles in newspapers from 1945 to 1948, stating clearly that it was morally justified and better to go to war against the USSR using atomic bombs while the United States possessed them and before the USSR did. In September 1949, one week after the USSR tested its first A-bomb, but before this became known, Russell wrote that the USSR would be unabl…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Nuclear weapon",
-          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Ethics",
-          "score": 0.018382354,
-          "snippet": "Nuclear weapon  Even before the first nuclear weapons had been developed, scientists involved with the Manhattan Project were divided over the use of the weapon. The role of the two atomic bombings of the country in Japan's surrender and the U.S.'s ethical justification for them has been the subject of scholarly and popular debate for decades. The question of whether nations should have nuclear weapons, or test them, has been continually and nearly universally controversial."
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "score": 0.018333334,
+          "snippet": "History of nuclear weapons  \"Super\" bomb. Only Teller continued working on the project—against the will of project leaders Oppenheimer and Hans Bethe.  The Joe-1 atomic bomb test by the Soviet Union that took place in August 1949 came earlier than expected by Americans, and over the next several months there was an intense debate within the U.S. government, military, and scientific communities regarding whether to proceed with development of the far more powerful Super.  After the atomic bombings of Japan, many scientists at Los Alamos rebelled against the notion of creating a weapon thousands…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Hiroshima",
           "url": "https://en.wikipedia.org/wiki/Hiroshima#Prefectural_Route",
-          "score": 0.022916667,
+          "score": 0.04375,
           "snippet": "Hiroshima Prefectural Route 37 (Hiroshima-Miyoshi Route), Hiroshima Prefectural Route 70 (Hiroshima-Nakashima Route), Hiroshima Prefectural Route 84 (Higashi Kaita Hiroshima Route), Hiroshima Prefectural Route 164 (Hiroshima-Kaita Route), and Hiroshima Prefectural Route 264 (Nakayama-Onaga Route)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Puyi",
+          "url": "https://en.wikipedia.org/wiki/Puyi#Collapse_of_Manchukuo",
+          "score": 0.032666966,
+          "snippet": "Puyi  In his address, the Showa Emperor described the Americans as having used a \"most unusual and cruel bomb\" that had just destroyed the cities of Hiroshima and Nagasaki; this was the first time that Puyi heard of the atomic bombings of Hiroshima and Nagasaki, which the Japanese had not seen fit to tell him about until then."
         },
         {
           "corpus_id": "wikipedia",
@@ -165,38 +165,38 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Nuclear weapon",
-          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
           "score": 1.0,
-          "snippet": "Nuclear weapon  A nuclear weapon is an explosive device that derives its destructive force from nuclear reactions, either fission or a combination of fission and fusion reactions, producing a nuclear explosion. Both bomb types release large quantities of energy from relatively small amounts of matter. The first test of a fission (\"atomic\") bomb released an amount of energy approximately equal to 20,000 tons of TNT (84 TJ). The first thermonuclear (\"hydrogen\") bomb test released energy approximately equal to 10 million tons of TNT (42 PJ). Nuclear bombs have had yields between 10 tons TNT and 5…"
+          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Nuclear weapon",
-          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima",
           "score": 1.0,
-          "snippet": "Nuclear weapons have been deployed twice in war, both by the United States against the Japanese cities of Hiroshima and Nagasaki in 1945 during World War II."
+          "snippet": "Hiroshima is the capital of Hiroshima Prefecture in Japan. As of June 1, 2019, the city had an estimated population of 1,199,391. The gross domestic product (GDP) in Greater Hiroshima, Hiroshima Urban Employment Area, was US$61.3 billion as of 2010. Kazumi Matsui has been the city's mayor since April 2011. The Hiroshima metropolitan area is the second largest urban area in the Chugoku Region of Japan, following the Okayama metropolitan area. Hiroshima was founded in 1589 as a castle town on the Ōta River delta. Following the Meiji Restoration in 1868, Hiroshima rapidly transformed into a major…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Harry S. Truman",
-          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
           "score": 1.0,
-          "snippet": "Harry S. Truman was the 33rd president of the United States, serving from 1945 to 1953. A member of the Democratic Party, he previously served as a United States senator from Missouri from 1935 to 1945 and briefly as the 34th vice president in 1945 under Franklin D. Roosevelt. Assuming the presidency after Roosevelt's death, Truman implemented the Marshall Plan in the wake of World War II to rebuild the economy of Western Europe and established both the Truman Doctrine and NATO to contain the expansion of Soviet communism. He proposed numerous liberal domestic reforms, but few were enacted by …"
+          "snippet": "Nagasaki Prefecture is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 and has a geographic area of 4,130 km⁲. Nagasaki Prefecture borders Saga Prefecture to the northeast. Nagasaki is the capital and largest city of Nagasaki Prefecture, with other major cities including Sasebo, Isahaya, and Ōmura. Nagasaki Prefecture is located in western Kyūshū with a territory consisting of many mainland peninsulas centered around Ōmura Bay…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Harry S. Truman",
-          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
           "score": 1.0,
-          "snippet": "Harry S. Truman  Between 1940 and 1944, he gained national prominence as chairman of the Truman Committee, which was aimed at reducing waste and inefficiency in wartime contracts. Truman was elected vice president in the 1944 presidential election and assumed the presidency upon Roosevelt's death in April 1945. It was only when Truman assumed the presidency that he was informed about the ongoing Manhattan Project and the atomic bomb. Truman authorized the first and only use of nuclear weapons in war against the Japanese cities of Hiroshima and Nagasaki. Truman's administration engaged in an in…"
+          "snippet": "Nagasaki Prefecture is home to several of the Hidden Christian Sites in the Nagasaki Region which have been declared a UNESCO World Heritage Site."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Harry S. Truman",
-          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Abstract",
           "score": 1.0,
-          "snippet": "Harry S. Truman  He oversaw the Berlin Airlift and Marshall Plan in 1948. With the involvement of the US in the Korean War of 1950–1953, South Korea repelled the invasion by North Korea. Domestically, the postwar economic challenges such as strikes and inflation created a mixed reaction over the effectiveness of his administration. In 1948, he proposed Congress pass comprehensive civil rights legislation. Congress refused, so Truman issued Executive Order 9980 and Executive Order 9981, which prohibited discrimination in federal agencies and desegregated the U.S. Armed Forces. Investigations re…"
+          "snippet": "Nagasaki Prefecture (長崎県, Nagasaki-ken) is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 (1 June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast."
         }
       ],
       "source_score": {
@@ -222,7 +222,7 @@
         "ratio": 0.16666667
       },
       "embed_ms": 0,
-      "search_ms": 5143,
+      "search_ms": 5462,
       "corpora_hit": [
         "wikipedia"
       ],

@@ -2,7 +2,7 @@
   "bank_name": "sep-core-v1.1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784231981,
+  "started_at_unix": 1784233837,
   "results": [
     {
       "question_id": "argument_consequence_against_compatibilism",
@@ -190,7 +190,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1753,
+      "search_ms": 3088,
       "corpora_hit": [
         "sep"
       ],
@@ -245,6 +245,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "dualism",
+          "url": "https://plato.stanford.edu/entries/dualism/",
+          "score": 0.0310539,
+          "snippet": "dualism  A major rationale of those who think that imagination is not a safe indication of possibility, even when such possibility is not eliminable a priori, is that we can imagine that a posteriori necessities might be false – for example, that Hesperus might not be identical to Phosphorus. But if Kripke is correct, that is not a real possibility. Another way of putting this point is that there are many epistemic possibilities which are imaginable because they are epistemic possibilities, but which are not real possibilities. Richard Swinburne (1997, New Appendix C), whilst accepting this ar…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "logical-constants",
           "url": "https://plato.stanford.edu/entries/logical-constants/",
           "score": 0.040324975,
@@ -254,14 +261,14 @@
           "corpus_id": "sep",
           "title": "two-dimensional-semantics",
           "url": "https://plato.stanford.edu/entries/two-dimensional-semantics/",
-          "score": 0.017942583,
+          "score": 0.023419036,
           "snippet": "two-dimensional-semantics  This simple rationalist picture of meaning and modality, however, was undermined by externalist thought experiments. Kripke’s (1980) observation that certain necessary truths, like ‘Hesperus = Phosphorus’, are only knowable aposteriori threatens both the idea that linguistic competence affords apriori access to the truth- and applicability-conditions of one’s words and the idea that necessary truths are always apriori knowable. The guiding idea behind 2D rationalism is that a rationalist can accommodate Kripke’s examples by moving to a 2D semantic framework. In parti…"
         },
         {
           "corpus_id": "sep",
           "title": "apriori",
           "url": "https://plato.stanford.edu/entries/apriori/",
-          "score": 0.017709563,
+          "score": 0.02662222,
           "snippet": "apriori  Philosophers generally agree that we can be justified in believing  15bi  and  15biii  only empirically. Yet many believe that they are necessarily true. If they are necessarily true, that would mean that it’s false that we can be justified in believing necessary truths only a priori. But some philosophers think that  15bi  and  15biii  are not necessary truths and the relevant necessary truth that we can know a priori is that the essence of any type of matter is given by the basic elements of which it is composed. On this view, in the case of water and rubies, we discover empirically…"
         },
         {
@@ -270,6 +277,13 @@
           "url": "https://plato.stanford.edu/entries/logic-modal/",
           "score": 0.037024066,
           "snippet": "logic-modal  The idea has also been deployed in the philosophy of language. Kripke (1980) famously argued that ‘Water is H2O’ is a posteriori but nevertheless a necessary truth, for given that water just is H20, the there is no possible world where THAT stuff is (say) a basic element as the Greeks thought. On the other hand, there is a strong intuition that had the real world been somewhat different from what it is, the odorless liquid that falls from the sky as rain, fills our lakes and rivers, etc. might perfectly well have been an element. So in some sense it is conceivable that water is no…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "supervenience",
+          "url": "https://plato.stanford.edu/entries/supervenience/",
+          "score": 0.024571413,
+          "snippet": "supervenience  This raises some controversial issues. For the purposes of this essay, we make the following three assumptions. First, we assume that metaphysical necessity is just as strong as logical necessity. There are, to be sure, metaphysically necessary truths that are not logical truths, such as the truth that water = H20. But metaphysical necessity is just as strong as logical necessity in that the space of metaphysical possibility is exactly the same as the space of logically possibility: the logically possible worlds = the metaphysically possible worlds (see, e.g., McLaughlin 1995; C…"
         },
         {
           "corpus_id": "sep",
@@ -294,52 +308,38 @@
         },
         {
           "corpus_id": "sep",
-          "title": "social-construction-naturalistic",
-          "url": "https://plato.stanford.edu/entries/social-construction-naturalistic/",
-          "score": 0.021390375,
-          "snippet": "social-construction-naturalistic  There is a different model of necessity for the constructionist, however, which is to hold that the necessity in question is revealed a posteriori by our investigations of the phenomenon in question. Saul Kripke (1980), Hilary Putnam (1975) and others defended a causal theory of reference on which some terms (notably natural kind terms) referred to some sort of stuff or essence underlying the central uses of the term (see  Reference: Causal Theories).  Crucially, however, because the reference relation is external, competent users of a term can be radically mi…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "moral-non-naturalism",
-          "url": "https://plato.stanford.edu/entries/moral-non-naturalism/",
-          "score": 0.018890202,
-          "snippet": "moral-non-naturalism  Finally, more sophisticated forms of reductionist naturalism hold that while moral predicates do refer to natural properties, they do not so refer in virtue of any sort of analytic equivalence between moral predicates and non-moral predicates. The analogy here is with certain theories of reference borrowed from the discussion of proper names and natural kinds (see, e.g., Boyd 1988). Some philosophers have held that identifications of natural kinds like ‘water=H2O’ are necessarily true but not analytic. Rather, they are a posteriori necessary truths that hold in virtue of …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "dualism",
-          "url": "https://plato.stanford.edu/entries/dualism/",
-          "score": 0.018648019,
-          "snippet": "dualism  The only general argument that seem to be available for this would be the principle that, for any two levels of discourse, A and B, they are more-than-causally connected only if one entails the other a priori. And the argument for accepting this principle would be that the relatively uncontroversial cases of a posteriori necessary connections are in fact cases in which one can argue a priori from facts about the microstructure to the manifest facts. In the case of water, for example, it would be claimed that it follows a priori that if there were something with the properties attribut…"
-        },
-        {
-          "corpus_id": "sep",
           "title": "natural-kinds",
           "url": "https://plato.stanford.edu/entries/natural-kinds/",
-          "score": 0.02346041,
-          "snippet": "natural-kinds  The view that natural kind terms are rigid designators has consequences for identity statements involving natural kind terms (e.g., “brontosaurus is apatosaurus”). The reason is that any identity statement relating two rigid designators is necessarily true. Hence identity statements involving natural kind terms express necessary truths, even if knowable only a posteriori. Kripke regards theoretical identities such as ‘water = H2O’, where one of the terms is a description, as instances of such a posteriori necessary identities. Such a claim requires an argument to show that ‘H2O’…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "laws-of-nature",
-          "url": "https://plato.stanford.edu/entries/laws-of-nature/",
-          "score": 0.021170609,
-          "snippet": "laws-of-nature  Two reasons can be given for believing that being a law does not depend on any necessary connection between properties. The first reason is the conceivability of it being a law in one possible world that all Fs are Gs even though there is another world with an F that is not G. The second is that there are laws that can only be discovered in an a posteriori manner. If necessity is always associated with laws of nature, then it is not clear why scientists cannot always get by with a priori methods. Naturally, these two reasons are often challenged. The necessitarians argue that c…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "naturalism",
-          "url": "https://plato.stanford.edu/entries/naturalism/",
-          "score": 0.01818182,
-          "snippet": "naturalism  This makes room for methodological naturalists to insist that most primary philosophical concerns are synthetic and a posteriori, even if they imply additional modal claims which are not. Natural science provides a good analogy here. Water is H2O. Heat is molecular motion. Stars are made of hot gas. Halley’s comet is made of rock and ice. Since all these claims concern matters of identity and constitution, they too are necessary if true. But science is interested in these synthetic a posteriori claims as such, rather than their modal implications. Chemistry is interested in the com…"
+          "score": 0.02177929,
+          "snippet": "natural-kinds  One might take the view that the apparent derivation of a metaphysical conclusion from semantic premises is a sleight of hand, with hidden essentialist premises being smuggled into the argument. If one were to assume that ‘H2O’ is a rigid designator, one might be accused of tacitly assuming metaphysical essentialism. However, one might alternatively take the view that semantics and metaphysics are more intimately related (Bird 2020). For example, one might hold that the semantics itself makes certain metaphysical assumptions, in which case the metaphysics would follow from the s…"
         },
         {
           "corpus_id": "sep",
           "title": "essential-accidental",
           "url": "https://plato.stanford.edu/entries/essential-accidental/",
-          "score": 0.022727273,
-          "snippet": "essential-accidental  In addition to these sorts of claims about the essential properties of ordinary individuals, claims about the essential properties of natural kinds have figured prominently in the literature, since Kripke (1972/1980) and Putnam (1975) made essentialist claims concerning, for example, cats and water. The core intuitions are that in any possible world anything that is not an animal is not a cat and that in any possible world anything that is not composed of molecules of H2O is not water. Since we discovered empirically that cats are animals (and not, for example, robots) an…"
+          "score": 0.02229608,
+          "snippet": "essential-accidental  If one claims that something is possible, it is sometimes natural to take this to mean that one does not know it to be false. For example, suppose that you ask someone whether Socrates ever went to Sparta and she answers that it is possible. It is natural to understand her as saying that she does not know that Socrates did not go to Sparta. Thus, the possibility that is expressed here is a kind of epistemic possibility (in particular, one according to which \\(p\\) is epistemically possible for an agent \\(X\\) just in case not-\\(p\\) is not known by \\(X)\\). This notion of epi…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ontological-commitment",
+          "url": "https://plato.stanford.edu/entries/ontological-commitment/",
+          "score": 0.023015434,
+          "snippet": "ontological-commitment  If the notion of ontological commitment is to play a role in theory choice or clarifying ontological disputes, then the ontological commitments of a theory must be rationally accessible; failure to acknowledge the ontological commitments of one's theory must be a rational failing (see Michael 2008). That puts the following epistemic constraint on the entailment relation that is invoked by an entailment account of ontological commitment: the entailments of a theory must be knowable by any ideally rational agent, that is to say, must be knowable a priori. Does modal entai…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rigid-designators",
+          "url": "https://plato.stanford.edu/entries/rigid-designators/",
+          "score": 0.018782869,
+          "snippet": "rigid-designators  Some of the fundamental work concerns epistemology: e.g., the issue of whether a sentence like ‘Hesperus = Phosphorus’ is a posteriori as well as necessarily true. Would the above considerations in favor of distinguishing assertoric from ingredient sense  undermine Kripke’s ideas here, at least, even if the considerations do not undermine Kripke’s ideas about modality? That seems unlikely. On the contrary, the claim that names, though rigid, share the semantic content of descriptions seems likely to vindicate Kripke’s claims about the epistemic status of statements like the …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "possibilism-actualism",
+          "url": "https://plato.stanford.edu/entries/possibilism-actualism/",
+          "score": 0.016573902,
+          "snippet": "possibilism-actualism  However, Kripke (1963b, p. 89, note 1) is loath to adopt a solution that, like the ones just suggested, involves “revising quantification theory or modal logic”. So instead Kripke opts for another that he borrows from Quine. In his account of quantification, Quine (1951: §15) points out that any occurrence of a name in an ordinary logical truth is inessential to its truth: what is said of the referent of the name could just as well be said of anything. Thus, it is not in virtue of any distinctive properties of God or Socrates that the following proposition is true:"
         },
         {
           "corpus_id": "sep",
@@ -414,15 +414,15 @@
       ],
       "source_score": {
         "matched": [
+          "rigid-designators",
           "modality-varieties",
           "natural-kinds"
         ],
         "missing": [
-          "rigid-designators",
           "possible-worlds"
         ],
         "total_expected": 4,
-        "ratio": 0.5
+        "ratio": 0.75
       },
       "fact_score": {
         "matched": [
@@ -439,7 +439,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1178,
+      "search_ms": 2575,
       "corpora_hit": [
         "sep"
       ],
@@ -503,7 +503,7 @@
           "corpus_id": "sep",
           "title": "collins",
           "url": "https://plato.stanford.edu/entries/collins/",
-          "score": 0.015151516,
+          "score": 0.027272727,
           "snippet": "collins  Collins accepts Locke’s revolutionary view that consciousness and not the substantial soul is the bearer of personal identity. Again agreeing with Locke, he regards memory as crucial to personal identity and feelings of pleasure and pain as important concomitants of consciousness. Still, Collins’ account of personal identity is not exactly the same as Locke’s. Locke’s account is officially neutral in regard to whether “the substance that thinks in us” is material or immaterial, simple or compounded (Locke 1690: II, xxvii. 17 [1975: 341). Collins, by contrast, is giving an account that…"
         },
         {
@@ -529,6 +529,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "memory-episprob",
+          "url": "https://plato.stanford.edu/entries/memory-episprob/",
+          "score": 0.021698466,
+          "snippet": "memory-episprob  The most severe critic of the RTM was Scottish philosopher Thomas Reid, a contemporary of Hume.  I'll close this section of this essay by looking at Reid's critique of Locke and Hume.  This will provide us with a natural transition to the next section on the Direct Theory of Memory, the chief proponent of which is none other than Reid himself."
+        },
+        {
+          "corpus_id": "sep",
           "title": "real-essence",
           "url": "https://plato.stanford.edu/entries/real-essence/",
           "score": 0.032851618,
@@ -538,7 +545,7 @@
           "corpus_id": "sep",
           "title": "reid-ethics",
           "url": "https://plato.stanford.edu/entries/reid-ethics/",
-          "score": 0.029339021,
+          "score": 0.029231202,
           "snippet": "reid-ethics  According to Reid, (3), then, is either false or trivial (for discussion, see Yaffe 2004, Ch. 6)."
         },
         {
@@ -652,13 +659,6 @@
           "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
           "score": 0.60008466,
           "snippet": "John Locke argues that personal identity is grounded in the continuity of consciousness rather than the persistence of an immaterial soul or material substance. This psychological criterion for personhood has sparked extensive scholarly debate regarding whether persons are substances, modes, or relations, and it contrasts sharply with traditional views held by critics like Butler and Reid."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "locke-personal-identity",
-          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
-          "score": 0.59170693,
-          "snippet": "Locke argues that personal identity is constituted by consciousness rather than the substance of the soul or the continuity of the physical body, as illustrated through thought experiments involving Socrates and a prince switching bodies. Critics like Cockburn contend that this view does not entail the immortality of an always-thinking soul nor require us to possess new souls daily, while Reid highlights potential paradoxes in applying Locke's theory across different stages of life."
         }
       ],
       "source_score": {
@@ -689,7 +689,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1124,
+      "search_ms": 2582,
       "corpora_hit": [
         "sep"
       ],
@@ -882,7 +882,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 961,
+      "search_ms": 1831,
       "corpora_hit": [
         "sep"
       ],
@@ -923,17 +923,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "justep-intext",
-          "url": "https://plato.stanford.edu/entries/justep-intext/",
-          "score": 0.034209087,
-          "snippet": "justep-intext  epistemology: naturalism in |  justification, epistemic: coherentist theories of |  justification, epistemic: internalist vs. externalist conceptions of |  knowledge: analysis of |  skepticism"
+          "title": "epistemology",
+          "url": "https://plato.stanford.edu/entries/epistemology/",
+          "score": 0.02638889,
+          "snippet": "epistemology  One challenge for explanatory coherentists is to explain what makes one explanation better than another. Let’s use the evil demon hypothesis to illustrate this challenge. What we need is an explanation of why you are having (E). According to the evil demon hypothesis, you are having (E) because the evil demon is causing you to have (E), in order to trick you. The explanatory coherentist would say that, if the bulk of our beliefs about the mind-independent world are justified, then this “evil demon” hypothesis is a bad explanation of why you are having (E). But why is it bad? What…"
         },
         {
           "corpus_id": "sep",
-          "title": "wisdom",
-          "url": "https://plato.stanford.edu/entries/wisdom/",
-          "score": 0.034088813,
-          "snippet": "wisdom  evidence |  justification, epistemic: coherentist theories of |  justification, epistemic: foundationalist theories of |  justification, epistemic: internalist vs. externalist conceptions of |  knowledge: analysis of |  modesty and humility |  reliabilist epistemology"
+          "title": "justep-intext",
+          "url": "https://plato.stanford.edu/entries/justep-intext/",
+          "score": 0.029947916,
+          "snippet": "justep-intext  One way to see the import of the externalist position regarding justification is by means of examples. The case described earlier wherein one gains a great number of justified perceptual beliefs all in a short and very compressed time span seems appropriate to this purpose. Another method for getting a sense of the externalist position is by consideration of a theory of epistemic justification that is consistent with it. A simple version of the reliable process theory of justification will illustrate the point (see Goldman 1979, for a classic statement):"
         },
         {
           "corpus_id": "sep",
@@ -951,31 +951,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "justep-coherence",
-          "url": "https://plato.stanford.edu/entries/justep-coherence/",
-          "score": 0.032738097,
-          "snippet": "justep-coherence  epistemology |  justification, epistemic: foundationalist theories of |  justification, epistemic: internalist vs. externalist conceptions of |  knowledge: analysis of"
-        },
-        {
-          "corpus_id": "sep",
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
-          "score": 0.017605633,
+          "score": 0.027448153,
           "snippet": "descartes-epistemology  One way to divide up theories of justification is in terms of the internalism-externalism distinction. Very roughly: a theory of epistemic justification is internalist insofar as it requires that the justifying factors are accessible to the knower’s conscious awareness; it is externalist insofar as it does not impose this requirement."
         },
         {
           "corpus_id": "sep",
-          "title": "perception-justification",
-          "url": "https://plato.stanford.edu/entries/perception-justification/",
-          "score": 0.02363184,
-          "snippet": "perception-justification  In response, one might attempt to explain away the intuition of equal justification as instead concerning equal blamelessness or excusability, or at any rate as being correct only if restricted to blamelessness or excusability (e.g. Williamson 2007 or forthcoming). Critics often try to respond by distinguishing the sort of blamelessness or excusability one finds in cases of cognitive delusion or brainwashing, from the epistemic status of the beliefs of the victim of an evil demon (Pryor 2001), or by demanding a more thorough explanation of why the victim is indeed bla…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "epistemology",
-          "url": "https://plato.stanford.edu/entries/epistemology/",
-          "score": 0.031590417,
-          "snippet": "epistemology  contextualism, epistemic |  epistemic closure |  epistemology: naturalism in |  epistemology: social |  epistemology: virtue |  feminist philosophy, interventions: epistemology and philosophy of science |  justification, epistemic: coherentist theories of |  justification, epistemic: foundationalist theories of |  justification, epistemic: internalist vs. externalist conceptions of |  knowledge: analysis of |  knowledge: by acquaintance vs. description |  memory: epistemological problems of |  perception: epistemological problems of |  perception: the problem of |  religion: epis…"
+          "title": "evil",
+          "url": "https://plato.stanford.edu/entries/evil/",
+          "score": 0.022019122,
+          "snippet": "evil  In his 1996 paper, “The Evidential Argument from Evil: A Second Look”, Rowe set aside the problem of attempting to find a satisfactory account of the inductive step involved in direct, inductive formulations of the argument from evil in favor of a very different, Bayesian formulation of the argument from evil. The latter argument has been vigorously criticized by Plantinga (1998), but Rowe (1998) has remained confident that the new argument is sound."
         },
         {
           "corpus_id": "sep",
@@ -993,6 +979,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "skeptical-theism",
+          "url": "https://plato.stanford.edu/entries/skeptical-theism/",
+          "score": 0.027082287,
+          "snippet": "skeptical-theism  consequentialism |  evil: problem of |  hiddenness of God |  justification, epistemic: foundationalist theories of"
+        },
+        {
+          "corpus_id": "sep",
           "title": "epistemology-virtue",
           "url": "https://plato.stanford.edu/entries/epistemology-virtue/",
           "score": 0.029105186,
@@ -1007,9 +1000,23 @@
         },
         {
           "corpus_id": "sep",
+          "title": "knowledge-value",
+          "url": "https://plato.stanford.edu/entries/knowledge-value/",
+          "score": 0.021253062,
+          "snippet": "knowledge-value  So far this discussion has taken it as given that whatever problems reliabilism faces in this regard, there are epistemological theories available—some form of virtue epistemology, for example—that can deal with them. But not everyone in the contemporary debate accepts this. Perhaps the best known sceptic in this respect is Jonathan Kvanvig (2003), who in effect argues that while virtue epistemology (along with a form of epistemic internalism) can resolve the primary value problem (i.e., the problem of explaining why knowledge is more valuable than mere true belief), the real …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "higher-order-evidence",
+          "url": "https://plato.stanford.edu/entries/higher-order-evidence/",
+          "score": 0.023786977,
+          "snippet": "higher-order-evidence  disagreement |  evidence |  justification, epistemic: coherentist theories of |  justification, epistemic: foundationalist theories of |  justification, epistemic: internalist vs. externalist conceptions of |  rational choice, normative: expected utility |  rational choice, normative: rivals to expected utility |  -->rationality--> |  -->rationality: structural--> |  reliabilist epistemology |  self-doubt, epistemic  epistemic-self-doubt"
+        },
+        {
+          "corpus_id": "sep",
           "title": "intuition",
           "url": "https://plato.stanford.edu/entries/intuition/",
-          "score": 0.017123288,
+          "score": 0.023772223,
           "snippet": "intuition  Insofar as the normative premise is meant to articulate a necessary truth, it is open to the “new evil demon” counterexample to the necessity of reliability (Cohen 1984) according to which subjects with exactly our experiences and beliefs are justified in believing as we do even if they are the victims of a deceptive evil demon. As a natural interpretation of the reliability condition would be contravened here, this is taken by many to demonstrate that reliability (so understood) is not a necessary condition of justified belief."
         },
         {
@@ -1018,13 +1025,6 @@
           "url": "https://plato.stanford.edu/entries/scientific-underdetermination/",
           "score": 0.019953052,
           "snippet": "scientific-underdetermination  The scope of the epistemic challenge arising from underdetermination is not limited only to scientific contexts, as is perhaps most readily seen in classical skeptical attacks on our knowledge more generally. René Descartes ([1640] 1996) famously sought to doubt any and all of his beliefs which could possibly be doubted by supposing that there might be an all-powerful Evil Demon who sought only to deceive him. Descartes’ challenge essentially appeals to a form of underdetermination: he notes that all our sensory experiences would be just the same if they were cau…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "panpsychism",
-          "url": "https://plato.stanford.edu/entries/panpsychism/",
-          "score": 0.017777778,
-          "snippet": "panpsychism  The subject-summing problem, and indeed all forms of the combination problem, can be construed in a stronger or a milder form. In its milder form it is taken to be a challenge that the panpsychist must address in the long run, either by eventually coming up with an adequate theoretical account of mental combination, or at least by explaining why such an account is beyond our ken. Almost all panpsychists accept this challenge, and one major activity of the contemporary panpsychism research project is attempting to solve (or circumnavigate) the subject-summing problem and the combin…"
         },
         {
           "corpus_id": "sep",
@@ -1130,7 +1130,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 678,
+      "search_ms": 1141,
       "corpora_hit": [
         "sep"
       ],
@@ -1192,10 +1192,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "qt-consciousness",
-          "url": "https://plato.stanford.edu/entries/qt-consciousness/",
-          "score": 0.020930232,
-          "snippet": "qt-consciousness  Dual-aspect approaches consider mental and material domains of reality as aspects, or manifestations, of one underlying reality in which mind and matter are unseparated. In such a framework, the distinction between mind and matter results from the application of a basic tool for achieving epistemic access to, i.e., gather knowledge about, both the separated domains and the underlying  reality.[16]  Consequently, the status of the underlying, psychophysically neutral domain is considered as ontic relative to the mind-matter distinction."
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.02880372,
+          "snippet": "consciousness  If one could see on a priori grounds that there is no way in which consciousness could be intelligibly explained as arising from the physical, it would not be a big step to concluding that it in fact does not do so (Chalmers 1996). However, the very strength of such an epistemological claim makes it difficult to assume with begging the metaphysical result in question. Thus those who wish to use a strong in principle gap claim to refute physicalism must find independent grounds to support it. Some have appealed to conceivability arguments for support, such as the alleged conceiva…"
         },
         {
           "corpus_id": "sep",
@@ -1208,36 +1208,22 @@
           "corpus_id": "sep",
           "title": "dualism",
           "url": "https://plato.stanford.edu/entries/dualism/",
-          "score": 0.017948719,
+          "score": 0.023906166,
           "snippet": "dualism  One category of arguments for dualism is constituted by the standard objections against physicalism. Prime examples are those based on the existence of qualia, the most important of which is the so-called ‘knowledge argument’. Because this argument has its own entry (see the entry  qualia: the knowledge argument),  I shall deal relatively briefly with it here.  One should bear in mind, however, that all arguments against physicalism are also arguments for the irreducible and hence immaterial nature of the mind and, given the existence of the material world, are thus arguments for dual…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "functionalism",
-          "url": "https://plato.stanford.edu/entries/functionalism/",
-          "score": 0.016455697,
-          "snippet": "functionalism  In another important, related, challenge to functionalism (and, more generally, physicalism), Thomas Nagel (1974) and Frank Jackson (1982) argue that a person could know all the physical and functional facts about a certain type of experience and still not “know what it's like” to have it. This is known as the “Knowledge Argument”, and its conclusion is that there are certain properties of experiences — the “what it's like” to see red, feel pain, or sense the world through echolocation — which cannot be identified with functional (or physical) properties. Though neither Nagel (2…"
         },
         {
           "corpus_id": "sep",
           "title": "epiphenomenalism",
           "url": "https://plato.stanford.edu/entries/epiphenomenalism/",
-          "score": 0.017857144,
+          "score": 0.026144436,
           "snippet": "epiphenomenalism  David Lewis (1988) undertakes a thorough response to the knowledge argument. Among Lewis’s many considerations, there is one that seeks to enforce a connection between phenomenal information per se and epiphenomenalism. According to Lewis’s argument, even if one says that phenomenal events are identical with physical events, and even if one says that phenomenal events produce physical effects in violation of physical laws, one will still be led to a form of epiphenomenalism if one says there is phenomenal information that is irreducibly different from physical information. To…"
         },
         {
           "corpus_id": "sep",
-          "title": "qualia",
-          "url": "https://plato.stanford.edu/entries/qualia/",
-          "score": 0.015116278,
-          "snippet": "qualia  On one version of this view, phenomenal concepts are just indexical concepts applied to phenomenal states via introspection (see Lycan 1996). On an alternative version of the view, phenomenal concepts are very special, first-person concepts different in kind from all others (see Tye 2003). This response to the explanatory gap obviously bears affinities to the second physicalist response sketched in Section 3 to the Knowledge Argument. Unfortunately, if the appeal to phenomenal concepts by the physicalist is misguided, then it cannot be used to handle the gap."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "panpsychism",
-          "url": "https://plato.stanford.edu/entries/panpsychism/",
-          "score": 0.014942528,
-          "snippet": "panpsychism  To get around this problem, a fuller definition of “protophenomenal properties” would define them as properties that in certain combinations transparently account for the existence of consciousness, in the sense that one could in principle move a priori from knowing the relevant facts about protophenomenal properties to knowing the relevant facts about phenomenal properties (Chalmers 2015; Goff 2015, 2017). That is to say, if you could magically perceive the protophenomenal properties in my brain (assuming panprotopsychism is true), you would in principle be able to deduce what it…"
+          "title": "mental-representation",
+          "url": "https://plato.stanford.edu/entries/mental-representation/",
+          "score": 0.02074176,
+          "snippet": "mental-representation  Another sort of representation appealed to by some phenomenalists (e.g., Chalmers (2003), Block (2003)) is what Chalmers calls a “pure phenomenal concept.” A phenomenal concept in general is a concept whose denotation is a phenomenal property, and it may be discursive (‘the color of ripe bananas’), demonstrative (‘this color’; Loar 1990/96)), or even more direct. On Chalmers’s view, a pure phenomenal concept is (something like) a conceptual/phenomenal hybrid consisting of a phenomenological “sample” (an image or an occurrent sensation) integrated with (or functioning as)…"
         },
         {
           "corpus_id": "sep",
@@ -1262,10 +1248,31 @@
         },
         {
           "corpus_id": "sep",
-          "title": "consciousness",
-          "url": "https://plato.stanford.edu/entries/consciousness/",
-          "score": 0.024590163,
-          "snippet": "consciousness  As with the What and How questions, the Why question poses a general problem that subdivides into a diversity of more specific inquiries. In so far as the various sorts of consciousness, e.g., access, phenomenal, meta-mental, are distinct and separable—which remains an open question—they likely also differ in their specific roles and values. Thus the Why question may well not have a single or uniform answer."
+          "title": "russellian-monism",
+          "url": "https://plato.stanford.edu/entries/russellian-monism/",
+          "score": 0.023105228,
+          "snippet": "russellian-monism  Some traditional physicalist theories conflict with other aspects of Russellian monism. For example, (physicalist) analytic functionalism (Armstrong 1968; Lewis 1966, 1972, 1980) conflicts with the Russellian monist’s denial that structural truths alone a priori entail all phenomenal truths (see the entry  functionalism;  phenomenal truths are truths about consciousness). But other traditional physicalist theories are not similarly disqualified. For example, a posteriori physicalists also deny that structural truths alone a priori entail all phenomenal truths (see the entry …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "properties-emergent",
+          "url": "https://plato.stanford.edu/entries/properties-emergent/",
+          "score": 0.018547855,
+          "snippet": "properties-emergent  Some accept this claim regarding these “phenomenal” qualities of conscious experience, but think that there is no corresponding deep challenge to physicalism with regards to the intentional properties of experiences, representing what the world around us is like (again, Jackson 1982 and Chalmers 1996). (This limited anti-physicalism most lends itself to—although it does not entail—the epiphenomenalist version of strong emergence discussed in  4.2.1  above, as it is consistent with the claim that information-processing intentional states are the only mental states that caus…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "materialism-eliminative",
+          "url": "https://plato.stanford.edu/entries/materialism-eliminative/",
+          "score": 0.01895193,
+          "snippet": "materialism-eliminative  A somewhat similar outlook has been proposed by Keith Frankish and others, and is commonly referred to as “Illusionism” about consciousness, a label designed to help indicate why it seems to us that phenomenal consciousness is real (Frankish, 2016, 2017). Illusionism is motivated in part by broader theoretical considerations, such as the problematic nature of consciousness from the standpoint of physicalism and the observation that even reductive accounts of phenomenal experience typically suggest some sort of misapprehension of what is really going on. Illusionism cla…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "perception-justification",
+          "url": "https://plato.stanford.edu/entries/perception-justification/",
+          "score": 0.014708334,
+          "snippet": "perception-justification  If the conscious character of experiences does play a justifying role, a further question remains about why it does so. One might hold that there is no further explanation to be provided here. Perhaps the capacity of consciousness to justify is a fundamental fact of epistemology. According to another proposal, consciousness justifies thanks to being introspectively accessible. On this internalist conception of justification, a special kind of access to a source is necessary for the source to provide justification, and consciousness stands out for allowing this sort of…"
         },
         {
           "corpus_id": "sep",
@@ -1356,7 +1363,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 758,
+      "search_ms": 1190,
       "corpora_hit": [
         "sep"
       ],
@@ -1527,7 +1534,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 923,
+      "search_ms": 1966,
       "corpora_hit": [
         "sep"
       ],
@@ -1575,17 +1582,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "mental-representation",
-          "url": "https://plato.stanford.edu/entries/mental-representation/",
-          "score": 0.018181818,
-          "snippet": "mental-representation  Burge (1986b) has argued that causation-based worries about externalist individuation of psychological content, and the introduction of the narrow notion, are misguided. Fodor (1994, 1998) has more recently urged that a scientific psychology might not need narrow content in order to supply naturalistic (causal) explanations of human cognition and action, since the sorts of cases they were introduced to handle, viz., Twin-Earth cases and Frege cases, are either nomologically impossible or dismissible as exceptions to non-strict psychological laws."
-        },
-        {
-          "corpus_id": "sep",
           "title": "consciousness-intentionality",
           "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
           "score": 0.032946087,
           "snippet": "consciousness-intentionality  Reaction to the Fregean picture has determined the character of analytic discussions of intentionality or content in another major way. It may be granted that the content of the thought reported is to be identified with the sense of the expression with which we report it. But then, it is argued, the identity of this content will not be determined individualistically, and may in some respects lie beyond the grasp (or not be fully “present to” the mind) of the psychological subject. For what determines the reference of an expression may be a natural causal relation …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "mental-representation",
+          "url": "https://plato.stanford.edu/entries/mental-representation/",
+          "score": 0.030982908,
+          "snippet": "mental-representation  On the most common versions of externalism, though intentional contents are externally determined, mental representations themselves, and the states they partly constitute, remain “in the head.” More radical versions are possible. One might maintain that since thoughts are individuated by their contents, and some thought contents are partially constituted by objects external to the mind, then some thoughts are partly constituted by objects external to the mind. On such a view, a singular thought – i.e., a thought about a particular object – literally contains the object …"
         },
         {
           "corpus_id": "sep",
@@ -1603,16 +1610,16 @@
         },
         {
           "corpus_id": "sep",
-          "title": "consciousness-representational",
-          "url": "https://plato.stanford.edu/entries/consciousness-representational/",
-          "score": 0.016666668,
-          "snippet": "consciousness-representational  Narrow content. In the propositional-attitude literature, the corresponding transportation argument has been taken as the basis of an argument for “narrow content,” viz., for something that is intentional content within the meaning of the act but is narrow rather than, as usual, wide. The self-knowledge problem aforementioned, and the problem of “wide causation” (Fodor (1987), Kim (1995)), have also been used to motivate narrow content. And, indeed, any general argument for narrow content will presumably apply to sensory representation as well as to propositiona…"
+          "title": "meaning",
+          "url": "https://plato.stanford.edu/entries/meaning/",
+          "score": 0.020777805,
+          "snippet": "meaning  The two sorts of mentalist theories sketched above both try to explain meaning in terms of the relationship between linguistic expressions and propositional attitudes of users of the relevant language. But this is not the only sort of theory available to a theorist who wants to analyze meaning in terms of broadly mental representation. A common view in the philosophy of mind and cognitive science is that the propositional attitudes of subjects are underwritten by an internal language of thought, comprised of mental representations. (See entry on  the computational theory of mind.)  On…"
         },
         {
           "corpus_id": "sep",
           "title": "culture-cogsci",
           "url": "https://plato.stanford.edu/entries/culture-cogsci/",
-          "score": 0.019178081,
+          "score": 0.027983112,
           "snippet": "culture-cogsci  This core idea has been developed in several ways. Initial versions of externalism focused on semantics and mental content, holding that what some intentional mental states are about is at least in part determined by factors outside the body, including social arrangements, cultural patterns of expertise and deference, and norms that structure the division of linguistic labor (McGinn 1977; Burge 1979; Fodor 1987, 1994; cf. Putnam 1975a). Later and more contentious forms of externalism focused on the vehicles of content, holding that some cognitive processes and mental states are…"
         },
         {
@@ -1626,15 +1633,36 @@
           "corpus_id": "sep",
           "title": "phenomenal-intentionality",
           "url": "https://plato.stanford.edu/entries/phenomenal-intentionality/",
-          "score": 0.016455697,
+          "score": 0.026230132,
           "snippet": "phenomenal-intentionality  It is possible to argue for PIT on the basis of internalism about mental content, the view that what a subject’s mental states represent is fully determined by her intrinsic properties. (The alternative to internalism is externalism. Intentional content that is determined by a subject’s intrinsic properties is said to be narrow as opposed to wide. See the entries on  narrow mental content  and  externalism about mental content.)"
         },
         {
           "corpus_id": "sep",
-          "title": "knowledge-value",
-          "url": "https://plato.stanford.edu/entries/knowledge-value/",
-          "score": 0.020149253,
-          "snippet": "knowledge-value  According to the extended mind thesis (EMT), mental states (e.g., beliefs) can supervene in part on extra-organismic elements of the world, such as laptops, phones and notebooks, that are typically regarded as ‘external’ to our minds. This thesis, defended most notably by Andy Clark and David Chalmers (1998), should not be conflated with comparatively weaker and less controversial thesis of content externalism (e.g., Putnam 1975; Burge 1986), according to which the meaning or content of mental states can be fixed by extra-organismic features of our physical or social-linguisti…"
+          "title": "innateness-language",
+          "url": "https://plato.stanford.edu/entries/innateness-language/",
+          "score": 0.016058823,
+          "snippet": "innateness-language  These insights were to drive linguistic theorizing for the next fifty years, and it's worth emphasizing just how radical and exciting they  were at the time. First, the idea that explaining language use  involves attributing knowledge to speakers flouted the  prevailing behaviorist view that talking about mental states was  unscientific because mental states are unobservable. It also raised  several pressing empirical question that linguists are still  debating. For example, what is the content of speakers'  knowledge of   language?[3]  What sorts of facts about language a…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-representational",
+          "url": "https://plato.stanford.edu/entries/consciousness-representational/",
+          "score": 0.020958565,
+          "snippet": "consciousness-representational  A more important division is that of “narrow” vs. “wide.” In the literature on propositional attitudes beginning with Putnam (1975), the representational content of an attitude is generally thought to be “wide” in that it does not supervene on the contents of the subject’s head; on this view, two molecularly indistinguishable people could have different belief or desire contents, determined in part by objects in their respective environments. Since according to the representational theory, sensory qualities themselves are real or unreal environmental properties,…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "herder",
+          "url": "https://plato.stanford.edu/entries/herder/",
+          "score": 0.017628359,
+          "snippet": "herder  In a further seminal move in the philosophy of mind Herder argues that linguistic meaning is fundamentally social—so that thought and other aspects of human mental life (since they are essentially articulated in terms of linguistic meanings), and therefore even the very self (since the self is essentially dependent on thought and other aspects of human mental life, and moreover defined in its specific identity by theirs), are so too. Herder’s version of this position seems intended only as an empirically based causal claim. It has since fathered a long tradition of attempts to generate…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "perception-contents",
+          "url": "https://plato.stanford.edu/entries/perception-contents/",
+          "score": 0.01133445,
+          "snippet": "perception-contents  Together with the assumption (made by Horgan and Tienson and by Kriegel) that phenomenology is narrow (i.e., shared by intrinsic duplicates), the thesis of phenomenal intentionality yields an internalist theory of experience content. This introduces another respect in which phenomenal intentionality stands opposed to some versions of functionalist informational theories of experience content—namely, those versions that hold that the only contents experiences can have are those had in virtue of the functional properties of the sort discussed in  Section 8.2.  If the thesis …"
         },
         {
           "corpus_id": "sep",
@@ -1726,27 +1754,6 @@
           "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
           "score": 1.0,
           "snippet": "self-knowledge-externalism  Officially, we can put the issue in terms of an apparent tension between the following:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "self-knowledge-externalism",
-          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
-          "score": 1.0,
-          "snippet": "self-knowledge-externalism  The issue is that EXT seemingly implies that knowing about content requires knowing about the environment. And since the latter is empirical, so too would be the former, contra  SK.[4]  Now it is usually thought that, if EXT is incompatible with SK, this would be a serious problem for EXT (though some think internalism also conflicts with SK; see McLaughlin &amp; Tye 1998a, Farkas 2003, Bar-On 2006, p. 434). Yet some think the incompatibility threatens SK instead of EXT (see section  2.4).  Regardless, the interest in the debate goes beyond EXT, for it pertains to m…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.6162464,
-          "snippet": "The passages explore the philosophical concept of narrow content, contrasting it with broad content through thought experiments like Putnam's Twin Earth and Fodor's mapping conception. Narrow content is defined as a function from contexts or environments to truth conditions, aiming to capture what Oscar and his twin share despite differing external referents. The discussion further refines this by incorporating parameters for agents, times, and specific brain structures to address limitations in determining precise semantic values."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.60931444,
-          "snippet": "The text argues that narrow mental content is determined solely by an individual's intrinsic properties, distinct from broad content which depends on external factors like the environment. Using Putnam’s Twin Earth thought experiment involving Oscar and Twin Oscar, it demonstrates that identical internal states can correspond to different referents (H2O vs. XYZ), thereby challenging the sufficiency of intrinsic properties for determining meaning. The discussion further explores attempts to define diagonal propositions or perceptual analogies as potential candidates for narrow content while hig…"
         }
       ],
       "source_score": {
@@ -1776,7 +1783,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 991,
+      "search_ms": 1935,
       "corpora_hit": [
         "sep"
       ],
@@ -1840,7 +1847,7 @@
           "corpus_id": "sep",
           "title": "ethics-ai",
           "url": "https://plato.stanford.edu/entries/ethics-ai/",
-          "score": 0.016025642,
+          "score": 0.022710133,
           "snippet": "ethics-ai  There is some discussion of “trolley problems” in this context. In the classic “trolley problems” (Thomson 1976; Woollard and Howard-Snyder 2016: section 2) various dilemmas are presented. The simplest version is that of a trolley train on a track that is heading towards five people and will kill them, unless the train is diverted onto a side track, but on that track there is one person, who will be killed if the train takes that side track. The example goes back to a remark in (Foot 1967: 6), who discusses a number of dilemma cases where tolerated and intended consequences of an ac…"
         },
         {
@@ -1859,24 +1866,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "aquinas-moral-political",
-          "url": "https://plato.stanford.edu/entries/aquinas-moral-political/",
-          "score": 0.017068272,
-          "snippet": "aquinas-moral-political  Aquinas wavers between suggesting that the use of lethal public force, e.g. in capital punishment, intends (“is referred to”) justice rather than killing, and plainly accepting that in such cases death is indeed intended. The latter is his dominant position; his arguments to justify a kind of choice which, whatever its beneficial consequences, is so immediately against the good of life have come increasingly to seem insufficient: the Catechism of the Catholic Church (1993), paras. 2263–67 expounds its whole teaching on war, lethal police action, and capital punishment …"
+          "title": "nonidentity-problem",
+          "url": "https://plato.stanford.edu/entries/nonidentity-problem/",
+          "score": 0.023390021,
+          "snippet": "nonidentity-problem  The conceptual concerns arise when attempts are made to explain the Asymmetry by reference to principles that assign a special moral status to actual people (or people who will exist if the act under scrutiny is performed; or people who will exist independently of whether that act is performed) that they do not also assign to merely possible people (or to never existing people; or to people whose existence depends on that act being performed) (McMahan 1981; 2009; Persson 2009; Singer 2011, 114; Parfit 2011 vol. 2, 224–225). Similar concerns arise in connection with cases i…"
         },
         {
           "corpus_id": "sep",
           "title": "embodied-cognition",
           "url": "https://plato.stanford.edu/entries/embodied-cognition/",
-          "score": 0.020491801,
+          "score": 0.030572448,
           "snippet": "embodied-cognition  Dual process theories of moral psychology reject the moral sentimentalism claim that all moral judgments are made in the same way.  Dual process theories maintain that we have two systems of moral decision-making: a system for Utilitarian reasoning that is driven by affect-less, abstract deliberation, and system for Deontological reasoning that is driven by automatic, intuitive, emotional heuristics like gut feelings (Greene, 2014). Dual process theories are meant to explain the seemingly inconsistent moral intuitions ordinary folks have about moral dilemmas. For example, i…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "experimental-moral",
-          "url": "https://plato.stanford.edu/entries/experimental-moral/",
-          "score": 0.019144144,
-          "snippet": "experimental-moral  Guided by the idea that variation in some judgments might challenge our trust in them (Machery 2017, Chapter 4), the negative program has led experimental philosophers to examine whether moral judgments vary across cultures and other demographic groups (see also Graham et al. 2016; Doris et al. 2020). Early research focused on the distinction between causing harm as a means or as a side effect, and failed to find any cultural variation using the footbridge and the bystander versions of the trolley case (Hauser et al. 2007; Moore et al. 2011), but a few articles have observe…"
         },
         {
           "corpus_id": "sep",
@@ -1887,10 +1887,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "apriori",
-          "url": "https://plato.stanford.edu/entries/apriori/",
-          "score": 0.016877638,
-          "snippet": "apriori  A new branch of philosophy called experimental philosophy (X-phi for short) has studied the intuitive judgments of people (often students) when presented with well-known examples in epistemology and ethics. They ask these people (often from different ethnic, cultural, economic, and educational backgrounds) whether someone in a hypothetical scenario knows, or only believes, that some proposition is true, say, in Sheep whether the person knows, or only believes, that there are sheep in the field. In ethics they may present the subjects with a case and ask them if it is wrong, or not wro…"
+          "title": "decision-causal",
+          "url": "https://plato.stanford.edu/entries/decision-causal/",
+          "score": 0.007726269,
+          "snippet": "decision-causal  Most texts on decision theory are consistent with causal decision theory. Many do not treat the special cases, such as Newcomb’s problem, that motivate a distinction between causal and evidential decision theory. For example, Leonard Savage (1954) analyzes only decision problems in which options do not affect probabilities of states, as his account of utility makes clear (1954: 73). Causal and evidential decision theories reach the same recommendations in these problems. Causal decision theory is the prevailing form of decision theory among those who distinguish causal and evi…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "causation-physics",
+          "url": "https://plato.stanford.edu/entries/causation-physics/",
+          "score": 0.009502924,
+          "snippet": "causation-physics  David Lewis proposes an answer to this concern, arguing that the time-asymmetry of counterfactuals is secured by an asymmetric overdetermination of the present by the future (Lewis 1979), but Lewis’s overdetermination thesis is false in the context of the deterministic theories he considers (Frisch 2005: ch. 8; Loewer 2007)."
         },
         {
           "corpus_id": "sep",
@@ -1901,10 +1908,24 @@
         },
         {
           "corpus_id": "sep",
-          "title": "causation-physics",
-          "url": "https://plato.stanford.edu/entries/causation-physics/",
-          "score": 0.014403292,
-          "snippet": "causation-physics  Authors who try to derive the radiation arrow from probabilistic considerations sometimes argue that coherently converging waves do not occur because such waves would require a radically improbable coordinated behavior of incoming waves (Earman 2011; see also Atkinson 2006). But this line of argument is in danger of committing what Price has called “the temporal double-standard fallacy” (Price 1997). From an acausal perspective the coordinated behavior of outgoing waves in the future of a radiating source should appear to be no less improbable than coordinated behavior of in…"
+          "title": "truthmakers",
+          "url": "https://plato.stanford.edu/entries/truthmakers/",
+          "score": 0.011299435,
+          "snippet": "truthmakers  MacBride (2014) offers a purely semantic account of the felt asymmetry in terms of the interlocking mechanism of reference and satisfaction that explains the truth of a proposition. Whilst we can deduce from the truth of the proposition that p that p is the case, MacBride argues that we can’t (ultimately) explain its being the case that p in terms of the truth of the proposition that p because its being the case that p is already assumed by the truth of that proposition, that is, has already performed a role in the semantic mechanism whereby the truth-value is determined. By contr…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "delmedigo",
+          "url": "https://plato.stanford.edu/entries/delmedigo/",
+          "score": 0.01336478,
+          "snippet": "delmedigo  It is a significant fact that these scholars, while debating Del Medigo’s position on the relation between philosophy and religion, rely mostly on Del Medigo’s account in Beḥinat ha-Dat. The latter did, however, treat meta-philosophical issues present in the Italian works as well. In his Quaestio de efficientia mundi, for instance, Del Medigo clearly differentiates the realm of religious belief—where one may endorse the belief in creation ex nihilo—and the philosophical truth which seems to contradict this view. Del Medigo speaks in this context of two truths, one religious (“via le…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "religion-politics",
+          "url": "https://plato.stanford.edu/entries/religion-politics/",
+          "score": 0.014492754,
+          "snippet": "religion-politics  The standard view among political theorists, such as Robert Audi, Jürgen Habermas, Charles Larmore, Steven Macedo, Martha Nussbaum, and John Rawls is that religious reasons can play only a limited role in justifying coercive laws, as coercive laws that require a religious rationale lack moral  legitimacy.[2] If the standard view is correct, there is an important asymmetry between religious and secular reasons in the following respect: some secular reasons can themselves justify state coercion but no religious reason can. This asymmetry between the justificatory potential of …"
         },
         {
           "corpus_id": "sep",
@@ -1991,7 +2012,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 743,
+      "search_ms": 1195,
       "corpora_hit": [
         "sep"
       ],
@@ -2034,22 +2055,22 @@
           "corpus_id": "sep",
           "title": "aristotle",
           "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 0.025641028,
+          "score": 0.036789298,
           "snippet": "aristotle  For more on Aristotle’s virtue-based ethics, see the entry on   Aristotle’s Ethics."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-biology",
-          "url": "https://plato.stanford.edu/entries/aristotle-biology/",
-          "score": 0.038184043,
-          "snippet": "aristotle-biology  Aristotle |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, Special Topics: causality |  soul, ancient theories of"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-rhetoric",
           "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
-          "score": 0.037600458,
+          "score": 0.037304603,
           "snippet": "aristotle-rhetoric  Aristotle |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: logic |  Cicero |  Plato: rhetoric and poetry"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-natphil",
+          "url": "https://plato.stanford.edu/entries/aristotle-natphil/",
+          "score": 0.037036397,
+          "snippet": "aristotle-natphil  Aristotle, General Topics: biology |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: psychology |  Aristotle, Special Topics: causality |  Aristotle, Special Topics: on non-contradiction"
         },
         {
           "corpus_id": "sep",
@@ -2067,13 +2088,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "argument",
-          "url": "https://plato.stanford.edu/entries/argument/",
-          "score": 0.021074817,
-          "snippet": "argument  One such approach is virtue argumentation theory. Drawing on virtue ethics and virtue epistemology (see entries on  virtue ethics  and  virtue epistemology),  virtue argumentation theory seeks to theorize how to argue well in terms of the dispositions and character of arguers rather than, for example, in terms of properties of arguments considered in abstraction from arguers (Aberdein &amp; Cohen 2016). Some of the argumentative virtues identified in the literature are: willingness to listen to others (Cohen 2019), willingness to take a novel viewpoint seriously (Kwong 2016), humilit…"
-        },
-        {
-          "corpus_id": "sep",
           "title": "african-ethics",
           "url": "https://plato.stanford.edu/entries/african-ethics/",
           "score": 0.03359612,
@@ -2083,7 +2097,7 @@
           "corpus_id": "sep",
           "title": "aristotle-rhetoric",
           "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
-          "score": 0.023504274,
+          "score": 0.036228392,
           "snippet": "aristotle-rhetoric  Still, for many interpreters of Aristotle, from the times of the great Roman rhetoricians on, it is hard to embrace the thought that Aristotle — the famous author of the Nicomachean Ethics and the Politics — who in his ethical work praises the life in accordance with human virtue, could ever endorse a rhetorical project that is not meant to promote virtue and happiness in the city-state (polis). Is it, in other words, possible or likely that Aristotle, whose name in the history of moral philosophy stands for an ethics based on the sustainable development of moral virtues, e…"
         },
         {
@@ -2111,21 +2125,28 @@
           "corpus_id": "sep",
           "title": "ethics-business",
           "url": "https://plato.stanford.edu/entries/ethics-business/",
-          "score": 0.022869024,
+          "score": 0.03265115,
           "snippet": "ethics-business  One influential approach to business ethics draws on virtue ethics. Moore (2017) develops and applies MacIntyre’s (1984) virtue ethics to business. For MacIntyre, there are goods internal to practices, and certain virtues are necessary to achieve those goods. Building on MacIntyre, Moore develops the idea that business is a practice (or contains practices), and thus has certain goods internal to it (or them), the attainment of which requires the cultivation of business virtues. Aristotelian approaches to virtue in business are found in Alzola (2012) and de Bruin (2015). Schola…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-psych-emp",
+          "url": "https://plato.stanford.edu/entries/moral-psych-emp/",
+          "score": 0.02765907,
+          "snippet": "moral-psych-emp  One way of defusing empirically motivated skepticism—dubbed by Alfano (2013) “the dodge”—is simply to deny that virtue ethics makes empirical claims. On this understanding, virtue ethics is cast as a “purely normative” endeavor aiming at erecting ethical ideals in complete absence of empirical commitments regarding actual human psychologies. This sort of purity is perhaps less honored than honored in the breach: historically, virtue ethics has been typified by an interest in how actual people become good. Aristotle (Nicomachean Ethics, 1099b18–19) thought that anyone not “maim…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-politics",
           "url": "https://plato.stanford.edu/entries/aristotle-politics/",
-          "score": 0.024886878,
+          "score": 0.03227687,
           "snippet": "aristotle-politics  In the Nicomachean Ethics Aristotle describes his subject matter as ‘political science’, which he characterizes as the most authoritative science. It prescribes which sciences are to be studied in the city-state, and the others — such as military science, household management, and rhetoric — fall under its authority. Since it governs the other practical sciences, their ends serve as means to its end, which is nothing less than the human good. “Even if the end is the same for an individual and for a city-state, that of the city-state seems at any rate greater and more comple…"
         },
         {
           "corpus_id": "sep",
           "title": "moral-relativism",
           "url": "https://plato.stanford.edu/entries/moral-relativism/",
-          "score": 0.022128556,
+          "score": 0.028590094,
           "snippet": "moral-relativism  Various objectivist responses may be made to this argument. One is the Davidsonian approach, already considered, that precludes the possibility of incommensurable moral frameworks. Another response is that incommensurability does not preclude the possibility of rationally resolving differences between moral frameworks. For example, Alasdair MacIntyre (1988: ch. 18 and 1994) has argued that, in some circumstances, it is possible to realize, through an exercise in imagination, that a conflicting and incommensurable moral tradition is rationally superior to one’s own tradition. …"
         },
         {
@@ -2137,10 +2158,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "moral-character-empirical",
-          "url": "https://plato.stanford.edu/entries/moral-character-empirical/",
-          "score": 0.017837236,
-          "snippet": "moral-character-empirical  Amongst philosophers, Aristotle for instance clearly endorses both of these assumptions. Virtue is rare on his view, and most people fail to meet the relevant requirements. Plus vice is diametrically opposed to virtue. Virtue ethicists in the Aristotelian tradition would follow him in accepting  (A1)  and  (A2) (for further discussion of these assumptions, see Miller 2019a)."
+          "title": "alexander-aphrodisias",
+          "url": "https://plato.stanford.edu/entries/alexander-aphrodisias/",
+          "score": 0.026418028,
+          "snippet": "alexander-aphrodisias  Since Alexander did not write a commentary on Aristotle’s ethics, his Ethical Problems, despite their somewhat disorganized state, are of considerable interest (cf. Madigan 1987; Sharples 1990; 2001, 2). For, apart from Aspasius’ early commentary on parts of the Nicomachean Ethics there are no extant commentaries on Aristotle’s ethics before the composite commentary by various hands of the Byzantine age (Michael of Ephesus in the 11th/12th c. and his contemporary Eustratius, together with some material extracted from earlier authors, cf. Sharples 1990, 6–7, 95). This gap…"
         },
         {
           "corpus_id": "sep",
@@ -2227,7 +2248,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 1639,
+      "search_ms": 3937,
       "corpora_hit": [
         "sep"
       ],
@@ -2291,7 +2312,7 @@
           "corpus_id": "sep",
           "title": "self-reference",
           "url": "https://plato.stanford.edu/entries/self-reference/",
-          "score": 0.02071251,
+          "score": 0.026548177,
           "snippet": "self-reference  For a more extensive discussion of Kripke’s theory, its successors and rivals, see the entry on  the liar paradox."
         },
         {
@@ -2340,36 +2361,36 @@
           "corpus_id": "sep",
           "title": "definitions",
           "url": "https://plato.stanford.edu/entries/definitions/",
-          "score": 0.01604278,
+          "score": 0.02314217,
           "snippet": "definitions  is necessary. A name such as ‘Jack the Ripper’, Kripke argued, is rigid: it picks out the same individual across possible worlds; the description, on the other hand, is non-rigid. Kripke used such reference-fixing stipulations to argue for the existence of contingent a priori truths—(1) being an example. Reference-fixing stipulative definitions can be given not only for names but also for terms in other categories, e.g., common nouns."
         },
         {
           "corpus_id": "sep",
-          "title": "fictional-entities",
-          "url": "https://plato.stanford.edu/entries/fictional-entities/",
-          "score": 0.019862492,
-          "snippet": "fictional-entities  Millians are not the only ones to have grappled with the implications that the Kripke-Donnellan attack on descriptivism has for the semantics of fictional names. Michael Devitt, for example, another early critic of descriptivism, has used the problem of fictional and other empty names to argue against Millianism and in favor of his version of a causal-historical theory of reference (cf. Devitt 1989). And Mark Sainsbury argues in Sainsbury 2005 that names, including fictional names, have singular but non-descriptive meanings that can be specified in a Davidson-style truth th…"
+          "title": "singular-terms-medieval",
+          "url": "https://plato.stanford.edu/entries/singular-terms-medieval/",
+          "score": 0.028348124,
+          "snippet": "singular-terms-medieval  Buridan adds a very important clause to his discussion at this point. He remarks that I can treat ‘Aristotle’ as a singular term because I believe that the name was imposed or given its signification by a person who did have the appropriate singular concept. This move allows him to avoid the awkward consequence that whether ‘Aristotle’ is a proper name or not depends entirely on the experience of the speakers, and not at all on the linguistic practices of the community.  If I have never known Aristotle, but am speaking with someone who did know him, we can both be take…"
         },
         {
           "corpus_id": "sep",
-          "title": "religious-language",
-          "url": "https://plato.stanford.edu/entries/religious-language/",
-          "score": 0.01882353,
-          "snippet": "religious-language  Recent work on the reference of “God” mostly proceeds from the assumption that “God” is a name rather than a title or a description (for criticism of this view see Johnston 2011: 6–7; for supporting arguments see Scott 2013: 86–7). From this starting point, attention has focused on how to apply the rich resources of research on names from the philosophy of language to this case. For example, according to descriptivist theories “God” has a descriptive content (a view that stretches back at least as far as Anselm), whereas according to Millian theories “God” refers to its bea…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "dharmakiirti",
-          "url": "https://plato.stanford.edu/entries/dharmakiirti/",
-          "score": 0.020168068,
-          "snippet": "dharmakiirti  On a bottom-up approach, on the other hand, the double exclusion plays a comparatively minor role, and thus some of the Kumārila-Uddyotakara criticisms may be less telling. Causal chains and error are what serve to bridge the scheme-content gap, rather than the descriptive content of the apoha. It is notable that such reliance on causality seems to be entirely absent in Dignāga: it is Dharmakīrti’s major contribution to the theory. The way words link to things is thus primarily explained through the existence of a causal chain from particular things to perceptions to thoughts and…"
+          "title": "concepts",
+          "url": "https://plato.stanford.edu/entries/concepts/",
+          "score": 0.027139036,
+          "snippet": "concepts  Conceptual atomism follows in the anti-descriptivist tradition that traces back to Saul Kripke, Hilary Putnam, and others working in the philosophy of language (see Kripke 1972/80, Putnam 1975, Devitt 1981). Kripke, for example, argues that proper names function like mere tags in that they have no descriptive content (Kripke 1972/80). On a description theory one might suppose that “Gödel” means something like the discoverer of the incompleteness of arithmetic. But Kripke points out we could discover that Schmitt really discovered the incompleteness of arithmetic and that Gödel could …"
         },
         {
           "corpus_id": "sep",
           "title": "meaning-holism",
           "url": "https://plato.stanford.edu/entries/meaning-holism/",
-          "score": 0.018437225,
+          "score": 0.028013147,
           "snippet": "meaning-holism  Backward looking causal theories inspired by Kripke (1972) and Putnam (1975) might have initially seemed like candidates for an atomistic semantics. If what I meant by “cat” were determined by a causal chain leading back to the kind that prompted the first “that’s a cat” utterance, then one might think that the determinants of the meaning of each term could be distinct in the way that atomism requires. However, this initial attempt to restrict the determinants to a set of initial baptisms quickly ran aground on various counterexamples (such as the discussion of “Madagascar” (Ev…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "possible-objects",
+          "url": "https://plato.stanford.edu/entries/possible-objects/",
+          "score": 0.020313658,
+          "snippet": "possible-objects  Alternatively, one might choose to insist that if anything at any possible world is Vulcan, it has to possess at that world the properties relevant to the introduction of the name ‘Vulcan’, such as being the heavenly body with such-and-such mass and orbit and other astrophysical characteristics and being between Sun and Mercury in a Newtonian universe. This is supported by descriptionism concerning the semantics of proper names, according to which ‘Vulcan’ is a proper name which is semantically equivalent to a definite description (‘the heavenly body with such-and-such mass a…"
         },
         {
           "corpus_id": "sep",
@@ -2465,17 +2486,17 @@
           "Kripke",
           "rigid designator",
           "initial baptism",
-          "qua-problem",
-          "descriptivism"
+          "qua-problem"
         ],
         "missing": [
-          "reference borrowing"
+          "reference borrowing",
+          "descriptivism"
         ],
         "total_expected": 7,
-        "ratio": 0.85714287
+        "ratio": 0.71428573
       },
       "embed_ms": 0,
-      "search_ms": 944,
+      "search_ms": 1842,
       "corpora_hit": [
         "sep"
       ],
@@ -2497,15 +2518,8 @@
           "corpus_id": "sep",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
-          "score": 0.044132918,
+          "score": 0.043981485,
           "snippet": "content-externalism  Despite its seemingly outlandish nature, this twin earth thought experiment is just a way of making graphic a simple point. You and your twin are, as a matter of stipulation, molecule-for-molecule duplicates. Thus, everything situated inside your head (and biological boundaries more generally) is, by stipulation, qualitatively (if not numerically) identical. Nevertheless, your beliefs (and other propositional attitudes) differ. The principle that emerges is, then, this: if you fix what is going inside the head (and biological boundaries more generally) of an individual and…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "content-causal",
-          "url": "https://plato.stanford.edu/entries/content-causal/",
-          "score": 0.022727273,
-          "snippet": "content-causal  Causal theories of mental content are typically developed in the context of four principal assumptions. First, they typically presuppose that there is a difference between derived and underived  meaning.[2]  Normal humans can use one thing, such as “%”, to mean percent. They can use certain large red octagons to mean that one is to stop at an intersection. In such cases, there are collective arrangements that confer relatively specific meanings on relatively specific objects. In the case of human minds, however, it is proposed that thoughts can have the meanings or contents the…"
         },
         {
           "corpus_id": "sep",
@@ -2516,9 +2530,16 @@
         },
         {
           "corpus_id": "sep",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.03524954,
+          "snippet": "content-narrow  Among the earliest and most influential arguments for broad content were Hilary Putnam’s arguments in such essays as “The Meaning of ‘Meaning’” (1975). Putnam’s arguments were not designed specifically with mental content in mind. They applied in the first instance to linguistic content, more specifically to the reference of terms in a natural language. However, they have been widely applied to mental content. I will first discuss Putnam’s argument concerning linguistic content, and then note how it can be extended to mental content."
+        },
+        {
+          "corpus_id": "sep",
           "title": "mental-representation",
           "url": "https://plato.stanford.edu/entries/mental-representation/",
-          "score": 0.02173913,
+          "score": 0.03173913,
           "snippet": "mental-representation  On the most common versions of externalism, though intentional contents are externally determined, mental representations themselves, and the states they partly constitute, remain “in the head.” More radical versions are possible. One might maintain that since thoughts are individuated by their contents, and some thought contents are partially constituted by objects external to the mind, then some thoughts are partly constituted by objects external to the mind. On such a view, a singular thought – i.e., a thought about a particular object – literally contains the object …"
         },
         {
@@ -2551,31 +2572,31 @@
         },
         {
           "corpus_id": "sep",
+          "title": "content-causal",
+          "url": "https://plato.stanford.edu/entries/content-causal/",
+          "score": 0.029248001,
+          "snippet": "content-causal  Third, these theories assume that it is possible to explain the origin of underived content without appeal to other semantic or contentful notions. So, it is assumed that there is more to the project than simply saying that one’s thoughts mean that Colleen currently has the measles because one’s thoughts are about Colleen currently having the measles. Explicating meaning in terms of aboutness, or aboutness in terms of meaning, or either in terms of some still further semantic notion, does not go as far as is commonly desired by those who develop causal theories of mental conten…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "self-knowledge-externalism",
           "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
-          "score": 0.023076924,
+          "score": 0.034887947,
           "snippet": "self-knowledge-externalism  What this indicates is that Oscar is unable to discriminate from the armchair whether assertions using ‘water’ have a water content versus a twin water content. As with the original Twin Earth example, the lesson here is extended to mental content as well. Hence, if a “water thought” is one that Oscar expresses with help from the term ‘water’, the slow switch experiment indicates that:"
         },
         {
           "corpus_id": "sep",
           "title": "consciousness-intentionality",
           "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
-          "score": 0.028055556,
-          "snippet": "consciousness-intentionality  Reaction to the Fregean picture has determined the character of analytic discussions of intentionality or content in another major way. It may be granted that the content of the thought reported is to be identified with the sense of the expression with which we report it. But then, it is argued, the identity of this content will not be determined individualistically, and may in some respects lie beyond the grasp (or not be fully “present to” the mind) of the psychological subject. For what determines the reference of an expression may be a natural causal relation …"
+          "score": 0.026416006,
+          "snippet": "consciousness-intentionality  Another aspect to these issues concerns what conception of thought content one employs, and how this is introduced. Some ways of defining the issues invoke at the very outset a notion of content (or of representation). Pitt sees the basic question as whether the phenomenology of thought “individuates its content”. One may, however, also approach the issue initially by asking about the relation of phenomenal differences to differences in how we understand our words, or how we think of what we are thinking about—where “understanding” and “thinking” are taken to impl…"
         },
         {
           "corpus_id": "sep",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.025537632,
-          "snippet": "content-narrow  Since Oscar and Twin Oscar have exactly the same intrinsic properties, yet refer to different substances when they use their ‘water’-words, their intrinsic properties cannot suffice to determine what they refer to. If the meaning of a word suffices to determine its reference, then meaning cannot be determined by intrinsic properties either. As Putnam famously puts it, “‘meanings’ just ain’t in the head!” (1975, p. 227)."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "reference",
-          "url": "https://plato.stanford.edu/entries/reference/",
-          "score": 0.015981734,
-          "snippet": "reference  descriptions |  externalism about the mind |  Goodman, Nelson: aesthetics |  indexicals |  many, problem of |  mental content: causal theories of |  mental content: teleological theories of |  mental representation |  names |  natural kinds |  nonexistent objects |  rigid designators |  skepticism: and content externalism"
+          "title": "reid",
+          "url": "https://plato.stanford.edu/entries/reid/",
+          "score": 0.01652141,
+          "snippet": "reid  Reid affirms human beings know what are the intentional contents of their thoughts. If I think about a tree, then I am (defeasibly) justified that I am thinking about a tree. But the Way of Ideas jeopardizes Reid's commitment to the obviousness of our introspective ability to identify what we are thinking about. Like the more familiar veil of perception created by the representational role of ideas (see 3.1 The Way of Ideas and Representational Theories of Perception ), there is also a veil of conception. The seeds of Reid's argument are in Hume's candid remark that, given the Way of Ide…"
         },
         {
           "corpus_id": "sep",
@@ -2586,6 +2607,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "natural-kinds",
+          "url": "https://plato.stanford.edu/entries/natural-kinds/",
+          "score": 0.020270271,
+          "snippet": "natural-kinds  Both Putnam and Kripke take arguments of this sort to generalize to natural kind terms. The best known of the semantic arguments as applied to natural kind terms is Putnam’s Twin Earth thought experiment (see Section 1.3.1). Putnam asks us to imagine that elsewhere in the universe there is a planet exactly like Earth in virtually all respects, which we may call ‘Twin Earth’. However, where on Earth we find H2O, on Twin Earth we find XYZ, a substance with a fundamentally different chemical structure from H2O, but which shares all its manifest properties (boiling and freezing poin…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "chinese-room",
           "url": "https://plato.stanford.edu/entries/chinese-room/",
           "score": 0.013541668,
@@ -2593,10 +2621,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "belief",
-          "url": "https://plato.stanford.edu/entries/belief/",
-          "score": 0.018264841,
-          "snippet": "belief  Several arguments against internalism have prompted considerable debate in philosophy of mind. Here is a condensed version of one argument, due to Putnam (1975; though it should be said that Putnam’s original emphasis was on linguistic meaning, not on belief). Suppose that in 1750, in a far-off region of the universe, there existed a planet that was physically identical to Earth, molecule-for-molecule, in every respect but one: Where Earth had water, composed of H2O, Twin Earth had something else instead, “twater”, coming down as rain and filling streams, behaving identically to water …"
+          "title": "kant-conceptualism",
+          "url": "https://plato.stanford.edu/entries/kant-conceptualism/",
+          "score": 0.0128968265,
+          "snippet": "kant-conceptualism  Conceptualism:  The ‘content’ (Inhalt) of an intuition is conceptual, and constitutes its cognitive relation to a (putatively) mind-independent object"
         },
         {
           "corpus_id": "sep",
@@ -2611,13 +2639,6 @@
           "url": "https://plato.stanford.edu/entries/phenomenal-intentionality/",
           "score": 0.015432099,
           "snippet": "phenomenal-intentionality  A Twin Earth case helps illustrate the options available in the case of wide intentional states (see Putnam 1975). Consider two individuals, Alice and Twin Alice. Alice lives on Earth, while Twin Alice lives on a copy of Earth located far away from us in this world. Let us suppose that Alice and Twin Alice are phenomenal duplicates: they instantiate all the same phenomenal properties throughout their existences."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "natural-kinds",
-          "url": "https://plato.stanford.edu/entries/natural-kinds/",
-          "score": 0.021464646,
-          "snippet": "natural-kinds  Putnam’s (1975a) Twin Earth thought experiment, in a non-semantic guise, leads to a similar conclusion. We imagine there is a planet, ‘Twin Earth’, exactly like Earth in all readily observable respects. Every person and thing on Earth has a twin equivalent on Twin Earth. However, there is no H2O on Twin Earth. Instead, there is a liquid that shares the manifest properties of water (e.g., its being colourless, tasteless, odourless, good for drinking, etc.). This liquid is composed not of H2O molecules but of very different molecules to which we assign the made-up formula ‘XYZ’. D…"
         },
         {
           "corpus_id": "sep",
@@ -2708,7 +2729,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 979,
+      "search_ms": 1917,
       "corpora_hit": [
         "sep"
       ],
@@ -2903,7 +2924,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 1107,
+      "search_ms": 2434,
       "corpora_hit": [
         "sep"
       ],
@@ -2967,14 +2988,14 @@
           "corpus_id": "sep",
           "title": "justice-virtue",
           "url": "https://plato.stanford.edu/entries/justice-virtue/",
-          "score": 0.019736841,
+          "score": 0.032785993,
           "snippet": "justice-virtue  Rawls’s positive view of justice is concerned primarily with the justice of institutions or (what he calls) the “basic structure” of society: justice as an individual virtue is derivative from justice as a social virtue defined via certain principles of justice. The principles, famously, are derived from an “original position” in which (very roughly) rational contractors under a “veil of ignorance” decide how they wish to commit themselves to being governed in their actual lives. Rawls deliberately invokes Kantian rationalism (or anti-sentimentalism) in explaining the intellect…"
         },
         {
           "corpus_id": "sep",
           "title": "contractarianism-contemporary",
           "url": "https://plato.stanford.edu/entries/contractarianism-contemporary/",
-          "score": 0.020594968,
+          "score": 0.029259922,
           "snippet": "contractarianism-contemporary  Rawls, along with Gauthier and Buchanan, was sometimes attracted to such a reading. Rawls (1999, 104) describes the argument from the original position as invoking “pure procedural justice”—the deliberative situation is so set up that whatever principles it generates are, by the fact of their generation, just. But, his considered position is that the outcome of the deliberative model is indicative (not constitutive) of the correct solution to “the question of justification” (1999, 16)."
         },
         {
@@ -3007,17 +3028,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "religion-politics",
-          "url": "https://plato.stanford.edu/entries/religion-politics/",
-          "score": 0.029927606,
-          "snippet": "religion-politics  First, Rawls' own position about the relation between coercive law and religious reasons has shifted. In Political Liberalism, Rawls admits that at one point he inclined toward accepting an ambitious version of the DRR according to which each citizen of a liberal democracy ought not to appeal to religious reasons when deliberating about matters of basic justice and constitutional essentials (see Rawls 1993, 247 n.36). In the face of criticism, Rawls modified his position, arriving at a close relative of the DRR, viz., that while an agent may appeal to religious reasons to ju…"
+          "title": "justice-distributive",
+          "url": "https://plato.stanford.edu/entries/justice-distributive/",
+          "score": 0.036473274,
+          "snippet": "justice-distributive  The most widely discussed theory of distributive justice in the past four decades has been that proposed by John Rawls in A Theory of Justice, (Rawls 1971), and Political Liberalism, (Rawls 1993). Rawls proposes the following two principles of justice:"
         },
         {
           "corpus_id": "sep",
-          "title": "religion-morality",
-          "url": "https://plato.stanford.edu/entries/religion-morality/",
-          "score": 0.015789475,
-          "snippet": "religion-morality  The most important opponent of utilitarianism in the twentieth century was John Rawls (1921–2005). In his Theory of Justice (1971) he gave, like Hare, an account of ethics heavily indebted to Kant. But he insisted that utilitarianism does not capture the Kantian insight that each person is an end in himself or herself, because it ‘does not take seriously the distinction between persons’ (Theory of Justice, 22). He constructed the thought experiment of the ‘Original Position’ in which individuals imagine themselves not knowing what role in society they are going to play or wh…"
+          "title": "envy",
+          "url": "https://plato.stanford.edu/entries/envy/",
+          "score": 0.02462296,
+          "snippet": "envy  In constructing the “original position” from which deliberators select principles of justice in A Theory of Justice, Rawls assumes that the imagined deliberators are not motivated by various psychological propensities. One of these is the propensity to envy. One justification Rawls offers for this stipulation is that what principles of justice are chosen should not be affected by individual inclinations, which are mere accidents. This rationale is less persuasive if envious concerns are universal in human nature. Another justification is that parties in the original position should be co…"
         },
         {
           "corpus_id": "sep",
@@ -3028,16 +3049,23 @@
         },
         {
           "corpus_id": "sep",
-          "title": "egalitarianism",
-          "url": "https://plato.stanford.edu/entries/egalitarianism/",
-          "score": 0.016404647,
-          "snippet": "egalitarianism  Cohen then holds that Rawls, and we, should believe that justice requires equality, even if pragmatic nonjustice grounds favor the difference principle, which does not incorporate the idea that equality is non-instrumentally morally valuable. (See Cohen 2008, chapter 4). But in the argument being considered here, Cohen accepts the difference principle arguendo, and argues that Rawls does not fully acknowledge the implications of his own commitment to it.)"
+          "title": "property",
+          "url": "https://plato.stanford.edu/entries/property/",
+          "score": 0.019712793,
+          "snippet": "property  In dealing with the pros and cons of private property as an institution, it has sometimes been suggested that the general justification of private property and the distribution of particular property rights can be treated as separate issues, rather in the way that some philosophers suggested that the general justification of punishment can be separated from the principles governing its distribution (Hart 1968, p. 4; see also Ryan 1984, p. 82 and Waldron 1988, p. 330). In neither case, though, is the separation complete: it holds for some general justifications and not for others. In …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "william-david-ross",
+          "url": "https://plato.stanford.edu/entries/william-david-ross/",
+          "score": 0.023898238,
+          "snippet": "william-david-ross  Ross has a further argument against Rawls. Rawls’s theory contains two principles of justice, lexically ordered. His first principle outlining a set of basic rights takes priority over his second principle outlining the correct distribution of social benefits and burdens. Rawls does not think it is ever right to violate rights in order to produce just distributions. This gets him a theory as systematic as his classical average utilitarian rival and more systematic than Ross’s theory. But Ross can argue Rawls achieves system at the expense of endorsing absolutism, which many…"
         },
         {
           "corpus_id": "sep",
           "title": "equality",
           "url": "https://plato.stanford.edu/entries/equality/",
-          "score": 0.015375518,
+          "score": 0.02717225,
           "snippet": "equality  Since Rawls’ Theory of Justice is the classical focal point of present-day political philosophy, it is worth noting the different ways his theory claims to be egalitarian. First, Rawls upholds a natural basis for equal human worth: a minimal capacity for having a conception of the good and a sense of justice. Second, through the device of the “veil of ignorance,” people are conceived as equals in the “original position.” Third, the idea of sharing this “original position” presupposes the parties having political equality, as equal participants in the process of choosing the principle…"
         },
         {
@@ -3046,13 +3074,6 @@
           "url": "https://plato.stanford.edu/entries/neoliberalism/",
           "score": 0.032043345,
           "snippet": "neoliberalism  If Hayek sounds like Rawls, it is no coincidence. Hayek’s reading of Rawls’s earlier papers (not A Theory of Justice) led him to believe he had no quarrel with Rawls, for Rawls"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "realism-theory-change",
-          "url": "https://plato.stanford.edu/entries/realism-theory-change/",
-          "score": 0.017088175,
-          "snippet": "realism-theory-change  This argument engages the history of theory-change in science in a substantial way. As Hesse admitted, the Principle of No Privilege arises “from accepting the induction from the history of science” (1976: 271). Hesse’s argument starts with the historical premise that, as science grows over time, there has been a recognizable pattern of change in the ‘ontology of fundamental entities and properties’ posited by scientific theories. Assuming, then, the Principle of No Privilege, it is argued that current theories too will be subjected to a radical change in the ontology of…"
         },
         {
           "corpus_id": "sep",
@@ -3152,7 +3173,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1164,
+      "search_ms": 2583,
       "corpora_hit": [
         "sep"
       ],
@@ -3216,22 +3237,22 @@
           "corpus_id": "sep",
           "title": "libertarianism",
           "url": "https://plato.stanford.edu/entries/libertarianism/",
-          "score": 0.014492754,
+          "score": 0.023381643,
           "snippet": "libertarianism  anarchism |  liberalism |  liberty: positive and negative |  Locke, John |  Nozick, Robert: political philosophy |  property and ownership |  rights"
         },
         {
           "corpus_id": "sep",
-          "title": "neoliberalism",
-          "url": "https://plato.stanford.edu/entries/neoliberalism/",
-          "score": 0.01388889,
-          "snippet": "neoliberalism  Neoliberals do not always embrace negative conceptions of liberty alone. Hayek’s (1960 [2011: 11]) conception of freedom can be interpreted as republican, as the view that one is free when she is free from arbitrary interference, since Hayek repeatedly worries about government engaging in arbitrary controls that prevent people from developing long-term plans. This partly explains his insistence that a society can be free only when it is governed by the rule of law, since while law typically coercively interferes, it interferes in a non-arbitrary, predictable fashion (1960 [2011:…"
+          "title": "dewey-political",
+          "url": "https://plato.stanford.edu/entries/dewey-political/",
+          "score": 0.02409211,
+          "snippet": "dewey-political  This account of the character and value of freedom was for Dewey, as for the Idealists and New Liberals that he drew on and for later writers on negative and positive liberty such as Isaiah Berlin, flowed into a debate about the proper scope of social and political action. The classical identification of liberty with negative liberty bolsters the identification of freedom with the sphere of life outside the scope of political action. By contrast, for Dewey the scope of legitimate social and political action had to be determined experimentally: laissez-faire should not be assum…"
         },
         {
           "corpus_id": "sep",
-          "title": "pornography-censorship",
-          "url": "https://plato.stanford.edu/entries/pornography-censorship/",
-          "score": 0.015438598,
-          "snippet": "pornography-censorship  autonomy: in moral and political philosophy |  Berlin, Isaiah |  civil rights |  egalitarianism |  equality: of opportunity |  exploitation |  feminist philosophy |  feminist philosophy, topics: perspectives on sex markets |  freedom: of speech |  liberalism |  libertarianism |  liberty: positive and negative |  Mill, John Stuart: moral and political philosophy |  paternalism |  privacy"
+          "title": "law-limits",
+          "url": "https://plato.stanford.edu/entries/law-limits/",
+          "score": 0.019554704,
+          "snippet": "law-limits  There is a controversy here as to whether the negative liberty which Moore explicitly invokes (and which Devlin assumes) can ground the requisite prima facie reason against legal coercion (for scepticism see Tadros 2016b: 79–82 and the response in Moore 2016:  352).[7]  This raises the issue much explored in the philosophical literature of the extent to which liberty should be understood as “negative liberty” or “positive liberty” or some combination of the two (Carter 2019). Negative liberty, as Ian Carter puts it,"
         },
         {
           "corpus_id": "sep",
@@ -3239,6 +3260,13 @@
           "url": "https://plato.stanford.edu/entries/brouwer/",
           "score": 0.026422549,
           "snippet": "brouwer  The Berlin lectures of 1927 have been published in"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "neurath",
+          "url": "https://plato.stanford.edu/entries/neurath/",
+          "score": 0.026045548,
+          "snippet": "neurath  Hans Reichenbach, Carnap and Schlick’s ally in Berlin, was the leader of the Berlin Society for Scientific Philosophy, also known as the Berlin Circle, and hence was in personal and intellectual interaction with Wolfgang Köhler in Berlin. Eventually he would mention Gestalt theory in his writings in 1931, in ‘Aims of Modern Philosophy of Nature’. There he raised the question of the philosophical problems of psychology and focused on Gestalt theory as ‘a recent development’ that ‘subsumes psychological events under the concept of Gestalt (…) an organized arrangement of experiences’ (Re…"
         },
         {
           "corpus_id": "sep",
@@ -3365,13 +3393,6 @@
           "url": "https://plato.stanford.edu/entries/republicanism/",
           "score": 0.5285721,
           "snippet": "The text argues that republican liberty, defined as non-domination or independence from arbitrary power, offers a superior account of political freedom compared to the liberal negative conception of non-interference. This distinction is supported by thought experiments involving benevolent masters and imperial colonies, which demonstrate that structural relationships matter more than contingent outcomes. The summary further explores definitions of arbitrariness through procedural and democratic control mechanisms while addressing objections regarding its value and practical implementation."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "freedom-ancient",
-          "url": "https://plato.stanford.edu/entries/freedom-ancient/",
-          "score": 0.5096282,
-          "snippet": "The introduction of an atomic swerve to preserve human freedom is argued against as a flawed concept. Instead, the text suggests that for rational animals like humans, true liberty lies in actions originating from within oneself rather than merely choosing between opposite options."
         }
       ],
       "source_score": {
@@ -3399,7 +3420,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 912,
+      "search_ms": 1797,
       "corpora_hit": [
         "sep"
       ],
@@ -3454,23 +3475,58 @@
         },
         {
           "corpus_id": "sep",
+          "title": "structure-scientific-theories",
+          "url": "https://plato.stanford.edu/entries/structure-scientific-theories/",
+          "score": 0.021538338,
+          "snippet": "structure-scientific-theories  Carnap, Rudolf |  cognitive science |  confirmation |  Darwinism |  empiricism: logical |  feminist philosophy, interventions: epistemology and philosophy of science |  Feyerabend, Paul |  genetics: population |  incommensurability: of scientific theories |  Kuhn, Thomas |  models in science |  model theory |  paradox: Skolem’s |  physics: structuralism in |  pragmatism |  rationality: historicist theories of |  reduction, scientific |  science: theory and observation in |  scientific explanation |  scientific realism |  scientific representation |  simulations i…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "constructivism-metaethics",
+          "url": "https://plato.stanford.edu/entries/constructivism-metaethics/",
+          "score": 0.012232415,
+          "snippet": "constructivism-metaethics  This way of characterizing constructivism fails to neatly mark the contrast between constructivism and other metaethical views. First, Korsgaard’s characterization takes realism to be committed to claim (e) about mind-independence. But not all define realism in this restrictive way (Sayre-McCord 1988; Copp 2007: 7). When realism is defined more capaciously, it includes views according to which moral judgments are made true by facts that depend on some mental states. Second, Korsgaard’s way of drawing the contrast seems to overlook the fact that some contemporary vers…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "metaepistemology",
           "url": "https://plato.stanford.edu/entries/metaepistemology/",
-          "score": 0.015394913,
-          "snippet": "metaepistemology  There are two central types of metaepistemological anti-realist, those that reject epistemic facts and those that accept epistemic facts but reject that the obtaining of these facts is mind-independent in the way the realist insists. Explicit defenses of anti-realist positions in metaepistemology are few and far between—at least, compared with explicit defense of versions of metaethical anti-realism—and rely typically on rationales drawn from metanormative theory and philosophy of language more so than epistemology."
+          "score": 0.014048531,
+          "snippet": "metaepistemology  Whereas Cuneo’s and Boghossian’s respective cases for metaepistemological realism are negative in that they rest principally on challenging the credentials of various forms of anti-realism, at least two other strategies do not. One such envisioned metanormative strategy would be to (rather than as Cuneo has done) aim to establish metaethical realism on independent grounds and then argue from here to metaepistemological realism via a parity premise (for an instance of such a strategy, see Kyriacou 2018). Fourthly, we can envision a kind of pragmatic justification of metaepiste…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "fictionalism",
+          "url": "https://plato.stanford.edu/entries/fictionalism/",
+          "score": 0.016549591,
+          "snippet": "fictionalism  abstract objects |  cognitivism vs. non-cognitivism, moral |  constructive empiricism |  fictionalism: modal |  imagination |  impossible worlds |  logic and ontology |  mathematics, philosophy of: fictionalism |  mathematics, philosophy of: indispensability arguments in the |  mathematics, philosophy of: naturalism |  models in science |  moral anti-realism |  moral realism |  naturalism |  nominalism: in metaphysics |  nonexistent objects |  Platonism: in metaphysics |  Platonism: in the philosophy of mathematics |  propositions |  realism"
         },
         {
           "corpus_id": "sep",
           "title": "scientific-underdetermination",
           "url": "https://plato.stanford.edu/entries/scientific-underdetermination/",
-          "score": 0.019005848,
+          "score": 0.02605192,
           "snippet": "scientific-underdetermination  confirmation |  constructive empiricism |  Duhem, Pierre |  epistemology: naturalism in |  feminist philosophy, interventions: epistemology and philosophy of science |  Feyerabend, Paul |  induction: problem of |  Quine, Willard Van Orman |  scientific knowledge: social dimensions of |  scientific realism"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "feigl",
+          "url": "https://plato.stanford.edu/entries/feigl/",
+          "score": 0.014069047,
+          "snippet": "feigl  It is commonly supposed that logical empiricism and scientific realism are systematically at odds. However, Feigl’s diverse contributions to the scientific realism debate just suggest the opposite: Influenced by the early ‘critical’ realism of his teacher Schlick, Feigl (like Reichenbach and Eino Kaila) argued in terms of a reconciliation of both positions, that is, he attempted to combine logical empiricist methods with a scientific realist account of theoretically postulated entities (see, in this connection, also Neuber 2012, esp. pp. 45–51, and especially Neuber 2018b, ch. 5)."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "wesley-salmon",
+          "url": "https://plato.stanford.edu/entries/wesley-salmon/",
+          "score": 0.016622623,
+          "snippet": "wesley-salmon  The possibility of combining empiricism and realism is made to depend on an affirmative answer to this question, which Salmon claimed had not been given serious consideration by most philosophers of science, including van Fraassen, whose constructive empiricism implies a negative answer to the key question, and therefore the incompatibility between empiricism and realism."
         },
         {
           "corpus_id": "sep",
           "title": "phil-science-latin-america",
           "url": "https://plato.stanford.edu/entries/phil-science-latin-america/",
-          "score": 0.014725568,
+          "score": 0.020039577,
           "snippet": "phil-science-latin-america  Christián Carman worked extensively on the problem of realism in science. He offered a detailed elucidation of the term “scientific realism” (2005a), and he considered the theoretical-observational distinction in light of the problem of realism (2005b). Carman also critically analyzed Harré’s inductive argument for scientific realism (2005c). Moreover, he reformulated the no-miracle argument in order to apply it to simultaneous predictions (2010b), in particular in the context of Ptolemy’s planetary theory (Carman and Díez 2015)."
         },
         {
@@ -3479,20 +3535,6 @@
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 0.015782828,
           "snippet": "induction-problem  In assessing this argument, it is helpful to distinguish between levels at which the principle of induction can be applied. Following Skyrms (2000), we may distinguish between level 1, where candidate methods are applied to ordinary events or individuals, and level 2, where they are applied not to individuals or events, but to the arguments on level 1. Let us refer to “object-induction” when the inductive principle is applied at level 1, and “meta-induction” when it is applied at level 2. Reichenbach’s response does not rule out the possibility that another method might do b…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "physics-experiment",
-          "url": "https://plato.stanford.edu/entries/physics-experiment/",
-          "score": 0.014048531,
-          "snippet": "physics-experiment  confirmation |  logic: inductive |  rationalism vs. empiricism |  scientific method |  scientific realism"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "logical-construction",
-          "url": "https://plato.stanford.edu/entries/logical-construction/",
-          "score": 0.014492754,
-          "snippet": "logical-construction  Demopoulos and Friedman (1985) find an anticipation of the recent “structural realist” view of scientific theories in (Russell 1927), The Analysis of Matter. They argue that the logical constructions of sense data in Russell’s earlier thinking on the “problem of matter” were replaced by inferences to the structural properties of space and matter from patterns of sense data. We may sense patches of color next to each other in our visual field, but what that tells us about the causes of those sense data, about matter, is only revealed by the structure of those relationships…"
         },
         {
           "corpus_id": "sep",
@@ -3578,7 +3620,7 @@
         "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 623,
+      "search_ms": 1105,
       "corpora_hit": [
         "sep"
       ],
@@ -3598,13 +3640,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "kant-hume-morality",
-          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
-          "score": 0.03076923,
-          "snippet": "kant-hume-morality  The relationship between Immanuel Kant (1724–1804) and David Hume (1711–1776) is a source of longstanding fascination. Kant credited Hume with waking him from his “dogmatic slumber”, and he describes the Critique of Pure Reason, arguably the most important work of modern philosophy, as the solution to the “Humean problem in its greatest possible amplification” (Prol 4:260–61). Much of the focus has been on their respective views in metaphysics and epistemology. Yet, as Thomas Nagel remarks, contemporary moral philosophy also “continues to be dominated by the disagreement be…"
-        },
-        {
-          "corpus_id": "sep",
           "title": "induction-problem",
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 0.04717441,
@@ -3612,10 +3647,24 @@
         },
         {
           "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.032019705,
+          "snippet": "kant-hume-morality  When comparing Hume and Kant, it is a mistake to ask simply which philosopher has the best account of freedom or does the best job of reconciling freedom and necessity. They disagree about both causal necessity and the question of which idea of freedom “it concerns us to preserve”. As a result, they focus on somewhat different topics. Hume concentrates on what happens downstream from the will, that is, on how motives determine action. But Kant’s attention is focused on what happens upstream—on the question of what determines the will. It seems fair to say that from Kant’s p…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "hume-newton",
           "url": "https://plato.stanford.edu/entries/hume-newton/",
           "score": 0.0234375,
           "snippet": "hume-newton  Hume’s account of causality covers at least five related issues: (1) how we acquire an idea of cause; (2) what we mean by “cause;” (3) how we reason about causes; (4) whether causes are in the mind or in nature; (5) how we could infer the existence of causes. In this section, we explore how Hume’s treatment of what we mean by “cause” illustrates Hume’s critical response to and departure from Newton’s philosophy (see also Schliesser 2007). Hume’s treatment of causation straightforwardly rejects at least two kinds of causes that appear in Newton’s philosophy: final causes and simult…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
+          "score": 0.04103954,
+          "snippet": "kant-transcendental  The challenge Kant issues is to explain why, under normal conditions, the ordering in question is universal and necessary. Part of the best explanation, he believes, is (a), that we must have a faculty for ordering the representations. Hume might agree with this conclusion, supposing a sufficiently thin conception of ‘faculty’. Yet he would deny (b), that this faculty does not consist solely of sensory items. Kant argues that the Humean proposal for a faculty that consists solely of sensory items, the faculty of association, cannot account for the truth of propositions suc…"
         },
         {
           "corpus_id": "sep",
@@ -3640,24 +3689,38 @@
         },
         {
           "corpus_id": "sep",
-          "title": "kant-science",
-          "url": "https://plato.stanford.edu/entries/kant-science/",
-          "score": 0.04574063,
-          "snippet": "kant-science  Kant, Immanuel |  Kant, Immanuel: aesthetics and teleology |  Kant, Immanuel: philosophical development |  Kant, Immanuel: view of mind and consciousness of self |  laws of nature"
+          "title": "hume-freewill",
+          "url": "https://plato.stanford.edu/entries/hume-freewill/",
+          "score": 0.022063594,
+          "snippet": "hume-freewill  Apart from these “internal” difficulties among Hume’s core arguments, it may also be questioned whether Hume’s alternative account of causation serves to allay or diffuse other (and deeper) worries that libertarians and incompatibilists may have about his proposed “reconciliation”. What libertarians seek – particularly but not exclusively in the 18th c. context – is an account of moral agency that rests with agents who possess active powers of some kind such that they have genuine open alternatives in the same (causal) conditions. Related to this, libertarians also insist on mak…"
         },
         {
           "corpus_id": "sep",
-          "title": "reid",
-          "url": "https://plato.stanford.edu/entries/reid/",
-          "score": 0.01364366,
-          "snippet": "reid  However, Reid also offers criticisms of Hume's view of causation that can be accepted independently of the Reidian view of perception and sensation. Two of his most influential criticisms are of Hume's view that our ordinary concept of causation is reducible to the relation of constant conjunction."
+          "title": "hume",
+          "url": "https://plato.stanford.edu/entries/hume/",
+          "score": 0.024725879,
+          "snippet": "hume  The real problem, however, is that Hutcheson just claims—hypothesizes—that we possess a unique, original moral sense. If asked why we have a moral sense, his reply is that God implanted it in us. Although in his critical phase Hume freely borrows many of Hutcheson’s arguments to criticize moral rationalism, his rejection of a God-given moral sense puts him on a radically different path from Hutcheson in his constructive phase. One way of understanding Hume’s project is to see it as an attempt to naturalize Hutcheson’s moral sense theory. He aims to provide a wholly naturalistic and econo…"
         },
         {
           "corpus_id": "sep",
-          "title": "kant-transcendental",
-          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
-          "score": 0.026260504,
-          "snippet": "kant-transcendental  For Kant, the most significant rival theory of mental processing is that of his target, Hume. Hume concurs that a theory of experience requires an account of the processing of mental items, but he denies that such an account demands a priori concepts or issues in their legitimate applicability to experience. According to his theory, associationism, our mental repertoire consists solely of perceptions, all of which are sensory items – the more vivid impressions, which constitute sensory experience, and their less vivid copies, the ideas, which function in imagination, memor…"
+          "title": "kant-conceptualism",
+          "url": "https://plato.stanford.edu/entries/kant-conceptualism/",
+          "score": 0.046164773,
+          "snippet": "kant-conceptualism  Kant, Immanuel |  Kant, Immanuel: philosophy of mathematics |  Kant, Immanuel: transcendental idealism |  Kant, Immanuel: view of mind and consciousness of self |  Kant, Immanuel: views on space and time |  mental content: nonconceptual |  perception: experience and justification |  perception: the contents of"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant",
+          "url": "https://plato.stanford.edu/entries/kant/",
+          "score": 0.049436975,
+          "snippet": "kant  aesthetics: German, in the 18th century |  categories |  Fichte, Johann Gottlieb |  Kant, Immanuel: account of reason |  Kant, Immanuel: aesthetics and teleology |  Kant, Immanuel: and Hume on causality |  Kant, Immanuel: and Hume on morality |  Kant, Immanuel: and Leibniz |  Kant, Immanuel: critique of metaphysics |  Kant, Immanuel: moral philosophy |  Kant, Immanuel: philosophical development |  Kant, Immanuel: philosophy of mathematics |  Kant, Immanuel: philosophy of religion |  Kant, Immanuel: philosophy of science |  Kant, Immanuel: social and political philosophy |  Kant, Immanuel…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hegel-dialectics",
+          "url": "https://plato.stanford.edu/entries/hegel-dialectics/",
+          "score": 0.023061939,
+          "snippet": "hegel-dialectics  Kant thought Hume’s argument led to an unacceptable, skeptical conclusion, and he rejected Hume’s own solution to the skepticism (see Kant’s Critique of Pure Reason, B5, B19–20). Hume suggested that our idea of causal necessity is grounded merely in custom or habit, since it is generated by our own imaginations after repeated observations of one sort of event following another sort of event (see Hume’s A Treatise of Human Nature, Book I, Section VI; Hegel also rejected Hume’s solution, see EL §39). For Kant, science and knowledge should be grounded in reason, and he proposed …"
         },
         {
           "corpus_id": "sep",
@@ -3668,23 +3731,9 @@
         },
         {
           "corpus_id": "sep",
-          "title": "kant-aesthetics",
-          "url": "https://plato.stanford.edu/entries/kant-aesthetics/",
-          "score": 0.044653762,
-          "snippet": "kant-aesthetics  aesthetics: aesthetic judgment |  Kant, Immanuel |  Kant, Immanuel: critique of metaphysics |  Kant, Immanuel: philosophical development |  Kant, Immanuel: philosophy of science |  Kant, Immanuel: theory of judgment |  teleology: teleological notions in biology"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "reichenbach",
-          "url": "https://plato.stanford.edu/entries/reichenbach/",
-          "score": 0.015248797,
-          "snippet": "reichenbach  The thesis develops an account of probability appropriate for scientific inference. It presents an argument to supplement what Reichenbach understands to be Kant’s transcendental principle of causality with a transcendental principle of probability. In Reichenbach’s reading of Kant, the “principle of causality” asserts that every event is preceded by a cause that determines it according to some universal law (see the discussion of Kant’s principle in Section 2 of the entry on  Kant and Hume on Causality).  The principle is “transcendental” because it cannot be empirically establis…"
-        },
-        {
-          "corpus_id": "sep",
           "title": "hume-freewill",
           "url": "https://plato.stanford.edu/entries/hume-freewill/",
-          "score": 0.040061206,
+          "score": 0.039835166,
           "snippet": "hume-freewill  Hume considers the following objection:"
         },
         {
@@ -3693,20 +3742,6 @@
           "url": "https://plato.stanford.edu/entries/hume-moral/",
           "score": 0.03901895,
           "snippet": "hume-moral  Hume, David |  property and ownership"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-noncontradiction",
-          "url": "https://plato.stanford.edu/entries/aristotle-noncontradiction/",
-          "score": 0.017625233,
-          "snippet": "aristotle-noncontradiction  On this view, we are left with a skeptical Humean or pragmatic account. Aristotle’s account would be parallel to Hume’s skeptical solution to the problem of induction: We just do proceed as if induction is correct, even though we lack any justification for so doing. Or compare Wittgenstein: “..the end is not an unfounded presupposition—It is an unfounded way of acting.” (On Certainty, Section 110)."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "hume",
-          "url": "https://plato.stanford.edu/entries/hume/",
-          "score": 0.024891777,
-          "snippet": "hume  Philo explains why only a critical solution is possible by offering a deeper diagnosis of the problem. Although the dispute may appear to be merely verbal, it is in fact “still more incurably ambiguous”, for"
         },
         {
           "corpus_id": "sep",
@@ -3728,6 +3763,13 @@
           "url": "https://plato.stanford.edu/entries/kant-social-political/",
           "score": 0.02414487,
           "snippet": "kant-social-political  This explains why happiness is not universal, but not why freedom is universal. By “freedom” in political philosophy, Kant is not referring to the transcendental conception of freedom usually associated with the problem of the freedom of the will amid determinism in accordance with laws of nature, a solution to which is provided in the Third Antinomy of the Critique of Pure Reason. Rather, freedom in political philosophy is defined, as in the claim above about the only innate right, as “independence from being constrained by another’s choice”. His concern in political ph…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aesthetic-judgment",
+          "url": "https://plato.stanford.edu/entries/aesthetic-judgment/",
+          "score": 0.020255864,
+          "snippet": "aesthetic-judgment  However, the austere characterization attempts to catch a more basic idea of normativity—one that might serve as the target of rival explanations. In order to explain how subjectively universal judgments are possible, Kant has a complicated story about the harmonious interplay of the cognitive faculties—imagination and understanding—which he thinks constitutes pleasure in beauty (Kant 1790, 5: 219 [2000: 104]). This “deep” account of pleasure in beauty is highly controversial and not particularly plausible (see Budd 2001). But we can see why Kant gives it. For Kant, the nor…"
         },
         {
           "corpus_id": "sep",
@@ -3766,6 +3808,27 @@
         },
         {
           "corpus_id": "sep",
+          "title": "kant",
+          "url": "https://plato.stanford.edu/entries/kant/",
+          "score": 1.0,
+          "snippet": "kant  Immanuel Kant (1724–1804) is the central figure in modern philosophy. He synthesized early modern rationalism and empiricism, set the terms for much of nineteenth and twentieth century philosophy, and continues to exercise a significant influence today in metaphysics, epistemology, ethics, political philosophy, aesthetics, and other fields. The fundamental idea of Kant’s “critical philosophy” – especially in his three Critiques: the Critique of Pure Reason (1781, 1787), the Critique of Practical Reason (1788), and the Critique of the Power of Judgment (1790) – is human autonomy. He argue…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant",
+          "url": "https://plato.stanford.edu/entries/kant/",
+          "score": 1.0,
+          "snippet": "kant  Immanuel Kant was born April 22, 1724 in Königsberg, near the southeastern shore of the Baltic Sea. Today Königsberg has been renamed Kaliningrad and is part of Russia. But during Kant’s lifetime Königsberg was the capital of East Prussia, and its dominant language was German. Though geographically remote from the rest of Prussia and other German cities, Königsberg was then a major commercial center, an important military port, and a relatively cosmopolitan university  town.[1]"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant",
+          "url": "https://plato.stanford.edu/entries/kant/",
+          "score": 1.0,
+          "snippet": "kant  Kant was born into an artisan family of modest means. His father was a master harness maker, and his mother was the daughter of a harness maker, though she was better educated than most women of her social class. Kant’s family was never destitute, but his father’s trade was in decline during Kant’s youth and his parents at times had to rely on extended family for financial support."
+        },
+        {
+          "corpus_id": "sep",
           "title": "induction-problem",
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 1.0,
@@ -3777,43 +3840,20 @@
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 1.0,
           "snippet": "induction-problem  The original source of what has become known as the “problem of induction” is in Book 1, part iii, section 6 of A Treatise of Human Nature by David Hume, published in 1739 (Hume 1739). In 1748, Hume gave a shorter version of the argument in Section iv of An enquiry concerning human understanding (Hume 1748). Throughout this article we will give references to the Treatise as “T”, and the Enquiry as “E”."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "induction-problem",
-          "url": "https://plato.stanford.edu/entries/induction-problem/",
-          "score": 1.0,
-          "snippet": "induction-problem  Hume asks on what grounds we come to our beliefs about the unobserved on the basis of inductive inferences. He presents an argument in the form of a dilemma which appears to rule out the possibility of any reasoning from the premises to the conclusion of an inductive inference. There are, he says, two possible types of arguments, “demonstrative” and “probable”, but neither will serve. A demonstrative argument produces the wrong kind of conclusion, and a probable argument would be circular. Therefore, for Hume, the problem remains of how to explain why we form any conclusions…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "kant-science",
-          "url": "https://plato.stanford.edu/entries/kant-science/",
-          "score": 1.0,
-          "snippet": "kant-science  Kant's philosophy of science has received attention from several different audiences and for a variety of reasons. It is of interest to contemporary philosophers of science primarily because of the way in which Kant attempts to articulate a philosophical framework that places substantive conditions on our scientific knowledge of the world while still respecting the autonomy and diverse claims of particular sciences. More specifically, Kant develops a philosophy of science that departs from (i) broadly empiricist views — such as David Lewis's, according to which purely contingent …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "kant-science",
-          "url": "https://plato.stanford.edu/entries/kant-science/",
-          "score": 1.0,
-          "snippet": "kant-science  Kant's scientific writings are also of interest to historians of modern philosophy, historians of science, and historians of philosophy of science. Historians of modern philosophy are especially interested in determining how Kant's views on science might complement or clarify his distinctive metaphysical and epistemological doctrines (e.g., as expressed in the Critique of Pure Reason). Historians of science reflect on the way in which Kant's position fits in with the views of other natural philosophers of the period, such as Newton and Leibniz, including his novel account of the …"
         }
       ],
       "source_score": {
         "matched": [
           "hume",
+          "kant",
           "kant-hume-causality"
         ],
-        "missing": [
-          "kant"
-        ],
+        "missing": [],
         "total_expected": 3,
-        "ratio": 0.6666667
+        "ratio": 1.0
       },
       "fact_score": {
         "matched": [
-          "constant conjunction",
           "necessary connection",
           "transcendental",
           "synthetic a priori",
@@ -3822,12 +3862,14 @@
           "Hume",
           "Kant"
         ],
-        "missing": [],
+        "missing": [
+          "constant conjunction"
+        ],
         "total_expected": 8,
-        "ratio": 1.0
+        "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 1084,
+      "search_ms": 2450,
       "corpora_hit": [
         "sep"
       ],
@@ -3870,15 +3912,8 @@
           "corpus_id": "sep",
           "title": "radulphus-brito",
           "url": "https://plato.stanford.edu/entries/radulphus-brito/",
-          "score": 0.022222223,
+          "score": 0.034782607,
           "snippet": "radulphus-brito  In his commentary on De anima II, Brito goes on to discuss the description of the soul as the substantial form of the living body. The discussion is directly related to the debate between those (like Albert the Great) who describe the soul as the extrinsically given perfection of the living body, and those (like Thomas Aquinas) who describe it as the living body’s intrinsic substantial form. The first group of commentators refrained from describing the soul as the substantial form of the body because this seemed too close to the materialist account of Alexander of Aphrodisias,…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-biology",
-          "url": "https://plato.stanford.edu/entries/aristotle-biology/",
-          "score": 0.037918873,
-          "snippet": "aristotle-biology  Aristotle |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, Special Topics: causality |  soul, ancient theories of"
         },
         {
           "corpus_id": "sep",
@@ -3898,7 +3933,7 @@
           "corpus_id": "sep",
           "title": "aristotle-rhetoric",
           "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
-          "score": 0.0356421,
+          "score": 0.03536165,
           "snippet": "aristotle-rhetoric  Aristotle |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: logic |  Cicero |  Plato: rhetoric and poetry"
         },
         {
@@ -3917,38 +3952,38 @@
         },
         {
           "corpus_id": "sep",
+          "title": "aristotle-natphil",
+          "url": "https://plato.stanford.edu/entries/aristotle-natphil/",
+          "score": 0.035107415,
+          "snippet": "aristotle-natphil  Aristotle, General Topics: biology |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: psychology |  Aristotle, Special Topics: causality |  Aristotle, Special Topics: on non-contradiction"
+        },
+        {
+          "corpus_id": "sep",
           "title": "aristotle-commentators",
           "url": "https://plato.stanford.edu/entries/aristotle-commentators/",
-          "score": 0.021198831,
+          "score": 0.034297295,
           "snippet": "aristotle-commentators  Another text that has important implications for the reception of Aristotle’s treatment of the intellect is the paraphrase of the De anima that Themistius wrote around 350 CE. There, Themistius argues that the active intellect is the most accurate specification of the human form (In De anima 100.35–36). Put differently, our essence as human beings is the active intellect (In De anima 100.36–101.1). Although Themistius does not name names, he is clearly reacting against the reading advanced by Alexander of Aphrodisias. For Themistius the active intellect is not God or th…"
         },
         {
           "corpus_id": "sep",
           "title": "form-matter",
           "url": "https://plato.stanford.edu/entries/form-matter/",
-          "score": 0.02688172,
+          "score": 0.03651563,
           "snippet": "form-matter  While the basic idea of hylomorphism is easy to grasp, much remains unclear beneath the surface. Aristotle introduces matter and form, in the Physics, to account for changes in the natural world, where he is particularly interested in explaining how substances come into existence even though, as he maintains, there is no generation ex nihilo, that is that nothing comes from nothing. In this connection, he develops a general hylomorphic framework, which he then extends by putting it to work in a variety of contexts. For example, he deploys it in his Metaphysics, where he argues tha…"
         },
         {
           "corpus_id": "sep",
           "title": "al-kindi",
           "url": "https://plato.stanford.edu/entries/al-kindi/",
-          "score": 0.018518519,
+          "score": 0.02877493,
           "snippet": "al-kindi  That There are Incorporeal Substances (Abu Rida 1950, 265–69, Adamson and Pormann 2009) is a creative application of ideas from Aristotle’s Categories to the problem of showing that the human soul is an immaterial substance. Al-Kindi takes up this task in stages, first proving that the soul is a substance, then showing that it is immaterial. He argues that the soul is a substance by drawing on the opening chapters of the Categories to claim that the essence of something shares a name and definition with that thing. Since the soul is the essence of the living being, and the living bei…"
         },
         {
           "corpus_id": "sep",
           "title": "theology-aristotle",
           "url": "https://plato.stanford.edu/entries/theology-aristotle/",
-          "score": 0.017316017,
+          "score": 0.022941899,
           "snippet": "theology-aristotle  Sympathy for Aristotle’s theory of soul is apparent too in the Arabic version of Enneads IV.7.85. In this chapter, Plotinus criticizes Aristotle’s doctrine that the soul is a perfection or entelecheia of the body. The Arabic version, preserved in the third chapter of the Theology, by contrast says that it is the ‘most excellent philosophers’ who described the soul as an entelecheia (using an Arabic transliteration of the Greek word), and therefore sets out to discover in what sense this doctrine is to be understood. In other words, the Arabic version takes it for granted th…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "abraham-daud",
-          "url": "https://plato.stanford.edu/entries/abraham-daud/",
-          "score": 0.016666668,
-          "snippet": "abraham-daud  The soul is an important and central issue in the ER, related as it is to Ibn Daud’s treatment of the aforementioned key-concepts of Aristotelian natural philosophy on the one hand, and to his discussions of cosmology, prophecy and ethics on the other. About one fifth of the book is devoted to an investigation of the soul, its nature and faculties, its relation to the body and its afterlife (ER W 20–41; S 54b–116b). Ibn Daud infers the existence of something like the soul from the fact that different natural bodies are characterized by various actions, which can only be explained…"
         },
         {
           "corpus_id": "sep",
@@ -3959,24 +3994,31 @@
         },
         {
           "corpus_id": "sep",
-          "title": "ibn-bajja",
-          "url": "https://plato.stanford.edu/entries/ibn-bajja/",
-          "score": 0.016812867,
-          "snippet": "ibn-bajja  Since it was clear to Plato that the soul is assigned to substance, and that substance is predicated on the form and matter which is body, and that the soul cannot be said to be a body, he fervently defined the soul in its particular aspect. Since he had established that the forms of spheres are souls, he looked for the commonality of all [souls], and found that sense perception is particular to animals, [but] that movement is particular to all, and therefore he defined the soul as “something which moves itself”. (IB-S1a: 40. 5–41; IB-S1e: 26)"
-        },
-        {
-          "corpus_id": "sep",
           "title": "aristotle",
           "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 0.017580872,
+          "score": 0.029871922,
           "snippet": "aristotle  However these and like issues are to be resolved, given the primacy of form as substance, it is unsurprising to find Aristotle identifying the soul, which he introduces as a principle or source (archê) of all life, as the form of a living compound. For Aristotle, in fact, all living things, and not only human beings, have souls: ‘what is ensouled is distinguished from what is unensouled by living’ (DA 431a20–22; cf. DA 412a13, 423a20–6; De Part. An. 687a24–690a10; Met. 1075a16–25).  It is appropriate, then, to treat all ensouled bodies in hylomorphic terms:"
         },
         {
           "corpus_id": "sep",
-          "title": "functionalism",
-          "url": "https://plato.stanford.edu/entries/functionalism/",
-          "score": 0.027730133,
-          "snippet": "functionalism  The earliest view that can be considered an ancestor of functionalism is Aristotle's theory of the soul (350 BCE). In contrast to Plato's claim that the soul can exist apart from the body, Aristotle argued (De Anima Bk. II, Ch. 1) that the (human) soul is the form of a natural, organized human body — the set of powers or capacities that enable it to express its “essential whatness”, which for Aristotle is a matter of fulfilling the function or purpose that defines it as the kind of thing it is. Just as the form of an axe is whatever enables it to cut, and the form of an eye is w…"
+          "title": "burley",
+          "url": "https://plato.stanford.edu/entries/burley/",
+          "score": 0.026252305,
+          "snippet": "burley  This particular reconstruction of the process of knowledge is justified at the ontological level too. Burley’s earlier view about the metaphysical composition of corporeal beings accounts for the way he approaches questions concerning knowledge. He claims that corporeal beings are constituted by an individual substance and a host of accidental forms inhering in it. Individual substance is then the result of the union of particular matter and form (cf. Quaestiones in librum Perihermeneias, q.4, p. 272). Particular form is itself constituted by a specific form (that is, the essence of th…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "olivi",
+          "url": "https://plato.stanford.edu/entries/olivi/",
+          "score": 0.021771973,
+          "snippet": "olivi  Olivi accepts a doctrine that is known as “universal hylomorphism”, i.e. the view that every substance, except God, is composed of form and matter. The hylomorphic scheme as such is of course taken from Aristotle, but the idea that it must be applied also to spiritual entities, such as the human soul and angels, is an extension that was popularized by Dominicus Gundissalinus. The philosophical reason behind this view is related to the idea that forms are fully actual. Everything that can undergo a change from one state to another requires potentiality, and thus all created substances mu…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "william-auvergne",
+          "url": "https://plato.stanford.edu/entries/william-auvergne/",
+          "score": 0.025251057,
+          "snippet": "william-auvergne  According to William, souls are among the simplest of created substances. Nevertheless, like all created substances, they must involve some kind of composition. This composition cannot be a bodily composition, of course, since they are not bodies and thus cannot be divided into bodily parts. According to Avicebron, as well as some of William's contemporaries, souls are composite in the sense that they are composites of form and matter, though not a matter that involves physical dimensions, but rather what some called “spiritual matter.” This view is part of the doctrine now t…"
         },
         {
           "corpus_id": "sep",
@@ -4075,7 +4117,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1255,
+      "search_ms": 2553,
       "corpora_hit": [
         "sep"
       ],
@@ -4160,7 +4202,7 @@
           "corpus_id": "sep",
           "title": "heidegger",
           "url": "https://plato.stanford.edu/entries/heidegger/",
-          "score": 0.038499136,
+          "score": 0.038786028,
           "snippet": "heidegger  Heidegger was soon disappointed by his ‘divinities’. In a 1935 lecture he remarks that the"
         },
         {
@@ -4267,7 +4309,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 1634,
+      "search_ms": 3803,
       "corpora_hit": [
         "sep"
       ],
@@ -4317,14 +4359,14 @@
           "corpus_id": "sep",
           "title": "daoism",
           "url": "https://plato.stanford.edu/entries/daoism/",
-          "score": 0.018018018,
+          "score": 0.029037302,
           "snippet": "daoism  Zhuangzi built on a related view—that people develop different moral attitudes from different natural upbringings and each feels his own views are obvious and natural. But his version treats all as equally natural, not regarding some as more able than others to avoid being “blinded by socialization.” Zhuangzi also adopts a closely related view of how xinheart-mind is shaped by socialization. So there is a role for Song Xing, along with Mozi in the motivations for Daoist theorizing. However, again we find little hint that Song Xing reflected on the concept of dao itself and how it is in…"
         },
         {
           "corpus_id": "sep",
           "title": "chinese-social-political",
           "url": "https://plato.stanford.edu/entries/chinese-social-political/",
-          "score": 0.016812867,
+          "score": 0.027550496,
           "snippet": "chinese-social-political  Ritual (li—a different character from that for “benefit”) was important in many chapters of the Analects, but takes on an even more central role here. While people (unlike animals) have the ability to notice and pay heed to distinctions (fen), they will not do so naturally. Their desires have to be shaped through on-going ritual education in order for society to be harmonious and for people to flourish. The text explicitly links ritual with the idea of “standard (fa)”: “To reject ritual is to be without standards”, and “a man without standards is lost and guideless” (…"
         },
         {
@@ -4366,15 +4408,8 @@
           "corpus_id": "sep",
           "title": "confucius",
           "url": "https://plato.stanford.edu/entries/confucius/",
-          "score": 0.01925926,
+          "score": 0.03037037,
           "snippet": "confucius  Later writers developed accounts of the sources of benevolent behavior, most famously in the context of the discussion of human nature (xing 性) in the centuries after Confucius. Mencius (fourth century BCE) argued that benevolence grows out of the cultivation of an affective disposition to compassion (ceyin 惻隱) in the face of another’s distress. The anonymous author of the late Warring States period excavated text “Five Kinds of Action” (Wu xing 五行) describes it as building from the affection one feels for close family members, through successive stages to finally develop into a mor…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "chinese-epistemology",
-          "url": "https://plato.stanford.edu/entries/chinese-epistemology/",
-          "score": 0.014211887,
-          "snippet": "chinese-epistemology  Mengzi believed that the inborn qualities of human beings (xing 性) are naturally disposed towards the good. If individuals are in touch with their true nature, their actions will inevitably tend towards the good (Allinson 1989: 17) without needing to rely on linguistic maxims. In this sense, he formulated the first anti-linguistic version of Confucian epistemology (Mengzi CTP: Wan zhang shang, 5; Jin xin shang, 1, 5, 15; Liang Hui wang shang, 6). With this approach, he wanted both to refute one of the central tenets of Mohist theory, while also resolving (or avoiding) the…"
         },
         {
           "corpus_id": "sep",
@@ -4385,9 +4420,16 @@
         },
         {
           "corpus_id": "sep",
+          "title": "mohism",
+          "url": "https://plato.stanford.edu/entries/mohism/",
+          "score": 0.023098847,
+          "snippet": "mohism  One answer, accepted by many Ru (Confucians) and other “gentlemen of the world” criticized by the Mohists, is the li (ritual propriety, ceremony), a traditional code of propriety specifying behavior appropriate for individuals playing different social roles in various types of  situations.[4]  We can take the li, supplemented by the situational discretion (quan) of the virtuous gentleman, as a basic standard of conduct. This solution of course presupposes a rough, gentlemanly consensus about what is and is not appropriate behavior. Such a consensus seems to be assumed by the major Conf…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "chinese-metaphysics",
           "url": "https://plato.stanford.edu/entries/chinese-metaphysics/",
-          "score": 0.019323673,
+          "score": 0.024879228,
           "snippet": "chinese-metaphysics  This view of self-cultivation inherits the Buddhist claim that, since everyone possesses Buddha-nature (fo xing), everyone is already enlightened, but merges it with Mengzi’s claim that human nature (xing) is good. Unlike Mengzi, the process of self-cultivation is not a process of extension but rather of removing the obstacles that keep us from being what we already are. Phillip J. Ivanhoe has nicely captured this point by contrasting the views of self-cultivation for Mengzi and Wang Yangming as the difference between a model of development and a model of discovery (Ivanho…"
         },
         {
@@ -4514,7 +4556,7 @@
         "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 1057,
+      "search_ms": 2390,
       "corpora_hit": [
         "sep"
       ],
@@ -4543,14 +4585,14 @@
           "corpus_id": "sep",
           "title": "ethics-virtue",
           "url": "https://plato.stanford.edu/entries/ethics-virtue/",
-          "score": 0.01671123,
+          "score": 0.02811114,
           "snippet": "ethics-virtue  Nevertheless, the complaint that virtue ethics does not produce codifiable principles is still a commonly voiced criticism of the approach, expressed as the objection that it is, in principle, unable to provide action-guidance."
         },
         {
           "corpus_id": "sep",
           "title": "publichealth-ethics",
           "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
-          "score": 0.022165388,
+          "score": 0.03606913,
           "snippet": "publichealth-ethics  As we noted in the introduction to this entry, many real-world challenges in public health require attending to both questions of justice as well as questions of legitimacy in order to provide an adequate analysis of what is morally at stake. In keeping with this observation, some have proposed approaches to public health ethics that accord normative importance to individual liberty while also allowing for the possibility that, depending on the context, other moral considerations may justifiably outweigh or override this normative  importance.[30]  Several influential fram…"
         },
         {
@@ -4564,8 +4606,15 @@
           "corpus_id": "sep",
           "title": "reflective-equilibrium",
           "url": "https://plato.stanford.edu/entries/reflective-equilibrium/",
-          "score": 0.015224914,
+          "score": 0.026576823,
           "snippet": "reflective-equilibrium  In practical ethics, especially bioethics, there has been a vigorous debate about methodology. Some argue that we must root all claims about specific cases in specific ethical theories, and the hard work is showing how these theories apply to specific cases. Others argue that we may disagree about many aspects of general theory but still agree on principles, and the hard work of practical ethics consists in fitting sometimes conflicting principles to particular cases. Still others argue that we must begin our philosophical work with detailed understanding of the texture…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-indian-buddhism",
+          "url": "https://plato.stanford.edu/entries/ethics-indian-buddhism/",
+          "score": 0.017005146,
+          "snippet": "ethics-indian-buddhism  Some scholars, such as Charles Hallisey (1996) and Jay Garfield, have concluded that it is futile and misleading to try to interpret Buddhist ethics as a systematic theory fitting into one of the recognized types of ethical theories in the West. Rather, they suggest that Buddhist ethics is pluralist, in that it draws on various kinds of moral considerations in different cases, and particularist, rejecting the entire enterprise of formulating general moral principles to cover all cases. This view can easily accommodate textual evidence of various kinds of moral reasoning…"
         },
         {
           "corpus_id": "sep",
@@ -4578,8 +4627,22 @@
           "corpus_id": "sep",
           "title": "biomedicine",
           "url": "https://plato.stanford.edu/entries/biomedicine/",
-          "score": 0.013522651,
+          "score": 0.019916514,
           "snippet": "biomedicine  As noted at the beginning of this entry, critiques of biomedicine tend to focus on elements of biomedicine rather than the whole. There are exceptions to this. This section will review some of the frameworks that have been offered in place of biomedicine, though they vary in how similar they remain to the biomedical framework. Before delving into the alternative frameworks, it is important to discuss two prominent critiques of biomedicine that are influential primarily as holistic criticisms and not so much as sources of alternative visions of what ought to be offered in place of …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "supervenience-ethics",
+          "url": "https://plato.stanford.edu/entries/supervenience-ethics/",
+          "score": 0.017356811,
+          "snippet": "supervenience-ethics  One traditional assumption about ethics is that our ethical obligations can be expressed by general ethical principles. This assumption has recently been challenged by ethical particularists, who claim that our ethical reasons and obligations cannot be codified into principles. Supervenience might seem to be relevant to this debate. For as  Section 3.2  above showed, some philosophers argue that the strong metaphysical supervenience of the ethical entails that for every ethical property, there will be a base property that is necessarily coextensive with it. Focusing on wr…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hume-moral",
+          "url": "https://plato.stanford.edu/entries/hume-moral/",
+          "score": 0.018193733,
+          "snippet": "hume-moral  Linked with these meta-ethical controversies is the dilemma of understanding the ethical life either as the “ancients” do, in terms of virtues and vices of character, or as the “moderns” do, primarily in terms of principles of duty or natural law. While even so law-oriented a thinker as Hobbes has a good deal to say about virtue, the ethical writers of the seventeenth and eighteenth centuries predominantly favor a rule- or law-governed understanding of morals, giving priority to laws of nature or principles of duty. The chief exception here is the moral sense school, which advocate…"
         },
         {
           "corpus_id": "sep",
@@ -4590,17 +4653,31 @@
         },
         {
           "corpus_id": "sep",
+          "title": "ethics-internet-research",
+          "url": "https://plato.stanford.edu/entries/ethics-internet-research/",
+          "score": 0.016228274,
+          "snippet": "ethics-internet-research  ethics, biomedical: clinical research |  ethics: deontological |  informed consent |  privacy"
+        },
+        {
+          "corpus_id": "sep",
           "title": "respect",
           "url": "https://plato.stanford.edu/entries/respect/",
-          "score": 0.017570665,
+          "score": 0.02389282,
           "snippet": "respect  The idea that all persons are owed respect has been applied in a wide variety of contexts. For instance, some philosophers employ it to justify various positions in normative ethics, such as the claim that persons have moral rights (Benn 1971; Feinberg 1970; Downie and Telfer 1969) or duties (Fried 1978; Rawls 1971), or to argue for principles of equality (Williams 1962), justice (Narveson 2002a, 2002b; Nussbaum 1999), and education (Andrews 1976). Others appeal to respect for persons in addressing a wide variety of practical issues such as abortion, racism and sexism, rape, punishmen…"
         },
         {
           "corpus_id": "sep",
-          "title": "ethics-internet-research",
-          "url": "https://plato.stanford.edu/entries/ethics-internet-research/",
-          "score": 0.017216643,
-          "snippet": "ethics-internet-research  The practical, professional, and theoretical implications of human subjects protections has been covered extensively in scholarly literature, ranging from medical/biomedical to social sciences to computing and technical disciplines (see Beauchamp &amp; Childress 2008; Emanual et al. 2003; PRIM&amp;R et al. 2021; Sieber 1992; Wright 2006). Relevant protections and regulations continue to receive much attention in the face of research ethics violations (see, for example, Skloot 2010, on Henrietta Lacks; the U.S. Government’s admission and apology to the Guatemalan Gover…"
+          "title": "moral-particularism-generalism",
+          "url": "https://plato.stanford.edu/entries/moral-particularism-generalism/",
+          "score": 0.01484494,
+          "snippet": "moral-particularism-generalism  One might be a particularist or a generalist about moral principles understood in any of these ways. Whether being a particularist or generalist about principles in one sense drives one to be a particularist or a generalist about principles in another sense is not a trivial question. Further complicating matters, there is more than one way to oppose principles (however those principles are conceived.) Last, the form a particularist’s opposition takes might reasonably vary across different types of principle. Let us now review different ways one might oppose prin…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "medicine",
+          "url": "https://plato.stanford.edu/entries/medicine/",
+          "score": 0.014374734,
+          "snippet": "medicine  belief merging and judgment aggregation |  ethics, biomedical: theory |  health |  molecular biology |  psychiatry, philosophy of |  reduction, scientific |  reduction, scientific: in biology |  scientific explanation |  scientific objectivity"
         },
         {
           "corpus_id": "sep",
@@ -4608,27 +4685,6 @@
           "url": "https://plato.stanford.edu/entries/informed-consent/",
           "score": 0.01816609,
           "snippet": "informed-consent  The 1970s saw the ascent of a second rationale,  autonomy,  as the predominant justification of informed consent, through influential work by Ruth Faden, Tom Beauchamp, James Childress, and a U.S. President’s Commission (Faden and Beauchamp 1986, 8; National Commission for the Protection of Human Subjects of Biomedical and Behavioral Research 1979, section b (1), 282–3; Beauchamp and Childress 2008, ch. 4; Beauchamp 2010; see also President’s Commission for the Study of Ethical Problems in Medicine and Biomedical and Behavioral Research 1982, 27; Feinberg 1986; Dworkin 1988, …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "justice-inequality-health",
-          "url": "https://plato.stanford.edu/entries/justice-inequality-health/",
-          "score": 0.014883061,
-          "snippet": "justice-inequality-health  beneficence, principle of |  civil rights |  economics [normative] and economic justice |  egalitarianism |  equality |  equality: of opportunity |  ethics, biomedical: justice and access to health care |  exploitation |  feminist philosophy |  feminist philosophy, interventions: bioethics |  health |  human genome project |  justice: as a virtue |  justice: distributive |  justice: intergenerational |  justice: international distributive |  luck: justice and bad luck |  race |  Rawls, John |  social minimum [basic income]"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "privacy-medicine",
-          "url": "https://plato.stanford.edu/entries/privacy-medicine/",
-          "score": 0.013679891,
-          "snippet": "privacy-medicine  Individuals, organizations and governments value and protect medical privacy (Francis and Francis 2017; Beauchamp and Childress 2008; Humber and Almeder 2001; Englehardt 2000b). As a general rule, they strive to (1) restrict and secure what they deem to be sensitive medical information and biospecimens, (2) respect medically-related decisions by individuals and families and (3) honor community and legal expectations of privacy (Francis 2017; Winslade 2014). For more than fifty years, philosophers and bioethicists have taken a keen interest in privacy issues. They have contrib…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "reasoning-moral",
-          "url": "https://plato.stanford.edu/entries/reasoning-moral/",
-          "score": 0.012928249,
-          "snippet": "reasoning-moral  Casuistry, thus understood, is an indispensable aid to moral reasoning. At least, that it is would follow from conjoining two features of the human moral situation mentioned above: the multifariousness of moral considerations that arise in particular cases and the need and possibility for employing moral principles in sound moral reasoning. We require moral judgment, not simply a deductive application of principles or a particularist bottom-line intuition about what we should do. This judgment must be responsible to moral principles yet cannot be straightforwardly derived from…"
         },
         {
           "corpus_id": "sep",
@@ -4641,15 +4697,8 @@
           "corpus_id": "sep",
           "title": "suicide",
           "url": "https://plato.stanford.edu/entries/suicide/",
-          "score": 0.021410037,
+          "score": 0.020369524,
           "snippet": "suicide  Some (e.g., Beauchamp 1992, Cholbi 2011, 35–37) might wish to add a further condition to (a) and (b) above:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "decision-capacity",
-          "url": "https://plato.stanford.edu/entries/decision-capacity/",
-          "score": 0.012418301,
-          "snippet": "decision-capacity  we have a fundamental obligation to ensure that patients have the right to choose, as well as the right to accept or decline information. (Beauchamp &amp; Childress 2001: 63)"
         },
         {
           "corpus_id": "sep",
@@ -4695,6 +4744,27 @@
         },
         {
           "corpus_id": "sep",
+          "title": "publichealth-ethics",
+          "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
+          "score": 1.0,
+          "snippet": "publichealth-ethics  At its core, public health is concerned with promoting and protecting the health of  populations,[1]  broadly understood. Promoting and protecting the health of populations often involves or requires coordinated action on the part of governments. In the United States, for example, the Centers for Disease Control and Prevention, the Food and Drug Administration, the Environmental Protection Agency and the Consumer Protection Agency are, at least in part, public health agencies. All nations and most states or provinces and municipalities have health departments whose functio…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "publichealth-ethics",
+          "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
+          "score": 1.0,
+          "snippet": "publichealth-ethics  This entry provides a general lay of the land of the central ethical issues and challenges that arise in public health policies and practices and that drive the literature in public health ethics. Some issues are conceptual: what is the public, and in what sense can a public be healthy? Other questions concern the moral foundations of the enterprise: what sort of value does public health have, and what morally justifies efforts to promote public health?"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "publichealth-ethics",
+          "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
+          "score": 1.0,
+          "snippet": "publichealth-ethics  The literature in public health ethics often falls into two big categories. The first category focuses on the goals, targets and priorities of public health policies and programs from the standpoint of justice. Many of the issues engage familiar debates between utilitarian and various egalitarian approaches to the allocation of resources and the distribution of benefits and burdens (see also the entry on  justice);  in health policy circles these issues often play out as tensions between efficiency and equity. The justice literature in public health ethics also addresses b…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "technology",
           "url": "https://plato.stanford.edu/entries/technology/",
           "score": 1.0,
@@ -4706,34 +4776,6 @@
           "url": "https://plato.stanford.edu/entries/technology/",
           "score": 1.0,
           "snippet": "technology  The entry starts with a brief historical overview, then continues with a presentation of the themes on which modern analytic philosophy of technology focuses. This is followed by a discussion of the societal and ethical aspects of technology, in which some of the concerns of humanities philosophy of technology are addressed. This twofold presentation takes into consideration the development of technology as the outcome of a process originating within and guided by the practice of engineering, by standards on which only limited societal control is exercised, as well as the consequen…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "technology",
-          "url": "https://plato.stanford.edu/entries/technology/",
-          "score": 1.0,
-          "snippet": "technology  Philosophical reflection on technology is about as old as philosophy itself. Our oldest testimony is from ancient Greece. There are four prominent themes. One early theme is the thesis that technology learns from or imitates nature (Plato, Laws X 899a ff.). According to Democritus, for example, house-building and weaving were first invented by imitating swallows and spiders building their nests and nets, respectively (Diels 1903 and Freeman 1948: 154).  Perhaps the oldest extant source for the exemplary role of nature is Heraclitus (Diels 1903 and Freeman 1948: 112).  Aristotle ref…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "principle-beneficence",
-          "url": "https://plato.stanford.edu/entries/principle-beneficence/",
-          "score": 1.0,
-          "snippet": "principle-beneficence  Beneficent actions and motives have traditionally occupied a central place in morality. Common examples today are found in social welfare programs, scholarships for needy and meritorious students, communal support of health-related research, policies to improve the welfare of animals, philanthropy, disaster relief, programs to benefit children and the incompetent, and preferential hiring and admission policies. What makes these diverse acts beneficent? Are such beneficent acts and policies obligatory or merely the pursuit of optional moral ideals?"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "principle-beneficence",
-          "url": "https://plato.stanford.edu/entries/principle-beneficence/",
-          "score": 1.0,
-          "snippet": "principle-beneficence  These questions have generated a substantial literature on beneficence in both theoretical ethics and applied ethics. In theoretical ethics, the dominant issue in recent years has been how to place limits on the scope of beneficence. In applied and professional ethics, a number of issues have been treated in the fields of biomedical ethics and business ethics."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "theory-bioethics",
-          "url": "https://plato.stanford.edu/entries/theory-bioethics/",
-          "score": 0.6237672,
-          "snippet": "Bioethical theory has evolved from abstract high-level principles to mid-level approaches like Beauchamp and Childress's four-principles framework, which relies on common morality and wide reflective equilibrium rather than deductive reasoning. This shift was driven by criticisms that high theory is ahistorical and disconnected from practical application, leading some scholars to advocate for casuistry as an alternative method emphasizing analogical reasoning with concrete cases."
         }
       ],
       "source_score": {
@@ -4753,17 +4795,17 @@
           "Beauchamp",
           "Childress",
           "principlism",
-          "casuistry"
-        ],
-        "missing": [
-          "non-maleficence",
+          "casuistry",
           "particularism"
         ],
+        "missing": [
+          "non-maleficence"
+        ],
         "total_expected": 9,
-        "ratio": 0.7777778
+        "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 896,
+      "search_ms": 1850,
       "corpora_hit": [
         "sep"
       ],
