@@ -2,7 +2,7 @@
   "bank_name": "single-atomic-bombings",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784182684,
+  "started_at_unix": 1784229634,
   "results": [
     {
       "question_id": "contested_atomic_bombings_morality",
@@ -19,16 +19,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
-          "score": 0.031318814,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.030477948,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
           "score": 0.030477948,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
         },
         {
           "corpus_id": "wikipedia",
@@ -39,16 +39,30 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.028125,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Air raids on Japan",
           "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
-          "score": 0.027637724,
+          "score": 0.027389705,
           "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.026830135,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
-          "score": 0.027346637,
+          "score": 0.026480835,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  Ward Wilson believes that the bombing of Hiroshima was not the reason for Japan's surrender, because the preliminary report of the Japanese Army investigation team on the bombing of Hiroshima was not submitted until August 10. Ward Wilson believes that Japan decided to surrender long before its leaders realized the devastation caused by the atomic bombs on Hiroshima and Nagasaki.According to Ward Wilson, Japanese leaders had long concluded: it is possible to fight a decisive battle against a great power attacking from one direction, but it is impossib…"
         },
         {
@@ -60,6 +74,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
+          "score": 0.015873017,
+          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated a uranium gun-type fission bomb nicknamed \" Little Boy \" over the Japanese city of Hiroshima; three days later, on August 9, the USAAF detonated a plutonium implosion-type fission bomb nicknamed \" Fat Man \" over the Japanese city of Nagasaki. These bombings caused injuries that resulted in the deaths of approximately 200,000 civilians and military personnel. The ethics of these bombings and their r…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
           "score": 0.015873017,
@@ -67,24 +88,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
-          "score": 0.015625,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
-          "score": 0.015625,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "title": "Harry S. Truman",
+          "url": "https://en.wikipedia.org/wiki/Harry_S._Truman#Dropping_atomic_bombs_on_Japan",
           "score": 0.015384615,
-          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
+          "snippet": "Harry S. Truman  bomb, Stalin was already aware of the bomb project—having learned about it through atomic espionage long before Truman did.  Hiroshima was bombed on August 6, and Nagasaki three days later, leaving 105,000 dead. The Soviet Union declared war on Japan on August 9 and invaded Manchuria. Japan agreed to surrender the following day.  Supporters of Truman's decision argue that, given the tenacious Japanese defense of the outlying islands, the bombings saved hundreds of thousands of lives of Allied prisoners, Japanese civilians, and combatants on both sides that would have been lost…"
         },
         {
           "corpus_id": "wikipedia",
@@ -96,6 +103,13 @@
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.015151516,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Hibakusha",
           "score": 0.015151516,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  as of August 2024, the memorials record the names of more than 540,000 hibakusha; 344,306 in Hiroshima and 198,785 in Nagasaki."
@@ -103,16 +117,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
           "score": 0.014925373,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of nuclear weapons",
-          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Ethics",
           "score": 0.014705882,
-          "snippet": "History of nuclear weapons  they argued, could only be used against large civilian populations, and could thus only be used as a weapon of genocide.  Many scientists, such as Bethe, urged that the United States should not develop such weapons and set an example towards the Soviet Union. Promoters of the weapon, including Teller, Ernest Lawrence, and Luis Alvarez, argued that such a development was inevitable, and to deny such protection to the people of the United States—especially when the Soviet Union was likely to create such a weapon themselves—was itself an immoral and unwise act."
+          "snippet": "Nuclear weapon  Even before the first nuclear weapons had been developed, scientists involved with the Manhattan Project were divided over the use of the weapon. The role of the two atomic bombings of the country in Japan's surrender and the U.S.'s ethical justification for them has been the subject of scholarly and popular debate for decades. The question of whether nations should have nuclear weapons, or test them, has been continually and nearly universally controversial."
         },
         {
           "corpus_id": "wikipedia",
@@ -123,10 +137,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of nuclear weapons",
-          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
           "score": 0.014492754,
-          "snippet": "History of nuclear weapons  \"Super\" bomb. Only Teller continued working on the project—against the will of project leaders Oppenheimer and Hans Bethe.  The Joe-1 atomic bomb test by the Soviet Union that took place in August 1949 came earlier than expected by Americans, and over the next several months there was an intense debate within the U.S. government, military, and scientific communities regarding whether to proceed with development of the far more powerful Super.  After the atomic bombings of Japan, many scientists at Los Alamos rebelled against the notion of creating a weapon thousands…"
+          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
         },
         {
           "corpus_id": "wikipedia",
@@ -138,30 +152,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Choice_of_targets",
-          "score": 0.014285714,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  city may be destroyed. The Emperor's palace in Tokyo has a greater fame than any other target but is of least strategic value.\"  Edwin O. Reischauer, a Japan expert for the U.S. Army Intelligence Service, was incorrectly said to have prevented the bombing of Kyoto. In his autobiography, Reischauer specifically refuted this claim:  ... the only person deserving credit for saving Kyoto from destruction is Henry L. Stimson, the Secretary of War at the time, who had known and admired Kyoto ever since his honeymoon there several decades earlier."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Double_survivors",
           "score": 0.014285714,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  Perhaps as many as 200 people from Hiroshima sought refuge in Nagasaki. The 2006 documentary Twice Survived: The Doubly Atomic Bombed of Hiroshima and Nagasaki documented 165 nijū hibakusha (lit. double explosion-affected people), nine of whom claimed to be in the blast zone in both cities. On 24 March 2009, the Japanese government officially recognized Tsutomu Yamaguchi as a double hibakusha. He was confirmed to be 3 km (1.9 mi) from ground zero in Hiroshima on a business trip when the bomb was detonated. He was seriously burnt on his left side and s…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "World War II",
-          "url": "https://en.wikipedia.org/wiki/World_War_II",
-          "score": 0.014084507,
-          "snippet": "but not on the same scale as those of the Axis powers and the Soviet Union. The Western Allies prosecuted a number of war crimes committed by their own forces, but Allied war crimes were not prosecuted by the post-war international military tribunals. There has been continued debate over whether the area bombing of cities in Germany and Japan, and the atomic bombing of Hiroshima and Nagasaki, were war crimes."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "James B. Conant",
-          "url": "https://en.wikipedia.org/wiki/James_B._Conant#National_Defense_Research_Committee",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
           "score": 0.013888889,
-          "snippet": "James B. Conant  Stimson with the help of McGeorge Bundy, the article stressed that the atomic bombings of Hiroshima and Nagasaki were used to avoid the possibility of \"over a million casualties\", from a figure found in the estimates given to the Joint Chiefs of Staff by its Joint Planning Staff in 1945."
+          "snippet": "Air raids on Japan  When registering the only dissenting opinion of the judges involved in the International Military Tribunal for the Far East in 1947, Justice Radhabinod Pal argued that Japan's leadership had not conspired to commit atrocities and stated that the decision to conduct the atomic bomb attacks was the clearest example of a direct order to conduct \"indiscriminate murder\" during the Pacific War. Since then, Japanese academics, such as Yuki Tanaka and Tsuyoshi Hasegawa, have argued that use of the bombs was immoral and constituted a war crime. In contrast, President Truman and, mor…"
         },
         {
           "corpus_id": "wikipedia",
@@ -172,10 +172,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "War",
-          "url": "https://en.wikipedia.org/wiki/War",
+          "title": "Historical revisionism",
+          "url": "https://en.wikipedia.org/wiki/Historical_revisionism#Atomic_bombings_of_Hiroshima_and_Nagasaki",
           "score": 0.01369863,
-          "snippet": "=Mar 1997|volume=41|issue=1|pages=87â112|url=http://www.ou.edu/uschina/texts/Levy.97.ISQ.ProspectTheory.pdf|doi=10.1111/0020-8833.00034|url-status=dead|archive-url=https://web.archive.org/web/20150924075824/http://www.ou.edu/uschina/texts/Levy.97.ISQ.ProspectTheory.pdf|archive-date=24 September 2015}}  (1871) by Vasily Vereshchagin]]  The morality of war has been the subject of debate for thousands of years.  The two principal aspects of ethics in war, according to the just war theory, are jus ad bellum and jus in bello."
+          "snippet": "Historical revisionism  The atomic bombings of Hiroshima and Nagasaki have generated controversy and debate. Historians who accepted President Harry Truman 's reasoning in justifying dropping atomic bombs in order to force Japanese surrender end of World War II are known as \"orthodox,\" while \"revisionists\" generally deny that the bombs were necessary. Some also claim that Truman knew they were not necessary but wanted to pressure the Soviet Union. These historians see Truman's decision as a major factor in starting the Cold War. They and others also may charge that Truman ignored or downplayed…"
         },
         {
           "corpus_id": "wikipedia",
@@ -186,10 +186,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Kurt Vonnegut",
-          "url": "https://en.wikipedia.org/wiki/Kurt_Vonnegut#War",
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
           "score": 0.013513514,
-          "snippet": "Kurt Vonnegut  intended to publish again, but his anger against the George W. Bush administration led him to write A Man Without a Country.  Slaughterhouse-Five is the Vonnegut novel best known for its antiwar themes, but the author expressed his beliefs in ways beyond the depiction of the destruction of Dresden. One character, Mary O'Hare, opines that \"wars were partly encouraged by books and movies\", starring \" Frank Sinatra or John Wayne or some of those other glamorous, war-loving, dirty old men\". Vonnegut made a number of comparisons between Dresden and the bombing of Hiroshima in Slaught…"
+          "snippet": "History of nuclear weapons  they argued, could only be used against large civilian populations, and could thus only be used as a weapon of genocide.  Many scientists, such as Bethe, urged that the United States should not develop such weapons and set an example towards the Soviet Union. Promoters of the weapon, including Teller, Ernest Lawrence, and Luis Alvarez, argued that such a development was inevitable, and to deny such protection to the people of the United States—especially when the Soviet Union was likely to create such a weapon themselves—was itself an immoral and unwise act."
         },
         {
           "corpus_id": "wikipedia",
@@ -200,6 +200,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "score": 0.013333334,
+          "snippet": "History of nuclear weapons  \"Super\" bomb. Only Teller continued working on the project—against the will of project leaders Oppenheimer and Hans Bethe.  The Joe-1 atomic bomb test by the Soviet Union that took place in August 1949 came earlier than expected by Americans, and over the next several months there was an intense debate within the U.S. government, military, and scientific communities regarding whether to proceed with development of the far more powerful Super.  After the atomic bombings of Japan, many scientists at Los Alamos rebelled against the notion of creating a weapon thousands…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Soviet–Japanese War",
           "url": "https://en.wikipedia.org/wiki/Soviet%E2%80%93Japanese_War#Impact_on_the_Japanese_decision_to_surrender",
           "score": 0.013333334,
@@ -207,17 +214,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of nuclear weapons",
-          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#Decision_to_drop_the_bomb",
-          "score": 0.013333334,
-          "snippet": "History of nuclear weapons  leaflets were never dropped over Hiroshima and Nagasaki, or were dropped too late, although a testimony does contradict this.  On August 6, 1945, a uranium-based weapon, Little Boy, was detonated above the Japanese city of Hiroshima, and three days later, a plutonium-based weapon, Fat Man, was detonated above the Japanese city of Nagasaki. To date, Hiroshima and Nagasaki remain the only two instances of nuclear weapons being used in combat. The atomic raids killed at least one hundred thousand Japanese civilians and military personnel outright, with the heat, radiat…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "War",
-          "url": "https://en.wikipedia.org/wiki/War",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Choice_of_targets",
           "score": 0.013157895,
-          "snippet": "of success; fifth, the war must be a last resort; and sixth, the ends being sought must be proportional to means being used.  . \"Hitler ordered that Moscow and Leningrad were to be razed to the ground; their inhabitants were to be annihilated or driven out by starvation. These intentions were part of the 'General Plan East'.\" â The Oxford Companion to World War II]]Jus in bello (right in war), is the set of ethical rules when conducting war. The two main principles are proportionality and discrimination. Proportionality regards how much force is necessary and morally appropriate to the ends …"
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  city may be destroyed. The Emperor's palace in Tokyo has a greater fame than any other target but is of least strategic value.\"  Edwin O. Reischauer, a Japan expert for the U.S. Army Intelligence Service, was incorrectly said to have prevented the bombing of Kyoto. In his autobiography, Reischauer specifically refuted this claim:  ... the only person deserving credit for saving Kyoto from destruction is Henry L. Stimson, the Secretary of War at the time, who had known and admired Kyoto ever since his honeymoon there several decades earlier."
         }
       ],
       "source_score": {
@@ -242,8 +242,8 @@
         "total_expected": 6,
         "ratio": 0.33333334
       },
-      "embed_ms": 27,
-      "search_ms": 3119,
+      "embed_ms": 31,
+      "search_ms": 3142,
       "corpora_hit": [
         "wikipedia"
       ],

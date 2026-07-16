@@ -1077,6 +1077,166 @@ pub async fn run_bank(
     })
 }
 
+/// Bench-prod parity mode (`--prod-pipeline`): every question drives the
+/// PRODUCTION KnowledgeQuery retrieval pipeline in-process
+/// (`Runtime::retrieve_evidence` — context build → the 19-step
+/// `kq_pipeline()` → merge → truncate) and the returned evidence pool is
+/// scored with the same rigid source/fact scorers as the raw-index mode.
+/// No synthesis pass, so the lane stays deterministic and cheap while
+/// measuring the pipeline chat surfaces actually run
+/// (RETRIEVAL_REDESIGN.md §7.1). Note the pool size is the pipeline's own
+/// (KQ_MERGED_LIMIT + grounding injections), not the raw lane's `--limit`
+/// — scores are baseline-comparable only within this mode.
+pub async fn run_bank_prod(
+    session: &ChatSession,
+    bank: &EvalBank,
+    limit: usize,
+    isolate: bool,
+) -> Result<EvalRun, String> {
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let isolate_corpora: Option<Vec<String>> = if isolate {
+        Some(vec![bank.bank.corpus.clone()])
+    } else {
+        None
+    };
+    let mut results = Vec::with_capacity(bank.questions.len());
+    for q in &bank.questions {
+        results.push(run_question_prod(session, q, limit, isolate_corpora.as_deref()).await);
+    }
+    Ok(EvalRun {
+        bank_name: bank.bank.name.clone(),
+        corpus: bank.bank.corpus.clone(),
+        limit,
+        started_at_unix,
+        results,
+    })
+}
+
+async fn run_question_prod(
+    session: &ChatSession,
+    q: &Question,
+    limit: usize,
+    isolate_corpora: Option<&[String]>,
+) -> EvalResult {
+    // Fresh conversation per question — same seeding pattern as the synth
+    // path so `build_context` + the personal-scope filter see a real row,
+    // and isolation scopes retrieval via `enabled_corpora`.
+    let conversation_id = uuid::Uuid::new_v4().to_string();
+    let created_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    if let Err(e) = session
+        .store
+        .insert_empty_conversation(&conversation_id, created_at, None)
+        .await
+    {
+        eprintln!("  warn: prod-pipeline seed (insert) failed for {}: {e}", q.id);
+    } else if let Some(corpora) = isolate_corpora {
+        if let Err(e) = session
+            .store
+            .set_conversation_enabled_corpora(&conversation_id, Some(corpora.to_vec()))
+            .await
+        {
+            eprintln!("  warn: prod-pipeline seed (scope) failed for {}: {e}", q.id);
+        }
+    }
+
+    let empty_result = |qq: &Question| EvalResult {
+        question_id: qq.id.clone(),
+        category: qq.category.clone(),
+        question: qq.question.clone(),
+        retrieved: Vec::new(),
+        source_score: score_sources(&qq.expected_sources, &[]).into(),
+        fact_score: score_facts(&qq.expected_facts, &[]).into(),
+        embed_ms: 0,
+        search_ms: 0,
+        corpora_hit: Vec::new(),
+        vector_eligible: true,
+        synth: None,
+        loose_source_score: None,
+        loose_source_evidence: Vec::new(),
+        essay_readiness: None,
+        atlas_navigation: Vec::new(),
+        meta_atlas_hits: Vec::new(),
+    };
+
+    let ev = match session
+        .runtime
+        .retrieve_evidence(&q.question, &conversation_id)
+        .await
+    {
+        Ok(ev) => ev,
+        Err(e) => {
+            return empty_result(q).with_error(format!("retrieve_evidence: {e}"));
+        }
+    };
+
+    let mut all_hits = ev.chunks;
+    if all_hits.len() > limit {
+        all_hits.truncate(limit);
+    }
+    // Same attribution projection as the raw-index scorer (see
+    // run_question step 3): conversation-history banks must not credit a
+    // restatement as evidence.
+    let attribution_mode = attribution::AttributionMode::from_str(&q.attribution_mode);
+    let hits_for_scoring: Vec<ScoredChunk> =
+        if attribution_mode == attribution::AttributionMode::Both {
+            all_hits.clone()
+        } else {
+            all_hits
+                .iter()
+                .map(|h| {
+                    let mut filtered = h.clone();
+                    filtered.content =
+                        attribution::filter_chunk_content(&h.content, attribution_mode);
+                    filtered
+                })
+                .collect()
+        };
+    let source_score: ScoreSnapshot = score_sources(&q.expected_sources, &hits_for_scoring).into();
+    let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &hits_for_scoring).into();
+    let corpora_hit: Vec<String> = {
+        let mut s: Vec<String> = all_hits.iter().map(|c| c.corpus_id.clone()).collect();
+        s.sort();
+        s.dedup();
+        s
+    };
+    let retrieved = all_hits
+        .iter()
+        .map(|c| RetrievedChunk {
+            corpus_id: c.corpus_id.clone(),
+            title: c.title.clone(),
+            url: c.url.clone(),
+            score: c.score,
+            snippet: truncate(&c.content.replace('\n', " "), 600),
+            source: None,
+        })
+        .collect();
+
+    EvalResult {
+        question_id: q.id.clone(),
+        category: q.category.clone(),
+        question: q.question.clone(),
+        retrieved,
+        source_score,
+        fact_score,
+        embed_ms: 0,
+        search_ms: ev.search_ms,
+        corpora_hit,
+        vector_eligible: true,
+        synth: None,
+        loose_source_score: None,
+        loose_source_evidence: Vec::new(),
+        essay_readiness: None,
+        atlas_navigation: Vec::new(),
+        meta_atlas_hits: Vec::new(),
+    }
+}
+
 async fn run_question(
     session: &ChatSession,
     target_indexes: &[&corpus_engine::IndexInfo],
@@ -1391,7 +1551,15 @@ async fn run_question(
         );
     }
 
-    for info in target_indexes {
+    // The wide search below exists solely to serve the atlas-article loop —
+    // with no ranked atlas articles (the no-atlas bench path) it would be a
+    // full hybrid search per index whose results are thrown away unread.
+    let atlas_target_indexes = if articles_ranked.is_empty() {
+        &[][..]
+    } else {
+        target_indexes
+    };
+    for info in atlas_target_indexes {
         let idx = match session.corpus_engine.open_index(&info.path).await {
             Ok(i) => i,
             Err(_) => continue,

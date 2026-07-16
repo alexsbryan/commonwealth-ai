@@ -2,7 +2,7 @@
   "bank_name": "sep-summarize-v1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784182385,
+  "started_at_unix": 1784229392,
   "results": [
     {
       "question_id": "summary_idealism",
@@ -35,14 +35,14 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.016393442,
-          "snippet": "idealism  His idealism needs epistemology as well as metaphysics."
+          "snippet": "idealism  This entry discusses philosophical idealism as a movement chiefly in the eighteenth and nineteenth centuries, although anticipated by certain aspects of seventeenth century philosophy and continuing into the twentieth century. It revises the standard distinction between epistemological idealism, the view that the contents of human knowledge are ineluctably determined by the structure of human thought, and ontological idealism, the view that epistemological idealism delivers truth because reality itself is a form of thought and human thought participates in it, in favor of a distincti…"
         },
         {
           "corpus_id": "sep",
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.016129032,
-          "snippet": "idealism  This entry discusses philosophical idealism as a movement chiefly in the eighteenth and nineteenth centuries, although anticipated by certain aspects of seventeenth century philosophy and continuing into the twentieth century. It revises the standard distinction between epistemological idealism, the view that the contents of human knowledge are ineluctably determined by the structure of human thought, and ontological idealism, the view that epistemological idealism delivers truth because reality itself is a form of thought and human thought participates in it, in favor of a distincti…"
+          "snippet": "idealism  Prior to Wolff, neither defending nor refuting idealism seems to have been a central issue for rationalist philosophers, and none of them called themselves idealists. Yet what are by later lights idealistic tendencies can nevertheless be found among them."
         },
         {
           "corpus_id": "sep",
@@ -56,7 +56,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.015873017,
-          "snippet": "idealism  Prior to Wolff, neither defending nor refuting idealism seems to have been a central issue for rationalist philosophers, and none of them called themselves idealists. Yet what are by later lights idealistic tendencies can nevertheless be found among them."
+          "snippet": "idealism  The relation between ontological and epistemological arguments for idealism is complex. Idealism can be argued for on ontological grounds, and then bring an epistemological argument in its train. Or an epistemological argument can be offered independently of ontological assumptions but lead to idealism, especially in the hope of avoiding skepticism. The first option may have been characteristic of some rationalists, such as Leibniz in his more strictly idealist mood. Both forms of argument are found within early modern British philosophy. We find epistemological considerations pushin…"
         },
         {
           "corpus_id": "sep",
@@ -70,7 +70,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.015625,
-          "snippet": "idealism  Since the work of Blanshard in the 1930s, very few Anglophone philosophers have attempted an explicit defense of idealism. Both John Foster, in The Case for Idealism (1982) and Timothy Sprigge in The Vindication of Absolute Idealism (1983) constructed defenses of what Foster defined by the three theses"
+          "snippet": "idealism  Be this as it may, at least as far as epistemological idealism is concerned it is by no means obvious that either his explicit criticism of idealism or his remarks on the ways we make up epistemic worlds prevent Nietzsche from coming close to an idealist position himself. This is so because in epistemology his main enemy does not seem to be idealism but all forms of realism."
         },
         {
           "corpus_id": "sep",
@@ -84,7 +84,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.015384615,
-          "snippet": "idealism  In the end, then, after 1800 Schelling (arguably as well as Fichte in his post-Jena period) seems pushed toward a “non-dogmatic” idealism that combines ontological as well as epistemological idealism within a monistic framework."
+          "snippet": "idealism  Since the work of Blanshard in the 1930s, very few Anglophone philosophers have attempted an explicit defense of idealism. Both John Foster, in The Case for Idealism (1982) and Timothy Sprigge in The Vindication of Absolute Idealism (1983) constructed defenses of what Foster defined by the three theses"
         },
         {
           "corpus_id": "sep",
@@ -98,7 +98,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.015151516,
-          "snippet": "idealism  Similarly, in the Prolegomena he writes that"
+          "snippet": "idealism  So instead of using Kant as any kind of model for epistemological idealism, in this entry we will distinguish between metaphysical and epistemological arguments for idealism understood as a metaphysical doctrine, namely that everything that exists is in some way mental. We thus agree with A.C. Ewing, who wrote in 1934 that all forms of idealism"
         },
         {
           "corpus_id": "sep",
@@ -112,7 +112,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.014925373,
-          "snippet": "idealism  So instead of using Kant as any kind of model for epistemological idealism, in this entry we will distinguish between metaphysical and epistemological arguments for idealism understood as a metaphysical doctrine, namely that everything that exists is in some way mental. We thus agree with A.C. Ewing, who wrote in 1934 that all forms of idealism"
+          "snippet": "idealism  His idealism needs epistemology as well as metaphysics."
         },
         {
           "corpus_id": "sep",
@@ -126,7 +126,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.014705882,
-          "snippet": "idealism  The relation between ontological and epistemological arguments for idealism is complex. Idealism can be argued for on ontological grounds, and then bring an epistemological argument in its train. Or an epistemological argument can be offered independently of ontological assumptions but lead to idealism, especially in the hope of avoiding skepticism. The first option may have been characteristic of some rationalists, such as Leibniz in his more strictly idealist mood. Both forms of argument are found within early modern British philosophy. We find epistemological considerations pushin…"
+          "snippet": "idealism  Our distinctions between epistemological and ontological idealism, on the one hand, and that between metaphysical and epistemological arguments for idealism, on the other hand, has not always been clearly made. However, the American philosopher Josiah Royce pointed in the direction of our distinction at the end of the nineteenth century. On Royce’s definitions, epistemological idealism"
         },
         {
           "corpus_id": "sep",
@@ -140,7 +140,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.014492754,
-          "snippet": "idealism  that"
+          "snippet": "idealism  Collier argues for his idealism on both epistemological and more purely metaphysical ground. His work, although a footnote in the history of philosophy, is interesting precisely because it so clearly illustrates the dual strategies for arguing for idealism,"
         },
         {
           "corpus_id": "sep",
@@ -161,14 +161,14 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.014285714,
-          "snippet": "idealism  Be this as it may, at least as far as epistemological idealism is concerned it is by no means obvious that either his explicit criticism of idealism or his remarks on the ways we make up epistemic worlds prevent Nietzsche from coming close to an idealist position himself. This is so because in epistemology his main enemy does not seem to be idealism but all forms of realism."
+          "snippet": "idealism  Despite these critical attitudes towards idealism, which contributed to its decline as a major philosophical position in the German intellectual milieu before the first World War, idealistic claims based on metaphysical and/or epistemological arguments can still be found in the works of some of the (at least at that time) better known philosophers. In particular, the writings of Friedrich Adolf Trendelenburg (1802–1872) and Rudolf Hermann Lotze (1817–1881) are documents of a lasting influence of idealistic figures and practices of thought, as was highlighted in detail by Beiser (2013…"
         },
         {
           "corpus_id": "sep",
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.014084507,
-          "snippet": "idealism  and that"
+          "snippet": "idealism  However, a closer look at how Hegel tries to realize a monistic idealism reveals that it proved rather complicated to establish a philosophical system based on the identity of thinking and being or subject and object. At the outset this project was to be realized within the boundaries of two conditions. The first was to present an argument in favor of the superiority of idealism that would not just make the endorsement of idealism a question of individual character or what a person wants to be, a move he thought to be characteristic of both Fichte’s and Schelling’s defense of idealis…"
         },
         {
           "corpus_id": "sep",
@@ -189,14 +189,14 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.013888889,
-          "snippet": "idealism  Our distinctions between epistemological and ontological idealism, on the one hand, and that between metaphysical and epistemological arguments for idealism, on the other hand, has not always been clearly made. However, the American philosopher Josiah Royce pointed in the direction of our distinction at the end of the nineteenth century. On Royce’s definitions, epistemological idealism"
+          "snippet": "idealism  Things were different in the English-speaking world, where idealism became an important topic in a wide spectrum of philosophical discussions ranging from metaphysics via aesthetics to moral and social theories. In England, Scotland, and Wales an idealism that was ultimately both epistemological and ontological in motivation became the dominant approach to philosophy for several decades, while in the United States idealism could not monopolize philosophy, having to share the stage with and ultimately reach an accommodation with pragmatism, but it nevertheless also flourished for seve…"
         },
         {
           "corpus_id": "sep",
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.01369863,
-          "snippet": "idealism  It is because of its one-sidedness and its putting “the real” outside of our grasp that such a “subjective” idealism is for Hegel unacceptable (see his criticism of Kant in Faith and Knowledge, GW 4, 325 ff.). His objections to and his contempt for both idealism and realism in their mutually exclusive forms are well documented in almost all of his writings throughout his philosophical career."
+          "snippet": "idealism  and that"
         },
         {
           "corpus_id": "sep",
@@ -210,7 +210,7 @@
           "title": "idealism",
           "url": "https://plato.stanford.edu/entries/idealism/",
           "score": 0.013513514,
-          "snippet": "idealism  but that"
+          "snippet": "idealism  This simple and perhaps inescapable thought may be regarded as the most fundamental epistemological motivation for any form of idealism. On the basis of this proposition, Schopenhauer then tries to distinguish his position from what he takes to be the skepticism of Hume, that there is a real question about whether there is either a subject or an object in addition to representations, and from the dogmatism of Fichte, that both of these can be proved; his own view as initially stated is rather that"
         },
         {
           "corpus_id": "sep",
@@ -246,8 +246,8 @@
         "total_expected": 10,
         "ratio": 0.6
       },
-      "embed_ms": 42,
-      "search_ms": 717,
+      "embed_ms": 43,
+      "search_ms": 794,
       "corpora_hit": [
         "sep"
       ],
@@ -262,6 +262,13 @@
           "corpus_id": "sep",
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
+          "score": 0.033333335,
+          "snippet": "cosmological-argument  Critics have objected to key premises in the argument. We will consider the most important objections and responses."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.032522473,
           "snippet": "cosmological-argument  Robert Koons (1997) employs mereology and modal and nonmonotonic logic in taking a “new look” at the argument from contingency. In his widely discussed writings William Lane Craig marshals multidisciplinary evidence for the truth of the premises found in the kalām argument. Richard Gale and Alexander Pruss propose a version based on a so-called weak principle of sufficient reason that leads to a finite God that is not omnibenevolent, while Michael Almeida constructs a version of the argument based on modal realism and a strong principle of sufficient reason. Richard Swin…"
         },
@@ -269,22 +276,15 @@
           "corpus_id": "sep",
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
-          "score": 0.032291666,
-          "snippet": "cosmological-argument  Critics have objected to key premises in the argument. We will consider the most important objections and responses."
+          "score": 0.02967033,
+          "snippet": "cosmological-argument  Swinburne is correct that if someone believes that a deductive cosmological argument (proof) for God’s existence is sound, then it would be incoherent for that same person to then deny that God exists. However, in their respective proofs defenders of the deductive cosmological arguments make a claim about incoherence, namely, that it would be contradictory for the same person to affirm the premises of the argument and to claim that God or a personal necessary being does not exist. And they believe both that the respective premises have the intuitiveness that Swinburne de…"
         },
         {
           "corpus_id": "sep",
           "title": "kant-metaphysics",
           "url": "https://plato.stanford.edu/entries/kant-metaphysics/",
-          "score": 0.023581635,
+          "score": 0.02604431,
           "snippet": "kant-metaphysics  Thus, although Kant is most well known for his attacks on the specific arguments for God’s existence, his criticisms of rational theology are in fact more detailed, and involve a robust critique of the idea of God itself. This account of the rational origin and the importance of the idea of God clears the way for Kant’s rejection of the metaphysical arguments about God’s existence. Kant identifies three traditional arguments, the ontological, the cosmological, and the physico-theological (the argument from design). What all such arguments do is attempt to wed the idea of the …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "cosmological-argument",
-          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
-          "score": 0.016666668,
-          "snippet": "cosmological-argument  Richard Swinburne contends that the cosmological argument is not deductively valid; if it were,"
         },
         {
           "corpus_id": "sep",
@@ -295,17 +295,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "cosmological-argument",
-          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
+          "title": "natural-theology",
+          "url": "https://plato.stanford.edu/entries/natural-theology/",
           "score": 0.016129032,
-          "snippet": "cosmological-argument  Craig’s second argument addresses this very point."
+          "snippet": "natural-theology  In general, objections to the cosmological argument (both historical and contemporary) take one of the following forms:"
         },
         {
           "corpus_id": "sep",
-          "title": "cosmology-theology",
-          "url": "https://plato.stanford.edu/entries/cosmology-theology/",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.015873017,
-          "snippet": "cosmology-theology  The big-bang theologian argues that the claim"
+          "snippet": "cosmological-argument  A second type of cosmological argument, contending for a first or beginning cause of the universe, has a venerable history, especially in the Islamic mutakalliman tradition. Although it had numerous defenders through the centuries, it received new life in the recent voluminous writings of William Lane Craig. Craig formulates the kalām cosmological argument this way (Craig and Sinclair 2009; Craig and Smith 1993: chap. 1)."
         },
         {
           "corpus_id": "sep",
@@ -316,6 +316,13 @@
         },
         {
           "corpus_id": "sep",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
+          "score": 0.015625,
+          "snippet": "cosmological-argument  In defense of premise 2, Craig develops both a priori and a posteriori arguments. His primary a priori argument is"
+        },
+        {
+          "corpus_id": "sep",
           "title": "consciousness-neuroscience",
           "url": "https://plato.stanford.edu/entries/consciousness-neuroscience/",
           "score": 0.015625,
@@ -323,24 +330,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "religion-science",
-          "url": "https://plato.stanford.edu/entries/religion-science/",
-          "score": 0.015384615,
-          "snippet": "religion-science  Comte, Auguste |  cosmological argument |  Hume, David: on religion |  teleology: teleological arguments for God’s existence |  theology, natural and natural religion"
-        },
-        {
-          "corpus_id": "sep",
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.015384615,
-          "snippet": "cosmological-argument  Swinburne is correct that if someone believes that a deductive cosmological argument (proof) for God’s existence is sound, then it would be incoherent for that same person to then deny that God exists. However, in their respective proofs defenders of the deductive cosmological arguments make a claim about incoherence, namely, that it would be contradictory for the same person to affirm the premises of the argument and to claim that God or a personal necessary being does not exist. And they believe both that the respective premises have the intuitiveness that Swinburne de…"
+          "snippet": "cosmological-argument  René Descartes advances his version of the cosmological argument not only as a piece of natural theology that proves God’s existence by natural reason, but also serving an epistemic function of guaranteeing that God could not be deceiving him (Meditations on First Philosophy, Preface &amp; Meditation 3). The cosmological argumentcame under serious assault in the 18th century, first byDavid Hume and then by Immanuel Kant. Hume (1748) attacked both theview of causation presupposed in the argument (that causation is anobjective, productive, necessary power relation that hol…"
         },
         {
           "corpus_id": "sep",
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.015151516,
-          "snippet": "cosmological-argument  A second type of cosmological argument, contending for a first or beginning cause of the universe, has a venerable history, especially in the Islamic mutakalliman tradition. Although it had numerous defenders through the centuries, it received new life in the recent voluminous writings of William Lane Craig. Craig formulates the kalām cosmological argument this way (Craig and Sinclair 2009; Craig and Smith 1993: chap. 1)."
+          "snippet": "cosmological-argument  Richard Swinburne contends that the cosmological argument is not deductively valid; if it were,"
         },
         {
           "corpus_id": "sep",
@@ -351,10 +351,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "cosmology-theology",
-          "url": "https://plato.stanford.edu/entries/cosmology-theology/",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.014925373,
-          "snippet": "cosmology-theology  In relation to the design argument, as reinvigorated by the discussions of the anthropic principle, some physicists and philosophers have returned to an old objection to it, namely that it is not an argument for the Christian God; it is at best an argument for a cosmic architect in a deistic sense, or for that matter several such architects. On the other hand, theists have replied that even if this objection be true it does not constitute a proof that the God of theism does not exist. Although design arguments frequently occur in connection with the anthropic principle, it …"
+          "snippet": "cosmological-argument  On the one hand, the argument arises from human curiosity as to why there is something rather than nothing or than something else. It invokes a concern for some full, complete, ultimate, or best explanation of what exists contingently. On the other hand, it raises intrinsically important philosophical questions about contingency and necessity, causation and explanation, part/whole relationships (mereology), possible worlds, infinity, sets, the nature of time, and the nature and origin of the universe. In what follows we will first sketch out a very brief history of the a…"
         },
         {
           "corpus_id": "sep",
@@ -365,10 +365,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "ontological-arguments",
-          "url": "https://plato.stanford.edu/entries/ontological-arguments/",
+          "title": "cosmology-theology",
+          "url": "https://plato.stanford.edu/entries/cosmology-theology/",
           "score": 0.014705882,
-          "snippet": "ontological-arguments  God exists in the understanding. (Premise, to which even the Fool agrees.)"
+          "snippet": "cosmology-theology  In relation to the design argument, as reinvigorated by the discussions of the anthropic principle, some physicists and philosophers have returned to an old objection to it, namely that it is not an argument for the Christian God; it is at best an argument for a cosmic architect in a deistic sense, or for that matter several such architects. On the other hand, theists have replied that even if this objection be true it does not constitute a proof that the God of theism does not exist. Although design arguments frequently occur in connection with the anthropic principle, it …"
         },
         {
           "corpus_id": "sep",
@@ -379,10 +379,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "perfect-goodness",
-          "url": "https://plato.stanford.edu/entries/perfect-goodness/",
+          "title": "russell",
+          "url": "https://plato.stanford.edu/entries/russell/",
           "score": 0.014492754,
-          "snippet": "perfect-goodness  Anselm, Saint [Anselm of Bec, Anselm of Canterbury] |  Aquinas, Thomas |  compatibilism |  cosmological argument |  Duns Scotus, John |  evil: problem of |  freedom: divine |  God, arguments for the existence of: moral arguments |  God: and other ultimates |  incompatibilism: arguments for |  ontological arguments |  teleology: teleological arguments for God’s existence"
+          "snippet": "russell  Russell’s criticism of arguments traditionally offered in favour of the existence of God includes his discussion of the First Cause Argument, the Problem of Evil, the Ontological Argument, the Teleological Argument, the Argument from Pre-established Harmony, the Natural Law Argument, the Argument from Morality, the Remediation of Injustice Argument and the Argument from Religious Experience."
         },
         {
           "corpus_id": "sep",
@@ -393,13 +393,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "natural-theology",
-          "url": "https://plato.stanford.edu/entries/natural-theology/",
-          "score": 0.014285714,
-          "snippet": "natural-theology  In general, objections to the cosmological argument (both historical and contemporary) take one of the following forms:"
-        },
-        {
-          "corpus_id": "sep",
           "title": "clarke",
           "url": "https://plato.stanford.edu/entries/clarke/",
           "score": 0.014285714,
@@ -407,10 +400,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "cosmology-theology",
-          "url": "https://plato.stanford.edu/entries/cosmology-theology/",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.014084507,
-          "snippet": "cosmology-theology  A number of theists take the past-singular nature of cosmological models as confirmation of the claim that God created the universe ex nihilo. The list of advocates of this “big bang theology” includes Pope Pius XII, Francis Collins (director, US National Institutes of Health), and apologists William Lane Craig and Hugh Ross. And indeed, big bang cosmology does provide prima facie support for theism. After all, big bang cosmology says that the universe has a finite age, and (traditional) theism says that God created the universe out of nothing. Does big bang cosmology not c…"
+          "snippet": "cosmological-argument  Further considerations beyond the scope of the cosmological argument are in order to discern the relationship between a necessary being and the properties often associated with a religious Ultimate. While defenders of the cosmological argument point to the relevance and importance of connecting the necessary being with natural theology, critics find themselves freed from such endeavors."
         },
         {
           "corpus_id": "sep",
@@ -424,7 +417,7 @@
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.013888889,
-          "snippet": "cosmological-argument  René Descartes advances his version of the cosmological argument not only as a piece of natural theology that proves God’s existence by natural reason, but also serving an epistemic function of guaranteeing that God could not be deceiving him (Meditations on First Philosophy, Preface &amp; Meditation 3). The cosmological argumentcame under serious assault in the 18th century, first byDavid Hume and then by Immanuel Kant. Hume (1748) attacked both theview of causation presupposed in the argument (that causation is anobjective, productive, necessary power relation that hol…"
+          "snippet": "cosmological-argument  Aquinas, Thomas |  Bonaventure, Saint |  Clarke, Samuel |  cosmology: and theology |  Duns Scotus, John |  fine-tuning |  Hume, David |  Hume, David: on religion |  infinite regress arguments |  Kant, Immanuel |  Leibniz, Gottfried Wilhelm |  ontological arguments |  principle of sufficient reason |  religion: and science |  Russell, Bertrand |  theology, natural and natural religion"
         },
         {
           "corpus_id": "sep",
@@ -432,13 +425,6 @@
           "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
           "score": 0.013888889,
           "snippet": "moral-arguments-god  However, it is important to see that there are versions of the moral argument for God’s existence that are completely independent of such a divine command theory, and this possibility can be seen in arguments developed by Angus Ritchie (2012) and Mark Linville (2009). Perhaps the most extensive and developed account of a moral argument for God’s existence in recent philosophy is found in David Baggett and Jerry L. Walls (2016). This book examines a comprehensive cumulative form of moral argument and extensively explores underlying issues. It goes without saying that these …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "teleological-arguments",
-          "url": "https://plato.stanford.edu/entries/teleological-arguments/",
-          "score": 0.01369863,
-          "snippet": "teleological-arguments  abduction |  Bayes’ Theorem |  creationism |  Darwinism |  fine-tuning |  Hume, David |  Hume, David: on religion |  Kant, Immanuel |  teleology: teleological notions in biology"
         },
         {
           "corpus_id": "sep",
@@ -452,7 +438,7 @@
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.013513514,
-          "snippet": "cosmological-argument  Further considerations beyond the scope of the cosmological argument are in order to discern the relationship between a necessary being and the properties often associated with a religious Ultimate. While defenders of the cosmological argument point to the relevance and importance of connecting the necessary being with natural theology, critics find themselves freed from such endeavors."
+          "snippet": "cosmological-argument  Philosophers employ diverse classifications of the cosmological arguments. Swinburne distinguishes inductive from deductive versions. Craig distinguishes three types of deductive cosmological arguments in terms of their approach to an infinite regress of causes. The first, advocated by Aquinas, is based on the impossibility of an essentially ordered infinite regress. The second, which Craig terms the kalām argument, holds that an infinite temporal regress of causes is impossible because an actual infinite is impossible, and even if it were possible it could not be tempor…"
         },
         {
           "corpus_id": "sep",
@@ -466,7 +452,21 @@
           "title": "cosmological-argument",
           "url": "https://plato.stanford.edu/entries/cosmological-argument/",
           "score": 0.013333334,
+          "snippet": "cosmological-argument  Both theists and nontheists in the last part of the 20th century and the first part of the 21st century generally show a healthy skepticism about the argument. Alvin Plantinga concludes “that this piece of natural theology is ineffective” (1967: chap. 1), and from his later Reformed Epistemology, it is unnecessary since belief in God can be properly basic. Richard Gale contends, in Kantian fashion, that since the conclusion of all versions of the cosmological argument invokes an impossibility, no cosmological arguments can provide examples of sound reasoning (1991: chap.…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "cosmological-argument",
+          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
+          "score": 0.013333334,
           "snippet": "cosmological-argument  (2013: 52)    In conclusion, Swinburne contends that it is very unlikely that a universe would exist uncaused, but more likely that God would exist uncaused. It is likely that if there is a God, he will make something like the finite and complex universe. The puzzling existence of the universe can be made comprehensible (explicable) if we suppose it is brought about by a personal God with intentional beliefs and the power to bring intentions to fruition (2004: 152). Whether simplicity can bear the weight of his argument is the key matter in question. 9. Necessary Being  …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "emotions-17th18th",
+          "url": "https://plato.stanford.edu/entries/emotions-17th18th/",
+          "score": 0.013157895,
+          "snippet": "emotions-17th18th  Early modern philosophy in Europe and Great Britain is awash with discussions of the emotions: they figure not only in philosophical psychology and related fields, but also in theories of epistemic method, metaphysics, ethics, political theory and practical reasoning in general. Moreover, interest in the emotions links philosophy with work in other, sometimes unexpected areas, such as medicine, art, literature, and practical guides on everything from child-rearing to the treatment of subordinates. Because of the breadth of the topic, this article can offer only an overview, …"
         }
       ],
       "source_score": {
@@ -494,8 +494,8 @@
         "total_expected": 10,
         "ratio": 1.0
       },
-      "embed_ms": 35,
-      "search_ms": 494,
+      "embed_ms": 40,
+      "search_ms": 504,
       "corpora_hit": [
         "sep"
       ],
@@ -510,15 +510,15 @@
           "corpus_id": "sep",
           "title": "philosophy-religion",
           "url": "https://plato.stanford.edu/entries/philosophy-religion/",
-          "score": 0.03175403,
-          "snippet": "philosophy-religion  For an interesting practical application of the traditional problem of evil to the topic of the ethics of procreation, see Marsh 2015. It has been argued that if one does believe that the world is not good, then that can provide a prima facie reason against procreation. Why should one bring children into a world that is not good? Another interesting, recent development in the philosophy of religion literature has been the engagement of philosophers with ostensible evils that God commands in the Bible (see Bergmann, Murray, &amp; Rea 2010). For a fascinating engagement with…"
+          "score": 0.03226646,
+          "snippet": "philosophy-religion  Theistic responses to the problem of evil distinguish between a defense and a theodicy. A defense seeks to establish that rational belief that God exists is still possible (when the defense is employed against the logical version of the problem of evil) and that the existence of evil does not make it improbable that God exists (when used against the probabilistic version). Some have adopted the defense strategy while arguing that we are in a position to have rational belief in the existence of evil and in a completely good God who hates this evil, even though we may be una…"
         },
         {
           "corpus_id": "sep",
           "title": "philosophy-religion",
           "url": "https://plato.stanford.edu/entries/philosophy-religion/",
-          "score": 0.03028233,
-          "snippet": "philosophy-religion  Theistic responses to the problem of evil distinguish between a defense and a theodicy. A defense seeks to establish that rational belief that God exists is still possible (when the defense is employed against the logical version of the problem of evil) and that the existence of evil does not make it improbable that God exists (when used against the probabilistic version). Some have adopted the defense strategy while arguing that we are in a position to have rational belief in the existence of evil and in a completely good God who hates this evil, even though we may be una…"
+          "score": 0.031513646,
+          "snippet": "philosophy-religion  For an interesting practical application of the traditional problem of evil to the topic of the ethics of procreation, see Marsh 2015. It has been argued that if one does believe that the world is not good, then that can provide a prima facie reason against procreation. Why should one bring children into a world that is not good? Another interesting, recent development in the philosophy of religion literature has been the engagement of philosophers with ostensible evils that God commands in the Bible (see Bergmann, Murray, &amp; Rea 2010). For a fascinating engagement with…"
         },
         {
           "corpus_id": "sep",
@@ -526,6 +526,13 @@
           "url": "https://plato.stanford.edu/entries/evil/",
           "score": 0.028949544,
           "snippet": "evil  Given an evidential formulation of the evidential argument from evil, what sorts of responses are possible? A natural way of dividing up possible responses is into what may be referred to as total refutations, theodicies, and defenses. So let us begin by considering what is involved in these three different, general types of responses."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "evil-kinds-origins",
+          "url": "https://plato.stanford.edu/entries/evil-kinds-origins/",
+          "score": 0.023709316,
+          "snippet": "evil-kinds-origins  Arendt, Hannah |  evil: concept of |  evil: problem of |  Kant, Immanuel: philosophy of religion |  Leibniz, Gottfried Wilhelm: on the problem of evil |  Plotinus |  value theory"
         },
         {
           "corpus_id": "sep",
@@ -550,17 +557,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "perfect-goodness",
-          "url": "https://plato.stanford.edu/entries/perfect-goodness/",
-          "score": 0.015873017,
-          "snippet": "perfect-goodness  Anselm, Saint [Anselm of Bec, Anselm of Canterbury] |  Aquinas, Thomas |  compatibilism |  cosmological argument |  Duns Scotus, John |  evil: problem of |  freedom: divine |  God, arguments for the existence of: moral arguments |  God: and other ultimates |  incompatibilism: arguments for |  ontological arguments |  teleology: teleological arguments for God’s existence"
-        },
-        {
-          "corpus_id": "sep",
           "title": "philosophy-religion",
           "url": "https://plato.stanford.edu/entries/philosophy-religion/",
           "score": 0.015873017,
           "snippet": "philosophy-religion  Philosophy of religion is the philosophical examination of the themes and concepts involved in religious traditions as well as the broader philosophical task of reflecting on matters of religious significance including the nature of religion itself, alternative concepts of God or ultimate reality, and the religious significance of general features of the cosmos (e.g., the laws of nature, the emergence of consciousness) and of historical events (e.g., the 1755 Lisbon Earthquake, the Holocaust). Philosophy of religion also includes the investigation and assessment of worldvi…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "evil",
+          "url": "https://plato.stanford.edu/entries/evil/",
+          "score": 0.015625,
+          "snippet": "evil  This discussion is divided into eight sections. The first is concerned with some preliminary distinctions; the second, with the choice between deductive versions of the argument from evil, and evidential versions; the third, with alternative evidential formulations of the argument from evil; the fourth, with the distinction between three very different types of responses to the argument from evil: attempted total refutations, defenses, and theodicies. The fifth section then focuses upon attempted total refutations, while the sixth is concerned with defenses, and the seventh with some tra…"
         },
         {
           "corpus_id": "sep",
@@ -571,13 +578,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "evil",
-          "url": "https://plato.stanford.edu/entries/evil/",
-          "score": 0.015384615,
-          "snippet": "evil  abduction |  Bayes’ Theorem |  ethics: deontological |  God: and other ultimates |  Hume, David: on religion |  incompatibilism: (nondeterministic) theories of free will |  incompatibilism: arguments for |  Leibniz, Gottfried Wilhelm: on the problem of evil |  ontological arguments |  probability, interpretations of |  providence, divine"
-        },
-        {
-          "corpus_id": "sep",
           "title": "logics-for-games",
           "url": "https://plato.stanford.edu/entries/logics-for-games/",
           "score": 0.015384615,
@@ -585,10 +585,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "religion-science",
-          "url": "https://plato.stanford.edu/entries/religion-science/",
+          "title": "evil",
+          "url": "https://plato.stanford.edu/entries/evil/",
           "score": 0.015151516,
-          "snippet": "religion-science  Comte, Auguste |  cosmological argument |  Hume, David: on religion |  teleology: teleological arguments for God’s existence |  theology, natural and natural religion"
+          "snippet": "evil  This response to the argument from evil has been around for quite a while.  In recent years, however, it has been strongly advocated by George Schlesinger (1964, 1977), and, more recently, by Peter Forrest (1981)—though Forrest, curiously, describes the defense as one that has been “neglected”, and refers neither to Schlesinger’s well-known discussions, nor to the very strong objections that have been directed against this response to the argument from evil."
         },
         {
           "corpus_id": "sep",
@@ -599,10 +599,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "evil",
-          "url": "https://plato.stanford.edu/entries/evil/",
+          "title": "sin-christian",
+          "url": "https://plato.stanford.edu/entries/sin-christian/",
           "score": 0.014925373,
-          "snippet": "evil  One of the more striking illustrations of this phenomenon is provided by Alvin Plantinga’s discussions of the problem of evil. In God and Other Minds, in The Nature of Necessity, and in God, Freedom, and Evil, for example, Plantinga, starting out from an examination of John L. Mackie’s essay “Evil and Omnipotence” (1955), in which Mackie had defended an incompatibility version of the argument from evil, focuses mainly on the question of whether the existence of God is compatible with the existence of evil, although there are also short discussions of whether the existence of God is compa…"
+          "snippet": "sin-christian  this argument is a new species from Plantinga in the genus of responses to the problem of evil. This is a theodicy, not merely a defense, not merely a defeater defeater, but an explanation for why God allows evil—a reason for evil, that does not remove all the perplexity, but at a general level gives us an understanding for why it exists. (Diller 2008: 90)"
         },
         {
           "corpus_id": "sep",
@@ -613,10 +613,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "evil",
-          "url": "https://plato.stanford.edu/entries/evil/",
+          "title": "philosophy-religion",
+          "url": "https://plato.stanford.edu/entries/philosophy-religion/",
           "score": 0.014705882,
-          "snippet": "evil  This discussion is divided into eight sections. The first is concerned with some preliminary distinctions; the second, with the choice between deductive versions of the argument from evil, and evidential versions; the third, with alternative evidential formulations of the argument from evil; the fourth, with the distinction between three very different types of responses to the argument from evil: attempted total refutations, defenses, and theodicies. The fifth section then focuses upon attempted total refutations, while the sixth is concerned with defenses, and the seventh with some tra…"
+          "snippet": "philosophy-religion  In part, the magnitude of the difficulty one takes the problem of evil to pose for theism will depend upon one’s commitments in other areas of philosophy, especially ethics, epistemology, and metaphysics. If in ethics you hold that there should be no preventable suffering for any reason, regardless of the cause or consequence, then the problem of evil will conflict with your acceptance of traditional theism. Moreover, if you hold that any solution to the problem of evil should be evident to all persons, then again traditional theism is in jeopardy, for clearly the “solutio…"
         },
         {
           "corpus_id": "sep",
@@ -655,10 +655,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "evil",
-          "url": "https://plato.stanford.edu/entries/evil/",
+          "title": "process-theism",
+          "url": "https://plato.stanford.edu/entries/process-theism/",
           "score": 0.014084507,
-          "snippet": "evil  This response to the argument from evil has been around for quite a while.  In recent years, however, it has been strongly advocated by George Schlesinger (1964, 1977), and, more recently, by Peter Forrest (1981)—though Forrest, curiously, describes the defense as one that has been “neglected”, and refers neither to Schlesinger’s well-known discussions, nor to the very strong objections that have been directed against this response to the argument from evil."
+          "snippet": "process-theism  Process theism provides unique, if controversial, thoughts on the traditional problem of evil. Simply stated, the problem of evil comes to this: if God is all-powerful then God has the ability to prevent unjustified suffering; if God is perfectly good then God has the motive to prevent unjustified suffering; but unjustified suffering apparently exists; therefore, there is reason to believe that God is not all-powerful or not perfectly good. The argument can be taken in at least two ways. According to one interpretation, the problem of evil poses a challenge to belief in God. In…"
         },
         {
           "corpus_id": "sep",
@@ -672,14 +672,21 @@
           "title": "concept-evil",
           "url": "https://plato.stanford.edu/entries/concept-evil/",
           "score": 0.013888889,
+          "snippet": "concept-evil  The history of theories of evil began with attempts to solve the problem of evil, i.e., attempts to reconcile the existence of evil (in the broad sense) with an all-powerful, all-knowing, all-good God or creator. Philosophers and theologians have recognized that to solve the problem of evil it is important to understand the nature of evil. As the Neoplatonist Plotinus put it “Those inquiring whence Evil enters into beings, or rather into a certain order of beings, would be making the best beginning if they established, first of all, what precisely Evil is” (Plotinus, Enneads, I, …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "concept-evil",
+          "url": "https://plato.stanford.edu/entries/concept-evil/",
+          "score": 0.013888889,
           "snippet": "concept-evil  Augustine, Saint |  evil: problem of |  Kant, Immanuel: moral philosophy |  Kant, Immanuel: philosophy of religion |  moral motivation |  moral responsibility |  moral skepticism |  Nietzsche, Friedrich: moral and political philosophy |  Plato: middle period metaphysics and epistemology |  Plotinus |  reasons for action: internal vs. external |  responsibility: collective"
         },
         {
           "corpus_id": "sep",
-          "title": "sin-christian",
-          "url": "https://plato.stanford.edu/entries/sin-christian/",
+          "title": "evil",
+          "url": "https://plato.stanford.edu/entries/evil/",
           "score": 0.01369863,
-          "snippet": "sin-christian  this argument is a new species from Plantinga in the genus of responses to the problem of evil. This is a theodicy, not merely a defense, not merely a defeater defeater, but an explanation for why God allows evil—a reason for evil, that does not remove all the perplexity, but at a general level gives us an understanding for why it exists. (Diller 2008: 90)"
+          "snippet": "evil  This type of religious theodicy has been advanced by a number of Christians, with a variant of it being found, for example, in Peter van Inwagen’s book, The Problem of Evil (2006, 85ff.). It is not, of course, a full theodicy, since it does not account for the suffering of non-human animals, at least before the Fall. So let us focus on it simply as offering an account of God’s justification for allowing human suffering.  Thus viewed, how successful is it?"
         },
         {
           "corpus_id": "sep",
@@ -690,10 +697,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "providence-divine",
-          "url": "https://plato.stanford.edu/entries/providence-divine/",
+          "title": "evil",
+          "url": "https://plato.stanford.edu/entries/evil/",
           "score": 0.013513514,
-          "snippet": "providence-divine  The last few sections outlined a variety of approaches to theodicy which are compatible with theological determinism; they represent attempts to explain why God might allow evil which do not rely on the traditional free will defense. Equally prominent in the tradition’s treatment of evil, however, is the theme of mystery: an unwillingness to identify with any surety why God would allow evil. That theme is prominent in scriptural treatments of evil, such as those found in Job and Ecclesiastes. Perhaps the most plausible way to interpret the tradition’s emphasis on mystery is …"
+          "snippet": "evil  One of the more striking illustrations of this phenomenon is provided by Alvin Plantinga’s discussions of the problem of evil. In God and Other Minds, in The Nature of Necessity, and in God, Freedom, and Evil, for example, Plantinga, starting out from an examination of John L. Mackie’s essay “Evil and Omnipotence” (1955), in which Mackie had defended an incompatibility version of the argument from evil, focuses mainly on the question of whether the existence of God is compatible with the existence of evil, although there are also short discussions of whether the existence of God is compa…"
         },
         {
           "corpus_id": "sep",
@@ -704,17 +711,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "concept-evil",
-          "url": "https://plato.stanford.edu/entries/concept-evil/",
+          "title": "leibniz-evil",
+          "url": "https://plato.stanford.edu/entries/leibniz-evil/",
           "score": 0.013333334,
-          "snippet": "concept-evil  Prior to World War II there was very little philosophical literature on the concept of evil in the narrow sense. However, philosophers have considered the nature and origins of evil in the broad sense since ancient times. Although this entry is primarily concerned with evil in the narrow sense, it is useful to survey the history of theories of evil in the broad sense since these theories provide the backdrop against which theories of evil in the narrow sense have been developed."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "feminist-philosophy",
-          "url": "https://plato.stanford.edu/entries/feminist-philosophy/",
-          "score": 0.013333334,
-          "snippet": "feminist-philosophy  This entry provides an overview of all the entries in the feminist philosophy section of the Stanford Encyclopedia of Philosophy (SEP). After a brief account of the history of feminist philosophy and various issues regarding defining feminism, the entry discusses the three main sections on (1) approaches to feminist philosophy, (2) feminist interventions in philosophy, and (3) feminist philosophical topics."
+          "snippet": "leibniz-evil  The issues that arise in thinking about Leibniz's views on the problem of evil have only in the past couple of decades begun to receive the sustained scholarly attention that they deserve in virtue of their manifest significance for Leibniz.  In the last few years in particular––probably not coincidentally, the three-hundredth anniversary of the publication of the Theodicy was celebrated in 2010––considerable interpretive attention has been devoted to the details of Leibniz's treatment of the problem of evil and related topics.  [Rateau (2008) is the first book-length treatment o…"
         }
       ],
       "source_score": {
@@ -731,20 +731,20 @@
           "evidential problem of evil",
           "theodicy",
           "free will defense",
-          "skeptical theism",
           "Plantinga"
         ],
         "missing": [
           "soul-making theodicy",
           "natural versus moral evil",
+          "skeptical theism",
           "omnipotence omniscience omnibenevolence",
           "gratuitous suffering"
         ],
         "total_expected": 10,
-        "ratio": 0.6
+        "ratio": 0.5
       },
-      "embed_ms": 26,
-      "search_ms": 446,
+      "embed_ms": 29,
+      "search_ms": 516,
       "corpora_hit": [
         "sep"
       ],
@@ -757,9 +757,23 @@
       "retrieved": [
         {
           "corpus_id": "sep",
+          "title": "malebranche-ideas",
+          "url": "https://plato.stanford.edu/entries/malebranche-ideas/",
+          "score": 0.028594771,
+          "snippet": "malebranche-ideas  One of the hallmarks of Descartes’ epistemological project is its obsession with refuting skepticism. Descartes begins his Meditations by entertaining the widest and most radical doubts possible so that he can defeat them once and for all. Some commentators have suggested that Malebranche’s doctrine of Vision in God is also designed to refute skepticism, at least concerning our knowledge of the essence of material things, but in fact the relation of his epistemology to skepticism is more complex, and he is best read as aiming for something more modest. Although Malebranche i…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
-          "score": 0.028665029,
+          "score": 0.02759802,
+          "snippet": "descartes-epistemology  There is much of interest in Descartes’ Third Meditation arguments for an all-perfect creator God. (Note that the Fifth Meditation advances a further argument for God.) In the interests of space, and of focusing on epistemological concerns, however, these arguments will not be considered here. (For an overview of Descartes’ proofs, see Nolan (2014) and Nolan and Nelson (2006).)"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "descartes-epistemology",
+          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
+          "score": 0.026779423,
           "snippet": "descartes-epistemology  These passages (and others) suggest an account wherein doubt is the contrast of certainty. As my certainty increases, my doubt decreases; conversely, as my doubt increases, my certainty decreases. The requirement that knowledge is to be based in complete, or perfect certainty, thus amounts to requiring a complete inability to doubt one’s convictions – an utter indubitability. This conception of the relationship between certainty and doubt helps underwrite Descartes’ methodical emphasis on doubt, the so-called ‘method of doubt’ (discussed in  Section 2)."
         },
         {
@@ -774,7 +788,7 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.016666668,
-          "snippet": "descartes-epistemology  a priori justification and knowledge |  certainty |  Descartes, René |  Descartes, René: modal metaphysics |  Descartes, René: theory of ideas |  Gassendi, Pierre |  idealism |  -->idealism: British--> |  -->ideas--> |  innateness: historical controversies |  justification, epistemic: foundationalist theories of |  knowledge: analysis of |  moral particularism |  original position |  perception: epistemological problems of |  primary and secondary qualities in early modern philosophy |  rationalism vs. empiricism |  realism |  reasoning: defeasible |  sense data |  skep…"
+          "snippet": "descartes-epistemology  In epistemological contexts, Descartes underwrites the mind-better-known-than-body doctrine with methodical doubt. For example, while reflecting on his epistemic position in regards both to himself, and to the wax, the Second Meditation meditator says:"
         },
         {
           "corpus_id": "sep",
@@ -788,14 +802,14 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.016393442,
-          "snippet": "descartes-epistemology  Here, Gassendi singles out two features of methodical doubt – its universal and hyperbolic character. In reply, Descartes remarks:"
+          "snippet": "descartes-epistemology  a priori justification and knowledge |  certainty |  Descartes, René |  Descartes, René: modal metaphysics |  Descartes, René: theory of ideas |  Gassendi, Pierre |  idealism |  -->idealism: British--> |  -->ideas--> |  innateness: historical controversies |  justification, epistemic: foundationalist theories of |  knowledge: analysis of |  moral particularism |  original position |  perception: epistemological problems of |  primary and secondary qualities in early modern philosophy |  rationalism vs. empiricism |  realism |  reasoning: defeasible |  sense data |  skep…"
         },
         {
           "corpus_id": "sep",
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.016129032,
-          "snippet": "descartes-epistemology  In epistemological contexts, Descartes underwrites the mind-better-known-than-body doctrine with methodical doubt. For example, while reflecting on his epistemic position in regards both to himself, and to the wax, the Second Meditation meditator says:"
+          "snippet": "descartes-epistemology  Evidently, Descartes holds that the universal and hyperbolic character of methodical doubt is helpful to its success. Further appeal to the architectural analogy helps elucidate why."
         },
         {
           "corpus_id": "sep",
@@ -809,7 +823,7 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.015873017,
-          "snippet": "descartes-epistemology  Evidently, Descartes holds that the universal and hyperbolic character of methodical doubt is helpful to its success. Further appeal to the architectural analogy helps elucidate why."
+          "snippet": "descartes-epistemology  Though the subject of rationalism in Descartes’ epistemology deserves careful attention, the present article generally focuses on Descartes’ efforts to achieve perfect knowledge. Relatively little attention is given to his doctrine of innateness, or, more generally, his ontology of thought."
         },
         {
           "corpus_id": "sep",
@@ -823,7 +837,7 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.015625,
-          "snippet": "descartes-epistemology  On Descartes’ analysis, there are three possible options for the kind of external thing causing sensations:"
+          "snippet": "descartes-epistemology  Here, Gassendi singles out two features of methodical doubt – its universal and hyperbolic character. In reply, Descartes remarks:"
         },
         {
           "corpus_id": "sep",
@@ -834,10 +848,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "descartes-method",
-          "url": "https://plato.stanford.edu/entries/descartes-method/",
+          "title": "descartes-epistemology",
+          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.015384615,
-          "snippet": "descartes-method  Descartes defines “method” in Rule 4 as a set of"
+          "snippet": "descartes-epistemology  Descartes’ method of doubt has been subject to numerous objections – some fair, others less so. Rendered in the terms Descartes himself employs, the method is arguably less flawed than its reputation. Let us consider some of the common objections. Two such objections are suggested in a passage from the pragmatist Peirce:"
         },
         {
           "corpus_id": "sep",
@@ -851,14 +865,14 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.015151516,
-          "snippet": "descartes-epistemology  In short, the intended epistemic success of the cogito does not presuppose any particular mind-body ontology."
+          "snippet": "descartes-epistemology  On Descartes’ analysis, there are three possible options for the kind of external thing causing sensations:"
         },
         {
           "corpus_id": "sep",
-          "title": "descartes-epistemology",
-          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
+          "title": "descartes-method",
+          "url": "https://plato.stanford.edu/entries/descartes-method/",
           "score": 0.014925373,
-          "snippet": "descartes-epistemology  In the Second Replies, he adds:"
+          "snippet": "descartes-method  Descartes’ method is one of the most important pillars of his philosophy and science. This entry introduces readers to Descartes’ method and its applications in optics, meteorology, geometry, and metaphysics."
         },
         {
           "corpus_id": "sep",
@@ -869,24 +883,17 @@
         },
         {
           "corpus_id": "sep",
+          "title": "descartes",
+          "url": "https://plato.stanford.edu/entries/descartes/",
+          "score": 0.014705882,
+          "snippet": "descartes  Some scholars emphasize the epistemological aspects of Descartes' work, starting with the Rules and continuing through to the Principles. Accordingly, the main change in Descartes' intellectual development is the introduction of skeptical arguments in the Discourse and Meditations. Many interpreters, represented prominently in the latter twentieth century by Richard Popkin (1979), believe that Descartes took the skeptical threat to knowledge quite seriously and sought to overcome it in the Meditations. By contrast, in the main interpretive thread  followed here, skeptical arguments …"
+        },
+        {
+          "corpus_id": "sep",
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
-          "score": 0.014705882,
-          "snippet": "descartes-epistemology  Though the subject of rationalism in Descartes’ epistemology deserves careful attention, the present article generally focuses on Descartes’ efforts to achieve perfect knowledge. Relatively little attention is given to his doctrine of innateness, or, more generally, his ontology of thought."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "malebranche-ideas",
-          "url": "https://plato.stanford.edu/entries/malebranche-ideas/",
-          "score": 0.014705882,
-          "snippet": "malebranche-ideas  One of the hallmarks of Descartes’ epistemological project is its obsession with refuting skepticism. Descartes begins his Meditations by entertaining the widest and most radical doubts possible so that he can defeat them once and for all. Some commentators have suggested that Malebranche’s doctrine of Vision in God is also designed to refute skepticism, at least concerning our knowledge of the essence of material things, but in fact the relation of his epistemology to skepticism is more complex, and he is best read as aiming for something more modest. Although Malebranche i…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "descartes-modal",
-          "url": "https://plato.stanford.edu/entries/descartes-modal/",
           "score": 0.014492754,
-          "snippet": "descartes-modal  Descartes is infamous for his doctrine of the creation of the eternal truths:"
+          "snippet": "descartes-epistemology  Though foundationalism brilliantly allows for the expansion of knowledge from first principles, Descartes thinks that a complementary method is needed to help us discover genuine first principles. As Hatfield writes, “the problem is not to carry out proofs (which might well be assented to, given the definitions and axioms), but to discover the axioms themselves (which are hopelessly obscured by the prejudices of the senses)” (1986, 71). Descartes therefore devises the method of doubt for this purpose – a method to help “set aside” preconceived opinions."
         },
         {
           "corpus_id": "sep",
@@ -897,24 +904,17 @@
         },
         {
           "corpus_id": "sep",
+          "title": "certainty",
+          "url": "https://plato.stanford.edu/entries/certainty/",
+          "score": 0.014285714,
+          "snippet": "certainty  Descartes, René: epistemology |  epistemology |  knowledge: analysis of |  knowledge: by acquaintance vs. description"
+        },
+        {
+          "corpus_id": "sep",
           "title": "continental-rationalism",
           "url": "https://plato.stanford.edu/entries/continental-rationalism/",
           "score": 0.014285714,
           "snippet": "continental-rationalism  The rationalism of the most famous of the rationalists is problematic on two counts. First, Descartes is known as the father of modern philosophy precisely because he initiated the so-called epistemological turn that is with us still. Since Descartes, philosophy has been especially concerned with the theory of knowledge, both in itself and as it affects other areas of philosophy. Ethics, for example, has often been concerned with how the good might be known rather than with what the good might be. With his fundamental objective of achieving certainty for his beliefs, D…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "descartes-epistemology",
-          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
-          "score": 0.014285714,
-          "snippet": "descartes-epistemology  Descartes reiterates the theme in the Second Replies:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "descartes-epistemology",
-          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
-          "score": 0.014084507,
-          "snippet": "descartes-epistemology  Why does Descartes not add a truth condition, thereby ensuring that beliefs counting as perfect knowledge are true? In an influential 1970 book, Harry Frankfurt offers a provocative answer. He argues that Descartes’ goal, truth-wise, is to establish the consistency of our beliefs, but not their correspondence with an external reality. Writes Frankfurt:"
         },
         {
           "corpus_id": "sep",
@@ -932,17 +932,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "descartes-ethics",
-          "url": "https://plato.stanford.edu/entries/descartes-ethics/",
-          "score": 0.013888889,
-          "snippet": "descartes-ethics  Descartes frames the rules of his provisional morality as part of the epistemological project—the search for certainty—announced in Part Two of the Discourse. In order that he may act decisively and live as happily as possible while avoiding “precipitate conclusions and assumptions,” Descartes proposes “a provisional moral code consisting of just three or four maxims”:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "descartes-epistemology",
-          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
+          "title": "descartes",
+          "url": "https://plato.stanford.edu/entries/descartes/",
           "score": 0.01369863,
-          "snippet": "descartes-epistemology  Of his own methodology, Descartes writes:"
+          "snippet": "descartes  Scholars have proposed various schemes for dividing Descartes' life into periods. This entry adopts a relatively simple division between the era when mathematics provided the model for his method and the period after the “metaphysical turn” of 1629, when his conception of the role of the intellect in acquiring knowledge changed and when he came to conceive the truth of his special or particular hypotheses in natural philosophy as less than certain and so as subject to the scheme of confirmation through consequences mentioned above. In effect, he adopted a hypothetico-deductive schem…"
         },
         {
           "corpus_id": "sep",
@@ -956,14 +949,21 @@
           "title": "descartes-epistemology",
           "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.013513514,
-          "snippet": "descartes-epistemology  There is much of interest in Descartes’ Third Meditation arguments for an all-perfect creator God. (Note that the Fifth Meditation advances a further argument for God.) In the interests of space, and of focusing on epistemological concerns, however, these arguments will not be considered here. (For an overview of Descartes’ proofs, see Nolan (2014) and Nolan and Nelson (2006).)"
+          "snippet": "descartes-epistemology  René Descartes (1596–1650) is widely regarded as the father of modern philosophy. His noteworthy contributions extend to mathematics and physics. This entry focuses on his philosophical contributions in the theory of knowledge. Specifically, the focus is on the epistemological project of his famous work, Meditations on First Philosophy. Descartes circulated the Meditations to other philosophers for objections and comments. He responded with detailed replies that provide a rich source of further information about the original work. Indeed, six sets of objections and repl…"
         },
         {
           "corpus_id": "sep",
-          "title": "certainty",
-          "url": "https://plato.stanford.edu/entries/certainty/",
+          "title": "descartes-epistemology",
+          "url": "https://plato.stanford.edu/entries/descartes-epistemology/",
           "score": 0.013333334,
-          "snippet": "certainty  Descartes, René: epistemology |  epistemology |  knowledge: analysis of |  knowledge: by acquaintance vs. description"
+          "snippet": "descartes-epistemology  Of his own methodology, Descartes writes:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "descartes-physics",
+          "url": "https://plato.stanford.edu/entries/descartes-physics/",
+          "score": 0.013333334,
+          "snippet": "descartes-physics  Nevertheless, even if Descartes’ mechanistic natural philosophy shunned the metaphysics of substantial forms, his underlying methodology or approach to science remained very close to the Scholastic tradition. By the time of the composition of the Principles, Descartes had formulated a method that, like the Scholastics, strived to explain natural phenomena based on the allegedly simple and irrefutable “facts” and/or observations, drawn from rational reflection on concepts or from everyday experience, about the most fundamental aspects of reality. These supposedly basic facts …"
         }
       ],
       "source_score": {
@@ -992,8 +992,8 @@
         "total_expected": 10,
         "ratio": 0.6
       },
-      "embed_ms": 36,
-      "search_ms": 483,
+      "embed_ms": 40,
+      "search_ms": 500,
       "corpora_hit": [
         "sep"
       ],
@@ -1013,31 +1013,52 @@
         },
         {
           "corpus_id": "sep",
+          "title": "mill",
+          "url": "https://plato.stanford.edu/entries/mill/",
+          "score": 0.03036577,
+          "snippet": "mill  freedom: of speech |  liberalism |  Mill, Harriet Taylor |  Mill, James |  Mill, John Stuart: moral and political philosophy |  naturalism |  utilitarianism: history of"
+        },
+        {
+          "corpus_id": "sep",
           "title": "mill-moral-political",
           "url": "https://plato.stanford.edu/entries/mill-moral-political/",
-          "score": 0.030477948,
+          "score": 0.029469121,
           "snippet": "mill-moral-political  Austin, John |  autonomy: in moral and political philosophy |  Bentham, Jeremy |  consequentialism |  democracy |  egalitarianism |  freedom: of speech |  Green, Thomas Hill |  happiness |  hedonism |  justice: distributive |  liberalism |  libertarianism |  liberty: positive and negative |  Mill, Harriet Taylor |  Mill, James |  Mill, John Stuart |  paternalism |  perfectionism, in moral and political philosophy |  reasoning: moral |  rights |  value theory |  well-being |  Whewell, William"
         },
         {
           "corpus_id": "sep",
           "title": "mill",
           "url": "https://plato.stanford.edu/entries/mill/",
-          "score": 0.028629031,
+          "score": 0.028893441,
           "snippet": "mill  John Stuart Mill (1806–73) was the most influential English language philosopher of the nineteenth century. He was a naturalist, a utilitarian, and a liberal, whose work explores the consequences of a thoroughgoing empiricist outlook. In doing so, he sought to combine the best of eighteenth-century Enlightenment thinking with newly emerging currents of nineteenth-century Romantic and historical philosophy. His most important works include System of Logic (1843), On Liberty (1859), Utilitarianism (1861) and An Examination of Sir William Hamilton’s Philosophy (1865)."
         },
         {
           "corpus_id": "sep",
           "title": "mill-moral-political",
           "url": "https://plato.stanford.edu/entries/mill-moral-political/",
-          "score": 0.028531246,
+          "score": 0.028283227,
           "snippet": "mill-moral-political  As perhaps the leading historical proponent of two important normative traditions—utilitarianism and liberalism—Mill occupies an unusually important position in the history of western moral and political philosophy. Viewed in historical context, both utilitarianism and liberalism have exerted considerable progressive influence on the scope of moral concern, the design of public institutions, the responsibilities of government, and the interests and rights of the governed. Mill did much to articulate the justification, content, and implications of utilitarian and liberal p…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "mill-moral-political",
+          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
+          "score": 0.026480835,
+          "snippet": "mill-moral-political  If we look outside of Utilitarianism we can find even clearer evidence of Mill’s doubts about psychological egoism and hedonism. In a note to his edition of James Mill’s Analysis of the Phenomena of the Human Mind (1869) John Stuart Mill diagnoses a possible equivocation in his father’s doctrine."
         },
         {
           "corpus_id": "sep",
           "title": "progress",
           "url": "https://plato.stanford.edu/entries/progress/",
-          "score": 0.025062658,
+          "score": 0.02456299,
           "snippet": "progress  John Stuart Mill (1806–1873), Comte's contemporary, admired his progressive philosophy of history (Mill 1865, 106) and shared his respect for scientific expertise (97).  But Mill was disappointed by Comte's basic distaste for democratic freedom and individuality (Mill 1865, 181).  Unlike Comte, Mill thought that a strong, scientifically oriented society could be a liberal democracy.  Such a society would best maintain the gains already achieved and nurture further improvement.  Mill articulates his twin commitment to progress and liberal democracy in his major writings, including A S…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "property",
+          "url": "https://plato.stanford.edu/entries/property/",
+          "score": 0.024222968,
+          "snippet": "property  Aristotle, General Topics: political theory |  consequentialism |  constitutionalism |  contractarianism |  economics [normative] and economic justice |  equality |  exploitation |  Hegel, Georg Wilhelm Friedrich |  Hobbes, Thomas: moral and political philosophy |  Hume, David: moral philosophy |  justice: distributive |  legal rights |  liberalism |  libertarianism |  Locke, John: political philosophy |  Marx, Karl |  Mill, John Stuart: moral and political philosophy |  personal identity: and ethics |  Plato: ethics and politics in The Republic |  redistribution |  republicanism"
         },
         {
           "corpus_id": "sep",
@@ -1055,17 +1076,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "mill",
-          "url": "https://plato.stanford.edu/entries/mill/",
-          "score": 0.015873017,
-          "snippet": "mill  freedom: of speech |  liberalism |  Mill, Harriet Taylor |  Mill, James |  Mill, John Stuart: moral and political philosophy |  naturalism |  utilitarianism: history of"
+          "title": "mill-moral-political",
+          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
+          "score": 0.016129032,
+          "snippet": "mill-moral-political  We get a somewhat different perspective on Mill’s utilitarian and liberal principles by seeing how he applies them to social and political issues. We might begin by focusing on Mill’s defense of a democratic form of liberalism in Considerations on Representative Government and Principles of Political Economy."
         },
         {
           "corpus_id": "sep",
-          "title": "bentham",
-          "url": "https://plato.stanford.edu/entries/bentham/",
-          "score": 0.015625,
-          "snippet": "bentham  Jeremy Bentham, jurist and political reformer, is the philosopher whose name is most closely associated with the foundational era of the modern utilitarian tradition. Earlier moralists had enunciated several of the core ideas and characteristic terminology of utilitarian philosophy, most notably John Gay, Francis Hutcheson, David Hume, Claude-Adrien Helvétius and Cesare Beccaria, but it was Bentham who rendered the theory in its recognisably secular and systematic form and made it a critical tool of moral and legal philosophy and political and social improvement. In 1776, he first ann…"
+          "title": "mill-moral-political",
+          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
+          "score": 0.015873017,
+          "snippet": "mill-moral-political  Though Mill accepts the utilitarian legacy of the Radicals, he transforms that legacy in important ways. Part of understanding Mill’s contributions to the utilitarian tradition involves understanding his disagreement with the Radicals on issues about human motivation and the nature of happiness."
         },
         {
           "corpus_id": "sep",
@@ -1073,13 +1094,6 @@
           "url": "https://plato.stanford.edu/entries/paternalism/",
           "score": 0.015625,
           "snippet": "paternalism  autonomy: in moral and political philosophy |  autonomy: personal |  beneficence, principle of |  liberty: positive and negative |  limits of law |  Mill, John Stuart: moral and political philosophy"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "nozick-political",
-          "url": "https://plato.stanford.edu/entries/nozick-political/",
-          "score": 0.015384615,
-          "snippet": "nozick-political  anarchism |  ethics: deontological |  justice: distributive |  libertarianism |  Rawls, John |  redistribution |  rights |  utilitarianism: history of |  -->utopia, utopianism-->"
         },
         {
           "corpus_id": "sep",
@@ -1093,7 +1107,7 @@
           "title": "mill-moral-political",
           "url": "https://plato.stanford.edu/entries/mill-moral-political/",
           "score": 0.015151516,
-          "snippet": "mill-moral-political  But it was common among the Philosophical Radicals to formulate utilitarianism, as the Proportionality Doctrine does, in terms of the felicific tendencies of individual actions. For instance, Bentham does this early in his Introduction to the Principles of Morals and Legislation."
+          "snippet": "mill-moral-political  One cannot properly appreciate the development of Mill’s moral and political philosophy without some understanding of his intellectual background. Mill was raised in the tradition of Philosophical Radicalism, made famous by Jeremy Bentham (1748–1832), John Austin (1790–1859), and his father James Mill (1773–1836), which applied utilitarian principles in a self-conscious and systematic way to issues of institutional design and social reform. Utilitarianism assesses actions and institutions in terms of their effects on human happiness and enjoins us to perform actions and d…"
         },
         {
           "corpus_id": "sep",
@@ -1104,10 +1118,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "mill-moral-political",
-          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
+          "title": "bentham",
+          "url": "https://plato.stanford.edu/entries/bentham/",
           "score": 0.014925373,
-          "snippet": "mill-moral-political  Though Mill accepts the utilitarian legacy of the Radicals, he transforms that legacy in important ways. Part of understanding Mill’s contributions to the utilitarian tradition involves understanding his disagreement with the Radicals on issues about human motivation and the nature of happiness."
+          "snippet": "bentham  Bentham’s most important influence was on John Stuart Mill. In his Autobiography (1873) Mill relates that when he first encountered Bentham’s ideas in the Traités “I now had opinions, a creed, a doctrine, a philosophy; in one among the best senses of the word, a religion; the inculcation and diffusion of which could be made the principal outward purpose of a life” (1963–91, I, 67–68). It was in the flush of his early commitment to utilitarianism that Mill edited the five volumes of Bentham’s writings on evidence, Rationale of Judicial Evidence (1838–43, VI, 189–585, VII 1–644). Around…"
         },
         {
           "corpus_id": "sep",
@@ -1132,13 +1146,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "mill-moral-political",
-          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
-          "score": 0.014492754,
-          "snippet": "mill-moral-political  We get a somewhat different perspective on Mill’s utilitarian and liberal principles by seeing how he applies them to social and political issues. We might begin by focusing on Mill’s defense of a democratic form of liberalism in Considerations on Representative Government and Principles of Political Economy."
-        },
-        {
-          "corpus_id": "sep",
           "title": "harriet-mill",
           "url": "https://plato.stanford.edu/entries/harriet-mill/",
           "score": 0.014492754,
@@ -1146,31 +1153,24 @@
         },
         {
           "corpus_id": "sep",
-          "title": "machiavelli",
-          "url": "https://plato.stanford.edu/entries/machiavelli/",
+          "title": "bentham",
+          "url": "https://plato.stanford.edu/entries/bentham/",
           "score": 0.014285714,
-          "snippet": "machiavelli  civic humanism |  republicanism |  sovereignty"
+          "snippet": "bentham  Jeremy Bentham, jurist and political reformer, is the philosopher whose name is most closely associated with the foundational era of the modern utilitarian tradition. Earlier moralists had enunciated several of the core ideas and characteristic terminology of utilitarian philosophy, most notably John Gay, Francis Hutcheson, David Hume, Claude-Adrien Helvétius and Cesare Beccaria, but it was Bentham who rendered the theory in its recognisably secular and systematic form and made it a critical tool of moral and legal philosophy and political and social improvement. In 1776, he first ann…"
         },
         {
           "corpus_id": "sep",
-          "title": "mill-moral-political",
-          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
-          "score": 0.014285714,
-          "snippet": "mill-moral-political  If we look outside of Utilitarianism we can find even clearer evidence of Mill’s doubts about psychological egoism and hedonism. In a note to his edition of James Mill’s Analysis of the Phenomena of the Human Mind (1869) John Stuart Mill diagnoses a possible equivocation in his father’s doctrine."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "political-obligation",
-          "url": "https://plato.stanford.edu/entries/political-obligation/",
+          "title": "moral-character",
+          "url": "https://plato.stanford.edu/entries/moral-character/",
           "score": 0.014084507,
-          "snippet": "political-obligation  anarchism |  authority |  autonomy: in moral and political philosophy |  civil disobedience |  consequentialism |  Hobbes, Thomas |  Hume, David |  Kant, Immanuel |  legal obligation and authority |  legitimacy, political |  Locke, John |  obligations: special |  Rawls, John |  social contract: contemporary approaches to"
+          "snippet": "moral-character  John Stuart Mill (1806–1873) defended a version of liberal utilitarianism, but scholars disagree about what kind of utilitarianism that was. We can safely say that, as a utilitarian, Mill thought human conduct should promote the happiness or welfare of those affected. But was Mill an act-utilitarian, who thought that right acts are those that promote as much happiness as can be done on the particular occasion, given the alternatives available to the agent? Or was he a rule-utilitarian, who thought that right conduct was conduct permitted by rules that, when publicly known to b…"
         },
         {
           "corpus_id": "sep",
-          "title": "rawls",
-          "url": "https://plato.stanford.edu/entries/rawls/",
+          "title": "james-mill",
+          "url": "https://plato.stanford.edu/entries/james-mill/",
           "score": 0.013888889,
-          "snippet": "rawls  Rawls’s own metaethical theory of the objectivity and validity of political judgments, political constructivism, will be described below, after the substantive political theory from which it emerges."
+          "snippet": "james-mill  Mill’s range of interests was remarkably wide, extending from education and psychology in his two-volume Analysis of the Phenomena of the Human Mind (1829a), to political economy (he persuaded his friend David Ricardo to write on that subject, as Mill himself did in his Elements of Political Economy, 1821), to penology and prison reform, to the law and history, and, not least, to political philosophy. On these and other subjects he wrote five books and more than a thousand essays and reviews. It is with Mill the political philosopher and educational theorist that the present articl…"
         },
         {
           "corpus_id": "sep",
@@ -1184,7 +1184,7 @@
           "title": "mill-moral-political",
           "url": "https://plato.stanford.edu/entries/mill-moral-political/",
           "score": 0.01369863,
-          "snippet": "mill-moral-political  Though Mill never renounced the liberal and utilitarian tradition and mission that he inherited from his father, his mental crisis and recovery greatly influenced his interpretation of this tradition. He became critical of the moral psychology of Bentham and his father and of some of the social theory underlying their plans for reform. It is arguable that Mill tends to downplay the significance of his innovations and to underestimate the intellectual discontinuities between himself and his father. One measure of the extent of Mill’s departure from the views of Bentham and…"
+          "snippet": "mill-moral-political  We need to ask if Mill is able to reconcile his defense of utility and liberty without compromising either his utilitarianism or his defense of a right to liberties."
         },
         {
           "corpus_id": "sep",
@@ -1192,6 +1192,13 @@
           "url": "https://plato.stanford.edu/entries/moral-character/",
           "score": 0.01369863,
           "snippet": "moral-character  Aristotle, General Topics: ethics |  character, moral: empirical approaches |  ethics: ancient |  ethics: virtue |  Green, Thomas Hill |  Kant, Immanuel: moral philosophy |  Marx, Karl |  Mill, John Stuart: moral and political philosophy |  moral psychology: empirical approaches |  Rawls, John |  Stoicism"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "mill-moral-political",
+          "url": "https://plato.stanford.edu/entries/mill-moral-political/",
+          "score": 0.013513514,
+          "snippet": "mill-moral-political  Mill also disagrees with the Radicals about the nature of happiness. Though he never abandons the utilitarian tradition of the Radicals, Mill modifies their assumptions about happiness. He explains his commitment to utilitarianism early in Chapter II of Utilitarianism."
         },
         {
           "corpus_id": "sep",
@@ -1204,15 +1211,8 @@
           "corpus_id": "sep",
           "title": "mill-moral-political",
           "url": "https://plato.stanford.edu/entries/mill-moral-political/",
-          "score": 0.013513514,
-          "snippet": "mill-moral-political  So far, this conception of a right does not yet introduce any utilitarian considerations. Mill adds utilitarianism to the mix in his account of the conditions under which society ought to enforce an individual’s claim."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "utilitarianism-history",
-          "url": "https://plato.stanford.edu/entries/utilitarianism-history/",
           "score": 0.013333334,
-          "snippet": "utilitarianism-history  One extremely controversial feature of Sidgwick's views relates to his rejection of a publicity requirement for moral theory. He writes:"
+          "snippet": "mill-moral-political  With a better understanding of the rationale and limits of Mill’s liberal principles, we can take a closer look at the details of his categorical approach, including its centerpiece—the harm principle."
         }
       ],
       "source_score": {
@@ -1227,22 +1227,22 @@
         "matched": [
           "utilitarianism",
           "greatest happiness principle",
+          "harm principle",
           "individual liberty",
+          "freedom of expression",
           "representative government",
           "the subjection of women"
         ],
         "missing": [
-          "harm principle",
           "higher and lower pleasures",
-          "freedom of expression",
           "qualitative hedonism",
           "tyranny of the majority"
         ],
         "total_expected": 10,
-        "ratio": 0.5
+        "ratio": 0.7
       },
-      "embed_ms": 28,
-      "search_ms": 460,
+      "embed_ms": 34,
+      "search_ms": 551,
       "corpora_hit": [
         "sep"
       ],
@@ -1264,6 +1264,13 @@
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
+          "score": 0.031054404,
+          "snippet": "conservatism  Conservatism and its modernising, anti-traditionalist rivals, liberalism and socialism, are the most influential political philosophies and ideologies of the post-Enlightenment era. Conservatives criticise their rivals for making a utopian exaggeration of the power of theoretical reason, and of human perfectibility. Conservative prescriptions are based on what they regard as experience rather than reason; for them, the ideal and the practical are inseparable. Most commentators regard conservatism as a modern political philosophy, even though it exhibits the standpoint of paternal…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "conservatism",
+          "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.030679155,
           "snippet": "conservatism  In an alternative tradition to Burkean conservatism, Continental conservatives have subscribed to Thomist or Hegelian traditions, producing a rational or systematic conservatism—which might include reactionary forms. Commentators differ on the extent to which “rational conservatism” challenges the centrality of Burkean conservatism to conservative tradition. John Gray argues that"
         },
@@ -1271,14 +1278,7 @@
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
-          "score": 0.028033793,
-          "snippet": "conservatism  Conservatism and its modernising, anti-traditionalist rivals, liberalism and socialism, are the most influential political philosophies and ideologies of the post-Enlightenment era. Conservatives criticise their rivals for making a utopian exaggeration of the power of theoretical reason, and of human perfectibility. Conservative prescriptions are based on what they regard as experience rather than reason; for them, the ideal and the practical are inseparable. Most commentators regard conservatism as a modern political philosophy, even though it exhibits the standpoint of paternal…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "conservatism",
-          "url": "https://plato.stanford.edu/entries/conservatism/",
-          "score": 0.027887695,
+          "score": 0.029380456,
           "snippet": "conservatism  Oakeshott argues that “conservatism is not a creed or a doctrine, but a disposition” to enjoy the present (“On Being a Conservative”)—part of human nature, not an abstract political idea or ideal, let alone an ideology. Though he was a philosopher not a political theorist, Oakeshott denies that he is a “conservative philosopher”; philosophy is theoretical, a “theory of theories”, while conservatism is practical (Minogue 2009). However, Gamble adds, that disposition gains substance from its connection with national ways of life and traditions:"
         },
         {
@@ -1293,14 +1293,14 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.016129032,
-          "snippet": "conservatism  For Graham, conservative scepticism is"
+          "snippet": "conservatism  This section has focused mainly on Burkean conservatism, treated as scepticism about the role of reason in politics. The next section analyses the historical development of Burkean conservatism, contrasting it with more rationalist traditions of conservatism, and also looking at North American traditions, and modern conservatism."
         },
         {
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.015873017,
-          "snippet": "conservatism  Other notable 20th century conservative thinkers include historian Maurice Cowling and philosopher Anthony Quinton. Probably the leading living conservative thinker is Roger Scruton, who bases conservatism on three concepts: authority, allegiance and tradition (Scruton 1980: 27). He rejects post-Hobbesian contractualism, which presupposes"
+          "snippet": "conservatism  It is contested both what conservatism is, and what it could or ought to be—both among the public and politicians, and among the philosophers and political theorists that this article focuses on. Popularly, “conservative” is a generic term for “right-wing viewpoint occupying the political spectrum between liberalism and fascism”. Philosophical commentators offer a more distinctive characterisation. Many treat it as a standpoint that is sceptical of abstract reasoning in politics, and that appeals instead to living tradition, allowing for the possibility of limited political refor…"
         },
         {
           "corpus_id": "sep",
@@ -1328,7 +1328,7 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.015384615,
-          "snippet": "conservatism  Compared to liberalism and socialism, conservatism has suffered philosophical neglect (Broad 1913: 396–7). Many deny that it is an ideology, or even a political philosophy, regarding it instead as a disposition that resists theoretical expression—a “non-ideology” that attempts to avoid the errors of ideologies (Graham 1986: 172; in contrast, Nisbet 1986). Is it an ancient attitude, or one that developed only in response to Enlightenment rationality and its political products, liberalism and socialism? How is it related to contemporary “neo-conservatism”? Is it a coherent position…"
+          "snippet": "conservatism  Other notable 20th century conservative thinkers include historian Maurice Cowling and philosopher Anthony Quinton. Probably the leading living conservative thinker is Roger Scruton, who bases conservatism on three concepts: authority, allegiance and tradition (Scruton 1980: 27). He rejects post-Hobbesian contractualism, which presupposes"
         },
         {
           "corpus_id": "sep",
@@ -1342,7 +1342,7 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.015151516,
-          "snippet": "conservatism  Conservatives have sometimes disdained theoretical reflection on political life, implying that political knowledge is…best left inarticulate, uncorrupted by rationalist systematising. The [19th and 20th] centuries are nevertheless replete with conservative thought…as systematic and reflective as any found in the liberal tradition. (Gray 1995: 78–9)"
+          "snippet": "conservatism  Compared to liberalism and socialism, conservatism has suffered philosophical neglect (Broad 1913: 396–7). Many deny that it is an ideology, or even a political philosophy, regarding it instead as a disposition that resists theoretical expression—a “non-ideology” that attempts to avoid the errors of ideologies (Graham 1986: 172; in contrast, Nisbet 1986). Is it an ancient attitude, or one that developed only in response to Enlightenment rationality and its political products, liberalism and socialism? How is it related to contemporary “neo-conservatism”? Is it a coherent position…"
         },
         {
           "corpus_id": "sep",
@@ -1350,13 +1350,6 @@
           "url": "https://plato.stanford.edu/entries/coercion/",
           "score": 0.015151516,
           "snippet": "coercion  Although some writings on coercion might appear to aim principally for conceptual clarification, theorists of coercion more often aim to answer questions that have practical import for ethics, judicial decisions, political or legal theory, and social policy. Some of the most common implications of claims about coercion are explored below. The four subsections here (on responsibility under coercion, the wrongfulness of coercion, its effect on freedom, and its political implications) overlap in a number of ways, so divisions among these sections are somewhat artificial. The divisions h…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "conservatism",
-          "url": "https://plato.stanford.edu/entries/conservatism/",
-          "score": 0.014925373,
-          "snippet": "conservatism  theory of the origins of society and government which placed political conservatism on a much sounder and more realistic basis. (1960: 51)"
         },
         {
           "corpus_id": "sep",
@@ -1370,14 +1363,14 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.014705882,
-          "snippet": "conservatism  Cobban contrasts Burke’s residual contractualism with Hume’s"
+          "snippet": "conservatism  Kekes argues similarly that conservatism, with its defining scepticism and opposition to “rationalism” in politics, contrasts with liberalism and socialism in rejecting a priori value-commitments (Kekes 1997: 368). This position was enunciated most trenchantly by Burke, conservatism’s “master intellectual”, acknowledged by almost all subsequent conservatives. He rejected a priori reasoning in politics, notably claims to abstract natural rights, manifested most dramatically in the French Jacobin dream of destroying and rebuilding society. Burke holds that there is a practical wisd…"
         },
         {
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.014492754,
-          "snippet": "conservatism  Kekes argues similarly that conservatism, with its defining scepticism and opposition to “rationalism” in politics, contrasts with liberalism and socialism in rejecting a priori value-commitments (Kekes 1997: 368). This position was enunciated most trenchantly by Burke, conservatism’s “master intellectual”, acknowledged by almost all subsequent conservatives. He rejected a priori reasoning in politics, notably claims to abstract natural rights, manifested most dramatically in the French Jacobin dream of destroying and rebuilding society. Burke holds that there is a practical wisd…"
+          "snippet": "conservatism  It is important to recognise that the precise appearance of conservatism after 1789 is disputed. For some writers argue, the ideology of conservatism was not articulated until the 1880s and 90s; only then was Burke established as conservatism’s ‘master intellectual’ (Jones 2017). Jones cites MacCunn’s The Political Philosophy of Burke (1913), which converted the Whig statesman into the originator of a political philosophy of conservatism. Cecil’s Conservatism (1912) firmly established the connection, devoting a chapter to Burke as the founder of conservatism. In contrast, Clark p…"
         },
         {
           "corpus_id": "sep",
@@ -1391,14 +1384,14 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.014285714,
-          "snippet": "conservatism  (2) non-relativistic conservatism rejects views such as socialism, libertarianism and fascism that aim to structure society around a single rationally-articulated organising principle. On this interpretation of conservatism, particularism does not imply relativism. Revolutionary systems, and autocratic systems with no possibility of incremental change—societies that do not exhibit living traditions—are not amenable to a conservative outlook. On this view, conservatism is situational, but some situations do not permit conservative responses."
+          "snippet": "conservatism  theory of the origins of society and government which placed political conservatism on a much sounder and more realistic basis. (1960: 51)"
         },
         {
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.014084507,
-          "snippet": "conservatism  To reiterate, this is a misinterpretation of conservatism. Conservatives would respond that Burke’s concept of tradition is not static, and does stress the importance of incremental change; while Oakeshott, like MacIntyre, has an interrogative attitude to tradition. Moreover, the communitarian opposition to liberal values is limited, and does not extend to advocacy of religious intolerance and homogeneity or patriarchal authority (see Taylor 1977; Waldron 1992)—though neither does the anti-liberalism of Burkean conservatives. It could be argued that since the conservative traditi…"
+          "snippet": "conservatism  (2) non-relativistic conservatism rejects views such as socialism, libertarianism and fascism that aim to structure society around a single rationally-articulated organising principle. On this interpretation of conservatism, particularism does not imply relativism. Revolutionary systems, and autocratic systems with no possibility of incremental change—societies that do not exhibit living traditions—are not amenable to a conservative outlook. On this view, conservatism is situational, but some situations do not permit conservative responses."
         },
         {
           "corpus_id": "sep",
@@ -1412,7 +1405,7 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.013888889,
-          "snippet": "conservatism  It is contested both what conservatism is, and what it could or ought to be—both among the public and politicians, and among the philosophers and political theorists that this article focuses on. Popularly, “conservative” is a generic term for “right-wing viewpoint occupying the political spectrum between liberalism and fascism”. Philosophical commentators offer a more distinctive characterisation. Many treat it as a standpoint that is sceptical of abstract reasoning in politics, and that appeals instead to living tradition, allowing for the possibility of limited political refor…"
+          "snippet": "conservatism  These cultural issues are central to G.A. Cohen’s work on conservatism in political and cultural spheres. Cohen argues for a truth in Burkean conservatism that is compatible with liberalism and socialism, viz. that we should accept some things as given:"
         },
         {
           "corpus_id": "sep",
@@ -1426,7 +1419,7 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.01369863,
-          "snippet": "conservatism  The parallel with conservative political thought is suggested by Scruton in his discussion of public space (Scruton 1994)."
+          "snippet": "conservatism  To reiterate, this is a misinterpretation of conservatism. Conservatives would respond that Burke’s concept of tradition is not static, and does stress the importance of incremental change; while Oakeshott, like MacIntyre, has an interrogative attitude to tradition. Moreover, the communitarian opposition to liberal values is limited, and does not extend to advocacy of religious intolerance and homogeneity or patriarchal authority (see Taylor 1977; Waldron 1992)—though neither does the anti-liberalism of Burkean conservatives. It could be argued that since the conservative traditi…"
         },
         {
           "corpus_id": "sep",
@@ -1440,7 +1433,7 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.013513514,
-          "snippet": "conservatism  These are very Burkean themes. As Gray puts it,"
+          "snippet": "conservatism  While conservatism should not be assimilated with neo-conservatism or neo-liberalism, many conservatives have converted to the latter:"
         },
         {
           "corpus_id": "sep",
@@ -1454,14 +1447,21 @@
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.013333334,
-          "snippet": "conservatism  Central to conservatism is the notion of tradition, whose self-conscious, contrastive use arises only in modernity. In the later 18th century, the mobilisation of “the past” as an explicit political resource became especially important, and a contrast between “traditional” and “modern”—as opposed to “ancient” and “modern”—was stressed. Burke’s political philosophy was an early instance of this process. This mobilisation has been associated with “the invention of tradition” (Hobsbawm and Ranger 1983), in which mass-produced “traditional” artefacts established a fictional organic r…"
+          "snippet": "conservatism  As well as Burke, Gray cites Hegel, de Maistre, Savigny, Santayana and Oakeshott, conservatives in that they share a “spirit of reaction against the excesses of liberal rationalism” (Gray 1995: Ch. 10). Skorupski (2015) contrasts anti-universalist pragmatic conservatism with universalist rational conservatism; “rational conservatism” does not exhibit particularist scepticism. Rational conservatives maintain that a community with a hierarchy of authority is most conducive to human well-being—though they also regard agent-relative virtues such as loyalty and patriotism as fundament…"
         },
         {
           "corpus_id": "sep",
           "title": "conservatism",
           "url": "https://plato.stanford.edu/entries/conservatism/",
           "score": 0.013333334,
-          "snippet": "conservatism  Conservatism is popularly conflated with neo-conservatism and with libertarianism. But right libertarians and neo-conservatives, unlike Burkean conservatives, reject state planning for doctrinaire reasons. Making anti-planning into a principle, or economic liberalism into an ideology, offends the conservative’s pragmatic, sceptical temper, which could admit a role for state planning and economic intervention were such things shown to be effective. Conservatives reject ideologies, of which neo-liberalism is one. As Oakeshott argues"
+          "snippet": "conservatism  Central to conservatism is the notion of tradition, whose self-conscious, contrastive use arises only in modernity. In the later 18th century, the mobilisation of “the past” as an explicit political resource became especially important, and a contrast between “traditional” and “modern”—as opposed to “ancient” and “modern”—was stressed. Burke’s political philosophy was an early instance of this process. This mobilisation has been associated with “the invention of tradition” (Hobsbawm and Ranger 1983), in which mass-produced “traditional” artefacts established a fictional organic r…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "conservatism",
+          "url": "https://plato.stanford.edu/entries/conservatism/",
+          "score": 0.013157895,
+          "snippet": "conservatism  Various precursors of this self-conscious conservatism have been claimed. Aristotle is often cited, for holding that morality and politics—unlike natural science—lack special experts, and that in these areas, human experience over generations is the main source of knowledge. Confucius is another possible precursor. His concern with the breakdown of contemporary political institutions led to a cautious, conservative political outlook; his stress on authority and hierarchy prefigures central conservative themes. From a later but still pre-Enlightenment era, the English common law n…"
         }
       ],
       "source_score": {
@@ -1490,8 +1490,8 @@
         "total_expected": 10,
         "ratio": 0.7
       },
-      "embed_ms": 30,
-      "search_ms": 461,
+      "embed_ms": 31,
+      "search_ms": 499,
       "corpora_hit": [
         "sep"
       ],
@@ -1506,8 +1506,22 @@
           "corpus_id": "sep",
           "title": "logics-for-games",
           "url": "https://plato.stanford.edu/entries/logics-for-games/",
-          "score": 0.029709507,
+          "score": 0.030330881,
           "snippet": "logics-for-games  The main topic of this entry is a logical approach to game theory, bringing classical notions and methods from logic to bear upon games. This project is sometimes called ‘logic of games’. There also is a converse direction of ‘logic as games’, where game theoretic concepts are employed to elucidate basic notions of logic. This section presents a brief discussion on this direction as a natural counterpoint to the main lines of the entry. For an extensive survey see the entries on  logic and games  and  games, abstraction and completeness."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-game",
+          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "score": 0.027056277,
+          "snippet": "epistemic-game  This entry provides an overview of the issues that arise when one takes this broadly decision-theoretic view on rational decision making in games. After some general comments about information in games, we present the formal tools developed in epistemic game theory and epistemic logic that have been used to understand the role of higher-order information in interactive decision making. We then show how these tools can be used to characterize known “solution concepts” of games in terms of rational decision making in specific informational contexts. Along the way, we highlight a …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "game-ethics",
+          "url": "https://plato.stanford.edu/entries/game-ethics/",
+          "score": 0.025657896,
+          "snippet": "game-ethics  Arguably the most systematic use of game theory in moral and political philosophy has been in contractarian approaches to justifying moral or political orders. Philosophers have typically characterized the social contract as a set of rules for regulating the interactions of members of a community. By providing a formal model of interactive decision-making, game theory is clearly relevant to the analysis of such contracts. What has been particularly distinctive of game theoretic analysis of the social contract, though, is an emphasis on bargaining problems. As we will discuss below…"
         },
         {
           "corpus_id": "sep",
@@ -1532,17 +1546,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "game-ethics",
-          "url": "https://plato.stanford.edu/entries/game-ethics/",
+          "title": "game-theory",
+          "url": "https://plato.stanford.edu/entries/game-theory/",
           "score": 0.016393442,
-          "snippet": "game-ethics  Arrow’s theorem |  decision theory |  functionalism |  game theory |  game theory: evolutionary |  prisoner’s dilemma |  public reason |  social choice theory |  social contract: contemporary approaches to |  social norms"
+          "snippet": "game-theory  The philosophical foundations of the basic game-theoretic concepts as economists understand them are presented in  LaCasse and Ross (1994).  Ross and LaCasse (1995) outline the relationships between games and the axiomatic assumptions of microeconomics and macroeconomics.  Philosophical puzzles at this foundational level are critically discussed in  Bicchieri (1993).  Lewis (1969) puts game-theoretic equilibrium concepts to wider application in philosophy, though making some foundational assumptions that economists generally do not share. His program is carried a good deal further…"
         },
         {
           "corpus_id": "sep",
-          "title": "epistemic-game",
-          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "title": "game-ethics",
+          "url": "https://plato.stanford.edu/entries/game-ethics/",
           "score": 0.016129032,
-          "snippet": "epistemic-game  Foundational work in game theory aims at making explicit the assumptions that underlie the basic concepts of the discipline. Non-cooperative game theory is the study of individual, rational decision making in situations of strategic interaction. This entry presents the epistemic foundations of non-cooperative game theory (this area of research is called epistemic game theory)."
+          "snippet": "game-ethics  Richard Braithwaite was the first professional philosopher to formally employ game theory in the analysis of a problem of ethics. In his 1954 lecture Theory of Games as a Tool for the Moral Philosopher (published 1955), Braithwaite used Nash’s bargaining problem to argue for a particular resolution to the fair division problem. He also conjectured that game theory might transform moral philosophy, much as statistics had transformed the social sciences. Although this transformation has not taken place in philosophy in the way that it has for some of the other social sciences, game …"
         },
         {
           "corpus_id": "sep",
@@ -1553,10 +1567,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "logics-for-games",
-          "url": "https://plato.stanford.edu/entries/logics-for-games/",
+          "title": "game-ethics",
+          "url": "https://plato.stanford.edu/entries/game-ethics/",
           "score": 0.015873017,
-          "snippet": "logics-for-games  decision theory |  epistemology: Bayesian |  games: abstraction and completeness |  game theory |  game theory: epistemic foundations of |  game theory: evolutionary |  learning theory, formal |  logic: and games |  logic: and probability |  logic: conditionals |  logic: deontic |  logic: dependence |  logic: dynamic epistemic |  logic: epistemic |  logic: for analyzing power in normal form games |  logic: independence friendly |  logic: justification |  logic: modal |  logic: propositional dynamic |  logic: temporal |  probability, interpretations of |  social procedures, fo…"
+          "snippet": "game-ethics  Many of the early applications of game theory to ethics were limited to contractarian theories and work exploring the relationship between morality and rationality. It has increasingly come to be an important tool in the study of applied problems in moral and political philosophy, though, and this promises to become even more true as the number of scholars working on issues at the intersection of philosophy, politics, and economics increases. That said, game theory remains an important tool for analyzing the function of morality and for identifying some of its necessary features. …"
         },
         {
           "corpus_id": "sep",
@@ -1567,17 +1581,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "prisoner-dilemma",
-          "url": "https://plato.stanford.edu/entries/prisoner-dilemma/",
+          "title": "game-ethics",
+          "url": "https://plato.stanford.edu/entries/game-ethics/",
           "score": 0.015625,
-          "snippet": "prisoner-dilemma  decision theory: causal |  game theory |  game theory: and ethics |  game theory: epistemic foundations of |  game theory: evolutionary"
+          "snippet": "game-ethics  Arrow’s theorem |  decision theory |  functionalism |  game theory |  game theory: evolutionary |  prisoner’s dilemma |  public reason |  social choice theory |  social contract: contemporary approaches to |  social norms"
         },
         {
           "corpus_id": "sep",
-          "title": "logics-for-games",
-          "url": "https://plato.stanford.edu/entries/logics-for-games/",
+          "title": "game-theory",
+          "url": "https://plato.stanford.edu/entries/game-theory/",
           "score": 0.015384615,
-          "snippet": "logics-for-games  Virtually all aspects of game theory provide contacts between logical and probabilistic perspectives. Clearly, this is true for the different representations of knowledge, beliefs and their dynamics just discussed. Other contacts occur at the level of game forms, cf.  Section 2,  where probabilities enrich the space of strategies. The resulting mixed moves require players to expand their preferences to mixed outcomes, cf.  Section 3.  Finally, at the level of reasoning about game play, cf.  Section 4,  probabilistic beliefs play a role in solution techniques such as dominance…"
+          "snippet": "game-theory  Two volumes from leading theorists that offer comprehensive views on the philosophical foundations of game theory were published in 2009. These are  Binmore (2009)  (**) and  Gintis (2009a)  (**). Both are indispensable to philosophers who aim to participate in critical discussions of foundational issues."
         },
         {
           "corpus_id": "sep",
@@ -1588,24 +1602,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "game-theory",
-          "url": "https://plato.stanford.edu/entries/game-theory/",
-          "score": 0.015151516,
-          "snippet": "game-theory  The interest of philosophers in game theory is more often motivated by this ambition than is that of the economist or other scientist."
-        },
-        {
-          "corpus_id": "sep",
           "title": "epistemic-game",
           "url": "https://plato.stanford.edu/entries/epistemic-game/",
           "score": 0.015151516,
-          "snippet": "epistemic-game  This entry provides an overview of the issues that arise when one takes this broadly decision-theoretic view on rational decision making in games. After some general comments about information in games, we present the formal tools developed in epistemic game theory and epistemic logic that have been used to understand the role of higher-order information in interactive decision making. We then show how these tools can be used to characterize known “solution concepts” of games in terms of rational decision making in specific informational contexts. Along the way, we highlight a …"
+          "snippet": "epistemic-game  Foundational work in game theory aims at making explicit the assumptions that underlie the basic concepts of the discipline. Non-cooperative game theory is the study of individual, rational decision making in situations of strategic interaction. This entry presents the epistemic foundations of non-cooperative game theory (this area of research is called epistemic game theory)."
         },
         {
           "corpus_id": "sep",
-          "title": "logic-games",
-          "url": "https://plato.stanford.edu/entries/logic-games/",
+          "title": "game-theory",
+          "url": "https://plato.stanford.edu/entries/game-theory/",
           "score": 0.014925373,
-          "snippet": "logic-games  In short, games are used for modelling rationality and bounded rationality. This is independent of any connection with logic. But some logics were designed for studying aspects of rational behaviour, and in recent years it has become increasingly common to link these logics to suitable games. See Section 5 (‘Semantic games for other logics’) and its bibliography."
+          "snippet": "game-theory  The interest of philosophers in game theory is more often motivated by this ambition than is that of the economist or other scientist."
         },
         {
           "corpus_id": "sep",
@@ -1613,13 +1620,6 @@
           "url": "https://plato.stanford.edu/entries/game-theory/",
           "score": 0.014925373,
           "snippet": "game-theory  This brings us to  Stirling’s (2012)  extension of game theory to cover such conditional interactions. Stirling’s aim is to formalize, and derive equilibrium conditions for, a notion of group preference that is, on the one hand, not a mere aggregation of individual preferences but also does not, on the other hand, simply assume the existence of a transcendent collective will that is imposed on individuals. The intuitive target Stirling has in mind is that of processes by which people derive their actual preferences partly on the basis of the comparative consequences for group welf…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "game-theory",
-          "url": "https://plato.stanford.edu/entries/game-theory/",
-          "score": 0.014705882,
-          "snippet": "game-theory  Then"
         },
         {
           "corpus_id": "sep",
@@ -1633,7 +1633,7 @@
           "title": "logics-for-games",
           "url": "https://plato.stanford.edu/entries/logics-for-games/",
           "score": 0.014492754,
-          "snippet": "logics-for-games  Game theory may be understood as generalized interactive decision theory. A major vehicle for the latter, just as for standard decision theory, is probability theory. Within games, probability can assume many roles. It may, for instance, express players’ degrees of belief quantitatively, but it can also enrich the space of actions with mixed strategies, thereby laying the ground for general equilibrium results. Probability can even play a role in the very definition of certain important games, especially in evolutionary game theory (Osborne &amp; Rubinstein 1994). In this ent…"
+          "snippet": "logics-for-games  Virtually all aspects of game theory provide contacts between logical and probabilistic perspectives. Clearly, this is true for the different representations of knowledge, beliefs and their dynamics just discussed. Other contacts occur at the level of game forms, cf.  Section 2,  where probabilities enrich the space of strategies. The resulting mixed moves require players to expand their preferences to mixed outcomes, cf.  Section 3.  Finally, at the level of reasoning about game play, cf.  Section 4,  probabilistic beliefs play a role in solution techniques such as dominance…"
         },
         {
           "corpus_id": "sep",
@@ -1641,6 +1641,13 @@
           "url": "https://plato.stanford.edu/entries/analysis/",
           "score": 0.014492754,
           "snippet": "analysis  The present document provides an overview, with introductions to the  various conceptions of analysis in the history of philosophy. It also contains links to the supplementary documents, the documents in the  bibliography, and other internet resources. The supplementary  documents expand on certain topics under each of the six main  sections. The annotated bibliography contains a list of key readings  on each topic, and is also divided according to the sections of this  entry."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "game-theory",
+          "url": "https://plato.stanford.edu/entries/game-theory/",
+          "score": 0.014285714,
+          "snippet": "game-theory  Behavioral and experimental applications of game theory are surveyed in  Kagel and Roth (1995).  Camerer (2003) (**) is a comprehensive and more recent study of this literature, and cannot be missed by anyone interested in these issues.  A shorter survey that emphasizes philosophical and methodological criticism is  Samuelson (2005).  Philosophical foundations are also carefully examined in  Guala (2005)."
         },
         {
           "corpus_id": "sep",
@@ -1653,8 +1660,8 @@
           "corpus_id": "sep",
           "title": "logics-for-games",
           "url": "https://plato.stanford.edu/entries/logics-for-games/",
-          "score": 0.014285714,
-          "snippet": "logics-for-games  This entry presents an overview of current work at the interface of logic and games. The topics surveyed fall in a number of strands including current logical analysis of games in the broadest sense, contacts between logic and classical game theory, connections with probability and with computation, and, lastly, the game-theoretic content of logic itself."
+          "score": 0.014084507,
+          "snippet": "logics-for-games  decision theory |  epistemology: Bayesian |  games: abstraction and completeness |  game theory |  game theory: epistemic foundations of |  game theory: evolutionary |  learning theory, formal |  logic: and games |  logic: and probability |  logic: conditionals |  logic: deontic |  logic: dependence |  logic: dynamic epistemic |  logic: epistemic |  logic: for analyzing power in normal form games |  logic: independence friendly |  logic: justification |  logic: modal |  logic: propositional dynamic |  logic: temporal |  probability, interpretations of |  social procedures, fo…"
         },
         {
           "corpus_id": "sep",
@@ -1662,6 +1669,13 @@
           "url": "https://plato.stanford.edu/entries/common-knowledge/",
           "score": 0.014084507,
           "snippet": "common-knowledge  The purpose of this essay is to overview of some of the most important results stemming from this contemporary research. The topics reviewed in each section of this essay are as follows: Section 1 gives motivating examples which illustrate a variety of ways in which the actions of agents depend crucially upon their having, or lacking, certain common knowledge. Section 2 discusses alternative analyses of common knowledge. Section 3 reviews applications of multi-agent knowledge concepts, particularly to game theory (von Neumann and Morgenstern 1944), in which common knowledge a…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "prisoner-dilemma",
+          "url": "https://plato.stanford.edu/entries/prisoner-dilemma/",
+          "score": 0.013888889,
+          "snippet": "prisoner-dilemma  decision theory: causal |  game theory |  game theory: and ethics |  game theory: epistemic foundations of |  game theory: evolutionary"
         },
         {
           "corpus_id": "sep",
@@ -1674,15 +1688,8 @@
           "corpus_id": "sep",
           "title": "game-theory",
           "url": "https://plato.stanford.edu/entries/game-theory/",
-          "score": 0.013888889,
-          "snippet": "game-theory  For readers new to economics, game theory, decision theory and the philosophy of action, this situation naturally presents a challenge."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "game-ethics",
-          "url": "https://plato.stanford.edu/entries/game-ethics/",
           "score": 0.01369863,
-          "snippet": "game-ethics  For instance, many game theoretically minded philosophers have contended that any account that privileges certain representations of agents’ utilities cannot avoid incorporating certain moral judgments into these utilities (Sen 1980; Moehler 2018)."
+          "snippet": "game-theory  Some other theorists understand the point of game theory differently. They view game theory as providing an explanatory account of actual human strategic reasoning processes. For this idea to be applicable, we must suppose that agents at least sometimes do what they do in non-parametric settings because game-theoretic logic recommends certain actions as the ‘rational’ ones. Such an understanding of game theory incorporates a normative aspect, since ‘rationality’ is taken to denote a property that an agent should at least generally want to have. These two very general ways of think…"
         },
         {
           "corpus_id": "sep",
@@ -1696,7 +1703,7 @@
           "title": "game-theory",
           "url": "https://plato.stanford.edu/entries/game-theory/",
           "score": 0.013513514,
-          "snippet": "game-theory  The philosophical foundations of the basic game-theoretic concepts as economists understand them are presented in  LaCasse and Ross (1994).  Ross and LaCasse (1995) outline the relationships between games and the axiomatic assumptions of microeconomics and macroeconomics.  Philosophical puzzles at this foundational level are critically discussed in  Bicchieri (1993).  Lewis (1969) puts game-theoretic equilibrium concepts to wider application in philosophy, though making some foundational assumptions that economists generally do not share. His program is carried a good deal further…"
+          "snippet": "game-theory  Hardin (1995)  is one of many examples of the application of game theory to problems in applied political theory.  Baird, Gertner and Picker (1994)  review uses of game theory in legal theory and jurisprudence.  Mueller (1997)  surveys applications in public choice.  Ghemawat (1997)  provides case studies intended to serve as a methodological template for practical application of game theory to business strategy problems.  Poundstone (1992)  provides a lively history of the Prisoner’s Dilemma and its use by Cold War strategists.  Amadae (2016)  tells the same story, based on origi…"
         },
         {
           "corpus_id": "sep",
@@ -1704,13 +1711,6 @@
           "url": "https://plato.stanford.edu/entries/truth/",
           "score": 0.013513514,
           "snippet": "truth  It would be impossible to survey all there is to say about truth in any coherent way. Instead, this essay will concentrate on the main themes in the study of truth in the contemporary philosophical literature. It will attempt to survey the key problems and theories of current interest, and show how they relate to one-another. A number of other entries investigate many of these topics in greater depth. Generally, discussion of the principal arguments is left to them. The goal of this essay is only to provide an overview of the current Theories. Many of the papers mentioned in this essay …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "epistemic-game",
-          "url": "https://plato.stanford.edu/entries/epistemic-game/",
-          "score": 0.013333334,
-          "snippet": "epistemic-game  belief, formal representations of |  common knowledge |  epistemology: Bayesian |  game theory |  game theory: and ethics |  prisoner’s dilemma"
         }
       ],
       "source_score": {
@@ -1723,6 +1723,7 @@
       },
       "fact_score": {
         "matched": [
+          "Nash equilibrium",
           "prisoner's dilemma",
           "extensive and normal form",
           "mixed strategies",
@@ -1730,17 +1731,16 @@
           "applications to social science"
         ],
         "missing": [
-          "Nash equilibrium",
           "dominant strategies",
           "cooperative versus non-cooperative games",
           "backward induction",
           "zero-sum games"
         ],
         "total_expected": 10,
-        "ratio": 0.5
+        "ratio": 0.6
       },
-      "embed_ms": 38,
-      "search_ms": 475,
+      "embed_ms": 41,
+      "search_ms": 485,
       "corpora_hit": [
         "sep"
       ],
@@ -1751,6 +1751,13 @@
       "category": "comprehensive_summary",
       "question": "Provide a comprehensive overview of the philosophy of the infinite. Cover the\ncentral distinctions, the major historical and mathematical developments, the\nkey paradoxes, and the principal figures. Aim for breadth across the whole\ntopic.\n",
       "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
+          "score": 0.027745886,
+          "snippet": "infinity  Considering whether space and time are infinite in extent and divisibility has led to many famous puzzles, paradoxes and antimonies. It was on account of such paradoxes that Kant was led to the claim that whether space is finite or infinite escapes any possible empirical determination. Kant’s presentation of the antinomies rested on a number of assumptions (such as the distinction between infinite and unbounded) that were undermined by later results in mathematics or were simply found to be philosophically questionable. Another interesting paradox relates to divisibility. In this sec…"
+        },
         {
           "corpus_id": "sep",
           "title": "infinity",
@@ -1777,14 +1784,14 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.016393442,
-          "snippet": "infinity  Many philosophers have devised paradoxes and even putative ‘antinomies’ that exploit the structural features of space and time in a way that essentially involves the infinite. Among the ancients, Zeno is renowned for his paradoxes of space, time and motion. They involve infinitely many spatial or temporal subdivisions or processes that are putatively impossible—see the entry on  Zeno’s paradoxes.    Among the moderns, Kant is particularly notable for his treatment of the extent of space and time in his ‘First Antinomy of Pure Reason’. We turn to it now."
+          "snippet": "infinity  If the urgency of problems related to the infinite reached Greek consciousness with Zeno’s paradoxes, the most influential discussion was due to Aristotle. In order to put Aristotle’s discussion in perspective, we need to list a number of ways in which mathematical infinity had emerged not only in philosophy, as we have described, but also in mathematics. We have already seen with Archytas the notion of spatial infinitude of the cosmos. But in number theory, the natural numbers were considered infinite, at least in the sense that given any natural number a greater one could be found.…"
         },
         {
           "corpus_id": "sep",
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.016129032,
-          "snippet": "infinity  By the time Aristotle (4th century BCE) developed his discussion of the infinite, this concept had thus made its presence felt in philosophy, mathematics, and natural philosophy (including cosmology, astronomy, and physics). It would be hard to exaggerate the role played by Aristotle in the history of infinity. He articulated some essential conceptual distinctions that were to influence all subsequent discussions. He was a finitist in the sense that in his universe, everything is finite. The cosmos is finite, bodies are finite, geometrical segments are finite, each number is finite, …"
+          "snippet": "infinity  Many philosophers have devised paradoxes and even putative ‘antinomies’ that exploit the structural features of space and time in a way that essentially involves the infinite. Among the ancients, Zeno is renowned for his paradoxes of space, time and motion. They involve infinitely many spatial or temporal subdivisions or processes that are putatively impossible—see the entry on  Zeno’s paradoxes.    Among the moderns, Kant is particularly notable for his treatment of the extent of space and time in his ‘First Antinomy of Pure Reason’. We turn to it now."
         },
         {
           "corpus_id": "sep",
@@ -1798,7 +1805,7 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.015873017,
-          "snippet": "infinity  If the urgency of problems related to the infinite reached Greek consciousness with Zeno’s paradoxes, the most influential discussion was due to Aristotle. In order to put Aristotle’s discussion in perspective, we need to list a number of ways in which mathematical infinity had emerged not only in philosophy, as we have described, but also in mathematics. We have already seen with Archytas the notion of spatial infinitude of the cosmos. But in number theory, the natural numbers were considered infinite, at least in the sense that given any natural number a greater one could be found.…"
+          "snippet": "infinity  The most fruitful development in the use of infinity in 17th century mathematics was that of the calculus."
         },
         {
           "corpus_id": "sep",
@@ -1812,7 +1819,7 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.015625,
-          "snippet": "infinity  In this section we will begin by showing how Greek mathematics studiously avoided the use of infinity in the presentation of its results by making use of the method of exhaustion (3.1). Then we will look at the widespread use of infinitary objects and procedures in 17th-century mathematics (theory of indivisibles and points at infinity in geometry (3.2), infinitesimals in the calculus (3.3)) and Galileo’s problem of extending counting to infinite collections (3.4). By the early 18th-century mathematics had undergone its first “infinitistic revolution” (the second is associated with t…"
+          "snippet": "infinity  By the time Aristotle (4th century BCE) developed his discussion of the infinite, this concept had thus made its presence felt in philosophy, mathematics, and natural philosophy (including cosmology, astronomy, and physics). It would be hard to exaggerate the role played by Aristotle in the history of infinity. He articulated some essential conceptual distinctions that were to influence all subsequent discussions. He was a finitist in the sense that in his universe, everything is finite. The cosmos is finite, bodies are finite, geometrical segments are finite, each number is finite, …"
         },
         {
           "corpus_id": "sep",
@@ -1826,7 +1833,7 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.015384615,
-          "snippet": "infinity  The most fruitful development in the use of infinity in 17th century mathematics was that of the calculus."
+          "snippet": "infinity  For more on infinity in philosophy of religion, see the following references."
         },
         {
           "corpus_id": "sep",
@@ -1840,7 +1847,7 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.015151516,
-          "snippet": "infinity  Aristotle, Special Topics: mathematics |  continuity and infinitesimals |  cosmology: and theology |  Dedekind, Richard: contributions to the foundations of mathematics |  geometry: finitism in |  Hilbert, David: program in the foundations of mathematics |  paradox: Skolem’s |  Pascal’s wager |  Quine, Willard van Orman: New Foundations |  set theory |  set theory: alternative axiomatic theories |  set theory: constructive and intuitionistic ZF |  set theory: continuum hypothesis |  set theory: early development |  set theory: independence and large cardinals |  set theory: large car…"
+          "snippet": "infinity  In this section we will begin by showing how Greek mathematics studiously avoided the use of infinity in the presentation of its results by making use of the method of exhaustion (3.1). Then we will look at the widespread use of infinitary objects and procedures in 17th-century mathematics (theory of indivisibles and points at infinity in geometry (3.2), infinitesimals in the calculus (3.3)) and Galileo’s problem of extending counting to infinite collections (3.4). By the early 18th-century mathematics had undergone its first “infinitistic revolution” (the second is associated with t…"
         },
         {
           "corpus_id": "sep",
@@ -1851,24 +1858,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "philosophy-mathematics",
-          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.014925373,
-          "snippet": "philosophy-mathematics  Aristotle, Special Topics: mathematics |  Brouwer, Luitzen Egbertus Jan |  choice, axiom of |  Church-Turing Thesis |  Frege, Gottlob: theorem and foundations for arithmetic |  Gödel, Kurt |  Hilbert, David: program in the foundations of mathematics |  infinity |  Kant, Immanuel: philosophy of mathematics |  logic, history of: intuitionistic logic |  logic: intuitionistic |  mathematics, philosophy of: fictionalism |  mathematics, philosophy of: formalism |  mathematics, philosophy of: indispensability arguments in the |  mathematics, philosophy of: intuitionism |  math…"
+          "snippet": "infinity  Aristotle, Special Topics: mathematics |  continuity and infinitesimals |  cosmology: and theology |  Dedekind, Richard: contributions to the foundations of mathematics |  geometry: finitism in |  Hilbert, David: program in the foundations of mathematics |  paradox: Skolem’s |  Pascal’s wager |  Quine, Willard van Orman: New Foundations |  set theory |  set theory: alternative axiomatic theories |  set theory: constructive and intuitionistic ZF |  set theory: continuum hypothesis |  set theory: early development |  set theory: independence and large cardinals |  set theory: large car…"
         },
         {
           "corpus_id": "sep",
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
-          "score": 0.014925373,
-          "snippet": "infinity  Considering whether space and time are infinite in extent and divisibility has led to many famous puzzles, paradoxes and antimonies. It was on account of such paradoxes that Kant was led to the claim that whether space is finite or infinite escapes any possible empirical determination. Kant’s presentation of the antinomies rested on a number of assumptions (such as the distinction between infinite and unbounded) that were undermined by later results in mathematics or were simply found to be philosophically questionable. Another interesting paradox relates to divisibility. In this sec…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-mathematics",
-          "url": "https://plato.stanford.edu/entries/aristotle-mathematics/",
           "score": 0.014705882,
-          "snippet": "aristotle-mathematics  Aristotle famously rejects the infinite in mathematics and in physics, with some notable exceptions. He defines it thus:"
+          "snippet": "infinity  In conclusion, the “infinitistic revolution” in the 17th and the early 18th century left an important legacy for philosophy and mathematics. The theory of indivisibles introduced new magnitudes characterized infinitarily (the collection of all the indivisibles of a figure), and new infinitary geometrical objects extended the classical geometrical universe. Moreover, the debates on the calculus were focused on the nature of the infinitely small and the infinitely large. Finally, the issues emerging from Galileo’s paradox were a prelude to the problem of extending counting from finite …"
         },
         {
           "corpus_id": "sep",
@@ -1879,10 +1879,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "settheory-early",
-          "url": "https://plato.stanford.edu/entries/settheory-early/",
+          "title": "aristotle-mathematics",
+          "url": "https://plato.stanford.edu/entries/aristotle-mathematics/",
           "score": 0.014492754,
-          "snippet": "settheory-early  In 19th century German-speaking areas, there were some intellectual tendencies that promoted the acceptance of the actual infinite (e.g., a revival of Leibniz’s thought). In spite of Gauss’s warning that the infinite can only be a manner of speaking, some minor figures and three major ones (Bolzano, Riemann, Dedekind) preceded Cantor in fully accepting the actual infinite in mathematics. Those three authors were active in promoting a set-theoretic formulation of mathematical ideas, with Dedekind’s contribution in a good number of classic writings (1871, 1872, 1876/77, 1888) be…"
+          "snippet": "aristotle-mathematics  Aristotle famously rejects the infinite in mathematics and in physics, with some notable exceptions. He defines it thus:"
         },
         {
           "corpus_id": "sep",
@@ -1903,14 +1903,14 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.014285714,
-          "snippet": "infinity  In conclusion, the “infinitistic revolution” in the 17th and the early 18th century left an important legacy for philosophy and mathematics. The theory of indivisibles introduced new magnitudes characterized infinitarily (the collection of all the indivisibles of a figure), and new infinitary geometrical objects extended the classical geometrical universe. Moreover, the debates on the calculus were focused on the nature of the infinitely small and the infinitely large. Finally, the issues emerging from Galileo’s paradox were a prelude to the problem of extending counting from finite …"
+          "snippet": "infinity  Philosophy countenances infinity in myriad ways, either directly or indirectly, in most of its sub-fields—here is a tiny sample taken from the contemporary discussion (we shall discuss historical material in  Section 1  and in  Section 2,  and many further examples in later sections). Some metaphysicians contend that there are infinitely many possibilities/possible worlds and canvas how big this infinity is (e.g. Lewis 1986). Philosophers of religion debate whether the divine is infinite, whether the divine creation is infinite, and whether the value of the afterlife is infinite. Epi…"
         },
         {
           "corpus_id": "sep",
-          "title": "wittgenstein-mathematics",
-          "url": "https://plato.stanford.edu/entries/wittgenstein-mathematics/",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.014084507,
-          "snippet": "wittgenstein-mathematics  Given Wittgenstein’s rejection of infinite mathematical extensions, he adopts finitistic, constructive views on mathematical quantification, mathematical decidability, the nature of real numbers, and Cantor’s diagonal proof of the existence of infinite sets of greater cardinalities."
+          "snippet": "infinity  Related to the distinction between meanings (2) and (3) is a distinction between metaphysical and mathematical meanings of infinity. This has been usefully employed in some of the most encompassing accounts of infinity, such as Moore (1990/2019; for another recent treatment that includes extensive discussion of the history of infinity see Zellini (2005)). Moore sees the metaphysical notion as bound up with the notions of ‘totality’, ‘absoluteness’ and ‘perfection’. While our entry is focused on the strict mathematical sense of ‘infinity’, one cannot cleanly separate the various meani…"
         },
         {
           "corpus_id": "sep",
@@ -1928,17 +1928,17 @@
         },
         {
           "corpus_id": "sep",
-          "title": "paradoxes-contemporary-logic",
-          "url": "https://plato.stanford.edu/entries/paradoxes-contemporary-logic/",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.013888889,
-          "snippet": "paradoxes-contemporary-logic  In the light of the foundational debate, the following years were rich in seminal work: new paradoxes were discovered (Berry, Grelling-Nelson), an old paradox—the Liar—showed up again, a comprehensive view of the contradictions of logic and mathematics was masterfully outlined in the opening section of Russell’s 1908 paper and the preceding Russell 1906a, while a conceptual distinction between two kinds of paradoxes was set forth in Peano’s paper of 1906. Also, the basic ideas of predicativity emerged in the discussion between Poincaré, the leading mathematician o…"
+          "snippet": "infinity  There is one final aspect of 17th century discussions of infinity that is relevant for later considerations: the problem of extending the concept of counting from the finite to the infinite. This problem is related to the issue of whether there is only one infinity or whether there might be different sizes of infinity. As we have mentioned, Philoponus argued that the eternity of the world led to a contradiction. In particular, he claimed, if the world has no beginning in the past, then the number of individuals up to Socrates would be infinite; but then by adding the number of indivi…"
         },
         {
           "corpus_id": "sep",
-          "title": "settheory-early",
-          "url": "https://plato.stanford.edu/entries/settheory-early/",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.01369863,
-          "snippet": "settheory-early  Chronologically, Bernard Bolzano was the first, but he exerted almost no influence. The high quality of his work in logic and the foundations of mathematics is well known. A book entitled Paradoxien des Unendlichen was posthumously published in 1851. Here Bolzano argued in detail that a host of paradoxes surrounding infinity are logically harmless, and mounted a forceful defence of actual infinity. He proposed an interesting argument attempting to prove the existence of infinite sets, which bears comparison with Dedekind’s later argument (1888). Although he employed complicate…"
+          "snippet": "infinity  Up to this point, it appears that infinity has been domesticated. This appearance begins to be challenged in section   5, when we canvas some classic paradoxes and puzzles involving infinity. It reappears as both friend and foe in the following sections on some philosophically fecund applications of it. In sections   6 and   7, it is both central to the formulation of probability and decision theory, and the source of more conundrums; we discuss some putative solutions to them. Section   8 presents some problems concerning space and time, as well as some progress that has been made o…"
         },
         {
           "corpus_id": "sep",
@@ -1952,7 +1952,7 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 0.013513514,
-          "snippet": "infinity  These problems were gradually addressed in the 19th and 20th centuries, and out of these discussions there emerged different mathematical notions of infinity. We will work our way in stages to these conceptions, via a discussion of some landmarks in the contemporary mathematics of infinity."
+          "snippet": "infinity  This was the first infinitary result in Western mathematics, for the infinite was not eliminable using some alternative finitary technique but rather showed up as a feature of the very object that had to be measured. Torricelli’s infinitary result put enormous pressure on empiricist conceptions of infinity. The heuristic fruitfulness of the indivisibilist method was also accompanied by paradoxes that threatened its foundations. Among them was Tacquet’s proof using indivisibles that all triangles have the same area. The indivisibilists were able to deal with such paradoxes in various …"
         },
         {
           "corpus_id": "sep",
@@ -1977,19 +1977,19 @@
           "the continuum",
           "Aristotle on potential infinity",
           "set-theoretic infinity",
-          "infinitesimals",
-          "one-to-one correspondence",
-          "cardinality"
+          "infinitesimals"
         ],
         "missing": [
           "actual versus potential infinity",
-          "transfinite numbers"
+          "transfinite numbers",
+          "one-to-one correspondence",
+          "cardinality"
         ],
         "total_expected": 10,
-        "ratio": 0.8
+        "ratio": 0.6
       },
-      "embed_ms": 28,
-      "search_ms": 460,
+      "embed_ms": 29,
+      "search_ms": 520,
       "corpora_hit": [
         "sep"
       ],

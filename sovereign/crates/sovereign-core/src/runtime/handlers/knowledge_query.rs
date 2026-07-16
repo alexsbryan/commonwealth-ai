@@ -269,6 +269,42 @@ impl Runtime {
     /// and the streaming KQ branch in
     /// [`Self::handle_message_stream`] so both paths cannot diverge
     /// in how they search, expand, or build the request.
+    /// Retrieve-only entry: run the FULL production KnowledgeQuery
+    /// retrieval path (context build → `prepare_knowledge_query_plan` →
+    /// the 19-step `kq_pipeline()` + post-pipeline expansion) and return
+    /// the composed evidence pool without a synthesis pass.
+    ///
+    /// This is the bench parity surface (RETRIEVAL_REDESIGN.md §7.1):
+    /// `eval run --prod-pipeline` scores THIS pool, so CI measures the
+    /// same code path chat users get — not a parallel bare-index search.
+    /// Intent is pinned to `KnowledgeQuery` deliberately: routing is
+    /// scored by its own lane, and a HARD retrieval lane must stay
+    /// deterministic. The conversation (typically freshly inserted by
+    /// the caller, optionally with `enabled_corpora` seeded for
+    /// isolation) scopes retrieval exactly as a live turn would.
+    pub async fn retrieve_evidence(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<EvidenceRetrieval> {
+        let context = crate::context::build_context(
+            self.store.as_ref(),
+            conversation_id,
+            message,
+            None,
+        )
+        .await?;
+        let intent = Intent::KnowledgeQuery;
+        let plan = self
+            .prepare_knowledge_query_plan(message, &context, &intent, None)
+            .await;
+        Ok(EvidenceRetrieval {
+            chunks: plan.chunks,
+            search_ms: plan.search_ms,
+            result_quality: plan.result_quality,
+        })
+    }
+
     pub(crate) async fn prepare_knowledge_query_plan(
         &self,
         message: &str,
@@ -565,11 +601,17 @@ impl Runtime {
         // coverage of the dominant article. The cost is occasional
         // displacement of title-expand chunks (T2/T7/T8 v22) but
         // the net is +19pt fact, +22pt src vs baseline.
-        // Which expander to run. Intent-aware: comparisons take breadth,
+        // Which expander to run. Intent- AND question-shape-aware:
+        // comparisons and breadth-shaped questions (contested / causal /
+        // comparative phrasing — `question_breadth_shape`) take breadth,
         // never the single-dominant-source collapse (which would strip a
         // contrast down to one side — see `decide_expansion_strategy`).
-        let (expansion_strategy, expansion_reason) =
-            decide_expansion_strategy(intent, route, &shape);
+        let (expansion_strategy, expansion_reason) = decide_expansion_strategy(
+            intent,
+            route,
+            &shape,
+            super::super::evidence::question_breadth_shape(message),
+        );
         tracing::info!(
             target: "retrieval_audit",
             event = "expansion_decision",
