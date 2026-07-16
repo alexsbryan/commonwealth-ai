@@ -290,7 +290,7 @@ sha2 = "0.10"
 # but sovereign-tools also reaches into arrow + parquet directly. The
 # arrow 55-vs-57 cross-crate skew was the exact failure mode cited in
 # ARCH §8.2; hoisting these locks one version per workspace.
-arrow = "57"
+arrow = "59"
 arrow-array = "57"
 arrow-schema = "57"
 parquet = "57"
