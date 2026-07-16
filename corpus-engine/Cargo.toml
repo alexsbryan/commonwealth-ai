@@ -160,7 +160,7 @@ rusqlite               = { version = "0.35", features = ["bundled"], optional = 
 # by design_signals.rs, which moved to corpus-engine-atos 2026-05-23).
 # Same version sovereign-atos and corpus-engine-atos use — one version
 # per workspace, per ARCH_PRINCIPLES.md §8.1.
-pulldown-cmark         = { version = "0.12", default-features = false, features = ["simd"], optional = true }
+pulldown-cmark         = { version = "0.13", default-features = false, features = ["simd"], optional = true }
 
 # SCIP call graph + exporter dispatch — moved to its own crate
 # (2026-05-23, ARCH §3.1/§3.3 carve-out). corpus-engine still uses
