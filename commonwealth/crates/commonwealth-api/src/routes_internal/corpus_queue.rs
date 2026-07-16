@@ -307,6 +307,19 @@ pub async fn corpus_next_unit(
                 error: format!("no queue registered for handoff {}", req.handoff_id),
             }),
         ),
+        Err(QueueError::PeerNotAllowed) => (
+            // Ephemeral grant-scoped job: this peer is not in the
+            // user-selected allowlist. Refuse the lease so a peer that
+            // slipped past the gossip enrollment filter still can't pull
+            // the corpus's chunk text.
+            StatusCode::FORBIDDEN,
+            Json(NextUnitResponse::Error {
+                error: format!(
+                    "peer not in the per-job allowlist for handoff {}",
+                    req.handoff_id
+                ),
+            }),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(NextUnitResponse::Error {
@@ -612,4 +625,158 @@ pub enum CompleteUnitResponse {
     Error {
         error: String,
     },
+}
+
+// ───── Partition eviction (ephemeral teardown) ──────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct PartitionEvictRequest {
+    pub corpus_id: String,
+    pub handoff_id: commonwealth_core::ids::HandoffId,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PartitionEvictResponse {
+    /// True when a partition working dir existed and was removed.
+    pub evicted: bool,
+}
+
+/// POST /internal/corpus/partition_evict — wipe this peer's working partition
+/// dir for an ephemeral grant-scoped ingest. Called by the merge coordinator
+/// right after it pulls this peer's shard (wipe-after-pull). Idempotent — a
+/// missing dir is success. This is the "no peer retention" guarantee: a peer
+/// holds the user's chunk text + embeddings only for its lease duration plus
+/// the window until this eviction.
+pub async fn corpus_partition_evict(
+    State(state): State<AppState>,
+    Json(req): Json<PartitionEvictRequest>,
+) -> (StatusCode, Json<PartitionEvictResponse>) {
+    let Some(engine) = state.inner.corpus_engine.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(PartitionEvictResponse { evicted: false }),
+        );
+    };
+    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let evicted = commonwealth_knowledge::shard_manager::evict_partition_dir(
+        engine.index_dir(),
+        &req.corpus_id,
+        local_node_id,
+    );
+    tracing::info!(
+        corpus = %req.corpus_id,
+        handoff = %req.handoff_id,
+        evicted,
+        "corpus_partition_evict: wiped local partition working dir (ephemeral teardown)"
+    );
+    (StatusCode::OK, Json(PartitionEvictResponse { evicted }))
+}
+
+// ───── Collaborate status (glassbox progress) ───────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CollaborateStatusRequest {
+    pub handoff_id: commonwealth_core::ids::HandoffId,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PeerProgressDto {
+    /// Full-hex node id (joins to the mesh member list for a display name).
+    pub node_id: String,
+    pub leased: u32,
+    pub completed: u32,
+    pub failed: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GrantStatusDto {
+    pub expires_at_ms: u64,
+    pub revoked: bool,
+    pub allowed_peers: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CollaborateStatusResponse {
+    pub handoff_id: String,
+    pub corpus_id: String,
+    pub phase: commonwealth_core::knowledge::HandoffPhase,
+    pub total_units: u32,
+    pub complete: u32,
+    pub failed: u32,
+    pub leased: u32,
+    pub queued: u32,
+    /// Per-peer unit tallies — the glassbox core of the desktop's assist view
+    /// ("Machine B: 12 done, 1 leased"). Empty until peers pull.
+    pub per_peer: Vec<PeerProgressDto>,
+    /// True when this ingest is backed by a live ephemeral grant.
+    pub ephemeral: bool,
+    pub grant: Option<GrantStatusDto>,
+}
+
+/// POST /internal/corpus/collaborate/status — glassbox progress for a
+/// (possibly peer-assisted) collaborative ingest. Projects the live work
+/// queue into aggregate + per-peer unit counts, plus the ephemeral grant's
+/// remaining window. Drives the desktop's per-peer assist view.
+pub async fn corpus_collaborate_status(
+    State(state): State<AppState>,
+    Json(req): Json<CollaborateStatusRequest>,
+) -> (StatusCode, Json<Option<CollaborateStatusResponse>>) {
+    let Some(snap) = state.inner.work_queue.snapshot(&req.handoff_id).await else {
+        return (StatusCode::NOT_FOUND, Json(None));
+    };
+
+    use commonwealth_core::knowledge::UnitStatus;
+    use std::collections::HashMap;
+    // (leased, completed, failed) per peer.
+    let mut per: HashMap<NodeId, (u32, u32, u32)> = HashMap::new();
+    let (mut complete, mut failed, mut leased, mut queued) = (0u32, 0u32, 0u32, 0u32);
+    for (_unit, status) in &snap.units {
+        match status {
+            UnitStatus::Queued { .. } => queued += 1,
+            UnitStatus::Leased { peer, .. } => {
+                leased += 1;
+                per.entry(*peer).or_default().0 += 1;
+            }
+            UnitStatus::Complete { peer, .. } => {
+                complete += 1;
+                per.entry(*peer).or_default().1 += 1;
+            }
+            UnitStatus::Failed { last_peer, .. } => {
+                failed += 1;
+                per.entry(*last_peer).or_default().2 += 1;
+            }
+        }
+    }
+    let per_peer = per
+        .into_iter()
+        .map(|(node, (l, c, f))| PeerProgressDto {
+            node_id: node.to_hex(),
+            leased: l,
+            completed: c,
+            failed: f,
+        })
+        .collect();
+
+    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let grant = state.inner.grant_store.live(&snap.corpus_id, now_ms);
+    let grant_dto = grant.as_ref().map(|g| GrantStatusDto {
+        expires_at_ms: g.expires_at_ms,
+        revoked: g.revoked,
+        allowed_peers: g.allowed_peers.iter().map(|n| n.to_hex()).collect(),
+    });
+
+    let resp = CollaborateStatusResponse {
+        handoff_id: req.handoff_id.to_string(),
+        corpus_id: snap.corpus_id,
+        phase: snap.phase,
+        total_units: snap.units.len() as u32,
+        complete,
+        failed,
+        leased,
+        queued,
+        per_peer,
+        ephemeral: grant_dto.is_some(),
+        grant: grant_dto,
+    };
+    (StatusCode::OK, Json(Some(resp)))
 }

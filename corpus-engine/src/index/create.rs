@@ -206,6 +206,8 @@ impl CorpusIndex {
             dedup_by_source: None,
             // Stamped post-create via `set_personal_scope` (same shape).
             personal_scope: None,
+            // Stamped post-create from `[corpus] grantable` via `set_grantable`.
+            grantable: None,
             license: license.to_string(),
             created_at: now,
             last_updated: now,

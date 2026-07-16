@@ -844,6 +844,7 @@ mod allow_list_tests {
             query_sharing: false,
             dedup_by_source: false,
             personal_scope: false,
+            grantable: false,
             is_shard: false,
             chunk_range: None,
             chunks_expected: None,

@@ -185,6 +185,19 @@ pub struct IngestionHandoff {
     /// distinguish a freshly-opened queue from a stale replay.
     #[serde(default)]
     pub queue_version: u32,
+    /// Per-job peer allowlist for an ephemeral grant-scoped ingest.
+    /// `None` = open to any embed-compatible peer (default, unchanged
+    /// behaviour). `Some(set)` = only these node_ids may enroll and lease
+    /// units. Peers self-enforce this in `discover_and_spawn_pull_loops`;
+    /// the coordinator's queue enforces it in `WorkQueueManager::next_unit`.
+    #[serde(default)]
+    pub allowed_peers: Option<Vec<NodeId>>,
+    /// True when this handoff is backed by an ephemeral ingest grant — a
+    /// user-selected, revocable, one-off compute assist over a normally
+    /// local-only corpus. Peers wipe their `<corpus>-partition-<self>/`
+    /// working dir on teardown when this is set, instead of retaining it.
+    #[serde(default)]
+    pub ephemeral: bool,
     pub created_at: u64, // Unix timestamp (ms)
     pub updated_at: u64, // Unix timestamp (ms)
 }
@@ -209,6 +222,8 @@ impl IngestionHandoff {
             merge_leader,
             phase: HandoffPhase::legacy_open(),
             queue_version: 0,
+            allowed_peers: None,
+            ephemeral: false,
             created_at: now,
             updated_at: now,
         }
@@ -233,6 +248,8 @@ impl IngestionHandoff {
             merge_leader: Some(merge_leader),
             phase: HandoffPhase::Open,
             queue_version: 1,
+            allowed_peers: None,
+            ephemeral: false,
             created_at: now,
             updated_at: now,
         }

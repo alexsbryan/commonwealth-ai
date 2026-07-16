@@ -48,6 +48,9 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
             mesh_sharing: false,
             scope: Some("local".into()),
             query_sharing: Some(false),
+            // Structural: KnowledgeView corpora may NEVER be lent to peers,
+            // even under a one-off ephemeral grant.
+            grantable: false,
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,
@@ -140,6 +143,9 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
             mesh_sharing: false,
             scope: Some("local".into()),
             query_sharing: Some(false),
+            // Structural: KnowledgeView corpora may NEVER be lent to peers,
+            // even under a one-off ephemeral grant.
+            grantable: false,
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,
@@ -261,6 +267,9 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
             mesh_sharing: false,
             scope: Some("local".into()),
             query_sharing: Some(false),
+            // Structural: KnowledgeView corpora may NEVER be lent to peers,
+            // even under a one-off ephemeral grant.
+            grantable: false,
             size_compressed_gb: 0.0,
             size_indexed_gb: 0.0,
             schema_version: 1,

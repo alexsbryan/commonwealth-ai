@@ -736,6 +736,7 @@ description = "{description}"
 license = "local"
 mesh_sharing = false
 scope = "{scope}"
+grantable = true
 schema_version = 1
 
 [acquire]

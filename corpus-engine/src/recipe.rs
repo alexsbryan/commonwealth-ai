@@ -975,6 +975,18 @@ pub struct CorpusMeta {
     /// Set explicitly to override.
     #[serde(default)]
     pub query_sharing: Option<bool>,
+    /// Whether this corpus MAY be temporarily lent to a user-selected
+    /// set of mesh peers for a one-off compute assist (embed + enrich)
+    /// under an ephemeral, revocable grant — WITHOUT ever changing its
+    /// standing `mesh_sharing`/`scope`. Set `true` only by user-owned
+    /// file corpora (Obsidian vault / document folder / watched folder).
+    /// Structural `KnowledgeView` corpora (`personal-knowledge`,
+    /// `conversation-history`, …) leave it `false` so they can never be
+    /// grant-shared, even transiently. Default `false`: a corpus is not
+    /// grantable unless it explicitly opts in. See the ephemeral
+    /// ingest-grant store in `commonwealth-knowledge`.
+    #[serde(default)]
+    pub grantable: bool,
     #[serde(default)]
     pub size_compressed_gb: f64,
     #[serde(default)]

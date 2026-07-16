@@ -71,6 +71,12 @@ pub enum QueueError {
     /// Caller-side re-validation — the queue itself doesn't enforce this;
     /// it's thrown by the HTTP handler after cross-checking gossip.
     EmbedModelMismatch,
+    /// The requesting peer is not in this handoff's per-job allowlist (403).
+    /// Defense-in-depth for ephemeral grant-scoped jobs: even if a peer
+    /// skips the gossip-side enrollment filter and calls `next_unit`
+    /// directly, the queue refuses to lease it a unit. See the ephemeral
+    /// ingest-grant flow in `commonwealth-api`.
+    PeerNotAllowed,
 }
 
 /// Result of a heartbeat — either the lease was renewed, or it was gone.
@@ -116,6 +122,12 @@ pub struct HandoffQueue {
     /// Peers that ever successfully pulled a unit. Used by the merge leader
     /// to know which `<corpus>-partition-<peer>/` dirs to tar-fetch.
     pub participating_peers: HashSet<NodeId>,
+    /// Per-job allowlist. `None` = open to any embed-compatible peer
+    /// (the default, unchanged behaviour). `Some(set)` = only these
+    /// node_ids may lease units — the queue-side enforcement of an
+    /// ephemeral, user-selected peer set. Empty set = coordinator self-serve
+    /// only (local-only fallback).
+    pub allowed_peers: Option<HashSet<NodeId>>,
     pub merge_leader: NodeId,
     pub created_at_ms: u64,
     pub last_mutation_ms: u64,
@@ -182,6 +194,7 @@ impl WorkQueueManager {
         embed_model: EmbedModelInfo,
         units: Vec<WorkUnit>,
         merge_leader: NodeId,
+        allowed_peers: Option<HashSet<NodeId>>,
     ) {
         let now = now_ms();
         let mut unit_slots: Vec<(WorkUnit, UnitStatus)> = Vec::with_capacity(units.len());
@@ -198,6 +211,7 @@ impl WorkQueueManager {
             units: unit_slots,
             queued,
             participating_peers: HashSet::new(),
+            allowed_peers,
             merge_leader,
             created_at_ms: now,
             last_mutation_ms: now,
@@ -215,6 +229,18 @@ impl WorkQueueManager {
     ) -> Result<Option<LeasedUnit>, QueueError> {
         let mut guard = self.inner.lock().await;
         let queue = guard.get_mut(handoff_id).ok_or(QueueError::NotFound)?;
+
+        // Per-job allowlist enforcement (ephemeral grant-scoped jobs).
+        // `None` = open queue (unchanged). `Some(set)` = only selected
+        // peers may lease. This is defense-in-depth: the gossip-side
+        // enrollment filter (`discover_and_spawn_pull_loops`) already
+        // stops a non-selected peer from starting a pull loop, but a
+        // direct `next_unit` call must be refused here too.
+        if let Some(allowed) = &queue.allowed_peers {
+            if !allowed.contains(&peer) {
+                return Err(QueueError::PeerNotAllowed);
+            }
+        }
 
         // No work left to lease — the handoff is in Draining/Merging/Complete.
         let Some(&unit_id) = queue.queued.iter().next() else {
@@ -517,6 +543,7 @@ mod tests {
             sample_model(),
             units,
             peer(1),
+            None, // open queue — no per-job allowlist
         )
         .await;
         (mgr, handoff)

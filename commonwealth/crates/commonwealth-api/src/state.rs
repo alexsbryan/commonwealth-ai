@@ -18,7 +18,7 @@ use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
-use commonwealth_knowledge::WorkQueueManager;
+use commonwealth_knowledge::{EphemeralGrantStore, WorkQueueManager};
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
@@ -415,6 +415,13 @@ pub struct AppStateInner {
     /// Only coordinators hold entries here — peer nodes never mutate it.
     /// See `commonwealth-knowledge::work_queue` for the full design.
     pub work_queue: Arc<WorkQueueManager>,
+    /// Ephemeral, renewable ingest grants — the out-of-band capability that
+    /// authorizes a one-off peer-assisted ingest of an otherwise local-only
+    /// corpus. Consulted at the `corpus_collaborate` kickoff gate; never
+    /// persisted, never mutates on-disk corpus metadata (so the corpus's
+    /// standing `mesh_sharing = false` posture is preserved throughout).
+    /// See `commonwealth-knowledge::ingest_grant`.
+    pub grant_store: Arc<EphemeralGrantStore>,
     /// Handoff IDs for which this node is currently running a pull loop
     /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
     /// loops when the same open handoff is seen across multiple gossip ticks.
@@ -944,6 +951,7 @@ impl AppState {
                 local_inference: None,
                 rpc_shard_warmer: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
+                grant_store: Arc::new(EphemeralGrantStore::new()),
                 active_pull_loops: RwLock::new(HashSet::new()),
                 // 0 sentinel = no foreground activity observed yet.
                 // The yield hook treats 0 as "never active", regardless

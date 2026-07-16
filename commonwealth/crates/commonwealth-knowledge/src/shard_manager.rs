@@ -354,6 +354,11 @@ impl ShardManager {
         // Collect shard directories.
         let mut shard_dirs: Vec<PathBuf> = Vec::new();
 
+        // Ephemeral grant-scoped ingest: once we pull a peer's shard we tell
+        // that peer to wipe its own working partition dir (wipe-after-pull).
+        // Captured here so the borrow doesn't tangle with the loop below.
+        let is_ephemeral = handoff.ephemeral;
+
         // Local shard. Machine A may have ingested into the original corpus
         // path instead of a partition path (when it had existing partial data).
         {
@@ -426,6 +431,27 @@ impl ShardManager {
                         });
                     }
                     shard_dirs.push(dest_dir);
+
+                    // Wipe-after-pull: for an ephemeral grant, the peer must
+                    // not retain the user's chunk text + embeddings. Fire-
+                    // and-forget — the peer also self-evicts when its pull
+                    // loop exits (auto_ingest), so a missed call here is
+                    // covered by that belt-and-suspenders path.
+                    if is_ephemeral {
+                        let evict_url = format!("{base_url}/internal/corpus/partition_evict");
+                        let corpus = handoff.corpus_id.clone();
+                        let hid = handoff_id;
+                        tokio::spawn(async move {
+                            let _ = reqwest::Client::new()
+                                .post(&evict_url)
+                                .json(&serde_json::json!({
+                                    "corpus_id": corpus,
+                                    "handoff_id": hid,
+                                }))
+                                .send()
+                                .await;
+                        });
+                    }
                 }
                 Err(e) => tracing::warn!(
                     node = %partition.node_id,
@@ -672,4 +698,23 @@ pub struct PreparedShard {
 pub struct TransferReceipt {
     pub corpus_id: String,
     pub bytes_transferred: u64,
+}
+
+/// Delete a peer's working partition dir
+/// (`<index_dir>/<corpus_id>-partition-<node>/`) and its `.tar` staging temp.
+/// Returns `true` when the dir existed. Pure fs and idempotent — safe to call
+/// redundantly (the coordinator's wipe-after-pull and the peer's own
+/// pull-loop self-evict may both fire).
+///
+/// The dir name uses the node id's `Display` form, matching how partitions are
+/// created (`corpus_queue::ingest_partition` and `coordinate_merge` above).
+/// This is the mechanism behind the "no peer retention" guarantee for
+/// ephemeral grant-scoped ingests.
+pub fn evict_partition_dir(index_dir: &Path, corpus_id: &str, node_id: NodeId) -> bool {
+    let dir = index_dir.join(format!("{corpus_id}-partition-{node_id}"));
+    let tar = dir.with_extension("tar");
+    let existed = dir.exists();
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_file(&tar).ok();
+    existed
 }

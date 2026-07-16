@@ -182,6 +182,29 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/corpus/collaborate",
             post(routes_internal::corpus_collaborate),
         )
+        // Ephemeral ingest-grant lifecycle: authorize a one-off, revocable
+        // peer-assisted ingest of an otherwise local-only corpus. The
+        // `collaborate` gate above consults the grant issued here.
+        .route(
+            "/internal/corpus/grant",
+            post(routes_internal::corpus_grant_issue),
+        )
+        .route(
+            "/internal/corpus/grant/revoke",
+            post(routes_internal::corpus_grant_revoke),
+        )
+        // Ephemeral teardown: a peer wipes its own working partition dir when
+        // the coordinator has pulled its shard (no peer retention).
+        .route(
+            "/internal/corpus/partition_evict",
+            post(routes_internal::corpus_partition_evict),
+        )
+        // Glassbox progress for a (possibly peer-assisted) collaborative
+        // ingest — per-peer unit tallies + the grant's remaining window.
+        .route(
+            "/internal/corpus/collaborate/status",
+            post(routes_internal::corpus_collaborate_status),
+        )
         .route(
             "/internal/corpus/ingest_partition",
             post(routes_internal::corpus_ingest_partition),

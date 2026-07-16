@@ -292,6 +292,11 @@ struct IndexMeta {
     /// `set_personal_scope` (mirrors `set_dedup_by_source`).
     #[serde(default)]
     personal_scope: Option<bool>,
+    /// Recipe `[corpus] grantable`. `None` = legacy index predating the
+    /// field → resolves to `false`. Stamped post-create by
+    /// `set_grantable` (mirrors `set_personal_scope`).
+    #[serde(default)]
+    grantable: Option<bool>,
     license: String,
     created_at: u64,
     last_updated: u64,
@@ -780,6 +785,8 @@ impl CorpusIndex {
         let dedup_by_source = meta.dedup_by_source.unwrap_or(false);
         // Same resolution shape for `personal_scope`: legacy → false.
         let personal_scope = meta.personal_scope.unwrap_or(false);
+        // Same resolution for `grantable`: legacy/never-stamped → false.
+        let grantable = meta.grantable.unwrap_or(false);
         // `source_path` is only set by the code-ingest pipeline
         // (`CorpusIndex::set_source_path`, called from `sovereign
         // code index`) — every other ingest path leaves it `None`.
@@ -810,6 +817,7 @@ impl CorpusIndex {
             query_sharing,
             dedup_by_source,
             personal_scope,
+            grantable,
             is_shard: meta.is_shard,
             chunk_range,
             parent_corpus_id: meta.parent_corpus_id,
@@ -973,6 +981,26 @@ impl CorpusIndex {
         read_meta(index_dir).ok().and_then(|m| m.personal_scope)
     }
 
+    /// Stamp the recipe's `[corpus] grantable` flag onto this index's
+    /// `_corpus_meta.json`, surfaced as `IndexInfo::grantable` — the
+    /// single signal the ephemeral ingest-grant gate consults to decide
+    /// whether a `mesh_sharing = false` corpus MAY be lent to selected
+    /// peers under a one-off grant. Mirrors `set_personal_scope`.
+    pub fn set_grantable(&self, grantable: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.grantable = Some(grantable);
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the stamped `grantable` value. `None` = never stamped
+    /// (legacy index) — distinguishes "explicitly false" from "predates
+    /// the field" without rewriting meta.
+    pub fn grantable(&self) -> Option<bool> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.grantable)
+    }
+
     /// Read the stamped `[display]` block (mirrors `stream()` /
     /// `personal_scope()`). Lets callers that open an index directly
     /// (e.g. the RAPTOR retrofit CLI) branch on the corpus shape —
@@ -996,6 +1024,22 @@ pub fn backfill_personal_scope(index_dir: &Path, personal_scope: bool) -> Result
         return Ok(false);
     }
     meta.personal_scope = Some(personal_scope);
+    write_meta(index_dir, &meta)?;
+    Ok(true)
+}
+
+/// Backfill helper for indexes created before the `grantable` meta field
+/// existed: stamp `index_dir`'s `_corpus_meta.json` IFF the field was
+/// never written. Pure meta I/O — no LanceDB open — so the watched-folder
+/// manager can run it across every registered file corpus at daemon boot.
+/// Returns `true` when a stamp was written, `false` when the meta already
+/// carried an explicit value.
+pub fn backfill_grantable(index_dir: &Path, grantable: bool) -> Result<bool> {
+    let mut meta = read_meta(index_dir)?;
+    if meta.grantable.is_some() {
+        return Ok(false);
+    }
+    meta.grantable = Some(grantable);
     write_meta(index_dir, &meta)?;
     Ok(true)
 }
