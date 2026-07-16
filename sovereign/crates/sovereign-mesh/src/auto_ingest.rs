@@ -702,6 +702,19 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             );
             continue;
         }
+        // Per-job allowlist enforcement for ephemeral grant-scoped ingests.
+        // When the coordinator pinned a user-selected helper set, a node not
+        // on the list never spawns a pull loop — so the corpus's chunk text
+        // never reaches it. `None` = open handoff (unchanged behaviour).
+        if let Some(allowed) = handoff.allowed_peers.as_ref() {
+            if !allowed.contains(&self_id) {
+                tracing::debug!(
+                    handoff = %handoff.handoff_id,
+                    "pull_loops: skipping handoff — this node is not in the per-job allowlist"
+                );
+                continue;
+            }
+        }
         if already_running.contains(&handoff.handoff_id) {
             continue;
         }
@@ -1032,6 +1045,28 @@ async fn pull_loop(
                     unit_id,
                     error = %e,
                     "pull_loop: complete_unit request failed"
+                );
+            }
+        }
+    }
+
+    // Ephemeral grant teardown (belt-and-suspenders): if this was a
+    // grant-scoped ingest, wipe our own working partition dir now that the
+    // pull loop has ended — queue drained, revoked (→ 404), or terminal. The
+    // coordinator also fires `partition_evict` wipe-after-pull; this path
+    // covers the revoke / coordinator-crash cases where that call never
+    // arrives, so the user's chunk text never lingers on a helper peer.
+    if handoff.ephemeral {
+        if let Some(engine) = state.inner.corpus_engine.as_ref() {
+            let dir = engine.partition_path(&corpus_id);
+            let existed = dir.exists();
+            std::fs::remove_dir_all(&dir).ok();
+            std::fs::remove_file(dir.with_extension("tar")).ok();
+            if existed {
+                tracing::info!(
+                    handoff = %handoff_id,
+                    corpus = %corpus_id,
+                    "pull_loop: ephemeral teardown — wiped local partition working dir"
                 );
             }
         }

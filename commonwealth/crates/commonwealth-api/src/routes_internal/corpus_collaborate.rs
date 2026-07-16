@@ -60,6 +60,53 @@ pub async fn corpus_collaborate(
         )
     })?;
 
+    // ── Ephemeral ingest-grant gate ─────────────────────────────────────
+    //
+    // A shared corpus (`mesh_sharing = true`) collaborates freely, exactly
+    // as before. A local-only corpus (`mesh_sharing = false` — e.g. an
+    // Obsidian vault or watched folder) may ONLY be shipped to peers under a
+    // live, authorizing ephemeral grant: the out-of-band, revocable,
+    // user-selected capability that never mutates the corpus's standing
+    // local posture. We resolve `mesh_sharing`/`grantable` from the RECIPE
+    // (the source of truth, present from registration) rather than the
+    // stamped index — the post-create `grantable` stamp may not be written
+    // yet during a fresh collaborative ingest.
+    let recipe_privacy = engine.load_recipe(&req.corpus_id).await.map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
+                error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
+            }),
+        )
+    })?;
+    if !recipe_privacy.corpus.mesh_sharing {
+        // Local-only corpus. Require a live grant that authorizes exactly
+        // the requested peer set. `grantable = false` (structural
+        // KnowledgeView) can never pass — even a stray grant is refused.
+        let now_ms = commonwealth_core::clock::unix_now_millis();
+        let requested = req.allowed_peers.clone().unwrap_or_default();
+        let authorized = recipe_privacy.corpus.grantable
+            && state
+                .inner
+                .grant_store
+                .live(&req.corpus_id, now_ms)
+                .map(|g| g.authorizes(&requested))
+                .unwrap_or(false);
+        if !authorized {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(ErrorBody {
+                    error: format!(
+                        "corpus '{}' is local-only; a collaborative ingest requires a live \
+                         ephemeral grant authorizing the selected peers (none found). Issue \
+                         one via POST /internal/corpus/grant first.",
+                        req.corpus_id
+                    ),
+                }),
+            ));
+        }
+    }
+
     // Build local node view.
     let mesh = state.inner.mesh.read().await;
     let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
@@ -128,6 +175,23 @@ pub async fn corpus_collaborate(
         })
         .collect();
     drop(mesh);
+
+    // Per-job peer allowlist (ephemeral grant-scoped ingest). When the
+    // caller pins a specific set of helper peers, drop any embed-compatible
+    // candidate that isn't on the list — tallying each drop into `rejected`
+    // so the glassbox log line below still explains every excluded peer.
+    let mut candidates = candidates;
+    if let Some(allowed) = req.allowed_peers.as_ref() {
+        let allow: std::collections::HashSet<NodeId> = allowed.iter().copied().collect();
+        candidates.retain(|m| {
+            if allow.contains(&m.node_id) {
+                true
+            } else {
+                rejected.push((m.node_id, "not in per-job allowlist"));
+                false
+            }
+        });
+    }
 
     if !rejected.is_empty() {
         tracing::info!(
@@ -417,12 +481,19 @@ pub async fn corpus_collaborate(
         }
 
         let unit_count = units.len();
-        let handoff = IngestionHandoff::new_queue(
+        let mut handoff = IngestionHandoff::new_queue(
             req.corpus_id.clone(),
             recipe_id.to_string(),
             local_embed_model.clone(),
             self_id,
         );
+        // Carry the per-job allowlist into the gossiped handoff so peers
+        // self-enforce enrollment. A local-only corpus reaching this point
+        // passed the ephemeral-grant gate above, so mark the handoff
+        // `ephemeral` — peers wipe their partition working dir on teardown
+        // instead of retaining it. Ordinary shared corpora stay non-ephemeral.
+        handoff.allowed_peers = req.allowed_peers.clone();
+        handoff.ephemeral = !recipe_privacy.corpus.mesh_sharing;
 
         state
             .inner
@@ -434,8 +505,21 @@ pub async fn corpus_collaborate(
                 handoff.embed_model.clone(),
                 units,
                 self_id,
+                handoff
+                    .allowed_peers
+                    .as_ref()
+                    .map(|v| v.iter().copied().collect()),
             )
             .await;
+
+        // Correlate the ephemeral grant with the handoff it authorized, so
+        // teardown (revoke / expiry sweep) can retire this exact queue.
+        if handoff.ephemeral {
+            state
+                .inner
+                .grant_store
+                .bind_handoff(&handoff.corpus_id, handoff.handoff_id);
+        }
 
         // Write the handoff announcement into the local mesh_store so
         // `ShardManager::load_handoff` and `discover_and_spawn_pull_loops`
@@ -882,4 +966,11 @@ pub struct CollaborateRequest {
     pub corpus_id: String,
     /// Recipe to use. Defaults to `corpus_id` when absent.
     pub recipe_id: Option<String>,
+    /// Per-job peer allowlist for an ephemeral grant-scoped ingest.
+    /// `None` (default) preserves today's behaviour: dispatch to every
+    /// embed-compatible online peer. `Some(set)` restricts the job to the
+    /// user-selected node_ids; an empty set means "coordinator self-serve
+    /// only" (a local-only run that still exercises the queue path).
+    #[serde(default)]
+    pub allowed_peers: Option<Vec<NodeId>>,
 }

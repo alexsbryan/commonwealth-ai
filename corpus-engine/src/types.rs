@@ -325,6 +325,13 @@ pub struct IndexInfo {
     /// predates the field.
     #[serde(default)]
     pub personal_scope: bool,
+    /// Resolved `grantable` flag (recipe `[corpus] grantable`). When
+    /// true this corpus may be lent to selected mesh peers under an
+    /// ephemeral, revocable one-off ingest grant even though
+    /// `mesh_sharing` is false. Falls back to `false` for legacy indexes
+    /// and for structural KnowledgeView corpora that never opt in.
+    #[serde(default)]
+    pub grantable: bool,
     pub is_shard: bool,
     pub chunk_range: Option<ChunkRange>,
 

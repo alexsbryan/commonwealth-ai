@@ -794,6 +794,21 @@ impl CorpusEngine {
             );
         }
 
+        // Stamp `[corpus] grantable` so the ephemeral ingest-grant gate
+        // can tell "user-owned file corpus that MAY be lent to peers for
+        // one job" apart from a structural KnowledgeView corpus. Non-fatal
+        // — an unstamped corpus resolves to `false` (not grantable), the
+        // safe default.
+        if let Err(e) = index.set_grantable(recipe.corpus.grantable) {
+            tracing::warn!(
+                corpus = %recipe.corpus.id,
+                path = %index_path.display(),
+                error = %e,
+                "ingest_inner: failed to stamp [corpus] grantable — \
+                 corpus resolves to non-grantable (safe default)"
+            );
+        }
+
         // Stamp the mutable-merge policy from the recipe so future
         // merges of this index against peer partitions take the
         // chosen reconciliation rule. None preserves classic

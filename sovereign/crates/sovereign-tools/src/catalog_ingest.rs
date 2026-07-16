@@ -865,6 +865,7 @@ mod tests {
                 mesh_sharing: true,
                 scope: None,
                 query_sharing: None,
+                grantable: false,
                 size_compressed_gb: 0.0,
                 size_indexed_gb: 0.0,
                 schema_version: 1,

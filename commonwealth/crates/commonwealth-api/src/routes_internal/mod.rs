@@ -17,6 +17,7 @@ use commonwealth_inference::oicp::EmbedModelInfo;
 
 mod atlas_status;
 mod corpus_collaborate;
+mod corpus_grant;
 mod corpus_ingest;
 mod corpus_queue;
 mod corpus_sync;
@@ -31,6 +32,7 @@ mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
+pub use corpus_grant::{corpus_grant_issue, corpus_grant_revoke};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,
     corpus_progress, corpus_status, spawn_corpus_expand, spawn_corpus_install,
@@ -42,9 +44,9 @@ pub use corpus_ingest::{
 // same progress→fraction projection so the two surfaces can't diverge.
 pub(crate) use corpus_ingest::progress_fraction;
 pub use corpus_queue::{
-    corpus_complete_unit, corpus_heartbeat, corpus_ingest_partition, corpus_next_unit,
-    CompleteUnitRequest, CompleteUnitResponse, HeartbeatRequest, HeartbeatResponseBody,
-    NextUnitRequest, NextUnitResponse,
+    corpus_collaborate_status, corpus_complete_unit, corpus_heartbeat, corpus_ingest_partition,
+    corpus_next_unit, corpus_partition_evict, CompleteUnitRequest, CompleteUnitResponse,
+    HeartbeatRequest, HeartbeatResponseBody, NextUnitRequest, NextUnitResponse,
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
 pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
