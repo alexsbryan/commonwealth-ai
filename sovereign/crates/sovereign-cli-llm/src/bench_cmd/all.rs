@@ -80,6 +80,13 @@ const HELP: Help = Help {
                  one LLM chat call per question. Synth baselines stored at `baselines/<bench>-synth/`.",
             ),
             (
+                "--sample-questions <N>",
+                "Lean-QA cap (with --synth): forward `--sample-questions N` to each bank's synth \
+                 run, down-sampling to at most N questions stratified by category. Trades \
+                 exhaustiveness for wall time (SEP's 35-question synth ≈ 100 min → a few min at \
+                 N=5). The sampled run is ADVISORY — not baseline-comparable. No-op without --synth.",
+            ),
+            (
                 "--routing-only",
                 "Drive ONLY the intent classifier (no retrieval, no synthesis) via `svrn eval \
                  run --routing-only`. Fastest iteration loop for classifier-prompt tuning: ~0.5-2s \
@@ -177,6 +184,12 @@ struct Opts {
     /// default (10) was producing apples-to-oranges source_recall
     /// regressions.
     retrieval_limit: usize,
+    /// Lean-QA cap forwarded to `svrn eval run --sample-questions` on synth
+    /// lanes: down-sample each bank to at most N questions, stratified by
+    /// category. None = full bank. Only affects `--synth` runs (the slow
+    /// lane); retrieval/routing keep the full set for stable HARD-gate
+    /// denominators. A sampled synth run is advisory, not baseline-comparable.
+    sample_questions: Option<usize>,
     /// When true, retrieval-lane benches drive the FULL chat pipeline
     /// (intent classifier → router → search tools → synthesis) via
     /// `svrn eval run --synth` instead of the bare embed→search
@@ -221,6 +234,7 @@ impl Default for Opts {
             report: None,
             regression_threshold: 0.005, // 0.5 pt
             retrieval_limit: 30,
+            sample_questions: None,
             synth: false,
             routing_only: false,
             isolate: false,
@@ -636,6 +650,8 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     };
 
     let limit_str = opts.retrieval_limit.to_string();
+    // Bound to the fn scope so &str refs into it survive in cmd_args below.
+    let sample_str = opts.sample_questions.map(|n| n.to_string());
     let mut cmd_args: Vec<&str> = vec![
         "eval",
         "run",
@@ -648,6 +664,12 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     ];
     if opts.synth {
         cmd_args.push("--synth");
+        // Lean-QA sampling is synth-only (eval run ignores it otherwise, but
+        // gate here too so the intent is legible at the call site).
+        if let Some(s) = sample_str.as_deref() {
+            cmd_args.push("--sample-questions");
+            cmd_args.push(s);
+        }
     }
     if opts.isolate {
         cmd_args.push("--isolate");
@@ -969,6 +991,16 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--synth" => {
                 opts.synth = true;
                 i += 1;
+            }
+            "--sample-questions" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or("--sample-questions requires a number")?;
+                opts.sample_questions = Some(
+                    v.parse::<usize>()
+                        .map_err(|e| format!("--sample-questions: {e}"))?,
+                );
+                i += 2;
             }
             "--routing-only" => {
                 opts.routing_only = true;

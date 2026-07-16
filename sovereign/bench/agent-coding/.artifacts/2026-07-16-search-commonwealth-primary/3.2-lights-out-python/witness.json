@@ -1,0 +1,12 @@
+{
+  "verify_exit_ok": false,
+  "stdout_tail": "......F.....                                                             [100%]\n=================================== FAILURES ===================================\n_______________________ test_one_lit_5x5_corner_solvable _______________________\n\n    def test_one_lit_5x5_corner_solvable():\n        grid = [[0] * 5 for _ in range(5)]\n        grid[0][0] = 1\n>       check_solves(grid)\n\ntests/test_integration.py:100: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ngrid = [[1, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]\n\n    def check_solves(grid):\n        presses = solve(grid)\n>       assert presses is not None, f\"expected a solution, got None; grid={grid!r}\"\nE       AssertionError: expected a solution, got None; grid=[[1, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]\nE       assert None is not None\n\ntests/test_integration.py:47: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_integration.py::test_one_lit_5x5_corner_solvable - Assertio...\n1 failed, 11 passed in 0.02s\n",
+  "passed": 11,
+  "failed": 1,
+  "total": 12,
+  "failed_names": [
+    "tests/test_integration.py::test_one_lit_5x5_corner_solvable"
+  ],
+  "pass_fraction": 0.9166666666666666,
+  "bucketed_score": 3
+}

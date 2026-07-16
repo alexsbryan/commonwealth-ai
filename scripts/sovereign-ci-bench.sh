@@ -42,10 +42,25 @@ set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────────────────────────
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
-BUDGET_SECS=7200          # 2h ceiling
+# Total wall-clock ceiling. Sized for a local slow-slot model: the SOFT synth
+# lanes drive full DeepQuery syntheses (~150-210s/question on the 35B-A3B), so
+# sep(35 questions across 3 banks) + wikipedia synth alone is ~2.5-3h. The old
+# 7200s (2h) dated from a faster-model era and starved the tail HARD lanes.
+BUDGET_SECS=14400         # 4h ceiling
+# Time (s) that SOFT/TRACKED lanes must LEAVE for the HARD lanes that run after
+# them. Without this, a long synth lane consumes the whole remaining budget and
+# the tail HARD gates (search-gym-gate, knowledge-gym-gate, agent-coding-gate)
+# all SKIP(budget) → HARD_FAIL — i.e. a SOFT lane fails the build. A SOFT lane
+# capped by this reserve just TIMEOUTs (advisory, non-gating) instead. Covers
+# the ~agent-coding (~15m) + the fast gym gates that trail the synth lanes.
+HARD_RESERVE_SECS="${HARD_RESERVE_SECS:-1800}"
 REPORT_DIR="target/ci-bench"
 UPDATE_BASELINE=""
 QUICK=""                  # --quick: smaller-n slices for a fast local pre-push (~15m)
+# Lean-tier synth sample: under --quick, each synth bank is down-sampled to this
+# many questions (stratified by category). 5 covers SEP's 6 archetypes at ~1/7th
+# the cost of the full 35-question run. Env-overridable.
+SYNTH_QUICK_SAMPLE="${SYNTH_QUICK_SAMPLE:-5}"
 NO_SYNTH=""               # --no-synth: skip the slow SOFT synthesis lanes (~55m).
                           # Useful for fast HARD-gate runs + baseline seeding.
 BENCH_ROOT="sovereign/bench"
@@ -83,7 +98,33 @@ FLYWHEEL_ABSENT_BANK="${FLYWHEEL_ABSENT_BANK:-$CHAOS_BANK}"
 AGENT_BIN="${SOVEREIGN_AGENT_BENCH:-target/debug/sovereign-agent-bench}"
 SEARCH_GYM_FIXTURES="07_multicorpus_tangential_local 08_multicorpus_stale_local 09_multicorpus_topical_mismatch 10_multicorpus_contradicting_local"
 KNOWLEDGE_GYM_FIXTURES="08_escalation_when_corpus_empty 10_cache_hit_on_repeat_query 11_multi_call_assembly"
-AGENT_PROBLEMS="${AGENT_PROBLEMS:-3.2-lights-out,3.2-lights-out-python,5.1-minilang-multifile-python}"
+# Agent-coding problems. The full run exercises three (lights-out in C + Python +
+# a multi-file minilang). agent-coding is the single most expensive lane
+# (~5min/problem), so under --quick we run just ONE — the Python lights-out
+# problem, our trusted baseline. An explicit AGENT_PROBLEMS env always wins; the
+# QUICK/FULL default is picked post-parse (once --quick is known).
+AGENT_PROBLEMS_FULL="3.2-lights-out,3.2-lights-out-python,5.1-minilang-multifile-python"
+AGENT_QUICK_PROBLEMS="${AGENT_QUICK_PROBLEMS:-3.2-lights-out-python}"
+AGENT_PROBLEMS="${AGENT_PROBLEMS:-}"   # empty sentinel → resolved after arg-parse
+# A single-problem quick run's grand_total/max_total fraction is NOT comparable
+# to the 3-problem `ci` baseline, so --quick gates agent-coding against its OWN
+# baseline id (passed via `bench gate --id`). First run auto-passes (first-run) +
+# seeds it under --update-baseline; thereafter it's a real HARD regression gate on
+# the Python-lights-out score.
+AGENT_QUICK_BASELINE_ID="${AGENT_QUICK_BASELINE_ID:-ci-quick}"
+# ── Multi-turn turn budget ───────────────────────────────────────────────────
+# The --threads lane costs ~one chat call per TURN (~85s/turn on the 35B), so the
+# uncapped 102-turn bank ate 8720s (2.4h) of the 14400s budget on the baseline run
+# and starved the trailing HARD lanes. `--max-turns` bounds it by whole-thread
+# packing from the front of the bank (the 21-turn marathon is last, so it's
+# naturally excluded). cap=30 → threads 1–4 = 28 turns (~40min). Whole-thread, so
+# the degradation curve stays honest per thread. Baselines are cap-specific: the
+# multiturn baseline must be captured at the SAME cap it runs at (re-baseline on a
+# cap change), which is why full and --quick use distinct caps + the quick lane is
+# advisory. An explicit MULTITURN_MAX_TURNS env always wins.
+MULTITURN_MAX_TURNS_FULL=30
+MULTITURN_QUICK_TURNS="${MULTITURN_QUICK_TURNS:-8}"
+MULTITURN_MAX_TURNS="${MULTITURN_MAX_TURNS:-}"   # empty sentinel → resolved post-parse
 # agent-bench's built-in default --model is `commonwealth/coder`, which no node
 # in the corrected stack advertises (→ every judge/agent call 503s → a floored
 # 0/27 that hides regressions). Pin it to the primary slot the daemon actually
@@ -103,7 +144,12 @@ AGENT_RUNNER="${AGENT_RUNNER:-search}"
 # whole groups (e.g. `literary/bk-book-1`, not `literary`, since `dubliners-3`
 # is an optional corpus that isn't installed everywhere).
 RETRIEVAL_CORPORA=(sep wikipedia)
-ENRICHMENT_CORPORA=(obsidian literary/bk-book-1)
+# `obsidian` is a personal vault, not present on most boxes — its bench filter
+# matches nothing there, exiting non-zero → a spurious HARD FAIL(1). It's now
+# OPT-IN via CI_BENCH_OBSIDIAN=1 (set it on the box that actually has the vault
+# indexed). The default set covers only the portable, checked-in corpus.
+ENRICHMENT_CORPORA=(literary/bk-book-1)
+[[ -n "${CI_BENCH_OBSIDIAN:-}" ]] && ENRICHMENT_CORPORA=(obsidian "${ENRICHMENT_CORPORA[@]}")
 ROUTING_FILTER="routing"
 # Per-lane wall-clock cap needs a `timeout` binary. macOS lacks it by default
 # (`brew install coreutils` → `gtimeout`). If neither exists, lanes run uncapped
@@ -122,6 +168,26 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
+
+# Lean tier: --quick down-samples the SOFT synth lanes (SYNTH_QUICK_SAMPLE) and
+# tightens the ceiling so a pre-push run stays minutes, not hours. An explicit
+# --budget-secs still wins — we only lower the *default* 14400 ceiling.
+if [[ -n "$QUICK" && "$BUDGET_SECS" == "14400" ]]; then
+  BUDGET_SECS=3600
+fi
+
+# Agent-coding problem set: an explicit AGENT_PROBLEMS env wins; otherwise --quick
+# runs the single trusted baseline (Python lights-out) and the full run runs all
+# three. Deferred to here so it can key on --quick.
+if [[ -z "$AGENT_PROBLEMS" ]]; then
+  if [[ -n "$QUICK" ]]; then AGENT_PROBLEMS="$AGENT_QUICK_PROBLEMS"; else AGENT_PROBLEMS="$AGENT_PROBLEMS_FULL"; fi
+fi
+
+# Multi-turn cap: explicit env wins; otherwise --quick uses the tiny quick cap and
+# the full run uses the full cap. Deferred to here so it can key on --quick.
+if [[ -z "$MULTITURN_MAX_TURNS" ]]; then
+  if [[ -n "$QUICK" ]]; then MULTITURN_MAX_TURNS="$MULTITURN_QUICK_TURNS"; else MULTITURN_MAX_TURNS="$MULTITURN_MAX_TURNS_FULL"; fi
+fi
 
 mkdir -p "$REPORT_DIR"
 START_TS=$(date +%s)
@@ -146,7 +212,15 @@ run_lane() {
     [[ "$kind" == "HARD" ]] && HARD_FAIL=1
     return
   fi
-  echo "── RUN   [$kind] $name   (budget left ${budget_left}s)"
+  # A SOFT/TRACKED lane must not devour the budget the trailing HARD lanes need
+  # (see HARD_RESERVE_SECS). Cap non-HARD lanes at budget_left − reserve so a
+  # slow synth TIMEOUTs (advisory) instead of starving agent-coding-gate into a
+  # build-failing SKIP. HARD lanes always get the full remaining budget.
+  local lane_cap="$budget_left"
+  if [[ "$kind" != "HARD" ]] && (( budget_left > HARD_RESERVE_SECS + 60 )); then
+    lane_cap=$(( budget_left - HARD_RESERVE_SECS ))
+  fi
+  echo "── RUN   [$kind] $name   (budget left ${budget_left}s, lane cap ${lane_cap}s)"
   echo "         \$ $*"
   local t0; t0=$(date +%s)
   local out; out="$REPORT_DIR/lane-$(printf '%s' "$name" | tr '/: ' '___').out"
@@ -154,7 +228,7 @@ run_lane() {
   # budget guard + lane-internal bounds keep the run finite). Tee output so we
   # can distinguish a real regression from a setup gap.
   if [[ -n "$TIMEOUT_BIN" ]]; then
-    "$TIMEOUT_BIN" "${budget_left}s" "$@" 2>&1 | tee "$out"
+    "$TIMEOUT_BIN" "${lane_cap}s" "$@" 2>&1 | tee "$out"
   else
     "$@" 2>&1 | tee "$out"
   fi
@@ -214,13 +288,22 @@ run_lane "routing" HARD \
     $UPDATE_BASELINE --report "$REPORT_DIR/routing.json"
 
 # ── Lane 3: synthesis answer-equiv (SOFT — judge variance) ──
-# Skippable with --no-synth: these are the slowest lanes (~55m) and SOFT, so a
-# fast HARD-gate run or a baseline-seeding pass can omit them.
+# Skippable with --no-synth: these are the slowest lanes and SOFT.
+#
+# LEAN TIER: under --quick, down-sample each synth bank to SYNTH_QUICK_SAMPLE
+# questions (stratified by category — every archetype stays represented). A
+# synthesis regression surfaces across categories, so a handful of questions
+# retains the signal at a fraction of the wall time (SEP's 35-question synth
+# ≈ 100 min on the 35B → a few min at N=5). The sampled run is ADVISORY — SOFT
+# already, and at a reduced N it's not baseline-comparable, so it never gates.
+# Full runs (no --quick) keep the whole bank for the baseline-tracked signal.
+SYNTH_SAMPLE_ARGS=""
+[[ -n "$QUICK" ]] && SYNTH_SAMPLE_ARGS="--sample-questions $SYNTH_QUICK_SAMPLE"
 if [[ -z "$NO_SYNTH" ]]; then
   for c in "${RETRIEVAL_CORPORA[@]}"; do
     run_lane "synth:$c" SOFT \
       "$BIN" bench all --bench-root "$BENCH_ROOT" --synth --filter "$c" \
-        --report "$REPORT_DIR/synth-$c.json"
+        $SYNTH_SAMPLE_ARGS --report "$REPORT_DIR/synth-$c.json"
   done
 else
   echo "── SKIP  [SOFT] synth lanes — --no-synth"
@@ -294,8 +377,12 @@ run_lane "mechanism-gate" HARD \
 # vs baseline at sovereign/bench/wikipedia_learn/baselines/threads/.
 THREAD_BANK=$(ls "$BENCH_ROOT"/wikipedia_learn/*.toml 2>/dev/null | head -1)
 if [[ -n "${THREAD_BANK:-}" ]]; then
+  # --max-turns bounds the lane's intrinsic cost (≈one chat call per turn) so it
+  # completes within budget and hands multiturn-gate a COMPLETE report — a timeout
+  # here would leave a partial report and spuriously fail the HARD gate.
   run_lane "multiturn-degradation" TRACKED \
     "$BIN" eval run --threads --bank "$THREAD_BANK" \
+      --max-turns "$MULTITURN_MAX_TURNS" \
       --output "$REPORT_DIR/threads.json"
   run_lane "multiturn-gate" HARD \
     "$BIN" bench gate multiturn --report "$REPORT_DIR/threads.json" \
@@ -367,9 +454,13 @@ if [[ -x "$AGENT_BIN" ]]; then
   run_lane "agent-coding" TRACKED \
     "$AGENT_BIN" run --agent "$AGENT_RUNNER" --problems "$AGENT_PROBLEMS" --judge-trials 1 \
       --model "$AGENT_MODEL" --report "$REPORT_DIR/agent-coding.json"
+  # --quick gates the single-problem run against its own baseline id (see the
+  # AGENT_QUICK_BASELINE_ID note above); full runs use the default `ci` baseline.
+  AGENT_GATE_ID_ARG=""
+  [[ -n "$QUICK" ]] && AGENT_GATE_ID_ARG="--id $AGENT_QUICK_BASELINE_ID"
   run_lane "agent-coding-gate" HARD \
     "$BIN" bench gate agent-coding --report "$REPORT_DIR/agent-coding.json" \
-      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+      $AGENT_GATE_ID_ARG --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
 else
   echo "── SKIP  [HARD] agent-coding — binary not found at $AGENT_BIN (build: cargo build -p sovereign-agent-bench)"
 fi

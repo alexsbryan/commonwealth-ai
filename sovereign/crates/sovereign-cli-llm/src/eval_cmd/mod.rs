@@ -80,10 +80,12 @@ const RUN_HELP: Help = Help {
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
             ("--isolate",      "Per-corpus isolation (with --synth). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
+            ("--sample-questions <N>", "Lean-QA cap (with --synth): down-sample the bank to at most N questions, round-robin across category so every archetype stays represented. Trades exhaustiveness for wall time; the sampled run is advisory (not baseline-comparable). No-op in retrieval/routing modes."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
             ("--threads",      "Multi-turn mode. Bank must be a `[[threads]]` shape (see sovereign/bench/wikipedia_learn/threads.toml). Each thread walks N follow-up turns under one conversation_id; per-turn deterministic scoring + one thread-level LLM judge call. Implies --synth pipeline. Disables --routing-only / --with-atlas / retrieval-only mode."),
             ("--thread-id <id>", "Filter --threads mode to a single thread by id. Useful for fast iteration on one fixture (e.g. `--thread-id computing_history`)."),
+            ("--max-turns <N>", "Lean-QA cap (with --threads): keep whole threads in bank order until the running total-turn count would exceed N, then stop. Cost of --threads is ~linear in total turns, so this bounds wall time. The first thread is always kept even if it alone exceeds N. Advisory (not baseline-comparable)."),
             ("--judge-trials <N>", "Run the LLM judge N times per thread on the same transcript. Default 1 (single-judge). N>1 enables multi-judge: per-fact present_count out of N, coverage from majority vote (≥⌈N/2⌉), coverage_mean as the continuous signal. Adds ~Nx10s per thread (~Nx2min for the 13-thread bank). Targets judge-side variance — cheaper than multi-trial of the whole synth pipeline."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
@@ -224,6 +226,22 @@ struct RunArgs {
     /// the unscoped run is the cross-corpus UX, scored on answer
     /// quality.
     isolate: bool,
+    /// Stratified question-sample cap (synth mode only). When set, the
+    /// bank's questions are down-sampled to at most N, round-robin across
+    /// `category` so every archetype stays represented. This is the lean-QA
+    /// lever: a synthesis regression shows up across categories, so a small
+    /// per-category sample catches it at a fraction of the wall time (SEP's
+    /// 35-question synth ≈ 100 min on the 35B → ~5 stratified questions in a
+    /// few min). No-op in retrieval/routing modes, whose HARD gates need
+    /// stable question-set denominators. See `sample_stratified`.
+    sample_questions: Option<usize>,
+    /// Total-turn budget for `--threads` mode (lean-QA lever for multi-turn
+    /// banks). The --threads lane costs ~one chat call per TURN, and thread
+    /// lengths vary widely (this repo's bank: 2–21 turns), so a turn budget
+    /// bounds wall time precisely where a naive thread COUNT would not. Keeps
+    /// threads in bank order until the running turn total would exceed N (always
+    /// keeps ≥1 thread). None = full bank. See `cap_threads_by_turns`.
+    max_turns: Option<usize>,
     /// Atom-seed source for `atlas_navigate`. `cosine` (default) = v1 exact
     /// cosine over the embedding bag + resolve; `ann` = ATLAS_STORAGE_V2
     /// Increment A's ANN over a co-located Lance vector column. The gate runs
@@ -254,9 +272,78 @@ impl Default for RunArgs {
             thread_id_filter: None,
             judge_trials: 1,
             isolate: false,
+            sample_questions: None,
+            max_turns: None,
             atlas_seed: atlas_ann::SeedMode::Cosine,
         }
     }
+}
+
+/// Down-sample a question set to at most `n`, round-robin across `category`
+/// so every archetype stays represented. Deterministic: categories are
+/// visited in first-appearance order and questions keep their in-bank order
+/// within a category, so the same bank + N always yields the same sample (no
+/// RNG — reproducible across runs). `n == 0` or `n >= len` returns the set
+/// unchanged. This is the lean-QA primitive: one synthesis regression tends
+/// to surface across categories, so a per-category sample retains the signal
+/// at a fraction of the full-bank wall time.
+fn sample_stratified(questions: Vec<bank::Question>, n: usize) -> Vec<bank::Question> {
+    if n == 0 || n >= questions.len() {
+        return questions;
+    }
+    let mut cat_order: Vec<String> = Vec::new();
+    let mut buckets: std::collections::HashMap<String, std::collections::VecDeque<bank::Question>> =
+        std::collections::HashMap::new();
+    for q in questions {
+        if !buckets.contains_key(&q.category) {
+            cat_order.push(q.category.clone());
+        }
+        buckets.entry(q.category.clone()).or_default().push_back(q);
+    }
+    let mut out: Vec<bank::Question> = Vec::with_capacity(n);
+    while out.len() < n {
+        let mut took_any = false;
+        for cat in &cat_order {
+            if out.len() >= n {
+                break;
+            }
+            if let Some(q) = buckets.get_mut(cat).and_then(|dq| dq.pop_front()) {
+                out.push(q);
+                took_any = true;
+            }
+        }
+        if !took_any {
+            break;
+        }
+    }
+    out
+}
+
+/// Cap a thread set to a total-TURN budget: keep threads in bank order,
+/// accumulating turns, and stop before the running total would exceed
+/// `max_turns`. Always keeps at least the first thread (a budget smaller than
+/// thread 1 still runs one). `max_turns == 0` or a budget ≥ the full total
+/// returns the set unchanged. Cost of `--threads` is ~linear in total turns, so
+/// this bounds wall time precisely — a plain thread COUNT would not, since
+/// thread lengths vary widely. Deterministic (prefix of bank order).
+fn cap_threads_by_turns(threads: Vec<bank::Thread>, max_turns: usize) -> Vec<bank::Thread> {
+    let total: usize = threads.iter().map(|t| t.turns.len()).sum();
+    if max_turns == 0 || max_turns >= total {
+        return threads;
+    }
+    let mut out: Vec<bank::Thread> = Vec::new();
+    let mut used = 0usize;
+    for t in threads {
+        let n = t.turns.len();
+        // Keep thread 1 unconditionally; otherwise only if it fits the budget.
+        if out.is_empty() || used + n <= max_turns {
+            used += n;
+            out.push(t);
+        } else {
+            break;
+        }
+    }
+    out
 }
 
 async fn cmd_run(args: &[String]) -> i32 {
@@ -301,6 +388,14 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--limit" => {
                 i += 1;
                 a.limit = rest.get(i).and_then(|s| s.parse().ok()).unwrap_or(a.limit);
+            }
+            "--sample-questions" => {
+                i += 1;
+                a.sample_questions = rest.get(i).and_then(|s| s.parse().ok());
+            }
+            "--max-turns" => {
+                i += 1;
+                a.max_turns = rest.get(i).and_then(|s| s.parse().ok());
             }
             "--inspect" => {
                 a.inspect = true;
@@ -476,6 +571,22 @@ async fn cmd_run(args: &[String]) -> i32 {
                 bank.threads.len()
             );
         }
+        // Lean-QA turn-budget cap: bound the multi-turn lane's wall time on slow
+        // slots. Advisory when it fires — the degradation metrics over a subset
+        // aren't comparable to the full-bank baseline.
+        if let Some(max_turns) = a.max_turns {
+            let before_t = bank.threads.len();
+            let before_turns: usize = bank.threads.iter().map(|t| t.turns.len()).sum();
+            bank.threads = cap_threads_by_turns(std::mem::take(&mut bank.threads), max_turns);
+            let after_turns: usize = bank.threads.iter().map(|t| t.turns.len()).sum();
+            if bank.threads.len() < before_t {
+                eprintln!(
+                    "lean: capped to {} of {before_t} threads ({after_turns}/{before_turns} turns, \
+                     budget {max_turns}) — advisory, not baseline-comparable at this cap",
+                    bank.threads.len()
+                );
+            }
+        }
         let total_turns: usize = bank.threads.iter().map(|t| t.turns.len()).sum();
         eprintln!(
             "loaded thread bank `{}` — {} threads, {total_turns} turns, target corpus `{}`",
@@ -515,13 +626,30 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
-    let bank = match bank::load_bank(&a.bank) {
+    let mut bank = match bank::load_bank(&a.bank) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("error: load bank: {e}");
             return 1;
         }
     };
+    // Lean-QA sampling: only in synth mode (the slow lane). Retrieval/routing
+    // keep the full set so their HARD-gate denominators stay stable.
+    if a.synth {
+        if let Some(n) = a.sample_questions {
+            let before = bank.questions.len();
+            bank.questions = sample_stratified(std::mem::take(&mut bank.questions), n);
+            if bank.questions.len() < before {
+                eprintln!(
+                    "lean: sampled {}/{} questions (stratified by category) — this synth run is \
+                     advisory, not baseline-comparable at N={}",
+                    bank.questions.len(),
+                    before,
+                    bank.questions.len(),
+                );
+            }
+        }
+    }
     eprintln!(
         "loaded bank `{}` — {} questions, target corpus `{}`",
         bank.bank.name,
@@ -694,4 +822,107 @@ async fn cmd_run(args: &[String]) -> i32 {
     }
 
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn q(id: &str, cat: &str) -> bank::Question {
+        bank::Question {
+            id: id.to_string(),
+            category: cat.to_string(),
+            question: format!("q-{id}"),
+            expected_facts: Vec::new(),
+            expected_sources: Vec::new(),
+            notes: String::new(),
+            expected_intent: None,
+            attribution_mode: "both".to_string(),
+        }
+    }
+
+    #[test]
+    fn sample_stratified_round_robins_categories() {
+        // Uneven category sizes; N=4 must take one per category first
+        // (appearance order) before doubling up — never 4-from-one-category.
+        let qs = vec![
+            q("a1", "alpha"),
+            q("a2", "alpha"),
+            q("a3", "alpha"),
+            q("b1", "beta"),
+            q("b2", "beta"),
+            q("c1", "gamma"),
+        ];
+        let got = sample_stratified(qs, 4);
+        let ids: Vec<&str> = got.iter().map(|q| q.id.as_str()).collect();
+        assert_eq!(ids, vec!["a1", "b1", "c1", "a2"]);
+        // All three archetypes represented in a 4-of-6 sample.
+        let cats: std::collections::HashSet<&str> =
+            got.iter().map(|q| q.category.as_str()).collect();
+        assert_eq!(cats.len(), 3);
+    }
+
+    #[test]
+    fn sample_stratified_is_noop_at_bounds() {
+        let mk = || vec![q("a", "x"), q("b", "y")];
+        assert_eq!(sample_stratified(mk(), 0).len(), 2, "n=0 → unchanged");
+        assert_eq!(sample_stratified(mk(), 5).len(), 2, "n>=len → unchanged");
+        assert_eq!(sample_stratified(mk(), 2).len(), 2, "n==len → unchanged");
+    }
+
+    #[test]
+    fn sample_stratified_deterministic() {
+        let mk = || vec![q("a1", "x"), q("b1", "y"), q("a2", "x"), q("b2", "y")];
+        let one: Vec<String> = sample_stratified(mk(), 3).iter().map(|q| q.id.clone()).collect();
+        let two: Vec<String> = sample_stratified(mk(), 3).iter().map(|q| q.id.clone()).collect();
+        assert_eq!(one, two, "same bank + N must yield the same sample");
+        assert_eq!(one, vec!["a1", "b1", "a2"]);
+    }
+
+    fn thr(id: &str, n_turns: usize) -> bank::Thread {
+        bank::Thread {
+            id: id.to_string(),
+            category: "c".to_string(),
+            description: String::new(),
+            turns: (0..n_turns)
+                .map(|i| bank::Turn {
+                    question: format!("q{i}"),
+                    expected_facts: Vec::new(),
+                    expected_sources: Vec::new(),
+                    notes: String::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn cap_threads_by_turns_bounds_total() {
+        // Uneven lengths like the real bank; budget 12 stops before the thread
+        // that would overflow it.
+        let threads = vec![thr("a", 5), thr("b", 5), thr("c", 12), thr("d", 6)];
+        let got = cap_threads_by_turns(threads, 12);
+        assert_eq!(
+            got.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b"], // 5+5=10 ≤ 12; +c(12)=22 > 12 → stop
+        );
+        assert!(got.iter().map(|t| t.turns.len()).sum::<usize>() <= 12);
+    }
+
+    #[test]
+    fn cap_threads_by_turns_keeps_oversized_first() {
+        // First thread alone exceeds the budget — still run it (never empty).
+        let got = cap_threads_by_turns(vec![thr("big", 21), thr("small", 2)], 10);
+        assert_eq!(
+            got.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            vec!["big"]
+        );
+    }
+
+    #[test]
+    fn cap_threads_by_turns_noop_at_bounds() {
+        let mk = || vec![thr("a", 5), thr("b", 6)];
+        assert_eq!(cap_threads_by_turns(mk(), 0).len(), 2, "0 → unchanged");
+        assert_eq!(cap_threads_by_turns(mk(), 11).len(), 2, "==total → unchanged");
+        assert_eq!(cap_threads_by_turns(mk(), 99).len(), 2, ">total → unchanged");
+    }
 }

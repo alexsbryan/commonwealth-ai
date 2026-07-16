@@ -1,0 +1,1 @@
+(runner wedged past wall cap; outer watchdog fired)
