@@ -209,6 +209,17 @@ pub struct CorpusIndex {
     table: lancedb::Table,
     corpus_id: String,
     embedding_dimensions: usize,
+    /// Cached search-gate metadata: `(row_count, ivf_built, fts_built)`.
+    /// `count_rows(None)` + `list_indices()` cost ~1.1-2.3s per call on a
+    /// 1.9M-row table (measured 2026-07-16 — they dominated search wall
+    /// time), and their answers are static for an open dataset version.
+    /// Shared across clones (`CorpusEngine::open_index` hands out clones,
+    /// keyed on the on-disk version mtime, so a committed external write
+    /// yields a fresh instance and a fresh cache). Write methods on THIS
+    /// instance (`insert_*`, `delete_*`, `build_indexes`) clear it so
+    /// ingest-time self-mutation can't leave a stale gate — a stale
+    /// "no IVF" on a >10k-row corpus would silently skip the vector leg.
+    gate_cache: std::sync::Arc<std::sync::Mutex<Option<(usize, bool, bool)>>>,
 }
 
 /// Build the Arrow schema for a corpus index table.
@@ -753,6 +764,7 @@ impl CorpusIndex {
             table,
             corpus_id: meta.corpus_id,
             embedding_dimensions: meta.embedding_dimensions,
+            gate_cache: Default::default(),
         })
     }
 

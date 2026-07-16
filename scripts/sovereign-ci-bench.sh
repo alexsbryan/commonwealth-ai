@@ -282,6 +282,22 @@ for c in "${RETRIEVAL_CORPORA[@]}"; do
       --report "$REPORT_DIR/retrieval-$c.json"
 done
 
+# ── Lane 2b: retrieval through the PRODUCTION pipeline (HARD, deterministic) ──
+# The bench-prod parity lane (sovereign/docs/RETRIEVAL_REDESIGN.md §7.1): each
+# question drives the production KnowledgeQuery retrieval pipeline in-process
+# (context build → kq_pipeline() → merge/truncate, NO synthesis) and the
+# composed evidence pool is baseline-diffed. This is the lane that would have
+# caught the 2026-07-16 finding — the pipeline delivering −12 facts vs the raw
+# index on wiki multi-fact questions — which the raw lanes above are blind to.
+# --isolate scopes each bank to its target corpus for cross-box determinism.
+# Baselines at `baselines/<bench>-prod-isolated/`; first run passes + seeds
+# under --update-baseline.
+for c in "${RETRIEVAL_CORPORA[@]}"; do
+  run_lane "retrieval-prod:$c" HARD \
+    "$BIN" bench all --bench-root "$BENCH_ROOT" --filter "$c" --prod-pipeline --isolate \
+      $UPDATE_BASELINE --report "$REPORT_DIR/retrieval-prod-$c.json"
+done
+
 # ── Lane 1: intent routing (HARD, deterministic, fast) ──
 run_lane "routing" HARD \
   "$BIN" bench all --bench-root "$BENCH_ROOT" --routing-only --filter "$ROUTING_FILTER" \

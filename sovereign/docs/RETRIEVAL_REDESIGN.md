@@ -445,11 +445,54 @@ demand_plan entirely (router already classifies) — their path gets
   | sep/questions | 48/66 (73%) · 146/159 (92%) | **49/66 (74%) · 148/159 (93%)** | +1 source · +2 facts |
 
   Remaining prod-vs-raw@20 gap on wiki (60 vs 62% sources, 72 vs 78%
-  facts) — next suspects, in order: entity-boost duplicate fetches
-  (−16 dups in the trace), the noise floor, KQ_MERGED_LIMIT=20 + the
-  8k-char budget, and the 3.6–9s latency (expansion re-searches).
-  Also queued: wire the parity mode as a committed `bench all` lane
-  with its own baseline id.
+  facts) — next suspects, in order: the noise floor, KQ_MERGED_LIMIT=20
+  + the 8k-char budget, and missing-entity aboutness (the atomic-bombings
+  debate facts live in an article no lane retrieves — S2/S3 territory).
+
+  **Throughput fixes (landed same session, timer-attributed):**
+
+  - *Mesh-self skip* (`step_main_retrieval_mesh`): sealed conversations
+    subtract locally-installed corpora from the mesh seal; an empty
+    remainder skips the mesh call entirely. The mesh round-trip of
+    locally-owned corpora was a full duplicate hybrid search through the
+    daemon per turn (the −16-dup dedupe delta in the trace) returning
+    only parroted results. Validated quality-IDENTICAL (prod4 = prod2
+    byte-for-byte on wiki + sep-summarize) at p50 7.4s→6.0s. Unsealed
+    (broad-research) fan-out unchanged.
+  - *Search-gate cache* (`CorpusIndex::gate_cache`): `count_rows(None)`
+    + `list_indices()` ran on EVERY search and cost 1.1–2.3s per call on
+    the 1.9M-row table — the single largest retrieval cost (timer
+    receipt: `meta_ms=2354` vs `query_ms=851` on the same search). Now
+    cached per open dataset version; invalidated by the instance's own
+    write methods (`insert_*`/`delete_*`/`build_indexes`) and naturally
+    by `open_index`'s version-mtime instance cache for external writes.
+
+  Also landed: the parity mode as a committed lane — `bench all
+  --prod-pipeline [--isolate]` (baselines at `baselines/<bench>-prod/` /
+  `-prod-isolated`, mutually exclusive with `--synth`/`--routing-only`)
+  plus two HARD `retrieval-prod:` lanes in `sovereign-ci-bench.sh` — the
+  lanes that would have caught the pipeline's −12-fact regression the
+  raw lanes were blind to.
+
+  **Coverage-select on the PRODUCTION path (measured post gate-cache,
+  2026-07-16 evening): a near-strict win.** The depth-vs-breadth
+  conflict observed on the raw lane dissolves in prod — coverage
+  diversifies the per-corpus base pool, then the (now shape-conditional)
+  expansion supplies depth downstream:
+
+  | bank | prod cov-off | prod cov-on | Δ |
+  |---|---|---|---|
+  | wikipedia/questions | 60% src · 72% facts | 59% · **78%** | −1 src · **+8pt facts** (= raw@20 parity) |
+  | sep/summarize | 100% · 62% | 100% · **66%** | **+4pt facts** |
+  | sep/questions | 80% · 92% | **83%** · 92% | **+2 src** · −1 fact |
+  | p50 latency | 0.7–2.7s | 1.2–2.8s | within budget |
+
+  Decision queued (own iteration, own battery): flip
+  `SOVEREIGN_COVERAGE_SELECT` default ON. A default flip touches every
+  surface (chaos honesty, governance lanes, raw-lane substrate
+  baselines incl. the two single-question depth canaries), so it must
+  clear the chaos-gate + full raw re-baseline + prod re-baseline as its
+  own checkpoint, not ride this one.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.

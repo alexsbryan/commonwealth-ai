@@ -1368,25 +1368,59 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
             st.enabled_corpora,
             st.corpus_ceiling,
         );
+        // Sealed conversations: subtract locally-installed corpora from
+        // the mesh seal before fanning out. The local leg above already
+        // searches every locally-installed corpus, so a mesh round-trip
+        // for those ids only parrots the same index back (the fold
+        // comment below: "we own it, mesh is just parroting") — at the
+        // cost of a FULL duplicate hybrid search through the daemon
+        // (measured as the +16-dup dedupe delta and a large share of
+        // the 3.6-9s/question parity-lane latency, RETRIEVAL_REDESIGN.md
+        // §8 P1). Locality check is a stat on the corpus dir — a miss
+        // (corpus under a non-basename dir) safely falls back to
+        // including the id in the fan-out. Unsealed (`None`) keeps the
+        // full broad-research fan-out unchanged.
+        let mesh_seal_remote: Option<Vec<String>> = match (st.enabled_corpora, &rt.corpus_engine) {
+            (Some(allow), Some(engine)) => {
+                let index_dir = engine.index_dir();
+                Some(
+                    allow
+                        .iter()
+                        .filter(|id| !index_dir.join(id.as_str()).join("chunks.lance").exists())
+                        .cloned()
+                        .collect(),
+                )
+            }
+            (Some(allow), None) => Some(allow.to_vec()),
+            (None, _) => None,
+        };
         let mesh_fut = async {
-            match &rt.mesh_knowledge {
-                Some(m) => {
-                    // Pass the conversation seal so the mesh fan-out's
-                    // local-view (and peer) search is scoped at the
-                    // source. The mesh-fold below (`st.enabled_corpora`
-                    // guard) only filters the *results*; without sealing
-                    // here, the fan-out still opens every hosted index
-                    // first — a 1.9M-row `wikipedia` search that
-                    // OOM-kills the daemon before the filter runs.
-                    m.search(
-                        st.message,
-                        &st.embedding,
-                        KQ_PER_CORPUS_LIMIT,
-                        st.enabled_corpora,
-                    )
-                    .await
+            match (&rt.mesh_knowledge, &mesh_seal_remote) {
+                // Every sealed corpus is local — the mesh has nothing
+                // non-redundant to add; skip the round-trip entirely.
+                (Some(_), Some(remote)) if remote.is_empty() => {
+                    tracing::info!(
+                        label = %st.search_label,
+                        "retrieval: mesh fan-out skipped — all sealed corpora are local"
+                    );
+                    Vec::new()
                 }
-                None => Vec::new(),
+                (Some(m), Some(remote)) => {
+                    m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT, Some(remote))
+                        .await
+                }
+                // Pass the conversation seal so the mesh fan-out's
+                // local-view (and peer) search is scoped at the
+                // source. The mesh-fold below (`st.enabled_corpora`
+                // guard) only filters the *results*; without sealing
+                // here, the fan-out still opens every hosted index
+                // first — a 1.9M-row `wikipedia` search that
+                // OOM-kills the daemon before the filter runs.
+                (Some(m), None) => {
+                    m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT, None)
+                        .await
+                }
+                (None, _) => Vec::new(),
             }
         };
         let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);

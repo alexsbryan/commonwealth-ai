@@ -246,6 +246,29 @@ impl CorpusIndex {
         })
     }
 
+    /// Search-gate metadata: `(row_count, ivf_built, fts_built)`, cached
+    /// per open dataset version (see the `gate_cache` field doc — the
+    /// uncached reads cost ~1.1-2.3s per SEARCH on a 1.9M-row table and
+    /// dominated retrieval wall time before 2026-07-16).
+    async fn gate_info(&self) -> (usize, bool, bool) {
+        if let Some(cached) = self.gate_cache.lock().ok().and_then(|g| *g) {
+            return cached;
+        }
+        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let ivf_built = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let fts_built = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
+        let info = (row_count, ivf_built, fts_built);
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = Some(info);
+        }
+        info
+    }
+
     pub async fn nearest_vector_distance(
         &self,
         query_embedding: &[f32],
@@ -255,11 +278,7 @@ impl CorpusIndex {
             return Ok(None);
         }
         const FLAT_SCAN_THRESHOLD: usize = 10_000;
-        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
-        let indices = self.table.list_indices().await.unwrap_or_default();
-        let ivf_built = indices
-            .iter()
-            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let (row_count, ivf_built, _) = self.gate_info().await;
         if !(ivf_built || row_count < FLAT_SCAN_THRESHOLD) {
             return Ok(None); // no vector path available for this corpus
         }
@@ -314,18 +333,11 @@ impl CorpusIndex {
         // scan completes in milliseconds.
         const FLAT_SCAN_THRESHOLD: usize = 10_000;
         let t_meta = std::time::Instant::now();
-        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
-        let indices = self.table.list_indices().await.unwrap_or_default();
+        let (row_count, ivf_built, fts_indexed) = self.gate_info().await;
         let meta_ms = t_meta.elapsed().as_millis() as u64;
-        let ivf_built = indices
-            .iter()
-            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
         let do_vector =
             !query_embedding.is_empty() && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
-        let fts_built = !sanitized.is_empty()
-            && indices
-                .iter()
-                .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
+        let fts_built = !sanitized.is_empty() && fts_indexed;
         let do_fts = fts_built;
 
         // Coverage selection (S1): overfetch a wider pool, compose the
@@ -343,7 +355,6 @@ impl CorpusIndex {
             ivf_built,
             fts_built,
             row_count = row_count as u64,
-            indices_count = indices.len(),
             stored_dims = self.embedding_dimensions,
             query_dims = query_embedding.len(),
             dims_match = (query_embedding.is_empty() || query_embedding.len() == self.embedding_dimensions),

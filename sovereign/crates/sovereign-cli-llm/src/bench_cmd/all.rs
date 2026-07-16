@@ -87,6 +87,14 @@ const HELP: Help = Help {
                  N=5). The sampled run is ADVISORY — not baseline-comparable. No-op without --synth.",
             ),
             (
+                "--prod-pipeline",
+                "Drive the PRODUCTION KnowledgeQuery retrieval pipeline in-process per question \
+                 via `svrn eval run --prod-pipeline` (no synthesis) and score its evidence pool — \
+                 the bench-prod parity lane (RETRIEVAL_REDESIGN.md §7.1). Deterministic; pair with \
+                 --isolate for cross-box stability. Baselines stored at `baselines/<bench>-prod/` \
+                 (`-prod-isolated` with --isolate).",
+            ),
+            (
                 "--routing-only",
                 "Drive ONLY the intent classifier (no retrieval, no synthesis) via `svrn eval \
                  run --routing-only`. Fastest iteration loop for classifier-prompt tuning: ~0.5-2s \
@@ -216,6 +224,12 @@ struct Opts {
     /// stored at `baselines/<bench>-routing/` to keep separate
     /// from retrieval and synth modes.
     routing_only: bool,
+    /// Bench-prod parity mode. Passes `--prod-pipeline` to `eval run`:
+    /// each question drives the production KQ retrieval pipeline
+    /// in-process (no synthesis) and the composed evidence pool is
+    /// scored. Deterministic (intent pinned). Baselines stored at
+    /// `baselines/<bench>-prod/` (`-prod-isolated` with --isolate).
+    prod_pipeline: bool,
     /// Per-corpus isolation (synth only). Passes `--isolate` to
     /// `eval run`, scoping each bank's retrieval to its target corpus
     /// to measure that corpus's integrity in isolation rather than its
@@ -236,6 +250,7 @@ impl Default for Opts {
             retrieval_limit: 30,
             sample_questions: None,
             synth: false,
+            prod_pipeline: false,
             routing_only: false,
             isolate: false,
         }
@@ -252,6 +267,10 @@ fn baseline_bench(bench: &DiscoveredBench, opts: &Opts) -> DiscoveredBench {
     }
     let suffix = if opts.routing_only {
         "-routing"
+    } else if opts.prod_pipeline && opts.isolate {
+        "-prod-isolated"
+    } else if opts.prod_pipeline {
+        "-prod"
     } else if opts.synth && opts.isolate {
         "-synth-isolated"
     } else if opts.synth {
@@ -671,6 +690,9 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             cmd_args.push(s);
         }
     }
+    if opts.prod_pipeline {
+        cmd_args.push("--prod-pipeline");
+    }
     if opts.isolate {
         cmd_args.push("--isolate");
     }
@@ -992,6 +1014,10 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
                 opts.synth = true;
                 i += 1;
             }
+            "--prod-pipeline" => {
+                opts.prod_pipeline = true;
+                i += 1;
+            }
             "--sample-questions" => {
                 let v = args
                     .get(i + 1)
@@ -1017,6 +1043,11 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
                 return Err(format!("unexpected positional argument: {other}"));
             }
         }
+    }
+    // The three retrieval modes are mutually exclusive — each writes its
+    // own baseline family and drives a different code path.
+    if opts.prod_pipeline && (opts.synth || opts.routing_only) {
+        return Err("--prod-pipeline is mutually exclusive with --synth / --routing-only".into());
     }
     Ok(opts)
 }
