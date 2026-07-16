@@ -527,16 +527,19 @@ pub async fn lc_ingest(
     let progress = make_emitter(app.clone(), job_id.clone());
     let daemon_url = state.client_base_url();
 
-    // One-shot document folder → the daemon owns ingest AND enrich (it holds the
-    // tiered providers; the desktop's manager doesn't). Ingesting here and
-    // enriching in the daemon deadlocks on the cross-process index handoff, so
-    // hand the whole job over. The daemon does NOT add it to the sweep scheduler
-    // ⇒ no ongoing watch — "a watched folder without the watching".
+    // One-shot document folder OR Obsidian vault → the daemon owns ingest AND
+    // enrich (it holds the tiered providers; the desktop's manager doesn't).
+    // Ingesting here and enriching in the daemon deadlocks on the cross-process
+    // index handoff, so hand the whole job over: a single in-process ingest +
+    // tiered enrich, no CLI subprocess. The daemon does NOT add it to the sweep
+    // scheduler ⇒ no ongoing watch — "a watched folder without the watching".
+    // WatchedFolder is excluded (its reconciliation worker owns enrichment).
     if with_ocr != Some(true) {
         if let Some(cfg) = manager.get(&corpus_id).await {
+            use sovereign_tools::local_corpus::config::LocalCorpusSourceType;
             if matches!(
                 cfg.source_type,
-                sovereign_tools::local_corpus::config::LocalCorpusSourceType::DocumentFolder
+                LocalCorpusSourceType::DocumentFolder | LocalCorpusSourceType::ObsidianVault { .. }
             ) {
                 let cid = corpus_id.clone();
                 let progress = progress.clone();
@@ -548,7 +551,7 @@ pub async fn lc_ingest(
                     let url = format!("{daemon_url}/internal/corpus/enrich-once");
                     tracing::info!(
                         corpus_id = %cid,
-                        "lc_ingest: handing document folder to the daemon (ingest + tiered enrich)"
+                        "lc_ingest: handing one-shot corpus to the daemon (ingest + tiered enrich)"
                     );
                     match client.post(&url).json(&cfg).send().await {
                         Ok(r) if r.status().is_success() => {
@@ -686,6 +689,54 @@ pub async fn lc_ingest(
         }
     });
     Ok(job_id)
+}
+
+/// Make an already-ingested local corpus explorable by building its atlas
+/// via the daemon's IN-PROCESS tiered enrichment (RAPTOR + entity graph +
+/// motifs) — the same path document folders take at ingest.
+///
+/// Replaces the legacy `sovereign-cli enrich init/build` subprocess, which is
+/// not bundled with the desktop (it needs the `sovereign-cli-llm` sibling) and
+/// is redundant with the daemon that already holds the models. Hands the
+/// corpus config to `POST /internal/corpus/enrich-once` (register-without-watch
+/// + tiered build). Fire-and-forget: returns as soon as the request is
+/// dispatched; the UI polls `lc_enrichment_status` for phase/percent and the
+/// corpus-progress banner shows any (re-)ingest the daemon runs. Enrichment
+/// runs in the daemon so writer and reader share one process (a cross-process
+/// index handoff deadlocks `enable_enrichment`).
+#[tauri::command]
+pub async fn lc_enrich_now(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let manager = require_manager(&state).await?;
+    let cfg = manager
+        .get(&corpus_id)
+        .await
+        .ok_or_else(|| format!("corpus '{corpus_id}' is not registered locally"))?;
+    let daemon_url = state.client_base_url();
+    let cid = corpus_id.clone();
+    tokio::spawn(async move {
+        let url = format!("{daemon_url}/internal/corpus/enrich-once");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(3600))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        match client.post(&url).json(&cfg).send().await {
+            Ok(r) if r.status().is_success() => {
+                tracing::info!(corpus_id = %cid, "lc_enrich_now: daemon accepted tiered enrichment")
+            }
+            Ok(r) => {
+                let status = r.status();
+                let body = r.text().await.unwrap_or_default();
+                tracing::warn!(corpus_id = %cid, %status, body, "lc_enrich_now: daemon rejected enrichment")
+            }
+            Err(e) => {
+                tracing::warn!(corpus_id = %cid, "lc_enrich_now: could not reach daemon: {e}")
+            }
+        }
+    });
+    Ok(())
 }
 
 /// Ingest a folder corpus by running the shipped `notebook` workflow on the

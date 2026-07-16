@@ -13,12 +13,39 @@
 
   let expandedId: string | null = $state(null);
 
-  function sourceLabel(c: LocalCorpusConfig): string {
-    return c.source_type === "DocumentFolder" ? "Folder" : "Obsidian vault";
+  // `source_type` is an externally-tagged union: the unit variant
+  // `DocumentFolder` serializes as the bare string "DocumentFolder", while
+  // the data-carrying variants serialize as a single-key object
+  // (`{ObsidianVault: {...}}` / `{WatchedFolder: {...}}`). The old
+  // `!== "DocumentFolder" ⇒ vault` shortcut therefore mislabeled EVERY
+  // watched folder as an Obsidian vault (and lit its vault-only "Organize"
+  // button). Discriminate explicitly instead.
+  function sourceKind(
+    c: LocalCorpusConfig,
+  ): "folder" | "obsidian" | "watched" {
+    const st = c.source_type;
+    if (st === "DocumentFolder") return "folder";
+    if (st && typeof st === "object") {
+      if ("ObsidianVault" in st) return "obsidian";
+      if ("WatchedFolder" in st) return "watched";
+    }
+    return "folder";
   }
 
+  function sourceLabel(c: LocalCorpusConfig): string {
+    switch (sourceKind(c)) {
+      case "obsidian":
+        return "Obsidian vault";
+      case "watched":
+        return "Watched folder";
+      default:
+        return "Folder";
+    }
+  }
+
+  // Only a true Obsidian vault gets the tag/link Organizer panel.
   function isVault(c: LocalCorpusConfig): boolean {
-    return c.source_type !== "DocumentFolder";
+    return sourceKind(c) === "obsidian";
   }
 
   function toggleExpand(id: string) {

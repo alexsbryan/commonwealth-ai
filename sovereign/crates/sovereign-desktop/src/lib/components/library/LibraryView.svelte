@@ -19,6 +19,7 @@
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
   import { kindLabel, kindTitle } from "./notebookKind";
   import AddSheet from "./AddSheet.svelte";
+  import InProgressIngests from "./InProgressIngests.svelte";
   import NotebookDetail from "./NotebookDetail.svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -116,6 +117,12 @@
     </header>
 
     <div class="lib-body">
+      <!-- Live ingests (embed/enrich) surface here with glassbox detail +
+           ETA + peer-assist — reachable from the top-of-chat progress
+           banner. Shown above the shelf so a first-ever ingest is visible
+           even before any notebook exists. -->
+      <InProgressIngests />
+
       {#if loading}
         <p class="muted">Loading your notebooks…</p>
       {:else if error}

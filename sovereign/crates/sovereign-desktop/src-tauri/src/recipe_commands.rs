@@ -219,6 +219,7 @@ pub async fn corpus_install_with_parameters(
         percent: 0.0,
         chunks_processed: 0,
         message: Some("Starting…".into()),
+        ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
         map.insert(request.corpus_id.clone(), initial.clone());

@@ -224,7 +224,7 @@ pub struct CorpusHealthDetail {
 /// `phase` covers the entire pipeline including enrichment, so the
 /// download bar can keep moving through claim and relationship
 /// extraction rather than appearing to stall after "indexing".
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 pub struct CorpusProgressPayload {
     pub corpus_id: String,
     /// One of: "downloading", "extracting", "chunking", "embedding",
@@ -233,6 +233,17 @@ pub struct CorpusProgressPayload {
     pub phase: String,
     pub percent: f32,
     pub chunks_processed: u64,
+    /// Total chunks the current phase expects to process (0 when unknown).
+    /// Paired with `chunks_per_sec`, this lets the frontend render a
+    /// glassbox ETA — "how long is left" — for the dominant embed phase
+    /// rather than only a percent. The backend already computes both inside
+    /// `IngestProgress::Embedding`; they were previously dropped here.
+    #[serde(default)]
+    pub chunks_total: u64,
+    /// Live embedding throughput (chunks/sec, 0.0 when unknown). ETA =
+    /// (chunks_total − chunks_processed) / chunks_per_sec.
+    #[serde(default)]
+    pub chunks_per_sec: f32,
     /// Optional human-readable status line for the more verbose phases.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,

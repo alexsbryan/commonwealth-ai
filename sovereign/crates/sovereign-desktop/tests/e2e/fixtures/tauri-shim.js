@@ -311,6 +311,17 @@
       ok: true,
     }),
     lc_watch_enrich_disable: ({ corpusId }) => ({ corpus_id: corpusId, ok: true }),
+    // In-process notebook enrich ("Make explorable"). lc_enrich_now kicks the
+    // daemon's tiered enrich; lc_enrichment_status is polled for phase/percent.
+    // Default status is "off" (no state) so a mounted NotebookDetail leaves its
+    // "No map yet" CTA in place — specs that drive the build override these.
+    lc_enrich_now: () => null,
+    lc_enrichment_status: () => ({
+      state: null,
+      is_terminal: false,
+      is_stalled: false,
+      fraction_complete: 0,
+    }),
     lc_watch_enrich_rebuild: ({ corpusId }) => ({
       corpus_id: corpusId,
       job_id: `mock-job-${Math.random().toString(36).slice(2, 10)}`,

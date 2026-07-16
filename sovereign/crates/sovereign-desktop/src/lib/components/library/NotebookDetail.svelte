@@ -21,20 +21,22 @@
   import ChatView from "../ChatView.svelte";
   import AtlasSurface from "../atlas/AtlasSurface.svelte";
   import ConflictsPanel from "./ConflictsPanel.svelte";
-  import EnrichmentStage from "../EnrichmentStage.svelte";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
   import { cardSend, cardReceive } from "../../motion";
   import { kindLabel, kindTitle, normalizeKind } from "./notebookKind";
   import {
-    recipeEnrichInitFromCorpus,
-    enrichBuildAsync,
+    lcEnrichNow,
+    enrichmentStatus,
     lcRemove,
     removeCorpus,
     lcWatchSyncNow,
     lcList,
     notebookConversations,
   } from "../../api";
-  import { enrichProgressStore } from "../../stores/enrichProgress.svelte";
+  // `EnrichmentStatus` here is the tiered-build status the daemon returns
+  // (state/is_stalled/fraction_complete), exported from `api` — distinct from
+  // the watched-folder `EnrichmentStatus` union in `types`.
+  import type { EnrichmentStatus } from "../../api";
   import { outerWorkScopeStore } from "../../stores/outerWorkScope.svelte";
   import { chatSeedStore } from "../../stores/chatSeed.svelte";
   import type {
@@ -173,36 +175,121 @@
   }
 
   // ── Explore: make-explorable enrich flow ──────────────────────────
+  // Enrichment runs IN-PROCESS in the daemon (tiered: RAPTOR + entity graph
+  // + motifs) — no `sovereign-cli` subprocess (it isn't bundled with the
+  // desktop and is redundant with the daemon's loaded models). We trigger it
+  // via `lcEnrichNow` and poll `enrichmentStatus` for phase + fraction,
+  // flipping explorable when the atlas lands.
   let enrichError = $state<string | null>(null);
   let enriching = $state(false);
-  // The live build job for this corpus, if one is streaming. Drives the
-  // shared progress stage and the false→true explorable flip.
-  let enrichJob = $derived(enrichProgressStore.byCorpus(notebook.id)[0] ?? null);
+  let enrichStatus = $state<EnrichmentStatus | null>(null);
+  let enrichPollHandle: ReturnType<typeof setInterval> | null = null;
+
+  function enrichPhaseLabel(phase?: string): string {
+    switch (phase) {
+      case "starting":
+        return "Starting…";
+      case "scanning":
+        return "Scanning documents";
+      case "entity_extraction":
+        return "Finding people, places, and ideas";
+      case "raptor_leaves":
+        return "Summarizing sections";
+      case "raptor_tree":
+        return "Building the summary tree";
+      case "motif_extraction":
+        return "Finding recurring themes";
+      case "atom_extraction":
+        return "Extracting claims";
+      case "persisting":
+        return "Saving the map";
+      default:
+        return "Building…";
+    }
+  }
+
+  function stopEnrichPoll() {
+    if (enrichPollHandle) {
+      clearInterval(enrichPollHandle);
+      enrichPollHandle = null;
+    }
+  }
+
+  async function pollEnrichOnce() {
+    let s: EnrichmentStatus;
+    try {
+      s = await enrichmentStatus(notebook.id);
+    } catch {
+      return; // transient daemon hiccup — keep polling
+    }
+    enrichStatus = s;
+    const phase = s.state?.phase;
+    if (phase === "complete") {
+      stopEnrichPoll();
+      enriching = false;
+      explorable = true;
+      onChanged?.();
+    } else if (phase === "failed") {
+      stopEnrichPoll();
+      enriching = false;
+      enrichError = s.state?.error ?? "Enrichment failed.";
+    } else if (s.is_stalled) {
+      stopEnrichPoll();
+      enriching = false;
+      enrichError = "Enrichment stalled — no progress. Try again.";
+    }
+  }
+
+  function startEnrichPoll() {
+    stopEnrichPoll();
+    enrichPollHandle = setInterval(() => void pollEnrichOnce(), 2000);
+    void pollEnrichOnce();
+  }
 
   async function makeExplorable() {
     enrichError = null;
     enriching = true;
+    enrichStatus = null;
     try {
-      // Scaffold the atlas config from the installed index, then build.
-      // `recipe_enrich_init_from_corpus` is idempotent (`--force`).
-      await recipeEnrichInitFromCorpus(notebook.id);
-      const handle = await enrichBuildAsync(notebook.id, null, null);
-      await enrichProgressStore.track(handle);
+      await lcEnrichNow(notebook.id);
+      startEnrichPoll();
     } catch (e) {
       enrichError = e instanceof Error ? e.message : String(e);
       enriching = false;
     }
   }
 
-  function onEnrichTerminal(
-    kind: "complete" | "aborted" | "spawn_failed" | "cancelled",
-  ) {
-    enriching = false;
-    if (kind === "complete") {
-      explorable = true;
-      onChanged?.();
-    }
-  }
+  // Reflect an already-running build (a vault auto-enriching after ingest, or
+  // a build still going from a prior session) without needing a click. The
+  // component is re-keyed per notebook, so a one-shot probe on mount is
+  // enough; it attaches the poll only when a non-terminal build is in flight.
+  $effect(() => {
+    if (explorable) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await enrichmentStatus(notebook.id);
+        if (cancelled) return;
+        const phase = s.state?.phase;
+        if (
+          s.state &&
+          phase !== "complete" &&
+          phase !== "failed" &&
+          !s.is_stalled
+        ) {
+          enriching = true;
+          enrichStatus = s;
+          startEnrichPoll();
+        }
+      } catch {
+        // No status file yet → leave the "No map yet" CTA in place.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopEnrichPoll();
+    };
+  });
 
   // ── Sources: hydrate the local-corpus config for path + sync ──────
   let localConfig = $state<LocalCorpusConfig | null>(null);
@@ -407,7 +494,8 @@
         <div class="explore-surface">
           <AtlasSurface startingCorpusId={notebook.id} onAskAbout={handleAskAbout} />
         </div>
-      {:else if enrichJob}
+      {:else if enriching}
+        {@const frac = enrichStatus?.fraction_complete ?? 0}
         <div class="pad">
           <h2>Building the map…</h2>
           <p class="lede">
@@ -415,7 +503,23 @@
             connections. You can keep using the rest of the app — this runs
             in the background.
           </p>
-          <EnrichmentStage job={enrichJob} onTerminal={onEnrichTerminal} />
+          <div class="enrich-progress">
+            <div class="enrich-phase">
+              {enrichPhaseLabel(enrichStatus?.state?.phase)}
+              {#if frac > 0}
+                <span class="enrich-pct">{Math.round(frac * 100)}%</span>
+              {/if}
+            </div>
+            <div class="enrich-bar">
+              <div
+                class="enrich-fill"
+                style:width={`${Math.max(frac * 100, 2)}%`}
+              ></div>
+            </div>
+            {#if enrichStatus?.state?.message}
+              <p class="enrich-msg">{enrichStatus.state.message}</p>
+            {/if}
+          </div>
         </div>
       {:else}
         <div class="pad empty">
@@ -846,4 +950,40 @@
     cursor: pointer;
   }
   .error { color: var(--error); font-size: 0.84rem; margin-top: 12px; }
+
+  .enrich-progress {
+    margin-top: 20px;
+    max-width: 520px;
+  }
+  .enrich-phase {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .enrich-pct {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .enrich-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .enrich-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+  .enrich-msg {
+    margin: 8px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
 </style>

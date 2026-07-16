@@ -66,6 +66,32 @@ async function ensureListening(): Promise<void> {
   await _listenerStarting;
 }
 
+/** Seconds remaining for the current phase, from backend throughput.
+ *  `null` when we can't honestly estimate (no live rate, or the total
+ *  isn't known yet) — callers render "—" / indeterminate rather than a
+ *  fabricated number. Pure so it's unit-tested in isolation. */
+export function etaSecondsFor(p: CorpusProgressPayload | undefined): number | null {
+  if (!p) return null;
+  const rate = p.chunks_per_sec ?? 0;
+  const total = p.chunks_total ?? 0;
+  if (rate <= 0 || total <= 0) return null;
+  const remaining = total - p.chunks_processed;
+  if (remaining <= 0) return 0;
+  return remaining / rate;
+}
+
+/** Compact, honestly-approximate ETA string ("~4 min", "~45s", "~1.5 h").
+ *  `null` seconds → "—". Always prefixed with "~": this is an estimate. */
+export function formatEta(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds <= 0) return "almost done";
+  if (seconds < 90) return `~${Math.max(1, Math.round(seconds))}s`;
+  const mins = seconds / 60;
+  if (mins < 90) return `~${Math.round(mins)} min`;
+  const hours = mins / 60;
+  return `~${hours.toFixed(hours < 10 ? 1 : 0)} h`;
+}
+
 export const corpusProgressStore = {
   /** Reactive record: corpus_id → latest progress payload. Readers
    *  in .svelte components rerender on any write. */

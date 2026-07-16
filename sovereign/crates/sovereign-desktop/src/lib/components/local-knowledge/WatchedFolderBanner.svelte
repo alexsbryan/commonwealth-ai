@@ -1,6 +1,10 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  import { lcWatchConfirmDeletion, lcWatchResume } from "../../api";
+  import {
+    lcWatchConfirmDeletion,
+    lcWatchRemove,
+    lcWatchResume,
+  } from "../../api";
   import type { WatchedFolderListEntry } from "../../types";
 
   interface Props {
@@ -40,6 +44,53 @@
     inflight = null;
   }
 
+  // Full removal for a wedged watched folder: deregisters it from the sweep
+  // scheduler AND wipes the (possibly incomplete) index — the escape hatch
+  // for the "initial ingest never finished" error, whose own text tells the
+  // user to remove + re-add but which the banner previously gave no way to
+  // do. `lcWatchRemove` → DELETE /internal/corpus/watch/{id} is idempotent
+  // and tolerates a missing `_corpus_meta.json`, so it always clears.
+  async function remove(id: string) {
+    if (
+      !window.confirm(
+        "Remove this watched folder? Its index is deleted and sweeping " +
+          "stops. Your original files are untouched — you can re-add it to " +
+          "start over.",
+      )
+    )
+      return;
+    inflight = id;
+    actionError = null;
+    try {
+      await lcWatchRemove(id);
+      await onChanged();
+    } catch (e) {
+      actionError = String(e);
+    }
+    inflight = null;
+  }
+
+  // The raw errored `message` is a developer-facing diagnostic that can run
+  // several sentences (path + cause + remediation) — rendered verbatim it
+  // overflowed the banner. Show a bounded one-line headline; the full text
+  // stays available via the row's `title` tooltip (see the template).
+  function errorHeadline(message: string): string {
+    const cleaned = message.replace(/^watched_folder:\s*/, "").trim();
+    // Our worker errors read "<what> at <path> — <cause>. <remediation>".
+    // The user-meaningful part is the <cause> after the em-dash; prefer it so
+    // the headline drops the path dump. The remediation clause is now
+    // embodied by the Remove button, so we cut at the first sentence.
+    const afterDash = cleaned.includes(" — ")
+      ? cleaned.slice(cleaned.indexOf(" — ") + 3)
+      : cleaned;
+    const firstSentence = afterDash.split(". ")[0].trim();
+    return firstSentence.length > 140
+      ? `${firstSentence.slice(0, 139)}…`
+      : firstSentence;
+  }
+
+  // Concise, bounded reason line for the row. Errored rows also expose the
+  // full message via `fullDetail` (tooltip).
   function summary(entry: WatchedFolderListEntry): string {
     const s = entry.status;
     switch (s.kind) {
@@ -53,10 +104,15 @@
         return rule;
       }
       case "errored":
-        return `Last sweep errored: ${s.message}`;
+        return `Last sweep errored: ${errorHeadline(s.message)}`;
       default:
         return "Needs attention";
     }
+  }
+
+  // Full (untrimmed) detail for the tooltip; empty for non-errored states.
+  function fullDetail(entry: WatchedFolderListEntry): string {
+    return entry.status.kind === "errored" ? entry.status.message : "";
   }
 </script>
 
@@ -76,7 +132,7 @@
         <li class="item">
           <div class="info">
             <span class="name">{entry.display_name}</span>
-            <span class="reason">{summary(entry)}</span>
+            <span class="reason" title={fullDetail(entry)}>{summary(entry)}</span>
           </div>
           <div class="actions">
             {#if entry.status.kind === "paused_awaiting_confirmation"}
@@ -92,8 +148,17 @@
                 class="ghost"
                 onclick={() => resume(entry.corpus_id)}
                 disabled={inflight === entry.corpus_id}
+                title="Try the sweep again on the next tick. Won't help if the initial ingest never completed — use Remove to start over."
               >
-                Retry on next sweep
+                Retry
+              </button>
+              <button
+                class="ghost danger"
+                onclick={() => remove(entry.corpus_id)}
+                disabled={inflight === entry.corpus_id}
+                title="Stop watching and delete this incomplete index. Your files are untouched."
+              >
+                Remove
               </button>
             {/if}
           </div>
@@ -165,6 +230,14 @@
   .reason {
     font-size: var(--lk-size-meta);
     color: var(--lk-ink-soft);
+    /* Bound a long errored diagnostic to two lines so it can never
+       overflow the banner; the full text lives in the `title` tooltip. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
   }
   .actions {
     display: flex;
@@ -191,6 +264,8 @@
     font-size: var(--lk-size-meta);
   }
   .ghost:hover { border-color: var(--lk-warn); }
+  .ghost.danger { color: var(--lk-err); }
+  .ghost.danger:hover:not(:disabled) { border-color: var(--lk-err); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .error {
     margin: 10px 0 0;
