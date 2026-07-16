@@ -38,7 +38,7 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 # Markdown AST for DESIGN.md structural parsing (design_signals.rs).
 # Matching the version corpus-engine previously declared for the
 # same parser.
-pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["simd"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
