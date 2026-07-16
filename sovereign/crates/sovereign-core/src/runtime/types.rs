@@ -195,6 +195,22 @@ pub(crate) struct KnowledgeQueryPlan {
     pub(crate) lessons: TurnLessons,
 }
 
+/// Retrieve-only projection of a [`KnowledgeQueryPlan`] — the evidence
+/// pool the production KnowledgeQuery pipeline assembled for a query,
+/// without a synthesis pass. Returned by
+/// [`super::Runtime::retrieve_evidence`], which the bench parity lane
+/// drives so the measured retrieval surface and the product surface are
+/// the same code path (RETRIEVAL_REDESIGN.md §7.1).
+pub struct EvidenceRetrieval {
+    /// The merged, pipeline-composed evidence pool (post truncate tail).
+    pub chunks: Vec<corpus_engine::ScoredChunk>,
+    /// Wall time of the retrieval pipeline run, embed included.
+    pub search_ms: u64,
+    /// `"empty" | "focused" | "synthesis" | "routed"` — the plan's
+    /// result-quality label (same value message metadata carries).
+    pub result_quality: &'static str,
+}
+
 /// Streaming handle returned by [`super::Runtime::handle_message_stream`].
 ///
 /// Holds the assistant message id (assigned up-front so callers can correlate

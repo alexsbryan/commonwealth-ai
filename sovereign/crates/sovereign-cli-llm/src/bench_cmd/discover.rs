@@ -162,8 +162,16 @@ fn classify(path: &Path, group: &str) -> Option<DiscoveredBench> {
 
     // ── Retrieval question bank ─────────────────────────────────
     //
-    // Distinguishing shape: `[bank]` table + `[[questions]]` array.
+    // Distinguishing shape: `[bank]` table + `[[questions]]` array. The
+    // `[[questions]]` check is load-bearing: a `[bank]` + `[[threads]]`
+    // bank (wikipedia_learn/threads.toml) belongs to the multi-turn
+    // runner (`eval run --threads`, its own ci-bench lane) — classified
+    // here it gets fed to the questions parser, which fails with
+    // "missing field `questions`" and reports the bench as stale.
     if let Some(bank) = val.get("bank").and_then(|v| v.as_table()) {
+        if val.get("questions").and_then(|v| v.as_array()).is_none() {
+            return None;
+        }
         let corpus = bank.get("corpus").and_then(|v| v.as_str())?;
         let (corpus_id, corpus_id_source) = if corpus.trim().is_empty() {
             (id.clone(), CorpusIdSource::InferredFromFilename)

@@ -42,6 +42,90 @@ fn cosine_distance_from_fixed_list(
     let sim = (dot / denom).clamp(-1.0, 1.0);
     Some(1.0 - sim)
 }
+/// Unit-normalized embedding for one row of a `FixedSizeListArray`.
+/// `None` on null rows / downcast failure / zero norm — callers treat a
+/// missing embedding as "row not eligible for coverage selection".
+fn embedding_from_fixed_list(list: &FixedSizeListArray, row: usize) -> Option<Vec<f32>> {
+    if list.is_null(row) {
+        return None;
+    }
+    let value = list.value(row);
+    let arr = value.as_any().downcast_ref::<Float32Array>()?;
+    let mut v: Vec<f32> = arr.values().to_vec();
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm <= 0.0 || !norm.is_finite() {
+        return None;
+    }
+    for x in &mut v {
+        *x /= norm;
+    }
+    Some(v)
+}
+
+/// Greedy facility-location selection: pick `k` of `n` candidates
+/// maximizing `Σ_c rel[c] · max_{s∈S} sim(c, s)` — every candidate in the
+/// pool wants a nearby selected representative, weighted by its own
+/// relevance. Redundant near-duplicates (same article/section) add almost
+/// no marginal coverage after the first is picked, so the budget spreads
+/// across distinct regions of the pool instead of stacking one article.
+/// This is the set-composition objective the per-chunk heuristics
+/// (noise floor / per-article caps) approximated by side effect — see
+/// sovereign/docs/RETRIEVAL_REDESIGN.md §3-4 and GeoRAG
+/// (arXiv:2606.29328) for the measured basis. (1−1/e) greedy guarantee;
+/// cost k·n² ≤ 30·200² — sub-millisecond-to-few-ms, no model calls.
+///
+/// `embs` must be unit-normalized. Returns selected indices in
+/// descending-`rel` order so downstream score-ordering assumptions hold.
+fn facility_location_select(embs: &[Vec<f32>], rel: &[f32], k: usize) -> Vec<usize> {
+    let n = embs.len();
+    if n == 0 || k == 0 {
+        return Vec::new();
+    }
+    let dot = |a: &[f32], b: &[f32]| -> f32 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+    let mut sim = vec![0f32; n * n];
+    for i in 0..n {
+        for j in i..n {
+            let d = dot(&embs[i], &embs[j]).max(0.0);
+            sim[i * n + j] = d;
+            sim[j * n + i] = d;
+        }
+    }
+    let mut covered = vec![0f32; n];
+    let mut in_set = vec![false; n];
+    let mut selected = Vec::with_capacity(k.min(n));
+    for _ in 0..k.min(n) {
+        let mut best: Option<usize> = None;
+        let mut best_gain = f32::NEG_INFINITY;
+        for s in 0..n {
+            if in_set[s] {
+                continue;
+            }
+            let mut gain = 0f32;
+            for c in 0..n {
+                let sv = sim[c * n + s];
+                if sv > covered[c] {
+                    gain += rel[c] * (sv - covered[c]);
+                }
+            }
+            if gain > best_gain {
+                best_gain = gain;
+                best = Some(s);
+            }
+        }
+        let Some(s) = best else { break };
+        in_set[s] = true;
+        selected.push(s);
+        for c in 0..n {
+            let sv = sim[c * n + s];
+            if sv > covered[c] {
+                covered[c] = sv;
+            }
+        }
+    }
+    selected.sort_by(|a, b| rel[*b].partial_cmp(&rel[*a]).unwrap_or(std::cmp::Ordering::Equal));
+    selected
+}
+
 use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -112,6 +196,56 @@ impl CorpusIndex {
     /// genuine non-signal: empty query, no vector path (no IVF index and the
     /// table is above the flat-scan threshold), or no scoreable rows — callers
     /// should treat `None` as fail-OPEN (keep the corpus).
+    /// ANN query parameters for every IVF-PQ search this index runs.
+    ///
+    /// `refine_factor` is load-bearing: IVF-PQ scores candidates on
+    /// quantized codes, and at 1024d/64-subvector the quantization error
+    /// alone costs ~35-40% of the true top-30 (measured 2026-07-16 on the
+    /// wikipedia 1.9M-chunk and sep 188k-chunk indexes: recall@30 vs a
+    /// near-exact reference was 0.59/0.66 without refinement, 0.98 with
+    /// refine_factor=30 at +17-26ms). Refinement re-scores the PQ
+    /// shortlist (`limit × refine_factor` rows) against exact vectors.
+    /// Env overrides exist for ablation sweeps, not for production tuning.
+    fn ann_params() -> (u32, Option<u32>) {
+        static PARAMS: std::sync::OnceLock<(u32, Option<u32>)> = std::sync::OnceLock::new();
+        *PARAMS.get_or_init(|| {
+            let nprobes = std::env::var("SOVEREIGN_ANN_NPROBES")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50);
+            let refine = match std::env::var("SOVEREIGN_ANN_REFINE_FACTOR") {
+                Ok(s) if s == "0" => None, // explicit opt-out for A/B
+                Ok(s) => s.parse().ok().or(Some(30)),
+                Err(_) => Some(30),
+            };
+            (nprobes, refine)
+        })
+    }
+
+    /// Coverage-selection knob (RETRIEVAL_REDESIGN.md S1, experimental).
+    /// `SOVEREIGN_COVERAGE_SELECT=1` turns it on: `search()` overfetches
+    /// `limit × factor` (capped 200), then greedily composes the final
+    /// `limit` by facility-location coverage instead of top-k truncation.
+    /// `SOVEREIGN_COVERAGE_POOL_FACTOR` (default 4) tunes the overfetch.
+    /// Returns `None` when off (byte-identical baseline behavior).
+    fn coverage_params() -> Option<usize> {
+        static PARAMS: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+        *PARAMS.get_or_init(|| {
+            let on = std::env::var("SOVEREIGN_COVERAGE_SELECT")
+                .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            if !on {
+                return None;
+            }
+            let factor = std::env::var("SOVEREIGN_COVERAGE_POOL_FACTOR")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .filter(|f| *f >= 2)
+                .unwrap_or(4);
+            Some(factor)
+        })
+    }
+
     pub async fn nearest_vector_distance(
         &self,
         query_embedding: &[f32],
@@ -129,12 +263,17 @@ impl CorpusIndex {
         if !(ivf_built || row_count < FLAT_SCAN_THRESHOLD) {
             return Ok(None); // no vector path available for this corpus
         }
-        let batches = self
+        let (nprobes, refine) = Self::ann_params();
+        let mut q = self
             .table
             .query()
             .nearest_to(query_embedding.to_vec())
             .map_err(|e| Error::Database(format!("nearest_vector_distance query: {e}")))?
-            .nprobes(50)
+            .nprobes(nprobes as usize);
+        if let Some(rf) = refine {
+            q = q.refine_factor(rf);
+        }
+        let batches = q
             .limit(k.max(1))
             .execute()
             .await
@@ -174,8 +313,10 @@ impl CorpusIndex {
         // unconditionally — they're too small to warrant an IVF-PQ index and a flat
         // scan completes in milliseconds.
         const FLAT_SCAN_THRESHOLD: usize = 10_000;
+        let t_meta = std::time::Instant::now();
         let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
         let indices = self.table.list_indices().await.unwrap_or_default();
+        let meta_ms = t_meta.elapsed().as_millis() as u64;
         let ivf_built = indices
             .iter()
             .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
@@ -186,6 +327,14 @@ impl CorpusIndex {
                 .iter()
                 .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
         let do_fts = fts_built;
+
+        // Coverage selection (S1): overfetch a wider pool, compose the
+        // final `limit` by facility-location coverage instead of top-k
+        // truncation. Vector leg required — selection runs on embeddings.
+        let coverage_factor = Self::coverage_params().filter(|_| do_vector);
+        let fetch_limit = coverage_factor
+            .map(|f| (limit * f).clamp(limit, 200))
+            .unwrap_or(limit);
 
         tracing::info!(
             corpus = %self.corpus_id,
@@ -212,15 +361,20 @@ impl CorpusIndex {
 
         let t_search = std::time::Instant::now();
 
+        let (nprobes, refine) = Self::ann_params();
         let results = if do_vector && do_fts {
             // Hybrid: vector + FTS combined via reranking.
-            self.table
+            let mut q = self
+                .table
                 .query()
                 .nearest_to(query_embedding.to_vec())
                 .map_err(|e| Error::Database(format!("vector query: {e}")))?
                 .full_text_search(FullTextSearchQuery::new(sanitized))
-                .nprobes(50)
-                .limit(limit)
+                .nprobes(nprobes as usize);
+            if let Some(rf) = refine {
+                q = q.refine_factor(rf);
+            }
+            q.limit(fetch_limit)
                 .execute()
                 .await
                 .map_err(|e| Error::Database(format!("hybrid search: {e}")))?
@@ -229,12 +383,16 @@ impl CorpusIndex {
                 .map_err(|e| Error::Database(format!("collect: {e}")))?
         } else if do_vector {
             // Vector-only search.
-            self.table
+            let mut q = self
+                .table
                 .query()
                 .nearest_to(query_embedding.to_vec())
                 .map_err(|e| Error::Database(format!("vector query: {e}")))?
-                .nprobes(50)
-                .limit(limit)
+                .nprobes(nprobes as usize);
+            if let Some(rf) = refine {
+                q = q.refine_factor(rf);
+            }
+            q.limit(fetch_limit)
                 .execute()
                 .await
                 .map_err(|e| Error::Database(format!("vector search: {e}")))?
@@ -267,8 +425,14 @@ impl CorpusIndex {
             tracing::trace!(columns = ?col_names, "CorpusIndex::search result schema");
         }
 
+        let query_ms = t_search.elapsed().as_millis() as u64;
+        let t_convert = std::time::Instant::now();
+
         // Convert Arrow RecordBatches to ScoredChunks.
         let mut scored = Vec::new();
+        // Push-order-aligned unit embeddings, populated only when
+        // coverage selection is active (they feed the selector below).
+        let mut pool_embs: Vec<Option<Vec<f32>>> = Vec::new();
         for batch in &results {
             let contents = batch
                 .column_by_name("content")
@@ -384,6 +548,9 @@ impl CorpusIndex {
                 } else {
                     None
                 };
+                if coverage_factor.is_some() {
+                    pool_embs.push(embedding_col.and_then(|fl| embedding_from_fixed_list(fl, i)));
+                }
 
                 scored.push(ScoredChunk {
                     content,
@@ -399,18 +566,54 @@ impl CorpusIndex {
             }
         }
 
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        let convert_ms = t_convert.elapsed().as_millis() as u64;
+
+        // Sort by score desc; with coverage selection active the
+        // embeddings ride along so alignment survives the reorder.
+        if coverage_factor.is_some() {
+            let mut order: Vec<usize> = (0..scored.len()).collect();
+            order.sort_by(|a, b| {
+                scored[*b]
+                    .score
+                    .partial_cmp(&scored[*a].score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let mut s = Vec::with_capacity(scored.len());
+            let mut e = Vec::with_capacity(pool_embs.len());
+            for i in order {
+                s.push(scored[i].clone());
+                e.push(pool_embs[i].clone());
+            }
+            scored = s;
+            pool_embs = e;
+        } else {
+            scored.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
         // Apply score threshold only in vector-only mode, where score = 1/(1+cosine_distance)
         // and 0.45 corresponds to cosine_distance ≈ 1.22 (weak semantic match).
         // In hybrid mode, scores are RRF (_relevance_score ≈ 0.016) — incompatible scale,
         // so we let all results through and trust the model to judge relevance.
         let before_threshold = scored.len();
         if do_vector && !do_fts {
-            scored.retain(|c| c.score >= 0.45);
+            let keep: Vec<bool> = scored.iter().map(|c| c.score >= 0.45).collect();
+            let mut i = 0;
+            scored.retain(|_| {
+                let k = keep[i];
+                i += 1;
+                k
+            });
+            if coverage_factor.is_some() {
+                let mut i = 0;
+                pool_embs.retain(|_| {
+                    let k = keep[i];
+                    i += 1;
+                    k
+                });
+            }
         }
         tracing::debug!(
             before = before_threshold,
@@ -419,10 +622,63 @@ impl CorpusIndex {
             threshold_applied = do_vector && !do_fts,
             "CorpusIndex::search: threshold check"
         );
-        scored.truncate(limit);
-        tracing::debug!(
+
+        // Coverage selection (S1): compose the final set by greedy
+        // facility-location over the pool instead of top-k truncation.
+        // Falls back to plain truncation when any pool row lacks an
+        // embedding (degenerate corpora) so the flag can never lose rows.
+        let mut select_ms = 0u64;
+        let distinct_titles = |chunks: &[ScoredChunk]| -> usize {
+            chunks
+                .iter()
+                .filter_map(|c| c.title.as_deref())
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        };
+        if coverage_factor.is_some() && scored.len() > limit {
+            if pool_embs.iter().all(|e| e.is_some()) {
+                let t_select = std::time::Instant::now();
+                let embs: Vec<Vec<f32>> = pool_embs.iter().map(|e| e.clone().unwrap()).collect();
+                let (lo, hi) = scored
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(lo, hi), c| {
+                        (lo.min(c.score), hi.max(c.score))
+                    });
+                let span = (hi - lo).max(f32::EPSILON);
+                let rel: Vec<f32> = scored.iter().map(|c| (c.score - lo) / span).collect();
+                let selected = facility_location_select(&embs, &rel, limit);
+                let titles_pool = distinct_titles(&scored);
+                let picked: Vec<ScoredChunk> =
+                    selected.iter().map(|&i| scored[i].clone()).collect();
+                select_ms = t_select.elapsed().as_millis() as u64;
+                tracing::info!(
+                    corpus = %self.corpus_id,
+                    pool = scored.len(),
+                    out = picked.len(),
+                    titles_pool,
+                    titles_out = distinct_titles(&picked),
+                    select_ms,
+                    "CorpusIndex::search coverage_select"
+                );
+                scored = picked;
+            } else {
+                tracing::warn!(
+                    corpus = %self.corpus_id,
+                    "coverage_select: pool rows missing embeddings — falling back to top-k"
+                );
+                scored.truncate(limit);
+            }
+        } else {
+            scored.truncate(limit);
+        }
+        tracing::info!(
+            corpus = %self.corpus_id,
             results = scored.len(),
-            elapsed_ms = t_search.elapsed().as_millis() as u64,
+            meta_ms,
+            query_ms,
+            convert_ms,
+            select_ms,
+            total_ms = t_search.elapsed().as_millis() as u64 + meta_ms,
             "CorpusIndex::search complete"
         );
         Ok(scored)

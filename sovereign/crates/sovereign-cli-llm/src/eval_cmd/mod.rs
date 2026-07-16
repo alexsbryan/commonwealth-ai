@@ -78,7 +78,8 @@ const RUN_HELP: Help = Help {
             ("--bank <path>",  "Path to the bank TOML (e.g. sovereign/bench/wikipedia/questions.toml)."),
             ("--synth",        "Drive each question through the full chat pipeline (routing → retrieval → synthesis). Slower, but exercises the model + routing layers."),
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
-            ("--isolate",      "Per-corpus isolation (with --synth). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
+            ("--isolate",      "Per-corpus isolation (with --synth or --prod-pipeline). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
+            ("--prod-pipeline", "Bench-prod parity mode. Each question drives the PRODUCTION KnowledgeQuery retrieval pipeline in-process (context build → kq_pipeline() 19 steps → merge/truncate) via Runtime::retrieve_evidence and scores the returned evidence pool — no synthesis pass. Measures the pipeline chat surfaces actually run, unlike the default raw-index mode. Deterministic (intent pinned to KnowledgeQuery)."),
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
             ("--sample-questions <N>", "Lean-QA cap (with --synth): down-sample the bank to at most N questions, round-robin across category so every archetype stays represented. Trades exhaustiveness for wall time; the sampled run is advisory (not baseline-comparable). No-op in retrieval/routing modes."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
@@ -247,6 +248,11 @@ struct RunArgs {
     /// Increment A's ANN over a co-located Lance vector column. The gate runs
     /// both arms and diffs essay/source/fact scores.
     atlas_seed: atlas_ann::SeedMode,
+    /// Bench-prod parity mode: drive the production KnowledgeQuery
+    /// retrieval pipeline in-process per question and score its evidence
+    /// pool (no synthesis). See `runner::run_bank_prod` and
+    /// RETRIEVAL_REDESIGN.md §7.1.
+    prod_pipeline: bool,
 }
 
 impl Default for RunArgs {
@@ -275,6 +281,7 @@ impl Default for RunArgs {
             sample_questions: None,
             max_turns: None,
             atlas_seed: atlas_ann::SeedMode::Cosine,
+            prod_pipeline: false,
         }
     }
 }
@@ -408,6 +415,9 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--isolate" => {
                 a.isolate = true;
+            }
+            "--prod-pipeline" => {
+                a.prod_pipeline = true;
             }
             "--no-judge" => {
                 a.no_judge = true;
@@ -776,6 +786,24 @@ async fn cmd_run(args: &[String]) -> i32 {
             );
         }
         match runner::run_bank_synth(&session, &bank, !a.no_judge, a.isolate).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        }
+    } else if a.prod_pipeline {
+        eprintln!(
+            "prod-pipeline mode — driving the production KnowledgeQuery retrieval \
+             pipeline per question (no synthesis)."
+        );
+        if !atlas_ctxs.is_empty() {
+            eprintln!(
+                "note: --with-atlas is ignored under --prod-pipeline (the runtime \
+                 pipeline owns its own atlas grounding)."
+            );
+        }
+        match runner::run_bank_prod(&session, &bank, a.limit, a.isolate).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");

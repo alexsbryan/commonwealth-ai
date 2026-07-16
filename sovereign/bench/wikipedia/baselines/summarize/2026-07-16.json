@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-summarize-pilot-v1",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784182785,
+  "started_at_unix": 1784229732,
   "results": [
     {
       "question_id": "summary_einstein",
@@ -12,16 +12,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Einstein's_objections_to_quantum_mechanics",
-          "score": 0.016666668,
-          "snippet": "Albert Einstein  Einstein played a major role in developing quantum theory, beginning with his 1905 paper on the photoelectric effect. However, he became displeased with modern quantum mechanics as it had evolved after 1925, despite its acceptance by other physicists. He was skeptical that the randomness of quantum mechanics was fundamental rather than the result of determinism, stating that God \"is not playing at dice\". Until the end of his life, he continued to maintain that quantum mechanics was incomplete."
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bohr_versus_Einstein",
+          "score": 0.02965368,
+          "snippet": "Albert Einstein  The Bohr–Einstein debates were a series of public disputes about quantum mechanics between Einstein and Niels Bohr, who were two of its founders. Their debates are remembered because of their importance to the philosophy of science. Their debates would influence later interpretations of quantum mechanics."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of general relativity",
-          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Developing_general_relativity",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Einstein's_objections_to_quantum_mechanics",
           "score": 0.016666668,
-          "snippet": "History of general relativity  about nature\"; fellow laureate Paul Dirac was quoted saying it was \"probably the greatest scientific discovery ever made\".  There have been claims that scrutiny of the specific photographs taken on the Eddington expedition showed the experimental uncertainty to be comparable to the magnitude of the effect Eddington claimed to have demonstrated, and that a 1962 British expedition concluded that the method was inherently unreliable. The deflection of light during a solar eclipse was confirmed by later, more accurate observations. Some resented the newcomer's fame, …"
+          "snippet": "Albert Einstein  Einstein played a major role in developing quantum theory, beginning with his 1905 paper on the photoelectric effect. However, he became displeased with modern quantum mechanics as it had evolved after 1925, despite its acceptance by other physicists. He was skeptical that the randomness of quantum mechanics was fundamental rather than the result of determinism, stating that God \"is not playing at dice\". Until the end of his life, he continued to maintain that quantum mechanics was incomplete."
         },
         {
           "corpus_id": "wikipedia",
@@ -32,17 +32,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Isaac Newton",
-          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Fame",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
           "score": 0.016393442,
-          "snippet": "Isaac Newton  has existed such and so great an ornament of the human race! He was born on 25th December 1642, and died on 20th March 1726.  In 2005, a dual survey of both the public and of members of Britain's Royal Society (formerly headed by Newton) asking who had the greater effect on the history of science, Newton or Albert Einstein, both the Royal Society members and the public deemed Newton to have made the greater overall contributions. In 1999, an opinion poll of 100 of the day's leading physicists voted Einstein the \"greatest physicist ever,\" with Newton the runner-up, while a paralle…"
+          "snippet": "Albert Einstein  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis. These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field—and demonstrated that if the special theory is correct, mass and energy are equivalent to each other. In 1915, he proposed a general theory of rel…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Uncertainty principle",
-          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
+          "title": "History of general relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Developing_general_relativity",
           "score": 0.016129032,
-          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
+          "snippet": "History of general relativity  about nature\"; fellow laureate Paul Dirac was quoted saying it was \"probably the greatest scientific discovery ever made\".  There have been claims that scrutiny of the specific photographs taken on the Eddington expedition showed the experimental uncertainty to be comparable to the magnitude of the effect Eddington claimed to have demonstrated, and that a 1962 British expedition concluded that the method was inherently unreliable. The deflection of light during a solar eclipse was confirmed by later, more accurate observations. Some resented the newcomer's fame, …"
         },
         {
           "corpus_id": "wikipedia",
@@ -53,10 +53,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Other_investigations",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Fame",
           "score": 0.015873017,
-          "snippet": "Albert Einstein  Einstein conducted other investigations that were unsuccessful and abandoned. These pertain to force, superconductivity, and other research."
+          "snippet": "Isaac Newton  has existed such and so great an ornament of the human race! He was born on 25th December 1642, and died on 20th March 1726.  In 2005, a dual survey of both the public and of members of Britain's Royal Society (formerly headed by Newton) asking who had the greater effect on the history of science, Newton or Albert Einstein, both the Royal Society members and the public deemed Newton to have made the greater overall contributions. In 1999, an opinion poll of 100 of the day's leading physicists voted Einstein the \"greatest physicist ever,\" with Newton the runner-up, while a paralle…"
         },
         {
           "corpus_id": "wikipedia",
@@ -67,10 +67,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Ultraviolet catastrophe",
-          "url": "https://en.wikipedia.org/wiki/Ultraviolet_catastrophe#Solution",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
           "score": 0.015625,
-          "snippet": "Ultraviolet catastrophe  In 1900, Max Planck derived the correct form for the intensity spectral distribution function by making some strange (for the time) assumptions. In particular, Planck assumed that electromagnetic radiation can be emitted or absorbed only in discrete packets, called quanta, of energy:  where:  By applying this new energy to the partition function in statistical mechanics, Planck's assumptions led to the correct form of the spectral distribution functions:  where:  Albert Einstein (in 1905) solved the problem by postulating that Planck's quanta were real physical particl…"
+          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
         },
         {
           "corpus_id": "wikipedia",
@@ -81,10 +81,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Arthur Schopenhauer",
-          "url": "https://en.wikipedia.org/wiki/Arthur_Schopenhauer#Influence_and_legacy",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Other_investigations",
           "score": 0.015384615,
-          "snippet": "Arthur Schopenhauer  Other philosophers of the 19th century who cited his influence include Hans Vaihinger, Volkelt, Solovyov and Weininger.  Schopenhauer was well read by physicists, most notably Einstein, Schrödinger, Wolfgang Pauli, and Majorana. Einstein described Schopenhauer's thoughts as a \"continual consolation\" and called him a genius. In his Berlin study three figures hung on the wall: Faraday, Maxwell, Schopenhauer. Konrad Wachsmann recalled: \"He often sat with one of the well-worn Schopenhauer volumes, and as he sat there, he seemed so pleased, as if he were engaged with a serene a…"
+          "snippet": "Albert Einstein  Einstein conducted other investigations that were unsuccessful and abandoned. These pertain to force, superconductivity, and other research."
         },
         {
           "corpus_id": "wikipedia",
@@ -95,10 +95,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "University of Cambridge",
-          "url": "https://en.wikipedia.org/wiki/University_of_Cambridge#Mathematics_and_sciences",
+          "title": "Ultraviolet catastrophe",
+          "url": "https://en.wikipedia.org/wiki/Ultraviolet_catastrophe#Solution",
           "score": 0.015151516,
-          "snippet": "University of Cambridge  before his ordination to the Anglican ministry, received the Templeton Prize for his work reconciling science and religion.  Other significant university alumni in science include Henry Cavendish, who discovered hydrogen; Frank Whittle, co-inventor of the jet engine; William Thomson (Lord Kelvin), who formulated the original Laws of Thermodynamics; William Fox Talbot, who invented the camera, Alfred North Whitehead, Einstein's major opponent; Jagadish Chandra Bose, one of the fathers of radio science; Lord Rayleigh, who made extensive contributions to both theoretical …"
+          "snippet": "Ultraviolet catastrophe  In 1900, Max Planck derived the correct form for the intensity spectral distribution function by making some strange (for the time) assumptions. In particular, Planck assumed that electromagnetic radiation can be emitted or absorbed only in discrete packets, called quanta, of energy:  where:  By applying this new energy to the partition function in statistical mechanics, Planck's assumptions led to the correct form of the spectral distribution functions:  where:  Albert Einstein (in 1905) solved the problem by postulating that Planck's quanta were real physical particl…"
         },
         {
           "corpus_id": "wikipedia",
@@ -109,10 +109,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Arthur Eddington",
-          "url": "https://en.wikipedia.org/wiki/Arthur_Eddington#Astronomy",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Einstein–Podolsky–Rosen_paradox",
           "score": 0.014925373,
-          "snippet": "Arthur Eddington  James Jeans contributed the important suggestion that stellar matter would certainly be ionized, but that was the end of any collaboration between the pair, who became famous for their lively debates."
+          "snippet": "Albert Einstein  of hidden variables would require nonlocality, the EPR paradox \"is resolved in the way which Einstein would have liked least\".  Despite this, and although Einstein personally found the argument in the EPR paper overly complicated, that paper became among the most influential papers published in Physical Review. It is considered a centerpiece of the development of quantum information theory."
         },
         {
           "corpus_id": "wikipedia",
@@ -123,10 +123,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Planck's law",
-          "url": "https://en.wikipedia.org/wiki/Planck%27s_law#Subsequent_events",
+          "title": "David Hilbert",
+          "url": "https://en.wikipedia.org/wiki/David_Hilbert#Physics",
           "score": 0.014705882,
-          "snippet": "Planck's law  Einstein gave the energy content of such quanta in the form Rβν / N. Thus Einstein was contradicting the undulatory theory of light held by Planck. In 1910, criticizing a manuscript sent to him by Planck, knowing that Planck was a steady supporter of Einstein's theory of special relativity, Einstein wrote to Planck: \"To me it seems absurd to have energy continuously distributed in space without assuming an aether.\""
+          "snippet": "David Hilbert  the war started in 1914, he continued seminars and classes where the works of Albert Einstein and others were followed closely.  By 1907, Einstein had framed the fundamentals of the theory of gravity, but then struggled for nearly 8 years to put the theory into its final form. By early summer 1915, Hilbert's interest in physics had focused on general relativity, and he invited Einstein to Göttingen to deliver a week of lectures on the subject. Einstein received an enthusiastic reception at Göttingen. Over the summer, Einstein learned that Hilbert was also working on the field eq…"
         },
         {
           "corpus_id": "wikipedia",
@@ -137,17 +137,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Munich",
-          "url": "https://en.wikipedia.org/wiki/Munich",
-          "score": 0.014492754,
-          "snippet": "1982), businesswoman and entrepreneur Alice Halicka, painter Asger Hamerik, composer Werner Heisenberg, Nobel Prize-winning physicist Adolf Hitler, German politician and leader of the Nazi Party Brigitte Horney, actress (MÃ¼nchhausen) Muhammad Iqbal, Pakistan's poet, who received his PhD from Munich in 1907 Wassily Kandinsky (1866â1944), painter Erich KÃ¤stner, author Erich KÃ¤stner (camera designer), movie camera designer, chief designer at ARRI Blake R. Van Leer, United States Army officer, civil rights leader and president of Georgia Institute of Technology Orlande de Lassus, composer Fra…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Albert Einstein",
           "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
           "score": 0.014492754,
           "snippet": "Albert Einstein  In the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose, he laid the groundwork for Bose-Einstein statistics. For much of the last phase of his academic life, Einstein worked on two endeavors that proved ultimately unsuccessful. First, he advocated against quantum theory's introduction of fundamental randomness into science's picture of t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arthur Schopenhauer",
+          "url": "https://en.wikipedia.org/wiki/Arthur_Schopenhauer#Influence_and_legacy",
+          "score": 0.014492754,
+          "snippet": "Arthur Schopenhauer  Other philosophers of the 19th century who cited his influence include Hans Vaihinger, Volkelt, Solovyov and Weininger.  Schopenhauer was well read by physicists, most notably Einstein, Schrödinger, Wolfgang Pauli, and Majorana. Einstein described Schopenhauer's thoughts as a \"continual consolation\" and called him a genius. In his Berlin study three figures hung on the wall: Faraday, Maxwell, Schopenhauer. Konrad Wachsmann recalled: \"He often sat with one of the well-worn Schopenhauer volumes, and as he sat there, he seemed so pleased, as if he were engaged with a serene a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Quantum field theory",
+          "url": "https://en.wikipedia.org/wiki/Quantum_field_theory#Theoretical_background",
+          "score": 0.014285714,
+          "snippet": "Quantum field theory  from Max Planck, Louis de Broglie, Werner Heisenberg, Max Born, Erwin Schrödinger, Paul Dirac, and Wolfgang Pauli.  In the same year as his paper on the photoelectric effect, Einstein published his theory of special relativity, built on Maxwell's electromagnetism. New rules, called Lorentz transformations, were given for the way time and space coordinates of an event change under changes in the observer's velocity, and the distinction between time and space was blurred. It was proposed that all physical laws must be the same for observers at different velocities, i.e. tha…"
         },
         {
           "corpus_id": "wikipedia",
@@ -158,17 +165,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of physics",
-          "url": "https://en.wikipedia.org/wiki/History_of_physics#Unified_field_theories",
-          "score": 0.014285714,
-          "snippet": "History of physics  Einstein deemed that all fundamental interactions in nature can be explained in a single theory. Unified field theories were numerous attempts to \"merge\" several interactions. One of many formulations of such theories (as well as field theories in general) is a gauge theory, a generalization of the idea of symmetry. Eventually the Standard Model (see below) succeeded in unification of strong, weak, and electromagnetic interactions. All attempts to unify gravitation with something else failed."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Anti-war movement",
-          "url": "https://en.wikipedia.org/wiki/Anti-war_movement",
+          "title": "Alan Turing",
+          "url": "https://en.wikipedia.org/wiki/Alan_Turing#School",
           "score": 0.014084507,
-          "snippet": "eb/20230326032216/https://www.youtube.com/watch?v=9to64vR8RvQ|url-status=live}}  Albert Einstein, Bertrand Russell and eight other leading scientists and intellectuals signed the Russell-Einstein Manifesto issued 9 July 1955. The Mainau Declaration of 15 July 1955 was signed by 52 Nobel Prize laureates. The Dubrovnik-Philadelphia Statement of 1974/1976"
+          "snippet": "Alan Turing  to attend that he rode his bicycle unaccompanied 60 miles (97 km) from Southampton to Sherborne, stopping overnight at an inn.  Turing's natural inclination towards mathematics and science did not earn him respect from some of the teachers at Sherborne, whose definition of education placed more emphasis on the classics. His headmaster wrote to his parents: \"I hope he will not fall between two stools. If he is to stay at public school, he must aim at becoming educated. If he is to be solely a Scientific Specialist, he is wasting his time at a public school\". Despite this, Turing co…"
         },
         {
           "corpus_id": "wikipedia",
@@ -179,6 +179,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Wolfgang Pauli",
+          "url": "https://en.wikipedia.org/wiki/Wolfgang_Pauli#Personality_and_friendships",
+          "score": 0.013888889,
+          "snippet": "Wolfgang Pauli  The Pauli effect was named after his anecdotal bizarre ability to break experimental equipment simply by being in its vicinity. Pauli was aware of his reputation and was delighted whenever the Pauli effect manifested. These strange occurrences were in line with his controversial investigations into the legitimacy of parapsychology, particularly his collaboration with C. G. Jung on synchronicity. Max Born considered Pauli \"only comparable to Einstein himself... perhaps even greater\". Einstein declared Pauli his \"spiritual heir\".  Pauli was famously a perfectionist. This extended…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Paul Ehrenfest",
           "url": "https://en.wikipedia.org/wiki/Paul_Ehrenfest#Abstract",
           "score": 0.013888889,
@@ -186,17 +193,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Anti-war movement",
-          "url": "https://en.wikipedia.org/wiki/Anti-war_movement",
-          "score": 0.013888889,
-          "snippet": "|editor-first=Noah |location=Huntington Beach, California}}  Here is a list of notable anti-war scientists and intellectuals: Linus Pauling was awarded the Nobel Peace Prize for his peace activism (his second Nobel Prize). He circulated multiple petitions among scientists. Sigmund Freud and Albert Einstein had correspondences on violence, peace, and human nature. Bertrand Russell mostly was a prominent anti-war activist; he championed anti-imperialism. Occasionally, he advocated preventive nuclear war, before the opportunity provided by the atomic monopoly is gone, and \"welcomed with enthusias…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Classical unified field theories",
-          "url": "https://en.wikipedia.org/wiki/Classical_unified_field_theories",
+          "title": "University of Cambridge",
+          "url": "https://en.wikipedia.org/wiki/University_of_Cambridge#Mathematics_and_sciences",
           "score": 0.01369863,
-          "snippet": "Classical unified field theories  Since the 19th century, some physicists, notably Albert Einstein, have attempted to develop a single theoretical framework that can account for all the fundamental forces of nature – a unified field theory. Classical unified field theories are attempts to create a unified field theory based on classical physics. In particular, unification of gravitation and electromagnetism was actively pursued by several physicists and mathematicians in the years between the two World Wars. This work spurred the purely mathematical development of differential geometry. This a…"
+          "snippet": "University of Cambridge  before his ordination to the Anglican ministry, received the Templeton Prize for his work reconciling science and religion.  Other significant university alumni in science include Henry Cavendish, who discovered hydrogen; Frank Whittle, co-inventor of the jet engine; William Thomson (Lord Kelvin), who formulated the original Laws of Thermodynamics; William Fox Talbot, who invented the camera, Alfred North Whitehead, Einstein's major opponent; Jagadish Chandra Bose, one of the fathers of radio science; Lord Rayleigh, who made extensive contributions to both theoretical …"
         },
         {
           "corpus_id": "wikipedia",
@@ -207,10 +207,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "United Kingdom",
-          "url": "https://en.wikipedia.org/wiki/United_Kingdom",
+          "title": "Planck's law",
+          "url": "https://en.wikipedia.org/wiki/Planck%27s_law",
           "score": 0.013513514,
-          "snippet": "|archive-date=26 April 2009 |archive-url=https://web.archive.org/web/20090426141109/http://www.bgs.ac.uk/ |url-status=live}}  is the most intensive research cluster for science and technology in the world.]] England and Scotland were leading centres of the Scientific Revolution from the 17th century. The United Kingdom led the Industrial Revolution from the 18th century, and has continued to produce scientists and engineers credited with important advances. Major theorists from the 17th and 18th centuries include Isaac Newton, whose laws of motion and illumination of gravity have been seen as …"
+          "snippet": "Planck's law  While Planck originally regarded the hypothesis of dividing energy into increments as a mathematical artifice, introduced merely to get the correct answer, other physicists including Albert Einstein built on his work, and Planck's insight is now recognized to be of fundamental importance to quantum theory."
         },
         {
           "corpus_id": "wikipedia",
@@ -233,19 +233,19 @@
           "photoelectric effect and the quantum/photon",
           "Brownian motion",
           "Nobel Prize in Physics",
-          "Bose-Einstein statistics"
+          "Bose-Einstein statistics",
+          "EPR paradox and debates with Niels Bohr over quantum mechanics"
         ],
         "missing": [
           "mass-energy equivalence E=mc^2",
-          "EPR paradox and debates with Niels Bohr over quantum mechanics",
           "fled Nazi Germany and emigrated to the United States",
           "pacifism, civil-rights advocacy, and the letter to Roosevelt"
         ],
         "total_expected": 10,
-        "ratio": 0.6
+        "ratio": 0.7
       },
-      "embed_ms": 43,
-      "search_ms": 3653,
+      "embed_ms": 41,
+      "search_ms": 3656,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -267,7 +267,7 @@
           "corpus_id": "wikipedia",
           "title": "War",
           "url": "https://en.wikipedia.org/wiki/War",
-          "score": 0.025326537,
+          "score": 0.024785802,
           "snippet": "n Revolution of 1917]]. 's Napoleon Square in the aftermath of World War II]] World War II was the most financially costly conflict in history; its belligerents cumulatively spent about a trillion U.S. dollars on the war effort (as adjusted to 1940 prices). The Great Depression of the 1930s ended as nations increased their production of war materials.  By the end of the war, 70% of European industrial infrastructure was destroyed. Property damage in the Soviet Union inflicted by the Axis invasion was estimated at a value of 679&nbsp;billion rubles. The combined damage consisted of complete or …"
         },
         {
@@ -422,7 +422,7 @@
           "title": "World War II",
           "url": "https://en.wikipedia.org/wiki/World_War_II",
           "score": 0.014084507,
-          "snippet": "Allied victory, Germany, Austria, Japan, and Korea were occupied, and German and Japanese leaders were tried for war crimes.  In December 1941, Japan attacked American and British territories in Asia and the Pacific, including Pearl Harbor in Hawaii, leading the United States to enter the war against the Axis. Japan conquered much of coastal China and Southeast Asia, but its advances in the Pacific were halted in June 1942 at the Battle of Midway. In early 1943, Axis forces were defeated in North Africa and at Stalingrad in the Soviet Union. An Allied invasion of Italy in July resulted in the …"
+          "snippet": "World War II  {{Infobox military conflict  | conflict = World War II  | image = From top to bottom, left to right: | date = 1 September 1939 – 2 September 1945 | place = Major theatres: | result = | combatants_header = Participants  | combatant1 = Allies  | combatant2 = Axis"
         },
         {
           "corpus_id": "wikipedia",
@@ -440,10 +440,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Russia",
-          "url": "https://en.wikipedia.org/wiki/Russia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
           "score": 0.013888889,
-          "snippet": "On 22 June 1941, Germany invaded the Soviet Union, opening the Eastern Front, the largest theatre of World War&nbsp;II.  Eventually, some 5 million Red Army troops were captured by the Nazis; the latter deliberately starved to death or otherwise killed 3.3&nbsp;million Soviet POWs, and a vast number of civilians, as the \"Hunger Plan\" sought to fulfil Generalplan Ost. Although the Wehrmacht had considerable early success, their attack was halted in the Battle of Moscow. Subsequently, the Germans were dealt major defeats first at the Battle of Stalingrad in the winter of 1942â1943, and then in…"
+          "snippet": "Allied victory, Germany, Austria, Japan, and Korea were occupied, and German and Japanese leaders were tried for war crimes.  In December 1941, Japan attacked American and British territories in Asia and the Pacific, including Pearl Harbor in Hawaii, leading the United States to enter the war against the Axis. Japan conquered much of coastal China and Southeast Asia, but its advances in the Pacific were halted in June 1942 at the Battle of Midway. In early 1943, Axis forces were defeated in North Africa and at Stalingrad in the Soviet Union. An Allied invasion of Italy in July resulted in the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II#Abstract",
+          "score": 0.01369863,
+          "snippet": "World War II or the Second World War (1 September 1939 – 2 September 1945) was a global conflict between two coalitions: the Allies and the Axis powers. Nearly all the world's countries —including all the great powers —participated, with many investing all available economic, industrial, and scientific capabilities in pursuit of total war, blurring the distinction between military and civilian resources. Tanks and aircraft played major roles, with the latter enabling the strategic bombing of population centres and delivery of the only two nuclear weapons ever used in war. World War II was the …"
         },
         {
           "corpus_id": "wikipedia",
@@ -454,17 +461,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "World War II",
-          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "title": "Russia",
+          "url": "https://en.wikipedia.org/wiki/Russia",
           "score": 0.013513514,
-          "snippet": "World War II  Japan soon conquered much of the western Pacific, but its advances were halted in 1942 after its defeat in the naval Battle of Midway; Germany and Italy were defeated in North Africa and at Stalingrad in the Soviet Union. Key setbacks in 1943—including German defeats on the Eastern Front, the Allied invasions of Sicily and the Italian mainland, and Allied offensives in the Pacific—cost the Axis powers their initiative and forced them into strategic retreat on all fronts. In 1944, the Western Allies invaded German-occupied France at Normandy, while the Soviet Union regained its te…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
-          "score": 0.013513514,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  The Hague Conventions of 1899 and 1907, which address the codes of wartime conduct on land and at sea, were adopted before the rise of air power. Despite repeated diplomatic attempts to update international humanitarian law to include aerial warfare, it was not updated before World War II. The absence of specific international humanitarian law did not mean aerial warfare was not covered under the laws of war, but rather that there was no general agreement of how to interpret those laws. This means that aerial bombardment of civilian areas in enemy ter…"
+          "snippet": "On 22 June 1941, Germany invaded the Soviet Union, opening the Eastern Front, the largest theatre of World War&nbsp;II.  Eventually, some 5 million Red Army troops were captured by the Nazis; the latter deliberately starved to death or otherwise killed 3.3&nbsp;million Soviet POWs, and a vast number of civilians, as the \"Hunger Plan\" sought to fulfil Generalplan Ost. Although the Wehrmacht had considerable early success, their attack was halted in the Battle of Moscow. Subsequently, the Germans were dealt major defeats first at the Battle of Stalingrad in the winter of 1942â1943, and then in…"
         }
       ],
       "source_score": {
@@ -480,19 +480,19 @@
           "the Holocaust and genocide",
           "the Eastern Front and the Soviet Union",
           "the Pacific theater against Japan",
-          "atomic bombings of Hiroshima and Nagasaki",
           "deadliest conflict in history, tens of millions of deaths"
         ],
         "missing": [
           "Axis powers versus the Allies",
           "Pearl Harbor and the entry of the United States",
-          "D-Day / the Normandy landings"
+          "D-Day / the Normandy landings",
+          "atomic bombings of Hiroshima and Nagasaki"
         ],
         "total_expected": 10,
-        "ratio": 0.7
+        "ratio": 0.6
       },
-      "embed_ms": 38,
-      "search_ms": 1957,
+      "embed_ms": 41,
+      "search_ms": 2004,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -503,6 +503,20 @@
       "category": "comprehensive_summary",
       "question": "Provide a comprehensive overview of evolution as a scientific theory. Cover its\ncentral claim, the main mechanisms, the principal lines of evidence, and its\nhistorical development. Aim for breadth across the whole topic.\n",
       "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Charles Darwin",
+          "url": "https://en.wikipedia.org/wiki/Charles_Darwin#Abstract",
+          "score": 0.029040404,
+          "snippet": "Charles Darwin  Lyell 's concept of gradual geological change. Publication of his journal of the voyage made Darwin famous as a popular author.  Darwin published his theory of evolution with compelling evidence in his 1859 book On the Origin of Species. By the 1870s, the scientific community and a majority of the educated public had accepted evolution as a fact. However, many initially favored competing explanations that gave only a minor role to natural selection, and it was not until the emergence of the modern evolutionary synthesis from the 1930s to the 1950s that a broad consensus develop…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Charles Darwin",
+          "url": "https://en.wikipedia.org/wiki/Charles_Darwin",
+          "score": 0.026069518,
+          "snippet": "Charles Darwin  In 1871, he examined human evolution and sexual selection in The Descent of Man, and Selection in Relation to Sex, followed by The Expression of the Emotions in Man and Animals (1872). His research on plants was published in a series of books, and in his final book, The Formation of Vegetable Mould, through the Actions of Worms (1881), he examined earthworms and their effect on soil. Darwin published his theory of evolution with compelling evidence in his 1859 book On the Origin of Species. By the 1870s, the scientific community and a majority of the educated public had accepte…"
+        },
         {
           "corpus_id": "wikipedia",
           "title": "Sociocultural evolution",
@@ -561,10 +575,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of evolutionary thought",
-          "url": "https://en.wikipedia.org/wiki/History_of_evolutionary_thought#Modern_synthesis",
+          "title": "Introduction to evolution",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_evolution#Evidence_for_evolution",
           "score": 0.015625,
-          "snippet": "History of evolutionary thought  be known as the modern synthesis. It received its name from the 1942 book Evolution: The Modern Synthesis by Julian Huxley.  The modern synthesis provided a conceptual core—in particular, natural selection and Mendelian population genetics—that tied together many, but not all, biological disciplines: developmental biology was one of the omissions. It helped establish the legitimacy of evolutionary biology, a primarily historical science, in a scientific climate that favored experimental methods over historical ones. The synthesis also resulted in a considerable…"
+          "snippet": "Introduction to evolution  Scientific evidence for evolution comes from many aspects of biology and includes fossils, homologous structures, and molecular similarities between species' DNA."
         },
         {
           "corpus_id": "wikipedia",
@@ -575,10 +589,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Evolutionary developmental biology",
-          "url": "https://en.wikipedia.org/wiki/Evolutionary_developmental_biology#The_modern_synthesis_of_the_early_20th_century",
+          "title": "Science",
+          "url": "https://en.wikipedia.org/wiki/Science#19th_century",
           "score": 0.015384615,
-          "snippet": "Evolutionary developmental biology  In the so-called modern synthesis of the early 20th century, between 1918 and 1930 Ronald Fisher brought together Darwin's theory of evolution, with its insistence on natural selection, heredity, and variation, and Gregor Mendel 's laws of genetics into a coherent structure for evolutionary biology. Biologists assumed that an organism was a straightforward reflection of its component genes: the genes coded for proteins, which built the organism's body. Biochemical pathways (and, they supposed, new species) evolved through mutations in these genes. It was a s…"
+          "snippet": "Science  as a separate discipline from philosophy when Wilhelm Wundt founded the first laboratory for psychological research in 1879.  During the mid-19th century Charles Darwin and Alfred Russel Wallace independently proposed the theory of evolution by natural selection in 1858, which explained how different plants and animals originated and evolved. Their theory was set out in detail in Darwin's book On the Origin of Species, published in 1859. Separately, Gregor Mendel presented his paper, \" Experiments on Plant Hybridization \" in 1865, which outlined the principles of biological inheritanc…"
         },
         {
           "corpus_id": "wikipedia",
@@ -589,13 +603,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Life",
-          "url": "https://en.wikipedia.org/wiki/Life",
-          "score": 0.015151516,
-          "snippet": "Life originated at least 3.5 billion years ago, resulting in a universal common ancestor. This evolved into all the species that exist now, by way of many extinct species, some of which have left traces as fossils. Attempts to classify living things, too, began with Aristotle. Modern classification began with Carl Linnaeus's system of binomial nomenclature in the 1740s. Living things are composed of biochemical molecules, formed mainly from a few core chemical elements. All living things contain two types of large molecule, proteins and nucleic acids, the latter usually both DNA and RNA: these…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Mass Rapid Transit (Singapore)",
           "url": "https://en.wikipedia.org/wiki/Mass_Rapid_Transit_(Singapore)",
           "score": 0.015151516,
@@ -603,10 +610,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Human evolution",
-          "url": "https://en.wikipedia.org/wiki/Human_evolution#Early_evolution_of_primates",
+          "title": "On the Origin of Species",
+          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species",
           "score": 0.014925373,
-          "snippet": "Human evolution  parsimonious interpretation is that hominines evolved over a lengthy period in Europe and dispersed into Africa before 7 Ma\".  Molecular evidence indicates that the lineage of gibbons diverged from the line of great apes some 18–12 mya, and that of orangutans (subfamily Ponginae) diverged from the other great apes at about 12 million years; there are no fossils that clearly document the ancestry of gibbons, which may have originated in a so-far-unknown Southeast Asian hominoid population, but fossil proto-orangutans may be represented by Sivapithecus from India and Griphopithe…"
+          "snippet": "On the Origin of Species  Huxley and his fellow members of the X Club to secularise science by promoting scientific naturalism. Within two decades, there was widespread scientific agreement that evolution, with a branching pattern of common descent, had occurred, but scientists were slow to give natural selection the significance that Darwin thought appropriate. During \"the eclipse of Darwinism\" from the 1880s to the 1930s, various other mechanisms of evolution were given more credit. With the development of the modern evolutionary synthesis in the 1930s and 1940s, Darwin's concept of evolutio…"
         },
         {
           "corpus_id": "wikipedia",
@@ -617,24 +624,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Evolutionary psychology",
-          "url": "https://en.wikipedia.org/wiki/Evolutionary_psychology",
-          "score": 0.014705882,
-          "snippet": "Evolutionary psychology is a theoretical approach in psychology that examines cognition and behavior from a modern evolutionary perspective. It seeks to identify human psychological adaptations with regards to the ancestral problems they evolved to solve. In this framework, psychological traits and mechanisms are either functional products of natural and sexual selection or non-adaptive by-products of other adaptive traits. Adaptationist thinking about physiological mechanisms, such as the heart, lungs, and the liver, is common in evolutionary biology. Evolutionary psychologists apply the same…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Introduction to evolution",
           "url": "https://en.wikipedia.org/wiki/Introduction_to_evolution#Mechanism",
           "score": 0.014705882,
           "snippet": "Introduction to evolution  The theory of evolution is widely accepted among the scientific community, serving to link the diverse speciality areas of biology. Evolution provides the field of biology with a solid scientific base. The significance of evolutionary theory is summarised by Theodosius Dobzhansky as \" nothing in biology makes sense except in the light of evolution.\" Nevertheless, the theory of evolution is not static. There is much discussion within the scientific community concerning the mechanisms behind the evolutionary process. For example, the rate at which evolution occurs is s…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "History of music",
-          "url": "https://en.wikipedia.org/wiki/History_of_music#Origins",
-          "score": 0.014492754,
-          "snippet": "History of music  by-product of evolution) that was the result of language; or if music and language both derived from a common antecedent.  There is little consensus on any particular theory for the origin of music, which have included contributions from archaeologists, cognitive scientists, ethnomusicologists, evolutionary biologists, linguists, neuroscientists, paleoanthropologists, philosophers, and psychologists (developmental and social). Some of the most prominent theories are as follows:"
         },
         {
           "corpus_id": "wikipedia",
@@ -645,6 +638,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "History of biology",
+          "url": "https://en.wikipedia.org/wiki/History_of_biology#Classical_genetics,_the_modern_synthesis,_and_evolutionary_theory",
+          "score": 0.014492754,
+          "snippet": "History of biology  modern synthesis. The inheritance of acquired characters was rejected, while mutationism gave way as genetic theories matured.  In the second half of the century the ideas of population genetics began to be applied in the new discipline of the genetics of behavior, sociobiology, and, especially in humans, evolutionary psychology. In the 1960s W.D. Hamilton and others developed game theory approaches to explain altruism from an evolutionary perspective through kin selection. The possible origin of higher organisms through endosymbiosis, and contrasting approaches to molecula…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of evolutionary thought",
+          "url": "https://en.wikipedia.org/wiki/History_of_evolutionary_thought#Modern_synthesis",
+          "score": 0.014285714,
+          "snippet": "History of evolutionary thought  be known as the modern synthesis. It received its name from the 1942 book Evolution: The Modern Synthesis by Julian Huxley.  The modern synthesis provided a conceptual core—in particular, natural selection and Mendelian population genetics—that tied together many, but not all, biological disciplines: developmental biology was one of the omissions. It helped establish the legitimacy of evolutionary biology, a primarily historical science, in a scientific climate that favored experimental methods over historical ones. The synthesis also resulted in a considerable…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Epistemology",
           "url": "https://en.wikipedia.org/wiki/Epistemology#Branches",
           "score": 0.014285714,
@@ -652,17 +659,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Evolution",
-          "url": "https://en.wikipedia.org/wiki/Evolution#Pre-Darwinian",
-          "score": 0.014285714,
-          "snippet": "Evolution  The \"New Science\" of the 17th century rejected the Aristotelian approach. It sought to explain natural phenomena in terms of physical laws that were the same for all visible things and that did not require the existence of any fixed natural categories or divine cosmic order. However, this new approach was slow to take root in the biological sciences: the last bastion of the concept of fixed natural types. John Ray applied one of the previously more general terms for fixed natural types, \"species\", to plant and animal types, but he strictly identified each type of living thing as a s…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "History of paleontology",
-          "url": "https://en.wikipedia.org/wiki/History_of_paleontology#Abstract",
+          "title": "Rejection of evolution by religious groups",
+          "url": "https://en.wikipedia.org/wiki/Rejection_of_evolution_by_religious_groups#Biology",
           "score": 0.014084507,
-          "snippet": "History of paleontology  knowledge of the fossil record also played an increasing role in the development of geology, and stratigraphy in particular.  In 1822, the word \"paleontology\" was used by the editor of a French scientific journal to refer to the study of ancient living organisms through fossils, and the first half of the 19th century saw geological and paleontological activity become increasingly well organized with the growth of geologic societies and museums and an increasing number of professional geologists and fossil specialists. This contributed to a rapid increase in knowledge a…"
+          "snippet": "Rejection of evolution by religious groups  Disputes relating to evolutionary biology are central to the controversy between creationists and the scientific community. The aspects of evolutionary biology disputed include common descent (and particularly human evolution from common ancestors with other members of the great apes), macroevolution, and the existence of transitional fossils."
         },
         {
           "corpus_id": "wikipedia",
@@ -673,24 +673,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Charles Darwin",
-          "url": "https://en.wikipedia.org/wiki/Charles_Darwin#Abstract",
+          "title": "Evolutionary developmental biology",
+          "url": "https://en.wikipedia.org/wiki/Evolutionary_developmental_biology#The_modern_synthesis_of_the_early_20th_century",
           "score": 0.013888889,
-          "snippet": "Charles Darwin  Lyell 's concept of gradual geological change. Publication of his journal of the voyage made Darwin famous as a popular author.  Darwin published his theory of evolution with compelling evidence in his 1859 book On the Origin of Species. By the 1870s, the scientific community and a majority of the educated public had accepted evolution as a fact. However, many initially favored competing explanations that gave only a minor role to natural selection, and it was not until the emergence of the modern evolutionary synthesis from the 1930s to the 1950s that a broad consensus develop…"
+          "snippet": "Evolutionary developmental biology  In the so-called modern synthesis of the early 20th century, between 1918 and 1930 Ronald Fisher brought together Darwin's theory of evolution, with its insistence on natural selection, heredity, and variation, and Gregor Mendel 's laws of genetics into a coherent structure for evolutionary biology. Biologists assumed that an organism was a straightforward reflection of its component genes: the genes coded for proteins, which built the organism's body. Biochemical pathways (and, they supposed, new species) evolved through mutations in these genes. It was a s…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Evolutionary psychology",
-          "url": "https://en.wikipedia.org/wiki/Evolutionary_psychology#Theoretical_foundations",
-          "score": 0.013888889,
-          "snippet": "Evolutionary psychology  evolutionary psychology, however, is possible only because of advances in evolutionary theory in the 20th century."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Evolution",
-          "url": "https://en.wikipedia.org/wiki/Evolution#Sources_of_variation",
+          "title": "Life",
+          "url": "https://en.wikipedia.org/wiki/Life",
           "score": 0.01369863,
-          "snippet": "Evolution  even relatively small differences in genotype can lead to dramatic differences in phenotype both within and between species.  An individual organism's phenotype results from both its genotype and the influence of the environment it has lived in. The modern evolutionary synthesis defines evolution as the change over time in this genetic variation. The frequency of one particular allele will become more or less prevalent relative to other forms of that gene. Variation disappears when a new allele reaches the point of fixation —when it either disappears from the population or replaces …"
+          "snippet": "Life originated at least 3.5 billion years ago, resulting in a universal common ancestor. This evolved into all the species that exist now, by way of many extinct species, some of which have left traces as fossils. Attempts to classify living things, too, began with Aristotle. Modern classification began with Carl Linnaeus's system of binomial nomenclature in the 1740s. Living things are composed of biochemical molecules, formed mainly from a few core chemical elements. All living things contain two types of large molecule, proteins and nucleic acids, the latter usually both DNA and RNA: these…"
         },
         {
           "corpus_id": "wikipedia",
@@ -701,10 +694,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of creationism",
-          "url": "https://en.wikipedia.org/wiki/History_of_creationism#Pre-Darwinian_biology",
+          "title": "Human evolution",
+          "url": "https://en.wikipedia.org/wiki/Human_evolution#Early_evolution_of_primates",
           "score": 0.013513514,
-          "snippet": "History of creationism  Erasmus Darwin published his Zoönomia between 1794 and 1796 foreshadowing Lamarck's ideas on evolution, and even suggesting \"that all warm-blooded animals have arisen from one living filament, which the great First Cause endued with animality... possessing the faculty of continuing to improve by its own inherent activity, and of delivering down these improvements by generation to its posterity.\"  Advances in paleontology, led by William Smith, saw the recording of the first fossil records that showed the transmutation of species. Then, Jean-Baptiste Lamarck proposed, in…"
+          "snippet": "Human evolution  parsimonious interpretation is that hominines evolved over a lengthy period in Europe and dispersed into Africa before 7 Ma\".  Molecular evidence indicates that the lineage of gibbons diverged from the line of great apes some 18–12 mya, and that of orangutans (subfamily Ponginae) diverged from the other great apes at about 12 million years; there are no fossils that clearly document the ancestry of gibbons, which may have originated in a so-far-unknown Southeast Asian hominoid population, but fossil proto-orangutans may be represented by Sivapithecus from India and Griphopithe…"
         },
         {
           "corpus_id": "wikipedia",
@@ -712,6 +705,13 @@
           "url": "https://en.wikipedia.org/wiki/Evolution_of_birds#Origins",
           "score": 0.013513514,
           "snippet": "Evolution of birds  The discoveries of further basal dromaeosaurids potentially capable of powered flight, such as Xiaotingia, has provided more evidence for the theory that flight was first developed in the bird line by early dromaeosaurids rather than later by Aves as was previously supposed."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of evolutionary thought",
+          "url": "https://en.wikipedia.org/wiki/History_of_evolutionary_thought#Abstract",
+          "score": 0.013333334,
+          "snippet": "History of evolutionary thought  Following the establishment of evolutionary biology, studies of mutation and genetic diversity in natural populations, combined with biogeography and systematics, led to sophisticated mathematical and causal models of evolution. Palaeontology and comparative anatomy allowed more detailed reconstructions of the evolutionary history of life. After the rise of molecular genetics in the 1950s, the field of molecular evolution developed, based on protein sequences and immunological tests, and later incorporating RNA and DNA studies. The gene-centred view of evolutio…"
         }
       ],
       "source_score": {
@@ -726,20 +726,20 @@
           "genetic variation and mutation",
           "genetic drift",
           "fossil evidence",
+          "comparative anatomy and homologous structures",
           "molecular / DNA evidence",
           "the modern evolutionary synthesis",
           "adaptation"
         ],
         "missing": [
           "common descent / a last universal common ancestor",
-          "speciation",
-          "comparative anatomy and homologous structures"
+          "speciation"
         ],
         "total_expected": 10,
-        "ratio": 0.7
+        "ratio": 0.8
       },
-      "embed_ms": 29,
-      "search_ms": 1972,
+      "embed_ms": 31,
+      "search_ms": 1988,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -836,10 +836,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "title": "François Victor Alphonse Aulard",
+          "url": "https://en.wikipedia.org/wiki/Fran%C3%A7ois_Victor_Alphonse_Aulard#Career",
           "score": 0.015151516,
-          "snippet": "The discredited Bourbon dynasty was overthrown by the July Revolution of 1830, which established the constitutional July Monarchy; French troops began the conquest of Algeria. Unrest led to the French Revolution of 1848 and the end of the July Monarchy. The abolition of slavery and the introduction of male universal suffrage was re-enacted in 1848. In 1852, president of the French Republic, Louis-NapolÃ©on Bonaparte, Napoleon I's nephew, was proclaimed emperor of the Second Empire, as Napoleon III. He multiplied French interventions abroad, especially in Crimea, Mexico and Italy. Napoleon III …"
+          "snippet": "François Victor Alphonse Aulard  Aulard was born at Montbron in Charente. He entered the École Normale Supérieure in 1867 and obtained the degree of doctor of letters in 1877 with a thesis in Latin on Gaius Asinius Pollio and a French one on Giacomo Leopardi (whose works he subsequently translated into French). Moving from literature to history, he made a study of parliamentary oratory during the French Revolution and published two volumes on Les orateurs de la Constituante (1882) and on Les orateurs de la Legislative et de la Convention (1885). With these works, he established a reputation as…"
         },
         {
           "corpus_id": "wikipedia",
@@ -850,10 +850,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "title": "History of France",
+          "url": "https://en.wikipedia.org/wiki/History_of_France#Revolutionary_France_(1789–1799)",
           "score": 0.014925373,
-          "snippet": "and Austerlitz. Members of the Bonaparte family were appointed monarchs in some of the newly established kingdoms.  These victories led to the worldwide expansion of French revolutionary ideals and reforms, such as the metric system, Napoleonic Code and Declaration of the Rights of Man. In 1812 Napoleon attacked Russia, reaching Moscow. Thereafter his army disintegrated through supply problems, disease, Russian attacks, and finally winter. After this catastrophic campaign and the ensuing uprising of European monarchies against his rule, Napoleon was defeated. About a million Frenchmen died dur…"
+          "snippet": "History of France  monarchy was abolished and replaced by the French First Republic in September, while Louis XVI was executed in January 1793.  After another revolt in June 1793, the constitution was suspended and effective political power passed from the National Convention to the Committee of Public Safety. About 16,000 people were executed in a Reign of Terror, which ended in July 1794. Weakened by external threats and internal opposition, the Republic was replaced in 1795 by the Directory. Four years later in 1799, the Consulate seized power in a military coup led by Napoleon Bonaparte. T…"
         },
         {
           "corpus_id": "wikipedia",
@@ -867,7 +867,7 @@
           "title": "Tennis Court Oath",
           "url": "https://en.wikipedia.org/wiki/Tennis_Court_Oath#Background",
           "score": 0.014705882,
-          "snippet": "Tennis Court Oath  against the wishes of the King, invited the other two estates to join. This signaled the outbreak of the French Revolution.  The Third Estate comprised the overwhelming majority of the French population but the structure of the Estates-General was such that the Third Estate comprised a bare majority of the delegates. A simple majority was sufficient—as long as delegate votes were cast together. The First and Second Estates preferred to divide the vote; a proposal might need to receive approval from each Estate or there might be two \"houses\" of the Estates-General (one for th…"
+          "snippet": "Tennis Court Oath  Before the Revolution, French society—aside from royalty—was divided into three estates. The First Estate comprised the clergy; the Second Estate was the nobility. The rest of France—some 97 per cent of the population—was the Third Estate, which ranged from very wealthy city merchants to impoverished rural farmers. The three estates had historically met in the Estates General, a legislative assembly, but this had not happened since 1614, under the reign of Louis XIII. It was the last of the Estates General of the Kingdom of France. Summoned by King Louis XVI, the Estates Gen…"
         },
         {
           "corpus_id": "wikipedia",
@@ -878,10 +878,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "French Revolution",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Revolution_and_the_Church",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
           "score": 0.014492754,
-          "snippet": "French Revolution  Historian John McManners argues \"in eighteenth-century France, throne and altar were commonly spoken of as in close alliance; their simultaneous collapse... would one day provide the final proof of their interdependence.\" One suggestion is that after a century of persecution, some French Protestants actively supported an anti-Catholic regime, a resentment fuelled by Enlightenment thinkers such as Voltaire. Jean-Jacques Rousseau, considered a philosophical founder of the revolution, wrote it was \"manifestly contrary to the law of nature... that a handful of people should gorg…"
+          "snippet": "The discredited Bourbon dynasty was overthrown by the July Revolution of 1830, which established the constitutional July Monarchy; French troops began the conquest of Algeria. Unrest led to the French Revolution of 1848 and the end of the July Monarchy. The abolition of slavery and the introduction of male universal suffrage was re-enacted in 1848. In 1852, president of the French Republic, Louis-NapolÃ©on Bonaparte, Napoleon I's nephew, was proclaimed emperor of the Second Empire, as Napoleon III. He multiplied French interventions abroad, especially in Crimea, Mexico and Italy. Napoleon III …"
         },
         {
           "corpus_id": "wikipedia",
@@ -899,17 +899,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "title": "Camille Desmoulins",
+          "url": "https://en.wikipedia.org/wiki/Camille_Desmoulins#Abstract",
           "score": 0.014285714,
-          "snippet": "rule, including the decadence of his court, discredited the monarchy, which in part paved the way for the French Revolution.  Louis XVI supported America with money, fleets and armies, helping them win independence from Great Britain. France gained revenge but verged on bankruptcyâa factor that contributed to the Revolution. Some of the Enlightenment occurred in French intellectual circles, and scientific breakthroughs, such as the naming of oxygen and the first hot air balloon carrying passengers, were achieved by French scientists. French explorers took part in the voyages of scientific ex…"
+          "snippet": "Camille Desmoulins  Lucie-Simplice-Camille-Benoît Desmoulins (French:; 2 March 1760 – 5 April 1794) was a French journalist, politician and a prominent figure of the French Revolution. He is best known for playing an instrumental role in the events that led to the Storming of the Bastille. Desmoulins was also noted for his radical criticism of the Reign of Terror as the editor of the journal Le Vieux Cordelier. He was a schoolmate and close friend of Maximilien Robespierre and a close friend and political ally of Georges Danton, who were the leading figures in the French Revolution."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Gilbert du Motier, Marquis de Lafayette",
-          "url": "https://en.wikipedia.org/wiki/Gilbert_du_Motier,_Marquis_de_Lafayette#Abstract",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Directory_(1795–1799)",
           "score": 0.014084507,
-          "snippet": "Gilbert du Motier, Marquis de Lafayette  Marie-Joseph Paul Yves Roch Gilbert du Motier de La Fayette, Marquis de La Fayette (French:; 6 September 1757 – 20 May 1834), known in the United States as Lafayette (/ ˌ l ɑː f i ˈ ɛ t, ˌ l æ f -/ LA(H)F -ee- ET), was a French nobleman and military officer who volunteered to join the Continental Army, led by General George Washington, in the American Revolutionary War. Lafayette was ultimately permitted to command Continental Army troops in the decisive Siege of Yorktown in 1781, the Revolutionary War's final major battle that secured American independ…"
+          "snippet": "French Revolution  The removal of his conservative opponents opened the way for direct conflict between Barras, and those on the left.  Fighting continued despite general war weariness, and the 1798 elections saw a resurgence in Jacobin strength. Napoleon's invasion of Egypt in July 1798 confirmed European fears of French expansionism, and the War of the Second Coalition began in November. Without a majority in the legislature, the Directors relied on the army to enforce decrees, and extract revenue from conquered territories. Generals like Napoleon and Joubert were now central to the politica…"
         },
         {
           "corpus_id": "wikipedia",
@@ -930,14 +930,14 @@
           "title": "France",
           "url": "https://en.wikipedia.org/wiki/France",
           "score": 0.013888889,
-          "snippet": "179] |title=Historical dynamics: why states rise and fall |publisher=Princeton University Press |isbn=978-0-691-11669-3}}  The French Renaissance saw cultural development and standardisation of French, which became the official language of France and Europe's aristocracy. France became rivals of the House of Habsburg during the Italian Wars, which would dictate much of their later foreign policy until the mid-18th century. French explorers claimed lands in the Americas, paving expansion of the French colonial empire. The rise of Protestantism led France to a civil war known as the French Wars …"
+          "snippet": "and Austerlitz. Members of the Bonaparte family were appointed monarchs in some of the newly established kingdoms.  These victories led to the worldwide expansion of French revolutionary ideals and reforms, such as the metric system, Napoleonic Code and Declaration of the Rights of Man. In 1812 Napoleon attacked Russia, reaching Moscow. Thereafter his army disintegrated through supply problems, disease, Russian attacks, and finally winter. After this catastrophic campaign and the ensuing uprising of European monarchies against his rule, Napoleon was defeated. About a million Frenchmen died dur…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "title": "Tennis Court Oath",
+          "url": "https://en.wikipedia.org/wiki/Tennis_Court_Oath#Background",
           "score": 0.01369863,
-          "snippet": "slave trade.  , the \"Sun King\", was the absolute monarch of France who made the country the leading power in Europe.]]  During Louis XIV's minority, trouble known as The Fronde occurred. This rebellion was driven by feudal lords and sovereign courts as a reaction to the royal absolute power. The monarchy reached its peak during the 17th century and reign of Louis XIV, during which France further increased its influence. By turning lords into courtiers at the Palace of Versailles, his command of the military went unchallenged. The \"Sun King\" made France the leading European power. France became…"
+          "snippet": "Tennis Court Oath  against the wishes of the King, invited the other two estates to join. This signaled the outbreak of the French Revolution.  The Third Estate comprised the overwhelming majority of the French population but the structure of the Estates-General was such that the Third Estate comprised a bare majority of the delegates. A simple majority was sufficient—as long as delegate votes were cast together. The First and Second Estates preferred to divide the vote; a proposal might need to receive approval from each Estate or there might be two \"houses\" of the Estates-General (one for th…"
         },
         {
           "corpus_id": "wikipedia",
@@ -948,10 +948,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#The_Revolution_and_the_Church",
           "score": 0.013513514,
-          "snippet": "From World War II until 2017, French politics was dominated by two politically opposed groupings: one left-wing, the French Section of the Workers' International, which was succeeded by the Socialist Party in 1969; and the other right-wing, the Gaullist Party, whose name changed over time to the Rally of the French People (1947), the Union of Democrats for the Republic (1958), the Rally for the Republic (1976), the Union for a Popular Movement (2007) and The Republicans (since 2015). In the 2017 presidential and legislative elections, the radical centrist party La RÃ©publique En Marche! (LREM)…"
+          "snippet": "French Revolution  Historian John McManners argues \"in eighteenth-century France, throne and altar were commonly spoken of as in close alliance; their simultaneous collapse... would one day provide the final proof of their interdependence.\" One suggestion is that after a century of persecution, some French Protestants actively supported an anti-Catholic regime, a resentment fuelled by Enlightenment thinkers such as Voltaire. Jean-Jacques Rousseau, considered a philosophical founder of the revolution, wrote it was \"manifestly contrary to the law of nature... that a handful of people should gorg…"
         },
         {
           "corpus_id": "wikipedia",
@@ -969,24 +969,24 @@
       },
       "fact_score": {
         "matched": [
-          "occurred 1789 to 1799",
           "financial crisis and social inequality as causes",
           "Enlightenment ideas",
           "the Estates-General and the National Assembly",
           "the storming of the Bastille",
           "abolition of the monarchy and execution of Louis XVI",
+          "the Reign of Terror and Robespierre",
           "rise of Napoleon Bonaparte"
         ],
         "missing": [
+          "occurred 1789 to 1799",
           "the Declaration of the Rights of Man and of the Citizen",
-          "the Reign of Terror and Robespierre",
           "end of feudalism and lasting political legacy"
         ],
         "total_expected": 10,
         "ratio": 0.7
       },
-      "embed_ms": 29,
-      "search_ms": 1956,
+      "embed_ms": 32,
+      "search_ms": 1976,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1000,93 +1000,79 @@
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant",
-          "score": 0.016666668,
-          "snippet": "Immanuel Kant was a German philosopher and one of the central Enlightenment thinkers. Born in Königsberg, Kant's comprehensive and systematic works in epistemology, metaphysics, ethics, and aesthetics have made him one of the most influential and controversial figures in modern Western philosophy, being called the \"father of modern ethics\", the \"father of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy\". In his doctrine of transcendental idealism, Kant argued that space and time are mere \"forms of intuition\" that structu…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant",
-          "score": 0.016666668,
-          "snippet": "Immanuel Kant  Kant drew a parallel to the Copernican Revolution in his proposal to think of the objects of experience as conforming to our spatial and temporal forms of intuition and the categories of our understanding, so that we have a priori cognition of those objects. These claims have proved especially influential in the social sciences, particularly sociology and anthropology, which regard human activities as pre-oriented by cultural norms. Kant believed that reason is the source of morality, and that aesthetics arises from a faculty of disinterested judgment. Kant's religious views wer…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Immanuel Kant",
           "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
-          "score": 0.016393442,
+          "score": 0.03226646,
           "snippet": "Immanuel Kant (born Emanuel Kant; 22 April 1724 – 12 February 1804) was a German philosopher and one of the central Enlightenment thinkers. Born in Königsberg, Kant's comprehensive and systematic works in epistemology, metaphysics, ethics, and aesthetics have made him one of the most influential and controversial figures in modern Western philosophy, being called the \"father of modern ethics\", the \"father of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy \"."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Reason",
-          "url": "https://en.wikipedia.org/wiki/Reason#Substantive_and_formal_reason",
-          "score": 0.016393442,
-          "snippet": "Reason  earlier forms of morality, which depended on religious understanding and interpretation, or on nature, for their substance.  According to Kant, in a free society each individual must be able to pursue their goals however they see fit, as long as their actions conform to principles given by reason. He formulated such a principle, called the \" categorical imperative \", which would justify an action only if it could be universalized:  Act only according to that maxim whereby you can, at the same time, will that it should become a universal law.  In contrast to Hume, Kant insisted that rea…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Morality",
-          "url": "https://en.wikipedia.org/wiki/Morality#Realism_and_anti-realism",
-          "score": 0.016129032,
-          "snippet": "Morality  Philosophical theories on the nature and origins of morality (that is, theories of meta-ethics) are broadly divided into two classes:  Some forms of non-cognitivism and ethical subjectivism, while considered anti-realist in the robust sense used here, are considered realist in the sense synonymous with moral universalism. For example, universal prescriptivism is a universalist form of non-cognitivism which claims that morality is derived from reasoning about implied imperatives, and divine command theory and ideal observer theory are universalist forms of ethical subjectivism which c…"
+          "title": "The World as Will and Representation",
+          "url": "https://en.wikipedia.org/wiki/The_World_as_Will_and_Representation#Relationship_to_earlier_philosophical_work",
+          "score": 0.03201844,
+          "snippet": "The World as Will and Representation  Furthermore, Schopenhauer states at the beginning that his book assumes the reader's prior knowledge of the philosophy of Immanuel Kant. Schopenhauer asserted that his philosophy was the natural continuation of Kant's, and is regarded by some as remaining more faithful to Kant's metaphysical system of transcendental idealism, expounded in the Critique of Pure Reason (1781), than any of the other later German idealists. However, The World as Will and Representation contains an appendix entitled \" Critique of the Kantian philosophy \", in which Schopenhauer r…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#\"The_Doctrine_of_Virtue\"",
-          "score": 0.016129032,
-          "snippet": "Immanuel Kant  As Kant explains in the 1785 Groundwork of the Metaphysics of Morals and as its title directly indicates, that text is \"nothing more than the search for and establishment of the supreme principle of morality \". His promised Metaphysics of Morals was much delayed and did not appear until its two parts, \"The Doctrine of Right\" and \"The Doctrine of Virtue\", were published separately in 1797 and 1798. The first deals with political philosophy, the second with ethics. \"The Doctrine of Virtue\" provides \"a very different account of ordinary moral reasoning\" than the one suggested by th…"
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant",
+          "score": 0.03137255,
+          "snippet": "Immanuel Kant was a German philosopher and one of the central Enlightenment thinkers. Born in Königsberg, Kant's comprehensive and systematic works in epistemology, metaphysics, ethics, and aesthetics have made him one of the most influential and controversial figures in modern Western philosophy, being called the \"father of modern ethics\", the \"father of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy\". In his doctrine of transcendental idealism, Kant argued that space and time are mere \"forms of intuition\" that structu…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
-          "score": 0.015873017,
-          "snippet": "Immanuel Kant  more than what is contained in its concepts. The most obvious form of synthetic proposition is a simple empirical observation."
+          "title": "Kantian ethics",
+          "url": "https://en.wikipedia.org/wiki/Kantian_ethics#The_Metaphysics_of_Morals",
+          "score": 0.03137255,
+          "snippet": "Kantian ethics  as such, and in this way to set forth completely the whole of morals, needs anthropology for its application to human beings.  His promised Metaphysics of Morals, however, was much delayed and did not appear until its two parts, The Doctrine of Right and The Doctrine of Virtue, were published separately in 1797 and 1798. In the twelve years between the Groundwork and The Doctrine of Right, Kant decided that the metaphysics of morals and its application should, after all, be integrated (though still as distinct from practical anthropology). The distinction between its groundwork…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
           "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#On_the_concepts_of_pure_reason",
-          "score": 0.015873017,
+          "score": 0.031257633,
           "snippet": "Immanuel Kant  pursued without regard to the limits of possible experience, yield the three central ideas of traditional metaphysics:  Although Kant denies that these ideas can be objects of genuine cognition, he argues that they are the result of reason's inherent drive to unify cognition into a systematic whole. Leibnizian-Wolffian metaphysics was divided into four parts: ontology, psychology, cosmology, and theology. Kant replaces the first with the positive results of the first part of the Critique. He proposes to replace the following three with his later doctrines of anthropology, the me…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Rationalism",
           "url": "https://en.wikipedia.org/wiki/Rationalism#Immanuel_Kant_(1724–1804)",
-          "score": 0.015625,
-          "snippet": "Rationalism  in contemporary thought, especially in fields such as metaphysics, epistemology, ethics, political philosophy, and aesthetics."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "The World as Will and Representation",
-          "url": "https://en.wikipedia.org/wiki/The_World_as_Will_and_Representation#Relationship_to_earlier_philosophical_work",
-          "score": 0.015625,
-          "snippet": "The World as Will and Representation  Furthermore, Schopenhauer states at the beginning that his book assumes the reader's prior knowledge of the philosophy of Immanuel Kant. Schopenhauer asserted that his philosophy was the natural continuation of Kant's, and is regarded by some as remaining more faithful to Kant's metaphysical system of transcendental idealism, expounded in the Critique of Pure Reason (1781), than any of the other later German idealists. However, The World as Will and Representation contains an appendix entitled \" Critique of the Kantian philosophy \", in which Schopenhauer r…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "United Kingdom",
-          "url": "https://en.wikipedia.org/wiki/United_Kingdom#Philosophy",
-          "score": 0.015384615,
-          "snippet": "United Kingdom  The United Kingdom is famous for the tradition of ' British Empiricism ', a branch of the philosophy of knowledge that states that only knowledge verified by experience is valid, and 'Scottish Philosophy', sometimes referred to as the ' Scottish School of Common Sense '. The most famous philosophers of British Empiricism are John Locke, George Berkeley and David Hume; while Dugald Stewart, Thomas Reid and William Hamilton were major exponents of the Scottish \"common sense\" school. Two Britons are also notable for the ethical theory of utilitarianism, a moral philosophy first us…"
+          "score": 0.030076887,
+          "snippet": "Rationalism  Kant is one of the central figures of modern philosophy, and set the terms by which all subsequent thinkers have had to grapple. He argued that human perception structures natural laws, and that reason is the source of morality. His thought continues to hold a major influence in contemporary thought, especially in fields such as metaphysics, epistemology, ethics, political philosophy, and aesthetics."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Epistemology",
           "url": "https://en.wikipedia.org/wiki/Epistemology#Definition",
-          "score": 0.015384615,
+          "score": 0.02871795,
           "snippet": "Epistemology is the philosophical study of knowledge. Also called theory of knowledge, it examines what knowledge is and what types of knowledge there are. It further investigates the sources of knowledge, like perception, inference, and testimony, to determine how knowledge is created. Another topic is the extent and limits of knowledge, confronting questions about what people can and cannot know. Other central concepts include belief, truth, justification, evidence, and reason. Epistemology is one of the main branches of philosophy besides fields like ethics, logic, and metaphysics. The term…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Rudolf Carnap",
-          "url": "https://en.wikipedia.org/wiki/Rudolf_Carnap#Philosophical_work",
-          "score": 0.015151516,
-          "snippet": "Rudolf Carnap  Below is an examination of the main topics in the evolution of the philosophy of Rudolf Carnap. It is not exhaustive, but it outlines Carnap's main works and contributions to modern epistemology and philosophy of logic."
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#\"The_Doctrine_of_Virtue\"",
+          "score": 0.028324153,
+          "snippet": "Immanuel Kant  As Kant explains in the 1785 Groundwork of the Metaphysics of Morals and as its title directly indicates, that text is \"nothing more than the search for and establishment of the supreme principle of morality \". His promised Metaphysics of Morals was much delayed and did not appear until its two parts, \"The Doctrine of Right\" and \"The Doctrine of Virtue\", were published separately in 1797 and 1798. The first deals with political philosophy, the second with ethics. \"The Doctrine of Virtue\" provides \"a very different account of ordinary moral reasoning\" than the one suggested by th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Moral_thought",
+          "score": 0.025859192,
+          "snippet": "Immanuel Kant  Kant developed his ethics, or moral philosophy, in three works: Groundwork of the Metaphysics of Morals (1785), Critique of Practical Reason (1788), and Metaphysics of Morals (1797).With regard to morality, Kant argued that the source of the good lies not in anything outside the human subject, either in nature or given by God, but rather is only the good will itself. A good will is one that acts from duty in accordance with the universal moral law that the autonomous human being freely gives itself. This law obliges one to treat humanity — understood as rational agency, and repr…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant",
+          "score": 0.016129032,
+          "snippet": "Immanuel Kant  Kant drew a parallel to the Copernican Revolution in his proposal to think of the objects of experience as conforming to our spatial and temporal forms of intuition and the categories of our understanding, so that we have a priori cognition of those objects. These claims have proved especially influential in the social sciences, particularly sociology and anthropology, which regard human activities as pre-oriented by cultural norms. Kant believed that reason is the source of morality, and that aesthetics arises from a faculty of disinterested judgment. Kant's religious views wer…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reason",
+          "url": "https://en.wikipedia.org/wiki/Reason#Substantive_and_formal_reason",
+          "score": 0.015625,
+          "snippet": "Reason  earlier forms of morality, which depended on religious understanding and interpretation, or on nature, for their substance.  According to Kant, in a free society each individual must be able to pursue their goals however they see fit, as long as their actions conform to principles given by reason. He formulated such a principle, called the \" categorical imperative \", which would justify an action only if it could be universalized:  Act only according to that maxim whereby you can, at the same time, will that it should become a universal law.  In contrast to Hume, Kant insisted that rea…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1097,38 +1083,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
-          "score": 0.014925373,
-          "snippet": "Immanuel Kant  Against this, Kant reasserts his own insistence upon the necessity of a sensible component in all genuine knowledge."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Rationalism",
-          "url": "https://en.wikipedia.org/wiki/Rationalism#Immanuel_Kant_(1724–1804)",
-          "score": 0.014925373,
-          "snippet": "Rationalism  Kant is one of the central figures of modern philosophy, and set the terms by which all subsequent thinkers have had to grapple. He argued that human perception structures natural laws, and that reason is the source of morality. His thought continues to hold a major influence in contemporary thought, especially in fields such as metaphysics, epistemology, ethics, political philosophy, and aesthetics."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Analytic philosophy",
-          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy#Meta-ethics",
-          "score": 0.014705882,
-          "snippet": "Analytic philosophy  As well as Hume's famous is/ought distinction, twentieth-century meta-ethics has two original strains."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Kantian ethics",
-          "url": "https://en.wikipedia.org/wiki/Kantian_ethics#The_Metaphysics_of_Morals",
-          "score": 0.014705882,
-          "snippet": "Kantian ethics  as such, and in this way to set forth completely the whole of morals, needs anthropology for its application to human beings.  His promised Metaphysics of Morals, however, was much delayed and did not appear until its two parts, The Doctrine of Right and The Doctrine of Virtue, were published separately in 1797 and 1798. In the twelve years between the Groundwork and The Doctrine of Right, Kant decided that the metaphysics of morals and its application should, after all, be integrated (though still as distinct from practical anthropology). The distinction between its groundwork…"
+          "url": "https://en.wikipedia.org/wiki/Kantian_ethics#Influences_on_Kantian_ethics",
+          "score": 0.014925373,
+          "snippet": "Kantian ethics  Biographer of Kant, Manfred Kuhn, suggested that the values Kant's parents held, of \"hard work, honesty, cleanliness, and independence\", set him an example and influenced him more than their pietism did. In the Stanford Encyclopedia of Philosophy, Michael Rohlf suggests that Kant was influenced by his teacher, Martin Knutzen, himself influenced by the work of Christian Wolff and John Locke, and who introduced Kant to the work of English physicist Isaac Newton. Eric Entrican Wilson and Lara Denis emphasize David Hume 's influence on Kant's ethics. Both of them try to reconcile f…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Continental philosophy",
-          "url": "https://en.wikipedia.org/wiki/Continental_philosophy#Definition",
+          "title": "Critique of Pure Reason",
+          "url": "https://en.wikipedia.org/wiki/Critique_of_Pure_Reason#Abstract",
           "score": 0.014492754,
-          "snippet": "Continental philosophy  then widespread in France and Germany, such as phenomenology, existentialism, structuralism, and post-structuralism."
+          "snippet": "Critique of Pure Reason  of life and death\" to metaphysics and to human reason, Kant argues, that the grounds of this kind of knowledge be explained.  Though it received little attention when it was first published, the Critique later attracted attacks from both empiricist and rationalist critics, and became a source of controversy. It has exerted an enduring influence on Western philosophy, and helped bring about the development of German idealism. The book is considered a culmination of several centuries of early modern philosophy and an inauguration of modern philosophy."
         },
         {
           "corpus_id": "wikipedia",
@@ -1139,6 +1104,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Morality",
+          "url": "https://en.wikipedia.org/wiki/Morality#Realism_and_anti-realism",
+          "score": 0.014285714,
+          "snippet": "Morality  Philosophical theories on the nature and origins of morality (that is, theories of meta-ethics) are broadly divided into two classes:  Some forms of non-cognitivism and ethical subjectivism, while considered anti-realist in the robust sense used here, are considered realist in the sense synonymous with moral universalism. For example, universal prescriptivism is a universalist form of non-cognitivism which claims that morality is derived from reasoning about implied imperatives, and divine command theory and ideal observer theory are universalist forms of ethical subjectivism which c…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
           "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Publication_of_The_Critique_of_Pure_Reason",
           "score": 0.014285714,
@@ -1146,17 +1118,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Inductivism",
-          "url": "https://en.wikipedia.org/wiki/Inductivism#Inductivist_endorsement",
-          "score": 0.014285714,
-          "snippet": "Inductivism  external reality, the noumena. Kant's transcendental idealism launched German idealism, a group of speculative metaphysics.  While philosophers widely continued awkward confidence in empirical sciences as inductive, John Stuart Mill, in England, proposed five methods to discern causality, how genuine inductivism purportedly exceeds enumerative induction. In the 1830s, opposing metaphysics, Auguste Comte, in France, explicated positivism, which, unlike Bacon's model, emphasizes predictions, confirming them, and laying scientific laws, irrefutable by theology or metaphysics. Mill, v…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "History of psychology",
-          "url": "https://en.wikipedia.org/wiki/History_of_psychology#Emergence_of_German_experimental_psychology",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Early_work",
           "score": 0.014084507,
-          "snippet": "History of psychology  Until the middle of the 19th century, psychology was widely regarded as a branch of philosophy. Whether it could become an independent scientific discipline was questioned already earlier on: Immanuel Kant (1724–1804) declared in his Metaphysical Foundations of Natural Science (1786) that psychology might perhaps never become a \"proper\" natural science because its phenomena cannot be quantified, among other reasons. Kant proposed an alternative conception of an empirical investigation of human thought, feeling, desire, and action, and lectured on these topics for over tw…"
+          "snippet": "Immanuel Kant  logic, and metaphysics. In his 1756 essay on the theory of winds, Kant laid out an original insight into the Coriolis force.  In 1756, Kant also published three papers on the 1755 Lisbon earthquake. Kant's theory, which involved shifts in huge caverns filled with hot gases, though inaccurate, was one of the first systematic attempts to explain earthquakes in natural rather than supernatural terms. In 1757, Kant began lecturing on geography making him one of the first lecturers to explicitly teach geography as its own subject. Geography was one of Kant's most popular lecturing to…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1167,6 +1132,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 0.013888889,
+          "snippet": "Immanuel Kant  but in its position within the whole of Kant's work.\""
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Ayn Rand",
           "url": "https://en.wikipedia.org/wiki/Ayn_Rand#Relationship_to_other_philosophers",
           "score": 0.013888889,
@@ -1174,17 +1146,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "United Kingdom",
-          "url": "https://en.wikipedia.org/wiki/United_Kingdom",
-          "score": 0.013888889,
-          "snippet": "work=The Guardian |url=https://www.theguardian.com/books/2008/may/17/poetry3 |access-date=10 December 2019}};  The United Kingdom is famous for \"British Empiricism\", a branch of the philosophy that states that only knowledge verified by experience is valid, and 'Scottish Philosophy', sometimes referred to as the 'Scottish School of Common Sense'. The most famous philosophers of British Empiricism are John Locke, George Berkeley and David Hume; while Dugald Stewart, Thomas Reid and William Hamilton were major exponents of the Scottish \"common sense\" school. Two Britons are also notable for the …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "The Phenomenology of Spirit",
-          "url": "https://en.wikipedia.org/wiki/The_Phenomenology_of_Spirit#Preface",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Kant's_critical_project",
           "score": 0.01369863,
-          "snippet": "The Phenomenology of Spirit  This involves an exposition on the content and standpoint of philosophy, i.e, the true shape of truth and the element of its existence, that is interspersed with polemics aimed at the presumption and mischief of philosophical formulas and what distinguishes it from that of any previous philosophy, especially that of his German Idealist predecessors (Kant, Fichte, and Schelling)."
+          "snippet": "Immanuel Kant  more than what is contained in its concepts. The most obvious form of synthetic proposition is a simple empirical observation."
         },
         {
           "corpus_id": "wikipedia",
@@ -1195,17 +1160,52 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Germany",
-          "url": "https://en.wikipedia.org/wiki/Germany",
+          "title": "Rationalism",
+          "url": "https://en.wikipedia.org/wiki/Rationalism#Immanuel_Kant_(1724–1804)",
           "score": 0.013513514,
-          "snippet": "deals and trading, with a tradition spanning over 500 years. The Leipzig Book Fair also retains a major position in Europe.  German philosophy is historically significant: Gottfried Leibniz's contributions to rationalism; the enlightenment philosophy by Immanuel Kant; the establishment of classical German idealism by Johann Gottlieb Fichte, Georg Wilhelm Friedrich Hegel and Friedrich Wilhelm Joseph Schelling; Arthur Schopenhauer's composition of metaphysical pessimism; the formulation of communist theory by Karl Marx and Friedrich Engels; Friedrich Nietzsche's development of perspectivism; [[G…"
+          "snippet": "Rationalism  in contemporary thought, especially in fields such as metaphysics, epistemology, ethics, political philosophy, and aesthetics."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Immanuel Kant",
-          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Moral_thought",
-          "score": 0.013513514,
-          "snippet": "Immanuel Kant  Kant developed his ethics, or moral philosophy, in three works: Groundwork of the Metaphysics of Morals (1785), Critique of Practical Reason (1788), and Metaphysics of Morals (1797).With regard to morality, Kant argued that the source of the good lies not in anything outside the human subject, either in nature or given by God, but rather is only the good will itself. A good will is one that acts from duty in accordance with the universal moral law that the autonomous human being freely gives itself. This law obliges one to treat humanity — understood as rational agency, and repr…"
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Political_philosophy",
+          "score": 0.013333334,
+          "snippet": "Immanuel Kant  In Towards Perpetual Peace: A Philosophical Project, Kant listed several conditions that he thought necessary for ending wars and creating a lasting peace. They included a world of constitutional republics. His classical republican theory was extended in the Doctrine of Right, the first part of the Metaphysics of Morals (1797). Kant believed that universal history leads to the ultimate world of republican states at peace, but his theory was not pragmatic. The process was described in Perpetual Peace as natural rather than rational:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Anselm of Canterbury",
+          "url": "https://en.wikipedia.org/wiki/Anselm_of_Canterbury#Writings",
+          "score": 0.013157895,
+          "snippet": "Anselm of Canterbury  He or the thinkers in northern France who shortly followed him—including Abelard, William of Conches, and Gilbert of Poitiers —inaugurated \"one of the most brilliant periods of Western philosophy \", innovating logic, semantics, ethics, metaphysics, and other areas of philosophical theology."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Humanities",
+          "url": "https://en.wikipedia.org/wiki/Humanities#Philosophy",
+          "score": 0.013157895,
+          "snippet": "Humanities  Philosophy—etymologically, the \"love of wisdom\"—is generally the study of problems concerning matters such as existence, knowledge, justification, truth, justice, right and wrong, beauty, validity, mind, and language. Philosophy is distinguished from other ways of addressing these issues by its critical, generally systematic approach and its reliance on reasoned argument, rather than experiments (experimental philosophy being an exception).  Philosophy used to be a very comprehensive term, including what have subsequently become separate disciplines, such as physics. (As Immanuel K…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kantian ethics",
+          "url": "https://en.wikipedia.org/wiki/Kantian_ethics",
+          "score": 0.012987013,
+          "snippet": "Kantian ethics refers to a deontological ethical theory developed by German philosopher Immanuel Kant that is based on the notion that \"I ought never to act except in such a way that I could also will that my maxim should become a universal law.\" It is also associated with the idea that \"it is impossible to think of anything at all in the world, or indeed even beyond it, that could be considered good without limitation except a good will.\" The theory was developed in the context of Enlightenment rationalism. It states that an action can only be moral if it is motivated by a sense of duty, and …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mou Zongsan",
+          "url": "https://en.wikipedia.org/wiki/Mou_Zongsan#Mou's_relation_to_Heidegger",
+          "score": 0.012987013,
+          "snippet": "Mou Zongsan’s interest in Heidegger’s philosophy arises from his critique and transformation of Kant's philosophy. Mou's interpretation of Kant is greatly influenced by Heidegger’s elaboration of Kant's Critique of Pure Reason in his books Kant and the Problem of Metaphysics (Kantbuch) and Introduction to Metaphysics. Under the influence of Heidegger’s philosophy, Mou change his interpretation of Kant’s first critique from an epistemological approach to an ontological approach. In his treatise Intellectual Intuition and Chinese Philosophy (zhi de zhexue yu zhongguo zhexue) 智的直覺與中國哲學 (1971), Mo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Metaphysics",
+          "url": "https://en.wikipedia.org/wiki/Metaphysics#Definition",
+          "score": 0.012820513,
+          "snippet": "Metaphysics  \"first philosophy\", implying that it is the most basic inquiry while all other branches of philosophy depend on it in some way.  Metaphysics is traditionally understood as a study of mind-independent features of reality. Starting with Immanuel Kant 's critical philosophy, an alternative conception gained prominence that focuses on conceptual schemes rather than external reality. Kant distinguishes transcendent metaphysics, which aims to describe the objective features of reality beyond sense experience, from critical metaphysics, which outlines the aspects and principles underlyin…"
         }
       ],
       "source_score": {
@@ -1219,21 +1219,21 @@
           "transcendental idealism",
           "the Critique of Pure Reason",
           "synthetic a priori knowledge",
-          "the distinction between phenomena and noumena",
           "space and time as a priori forms of intuition",
           "the categories of the understanding",
           "the categorical imperative",
+          "deontological / duty-based ethics",
           "the Critique of Practical Reason",
           "central figure of the Enlightenment"
         ],
         "missing": [
-          "deontological / duty-based ethics"
+          "the distinction between phenomena and noumena"
         ],
         "total_expected": 10,
         "ratio": 0.9
       },
-      "embed_ms": 26,
-      "search_ms": 1937,
+      "embed_ms": 27,
+      "search_ms": 1967,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1244,13 +1244,6 @@
       "category": "comprehensive_summary",
       "question": "Provide a comprehensive overview of the Roman Empire. Cover its political\nevolution, its military and administration, its economy and culture, the\nreligious changes it underwent, and its decline. Aim for breadth across the\nwhole topic.\n",
       "retrieved": [
-        {
-          "corpus_id": "wikipedia",
-          "title": "Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Languages",
-          "score": 0.02889813,
-          "snippet": "Roman Empire  Latin and Greek were the main languages of the Empire, but the Empire was deliberately multilingual. Andrew Wallace-Hadrill says \"The main desire of the Roman government was to make itself understood\". At the start of the Empire, knowledge of Greek was useful to pass as educated nobility and knowledge of Latin was useful for a career in the military, government, or law. Bilingual inscriptions indicate the everyday interpenetration of the two languages.  Latin and Greek's mutual linguistic and cultural influence is a complex topic. Latin words incorporated into Greek were very com…"
-        },
         {
           "corpus_id": "wikipedia",
           "title": "Fall of the Western Roman Empire",
@@ -1274,17 +1267,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Byzantine Empire",
-          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire",
           "score": 0.016393442,
-          "snippet": "Byzantine Empire  During the earlier Pax Romana period, the western parts of the empire became increasingly Latinised, while the eastern parts largely retained their preexisting Hellenistic culture. This created a dichotomy between the Greek East and Latin West. These cultural spheres continued to diverge after Constantine I (r. 324–337) moved the capital to Constantinople and legalised Christianity. Under Theodosius I (r. 379–395), Christianity became the state religion, and other religious practices were proscribed. Greek gradually replaced Latin for official use as Latin fell into disuse. T…"
+          "snippet": "Roman Empire  Constantine the Great (r. 306–337), the first Christian emperor, moved the imperial seat from Rome to Byzantium in 330, and renamed it Constantinople. The Migration Period, involving large invasions by Germanic peoples and by the Huns of Attila, led to the decline of the Western Roman Empire. With the fall of Ravenna to the Germanic Herulians and the deposition of Romulus Augustus in 476 by Odoacer, the Western Empire finally collapsed. The Eastern Roman Empire survived for another millennium with Constantinople as its sole capital, until the city's fall in 1453. Due to the Empir…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Crisis of the Third Century",
-          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century#Abstract",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
           "score": 0.016129032,
-          "snippet": "Crisis of the Third Century  the eastern provinces of Syria Palaestina and Aegyptus); and, between them, the Italian-centered Roman Empire proper.  The reign of Aurelian (270-275) marks a turning point in the crisis period. Aurelian successfully reunited the empire by defeating the two breakaway states, and carried out a series of reforms which helped restore some measure of stability to the Roman economy. The crisis is said to have ended with Diocletian and his restructuring of the Roman imperial government, economy and military. The last is seen as a pivotal moment in Roman history, signalin…"
+          "snippet": "Western Roman Empire  Roman cultural traditions continued throughout the territory of the Western Empire for long after its disappearance, and a recent school of interpretation argues that the great political changes can more accurately be described as a complex cultural transformation, rather than a fall."
         },
         {
           "corpus_id": "wikipedia",
@@ -1296,9 +1289,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Legacy",
           "score": 0.015873017,
-          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
+          "snippet": "Fall of the Western Roman Empire  The Roman Empire was not only a political unity enforced by the use of military power; it was also the combined and elaborated civilization of the Mediterranean Basin and beyond. It included manufacture, trade, and architecture, widespread secular literacy, written law, and an international language of science and literature. The Western barbarians lost much of these higher cultural practices, but their redevelopment in the Middle Ages by polities aware of the Roman achievement formed the basis for the later development of Europe.  Observing the cultural and a…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1309,10 +1302,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Religion in ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
           "score": 0.015625,
-          "snippet": "Religion in ancient Rome  for the Imperial cult. The claim was further elaborated and justified in Vergil's poetic, Imperial vision of the past.  In the late Republic, the so-called Marian reforms supposedly did the following: lowered an existing property bar on conscription, increased the efficiency of Rome's armies, and made them available as instruments of political ambition and factional conflict. The consequent civil wars led to changes at every level of Roman society. Augustus' principate established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, …"
+          "snippet": "Crisis of the Third Century  The last is seen as a pivotal moment in Roman history, signaling the beginning of the Dominate. The crisis resulted in such profound changes in the empire's institutions, society, economic life, and religion that it is increasingly seen by most historians as defining the transition between the historical periods of classical antiquity and late antiquity."
         },
         {
           "corpus_id": "wikipedia",
@@ -1323,17 +1316,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Religion in ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
           "score": 0.015384615,
-          "snippet": "Religion in ancient Rome  established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, restored it (see below)."
+          "snippet": "Byzantine Empire  During the earlier Pax Romana period, the western parts of the empire became increasingly Latinised, while the eastern parts largely retained their preexisting Hellenistic culture. This created a dichotomy between the Greek East and Latin West. These cultural spheres continued to diverge after Constantine I (r. 324–337) moved the capital to Constantinople and legalised Christianity. Under Theodosius I (r. 379–395), Christianity became the state religion, and other religious practices were proscribed. Greek gradually replaced Latin for official use as Latin fell into disuse. T…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Migration Period",
-          "url": "https://en.wikipedia.org/wiki/Migration_Period#Viewpoints",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Languages",
+          "score": 0.015384615,
+          "snippet": "Roman Empire  Latin and Greek were the main languages of the Empire, but the Empire was deliberately multilingual. Andrew Wallace-Hadrill says \"The main desire of the Roman government was to make itself understood\". At the start of the Empire, knowledge of Greek was useful to pass as educated nobility and knowledge of Latin was useful for a career in the military, government, or law. Bilingual inscriptions indicate the everyday interpenetration of the two languages.  Latin and Greek's mutual linguistic and cultural influence is a complex topic. Latin words incorporated into Greek were very com…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century#Abstract",
           "score": 0.015151516,
-          "snippet": "Migration Period  economic fragmentation removed many of the political, cultural and economic forces that had held the empire together.  The rural population in Roman provinces became distanced from the metropolis, and there was little to differentiate them from other peasants across the Roman frontier. In addition, Rome increasingly used foreign mercenaries to defend itself. That \"barbarisation\" parallelled changes within Barbaricum. To this end, noted linguist Dennis Howard Green wrote, \"the first centuries of our era witness not merely a progressive Romanisation of barbarian society, but al…"
+          "snippet": "Crisis of the Third Century  the eastern provinces of Syria Palaestina and Aegyptus); and, between them, the Italian-centered Roman Empire proper.  The reign of Aurelian (270-275) marks a turning point in the crisis period. Aurelian successfully reunited the empire by defeating the two breakaway states, and carried out a series of reforms which helped restore some measure of stability to the Roman economy. The crisis is said to have ended with Diocletian and his restructuring of the Roman imperial government, economy and military. The last is seen as a pivotal moment in Roman history, signalin…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1344,10 +1344,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Slaves_and_the_law",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
           "score": 0.014925373,
-          "snippet": "Roman Empire  Although slavery has often been regarded as waning in the 3rd and 4th centuries, it remained an integral part of Roman society until gradually ceasing in the 6th and 7th centuries with the disintegration of the complex Imperial economy."
+          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1358,10 +1358,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Religion",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
           "score": 0.014705882,
-          "snippet": "Ancient Rome  Archaic Roman religion, at least concerning the gods, was made up not of written narratives, but rather of complex interrelations between gods and humans. Unlike in Greek mythology, the gods were not personified, but were vaguely defined sacred spirits called numina. Romans also believed that every person, place or thing had its own genius, or divine soul. During the Roman Republic, Roman religion was organised under a strict system of priestly offices, which were held by men of senatorial rank. The College of Pontifices was uppermost body in this hierarchy, and its chief priest,…"
+          "snippet": "Crisis of the Third Century  Roman commanders in the field, although nominally loyal to the state, became increasingly independent of Rome's central authority. During the crisis, there were at least 26 claimants to the title of emperor, mostly prominent Roman generals, who assumed imperial power over all or part of the empire. The same number of men became accepted by the Roman Senate as emperor during this period and so became legitimate emperors. By 268, the empire had split into three competing states: the Gallic Empire; the Palmyrene Empire; and, between them, the Italian-centered Roman Em…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1372,10 +1372,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
+          "title": "Religion in ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
           "score": 0.014492754,
-          "snippet": "Empire  The fall of the western half of the Roman Empire is seen as one of the most pivotal points in all of human history. This event traditionally marks the transition from classical civilization to the birth of Europe. The Roman Empire started to decline at the end of the reign of the last of the Five Good Emperors, Marcus Aurelius in 161–180 A.D. There is still a debate over the cause of the fall of one of the largest empires in history. Piganiol argues that the Roman Empire under its authority can be described as \"a period of terror\", holding its imperial system accountable for its failur…"
+          "snippet": "Religion in ancient Rome  for the Imperial cult. The claim was further elaborated and justified in Vergil's poetic, Imperial vision of the past.  In the late Republic, the so-called Marian reforms supposedly did the following: lowered an existing property bar on conscription, increased the efficiency of Rome's armies, and made them available as instruments of political ambition and factional conflict. The consequent civil wars led to changes at every level of Roman society. Augustus' principate established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, …"
         },
         {
           "corpus_id": "wikipedia",
@@ -1393,17 +1393,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
           "score": 0.014285714,
-          "snippet": "Fall of the Western Roman Empire  When Gibbon published his landmark work, it quickly became the standard. Peter Brown has written that \"Gibbon's work formed the peak of a century of scholarship which had been conducted in the belief that the study of the declining Roman Empire was also the study of the origins of modern Europe\". Gibbon was the first to attempt an explanation of causes of a Fall of empire. Like other Enlightenment thinkers and British citizens of the age steeped in institutional anti-Catholicism, Gibbon held in contempt the Middle Ages as a priest-ridden, superstitious Dark Ag…"
+          "snippet": "Ancient Rome  That empire was among the largest empires in the ancient world, covering around 5 million square kilometres in AD 117, with an estimated 50 to 90 million inhabitants, roughly 20% of the world's population at the time. The Roman state evolved from an elective monarchy to a classical republic and then to an increasingly autocratic military dictatorship during the Empire. Ancient Rome is often grouped into classical antiquity together with ancient Greece, and their similar cultures and societies are known as the Greco-Roman world. Ancient Roman civilisation has contributed to modern…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Greek mythology",
-          "url": "https://en.wikipedia.org/wiki/Greek_mythology#Syncretizing_trends",
+          "title": "Religion in ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
           "score": 0.014084507,
-          "snippet": "Greek mythology  The traditional literary mythology was increasingly dissociated from actual religious practice. The worship of Sol as special protector of the emperors and the empire remained the chief imperial religion until it was replaced by Christianity."
+          "snippet": "Religion in ancient Rome  established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, restored it (see below)."
         },
         {
           "corpus_id": "wikipedia",
@@ -1421,17 +1421,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Christendom",
-          "url": "https://en.wikipedia.org/wiki/Christendom#Late_Antiquity_and_Early_Middle_Ages",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
           "score": 0.013888889,
-          "snippet": "Christendom  This model of church-state relations was accepted by various Church leaders and political leaders in European history.  The Church gradually became a defining institution of the Roman Empire. Emperor Constantine issued the Edict of Milan in 313 proclaiming toleration for the Christian religion, and convoked the First Council of Nicaea in 325 whose Nicene Creed included belief in \"one holy catholic and apostolic Church\". Emperor Theodosius I made Nicene Christianity the state church of the Roman Empire with the Edict of Thessalonica of 380. In terms of prosperity and cultural life,…"
+          "snippet": "Crisis of the Third Century  Roman commanders in the field, although nominally loyal to the state, became increasingly independent of Rome's central authority. During the crisis, there were at least 26 claimants to the title of emperor, mostly prominent Roman army generals, who assumed imperial power over all or part of the empire. The same number of men became accepted by the Roman Senate as emperor during this period and so became legitimate emperors. By 268, the empire had split into three competing states: the Gallic Empire; the Palmyrene Empire; and, between them, the Italian-centered Rom…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Egypt",
-          "url": "https://en.wikipedia.org/wiki/Egypt",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
           "score": 0.01369863,
-          "snippet": "way for Roman annexation. Native rebellions and dynastic disputes weakened the kingdom, facilitating its annexation by Rome.  Egypt was a wealthy imperial province of the Roman Empire, supplying grain and hosting the major city of Alexandria. Governed with Roman administration and Hellenistic culture, its population primarily spoke Greek in major cities and Coptic Egyptian in rural areas."
+          "snippet": "Western world  Ancient Rome (6th century BC – AD 476) is a term to describe the ancient Roman society that conquered Central Italy assimilating the Italian Etruscan culture, growing from the Latium region since about the 8th century BC, to a massive empire straddling the Mediterranean Sea. In its 10-centuries territorial expansion, Roman civilization shifted from a small monarchy (753–509 BC), to a republic (509–27 BC), into an autocratic empire (27 BC – AD 476). Its Empire came to dominate Western, Central and Southeastern Europe, Northern Africa and, becoming an autocratic Empire a vast Midd…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1442,17 +1442,17 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period#Viewpoints",
+          "score": 0.013513514,
+          "snippet": "Migration Period  economic fragmentation removed many of the political, cultural and economic forces that had held the empire together.  The rural population in Roman provinces became distanced from the metropolis, and there was little to differentiate them from other peasants across the Roman frontier. In addition, Rome increasingly used foreign mercenaries to defend itself. That \"barbarisation\" parallelled changes within Barbaricum. To this end, noted linguist Dennis Howard Green wrote, \"the first centuries of our era witness not merely a progressive Romanisation of barbarian society, but al…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Roman conquest of the Iberian Peninsula",
           "url": "https://en.wikipedia.org/wiki/Roman_conquest_of_the_Iberian_Peninsula#Last_stage_of_the_conquest:_the_Cantabrian_Wars",
           "score": 0.013513514,
           "snippet": "Roman conquest of the Iberian Peninsula  of the peninsula after the previous pacifications had become quite integrated into the Roman administrative system and economy.  Augustus annexed the whole of the peninsula to the Roman Empire. The Roman province of Hispania Citerior was significantly expanded and came to include the eastern part of central Hispania and northern Hispania. It was renamed Hispania Tarraconensis. Hispania Ulterior was divided into the provinces of Baetica (most of modern Andalusia) and Lusitania, which covered present day Portugal up to the River Durius (Douro), the presen…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Religion in ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Founding_myths_and_divine_destiny",
-          "score": 0.013333334,
-          "snippet": "Religion in ancient Rome  whose expulsion marked the end of Roman kingship and the beginning of the Roman republic, governed by elected magistrates.  Roman historians regarded the essentials of Republican religion as complete by the end of Numa's reign, and confirmed as right and lawful by the Senate and people of Rome: the sacred topography of the city, its monuments and temples, the histories of Rome's leading families, and oral and ritual traditions. According to Cicero, the Romans considered themselves the most religious of all peoples, and their rise to dominance was proof they received d…"
         }
       ],
       "source_score": {
@@ -1465,22 +1465,22 @@
         "matched": [
           "transition from republic to empire under Augustus",
           "the Pax Romana",
+          "vast territorial extent around the Mediterranean",
+          "the legions and the military",
           "Roman law and administration",
           "the spread of Christianity and Constantine",
           "the fall of the Western Roman Empire"
         ],
         "missing": [
-          "vast territorial extent around the Mediterranean",
-          "the legions and the military",
           "economy, trade, and infrastructure such as roads and aqueducts",
           "division into Western and Eastern empires",
           "continuation as the Byzantine (Eastern) Empire"
         ],
         "total_expected": 10,
-        "ratio": 0.5
+        "ratio": 0.7
       },
-      "embed_ms": 38,
-      "search_ms": 1987,
+      "embed_ms": 40,
+      "search_ms": 1974,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1493,10 +1493,31 @@
       "retrieved": [
         {
           "corpus_id": "wikipedia",
+          "title": "Molecular genetics",
+          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#Structure_of_DNA",
+          "score": 0.02932363,
+          "snippet": "Molecular genetics  genetic code for all biological life and contains the information for all the proteins the organism will be able to synthesize.  Its unique structure allows DNA to store and pass on biological information across generations during cell division. At cell division, cells must be able to copy its genome and pass it on to daughter cells. This is possible due to the double-stranded structure of DNA because one strand is complementary to its partner strand, and therefore each of these strands can act as a template strand for the formation of a new complementary strand. This is wh…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Heredity",
+          "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
+          "score": 0.028441634,
+          "snippet": "Heredity  Heritable traits are known to be passed from one generation to the next via DNA, a molecule that encodes genetic information. DNA is a long polymer that incorporates four types of bases, which are interchangeable. The Nucleic acid sequence (the sequence of bases along a particular DNA molecule) specifies the genetic information: this is comparable to a sequence of letters spelling out a passage of text. Before a cell divides through mitosis, the DNA is copied, so that each of the resulting two cells will inherit the DNA sequence. A portion of a DNA molecule that specifies a single fu…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "DNA",
           "url": "https://en.wikipedia.org/wiki/DNA#Genes_and_genomes",
-          "score": 0.029857397,
+          "score": 0.02813853,
           "snippet": "DNA  not code protein may still encode functional non-coding RNA molecules, which are involved in the regulation of gene expression.  Some noncoding DNA sequences play structural roles in chromosomes. Telomeres and centromeres typically contain few genes but are important for the function and stability of chromosomes. An abundant form of noncoding DNA in humans are pseudogenes, which are copies of genes that have been disabled by mutation. These sequences are usually just molecular fossils, although they can occasionally serve as raw genetic material for the creation of new genes through the p…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Biology",
+          "url": "https://en.wikipedia.org/wiki/Biology#Gene_expression",
+          "score": 0.025158228,
+          "snippet": "Biology  Gene expression is the molecular process by which a genotype encoded in DNA gives rise to an observable phenotype in the proteins of an organism's body. This process is summarized by the central dogma of molecular biology, which was formulated by Francis Crick in 1958. According to the Central Dogma, genetic information flows from DNA to RNA to protein. There are two gene expression processes: transcription (DNA to RNA) and translation (RNA to protein)."
         },
         {
           "corpus_id": "wikipedia",
@@ -1514,13 +1535,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Heredity",
-          "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
-          "score": 0.016393442,
-          "snippet": "Heredity  Heritable traits are known to be passed from one generation to the next via DNA, a molecule that encodes genetic information. DNA is a long polymer that incorporates four types of bases, which are interchangeable. The Nucleic acid sequence (the sequence of bases along a particular DNA molecule) specifies the genetic information: this is comparable to a sequence of letters spelling out a passage of text. Before a cell divides through mitosis, the DNA is copied, so that each of the resulting two cells will inherit the DNA sequence. A portion of a DNA molecule that specifies a single fu…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "DNA replication",
           "url": "https://en.wikipedia.org/wiki/DNA_replication#DNA_structure",
           "score": 0.016393442,
@@ -1528,10 +1542,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA#Genes_and_genomes",
+          "title": "Biology",
+          "url": "https://en.wikipedia.org/wiki/Biology#Genes_and_DNA",
           "score": 0.016129032,
-          "snippet": "DNA  Genomic DNA is tightly and orderly packed in the process called DNA condensation, to fit the small available volumes of the cell. In eukaryotes, DNA is located in the cell nucleus, with small amounts in mitochondria and chloroplasts. In prokaryotes, the DNA is held within an irregularly shaped body in the cytoplasm called the nucleoid. The genetic information in a genome is held within genes, and the complete set of this information in an organism is called its genotype. A gene is a unit of heredity and is a region of DNA that influences a particular characteristic in an organism. Genes c…"
+          "snippet": "Biology  A gene is a unit of heredity that corresponds to a region of deoxyribonucleic acid (DNA) that carries genetic information that controls form or function of an organism. DNA is composed of two polynucleotide chains that coil around each other to form a double helix. It is found as linear chromosomes in eukaryotes, and circular chromosomes in prokaryotes. The set of chromosomes in a cell is collectively known as its genome. In eukaryotes, DNA is mainly in the cell nucleus. In prokaryotes, the DNA is held within the nucleoid. The genetic information is held within genes, and the complete…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1542,10 +1556,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Genetics",
-          "url": "https://en.wikipedia.org/wiki/Genetics#Genetic_code",
+          "title": "DNA",
+          "url": "https://en.wikipedia.org/wiki/DNA#Genes_and_genomes",
           "score": 0.015873017,
-          "snippet": "Genetics  Genes express their functional effect through the production of proteins, which are molecules responsible for most functions in the cell. Proteins are made up of one or more polypeptide chains, each composed of a sequence of amino acids. The DNA sequence of a gene is used to produce a specific amino acid sequence. This process begins with the production of an RNA molecule with a sequence matching the gene's DNA sequence, a process called transcription."
+          "snippet": "DNA  Genomic DNA is tightly and orderly packed in the process called DNA condensation, to fit the small available volumes of the cell. In eukaryotes, DNA is located in the cell nucleus, with small amounts in mitochondria and chloroplasts. In prokaryotes, the DNA is held within an irregularly shaped body in the cytoplasm called the nucleoid. The genetic information in a genome is held within genes, and the complete set of this information in an organism is called its genotype. A gene is a unit of heredity and is a region of DNA that influences a particular characteristic in an organism. Genes c…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1556,13 +1570,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Gene",
-          "url": "https://en.wikipedia.org/wiki/Gene#Genetic_code",
-          "score": 0.015625,
-          "snippet": "Gene  The nucleotide sequence of a gene's DNA specifies the amino acid sequence of a protein through the genetic code. Sets of three nucleotides, known as codons, each correspond to a specific amino acid. The principle that three sequential bases of DNA code for each amino acid was demonstrated in 1961 using frameshift mutations in the rIIB gene of bacteriophage T4 (see Crick, Brenner et al. experiment).  Additionally, a \" start codon \", and three \" stop codons \" indicate the beginning and end of the protein coding region. There are 64 possible codons (four possible nucleotides at each of thre…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "DNA repair",
           "url": "https://en.wikipedia.org/wiki/DNA_repair#Nuclear_versus_mitochondrial",
           "score": 0.015625,
@@ -1570,10 +1577,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Cell (biology)",
-          "url": "https://en.wikipedia.org/wiki/Cell_(biology)#Genetic_material",
+          "title": "Genetics",
+          "url": "https://en.wikipedia.org/wiki/Genetics#Genetic_code",
           "score": 0.015384615,
-          "snippet": "Cell (biology)  Two different kinds of genetic material exist: deoxyribonucleic acid (DNA) and ribonucleic acid (RNA). Cells use DNA for their long-term information storage. The biological information contained in an organism is encoded in its DNA sequence. RNA is used for information transport (e.g., mRNA) and enzymatic functions (e.g., ribosomal RNA). Transfer RNA (tRNA) molecules are used to add amino acids during protein translation.  Prokaryotic genetic material is organized in a simple circular bacterial chromosome in the nucleoid region of the cytoplasm. Eukaryotic genetic material is d…"
+          "snippet": "Genetics  Genes express their functional effect through the production of proteins, which are molecules responsible for most functions in the cell. Proteins are made up of one or more polypeptide chains, each composed of a sequence of amino acids. The DNA sequence of a gene is used to produce a specific amino acid sequence. This process begins with the production of an RNA molecule with a sequence matching the gene's DNA sequence, a process called transcription."
         },
         {
           "corpus_id": "wikipedia",
@@ -1584,17 +1591,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#History",
+          "title": "DNA",
+          "url": "https://en.wikipedia.org/wiki/DNA#Base_pairing",
           "score": 0.015151516,
-          "snippet": "Molecular genetics  is often induced by conditions of stress, and the function of transformation appears to be repair of genomic damage.  In 1950, Erwin Chargaff derived rules that offered evidence of DNA being the genetic material of life. These were \"1) that the base composition of DNA varies between species and 2) in natural DNA molecules, the amount of adenine (A) is equal to the amount of thymine (T), and the amount of guanine (G) is equal to the amount of cytosine (C).\" These rules, known as Chargaff's rules, helped to understand of molecular genetics. In 1953 Francis Crick and James Wat…"
+          "snippet": "DNA  As a result of this base pair complementarity, all the information in the double-stranded sequence of a DNA helix is duplicated on each strand, which is vital in DNA replication. This reversible and specific interaction between complementary base pairs is critical for all the functions of DNA in organisms."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Central dogma of molecular biology",
-          "url": "https://en.wikipedia.org/wiki/Central_dogma_of_molecular_biology",
+          "title": "DNA",
+          "url": "https://en.wikipedia.org/wiki/DNA",
           "score": 0.014925373,
-          "snippet": "Central dogma of molecular biology  The central dogma of molecular biology deals with the flow of genetic information within a biological system. It is often stated as \"DNA makes RNA, and RNA makes protein\", although this is not its original meaning. It was first stated by Francis Crick in 1957, then published in 1958: The Central Dogma. This states that once \"information\" has passed into protein it cannot get out again. In more detail, the transfer of information from nucleic acid to nucleic acid, or from nucleic acid to protein may be possible, but transfer from protein to protein, or from p…"
+          "snippet": "DNA  These compacting structures guide the interactions between DNA and other proteins, helping control which parts of the DNA are transcribed."
         },
         {
           "corpus_id": "wikipedia",
@@ -1605,6 +1612,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Genetics",
+          "url": "https://en.wikipedia.org/wiki/Genetics#DNA_and_chromosomes",
+          "score": 0.014705882,
+          "snippet": "Genetics  these histones are called chromosomes. Viruses sometimes use the similar molecule RNA instead of DNA as their genetic material.  DNA normally exists as a double-stranded molecule, coiled into the shape of a double helix. Each nucleotide in DNA preferentially pairs with its partner nucleotide on the opposite strand: A pairs with T, and C pairs with G. Thus, in its two-stranded form, each strand effectively contains all necessary information, redundant with its partner strand. This structure of DNA is the physical basis for inheritance: DNA replication duplicates the genetic informatio…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Nucleic acid",
           "url": "https://en.wikipedia.org/wiki/Nucleic_acid#Abstract",
           "score": 0.014705882,
@@ -1612,10 +1626,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Genetics",
-          "url": "https://en.wikipedia.org/wiki/Genetics#Genetic_code",
+          "title": "Central dogma of molecular biology",
+          "url": "https://en.wikipedia.org/wiki/Central_dogma_of_molecular_biology#DNA_replications",
           "score": 0.014492754,
-          "snippet": "Genetics  begins with the production of an RNA molecule with a sequence matching the gene's DNA sequence, a process called transcription.  This messenger RNA molecule then serves to produce a corresponding amino acid sequence through a process called translation. Each group of three nucleotides in the sequence, called a codon, corresponds either to one of the twenty possible amino acids in a protein or an instruction to end the amino acid sequence; this correspondence is called the genetic code. The flow of information is unidirectional: information is transferred from nucleotide sequences int…"
+          "snippet": "Central dogma of molecular biology  In the sense that DNA replication must occur if genetic material is to be provided for the progeny of any cell, whether somatic or reproductive, the copying from DNA to DNA arguably is the fundamental step in information transfer. A complex group of proteins called the replisome performs the replication of the information from the parent strand to the complementary daughter strand."
         },
         {
           "corpus_id": "wikipedia",
@@ -1626,6 +1640,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Gene",
+          "url": "https://en.wikipedia.org/wiki/Gene#Genetic_code",
+          "score": 0.014285714,
+          "snippet": "Gene  The nucleotide sequence of a gene's DNA specifies the amino acid sequence of a protein through the genetic code. Sets of three nucleotides, known as codons, each correspond to a specific amino acid. The principle that three sequential bases of DNA code for each amino acid was demonstrated in 1961 using frameshift mutations in the rIIB gene of bacteriophage T4 (see Crick, Brenner et al. experiment).  Additionally, a \" start codon \", and three \" stop codons \" indicate the beginning and end of the protein coding region. There are 64 possible codons (four possible nucleotides at each of thre…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Nonverbal communication",
           "url": "https://en.wikipedia.org/wiki/Nonverbal_communication#Abstract",
           "score": 0.014285714,
@@ -1633,17 +1654,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "DNA",
-          "url": "https://en.wikipedia.org/wiki/DNA",
-          "score": 0.014285714,
-          "snippet": "DNA  RNA strands are created using DNA strands as a template in a process called transcription, where DNA bases are exchanged for their corresponding bases except in the case of thymine (T), for which RNA substitutes uracil (U). Under the genetic code, these RNA strands specify the sequence of amino acids within proteins in a process called translation. Within eukaryotic cells, DNA is organized into long structures called chromosomes. Before typical cell division, these chromosomes are duplicated in the process of DNA replication, providing a complete set of chromosomes for each daughter cell.…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Genetics",
-          "url": "https://en.wikipedia.org/wiki/Genetics#DNA_and_chromosomes",
+          "title": "Human genome",
+          "url": "https://en.wikipedia.org/wiki/Human_genome#Protein-coding_genes",
           "score": 0.014084507,
-          "snippet": "Genetics  The molecular basis for genes is deoxyribonucleic acid (DNA). DNA is composed of deoxyribose (sugar molecule), a phosphate group, and a base (amine group). There are four types of bases: adenine (A), cytosine (C), guanine (G), and thymine (T). The phosphates make phosphodiester bonds with the sugars to make long phosphate-sugar backbones. Bases specifically pair together (T&A, C&G) between two backbones and make like rungs on a ladder. The bases, phosphates, and sugars together make a nucleotide that connects to make long chains of DNA. Genetic information exists in the sequence of t…"
+          "snippet": "Human genome  and untranslated regions (UTRs) at either end of the mature mRNA. The total amount of coding DNA is about 1-2% of the genome.  Many people divide the genome into coding and non-coding DNA based on the idea that coding DNA is the most important functional component of the genome. About 98-99% of the human genome is non-coding DNA."
         },
         {
           "corpus_id": "wikipedia",
@@ -1654,10 +1668,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#History",
+          "title": "Cell (biology)",
+          "url": "https://en.wikipedia.org/wiki/Cell_(biology)#Genetic_material",
           "score": 0.013888889,
-          "snippet": "Molecular genetics  crystallography work done by Rosalind Franklin and Maurice Wilkins, were able to derive the 3-D double helix structure of DNA."
+          "snippet": "Cell (biology)  Two different kinds of genetic material exist: deoxyribonucleic acid (DNA) and ribonucleic acid (RNA). Cells use DNA for their long-term information storage. The biological information contained in an organism is encoded in its DNA sequence. RNA is used for information transport (e.g., mRNA) and enzymatic functions (e.g., ribosomal RNA). Transfer RNA (tRNA) molecules are used to add amino acids during protein translation.  Prokaryotic genetic material is organized in a simple circular bacterial chromosome in the nucleoid region of the cytoplasm. Eukaryotic genetic material is d…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1668,24 +1682,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Protein",
-          "url": "https://en.wikipedia.org/wiki/Protein#Biosynthesis",
-          "score": 0.01369863,
-          "snippet": "Proteins are assembled from amino acids using information encoded in genes. Each protein has its own unique amino acid sequence that is specified by the nucleotide sequence of the gene encoding this protein. The genetic code is a set of three-nucleotide sets called codons and each three-nucleotide combination designates an amino acid, for example AUG (adenine – uracil – guanine) is the code for methionine. Because DNA contains four nucleotides, the total number of possible codons is 64; hence, there is some redundancy in the genetic code, with some amino acids specified by more than one codon.…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Molecular genetics",
-          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#Structure_of_DNA",
+          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#History",
           "score": 0.01369863,
-          "snippet": "Molecular genetics  genetic code for all biological life and contains the information for all the proteins the organism will be able to synthesize.  Its unique structure allows DNA to store and pass on biological information across generations during cell division. At cell division, cells must be able to copy its genome and pass it on to daughter cells. This is possible due to the double-stranded structure of DNA because one strand is complementary to its partner strand, and therefore each of these strands can act as a template strand for the formation of a new complementary strand. This is wh…"
+          "snippet": "Molecular genetics  is often induced by conditions of stress, and the function of transformation appears to be repair of genomic damage.  In 1950, Erwin Chargaff derived rules that offered evidence of DNA being the genetic material of life. These were \"1) that the base composition of DNA varies between species and 2) in natural DNA molecules, the amount of adenine (A) is equal to the amount of thymine (T), and the amount of guanine (G) is equal to the amount of cytosine (C).\" These rules, known as Chargaff's rules, helped to understand of molecular genetics. In 1953 Francis Crick and James Wat…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Genome",
-          "url": "https://en.wikipedia.org/wiki/Genome#Coding_sequences",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution#Heredity",
           "score": 0.013513514,
-          "snippet": "Genome  DNA sequences that carry the instructions to make proteins are referred to as coding sequences. The proportion of the genome occupied by coding sequences varies widely. A larger genome does not necessarily contain more genes, and the proportion of non-repetitive DNA decreases along with increasing genome size in complex eukaryotes."
+          "snippet": "Evolution in organisms occurs through changes in heritable characteristics—the inherited characteristics of an organism. In humans, for example, eye colour is an inherited characteristic and an individual might inherit the \"brown-eye trait\" from one of their parents. Inherited traits are controlled by genes and the complete set of genes within an organism's genome (genetic material) is called its genotype."
         },
         {
           "corpus_id": "wikipedia",
@@ -1693,13 +1700,6 @@
           "url": "https://en.wikipedia.org/wiki/Ontology#Branches",
           "score": 0.013513514,
           "snippet": "Ontology  is a comprehensive framework for the standardized representation of gene-related information across species and databases.  Formal ontology is the study of objects in general while focusing on their abstract structures and features. It divides objects into different categories based on the forms they exemplify. Formal ontologists often rely on the tools of formal logic to express their findings in an abstract and general manner. Formal ontology contrasts with material ontology, which distinguishes between different areas of objects and examines the features characteristic of a specif…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Gene",
-          "url": "https://en.wikipedia.org/wiki/Gene#Transcription",
-          "score": 0.013333334,
-          "snippet": "Gene  Transcription produces a single-stranded RNA molecule known as messenger RNA, whose nucleotide sequence is complementary to the DNA from which it was transcribed. The mRNA acts as an intermediate between the DNA gene and its final protein product. The gene's DNA is used as a template to generate a complementary mRNA. The mRNA matches the sequence of the gene's DNA coding strand because it is synthesised as the complement of the template strand. Transcription is performed by an enzyme called an RNA polymerase, which reads the template strand in the 3' to 5' direction and synthesizes the R…"
         }
       ],
       "source_score": {
@@ -1726,8 +1726,8 @@
         "total_expected": 10,
         "ratio": 0.9
       },
-      "embed_ms": 29,
-      "search_ms": 1955,
+      "embed_ms": 34,
+      "search_ms": 1964,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1747,10 +1747,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#AI_welfare_and_rights",
+          "title": "History of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Optimism",
           "score": 0.016666668,
-          "snippet": "Artificial intelligence  the term “AI welfare” and outlined the new field of AI welfare science, which is derived from animal welfare science.  Progress in AI increased interest in the topic. Proponents of AI welfare and rights often argue that AI sentience, if it emerges, would be particularly easy to deny. They warn that this may be a moral blind spot analogous to slavery or factory farming, which could lead to large-scale suffering if sentient AI is created and carelessly exploited."
+          "snippet": "History of artificial intelligence  The first generation of AI researchers made these predictions about their work:"
         },
         {
           "corpus_id": "wikipedia",
@@ -1761,17 +1761,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "52nd G7 summit",
-          "url": "https://en.wikipedia.org/wiki/52nd_G7_summit",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Goals",
           "score": 0.016393442,
-          "snippet": "manitarian and reconstruction efforts in Gaza, and end violence in the West Bank.  Executives from Anthropic, OpenAI, Google and Mistral AI took part in discussions linked to artificial intelligence, online safety and the protection of minors. G7 members also said they would work with leading companies to accelerate the safe and beneficial deployment of AI and adapt the language used by AI chatbots when interacting with children."
+          "snippet": "Artificial intelligence  The general problem of simulating (or creating) intelligence has been broken into subproblems. These consist of particular traits or capabilities that researchers expect an intelligent system to display. The traits described below have received the most attention and cover the scope of AI research."
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Intelligence",
-          "url": "https://en.wikipedia.org/wiki/Intelligence#Abstract",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Narrow_vs._general_AI",
           "score": 0.016129032,
-          "snippet": "Intelligence has been defined in many ways: the capacity for abstraction, logic, understanding, self-awareness, learning, emotional knowledge, reasoning, planning, creativity, critical thinking, and problem-solving. It can be described as the ability to perceive or infer information; and to retain it as knowledge to be applied to adaptive behaviors within an environment or context.  The term rose to prominence during the early 1900s. Most psychologists believe that intelligence can be divided into various domains or competencies.  Intelligence has been long-studied in humans, and across numero…"
+          "snippet": "Artificial intelligence  AI researchers are divided as to whether to pursue the goals of artificial general intelligence and superintelligence directly or to solve as many specific problems as possible (narrow AI) in hopes these solutions will lead indirectly to the field's long-term goals. General intelligence is difficult to define and difficult to measure, and modern AI has had more verifiable successes by focusing on specific problems with specific solutions. The experimental sub-field of artificial general intelligence studies this area exclusively."
         },
         {
           "corpus_id": "wikipedia",
@@ -1782,10 +1782,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial general intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
+          "title": "History of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Soft_computing_and_probabilistic_reasoning",
           "score": 0.015873017,
-          "snippet": "Artificial general intelligence  GPT-3 API.  In 2022, DeepMind developed Gato, a \"general-purpose\" system capable of performing more than 600 different tasks.  In 2023, Microsoft Research published a study on an early version of OpenAI's GPT-4, contending that it exhibited more general intelligence than previous AI models and demonstrated human-level performance in tasks spanning multiple domains, such as mathematics, coding, and law. This research sparked a debate on whether GPT-4 could be considered an early, incomplete version of artificial general intelligence, emphasizing the need for fur…"
+          "snippet": "History of artificial intelligence  problems that precise symbolic methods could not handle. Press accounts often claimed these tools could \"think like a human\".  Judea Pearl 's influential 1988 book brought probability and decision theory into AI. Fuzzy logic, developed by Lofti Zadeh in the 60s, began to be more widely used in AI and robotics. Evolutionary computation and artificial neural networks also handle imprecise information, and are classified as \"soft\". In the 90s and early 2000s many other soft computing tools were developed and put into use, including Bayesian networks, hidden Mar…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1796,10 +1796,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "AI alignment",
-          "url": "https://en.wikipedia.org/wiki/AI_alignment#Alignment_problem",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#AI_welfare_and_rights",
           "score": 0.015625,
-          "snippet": "AI alignment  In 1960, AI pioneer Norbert Wiener described the AI alignment problem as follows:  If we use, to achieve our purposes, a mechanical agency with whose operation we cannot interfere effectively… we had better be quite sure that the purpose put into the machine is the purpose which we really desire.  AI alignment involves ensuring that an AI system's objectives match those of its designers or users, or match widely shared values, objective ethical standards, or the intentions its designers would have if they were more informed and enlightened.  AI alignment is an open problem for mo…"
+          "snippet": "Artificial intelligence  the term “AI welfare” and outlined the new field of AI welfare science, which is derived from animal welfare science.  Progress in AI increased interest in the topic. Proponents of AI welfare and rights often argue that AI sentience, if it emerges, would be particularly easy to deny. They warn that this may be a moral blind spot analogous to slavery or factory farming, which could lead to large-scale suffering if sentient AI is created and carelessly exploited."
         },
         {
           "corpus_id": "wikipedia",
@@ -1810,10 +1810,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Cognitive science",
-          "url": "https://en.wikipedia.org/wiki/Cognitive_science#History",
+          "title": "History of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Soft_computing_and_probabilistic_reasoning",
           "score": 0.015384615,
-          "snippet": "Cognitive science  Science. In 1986, the first Cognitive Science Department in the world was founded at the University of California, San Diego.  In the 1970s and early 1980s, as access to computers increased, artificial intelligence research expanded. Researchers such as Marvin Minsky would write computer programs in languages such as LISP to attempt to formally characterize the steps that human beings went through, for instance, in making decisions and solving problems, in the hope of better understanding human thought, and also in the hope of creating artificial minds. This approach is know…"
+          "snippet": "History of artificial intelligence  problems that precise symbolic methods could not handle. Press accounts often claimed these tools could \"think like a human\".  Judea Pearl 's influential 1988 book brought probability and decision theory into AI. Fuzzy logic, developed by Lofti Zadeh in the 60s, began to be more widely used in AI and robotics. Evolutionary computation and artificial neural networks also handle imprecise information, and are classified as \"soft\". In the 90s and early 2000s many other soft computing tools were developed and put into use, including Bayesian networks, hidden Mar…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1824,10 +1824,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Privacy_and_copyright",
+          "title": "52nd G7 summit",
+          "url": "https://en.wikipedia.org/wiki/52nd_G7_summit",
           "score": 0.015151516,
-          "snippet": "Artificial intelligence  society where individual activities are constantly monitored and analyzed without adequate safeguards or transparency.  Sensitive user data collected may include online activity records, geolocation data, video or audio. For example, in order to build speech recognition algorithms, Amazon has recorded millions of private conversations and allowed temporary workers to listen to and transcribe some of them. Opinions about this widespread surveillance range from those who see it as a necessary evil to those for whom it is clearly unethical and a violation of the right to …"
+          "snippet": "manitarian and reconstruction efforts in Gaza, and end violence in the West Bank.  Executives from Anthropic, OpenAI, Google and Mistral AI took part in discussions linked to artificial intelligence, online safety and the protection of minors. G7 members also said they would work with leading companies to accelerate the safe and beneficial deployment of AI and adapt the language used by AI chatbots when interacting with children."
         },
         {
           "corpus_id": "wikipedia",
@@ -1838,10 +1838,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Chatbot",
-          "url": "https://en.wikipedia.org/wiki/Chatbot",
+          "title": "Intelligence",
+          "url": "https://en.wikipedia.org/wiki/Intelligence#Abstract",
           "score": 0.014925373,
-          "snippet": "his successor, Edmund Muskie.  In 1984, an interactive version of the program Racter was released which acted as a chatbot.  A.L.I.C.E. was released in 1995. This uses a markup language called AIML, which is specific to its function as a conversational agent, and has since been adopted by various other developers of, so-called, Alicebots. A.L.I.C.E. is a weak AI without any reasoning capabilities. It is based on a similar pattern matching technique as ELIZA in 1966. This is not strong AI, which would require sapience and logical reasoning abilities.  Jabberwacky, released in 1997, learns new r…"
+          "snippet": "Intelligence has been defined in many ways: the capacity for abstraction, logic, understanding, self-awareness, learning, emotional knowledge, reasoning, planning, creativity, critical thinking, and problem-solving. It can be described as the ability to perceive or infer information; and to retain it as knowledge to be applied to adaptive behaviors within an environment or context.  The term rose to prominence during the early 1900s. Most psychologists believe that intelligence can be divided into various domains or competencies.  Intelligence has been long-studied in humans, and across numero…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1852,10 +1852,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Knowledge_revolution",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
           "score": 0.014705882,
-          "snippet": "History of artificial intelligence  The power of expert systems came from the expert knowledge they contained. They were part of a new direction in AI research that had been gaining ground throughout the 70s. \"AI researchers were beginning to suspect—reluctantly, for it violated the scientific canon of parsimony —that intelligence might very well be based on the ability to use large amounts of diverse knowledge in different ways,\" writes Pamela McCorduck. \"he great lesson from the 1970s was that intelligent behavior depended very much on dealing with knowledge, sometimes quite detailed knowled…"
+          "snippet": "Artificial general intelligence  adult comes to about 100 on average. Similar tests were carried out in 2014, with the IQ score reaching a maximum value of 27.  In 2020, OpenAI developed GPT-3, a language model capable of performing many diverse tasks without specific training. According to Gary Grossman in a VentureBeat article, while there is consensus that GPT-3 is not an example of AGI, it is considered by some to be too advanced to be classified as a narrow AI system.  In the same year, Jason Rohrer used his GPT-3 account to develop a chatbot, and provided a chatbot-developing platform ca…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1866,10 +1866,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Chatbot",
-          "url": "https://en.wikipedia.org/wiki/Chatbot#Development",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
           "score": 0.014492754,
-          "snippet": "Chatbot  technique ELIZA was using back in 1966. This is not strong AI, which would require sapience and logical reasoning abilities.  Jabberwacky learns new responses and context based on real-time user interactions, rather than being driven from a static database. Some more recent chatbots also combine real-time learning with evolutionary algorithms that optimize their ability to communicate based on each conversation held. Still, there is currently no general purpose conversational artificial intelligence, and some software developers focus on the practical aspect, information retrieval.  C…"
+          "snippet": "Artificial general intelligence  GPT-3 API.  In 2022, DeepMind developed Gato, a \"general-purpose\" system capable of performing more than 600 different tasks.  In 2023, Microsoft Research published a study on an early version of OpenAI's GPT-4, contending that it exhibited more general intelligence than previous AI models and demonstrated human-level performance in tasks spanning multiple domains, such as mathematics, coding, and law. This research sparked a debate on whether GPT-4 could be considered an early, incomplete version of artificial general intelligence, emphasizing the need for fur…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1887,17 +1887,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#State_space_search",
+          "title": "AI alignment",
+          "url": "https://en.wikipedia.org/wiki/AI_alignment#Alignment_problem",
           "score": 0.014285714,
-          "snippet": "Artificial intelligence  State space search searches through a tree of possible states to try to find a goal state. For example, planning algorithms search through trees of goals and subgoals, attempting to find a path to a target goal, a process called means-ends analysis.  Simple exhaustive searches are rarely sufficient for most real-world problems: the search space (the number of places to search) quickly grows to astronomical numbers. The result is a search that is too slow or never completes. \" Heuristics \" or \"rules of thumb\" can help prioritize choices that are more likely to reach a g…"
+          "snippet": "AI alignment  In 1960, AI pioneer Norbert Wiener described the AI alignment problem as follows:  If we use, to achieve our purposes, a mechanical agency with whose operation we cannot interfere effectively… we had better be quite sure that the purpose put into the machine is the purpose which we really desire.  AI alignment involves ensuring that an AI system's objectives match those of its designers or users, or match widely shared values, objective ethical standards, or the intentions its designers would have if they were more informed and enlightened.  AI alignment is an open problem for mo…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of artificial life",
-          "url": "https://en.wikipedia.org/wiki/History_of_artificial_life#Pre-computer",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Regulation",
           "score": 0.014084507,
-          "snippet": "History of artificial life  The earliest examples of artificial life involve sophisticated automata constructed using pneumatics, mechanics, and/or hydraulics. The first automata were conceived during the third and second centuries BC and these were demonstrated by the theorems of Hero of Alexandria, which included sophisticated mechanical and hydraulic solutions. Many of his notable works were included in the book Pneumatics, which was also used for constructing machines until early modern times. In 1490, Leonardo da Vinci also constructed an armored knight, which is considered the first huma…"
+          "snippet": "Artificial intelligence  for the federal government to regulate AI, versus 13% responding \"not very important\" and 8% responding \"not at all important\".  In November 2023, the first global AI Safety Summit was held in Bletchley Park in the UK to discuss the near and far term risks of AI and the possibility of mandatory and voluntary regulatory frameworks. 28 countries including the United States, China, and the European Union issued a declaration at the start of the summit, calling for international co-operation to manage the challenges and risks of artificial intelligence. In May 2024 at the …"
         },
         {
           "corpus_id": "wikipedia",
@@ -1915,17 +1915,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Frameworks",
+          "title": "Cognitive science",
+          "url": "https://en.wikipedia.org/wiki/Cognitive_science#History",
           "score": 0.013888889,
-          "snippet": "Artificial intelligence  between job roles such as data scientists, product managers, data engineers, domain experts, and delivery managers.  The UK AI Safety Institute released in 2024 a testing toolset called 'Inspect' for AI safety evaluations available under a MIT open-source licence which is freely available on GitHub and can be improved with third-party packages. It can be used to evaluate AI models in a range of areas including core knowledge, ability to reason, and autonomous capabilities."
+          "snippet": "Cognitive science  Science. In 1986, the first Cognitive Science Department in the world was founded at the University of California, San Diego.  In the 1970s and early 1980s, as access to computers increased, artificial intelligence research expanded. Researchers such as Marvin Minsky would write computer programs in languages such as LISP to attempt to formally characterize the steps that human beings went through, for instance, in making decisions and solving problems, in the hope of better understanding human thought, and also in the hope of creating artificial minds. This approach is know…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Chatbot",
-          "url": "https://en.wikipedia.org/wiki/Chatbot",
+          "title": "History of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Decrease_in_funding",
           "score": 0.01369863,
-          "snippet": "chatbot]] chatbot]]  A chatbot (originally chatterbot) is a software application or web interface designed to converse through text or speech. Modern chatbots are typically online and use generative artificial intelligence systems that are capable of maintaining a conversation with a user in natural language and simulating the way a human would behave as a conversational partner. Such chatbots often use deep learning and natural language processing. Simpler chatbots have existed for decades.  Chatbots have gained popularity during the AI boom of the 2020s, with the releases of generative AI ch…"
+          "snippet": "History of artificial intelligence  instead directed money at specific projects with clear objectives, such as autonomous tanks and battle management systems.  The major laboratories (MIT, Stanford, CMU and Edinburgh) had been receiving generous support from their governments, and when it was withdrawn, these were the only places that were seriously impacted by the budget cuts. The thousands of researchers outside these institutions and the many more thousands that were joining the field were unaffected."
         },
         {
           "corpus_id": "wikipedia",
@@ -1936,10 +1936,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Artificial general intelligence",
-          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Consciousness",
+          "title": "Generative artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Generative_artificial_intelligence",
           "score": 0.013513514,
-          "snippet": "Artificial general intelligence  It is not established whether an AGI would necessarily be conscious.  Consciousness can have various meanings. Some aspects of consciousness play a major role in science fiction and the ethics of artificial intelligence:  These traits have a moral dimension. AI sentience would give rise to concerns of welfare and legal protection, similarly to animals. Other aspects of consciousness related to cognitive capabilities are also relevant to the concept of AI rights. Figuring out how to integrate advanced AI with existing legal and social frameworks is an emergent i…"
+          "snippet": "Generative artificial intelligence  Generative AI has uses across a wide range of industries, including software development, healthcare, finance, entertainment, customer service, sales and marketing, art, writing, fashion, and product design. However, concerns have been raised about the potential misuse of generative AI such as cybercrime, the use of fake news or deepfakes to deceive or manipulate people, and the mass replacement of human jobs."
         },
         {
           "corpus_id": "wikipedia",
@@ -1973,8 +1973,8 @@
         "total_expected": 10,
         "ratio": 0.7
       },
-      "embed_ms": 30,
-      "search_ms": 1932,
+      "embed_ms": 33,
+      "search_ms": 1976,
       "corpora_hit": [
         "wikipedia"
       ],

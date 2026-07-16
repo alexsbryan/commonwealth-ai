@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-newsworthy-smoke",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784182492,
+  "started_at_unix": 1784229491,
   "results": [
     {
       "question_id": "newsworthy-israel-lebanon-ceasefire",
@@ -240,8 +240,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 29,
-      "search_ms": 3190,
+      "embed_ms": 32,
+      "search_ms": 3173,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -484,8 +484,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 28,
-      "search_ms": 1857,
+      "embed_ms": 29,
+      "search_ms": 1889,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -725,8 +725,8 @@
         "total_expected": 3,
         "ratio": 1.0
       },
-      "embed_ms": 26,
-      "search_ms": 1809,
+      "embed_ms": 30,
+      "search_ms": 1882,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -967,8 +967,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 29,
-      "search_ms": 1841,
+      "embed_ms": 28,
+      "search_ms": 1862,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1209,8 +1209,8 @@
         "total_expected": 3,
         "ratio": 1.0
       },
-      "embed_ms": 27,
-      "search_ms": 1831,
+      "embed_ms": 29,
+      "search_ms": 1878,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1453,8 +1453,8 @@
         "total_expected": 4,
         "ratio": 1.0
       },
-      "embed_ms": 28,
-      "search_ms": 1846,
+      "embed_ms": 31,
+      "search_ms": 1886,
       "corpora_hit": [
         "wikipedia"
       ],
