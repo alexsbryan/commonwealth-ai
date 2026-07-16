@@ -1,0 +1,13 @@
+{
+  "verify_exit_ok": false,
+  "stdout_tail": "..............F...F.....                                                 [100%]\n=================================== FAILURES ===================================\n_______________________________ test_or_keyword ________________________________\n\n    def test_or_keyword():\n>       assert evaluate(\"false or true\") is True\n               ^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests/test_integration.py:78: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \nminilang/__init__.py:13: in evaluate\n    return evaluate_ast(parse(tokenize(source)), {})\n                        ^^^^^^^^^^^^^^^^^^^^^^^\nminilang/parser.py:150: in parse\n    return Parser(toks).parse()\n           ^^^^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <minilang.parser.Parser object at 0x7f89fc2fa820>\n\n    def parse(self):\n        node = self.expr()\n        if self.peek().kind != \"EOF\":\n>           raise SyntaxError(f\"trailing tokens starting at {self.peek()}\")\nE           SyntaxError: trailing tokens starting at Token(IDENT, 'or')\n\nminilang/parser.py:50: SyntaxError\n___________________ test_or_short_circuits_past_div_by_zero ____________________\n\n    def test_or_short_circuits_past_div_by_zero():\n>       assert evaluate(\"true or (10 / 0 == 0)\") is True\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests/test_integration.py:96: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \nminilang/__init__.py:13: in evaluate\n    return evaluate_ast(parse(tokenize(source)), {})\n                        ^^^^^^^^^^^^^^^^^^^^^^^\nminilang/parser.py:150: in parse\n    return Parser(toks).parse()\n           ^^^^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <minilang.parser.Parser object at 0x7f89fc3bdf40>\n\n    def parse(self):\n        node = self.expr()\n        if self.peek().kind != \"EOF\":\n>           raise SyntaxError(f\"trailing tokens starting at {self.peek()}\")\nE           SyntaxError: trailing tokens starting at Token(IDENT, 'or')\n\nminilang/parser.py:50: SyntaxError\n=========================== short test summary info ============================\nFAILED tests/test_integration.py::test_or_keyword - SyntaxError: trailing tok...\nFAILED tests/test_integration.py::test_or_short_circuits_past_div_by_zero - S...\n2 failed, 22 passed in 0.02s\n",
+  "passed": 22,
+  "failed": 2,
+  "total": 24,
+  "failed_names": [
+    "tests/test_integration.py::test_or_keyword",
+    "tests/test_integration.py::test_or_short_circuits_past_div_by_zero"
+  ],
+  "pass_fraction": 0.9166666666666666,
+  "bucketed_score": 2
+}

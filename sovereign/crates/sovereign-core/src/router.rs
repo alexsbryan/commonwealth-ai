@@ -1860,6 +1860,13 @@ impl Router for LlmRouter {
         // when a search tool is present — i.e. exactly when `force_action`
         // could fire — so the common path pays nothing. Falls back to the
         // keyword heuristic on classify error or when no classifier is wired.
+        //
+        // NOTE: ACTION here resolves (via pass2_refine) to
+        // SimpleAction{web_search}, which the corpus-first backstop AFTER the
+        // coarse branch then redirects to KnowledgeQuery — the router does not
+        // auto-route to the web (see that guard + future_timeline_v1.toml). This
+        // pre-check's surviving value is ensuring a fresh-info question can't be
+        // answered from stale weights: it reaches the corpus + gap-check path.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
         let force_action = if has_search {
             match self.current_info_classifier.as_ref() {
@@ -1968,6 +1975,34 @@ impl Router for LlmRouter {
                 );
                 (Intent::KnowledgeQuery, None)
             }
+        };
+
+        // Corpus-first backstop: the router never AUTO-routes to a web search.
+        // Any implicit SimpleAction{web_search} the classifier chain produced —
+        // LLM Pass 1 reading a fresh-info question ("when does the next iPhone
+        // launch?") as ACTION, the current-info pre-check, or the SIMPLE
+        // self-assessment's NeedsWebSearch — is redirected to KnowledgeQuery so
+        // the corpus is queried FIRST. The always-on gap check then surfaces the
+        // user-triggered "Search the web" card when retrieval didn't ground the
+        // answer (project_gap_check_always_on + future_timeline_v1.toml). Auto
+        // web-search routing was deliberately rolled back (2026-05-19) as
+        // premature until the Phase-3 agent-loop (model calls the search tool
+        // under a URL-allowlist constraint) ships. EXPLICIT "search the web for
+        // X" requests are unaffected: those match a web_search exemplar in the
+        // embed router, which early-returns above before this point. The
+        // suppressed signal is NOT lost — coarse.intent / self_assessment still
+        // record why in the routing-meta log, so the glassbox shows the model
+        // wanted external reach even though we searched the corpus first.
+        let intent = match intent {
+            Intent::SimpleAction { tool } if tool == "web_search" => {
+                tracing::debug!(
+                    target: "router.current_info",
+                    coarse = %coarse.intent,
+                    "corpus-first: suppressing implicit web_search → KnowledgeQuery (gap check owns web escalation)"
+                );
+                Intent::KnowledgeQuery
+            }
+            other => other,
         };
 
         // Effort escalation on the coarse-resolved intent. This is the path the

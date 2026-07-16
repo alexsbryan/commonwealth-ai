@@ -343,19 +343,36 @@ the current message and hands non-crisis follow-ups back to the witness
 classifier failures keep the guaranteed floor) — any edit there must
 re-pass the `--persona crisis_discloser` suite.
 
-**CI composition** (`scripts/sovereign-ci-bench.sh`) — the single ≤2h
-core-regression gate; it *composes* the benches above rather than
-reinventing them. Deterministic baseline-diffed lanes (retrieval recall,
-enrichment atom-F1, intent routing) are **hard** (build-breaking); the
-synthesis answer-equiv judge lane is **soft** (judge variance shouldn't
-flake the build); chaos, mechanism, the multi-turn degradation thread,
-and the governance lanes run as **tracked** (advisory — their absolute
-verdict is a finding about the current system, not a regression), each
-paired with a **hard `sovereign bench gate <lane>`** that re-scores the
-same artifact and fails only on regression vs a committed baseline
-(`sovereign/bench/<group>/baselines/<id>/`; first run passes). Gate
-logic is one shared metric/direction/tolerance primitive
+**CI composition** (`scripts/sovereign-ci-bench.sh`) — **the primary way
+to catch a regression anywhere in the inference + retrieval stack.** One
+command spans the whole chain — retrieval recall, enrichment atom-F1,
+intent routing, synthesis answer-equiv, tool-use (search/knowledge/agent
+gyms), multi-turn degradation, chaos honesty, mechanism fidelity,
+governance — by *composing* the benches above rather than reinventing
+them, each diffed against a committed baseline. It is the regression net a
+change to any of those subsystems must clear; the per-bench harnesses are
+for drilling into a lane the gate flags, not the front-line check.
+Deterministic baseline-diffed lanes (retrieval recall, enrichment
+atom-F1, intent routing) are **hard** (build-breaking); the synthesis
+answer-equiv judge lane is **soft** (judge variance shouldn't flake the
+build); chaos, mechanism, the multi-turn degradation thread, and the
+governance lanes run as **tracked** (advisory — their absolute verdict is
+a finding about the current system, not a regression), each paired with a
+**hard `sovereign bench gate <lane>`** that re-scores the same artifact
+and fails only on regression vs a committed baseline
+(`sovereign/bench/<group>/baselines/<id>/`; first run passes). Gate logic
+is one shared metric/direction/tolerance primitive
 (`bench_cmd/lane_baseline.rs` + `gate.rs`).
+
+Two modes: **`--quick`** is the pre-push lean tier — it down-samples the
+slow lanes (`--sample-questions` on synth, one agent-coding problem,
+`--max-turns` on the multi-turn thread bank) to a stratified, whole-unit
+subset so signal-per-minute stays high (~35–40 min vs ~2–4 h); the full
+run is the release/nightly gate. **Invariant:** a sampled lane's baseline
+is *cap-specific* — it covers a different question/thread subset than the
+full run, so changing a sample size or `MULTITURN_MAX_TURNS` requires
+re-capturing that lane's baseline (`bench gate … --update-baseline` at the
+new cap) or its hard gate false-fires against a stale baseline.
 
 ---
 

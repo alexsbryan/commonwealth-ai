@@ -1,0 +1,114 @@
+{
+  "bank_name": "future-timeline-v1",
+  "started_at_unix": 1784183031,
+  "results": [
+    {
+      "question_id": "future_mac_studio",
+      "category": "factual_recall",
+      "question": "When is the next generation of Mac Studio expected to come out?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "ACTION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 3028
+    },
+    {
+      "question_id": "future_iphone_launch",
+      "category": "factual_recall",
+      "question": "When does the next iPhone launch?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "ACTION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 3004
+    },
+    {
+      "question_id": "future_switch_release",
+      "category": "factual_recall",
+      "question": "When is the new Nintendo Switch coming out?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2425
+    },
+    {
+      "question_id": "future_gpt5_release",
+      "category": "factual_recall",
+      "question": "When does GPT-5 come out?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2422
+    },
+    {
+      "question_id": "future_wwdc_expected",
+      "category": "factual_recall",
+      "question": "What's expected at the upcoming WWDC?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "ACTION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 3024
+    },
+    {
+      "question_id": "future_spacex_launch",
+      "category": "factual_recall",
+      "question": "When is the next SpaceX launch scheduled?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "ACTION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 3009
+    },
+    {
+      "question_id": "future_fed_meeting",
+      "category": "factual_recall",
+      "question": "When is the next Fed meeting?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"When does the next session of Congress convene?\" (cosine 0.605, margin 0.166)",
+      "correct": true,
+      "latency_ms": 68
+    },
+    {
+      "question_id": "future_m5_mac_studio_bare_expected",
+      "category": "factual_recall",
+      "question": "When is the M5 Mac Studio expected?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2430
+    },
+    {
+      "question_id": "future_eclipse",
+      "category": "factual_recall",
+      "question": "When is the next solar eclipse visible from the US?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2426
+    }
+  ]
+}

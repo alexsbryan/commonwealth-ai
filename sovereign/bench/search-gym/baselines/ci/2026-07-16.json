@@ -1,0 +1,12 @@
+{
+  "lane": "search-gym",
+  "captured_at": "2026-07-16T15:16:42.019293381+00:00",
+  "note": "20/20 replays passed",
+  "metrics": {
+    "pass_rate": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    }
+  }
+}

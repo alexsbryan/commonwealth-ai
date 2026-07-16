@@ -1,5 +1,19 @@
 # `sovereign/bench/` — single rollup surface for every enrichment bench
 
+## Front-line regression gate — `scripts/sovereign-ci-bench.sh`
+
+**This is the primary way to catch a regression anywhere in the inference + retrieval stack.** It composes every bench below into one baseline-diffed run spanning the whole chain — retrieval recall, enrichment atom-F1, intent routing, synthesis answer-equiv, tool-use (search/knowledge/agent gyms), multi-turn degradation, chaos honesty, mechanism fidelity, governance. A change to any of those subsystems should clear this gate; the per-bench sections in this README are for drilling into a lane the gate flags, not the front-line check.
+
+```bash
+scripts/sovereign-ci-bench.sh            # full release/nightly gate (~2–4h on the 35B)
+scripts/sovereign-ci-bench.sh --quick    # pre-push lean tier (~35–40 min)
+scripts/sovereign-ci-bench.sh --update-baseline   # re-capture baselines after an intended change
+```
+
+`--quick` down-samples the slow lanes (`--sample-questions` on synth, one agent-coding problem, `--max-turns` on the multi-turn bank) to a stratified, whole-unit subset — high signal-per-minute for local iteration. Lanes: deterministic ones (recall, atom-F1, routing) are **hard** (build-breaking); synth answer-equiv is **soft**; chaos/mechanism/multi-turn/governance are **tracked** runs each paired with a **hard `bench gate <lane>`** that fails only on regression vs a committed baseline. **Invariant:** a sampled lane's baseline is *cap-specific* (it covers a different subset than the full run) — change a sample size or `MULTITURN_MAX_TURNS` and you must re-capture that lane's baseline or its hard gate false-fires. Lane structure + the corrected-stack config live in [`CI_GATE_HANDOFF.md`](CI_GATE_HANDOFF.md).
+
+## Rollup surface for drilling a flagged lane
+
 One command:
 
 ```bash

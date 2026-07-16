@@ -1,0 +1,12 @@
+{
+  "tokens_input": 0,
+  "tokens_output": 0,
+  "wall_ms": 1666136,
+  "exit_reason": {
+    "kind": "completed"
+  },
+  "tool_calls": [],
+  "stderr_tail": "",
+  "final_assistant_text": "Search summary: 7/8 tests passing after 6 rounds.\n",
+  "raw_line_count": 0
+}

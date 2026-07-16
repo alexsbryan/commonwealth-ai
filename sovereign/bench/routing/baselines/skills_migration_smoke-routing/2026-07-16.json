@@ -1,0 +1,126 @@
+{
+  "bank_name": "skills-migration-smoke",
+  "started_at_unix": 1784183099,
+  "results": [
+    {
+      "question_id": "nav_who_calls",
+      "category": "metalingual",
+      "question": "Who calls the SearchTool::execute method in our code?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Where is the function that handles tool dispatch in this codebase?\" (cosine 0.575, margin 0.171)",
+      "correct": true,
+      "latency_ms": 81
+    },
+    {
+      "question_id": "nav_find_where",
+      "category": "metalingual",
+      "question": "Where in this codebase is the URL allowlist constraint implemented?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Find the implementation of the URL-allowlist constraint.\" (cosine 0.914, margin 0.542)",
+      "correct": true,
+      "latency_ms": 51
+    },
+    {
+      "question_id": "nav_what_changed",
+      "category": "metalingual",
+      "question": "What changed in the router classification pipeline recently?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What recent changes touched the router classification pipeline?\" (cosine 0.976, margin 0.359)",
+      "correct": true,
+      "latency_ms": 48
+    },
+    {
+      "question_id": "research_survey",
+      "category": "multi_article_synthesis",
+      "question": "Survey what's been published on situated agents for open-weight models — what are the major positions?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Research what's been published on situated agents for open-weight models.\" (cosine 0.960, margin 0.549)",
+      "correct": true,
+      "latency_ms": 52
+    },
+    {
+      "question_id": "research_collab",
+      "category": "multi_article_synthesis",
+      "question": "Let's dig into how the M-series Apple Silicon roadmap has evolved — start with the original M1 announcement.",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Let's dig into how the M-series Apple Silicon roadmap has evolved — start with w…\" (cosine 0.924, margin 0.580)",
+      "correct": true,
+      "latency_ms": 54
+    },
+    {
+      "question_id": "epi_consensus",
+      "category": "multi_article_synthesis",
+      "question": "What's the scholarly consensus on whether large language models actually reason?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What's the scholarly consensus on whether large language models reason?\" (cosine 0.954, margin 0.532)",
+      "correct": true,
+      "latency_ms": 52
+    },
+    {
+      "question_id": "epi_contested",
+      "category": "multi_article_synthesis",
+      "question": "Where do philosophers disagree about consciousness and which positions have the strongest support?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Where do philosophers disagree about consciousness?\" (cosine 0.883, margin 0.444)",
+      "correct": true,
+      "latency_ms": 52
+    },
+    {
+      "question_id": "pa_remind",
+      "category": "commissive",
+      "question": "Remind me to follow up with the design team on Thursday afternoon.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Remind me to follow up with the design team on Thursday.\" (cosine 0.992, margin 0.474)",
+      "correct": true,
+      "latency_ms": 53
+    },
+    {
+      "question_id": "pa_schedule",
+      "category": "conation",
+      "question": "Schedule a focused work block for tomorrow morning.",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Schedule a focused work block for tomorrow morning.\" (cosine 0.999, margin 0.338)",
+      "correct": true,
+      "latency_ms": 49
+    },
+    {
+      "question_id": "review_code",
+      "category": "multi_step",
+      "question": "Review this function for correctness and find bugs that aren't obvious from the diff.",
+      "expected": "complex_task",
+      "actual_intent": "complex_task",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Review this function for correctness and find bugs that aren't obvious from the …\" (cosine 1.000, margin 0.514)",
+      "correct": true,
+      "latency_ms": 56
+    }
+  ]
+}
