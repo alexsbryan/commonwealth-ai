@@ -222,18 +222,22 @@ impl CorpusIndex {
         })
     }
 
-    /// Coverage-selection knob (RETRIEVAL_REDESIGN.md S1, experimental).
-    /// `SOVEREIGN_COVERAGE_SELECT=1` turns it on: `search()` overfetches
-    /// `limit × factor` (capped 200), then greedily composes the final
-    /// `limit` by facility-location coverage instead of top-k truncation.
+    /// Coverage-selection knob (RETRIEVAL_REDESIGN.md S1). Default **ON**
+    /// since 2026-07-16: `search()` overfetches `limit × factor` (capped
+    /// 200), then greedily composes the final `limit` by facility-location
+    /// coverage instead of top-k truncation. On the production pipeline
+    /// this measured as a near-strict win (wiki facts +8pt to raw@20
+    /// parity, sep summarize +4pt, sep sources +2 — the pipeline's
+    /// shape-conditional expansion supplies single-source depth after the
+    /// diversified base pool). `SOVEREIGN_COVERAGE_SELECT=0` opts out
+    /// (byte-identical legacy behavior);
     /// `SOVEREIGN_COVERAGE_POOL_FACTOR` (default 4) tunes the overfetch.
-    /// Returns `None` when off (byte-identical baseline behavior).
     fn coverage_params() -> Option<usize> {
         static PARAMS: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
         *PARAMS.get_or_init(|| {
             let on = std::env::var("SOVEREIGN_COVERAGE_SELECT")
-                .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
+                .map(|s| !(s == "0" || s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("off")))
+                .unwrap_or(true);
             if !on {
                 return None;
             }
