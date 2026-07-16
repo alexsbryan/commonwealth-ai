@@ -340,6 +340,45 @@ impl EnrichmentDriver {
         self.in_flight.lock().await.contains_key(corpus_id)
     }
 
+    /// Re-enrich a SINGLE source document in-process — the "flag a wrong
+    /// summary → re-enrich just this note" revision loop
+    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`). Unlike `start_tiered_build`
+    /// this does not spawn a detached task (the desktop flag flow awaits
+    /// the corrected summary) and re-runs only the one note's RAPTOR via
+    /// the provider's incremental path. The provider's `enrich_conversation`
+    /// picks up any active correction for this note and, when it is still
+    /// `pending`, forces past the content-hash checkpoint so the summary
+    /// actually regenerates with the hint.
+    ///
+    /// `try_acquire` the single permit: if a full build holds it, return a
+    /// friendly busy error rather than parking an interactive request
+    /// behind a multi-minute run.
+    pub async fn reenrich_source(&self, corpus_id: &str, source_doc_id: &str) -> Result<()> {
+        let deps = {
+            let guard = self.tiered_deps.read().await;
+            guard.as_ref().cloned().ok_or_else(|| {
+                Error::Execution(
+                    "tiered enrichment deps not installed yet — \
+                     daemon boot incomplete or feature disabled"
+                        .into(),
+                )
+            })?
+        };
+
+        let _permit = self.permits.clone().try_acquire_owned().map_err(|_| {
+            Error::Execution(
+                "enrichment is busy with a full build right now — \
+                 try re-enriching this note again when it finishes"
+                    .into(),
+            )
+        })?;
+
+        deps.tiered_provider
+            .reenrich_sources(corpus_id, &[source_doc_id.to_string()])
+            .await
+            .map_err(|e| Error::Execution(format!("re-enrich note '{source_doc_id}': {e}")))
+    }
+
     /// Legacy CLI-subprocess build. NO LONGER WIRED into
     /// `LocalCorpusManager::enable_enrichment` — that path now requires
     /// the in-process tiered driver (`start_tiered_build`) and errors

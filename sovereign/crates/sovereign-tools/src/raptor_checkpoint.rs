@@ -106,6 +106,37 @@ impl RaptorCheckpointHandle {
         }
     }
 
+    /// Resolve a **per-note** checkpoint slot: `<index_dir>/
+    /// _raptor_checkpoint/note-<hash(conv_uuid)>/`. Each conversation in
+    /// a folder/vault corpus owns an independent slot instead of sharing
+    /// the single per-corpus slot `at` returns.
+    ///
+    /// This is the skip-already-built fix. Under the shared slot, every
+    /// note's build overwrote the previous note's `manifest.json`, so a
+    /// daemon restart mid-vault re-ran the LLM fan-out for *every*
+    /// already-built note: `decide()` read the manifest left by whatever
+    /// note finished last, its `input_hash` never matched the note now
+    /// being built → `StaleAndReset` → full rebuild, N times over.
+    /// Keying the slot by `conv_uuid` makes an unchanged note
+    /// short-circuit (`Resume` → load cached nodes → zero LLM) on resume,
+    /// so a restart only pays for the one note that was actually
+    /// in-flight.
+    ///
+    /// `conv_uuid` is hashed to a filesystem-safe single path component:
+    /// conv_uuids are root-relative file paths (`"Parable of Yakumo.md"`,
+    /// possibly nested under subdirs) that must not escape the checkpoint
+    /// root, embed separators, or collide on case-insensitive
+    /// filesystems.
+    pub fn at_note(index_dir: &Path, conv_uuid: &str, input_hash: impl Into<String>) -> Self {
+        let slot = blake3::hash(conv_uuid.as_bytes()).to_hex().to_string();
+        Self {
+            dir: index_dir
+                .join(CHECKPOINT_SUBDIR)
+                .join(format!("note-{slot}")),
+            input_hash: input_hash.into(),
+        }
+    }
+
     /// Compute the deterministic input hash for a build. Sorting by
     /// `chunk_id` makes the order-independent — kmeans is order-
     /// sensitive but we persist its output, so the input set's
@@ -417,6 +448,48 @@ mod tests {
         h_old.ensure_manifest().unwrap();
         let h_new = RaptorCheckpointHandle::at(tmp.path(), "hash-b");
         assert!(matches!(h_new.decide(), CheckpointDecision::StaleAndReset));
+    }
+
+    #[test]
+    fn at_note_scopes_checkpoints_per_conversation() {
+        // The skip-already-built guard. Under the old shared slot, note
+        // A completing its build overwrote the single manifest, so note
+        // B's decide() saw A's input_hash → StaleAndReset → full rebuild,
+        // once per already-built note on every mid-vault restart.
+        // Per-note keying must keep the two slots independent: A being
+        // Resume-able must not perturb B, and vice versa.
+        let tmp = tempfile::tempdir().unwrap();
+        let note_a = RaptorCheckpointHandle::at_note(tmp.path(), "Parable of Yakumo.md", "hash-a");
+        let note_b = RaptorCheckpointHandle::at_note(tmp.path(), "Grandmother Sato.md", "hash-b");
+
+        // Distinct on-disk slots.
+        assert_ne!(note_a.dir, note_b.dir);
+
+        // Note A finishes and writes its manifest…
+        note_a.ensure_manifest().unwrap();
+        assert!(matches!(note_a.decide(), CheckpointDecision::Resume(_)));
+        // …and note B is untouched — NOT dragged to StaleAndReset by A's
+        // completion (this is the exact shared-slot bug).
+        assert!(matches!(note_b.decide(), CheckpointDecision::Fresh));
+
+        // Now B finishes too; both remain independently resumable.
+        note_b.ensure_manifest().unwrap();
+        assert!(matches!(note_a.decide(), CheckpointDecision::Resume(_)));
+        assert!(matches!(note_b.decide(), CheckpointDecision::Resume(_)));
+    }
+
+    #[test]
+    fn at_note_hashes_path_like_uuids_to_a_single_safe_component() {
+        // conv_uuids are root-relative paths; a nested one must resolve
+        // to exactly one directory below the checkpoint root, never
+        // escaping it or spawning surprise subdirs.
+        let tmp = tempfile::tempdir().unwrap();
+        let nested = RaptorCheckpointHandle::at_note(tmp.path(), "sub/dir/Deep Note.md", "hash-a");
+        let root = tmp.path().join(CHECKPOINT_SUBDIR);
+        assert_eq!(nested.dir.parent(), Some(root.as_path()));
+        let slot = nested.dir.file_name().unwrap().to_str().unwrap();
+        assert!(slot.starts_with("note-"), "slot = {slot}");
+        assert!(!slot.contains('/') && !slot.contains(std::path::MAIN_SEPARATOR));
     }
 
     #[test]

@@ -48,6 +48,24 @@ pub struct ConvSkeletonRow {
     pub updated_at: i64,
 }
 
+/// One row from `conv_summary_corrections` — a user-authored revision
+/// of a note's RAPTOR summary. Keyed 1:1 with the note
+/// (`corpus_id, conv_uuid`). `correction_hint` is re-injected into the
+/// RAPTOR summarization prompt on every rebuild so the fix persists
+/// ("water over stone"). `status`: `pending` (flagged, not yet
+/// re-enriched) → `applied` (guided re-enrich landed). See
+/// `docs/specs/SUMMARY_REVISION_LOOP.md`.
+#[derive(Debug, Clone)]
+pub struct SummaryCorrectionRow {
+    pub corpus_id: String,
+    pub conv_uuid: String,
+    pub correction_hint: Option<String>,
+    pub original_summary: Option<String>,
+    pub status: String,
+    pub created_at: i64,
+    pub applied_at: Option<i64>,
+}
+
 /// One row from `conv_raptor_nodes` — corpus-namespaced RAPTOR tree
 /// node. Pre-serialised JSON blobs match the column types.
 #[derive(Debug, Clone)]

@@ -94,6 +94,17 @@ pub struct ConvRaptorNodeView {
     pub is_synthetic_tiny: bool,
 }
 
+/// The user's active summary correction for a note (the "flag a wrong
+/// summary" revision loop, `docs/specs/SUMMARY_REVISION_LOOP.md`). Present
+/// once the user has flagged the note; the desktop renders a "revised by
+/// you" badge when `status == "applied"`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SummaryCorrectionView {
+    pub status: String,
+    pub correction_hint: Option<String>,
+    pub created_at: i64,
+}
+
 /// Full conv detail — title + state + full RAPTOR tree. The
 /// frontend chooses between a flat (≤2 levels) or hierarchical (>2)
 /// rendering based on `max_level`.
@@ -107,6 +118,9 @@ pub struct ConvDetailView {
     pub updated_at: i64,
     pub raptor_nodes: Vec<ConvRaptorNodeView>,
     pub max_level: u8,
+    /// Present when the user has flagged this note's summary — drives the
+    /// "revised by you" provenance badge.
+    pub correction: Option<SummaryCorrectionView>,
 }
 
 /// One entity chip for the ConversationChunkRenderer surface (A2).

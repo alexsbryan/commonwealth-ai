@@ -804,9 +804,26 @@ impl LocalCorpusManager {
             }
         }
 
-        // Clear the live progress mirror + state file.
+        // Clear the live progress mirror + the generic enrichment state
+        // file. Removing `_enrichment_state.json` is load-bearing: a
+        // disable that hit mid-build (the tiered path doesn't honour
+        // mid-run cancellation, so a subsequent process death can strand a
+        // non-terminal phase) would otherwise leave a resumable-looking
+        // corpse that the boot-time `resume_interrupted_enrichment` scan
+        // re-kicks — silently re-enabling what the user just disabled.
         if let Ok(mut guard) = self.enrichment_progress.write() {
             guard.remove(corpus_id);
+        }
+        let state_path = corpus_engine::enrichment::state::EnrichmentStateFile::path(
+            &index_dir.join(corpus_id),
+        );
+        if state_path.exists() {
+            if let Err(e) = std::fs::remove_file(&state_path) {
+                tracing::warn!(
+                    corpus_id = %corpus_id,
+                    "disable_enrichment: remove enrichment state file failed: {e}"
+                );
+            }
         }
         self.set_enrichment_runtime_status(
             corpus_id,
@@ -856,6 +873,94 @@ impl LocalCorpusManager {
     /// gets. The pipeline id is a formality the tiered path ignores.
     pub async fn enrich_now(&self, corpus_id: &str) -> Result<String> {
         self.enable_enrichment(corpus_id, "referential_atlas").await
+    }
+
+    /// Re-enrich a SINGLE note in-process — the "flag a wrong summary →
+    /// re-enrich just this note" revision loop
+    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`). Thin proxy to the driver,
+    /// which serialises against any running full build (returns a
+    /// friendly "busy" error if one holds the permit). The correction
+    /// ledger (`conv_summary_corrections`) is written by the caller (the
+    /// desktop flag flow) BEFORE this runs; the provider's
+    /// `enrich_conversation` then reads it, forces past the content-hash
+    /// checkpoint, injects the hint, and flips the row to `applied`.
+    /// Awaits the (~1-min) build so the caller can show the corrected
+    /// summary on return.
+    pub async fn reenrich_note(&self, corpus_id: &str, source_doc_id: &str) -> Result<()> {
+        self.enrichment_driver
+            .reenrich_source(corpus_id, source_doc_id)
+            .await
+    }
+
+    /// Re-kick tiered enrichment for reconcilable corpora (watched
+    /// folders + Obsidian vaults) whose last build was interrupted by a
+    /// process restart and never reached a terminal `Complete`.
+    ///
+    /// **Why this exists.** Tiered enrichment runs inside the daemon
+    /// process. When that process restarts mid-build — a `tauri dev`
+    /// hot-reload after a code edit, an app auto-update, or a crash — the
+    /// in-flight build dies with it, and nothing else re-picks it up: the
+    /// watched-folder sweep only reacts to *file* diffs, so notes that
+    /// were merely never-reached (not edited) stay invisible. A vault
+    /// interrupted at note 66/314 would sit at 65 forever. This boot scan
+    /// closes that gap; it's the counterpart to the runner now owning a
+    /// single truthful terminal stamp (an interrupted run stays
+    /// non-terminal, which is exactly the signal we key off here).
+    ///
+    /// **Signal.** The corpus's own `_enrichment_state.json`
+    /// ([`EnrichmentPhase::is_resumable_interruption`]): a finished build
+    /// stamps `Complete` (skip); a genuine total failure stamps `Failed`
+    /// (skip — the operator retries deliberately, we don't auto-loop);
+    /// anything else was a process killed mid-run (resume). A corpus with
+    /// no state file was never enriched and is left alone.
+    ///
+    /// **Cheap-on-done.** `reset_enrichment_state` clears only the zombie
+    /// STATUS surfaces (not the persisted skeletons / RAPTOR
+    /// checkpoints), and the re-run's per-note checkpoint short-circuits
+    /// every note whose chunk set is unchanged — so the interrupted vault
+    /// pays only for the notes that never got built.
+    ///
+    /// Best-effort + serialized (the driver's single-permit semaphore
+    /// runs one build at a time). Returns the number of corpora kicked.
+    pub async fn resume_interrupted_enrichment(&self) -> usize {
+        use corpus_engine::enrichment::state::EnrichmentStateFile;
+        let mut kicked = 0usize;
+        for cfg in self.list_reconcilable().await {
+            let corpus_id = cfg.id.clone();
+            let index_dir = self.engine_index_dir().join(&corpus_id);
+            let state = match EnrichmentStateFile::read(&index_dir) {
+                Ok(Some(s)) => s,
+                _ => continue, // no prior enrichment attempt → nothing to resume
+            };
+            if !state.phase.is_resumable_interruption() {
+                continue;
+            }
+            if self.enrichment_driver.is_running(&corpus_id).await {
+                continue; // a build is somehow already live — don't double-start
+            }
+            tracing::info!(
+                corpus = %corpus_id,
+                phase = state.phase.label(),
+                "enrichment resume: prior tiered build was interrupted by a process restart; re-kicking"
+            );
+            // Clear the zombie status surfaces (keeps skeletons +
+            // checkpoints), then resume via the same path "Make explorable"
+            // uses. The checkpoint makes already-enriched notes cheap.
+            if let Err(e) = self.reset_enrichment_state(&corpus_id).await {
+                tracing::warn!(corpus = %corpus_id, error = %e, "enrichment resume: reset failed; skipping");
+                continue;
+            }
+            match self.enrich_now(&corpus_id).await {
+                Ok(job) => {
+                    tracing::info!(corpus = %corpus_id, job = %job, "enrichment resume: re-kicked tiered build");
+                    kicked += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(corpus = %corpus_id, error = %e, "enrichment resume: enrich_now failed")
+                }
+            }
+        }
+        kicked
     }
 
     /// Clear the "zombie" enrichment / watched-folder status a crashed,

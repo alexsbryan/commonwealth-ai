@@ -537,6 +537,7 @@ pub(crate) fn decode_f32_vec(bytes: &[u8]) -> Vec<f32> {
 
 pub use sovereign_core::conv_tiered::{
     ConvMotifRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, ConvTieredState,
+    SummaryCorrectionRow,
 };
 
 /// Per-corpus chunk-retrieval rollup for the chat activity surface.

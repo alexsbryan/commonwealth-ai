@@ -2219,6 +2219,15 @@ export interface ConvRaptorNodeView {
 /** Full conv detail — title + state + full RAPTOR tree. The frontend
  *  picks flat (≤2 levels) or hierarchical (>2) rendering based on
  *  max_level. */
+/** The user's active summary correction for a note (the "flag a wrong
+ *  summary" revision loop). Present once flagged; the UI shows a
+ *  "revised by you" badge when status === "applied". */
+export interface SummaryCorrectionView {
+  status: string;
+  correction_hint: string | null;
+  created_at: number;
+}
+
 export interface ConvDetailView {
   corpus_id: string;
   conv_uuid: string;
@@ -2228,6 +2237,8 @@ export interface ConvDetailView {
   updated_at: number;
   raptor_nodes: ConvRaptorNodeView[];
   max_level: number;
+  /** Present when the user has flagged this note's summary. */
+  correction: SummaryCorrectionView | null;
 }
 
 /** One entity chip for the conversation chunk renderer (A2). */

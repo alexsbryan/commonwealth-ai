@@ -19,6 +19,7 @@ use std::sync::Arc;
 use sovereign_tools::atlas_view::{
     AtlasCorpusSummary, AtomDetail, AtomFilter, AtomListPage, ConvCorpusSummary, ConvDetailView,
     ConvEntityChip, ConvListPage, ConvRaptorNodeView, ConvSummary, FileAtlasReader, PageCursor,
+    SummaryCorrectionView,
 };
 use tauri::State;
 
@@ -400,6 +401,18 @@ pub async fn atlas_get_conv_detail(
             }
         })
         .collect();
+    // Active summary correction (the "flag a wrong summary" revision
+    // loop) — drives the "revised by you" provenance badge.
+    let correction = store
+        .get_active_correction(&corpus_id, &conv_uuid)
+        .await
+        .ok()
+        .flatten()
+        .map(|c| SummaryCorrectionView {
+            status: c.status,
+            correction_hint: c.correction_hint,
+            created_at: c.created_at,
+        });
     Ok(Some(ConvDetailView {
         corpus_id,
         conv_uuid,
@@ -412,6 +425,7 @@ pub async fn atlas_get_conv_detail(
         updated_at: skeleton.updated_at,
         raptor_nodes,
         max_level,
+        correction,
     }))
 }
 

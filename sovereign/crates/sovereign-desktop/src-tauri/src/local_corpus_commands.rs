@@ -771,6 +771,63 @@ pub async fn lc_enrich_reset(
     Ok(())
 }
 
+/// Tauri command: the "flag a wrong summary → re-enrich just this note"
+/// revision loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). Persists the
+/// user's correction to the ledger (status `pending`), then asks the
+/// daemon to re-enrich that ONE note; the provider reads the pending
+/// correction, forces past the content-hash checkpoint, regenerates the
+/// summary with the hint injected, and flips the row to `applied`.
+/// Awaited (the ~1-min single-note build) so the caller can re-fetch the
+/// corrected summary on return. `correction_hint` / `original_summary`
+/// may be empty strings (stored as NULL).
+#[tauri::command]
+pub async fn lc_reenrich_note(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    source_doc_id: String,
+    correction_hint: String,
+    original_summary: String,
+) -> Result<(), String> {
+    // 1. Persist the correction so the provider sees it during the build.
+    //    Same sqlite file the embedded daemon's provider reads.
+    {
+        let guard = state.sqlite_store.read().await;
+        let store = guard
+            .as_ref()
+            .ok_or_else(|| "enrichment store not ready".to_string())?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let hint = Some(correction_hint.trim()).filter(|s| !s.is_empty());
+        let original = Some(original_summary.trim()).filter(|s| !s.is_empty());
+        store
+            .upsert_summary_correction(&corpus_id, &source_doc_id, hint, original, "pending", now)
+            .await
+            .map_err(|e| format!("record correction: {e}"))?;
+    }
+
+    // 2. Ask the daemon to re-enrich just this note (awaits the build).
+    let daemon_url = state.client_base_url();
+    let url = format!("{daemon_url}/internal/corpus/watch/{corpus_id}/enrich/reenrich-note");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "source_doc_id": source_doc_id }))
+        .send()
+        .await
+        .map_err(|e| format!("POST reenrich-note: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("daemon reenrich-note returned {status}: {body}"));
+    }
+    Ok(())
+}
+
 /// Ingest a folder corpus by running the shipped `notebook` workflow on the
 /// Runner (the substrate adoption path), translating the Runner's
 /// `WorkflowProgress` into the `LocalCorpusProgress` phases the desktop UI already

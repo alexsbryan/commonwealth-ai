@@ -119,6 +119,30 @@ impl WatchedSubsystem {
             );
         }
 
+        // Resume any tiered enrichment interrupted by a process restart
+        // (a `tauri dev` hot-reload after a code edit, an app auto-update,
+        // or a crash). The build runs INSIDE this process, so a restart
+        // kills it mid-flight; the sweep above only re-registers FS
+        // watching and reacts to file *diffs*, so notes that were merely
+        // never-reached (a vault interrupted at 66/314) would stay unbuilt
+        // forever. Detached so a slow rebuild never blocks boot; the
+        // enrichment driver's single-permit semaphore serialises builds.
+        // `set_tiered_deps` is wired before this installer runs in both the
+        // desktop and standalone-daemon boot paths, so `enrich_now` has its
+        // deps.
+        {
+            let resume_manager = Arc::clone(&manager);
+            tokio::spawn(async move {
+                let kicked = resume_manager.resume_interrupted_enrichment().await;
+                if kicked > 0 {
+                    tracing::info!(
+                        corpora = kicked,
+                        "watched_folder: resumed interrupted tiered enrichment after restart"
+                    );
+                }
+            });
+        }
+
         // Sink fans every worker event into the manager so the
         // auto-rebuild watchdog can debounce tiered rebuilds against
         // `SweepCompleted` events (Move 8 — folder-ingest v1 §3.6).
