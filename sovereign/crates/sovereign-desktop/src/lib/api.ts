@@ -1207,6 +1207,44 @@ export async function meshClearPeerPreference(
   return invoke("mesh_clear_peer_preference", { nodeId });
 }
 
+// ─── Peer-assisted ingest ("Blanket") ──────────────────────────────
+
+/** Which mesh peers can help with a peer-assisted ingest of `corpusId`.
+ *  Eligible peers are selectable; ineligible peers surface with a reason. */
+export async function meshAssistEligiblePeers(
+  corpusId: string,
+): Promise<import("./types").AssistEligiblePeersResponse> {
+  return invoke("mesh_assist_eligible_peers", { corpusId });
+}
+
+/** Issue an ephemeral grant + start collaborative ingest scoped to the
+ *  selected peers. Returns the opaque handoff id to poll. */
+export async function meshAssistStart(
+  corpusId: string,
+  peerNodeIds: string[],
+  ttlSecs?: number,
+): Promise<import("./types").AssistStartResult> {
+  return invoke("mesh_assist_start", {
+    corpusId,
+    peerNodeIds,
+    ttlSecs: ttlSecs ?? null,
+  });
+}
+
+/** Poll glassbox progress for a running assist. `null` once the job is torn
+ *  down. `handoffId` is the opaque value from `meshAssistStart`. */
+export async function meshAssistStatus(
+  handoffId: unknown,
+): Promise<import("./types").CollaborateStatus | null> {
+  return invoke("mesh_assist_status", { handoffId });
+}
+
+/** Revoke the corpus's grant and stop the peer-assist layer. The local
+ *  ingest continues; idempotent. */
+export async function meshAssistRevoke(corpusId: string): Promise<void> {
+  return invoke("mesh_assist_revoke", { corpusId });
+}
+
 /** All currently-set peer preferences. Excluded from gossip — this
  *  list never leaves the local node. */
 export async function meshListPeerPreferences(): Promise<

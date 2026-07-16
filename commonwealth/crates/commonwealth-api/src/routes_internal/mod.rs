@@ -31,7 +31,7 @@ mod pipeline_pause;
 mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
-pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
+pub use corpus_collaborate::{corpus_collaborate, corpus_eligible_peers, CollaborateRequest};
 pub use corpus_grant::{corpus_grant_issue, corpus_grant_revoke};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,

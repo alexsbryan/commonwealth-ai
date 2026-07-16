@@ -549,6 +549,57 @@ mod tests {
         (mgr, handoff)
     }
 
+    /// Fixture with a per-job allowlist — only the listed peers may lease.
+    async fn fixture_scoped(
+        unit_count: usize,
+        allowed: &[NodeId],
+    ) -> (WorkQueueManager, HandoffId) {
+        let mgr = WorkQueueManager::new();
+        let handoff = HandoffId::generate();
+        let units: Vec<WorkUnit> = (0..unit_count).map(WorkUnit::JsonlShard).collect();
+        mgr.register(
+            handoff,
+            "vault",
+            "vault",
+            sample_model(),
+            units,
+            peer(1),
+            Some(allowed.iter().copied().collect()),
+        )
+        .await;
+        (mgr, handoff)
+    }
+
+    #[tokio::test]
+    async fn allowlisted_peer_leases_but_others_are_refused() {
+        // Grant-scoped job: only peer(2) is on the allowlist. peer(2) leases
+        // fine; peer(9) is refused with PeerNotAllowed even via a direct
+        // next_unit call (defense-in-depth beyond the gossip enrollment
+        // filter). The refusal must NOT consume a unit — peer(2) can still
+        // claim every unit afterwards.
+        let (mgr, handoff) = fixture_scoped(2, &[peer(2)]).await;
+
+        let refused = mgr.next_unit(&handoff, peer(9)).await;
+        assert!(matches!(refused, Err(QueueError::PeerNotAllowed)));
+
+        let a = mgr.next_unit(&handoff, peer(2)).await.unwrap().unwrap();
+        let b = mgr.next_unit(&handoff, peer(2)).await.unwrap().unwrap();
+        assert_eq!(a.unit_id, 0);
+        assert_eq!(b.unit_id, 1);
+        // The refused lease left the queue intact — both units went to peer(2).
+        let empty = mgr.next_unit(&handoff, peer(2)).await.unwrap();
+        assert!(empty.is_none());
+    }
+
+    #[tokio::test]
+    async fn open_queue_has_no_allowlist_and_admits_any_peer() {
+        // The default (None) queue is unchanged by the allowlist feature —
+        // any peer leases, preserving today's collaborative-ingest behaviour.
+        let (mgr, handoff) = fixture(1).await;
+        let leased = mgr.next_unit(&handoff, peer(42)).await.unwrap();
+        assert!(leased.is_some());
+    }
+
     #[tokio::test]
     async fn next_unit_rotates_through_queue() {
         let (mgr, handoff) = fixture(3).await;

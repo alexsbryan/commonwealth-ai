@@ -13,6 +13,7 @@
     lcIngest,
     lcOcrAvailable,
     lcPreScan,
+    meshAssistStart,
     recipeEnrichInitFromCorpus,
   } from "../../../api";
   import type {
@@ -23,8 +24,11 @@
     StarterQuestion,
   } from "../../../types";
   import { enrichProgressStore } from "../../../stores/enrichProgress.svelte";
+  import { assistProgressStore } from "../../../stores/assistProgress.svelte";
   import { chatSeedStore } from "../../../stores/chatSeed.svelte";
   import { notifyReadyToAsk } from "../../../stores/toast.svelte";
+  import PeerAssistOffer from "../../mesh/PeerAssistOffer.svelte";
+  import AssistProgressPanel from "../../mesh/AssistProgressPanel.svelte";
 
   import FolderSelectPanel from "./FolderSelectPanel.svelte";
   import PreScanPanel from "./PreScanPanel.svelte";
@@ -150,6 +154,30 @@
   );
   let unlisten: UnlistenFn | null = null;
   let cancelling = $state(false);
+  /** Peer-assist decision captured from the confirm-step offer. When
+   *  `enabled`, we kick off a grant-scoped collaborative ingest across the
+   *  selected peers after the local ingest starts. Reset per confirm. */
+  let assistDecision = $state<{ enabled: boolean; peerNodeIds: string[] }>({
+    enabled: false,
+    peerNodeIds: [],
+  });
+  /** corpus_id of the step currently in flight, for the assist-progress
+   *  lookup. Present on confirm / ingesting / enriching / initializing. */
+  // `$derived.by` (closure form) so TS control-flow analysis resets `step`
+  // to the full `Step` union — the bare-expression form inherits the
+  // top-level narrowing to `{kind:"select"}` from the `$state` initializer
+  // above and would reject every other-variant comparison.
+  let currentCorpusId = $derived.by(() =>
+    step.kind === "confirm" ||
+    step.kind === "ingesting" ||
+    step.kind === "enriching" ||
+    step.kind === "initializing_atlas"
+      ? step.corpusId
+      : null,
+  );
+  let activeAssistJob = $derived(
+    currentCorpusId ? assistProgressStore.get(currentCorpusId) : undefined,
+  );
   /** The corpus template the user picked on the confirm step. `"notes"`
    *  = the default sample-atlas path; `"governance"` = attach the
    *  community-governance recipe and build the full corpus so the
@@ -239,6 +267,28 @@
       progress: null,
     };
     await kickOffIngest(corpusId, useOcr);
+
+    // If the user opted into mesh help, issue the grant + start the
+    // collaborative ingest scoped to the selected peers. Failure here never
+    // blocks the local ingest — it just finishes on this machine.
+    if (assistDecision.enabled && assistDecision.peerNodeIds.length > 0) {
+      try {
+        const handle = await meshAssistStart(
+          corpusId,
+          assistDecision.peerNodeIds,
+        );
+        assistProgressStore.track({
+          corpus_id: handle.corpus_id,
+          handoff_id: handle.handoff_id,
+          grant_expires_at_ms: handle.grant_expires_at_ms,
+        });
+      } catch (e) {
+        console.warn(
+          "peer-assist failed to start; continuing local-only",
+          e,
+        );
+      }
+    }
   }
 
   async function kickOffIngest(corpusId: string, useOcr = false) {
@@ -491,8 +541,20 @@
       onConfirm={handleConfirmIngest}
       onChooseAgain={handleChooseAgain}
     />
+    <PeerAssistOffer
+      corpusId={step.corpusId}
+      surface="folder"
+      defaultExpanded={step.result.readable.length >= 500}
+      onChange={(d) => (assistDecision = d)}
+    />
   {:else if step.kind === "ingesting"}
     <IngestProgressPanel progress={step.progress} />
+    {#if activeAssistJob}
+      <AssistProgressPanel
+        job={activeAssistJob}
+        onRevoke={(c) => assistProgressStore.revoke(c)}
+      />
+    {/if}
     <div class="working-actions">
       <button
         class="lk-btn lk-btn--quiet"
@@ -550,6 +612,12 @@
         hideCancel={true}
         onTerminal={(kind) => void handleAtlasTerminal(kind)}
       />
+      {#if activeAssistJob}
+        <AssistProgressPanel
+          job={activeAssistJob}
+          onRevoke={(c) => assistProgressStore.revoke(c)}
+        />
+      {/if}
       <div class="working-actions">
         {#if onDropToChat}
           <button class="lk-btn lk-btn--mark" onclick={dropToChatNow}>

@@ -2,8 +2,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, type NewsworthyStatus } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, meshAssistStart, type NewsworthyStatus } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
+  import { assistProgressStore } from "../stores/assistProgress.svelte";
+  import PeerAssistOffer from "./mesh/PeerAssistOffer.svelte";
+  import AssistProgressPanel from "./mesh/AssistProgressPanel.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
   import {
     formatRelativeAgo,
@@ -308,6 +311,41 @@
     }
   }
 
+  // Peer-assist ("Blanket") on installed recipe corpora. The offer
+  // self-guards — it renders nothing unless the corpus is grantable AND a
+  // compatible peer is online — so mounting it per row is safe; it only
+  // surfaces for user-file recipes that opted in. Decisions are keyed by
+  // corpus id since several rows can be expanded at once.
+  const STANDING_ASSIST_TTL_SECS = 24 * 60 * 60; // backend caps at 24h
+  let assistDecisions: Record<
+    string,
+    { enabled: boolean; peerNodeIds: string[] }
+  > = $state({});
+  let assistStarting: Set<string> = $state(new Set());
+  let assistErrors: Record<string, string> = $state({});
+
+  async function startAssist(id: string) {
+    const decision = assistDecisions[id];
+    if (!decision?.enabled || decision.peerNodeIds.length === 0) return;
+    assistStarting = new Set([...assistStarting, id]);
+    assistErrors = { ...assistErrors, [id]: "" };
+    try {
+      const handle = await meshAssistStart(
+        id,
+        decision.peerNodeIds,
+        STANDING_ASSIST_TTL_SECS,
+      );
+      assistProgressStore.track({
+        corpus_id: handle.corpus_id,
+        handoff_id: handle.handoff_id,
+        grant_expires_at_ms: handle.grant_expires_at_ms,
+      });
+    } catch (e) {
+      assistErrors = { ...assistErrors, [id]: String(e) };
+    }
+    assistStarting = new Set([...assistStarting].filter((x) => x !== id));
+  }
+
 </script>
 
 <div class="knowledge-status">
@@ -394,6 +432,40 @@
                   <span class="health-chip muted">Loading…</span>
                 {/if}
               </div>
+              <!-- Peer-assist offer. Self-hides unless this corpus is
+                   grantable + a compatible peer is online, so it only shows
+                   for user-file recipes that opted in. -->
+              {#if assistProgressStore.get(corpus.id)}
+                <div class="assist-slot">
+                  <AssistProgressPanel
+                    job={assistProgressStore.get(corpus.id)!}
+                    onRevoke={(c) => assistProgressStore.revoke(c)}
+                  />
+                </div>
+              {:else}
+                <div class="assist-slot">
+                  <PeerAssistOffer
+                    corpusId={corpus.id}
+                    surface="recipe"
+                    onChange={(d) =>
+                      (assistDecisions = { ...assistDecisions, [corpus.id]: d })}
+                  />
+                  {#if assistDecisions[corpus.id]?.enabled && assistDecisions[corpus.id].peerNodeIds.length > 0}
+                    <button
+                      class="action-btn install assist-start"
+                      onclick={() => startAssist(corpus.id)}
+                      disabled={assistStarting.has(corpus.id)}
+                    >
+                      {assistStarting.has(corpus.id)
+                        ? "Starting…"
+                        : "Get mesh help"}
+                    </button>
+                  {/if}
+                  {#if assistErrors[corpus.id]}
+                    <p class="assist-error">{assistErrors[corpus.id]}</p>
+                  {/if}
+                </div>
+              {/if}
             {/if}
           {:else if inProgress}
             {#if progress[corpus.id]}
@@ -863,6 +935,17 @@
     gap: 4px;
     margin-top: 4px;
     margin-left: 0;
+  }
+  .assist-slot {
+    margin-top: 6px;
+  }
+  .assist-start {
+    margin-top: 6px;
+  }
+  .assist-error {
+    margin: 6px 0 0;
+    font-size: 0.75rem;
+    color: var(--error, #ef4444);
   }
   .health-chip {
     display: inline-block;
