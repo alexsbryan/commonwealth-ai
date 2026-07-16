@@ -2,7 +2,7 @@
 //!
 //! `libmtmd` extends llama.cpp with the ability to encode image and audio
 //! inputs (bitmaps) into token embeddings that can then be fed into a
-//! standard [`llama_decode`] call alongside normal text tokens.
+//! standard [`crate::context::LlamaContext::decode`] call alongside normal text tokens.
 //!
 //! # Quick-start
 //!
@@ -51,6 +51,7 @@
 //! This module is only compiled when the `mtmd` Cargo feature is enabled.
 
 use std::ffi::{CStr, CString};
+use std::os::raw::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::slice;
@@ -93,10 +94,26 @@ pub enum MtmdError {
     /// `mtmd_helper_eval_chunks` (or single-chunk variant) returned a non-zero code.
     #[error("eval error: code {0}")]
     EvalError(i32),
+
+    /// A video stream could not be opened. Common causes: the build lacks
+    /// video support (`MTMD_VIDEO` was OFF), `ffmpeg`/`ffprobe` is not on
+    /// `PATH`, or the file is unreadable.
+    #[error("failed to open video stream (null return from mtmd_helper_video_init)")]
+    VideoInitFailed,
+
+    /// `mtmd_helper_video_read_next` returned an error code (`-2`).
+    #[error("video read error: code {0}")]
+    VideoReadError(i32),
 }
 
 /// A convenience `Result` alias for this module.
 pub type Result<T> = std::result::Result<T, MtmdError>;
+
+/// Progress callback invoked while the CLIP/mmproj weights are loading.
+///
+/// Receives a value in `[0.0, 1.0]`. Return `true` to continue loading or
+/// `false` to abort immediately.
+pub type MtmdProgressCallback = unsafe extern "C" fn(progress: f32, user_data: *mut c_void) -> bool;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MtmdContextParams
@@ -170,6 +187,84 @@ impl MtmdContextParams {
     #[must_use]
     pub fn image_max_tokens(mut self, n: i32) -> Self {
         self.params.image_max_tokens = n;
+        self
+    }
+
+    /// Maximum number of multimodal output tokens per batch.
+    ///
+    /// Maps to `mtmd_context_params.batch_max_tokens`. The upstream default
+    /// is `1024`. Increase for large images or long audio segments.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "mtmd")]
+    /// # {
+    /// use llama_cpp_4::mtmd::MtmdContextParams;
+    /// let params = MtmdContextParams::default().with_batch_max_tokens(2048);
+    /// assert_eq!(params.batch_max_tokens(), 2048);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn with_batch_max_tokens(mut self, n: i32) -> Self {
+        self.params.batch_max_tokens = n;
+        self
+    }
+
+    /// Get the configured batch token cap (`batch_max_tokens`).
+    #[must_use]
+    pub fn batch_max_tokens(&self) -> i32 {
+        self.params.batch_max_tokens
+    }
+
+    /// Set flash-attention mode for the vision encoder.
+    ///
+    /// Maps to `mtmd_context_params.flash_attn_type`. Uses the same
+    /// [`crate::context::params::LlamaFlashAttnType`] enum as text contexts.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "mtmd")]
+    /// # {
+    /// use llama_cpp_4::context::params::LlamaFlashAttnType;
+    /// use llama_cpp_4::mtmd::MtmdContextParams;
+    /// let params = MtmdContextParams::default()
+    ///     .with_flash_attn_type(LlamaFlashAttnType::Auto);
+    /// assert_eq!(params.flash_attn_type(), LlamaFlashAttnType::Auto);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn with_flash_attn_type(
+        mut self,
+        flash_attn_type: crate::context::params::LlamaFlashAttnType,
+    ) -> Self {
+        self.params.flash_attn_type = flash_attn_type.into();
+        self
+    }
+
+    /// Get flash-attention mode for the vision encoder.
+    #[must_use]
+    pub fn flash_attn_type(&self) -> crate::context::params::LlamaFlashAttnType {
+        crate::context::params::LlamaFlashAttnType::from(self.params.flash_attn_type)
+    }
+
+    /// Register a callback invoked while mmproj weights load.
+    ///
+    /// Maps to `mtmd_context_params.progress_callback`. Pass `None` to disable
+    /// progress reporting. The callback may return `false` to abort loading
+    /// early; see [`MtmdProgressCallback`].
+    ///
+    /// `user_data` is forwarded to each invocation and must remain valid until
+    /// [`MtmdContext::init_from_file`] returns.
+    #[must_use]
+    pub fn with_progress_callback(
+        mut self,
+        callback: Option<MtmdProgressCallback>,
+        user_data: *mut c_void,
+    ) -> Self {
+        self.params.progress_callback = callback;
+        self.params.progress_callback_user_data = user_data;
         self
     }
 
@@ -326,15 +421,33 @@ impl MtmdContext {
         unsafe { sys::mtmd_support_audio(self.ptr.as_ptr()) }
     }
 
-    /// Returns the audio sample rate in Hz (e.g. 16 000 for Whisper), or
-    /// `-1` if audio is not supported.
+    /// Returns `true` if this build and model support video input.
+    ///
+    /// Video support additionally requires `ffmpeg`/`ffprobe` to be available
+    /// at runtime (see [`MtmdVideo`]). Wraps `mtmd_helper_support_video`.
     #[must_use]
-    #[deprecated(note = "use audio_sample_rate() instead")]
-    pub fn audio_bitrate(&self) -> i32 {
-        self.audio_sample_rate()
+    pub fn supports_video(&self) -> bool {
+        unsafe { sys::mtmd_helper_support_video(self.ptr.as_ptr()) }
     }
 
-    /// Returns the audio sample rate in Hz.
+    /// Returns the media marker string configured for *this* context.
+    ///
+    /// Unlike [`default_marker`](Self::default_marker) (the library-wide
+    /// default), this reflects any override passed via
+    /// [`MtmdContextParams::media_marker`]. Wraps `mtmd_get_marker`.
+    #[must_use]
+    pub fn marker(&self) -> &str {
+        let ptr = unsafe { sys::mtmd_get_marker(self.ptr.as_ptr()) };
+        if ptr.is_null() {
+            return Self::default_marker();
+        }
+        unsafe { CStr::from_ptr(ptr) }
+            .to_str()
+            .unwrap_or_else(|_| Self::default_marker())
+    }
+
+    /// Returns the audio sample rate in Hz (e.g. `16_000` for Whisper), or `-1` if
+    /// audio is not supported.
     #[must_use]
     pub fn audio_sample_rate(&self) -> i32 {
         unsafe { sys::mtmd_get_audio_sample_rate(self.ptr.as_ptr()) }
@@ -358,7 +471,7 @@ impl MtmdContext {
     /// Tokenize a text prompt that contains one or more media markers.
     ///
     /// The number of `bitmaps` must equal the number of media markers in the
-    /// prompt text, otherwise [`MtmdError::TokenizeError(1)`] is returned.
+    /// prompt text, otherwise [`MtmdError::TokenizeError`] with code `1` is returned.
     ///
     /// This call is **thread-safe** (shared `&self`).
     ///
@@ -387,7 +500,11 @@ impl MtmdContext {
             .collect();
 
         let c_text = sys::mtmd_input_text {
-            text: text.c_text.as_ptr(),
+            // Upstream reads exactly `text_len` bytes from `text`
+            // (llama.cpp #25548), so the prompt is length-delimited and interior
+            // NUL bytes are preserved instead of truncating it.
+            text: text.text.as_ptr().cast(),
+            text_len: text.text_len,
             add_special: text.add_special,
             parse_special: text.parse_special,
         };
@@ -578,6 +695,9 @@ impl MtmdContext {
                 seq_id,
                 n_batch,
                 new_n_past,
+                // No post-decode callback; preserves prior single-shot behavior.
+                None,
+                std::ptr::null_mut(),
             )
         };
         if ret != 0 {
@@ -606,53 +726,76 @@ impl MtmdContext {
 ///
 /// The prompt string must contain the media marker (see
 /// [`MtmdContext::default_marker`]) once for every bitmap to be embedded.
+///
+/// The prompt is passed to llama.cpp as an explicit pointer + length
+/// (`mtmd_input_text::text_len`), so interior NUL bytes are preserved rather
+/// than truncating the prompt — use [`MtmdInputText::from_bytes`] when the
+/// prompt is not guaranteed NUL-free.
 #[derive(Debug)]
 pub struct MtmdInputText<'a> {
-    c_text: CString,
+    /// Prompt bytes followed by a trailing NUL sentinel. The sentinel keeps the
+    /// buffer usable by any C code that still treats `text` as a C string; it is
+    /// excluded from `text_len`.
+    text: Vec<u8>,
+    /// Prompt length in bytes, excluding the trailing NUL sentinel. Passed
+    /// verbatim as `mtmd_input_text::text_len`, so interior NULs are honoured.
+    text_len: usize,
     add_special: bool,
     parse_special: bool,
     _marker: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> MtmdInputText<'a> {
-    /// Create a new `MtmdInputText`.
+    /// Create a new `MtmdInputText` from a string prompt.
     ///
-    /// * `text`          – the prompt (must not contain interior NUL bytes)
+    /// * `text`          – the prompt (interior NUL bytes are permitted and
+    ///   preserved)
     /// * `add_special`   – whether to add BOS/EOS tokens
     /// * `parse_special` – whether to parse special tokens embedded in the text
-    ///
-    /// # Panics
-    ///
-    /// Panics if `text` contains an interior NUL byte.
     #[must_use]
     pub fn new(text: &'a str, add_special: bool, parse_special: bool) -> Self {
-        let c_text = CString::new(text).expect("MtmdInputText: text must not contain NUL bytes");
+        Self::from_bytes(text.as_bytes(), add_special, parse_special)
+    }
+
+    /// Create a new `MtmdInputText` from raw prompt bytes.
+    ///
+    /// Unlike a C string, the prompt length is carried explicitly, so `text`
+    /// may contain interior NUL bytes without truncating the prompt. The bytes
+    /// are copied into an owned, NUL-terminated buffer.
+    ///
+    /// * `text`          – the prompt bytes (typically UTF-8)
+    /// * `add_special`   – whether to add BOS/EOS tokens
+    /// * `parse_special` – whether to parse special tokens embedded in the text
+    #[must_use]
+    pub fn from_bytes(text: &'a [u8], add_special: bool, parse_special: bool) -> Self {
+        let text_len = text.len();
+        let mut buf = Vec::with_capacity(text_len + 1);
+        buf.extend_from_slice(text);
+        buf.push(0); // NUL sentinel, not counted in `text_len`
         Self {
-            c_text,
+            text: buf,
+            text_len,
             add_special,
             parse_special,
             _marker: std::marker::PhantomData,
         }
     }
 
-    /// Try to create a new `MtmdInputText`, returning an error if `text`
-    /// contains an interior NUL byte.
+    /// Try to create a new `MtmdInputText` from a string prompt.
+    ///
+    /// Retained for backwards compatibility. Interior NUL bytes are now
+    /// permitted (see [`MtmdInputText::new`]), so this never returns `Err`;
+    /// prefer [`new`](MtmdInputText::new).
     ///
     /// # Errors
     ///
-    /// Returns [`std::ffi::NulError`] if `text` contains a NUL byte.
+    /// Never returns an error; the `Result` is kept for API stability.
     pub fn try_new(
         text: &'a str,
         add_special: bool,
         parse_special: bool,
     ) -> std::result::Result<Self, std::ffi::NulError> {
-        let c_text = CString::new(text)?;
-        Ok(Self {
-            c_text,
-            add_special,
-            parse_special,
-            _marker: std::marker::PhantomData,
-        })
+        Ok(Self::new(text, add_special, parse_special))
     }
 }
 
@@ -726,6 +869,21 @@ impl MtmdBitmap {
         Ok(Self { ptr })
     }
 
+    /// Build an `MtmdBitmap` from a `mtmd_helper_bitmap_wrapper`, taking
+    /// ownership of the `bitmap` and freeing any `video_ctx`.
+    ///
+    /// The `from_file`/`from_buf` constructors only support image/audio input.
+    /// When the input is a video the helper returns a non-null `video_ctx`
+    /// (an open ffmpeg stream) which is not representable as an `MtmdBitmap`;
+    /// we free it here to avoid leaking it. Use [`MtmdVideo`] for video input.
+    fn from_wrapper(wrapper: sys::mtmd_helper_bitmap_wrapper) -> Result<Self> {
+        if !wrapper.video_ctx.is_null() {
+            unsafe { sys::mtmd_helper_video_free(wrapper.video_ctx) };
+        }
+        let ptr = NonNull::new(wrapper.bitmap).ok_or(MtmdError::BitmapCreateFailed)?;
+        Ok(Self { ptr })
+    }
+
     /// Load a bitmap from a file (image or audio).
     ///
     /// Supported image formats: JPEG, PNG, BMP, GIF, and others handled by
@@ -738,10 +896,12 @@ impl MtmdBitmap {
         let path = path.as_ref().to_str().ok_or(MtmdError::PathNotUtf8)?;
         let c_path = CString::new(path)?;
 
-        let ptr =
-            unsafe { sys::mtmd_helper_bitmap_init_from_file(ctx.ptr.as_ptr(), c_path.as_ptr()) };
-        let ptr = NonNull::new(ptr).ok_or(MtmdError::BitmapCreateFailed)?;
-        Ok(Self { ptr })
+        // `placeholder = false`: load the real bitmap data (not a token-count
+        // placeholder). For image/audio the returned `video_ctx` is always null.
+        let wrapper = unsafe {
+            sys::mtmd_helper_bitmap_init_from_file(ctx.ptr.as_ptr(), c_path.as_ptr(), false)
+        };
+        Self::from_wrapper(wrapper)
     }
 
     /// Load a bitmap from an in-memory buffer containing a file.
@@ -752,11 +912,12 @@ impl MtmdBitmap {
     ///
     /// Returns [`MtmdError::BitmapCreateFailed`] if decoding fails.
     pub fn from_buf(ctx: &MtmdContext, buf: &[u8]) -> Result<Self> {
-        let ptr = unsafe {
-            sys::mtmd_helper_bitmap_init_from_buf(ctx.ptr.as_ptr(), buf.as_ptr(), buf.len())
+        // `placeholder = false`: load the real bitmap data (not a token-count
+        // placeholder). For image/audio the returned `video_ctx` is always null.
+        let wrapper = unsafe {
+            sys::mtmd_helper_bitmap_init_from_buf(ctx.ptr.as_ptr(), buf.as_ptr(), buf.len(), false)
         };
-        let ptr = NonNull::new(ptr).ok_or(MtmdError::BitmapCreateFailed)?;
-        Ok(Self { ptr })
+        Self::from_wrapper(wrapper)
     }
 
     // ── Getters ───────────────────────────────────────────────────────────
@@ -817,6 +978,256 @@ impl MtmdBitmap {
         let cs = CString::new(id)?;
         unsafe { sys::mtmd_bitmap_set_id(self.ptr.as_ptr(), cs.as_ptr()) };
         Ok(())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Video input
+// ─────────────────────────────────────────────────────────────────────────────
+
+// `free()` from libc — used to release the heap-allocated text returned by
+// `mtmd_helper_video_read_next` (the C side allocates it with strdup/malloc and
+// documents that the caller must release it with `free()`).
+extern "C" {
+    fn free(ptr: *mut std::os::raw::c_void);
+}
+
+/// Parameters controlling how a [`MtmdVideo`] stream is opened and sampled.
+///
+/// Obtain a default-initialised instance via [`MtmdVideoParams::default()`]
+/// (which mirrors `mtmd_helper_video_init_params_default`: ~4 fps, native
+/// `ffmpeg`/`ffprobe` from `PATH`, and a 5 s timestamp interval) and tweak it
+/// with the builder methods.
+pub struct MtmdVideoParams {
+    params: sys::mtmd_helper_video_init_params,
+    // Keeps the `ffmpeg_bin_dir` C string alive for as long as `params`
+    // borrows it via a raw pointer.
+    ffmpeg_bin_dir: Option<CString>,
+}
+
+impl std::fmt::Debug for MtmdVideoParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MtmdVideoParams")
+            .field("fps_target", &self.params.fps_target)
+            .field("timestamp_interval_ms", &self.params.timestamp_interval_ms)
+            .field("ffmpeg_bin_dir", &self.ffmpeg_bin_dir)
+            .finish()
+    }
+}
+
+impl Default for MtmdVideoParams {
+    fn default() -> Self {
+        let params = unsafe { sys::mtmd_helper_video_init_params_default() };
+        Self {
+            params,
+            ffmpeg_bin_dir: None,
+        }
+    }
+}
+
+impl MtmdVideoParams {
+    /// Desired output frame rate. Values `<= 0` mean "use the video's native
+    /// fps" (the default is ~4 fps).
+    #[must_use]
+    pub fn fps_target(mut self, fps: f32) -> Self {
+        self.params.fps_target = fps;
+        self
+    }
+
+    /// Interval, in milliseconds, between inserted timestamp text chunks (e.g.
+    /// `"[10m50.5s]"`). Values `<= 0` disable timestamps (default 5000 ms).
+    #[must_use]
+    pub fn timestamp_interval_ms(mut self, ms: i64) -> Self {
+        self.params.timestamp_interval_ms = ms;
+        self
+    }
+
+    /// Directory containing the `ffmpeg`/`ffprobe` binaries. Pass `None` to
+    /// search `PATH` (the default).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `dir` contains an interior NUL byte.
+    pub fn ffmpeg_bin_dir(mut self, dir: Option<&str>) -> Result<Self> {
+        match dir {
+            None => {
+                self.params.ffmpeg_bin_dir = std::ptr::null();
+                self.ffmpeg_bin_dir = None;
+            }
+            Some(d) => {
+                let cs = CString::new(d)?;
+                self.params.ffmpeg_bin_dir = cs.as_ptr();
+                // Store the owner so the pointer above stays valid.
+                self.ffmpeg_bin_dir = Some(cs);
+            }
+        }
+        Ok(self)
+    }
+}
+
+/// Metadata describing an open [`MtmdVideo`] stream.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MtmdVideoInfo {
+    /// Frame width in pixels.
+    pub width: u32,
+    /// Frame height in pixels.
+    pub height: u32,
+    /// Effective frames-per-second (the `fps_target` if set, else native fps).
+    pub fps: f32,
+    /// Estimated total frame count at the effective fps (`-1` if unknown).
+    pub n_frames: i32,
+}
+
+/// One item read from a [`MtmdVideo`] stream by [`MtmdVideo::read_next`].
+#[derive(Debug)]
+pub enum MtmdVideoItem {
+    /// A decoded video frame, ready to be tokenized like any other image
+    /// [`MtmdBitmap`].
+    Frame(MtmdBitmap),
+    /// A timestamp text marker (e.g. `"[10m50.5s]"`) to be inserted into the
+    /// prompt between frames.
+    Text(String),
+}
+
+/// An open video stream, decoded frame-by-frame via `ffmpeg`.
+///
+/// The notion of "video" exists only at the helper level — it is decoded into
+/// a sequence of image [frames](MtmdVideoItem::Frame) and timestamp
+/// [text markers](MtmdVideoItem::Text) which are then fed through the normal
+/// multimodal pipeline.
+///
+/// Requires a build with video support (see [`MtmdContext::supports_video`])
+/// and `ffmpeg`/`ffprobe` available at runtime.
+///
+/// # Example
+///
+/// ```no_run
+/// # #[cfg(feature = "mtmd")]
+/// # fn run(mtmd_ctx: &llama_cpp_4::mtmd::MtmdContext) -> Result<(), llama_cpp_4::mtmd::MtmdError> {
+/// use std::path::Path;
+/// use llama_cpp_4::mtmd::{MtmdVideo, MtmdVideoParams, MtmdVideoItem};
+///
+/// let mut video = MtmdVideo::from_file(mtmd_ctx, Path::new("clip.mp4"),
+///                                      &MtmdVideoParams::default())?;
+/// while let Some(item) = video.read_next()? {
+///     match item {
+///         MtmdVideoItem::Frame(bitmap) => { /* tokenize the frame */ }
+///         MtmdVideoItem::Text(ts)      => { /* insert the timestamp marker */ }
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
+pub struct MtmdVideo {
+    ptr: NonNull<sys::mtmd_helper_video>,
+}
+
+impl std::fmt::Debug for MtmdVideo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MtmdVideo")
+            .field("info", &self.info())
+            .finish()
+    }
+}
+
+impl Drop for MtmdVideo {
+    fn drop(&mut self) {
+        unsafe { sys::mtmd_helper_video_free(self.ptr.as_ptr()) }
+    }
+}
+
+impl MtmdVideo {
+    /// Open a video file for frame-by-frame decoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MtmdError::VideoInitFailed`] if the stream cannot be opened
+    /// (no video support compiled in, `ffprobe` not found, file unreadable,
+    /// …), or [`MtmdError::InvalidPath`] / [`MtmdError::PathNotUtf8`] for a bad
+    /// path.
+    pub fn from_file(
+        ctx: &MtmdContext,
+        path: impl AsRef<Path>,
+        params: &MtmdVideoParams,
+    ) -> Result<Self> {
+        let path = path.as_ref().to_str().ok_or(MtmdError::PathNotUtf8)?;
+        let c_path = CString::new(path)?;
+        let ptr = unsafe {
+            sys::mtmd_helper_video_init(ctx.ptr.as_ptr(), c_path.as_ptr(), params.params)
+        };
+        let ptr = NonNull::new(ptr).ok_or(MtmdError::VideoInitFailed)?;
+        Ok(Self { ptr })
+    }
+
+    /// Open a video from an in-memory buffer. The buffer is copied internally,
+    /// so it need not outlive this call.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MtmdError::VideoInitFailed`] if the stream cannot be opened.
+    pub fn from_buf(ctx: &MtmdContext, buf: &[u8], params: &MtmdVideoParams) -> Result<Self> {
+        let ptr = unsafe {
+            sys::mtmd_helper_video_init_from_buf(
+                ctx.ptr.as_ptr(),
+                buf.as_ptr(),
+                buf.len(),
+                params.params,
+            )
+        };
+        let ptr = NonNull::new(ptr).ok_or(MtmdError::VideoInitFailed)?;
+        Ok(Self { ptr })
+    }
+
+    /// Return metadata (resolution, effective fps, estimated frame count) for
+    /// this stream.
+    #[must_use]
+    pub fn info(&self) -> MtmdVideoInfo {
+        let info = unsafe { sys::mtmd_helper_video_get_info(self.ptr.as_ptr()) };
+        MtmdVideoInfo {
+            width: info.width,
+            height: info.height,
+            fps: info.fps,
+            n_frames: info.n_frames,
+        }
+    }
+
+    /// Read the next item from the stream.
+    ///
+    /// Returns `Ok(Some(item))` for each frame or timestamp marker, and
+    /// `Ok(None)` once the end of the stream is reached.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MtmdError::VideoReadError`] on a decode error.
+    pub fn read_next(&mut self) -> Result<Option<MtmdVideoItem>> {
+        let mut out_bitmap: *mut sys::mtmd_bitmap = std::ptr::null_mut();
+        let mut out_text: *mut std::os::raw::c_char = std::ptr::null_mut();
+        let ret = unsafe {
+            sys::mtmd_helper_video_read_next(
+                self.ptr.as_ptr(),
+                &raw mut out_bitmap,
+                &raw mut out_text,
+            )
+        };
+        match ret {
+            0 => {
+                if let Some(ptr) = NonNull::new(out_bitmap) {
+                    Ok(Some(MtmdVideoItem::Frame(MtmdBitmap { ptr })))
+                } else if !out_text.is_null() {
+                    let text = unsafe { CStr::from_ptr(out_text) }
+                        .to_string_lossy()
+                        .into_owned();
+                    // The C side allocated this with strdup/malloc; release it.
+                    unsafe { free(out_text.cast()) };
+                    Ok(Some(MtmdVideoItem::Text(text)))
+                } else {
+                    // Success but nothing produced — treat as end of stream.
+                    Ok(None)
+                }
+            }
+            -1 => Ok(None), // EOF
+            other => Err(MtmdError::VideoReadError(other)),
+        }
     }
 }
 
@@ -1169,5 +1580,31 @@ mod tests {
         assert_eq!(std::mem::offset_of!(MtmdDecoderPos, x), 4);
         assert_eq!(std::mem::offset_of!(MtmdDecoderPos, y), 8);
         assert_eq!(std::mem::offset_of!(MtmdDecoderPos, z), 12);
+    }
+
+    #[test]
+    fn input_text_records_byte_length_and_nul_terminates() {
+        let input = MtmdInputText::new("hello", true, false);
+        // text_len is the prompt length, excluding the trailing NUL sentinel.
+        assert_eq!(input.text_len, 5);
+        assert_eq!(input.text, b"hello\0");
+        assert!(input.add_special);
+        assert!(!input.parse_special);
+    }
+
+    #[test]
+    fn input_text_preserves_interior_nul() {
+        // The whole point of upstream's `text_len`: a prompt with an embedded
+        // NUL must keep its full length rather than truncating at the NUL.
+        let input = MtmdInputText::from_bytes(b"a\0b", false, true);
+        assert_eq!(input.text_len, 3);
+        assert_eq!(input.text, b"a\0b\0");
+    }
+
+    #[test]
+    fn input_text_try_new_is_infallible() {
+        let input = MtmdInputText::try_new("marker \u{1} data", true, true)
+            .expect("try_new no longer rejects any input");
+        assert_eq!(input.text_len, "marker \u{1} data".len());
     }
 }

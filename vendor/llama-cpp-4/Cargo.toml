@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "llama-cpp-4"
-version = "0.3.1"
+version = "0.4.2"
 authors = ["Eugene Hauptmann"]
 build = false
 autolib = false
@@ -41,6 +41,7 @@ all-features = false
 features = [
     "mtmd",
     "ggml",
+    "rpc",
 ]
 
 [features]
@@ -79,8 +80,20 @@ name = "llama_cpp_4"
 path = "src/lib.rs"
 
 [[test]]
+name = "test_context_params"
+path = "tests/test_context_params.rs"
+
+[[test]]
+name = "test_fit"
+path = "tests/test_fit.rs"
+
+[[test]]
 name = "test_ggml"
 path = "tests/test_ggml.rs"
+
+[[test]]
+name = "test_integration"
+path = "tests/test_integration.rs"
 
 [[test]]
 name = "test_lib"
@@ -89,6 +102,10 @@ path = "tests/test_lib.rs"
 [[test]]
 name = "test_model"
 path = "tests/test_model.rs"
+
+[[test]]
+name = "test_prelude"
+path = "tests/test_prelude.rs"
 
 [[test]]
 name = "test_q1"
@@ -102,7 +119,7 @@ path = "tests/test_sampler.rs"
 version = "0.7.12"
 
 [dependencies.llama-cpp-sys-4]
-version = "0.3.1"
+version = "0.4.2"
 
 [dependencies.thiserror]
 version = "2.0.18"
