@@ -492,7 +492,42 @@ demand_plan entirely (router already classifies) — their path gets
   surface (chaos honesty, governance lanes, raw-lane substrate
   baselines incl. the two single-question depth canaries), so it must
   clear the chaos-gate + full raw re-baseline + prod re-baseline as its
-  own checkpoint, not ride this one.
+  own checkpoint, not ride this one. **Shipped 2026-07-16 evening
+  (chaos gate PASS, suite 7,668 green) — see the checkpoint-4 commit.**
+
+  **S3 attempt log (2026-07-16 evening) — NEGATIVE, reverted, with the
+  dependency order it established.** Two question-side probes and two
+  structural probes, all on the coverage-on substrate (wiki/questions
+  parity, isolated; baseline 34/58 sources · 101/130 facts · 2.8s):
+
+  | arm | sources | facts | p50 |
+  |---|---|---|---|
+  | entity title-lane (title-FTS fetch of question entities) | 34 | 101 | 3.0s |
+  | old axis-heuristic `graph_neighbor_expand` | **36** | 100 | 4.4s |
+  | PPR v1 (forward-push over link graph, 4 articles × 3 chunks, reserved, 0.6×top score) | 27 | 78 | 5.6s |
+  | PPR v2 (3 × 2, below-median score, no reservation) | 35 | 95 | 4.6s |
+
+  Findings, each with a receipt: (1) the remaining source-misses are
+  ANSWER-side articles the question never names (verified:
+  `synth_manhattan`'s expected Szilard/Fermi/Einstein appear nowhere in
+  the question) — question-side lanes are exhausted. (2) Structural
+  admission through a **title-cosine gate cannot distinguish
+  load-bearing from plausible-adjacent**: every injected chunk displaces
+  a fact-bearing direct hit past the 20-slot truncate, and even humble
+  injection (below-median, unreserved) nets −6 facts for +1 source.
+  (3) The old axis internals' +2 sources / −1 fact / +1.6s does not
+  clear the default-on bar; the flag stays opt-in.
+
+  **Consequence — S4 before S3.** The research already said bridge
+  admission must be rerank-gated (arXiv:2509.25530); the probes now
+  show it locally. The unlock for structural expansion is a real
+  cross-encoder admission gate: Qwen3-Reranker-0.6B, verified
+  llama.cpp-native (#15824, official ggml-org Q8_0, Apache-2.0), scoring
+  only the ~6-10 structural candidates per query (~10-20 prefills ≈
+  100-300ms — NOT a full-pool rerank). Next session's swing: S4
+  admission gate + retry S3 through it. The PPR walk implementation is
+  recoverable from this session's history (probe-ppr* runs in
+  target/ci-bench-p1/).
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.
