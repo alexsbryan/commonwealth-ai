@@ -100,7 +100,9 @@ pub(crate) use self::intent_helpers::{
     build_clarification_question, default_oicp_for_intent, format_interpretation, intent_hint,
     label_for_intent, parse_intent_hint,
 };
-pub(crate) use self::merge_select::{merge_demand_select, merge_select_enabled};
+pub(crate) use self::merge_select::{
+    concept_obligations_enabled, merge_demand_select, merge_select_enabled,
+};
 pub(crate) use self::question_analysis::{
     cap_chunks_per_article, comparison_axis, extract_commitment_phrase,
     extract_comparison_entities, extract_question_entities, parse_metalingual_locator,

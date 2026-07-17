@@ -190,6 +190,27 @@ impl FolderMetadataOracle for NoFolderMetadata {
 pub trait EntityExtractor: Send + Sync {
     /// Unique, lower-cased entity strings found in `text`, deduped; labels are elided (see trait doc).
     fn extract_entities(&self, text: &str) -> Vec<String>;
+
+    /// Unique, lower-cased CONCEPT strings (abstract nouns / -isms like
+    /// "determinism", "colonialism", "uncertainty principle") found in
+    /// `text`, deduped.
+    ///
+    /// Separate from [`extract_entities`](Self::extract_entities) on
+    /// purpose: the proper-noun heuristic that seeds retrieval is
+    /// uppercase-only and structurally cannot surface these, and the
+    /// tagged-entity `Concept` class is deliberately kept out of the
+    /// 5-label confirmation pass (its precision is only recoverable
+    /// downstream, at the FTS-exact-title obligation gate). Retrieval's
+    /// entity-obligation lane uses these to pin exact-title concept
+    /// articles that would otherwise never be fetched.
+    ///
+    /// Default returns empty — only the GLiNER-backed extractor runs the
+    /// extra `Concept` inference pass; every other impl (and the
+    /// not-yet-warm lazy loader) degrades to no concepts, exactly like a
+    /// machine without the model installed.
+    fn extract_concepts(&self, _text: &str) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 // ─── Corpus install (the `recipe:` workflow stage) ─────────────

@@ -808,6 +808,43 @@ demand_plan entirely (router already classifies) — their path gets
   sroman/news/wsum held exactly. Day total on the production path:
   wiki/questions 34/58 · 101/130 (morning) → **37/58 · 109/130**
   (64% sources · 84% facts) at p50 ~2.9s.
+- **Batched CE decode — landed + validated (2026-07-17).** The
+  multi-sequence `RerankSlot::score_batch` (shared prefix decoded once,
+  fanned to doc sequences, one decode per wave) **was broken** in the
+  tree: it aborted on llama.cpp b9982 (`GGML_ASSERT: seq_cp() is only
+  supported for full KV buffers`, llama-kv-cache.cpp:502) because the
+  rerank context was created non-unified, so the partial prefix fanout
+  was a CROSS-stream copy. One-line fix: `.with_kv_unified(true)` on the
+  rerank context (setter already in vendored `context/params/advanced.rs`)
+  → `n_stream=1`, all seqs map to stream 0, and the fanout becomes the
+  cheap same-stream cell-tag update the code always intended. Correctness
+  proven by `examples/rerank_batch_check.rs` against a machinery-free
+  `score_sequential` oracle: ranking identical (top-8 8/8), signed gate
+  bias ±0.03 (symmetric quantized-GEMM FP noise), **18.4× on 48 titles**
+  (127ms vs 2339ms), 6.5× on chunks. Scoreboard A/B (`eval run
+  --prod-pipeline --isolate --limit 30`, batched vs `SOVEREIGN_RERANK_
+  SEQUENTIAL=1`): wiki **42/58 src** (both, = committed baseline) · 104
+  vs 105 facts (one saturated-budget flicker) ; sep **56/66 src · 152/159
+  facts** (both, identical). Pure latency win, no source regression —
+  the "slots become free" unlock for further prerank widening.
+  `SOVEREIGN_RERANK_SEQUENTIAL=1` is the A/B valve + rollback hatch.
+- **Lowercase-concept obligations — built, NEGATIVE result, ships dark
+  (2026-07-17).** GLiNER `["Concept"]` pass (`extract_concepts`,
+  separate from the tuned 5-label confirmation filter) feeds the
+  entity-obligation lane with bidirectional title match ("European
+  colonialism"→"Colonialism"), behind `SOVEREIGN_CONCEPT_OBLIGATIONS`.
+  All correct + firing (audit: determinism Q → `concepts=["uncertainty
+  principle","determinism"]`; colonialism Q → `concepts=["european
+  colonialism"]`). But the limit=30 A/B measured **ZERO source lift** —
+  OFF==ON (4/7 · 8/13 on the 2-question addressable set): base retrieval
+  already surfaces `Determinism`/`Colonialism` at the real bench limit.
+  The checkpoint's "lowercase extraction gap" was a HYPOTHESIS that did
+  not reproduce under instrumentation (and 'capitalism' isn't even in
+  its question — a semantic-bridge miss, not extraction). GOTCHA that
+  caused a false "eviction" reading mid-session: `eval run` default
+  `--limit` is 10, but `bench all --prod-pipeline` passes
+  `--retrieval-limit 30`; the miss vanishes at 30. Default OFF; kept for
+  banks/corpora where base retrieval genuinely misses a named concept.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.

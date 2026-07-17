@@ -216,8 +216,22 @@ impl RerankSlot {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
+                // Multi-sequence rerank: size the KV for RERANK_BATCH_SEQS
+                // concurrent sequences (1 shared prefix + doc tails) so
+                // `score_batch` can fan a decoded prefix out to doc
+                // sequences and score a whole wave in one decode.
+                // (with_n_seq_max restored in llama-cpp-4 0.4.2 — absent
+                // in the 0.2.x binding.)
+                .with_n_seq_max(RERANK_BATCH_SEQS)
+                // UNIFIED cache = one stream shared across sequences. This
+                // is load-bearing for the fanout: only in unified mode is
+                // a partial `copy_kv_cache_seq(prefix range)` the cheap
+                // same-stream cell-tag update the fanout assumes. The
+                // llama.cpp default (per-sequence streams) makes that a
+                // cross-stream copy that ABORTS ("seq_cp() is only
+                // supported for full KV buffers", llama-kv-cache.cpp).
+                .with_kv_unified(true)
                 .with_n_ubatch(ctx_tokens.min(2048))
-                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
@@ -394,32 +408,15 @@ impl RerankSlot {
         }
     }
 
-    /// Score multiple docs against one query, sequential under the
-    /// slot mutex with SHARED-PREFIX KV reuse: every pair in a call
-    /// shares `scaffold + query + middle`, so that prefix is decoded
-    /// ONCE and each doc only pays for its own `doc + suffix` tokens —
-    /// the KV cache is rolled back to the prefix boundary between
-    /// docs (`clear_kv_cache_seq`). Measured motivation (2026-07-17):
-    /// per-pair full re-prefill cost ~37ms on short pairs and ~90ms on
-    /// long-query SEP pairs; the admission gate + title prerank issue
-    /// 16-24 pair calls per retrieval turn, and for title pairs the
-    /// shared prefix is ~95% of the tokens.
-    pub fn score_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        if docs.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut guard = self
-            .ctx
-            .lock()
-            .map_err(|e| Error::Inference(format!("rerank lock poisoned: {e}")))?;
-        let ctx = &mut guard.ctx;
-        ctx.clear_kv_cache();
-
-        // Truncation budget. Fixed overhead = prefix + middle +
-        // suffix + 1 (the trailing rerank token). Whatever's left
-        // is split: query keeps its full length up to a ceiling
-        // (queries are usually short), and doc takes everything
-        // else. When even the query won't fit, truncate query too.
+    /// Split the context budget for one rerank call. Fixed overhead =
+    /// prefix + middle + suffix + 1 (the trailing rerank token).
+    /// Whatever's left is split: query keeps its full length up to a
+    /// ceiling (queries are usually short), doc takes the rest. When
+    /// even the query won't fit, the query is truncated too. Returns
+    /// the (untruncated) query tokens plus the two budgets. Shared by
+    /// `score_batch` and `score_sequential` so a pair can never be
+    /// truncated one way in production and another in the oracle.
+    fn split_budget(&self, query: &str) -> Result<(Vec<LlamaToken>, usize, usize)> {
         let query_tokens = self
             .model
             .str_to_token(query, AddBos::Never)
@@ -435,6 +432,122 @@ impl RerankSlot {
         const QUERY_HARD_CAP: usize = 256;
         let query_budget = query_tokens.len().min(QUERY_HARD_CAP).min(dynamic_budget);
         let doc_budget = dynamic_budget.saturating_sub(query_budget);
+        Ok((query_tokens, query_budget, doc_budget))
+    }
+
+    /// Build one doc's tail tokens: `doc[..doc_budget] + suffix (+
+    /// rerank token on the jina protocol)`. This is everything that
+    /// rides AFTER the shared `prefix + query + middle` prefix. Shared
+    /// by `score_batch` and `score_sequential`.
+    fn build_tail(&self, doc: &str, doc_budget: usize) -> Result<Vec<LlamaToken>> {
+        let doc_tokens = self
+            .model
+            .str_to_token(doc, AddBos::Never)
+            .map_err(|e| Error::Inference(format!("Rerank doc tokenise: {e}")))?;
+        let mut tail: Vec<LlamaToken> =
+            Vec::with_capacity(doc_budget.min(doc_tokens.len()) + self.suffix_tokens.len() + 1);
+        tail.extend(doc_tokens.iter().take(doc_budget).copied());
+        tail.extend_from_slice(&self.suffix_tokens);
+        if let RerankProtocol::JinaScoreToken {
+            rerank_token_id, ..
+        } = self.protocol
+        {
+            tail.push(LlamaToken(rerank_token_id));
+        }
+        Ok(tail)
+    }
+
+    /// Reference scorer: each (query, doc) pair is decoded as ONE fully
+    /// independent sequence — whole-KV clear between pairs, scaffold +
+    /// query re-decoded every time, no cross-pair state. Slower than
+    /// [`score_batch`] (no shared-prefix reuse, no multi-sequence
+    /// batching) but it depends on NONE of the KV-fanout / wave
+    /// machinery, which makes it two things at once:
+    ///   1. the ground-truth oracle the `rerank_batch_check` example
+    ///      holds `score_batch` against — a correct batched decode of
+    ///      independent sequences MUST reproduce these logits; and
+    ///   2. a safe fallback mode for callers that would rather pay
+    ///      latency than trust the batched path on an unproven backend.
+    /// Uses the same `split_budget` / `build_tail` helpers as
+    /// `score_batch`, so identical truncation is guaranteed.
+    pub fn score_sequential(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        if docs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut guard = self
+            .ctx
+            .lock()
+            .map_err(|e| Error::Inference(format!("rerank lock poisoned: {e}")))?;
+        let ctx = &mut guard.ctx;
+
+        let (query_tokens, query_budget, doc_budget) = self.split_budget(query)?;
+        let mut head: Vec<LlamaToken> = Vec::with_capacity(
+            self.prefix_tokens.len() + query_budget + self.middle_tokens.len(),
+        );
+        head.extend_from_slice(&self.prefix_tokens);
+        head.extend(query_tokens.iter().take(query_budget).copied());
+        head.extend_from_slice(&self.middle_tokens);
+
+        let mut out = Vec::with_capacity(docs.len());
+        for doc in docs {
+            let tail = self.build_tail(doc, doc_budget)?;
+            // Fully independent: nothing from the previous pair survives.
+            ctx.clear_kv_cache();
+            let total = head.len() + tail.len();
+            let last = total - 1;
+            let mut batch = LlamaBatch::new(total, 1);
+            for (i, &tok) in head.iter().chain(tail.iter()).enumerate() {
+                batch
+                    .add(tok, i as i32, &[0], i == last)
+                    .map_err(|e| Error::Inference(format!("Rerank seq batch add: {e}")))?;
+            }
+            ctx.decode(&mut batch)
+                .map_err(|e| Error::Inference(format!("Rerank seq decode: {e}")))?;
+            out.push(Self::read_score(
+                self.protocol,
+                ctx.get_logits_ith(last as i32),
+            )?);
+        }
+        Ok(out)
+    }
+
+    /// Score multiple docs against one query with MULTI-SEQUENCE
+    /// batching on top of shared-prefix KV reuse: the shared
+    /// `scaffold + query + middle` prefix decodes ONCE on seq 0, is
+    /// fanned out to doc sequences via `copy_kv_cache_seq` (a KV-cell
+    /// tag update in the unified cache — no data copy), and every
+    /// doc's tail rides ONE `decode` call per wave with per-doc
+    /// logits harvested by batch index. Measured motivation
+    /// (2026-07-17): per-DECODE-CALL overhead (~15-35ms Vulkan
+    /// dispatch) dominated per-pair cost regardless of token count —
+    /// prefix reuse alone left gate/prerank latency unchanged. Waves
+    /// are packed under both the sequence cap and the KV token
+    /// budget; a failed wave falls back to sequential scoring so a
+    /// batching regression can never zero the gate.
+    pub fn score_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        if docs.is_empty() {
+            return Ok(Vec::new());
+        }
+        // A/B valve + rollback hatch: the batched decode changes rerank
+        // numerics at FP scale vs a fully independent decode (batched
+        // GEMM ≠ single GEMM on a quantized model). `SOVEREIGN_RERANK_
+        // SEQUENTIAL=1` routes to the machinery-free path so a scoreboard
+        // A/B can isolate the batched decode's effect, and an operator
+        // can fall back instantly if a backend ever misbehaves.
+        if rerank_sequential_forced() {
+            return self.score_sequential(query, docs);
+        }
+        let mut guard = self
+            .ctx
+            .lock()
+            .map_err(|e| Error::Inference(format!("rerank lock poisoned: {e}")))?;
+        let ctx = &mut guard.ctx;
+        ctx.clear_kv_cache();
+
+        // Truncation budget shared verbatim with `score_sequential`
+        // (see `split_budget`), so the batched and reference scorers
+        // can never truncate a pair differently.
+        let (query_tokens, query_budget, doc_budget) = self.split_budget(query)?;
 
         // Decode the shared prefix once: scaffold + query + middle.
         // The last prefix token requests logits purely as decode
@@ -456,52 +569,118 @@ impl RerankSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Rerank prefix decode: {e}")))?;
 
-        let mut out = Vec::with_capacity(docs.len());
-        for (di, doc) in docs.iter().enumerate() {
-            // Roll the cache back to the shared prefix (no-op for the
-            // first doc). A failed partial removal would silently
-            // corrupt every subsequent score, so it is a hard error.
-            if di > 0 {
-                let ok = ctx
-                    .clear_kv_cache_seq(Some(0), Some(shared_len as u32), None)
-                    .map_err(|e| Error::Inference(format!("Rerank kv rollback: {e}")))?;
-                if !ok {
-                    return Err(Error::Inference(
-                        "Rerank kv rollback rejected (partial seq removal unsupported)"
-                            .to_string(),
-                    ));
+        // Tokenise all tails up front (cheap, CPU-side).
+        let mut tails: Vec<Vec<LlamaToken>> = Vec::with_capacity(docs.len());
+        for doc in docs {
+            tails.push(self.build_tail(doc, doc_budget)?);
+        }
+
+        // Fan the decoded prefix out to the doc sequences once (tag
+        // update in the unified KV — cheap and idempotent).
+        let doc_seqs = (RERANK_BATCH_SEQS as usize).saturating_sub(1).max(1);
+        for s in 1..=doc_seqs as i32 {
+            ctx.copy_kv_cache_seq(0, s, Some(0), Some(shared_len as u32))
+                .map_err(|e| Error::Inference(format!("Rerank prefix fanout: {e}")))?;
+        }
+
+        // Wave packing: bounded by doc-sequence count AND the KV token
+        // budget beyond the shared prefix.
+        let wave_token_budget = (self.max_input_tokens - shared_len).saturating_sub(64);
+        let mut out: Vec<f32> = Vec::with_capacity(docs.len());
+        let mut di = 0usize;
+        while di < tails.len() {
+            let mut wave_end = di;
+            let mut wave_tokens = 0usize;
+            while wave_end < tails.len()
+                && (wave_end - di) < doc_seqs
+                && wave_tokens + tails[wave_end].len() <= wave_token_budget
+            {
+                wave_tokens += tails[wave_end].len();
+                wave_end += 1;
+            }
+            if wave_end == di {
+                // Single over-budget tail: run it alone (its length is
+                // already capped by doc_budget ≤ the context).
+                wave_end = di + 1;
+                wave_tokens = tails[di].len();
+            }
+            let wave = &tails[di..wave_end];
+
+            // Clear the doc sequences' PREVIOUS tails (positions past
+            // the shared prefix); the prefix tags survive.
+            for s in 1..=wave.len() as i32 {
+                let _ = ctx.clear_kv_cache_seq(Some(s as u32), Some(shared_len as u32), None);
+            }
+
+            let mut batch = LlamaBatch::new(wave_tokens, 1);
+            let mut last_indices: Vec<i32> = Vec::with_capacity(wave.len());
+            let mut batch_pos = 0i32;
+            for (w, tail) in wave.iter().enumerate() {
+                let seq = (w + 1) as i32;
+                let last = tail.len() - 1;
+                for (i, &tok) in tail.iter().enumerate() {
+                    batch
+                        .add(tok, (shared_len + i) as i32, &[seq], i == last)
+                        .map_err(|e| Error::Inference(format!("Rerank batch add: {e}")))?;
+                    if i == last {
+                        last_indices.push(batch_pos);
+                    }
+                    batch_pos += 1;
                 }
             }
-            let doc_tokens = self
-                .model
-                .str_to_token(doc, AddBos::Never)
-                .map_err(|e| Error::Inference(format!("Rerank doc tokenise: {e}")))?;
-            let mut tail: Vec<LlamaToken> =
-                Vec::with_capacity(doc_budget.min(doc_tokens.len()) + self.suffix_tokens.len() + 1);
-            tail.extend(doc_tokens.iter().take(doc_budget).copied());
-            tail.extend_from_slice(&self.suffix_tokens);
-            if let RerankProtocol::JinaScoreToken {
-                rerank_token_id, ..
-            } = self.protocol
-            {
-                tail.push(LlamaToken(rerank_token_id));
+            match ctx.decode(&mut batch) {
+                Ok(()) => {
+                    for &idx in &last_indices {
+                        let logits = ctx.get_logits_ith(idx);
+                        out.push(Self::read_score(self.protocol, logits)?);
+                    }
+                }
+                Err(e) => {
+                    // Fallback: score this wave sequentially on seq 0
+                    // (prefix intact) so one bad batch cannot zero the
+                    // whole call.
+                    tracing::warn!(
+                        error = %e,
+                        wave = wave.len(),
+                        "rerank wave decode failed — sequential fallback"
+                    );
+                    for tail in wave {
+                        let _ =
+                            ctx.clear_kv_cache_seq(Some(0), Some(shared_len as u32), None);
+                        let last = tail.len() - 1;
+                        let mut b = LlamaBatch::new(tail.len(), 1);
+                        for (i, &tok) in tail.iter().enumerate() {
+                            b.add(tok, (shared_len + i) as i32, &[0], i == last)
+                                .map_err(|e| {
+                                    Error::Inference(format!("Rerank batch add: {e}"))
+                                })?;
+                        }
+                        ctx.decode(&mut b)
+                            .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
+                        out.push(Self::read_score(self.protocol, ctx.get_logits_ith(last as i32))?);
+                    }
+                }
             }
-            let last = tail.len() - 1;
-            let mut batch = LlamaBatch::new(tail.len(), 1);
-            for (i, &tok) in tail.iter().enumerate() {
-                // Positions continue from the shared prefix; only the
-                // last position's logits carry the score.
-                batch
-                    .add(tok, (shared_len + i) as i32, &[0], i == last)
-                    .map_err(|e| Error::Inference(format!("Rerank batch add: {e}")))?;
-            }
-            ctx.decode(&mut batch)
-                .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
-            let logits = ctx.get_logits_ith(last as i32);
-            out.push(Self::read_score(self.protocol, logits)?);
+            di = wave_end;
         }
         Ok(out)
     }
+}
+
+/// Doc sequences per wave + 1 for the shared prefix. 16 keeps KV
+/// bookkeeping small while collapsing a 48-title prerank from 48
+/// decode calls to 4.
+const RERANK_BATCH_SEQS: u32 = 16;
+
+
+/// `SOVEREIGN_RERANK_SEQUENTIAL=1` forces `score_batch` down the
+/// fully-independent `score_sequential` path — the A/B valve and
+/// rollback hatch for the batched decode's FP-scale numeric change.
+fn rerank_sequential_forced() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_RERANK_SEQUENTIAL").ok().as_deref(),
+        Some("1" | "true" | "on" | "yes")
+    )
 }
 
 /// L2-normalize in place, preserving direction; all-zero vectors
