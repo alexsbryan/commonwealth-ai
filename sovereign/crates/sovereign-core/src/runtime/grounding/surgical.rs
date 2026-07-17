@@ -39,7 +39,7 @@ const MIN_SURVIVING_CHARS: usize = 40;
 
 /// Lossless sentence split: `split_sentences(t).concat() == t`, so we can
 /// delete or replace individual sentences and rebuild the rest byte-for-byte.
-fn split_sentences(text: &str) -> Vec<String> {
+pub(super) fn split_sentences(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
     let chars: Vec<char> = text.chars().collect();

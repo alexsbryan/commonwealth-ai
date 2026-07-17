@@ -24,6 +24,9 @@ Current in-flight:
 - [`PRODUCTION_SEARCH_INTEGRATION.md`](PRODUCTION_SEARCH_INTEGRATION.md)
   — phased plan; orchestrator + registry + DDG fallback shipped;
   Tavily + operator decisions remain.
+- [`STREAMING_GATE_PIPELINE.md`](STREAMING_GATE_PIPELINE.md) —
+  overlap the longform grounding-gate verification under the draft
+  stream; the final holistic-scan barrier stays the safety floor.
 
 ### 2. Reference patterns
 

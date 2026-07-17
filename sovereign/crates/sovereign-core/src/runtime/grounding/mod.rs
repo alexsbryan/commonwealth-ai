@@ -42,6 +42,7 @@ mod citation;
 mod citation_attribution;
 mod config;
 mod judge;
+mod pipeline;
 mod search;
 mod surgical;
 mod value_presence;
@@ -72,6 +73,7 @@ pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfi
 pub use config::grounding_gate_flags;
 #[allow(unused_imports)]
 pub(crate) use judge::{verify_grounding, GateVerdict};
+pub(crate) use pipeline::StreamingVerifier;
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
 #[allow(unused_imports)]
