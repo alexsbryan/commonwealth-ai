@@ -228,8 +228,6 @@ pub(super) async fn surgical_rewrite(
     base_request: &CompletionRequest,
     draft: &str,
     failed: &[(String, Vec<String>)],
-    chunks: &[String],
-    tau: f64,
 ) -> Option<String> {
     if failed.is_empty() {
         return Some(draft.to_string());
@@ -293,7 +291,6 @@ pub(super) async fn surgical_rewrite(
             }),
     )
     .await;
-    let mut fixed_indices: Vec<usize> = Vec::new();
     for (idx, result) in edited {
         let new = result?; // any edit failure → fall back to the full rewrite
         if new.eq_ignore_ascii_case("remove") || new.is_empty() {
@@ -305,46 +302,28 @@ pub(super) async fn surgical_rewrite(
             } else {
                 format!("{new} ")
             };
-            fixed_indices.push(idx);
         }
     }
 
-    // Scoped re-audit: verify ONLY the sentences we rewrote. The untouched ones
-    // were already verified in audit #1 and are kept verbatim, so re-checking
-    // the whole answer is redundant — the fast-slot fixes are the only NEW text
-    // that could hallucinate. Check each against the corpus (concurrently) and
-    // drop any that don't ground: an honest removal beats shipping a fresh
-    // fabrication. This replaces the gate's full re-audit for the surgical path.
-    const RECHECK_CHUNKS: usize = 8;
-    let posture = crate::slot_policy::posture_of(base_request);
-    let rechecks = futures::future::join_all(fixed_indices.iter().map(|&idx| {
-        let sentence = sentences[idx].clone();
-        async move {
-            (
-                idx,
-                super::judge::claim_violation_joint(
-                    inference,
-                    sentence.trim(),
-                    chunks,
-                    RECHECK_CHUNKS,
-                    posture,
-                )
-                .await,
-            )
-        }
-    }))
-    .await;
-    for (idx, vp) in rechecks {
-        if vp.is_some_and(|v| v >= tau) {
-            dbg(&format!(
-                "surgical: fix at sentence {idx} did not ground (vp>=tau) — dropping"
-            ));
-            sentences[idx] = String::new();
-        }
-    }
-
+    // NB: the surgically-edited answer is handed back to the caller's FULL
+    // re-audit ladder (`audit(second, true)`), the same one the full-rewrite
+    // path runs. An earlier "scoped re-audit" (verify only the changed spans)
+    // was faster but leaked a GK-caveated fabrication the holistic scan catches
+    // (calibration 2026-07-17, CONFAB-LEAKED 0→1). The holistic re-audit is the
+    // safety floor; surgery only changes HOW the corrected text is produced.
     let rebuilt = normalize_ws(&sentences.concat());
-    if rebuilt.chars().count() < MIN_SURVIVING_CHARS {
+    // Over-deletion guard: if surgery stripped more than half the answer, the
+    // draft was mostly unsupported — a coherent full re-synthesis (which
+    // REGENERATES a thinner grounded answer) beats shipping a collapsed stub
+    // that the presenter reads as an abstention. Belt-and-suspenders with the
+    // caller's failure-count cap, which normally routes such drafts to the full
+    // rewrite before surgery is even attempted.
+    let kept = rebuilt.chars().count();
+    let original = draft.chars().count().max(1);
+    if kept < MIN_SURVIVING_CHARS || kept * 2 < original {
+        dbg(&format!(
+            "surgical: over-deletion ({kept}/{original} chars survived) — full rewrite"
+        ));
         return None;
     }
     Some(rebuilt)
@@ -428,10 +407,8 @@ mod tests {
             "Smerdyakov piloted a hovercraft over Skotoprigonyevsk".to_string(),
             Vec::<String>::new(),
         )];
-        // No fixes (delete-only) → scoped re-audit makes no inference calls.
-        let out = surgical_rewrite(&inf, &base, draft, &failed, &[], 0.5)
-            .await
-            .unwrap();
+        // No fixes (delete-only) → makes no inference calls.
+        let out = surgical_rewrite(&inf, &base, draft, &failed).await.unwrap();
         assert!(!out.contains("hovercraft"), "unsupported sentence deleted");
         assert!(out.contains("Alyosha") && out.contains("Dmitri"), "verified prose kept");
     }
@@ -446,8 +423,24 @@ mod tests {
             "quantum chromodynamics governs gluon confinement".to_string(),
             vec!["some corrective passage".to_string()],
         )];
-        assert!(surgical_rewrite(&inf, &base, draft, &failed, &[], 0.5)
-            .await
-            .is_none());
+        assert!(surgical_rewrite(&inf, &base, draft, &failed).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn over_deletion_falls_back() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(NoCallProvider);
+        let base = CompletionRequest::default();
+        // One supported sentence (~78 chars) + one longer unsupported one
+        // (~135 chars). Deleting the unsupported one leaves >40 chars (clears the
+        // absolute floor) but under half the draft → the ratio guard fires and we
+        // fall back to the full rewrite rather than ship the stub.
+        let draft = "Alyosha Karamazov is the gentle youngest brother and a novice at the monastery. \
+                     Smerdyakov secretly piloted an experimental hovercraft across the province and \
+                     later transmitted the plans to a foreign power for profit.";
+        let failed = vec![(
+            "Smerdyakov secretly piloted an experimental hovercraft across the province".to_string(),
+            Vec::<String>::new(),
+        )];
+        assert!(surgical_rewrite(&inf, &base, draft, &failed).await.is_none());
     }
 }
