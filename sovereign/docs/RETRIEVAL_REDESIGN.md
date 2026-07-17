@@ -528,6 +528,70 @@ demand_plan entirely (router already classifies) — their path gets
   admission gate + retry S3 through it. The PPR walk implementation is
   recoverable from this session's history (probe-ppr* runs in
   target/ci-bench-p1/).
+
+  **S4 attempt log (2026-07-17) — gate VALIDATED, lane blocked
+  downstream; five probes, all receipted.** Built and A/B'd the full
+  S4+S3 stack on the wiki/questions prod parity lane (isolated,
+  limit 30; baseline 34/58 src · 101/130 facts · p50 2.8s):
+
+  - *Infrastructure (kept, tested):* jina-reranker-v3's public GGUF is
+    DEAD for scoring (conversion drops the projection head — the
+    JinaScoreToken protocol reads tied-embedding noise, rerank_slot.rs
+    2026-07-09). The official ggml-org
+    `qwen3-reranker-0.6b-q8_0.gguf` (639 MB, `sovereign/models/`)
+    works via the existing YesNoLogit protocol: smoke test gives
+    perfect ordering with +5..+8 vs −9..−11 logit-diff separation and
+    a natural zero crossing. `SOVEREIGN_RERANK_GATE_ONLY=1`
+    (bootstrap) installs `rerank_fn` for gate consumers WITHOUT
+    enabling full-pool `search_with_rerank`. ~37 ms/pair prefill-bound
+    on Strix Halo Vulkan; <1 s load.
+  - *The lane* (`SOVEREIGN_PPR_EXPAND=1`, new `ppr_struct_expand`
+    step after `graph_neighbor_expand`): forward-push PPR walk over
+    the wiki link graph (channel A) + the seeds' `causal`/`contested`
+    typed edges under front-loaded per-seed quotas (channel B) +
+    title-CE prerank + whole-article fetch with lexical
+    within-article pick + chunk-level CE admission, injected via
+    synthetic `vector_distance` just inside the truncate boundary.
+    GLiNER seed confirmation (model now installed) filters heuristic
+    seed noise when wired.
+  - *Iterated findings, one per probe:* (1) occurrence weights carry
+    NO signal for answer-side people — Manhattan Project has 468 of
+    508 neighbors at weight 1; Szilard/Fermi/Einstein live there, and
+    ALL of them are `causal` edges from its Origins section (typed
+    edges are the channel that finds them, measured). (2) HashMap
+    frontier order let one edge-dense seed fill the typed cap —
+    per-seed quotas fixed it: by probe 3b the candidate list for the
+    Manhattan question contained Fermi, Wigner, Einstein, FDR, with
+    the title prerank ranking them top-4. (3) The displacement bar
+    (beat max of the calibration tail) admits ~nothing anywhere.
+    (4) The absolute CE-yes floor (bar = 0) admits 13 chunks/20
+    questions and the discrimination is clean (answer-side −3..+2.6,
+    junk −8..−13) — but the default Qwen3-Reranker instruct asks
+    "does this passage ANSWER the query", and single chunks rarely
+    answer synthesis questions (Einstein's best chunk −1.18 for the
+    émigré question; a General-relativity chunk −3.95 for a
+    relativity question). (5) THE BLOCKER MOVED DOWNSTREAM: chunks
+    admitted with positive scores were then eaten by the
+    post-pipeline machinery — Adolf Hitler (+1.55, an expected
+    source for depression→fascism) admitted into the merged pool yet
+    absent from the 6-chunk final pool; Natural selection (+2.65,
+    the exact missing expected source for the Darwin question)
+    dropped while non-expected Sexual selection survived. Quality
+    was byte-identical to baseline (34/101) in ALL five probes —
+    fact-safe (yesterday's −6-fact mode is structurally gone) and
+    gain-free. p50 8.1s (fetch ~3.5-4s: `fetch_chunks_by_title` is a
+    filtered scan, ~450 ms/article, serialized).
+  - *Named unlocks, in dependency order, for whoever picks this up:*
+    (a) admitted-chunk SURVIVAL through the post-pipeline
+    expansion/budget stages — composition is S2 territory, again;
+    (b) evidence-framed CE instruct (`SOVEREIGN_RERANK_INSTRUCT`
+    exists; the default is web-search answer-ranking, our task is
+    evidence composition) — untested because (a) already eats
+    positive admissions; (c) fetch cost — a title scalar index or
+    the atoms substrate instead of filtered scans; (d) batched CE
+    decode for >20-pair calls. The lane ships default-OFF; the gate
+    infrastructure (reranker slot, GATE_ONLY, GLiNER confirmation)
+    is the kept asset.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.

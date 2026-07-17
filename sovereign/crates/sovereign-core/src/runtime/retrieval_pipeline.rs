@@ -196,6 +196,11 @@ const FLAG_META_BRIDGE: EnvFlag = EnvFlag {
     default: "off",
     purpose: "Cross-corpus bridge boost: question entities matching a bridge topic pull the LINKED corpus's framing via typed edges (the 'stereo' view). Built by `sovereign meta-atlas align`.",
 };
+const FLAG_PPR_EXPAND: EnvFlag = EnvFlag {
+    name: "SOVEREIGN_PPR_EXPAND",
+    default: "off",
+    purpose: "PPR walk over the wikipedia link graph proposes answer-side articles; a cross-encoder admission gate (requires rerank_fn) injects only candidates that out-score the marginal direct hits they'd displace (RETRIEVAL_REDESIGN.md S4+S3).",
+};
 
 /// Every env knob the retrieval pipeline (and its immediate post-steps)
 /// reads, with the step it belongs to. Renderable as a doc table
@@ -223,6 +228,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_MIN_LEVEL", default: "see helper", purpose: "Minimum tree level for injected summaries." }),
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_DEDUPE", default: "see helper", purpose: "Collapse one entry's multi-level nodes to its best." }),
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
+        ("ppr_struct_expand", FLAG_PPR_EXPAND),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "see helper", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
@@ -713,6 +719,11 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
             Some(FLAG_GRAPH_NEIGHBOR_EXPAND),
             step_graph_neighbor_expand,
         ),
+        step(
+            "ppr_struct_expand",
+            Some(FLAG_PPR_EXPAND),
+            step_ppr_struct_expand,
+        ),
         step("dedupe_merged", None, step_dedupe_merged),
         step("cap_and_reserve", None, step_cap_and_reserve),
         // FR-9: drop dead-law chunks for governance corpora; inert
@@ -1081,6 +1092,37 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
                     total = st.chunks.len(),
                     label = st.label,
                     "retrieval: graph neighbor expansion"
+                );
+            }
+        }
+        StepOutcome::default()
+    })
+}
+
+fn step_ppr_struct_expand<'a, 'ctx>(
+    rt: &'a Runtime,
+    st: &'a mut PipelineState<'ctx>,
+) -> StepFuture<'a> {
+    Box::pin(async move {
+        // PPR structural expansion, cross-encoder-gated (env-gated
+        // inside the helper; requires wikipedia_graph + rerank_fn).
+        // Admitted chunks carry a synthetic vector_distance that
+        // places them just inside the truncate boundary, so a plain
+        // re-sort integrates them — no reweight pass (which would
+        // compound score multipliers on the whole pool).
+        if let Some(admitted) = rt
+            .expand_via_ppr_gated(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling)
+            .await
+        {
+            if !admitted.is_empty() {
+                let added = admitted.len();
+                st.chunks.extend(admitted);
+                st.chunks.sort_by(cross_corpus_sort_cmp);
+                tracing::info!(
+                    added,
+                    total = st.chunks.len(),
+                    label = st.label,
+                    "retrieval: ppr structural expansion (gated)"
                 );
             }
         }
@@ -1742,6 +1784,7 @@ mod tests {
                 "atlas_grounding",
                 "reweight_and_sort",
                 "graph_neighbor_expand",
+                "ppr_struct_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
@@ -1770,6 +1813,7 @@ mod tests {
                 "atlas_grounding",
                 "reweight_and_sort",
                 "graph_neighbor_expand",
+                "ppr_struct_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
@@ -1787,16 +1831,16 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 15-step core (the 15th is
+        // Shared 3-step head + shared 16-step core (the 16th is
         // `readiness_disclosure` (was `dim_mismatch_disclosure`) — the last core step, inert
         // when retrieval found anything); the pipelines differ ONLY in their tails
         // (KQ: audited truncate; deep: plain truncate + strategy-driven
         // top-sources expansion).
-        assert_eq!(&kq[..18], &deep[..18]);
-        assert_eq!(kq.len(), 19);
-        assert_eq!(deep.len(), 20);
-        assert_eq!(kq[18], "truncate_merged");
-        assert_eq!(&deep[18..], &["truncate_merged", "top_sources_expand"]);
+        assert_eq!(&kq[..19], &deep[..19]);
+        assert_eq!(kq.len(), 20);
+        assert_eq!(deep.len(), 21);
+        assert_eq!(kq[19], "truncate_merged");
+        assert_eq!(&deep[19..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but

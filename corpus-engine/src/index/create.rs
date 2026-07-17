@@ -708,6 +708,31 @@ impl CorpusIndex {
         read_meta(dir).map(|m| m.chunks_deduped).unwrap_or(false)
     }
 
+    /// Build a BTree scalar index on `title` so `only_if("title = …")`
+    /// predicates (`fetch_chunks_by_title` — the dominant-source and
+    /// structural-expansion fetch path) use an index seek instead of a
+    /// filtered full scan (measured ~450-500 ms per call on the 1.9M-row
+    /// wikipedia table, 2026-07-17). Idempotent: LanceDB replaces an
+    /// existing index on the same column.
+    pub async fn build_title_scalar_index(&self) -> Result<()> {
+        self.table
+            .create_index(
+                &["title"],
+                lancedb::index::Index::BTree(
+                    lancedb::index::scalar::BTreeIndexBuilder::default(),
+                ),
+            )
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("BTree title index: {e}")))?;
+        // Index set changed — drop the cached search gate (same
+        // contract as build_indexes).
+        if let Ok(mut g) = self.gate_cache.lock() {
+            *g = None;
+        }
+        Ok(())
+    }
+
     /// Build vector + FTS indexes for efficient search.
     /// Should be called after all data is inserted.
     ///
