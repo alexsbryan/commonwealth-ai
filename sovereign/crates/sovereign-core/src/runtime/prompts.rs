@@ -387,14 +387,26 @@ pub(crate) const PPR_NEIGHBORS_PER_NODE: usize = 24;
 /// at w=1), so a narrow pull structurally misses them.
 pub(crate) const PPR_SEED_PULL: usize = 512;
 
-/// Cap on typed-channel (causal/contested edge) candidates per query.
-pub(crate) const PPR_TYPED_CAP: usize = 16;
+/// Cap on structural-channel candidates entering the title prerank
+/// (typed causal/contested edges from all seeds + topical bridges
+/// from the first two). Wide on purpose: the title-CE prerank is the
+/// picker; occurrence-ordered pre-cuts measured as a lottery.
+pub(crate) const PPR_TYPED_CAP: usize = 48;
 
-/// Top-mass candidate articles that get a chunk fetch + gate score.
-/// Every observed admission (probes v3b-v9) ranked within the top 4
-/// post-prerank; 6 keeps a margin while trimming 4 gate pairs + 2
-/// fetches per turn.
-pub(crate) const PPR_CANDIDATE_ARTICLES: usize = 6;
+/// Topical (plain-link) bridge candidates per entity seed.
+pub(crate) const PPR_TOPICAL_PER_SEED: usize = 8;
+
+/// Mass-channel candidates entering the title prerank.
+pub(crate) const PPR_MASS_INTO_PRERANK: usize = 16;
+
+/// Candidate articles that get a chunk fetch + gate score (the
+/// title-prerank's output size). Raised 6→10 with the widened
+/// funnels (2026-07-17): at 40-60 prerank titles, 6 slots made the
+/// PRERANK the admission judge — Einstein/Hitler (chunk-gate-proven
+/// admissions) lost seats to new topical candidates. The chunk gate
+/// is the calibrated judge; fetches are ~ms (BTree) and gate pairs
+/// are prefix-reused.
+pub(crate) const PPR_CANDIDATE_ARTICLES: usize = 10;
 
 /// Chunks kept per candidate article after the title filter.
 pub(crate) const PPR_CHUNKS_PER_ARTICLE: usize = 2;
@@ -420,7 +432,7 @@ pub(crate) const OBLIGATION_CHUNKS_PER_TITLE: usize = 2;
 /// Hard cap on injected chunks per query — every admitted chunk
 /// displaces a direct hit at the truncate, so this bounds the
 /// worst-case fact cost when the gate misjudges.
-pub(crate) const PPR_MAX_ADMITTED: usize = 3;
+pub(crate) const PPR_MAX_ADMITTED: usize = 4;
 
 // ─── Question decomposition (opt-in retrieval expansion) ─────
 
