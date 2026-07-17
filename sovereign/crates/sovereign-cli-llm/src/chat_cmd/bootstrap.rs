@@ -594,7 +594,14 @@ pub async fn build_session_with_skills(
                 let reranker: Arc<dyn InferenceProvider> = Arc::new(reranker);
                 let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
                 let mut cfg = corpus_engine::RerankConfig::default();
-                cfg.enabled = true;
+                // GATE_ONLY: install the rerank_fn (for consumers like
+                // the PPR admission gate, SOVEREIGN_PPR_EXPAND) WITHOUT
+                // enabling the full-pool search_with_rerank pass — the
+                // leaf search stays byte-identical to baseline.
+                let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
+                    .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                cfg.enabled = !gate_only;
                 if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
                     if let Ok(n) = s.parse::<usize>() {
                         cfg.candidates_k = n;

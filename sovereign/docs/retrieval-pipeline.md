@@ -36,11 +36,12 @@ dated convergence/divergence log.
 | 12 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
 | 13 | `reweight_and_sort` | — |
 | 14 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 15 | `dedupe_merged` | — |
-| 16 | `cap_and_reserve` | — |
-| 17 | `governance_active_set` | — |
-| 18 | `readiness_disclosure` | — |
-| 19 | `truncate_merged` | — |
+| 15 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 16 | `dedupe_merged` | — |
+| 17 | `cap_and_reserve` | — |
+| 18 | `governance_active_set` | — |
+| 19 | `readiness_disclosure` | — |
+| 20 | `truncate_merged` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -60,12 +61,13 @@ dated convergence/divergence log.
 | 12 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
 | 13 | `reweight_and_sort` | — |
 | 14 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 15 | `dedupe_merged` | — |
-| 16 | `cap_and_reserve` | — |
-| 17 | `governance_active_set` | — |
-| 18 | `readiness_disclosure` | — |
-| 19 | `truncate_merged` | — |
-| 20 | `top_sources_expand` | — |
+| 15 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 16 | `dedupe_merged` | — |
+| 17 | `cap_and_reserve` | — |
+| 18 | `governance_active_set` | — |
+| 19 | `readiness_disclosure` | — |
+| 20 | `truncate_merged` | — |
+| 21 | `top_sources_expand` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -80,12 +82,13 @@ dated convergence/divergence log.
 | 7 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
 | 8 | `reweight_and_sort` | — |
 | 9 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 10 | `dedupe_merged` | — |
-| 11 | `cap_and_reserve` | — |
-| 12 | `governance_active_set` | — |
-| 13 | `readiness_disclosure` | — |
-| 14 | `truncate_merged` | — |
-| 15 | `top_sources_expand` | — |
+| 10 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 11 | `dedupe_merged` | — |
+| 12 | `cap_and_reserve` | — |
+| 13 | `governance_active_set` | — |
+| 14 | `readiness_disclosure` | — |
+| 15 | `truncate_merged` | — |
+| 16 | `top_sources_expand` | — |
 
 ## Env-knob registry
 
@@ -114,6 +117,7 @@ asserts every step-level gate appears here.
 | raptor_grounding_early | `SOVEREIGN_RAPTOR_MIN_LEVEL` | see helper | Minimum tree level for injected summaries. |
 | raptor_grounding_early | `SOVEREIGN_RAPTOR_DEDUPE` | see helper | Collapse one entry's multi-level nodes to its best. |
 | graph_neighbor_expand | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | off | Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). |
+| ppr_struct_expand | `SOVEREIGN_PPR_EXPAND` | off | PPR walk over the wikipedia link graph proposes answer-side articles; a cross-encoder admission gate (requires rerank_fn) injects only candidates that out-score the marginal direct hits they'd displace (RETRIEVAL_REDESIGN.md S4+S3). |
 | bridge_boost | `SOVEREIGN_META_BRIDGE` | off | Cross-corpus bridge boost: question entities matching a bridge topic pull the LINKED corpus's framing via typed edges (the 'stereo' view). Built by `sovereign meta-atlas align`. |
 | - | `SOVEREIGN_CONV_PPR_WEIGHT` | see helper | Post-pipeline: PPR rerank weight for conversation-corpus chunks. |
 | - | `SOVEREIGN_HISTORY_RETRIEVAL` | on | History layer: retrieval over prior conversation turns (=0 disables). |

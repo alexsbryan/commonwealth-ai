@@ -809,7 +809,13 @@ pub(crate) fn question_breadth_shape(message: &str) -> Option<&'static str> {
         "origins of",
         "led to",
         "lead to",
-        "contributed to",
+        // Stem: contribute/contributed/contributing/contribution to.
+        // "How did X contribute to Y?" is the same causal shape as
+        // "X contributed to Y" — the un-stemmed form silently missed
+        // present-tense phrasings (measured 2026-07-17: the
+        // depression→fascism bank question routed DominantSource and
+        // the expander evicted admitted structural chunks as noise).
+        "contribut",
         "consequences",
         "resulted in",
         "gave rise",

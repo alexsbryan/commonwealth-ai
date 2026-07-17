@@ -352,6 +352,63 @@ pub(crate) const GRAPH_NEIGHBOR_LIMIT: usize = 5;
 /// that the query genuinely matches.
 pub(crate) const GRAPH_NEIGHBOR_DECAY: f32 = 0.6;
 
+// ─── PPR structural expansion, cross-encoder gated (S4+S3) ───
+//
+// The walk proposes; the gate disposes. Walk params bound the sqlite
+// neighbor queries (frontier × hops calls); gate params bound the
+// cross-encoder prefills (candidates × chunks + calibration tail
+// pairs per query). RETRIEVAL_REDESIGN.md §8 records the S3 probes
+// that fixed this shape: ungated injection loses ~2 facts per
+// admitted chunk, so admission must clear the displacement bar.
+
+/// Seeds for the PPR walk: question entities + top in-pool titles.
+pub(crate) const PPR_MAX_SEEDS: usize = 5;
+
+/// Push rounds. Two hops reach "article the answer cites" shapes
+/// (question entity → linked concept → its own neighbors) without
+/// diffusing mass into the whole graph.
+pub(crate) const PPR_HOPS: usize = 2;
+
+/// Fraction of a node's mass pushed to neighbors per round; the
+/// remainder stays put (standard PPR restart weight, inverted).
+pub(crate) const PPR_DAMPING: f64 = 0.85;
+
+/// Articles expanded per push round (top-mass first) — bounds the
+/// per-hop neighbor queries.
+pub(crate) const PPR_FRONTIER_CAP: usize = 8;
+
+/// Outbound neighbors pulled per expanded article.
+pub(crate) const PPR_NEIGHBORS_PER_NODE: usize = 24;
+
+/// Seed-hop adjacency pull. Wide on purpose: the same rows serve the
+/// mass push (top slice) AND the typed channel — `causal`/`contested`
+/// edges sit at occurrence weight 1-2 in a near-uniform weight
+/// distribution (measured: Manhattan Project = 468 of 508 neighbors
+/// at w=1), so a narrow pull structurally misses them.
+pub(crate) const PPR_SEED_PULL: usize = 512;
+
+/// Cap on typed-channel (causal/contested edge) candidates per query.
+pub(crate) const PPR_TYPED_CAP: usize = 16;
+
+/// Top-mass candidate articles that get a chunk fetch + gate score.
+pub(crate) const PPR_CANDIDATE_ARTICLES: usize = 8;
+
+/// Chunks kept per candidate article after the title filter.
+pub(crate) const PPR_CHUNKS_PER_ARTICLE: usize = 2;
+
+/// Whole-article pull cap for the within-article relevance pick
+/// (wiki articles chunk to ~10-40 rows; 64 covers the long tail).
+pub(crate) const PPR_ARTICLE_FETCH_LIMIT: usize = 64;
+
+/// Hard cap on injected chunks per query — every admitted chunk
+/// displaces a direct hit at the truncate, so this bounds the
+/// worst-case fact cost when the gate misjudges.
+pub(crate) const PPR_MAX_ADMITTED: usize = 3;
+
+/// Direct hits at the truncate boundary scored as the calibration
+/// tail — the displacement bar is their max.
+pub(crate) const PPR_CALIBRATION_TAIL: usize = 4;
+
 // ─── Question decomposition (opt-in retrieval expansion) ─────
 
 /// Upper bound on sub-queries the decomposer may emit. Higher values

@@ -5,6 +5,8 @@
 
 use super::super::*;
 
+use crate::runtime::evidence::{extract_tokens, EVIDENCE_TITLE_MIN_TOKEN_LEN};
+
 impl Runtime {
     /// Axis-aware structural-graph expansion (opt-in via
     /// `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND=1`). Two primitives:
@@ -161,6 +163,483 @@ impl Runtime {
         );
         Some(added)
     }
+    /// PPR structural expansion with a cross-encoder admission gate
+    /// (opt-in via `SOVEREIGN_PPR_EXPAND=1`; requires both a wikipedia
+    /// graph and an installed `rerank_fn`).
+    ///
+    /// The S3 probes (RETRIEVAL_REDESIGN.md, 2026-07-16) established
+    /// that structural candidates admitted on title-cosine displace
+    /// fact-bearing direct hits past the truncate — even humble
+    /// injection netted −6 facts for +1 source. The unlock is the S4
+    /// admission gate: a cross-encoder judges each structural
+    /// candidate against the query, and a candidate is injected ONLY
+    /// when it out-scores the marginal direct hits it would displace
+    /// (the displacement test) AND clears the model's absolute
+    /// relevance floor (yes-logit > no-logit, i.e. score > 0).
+    ///
+    /// Proposal is two channels; disposal is the gate:
+    ///
+    /// 1. **Walk (channel A)** — forward-push personalized PageRank
+    ///    over the wikipedia link graph. Seeds = question entities +
+    ///    top in-pool titles; two push rounds weighted by link
+    ///    occurrence counts. Catches aboutness-adjacent articles
+    ///    (bridges, co-cited concepts).
+    /// 2. **Typed edges (channel B)** — the seeds' `causal` +
+    ///    `contested` outbound edges, unconditionally. Edge types are
+    ///    classified at insert time from section paths ("Origins",
+    ///    "Criticism", …) and link-text verbs, so these are the rare
+    ///    edges that carry answer-side people/causes a question never
+    ///    names (measured: Manhattan Project → Szilard/Fermi/Einstein
+    ///    are ALL `causal` edges from its Origins section, at
+    ///    occurrence weight 1 in a 508-neighbor article — mass alone
+    ///    structurally cannot surface them, and 2026-07-16's S3
+    ///    probes showed lexical admission must not).
+    /// 3. **Title prerank** — when the merged candidate pool exceeds
+    ///    the fetch budget, one batched rerank call over bare titles
+    ///    (~15ms/pair) keeps the top few by semantic judgment.
+    /// 4. **Fetch** — FTS-only title-anchored retrieval per surviving
+    ///    candidate (title-only query; empty embedding ⇒ no ANN).
+    /// 5. **Gate** — one batched rerank call scores candidate chunks
+    ///    plus a calibration tail of direct hits at the truncate
+    ///    boundary. Admitted chunks are placed just inside the
+    ///    boundary via a synthetic `vector_distance` (the merged sort
+    ///    orders by distance; `None` would sort them straight out).
+    pub(crate) async fn expand_via_ppr_gated(
+        &self,
+        chunks: &[corpus_engine::ScoredChunk],
+        message: &str,
+        enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
+    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
+        if std::env::var("SOVEREIGN_PPR_EXPAND").ok().as_deref() != Some("1") {
+            return None;
+        }
+        let graph = self.wikipedia_graph.as_ref()?;
+        let Some(rerank_fn) = self.rerank_fn.clone() else {
+            // The gate IS the feature — ungated structural injection
+            // is a measured regression. Refuse loudly rather than
+            // degrade to the failure mode.
+            tracing::warn!(
+                "ppr_expand: enabled but no rerank_fn installed — skipping \
+                 (set SOVEREIGN_RERANK_MODEL_PATH, optionally with \
+                 SOVEREIGN_RERANK_GATE_ONLY=1)"
+            );
+            return None;
+        };
+        if chunks.is_empty() {
+            return Some(Vec::new());
+        }
+
+        let already_present: std::collections::HashSet<&str> =
+            chunks.iter().filter_map(|c| c.title.as_deref()).collect();
+
+        // ── Phase 1: seeds + forward-push walk ──────────────────────
+        let t_walk = std::time::Instant::now();
+        let mut seeds: Vec<String> = extract_comparison_entities(message);
+        if seeds.is_empty() {
+            seeds = extract_question_entities(message);
+        }
+        // GLiNER confirmation filter (when the extractor is wired):
+        // keep only heuristic seeds the NER model also sees as
+        // entities. The heuristics over-trigger on capitalized
+        // non-entities (measured 2026-07-17: "European Union" seeded
+        // from "European physicists", "Western world" from a Rome
+        // question) and every junk seed wastes walk mass on a wrong
+        // branch. GLiNER output is lower-cased so it can't seed the
+        // case-sensitive graph directly — it CONFIRMS cased spans
+        // instead. Substring match in both directions covers
+        // span-boundary differences ("nazi germany" vs "Germany").
+        if let Some(g) = self.gliner.as_ref() {
+            let ner: Vec<String> = g.extract_entities(message);
+            if !ner.is_empty() {
+                let confirmed: Vec<String> = seeds
+                    .iter()
+                    .filter(|s| {
+                        let sl = s.to_lowercase();
+                        ner.iter()
+                            .any(|e| sl == *e || sl.contains(e.as_str()) || e.contains(sl.as_str()))
+                    })
+                    .cloned()
+                    .collect();
+                if !confirmed.is_empty() && confirmed.len() < seeds.len() {
+                    tracing::debug!(
+                        dropped = seeds.len() - confirmed.len(),
+                        ?confirmed,
+                        "ppr_expand: gliner seed confirmation"
+                    );
+                    seeds = confirmed;
+                }
+            }
+        }
+        for title in chunks.iter().filter_map(|c| c.title.as_ref()) {
+            if seeds.len() >= PPR_MAX_SEEDS {
+                break;
+            }
+            if !seeds.iter().any(|s| s == title) {
+                seeds.push(title.clone());
+            }
+        }
+        // Keep only seeds the graph knows; a dropped seed is fine
+        // (its mass just never enters the walk).
+        let mut live_seeds: Vec<String> = Vec::new();
+        for s in &seeds {
+            if live_seeds.len() >= PPR_MAX_SEEDS {
+                break;
+            }
+            if graph.record(s).await.is_some() {
+                live_seeds.push(s.clone());
+            }
+        }
+        if live_seeds.is_empty() {
+            return Some(Vec::new());
+        }
+
+        // rank = accumulated PPR mass per article; mass = the frontier
+        // being pushed this round. Neighbor edges are weighted by
+        // occurrence count; PPR_DAMPING of a node's mass is pushed,
+        // the rest is retained where it sits (already in `rank`).
+        //
+        // The seed hop pulls each seed's adjacency WIDE (one sqlite
+        // query each, in `live_seeds` order — entity seeds first) so
+        // the same rows serve both channels: the top slice feeds the
+        // mass push, and the `causal`/`contested` typed rows become
+        // channel-B candidates under a PER-SEED quota. The quota is
+        // the load-bearing detail: iteration 2 collected typed edges
+        // in frontier order — a HashMap, i.e. ARBITRARY seed order —
+        // and one edge-dense seed (Nazism's Criticism section) filled
+        // the whole cap before the question's primary entity was even
+        // visited.
+        let seed_mass = 1.0 / live_seeds.len() as f64;
+        let mut rank: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        let mut mass: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        let mut in_scope: std::collections::HashMap<String, bool> =
+            std::collections::HashMap::new();
+        let mut typed: Vec<String> = Vec::new();
+        // Front-loaded per-seed quota: the first (primary-entity) seed
+        // gets half the cap — its typed edges are the question's own
+        // Origins/Criticism people, the highest-prior channel — and
+        // later seeds split the rest. A flat split measured 4 slots
+        // for Manhattan Project's 25 causal edges: Szilard and Fermi
+        // (occurrence weight 1, tie-ordered arbitrarily) usually lost
+        // the draw to w=2 administrative targets.
+        let seed_quota = |i: usize| -> usize {
+            match i {
+                0 => PPR_TYPED_CAP / 2,
+                _ => (PPR_TYPED_CAP / 2)
+                    .div_euclid(live_seeds.len().saturating_sub(1).max(1))
+                    .max(2),
+            }
+        };
+        for s in &live_seeds {
+            rank.insert(s.clone(), seed_mass);
+            mass.insert(s.clone(), seed_mass);
+            in_scope.insert(s.clone(), true);
+        }
+        let mut seed_pulls: std::collections::HashMap<
+            String,
+            Vec<corpus_engine::WikipediaNeighbor>,
+        > = std::collections::HashMap::new();
+        for (i, s) in live_seeds.iter().enumerate() {
+            let nbrs = graph.neighbors(s, PPR_SEED_PULL).await;
+            let quota = seed_quota(i);
+            let mut took = 0usize;
+            for n in &nbrs {
+                if took >= quota || typed.len() >= PPR_TYPED_CAP {
+                    break;
+                }
+                if matches!(n.relationship_type.as_str(), "causal" | "contested")
+                    && n.in_scope
+                    && !already_present.contains(n.title.as_str())
+                    && !typed.contains(&n.title)
+                {
+                    typed.push(n.title.clone());
+                    took += 1;
+                }
+            }
+            seed_pulls.insert(s.clone(), nbrs);
+        }
+        for _hop in 0..PPR_HOPS {
+            let mut frontier: Vec<(String, f64)> = mass.into_iter().collect();
+            frontier.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            frontier.truncate(PPR_FRONTIER_CAP);
+            let mut next: std::collections::HashMap<String, f64> =
+                std::collections::HashMap::new();
+            for (title, m) in frontier {
+                let nbrs = match seed_pulls.remove(&title) {
+                    Some(pulled) => pulled,
+                    None => graph.neighbors(&title, PPR_NEIGHBORS_PER_NODE).await,
+                };
+                let push: Vec<_> = nbrs.into_iter().take(PPR_NEIGHBORS_PER_NODE).collect();
+                let total_w: f64 = push
+                    .iter()
+                    .map(|n| n.occurrence_count.max(1) as f64)
+                    .sum();
+                if total_w <= 0.0 {
+                    continue;
+                }
+                for n in push {
+                    let share = m * PPR_DAMPING * (n.occurrence_count.max(1) as f64) / total_w;
+                    *next.entry(n.title.clone()).or_insert(0.0) += share;
+                    *rank.entry(n.title.clone()).or_insert(0.0) += share;
+                    in_scope.entry(n.title).or_insert(n.in_scope);
+                }
+            }
+            mass = next;
+        }
+
+        let mut by_mass: Vec<(String, f64)> = rank
+            .iter()
+            .filter(|(t, _)| !already_present.contains(t.as_str()))
+            .filter(|(t, _)| in_scope.get(*t).copied().unwrap_or(false))
+            .map(|(t, m)| (t.clone(), *m))
+            .collect();
+        by_mass.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        by_mass.truncate(PPR_CANDIDATE_ARTICLES);
+
+        // Merge channels (typed first — they carry the structural
+        // signal mass cannot), dedupe by title.
+        let mut candidates: Vec<(String, f64)> = Vec::new();
+        for t in typed.iter() {
+            let m = rank.get(t).copied().unwrap_or(0.0);
+            candidates.push((t.clone(), m));
+        }
+        for (t, m) in by_mass {
+            if !candidates.iter().any(|(c, _)| c == &t) {
+                candidates.push((t, m));
+            }
+        }
+        let typed_n = typed.len();
+        let walk_ms = t_walk.elapsed().as_millis() as u64;
+        if candidates.is_empty() {
+            return Some(Vec::new());
+        }
+
+        // ── Phase 1b: title prerank — semantic selection of which
+        // candidates earn a chunk fetch. Bare-title prefills are tiny
+        // (~15ms/pair), so judging 24 titles costs less than one
+        // wasted FTS fetch. No absolute threshold here — the chunk
+        // gate downstream applies the real bar; this only ORDERS.
+        let t_prerank = std::time::Instant::now();
+        if candidates.len() > PPR_CANDIDATE_ARTICLES {
+            let titles: Vec<String> = candidates.iter().map(|(t, _)| t.clone()).collect();
+            match (rerank_fn)(message, titles).await {
+                Ok(ts) if ts.len() == candidates.len() => {
+                    let mut order: Vec<usize> = (0..candidates.len()).collect();
+                    order.sort_by(|&a, &b| {
+                        ts[b].partial_cmp(&ts[a]).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    let picked: Vec<(String, f64)> = order
+                        .into_iter()
+                        .take(PPR_CANDIDATE_ARTICLES)
+                        .map(|i| candidates[i].clone())
+                        .collect();
+                    candidates = picked;
+                }
+                _ => {
+                    // Prerank is an optimization, not a gate — fall
+                    // back to channel order (typed first, then mass).
+                    candidates.truncate(PPR_CANDIDATE_ARTICLES);
+                }
+            }
+        }
+        let prerank_ms = t_prerank.elapsed().as_millis() as u64;
+
+        // ── Phase 2: whole-article fetch + lexical within-article
+        // pick. `fetch_chunks_by_title` (title-filtered scan — the
+        // dominant-source expansion's primitive) pulls the candidate
+        // article's chunks; the top PPR_CHUNKS_PER_ARTICLE by
+        // question-token overlap go to the gate. Iterations 1-2 used
+        // a global FTS query + exact-title filter instead: ~525ms per
+        // call AND the surviving chunks were effectively arbitrary
+        // (intros), so even correct candidates (Churchill for a Yalta
+        // question) reached the gate with a chunk that carried no
+        // answer content and were rightly refused. The pick signal is
+        // the same substantive-token overlap `reweight_by_query_
+        // relevance` uses — cheap, and the CE gate still judges.
+        let t_fetch = std::time::Instant::now();
+        let engine = self.corpus_engine.as_ref()?;
+        let fetch_corpora: Vec<String> = {
+            let installed = engine.installed_indexes().await.ok()?;
+            installed
+                .into_iter()
+                .filter(|i| {
+                    enabled_corpora
+                        .map(|e| e.iter().any(|c| c == &i.corpus_id))
+                        .unwrap_or(true)
+                        && corpus_ceiling
+                            .map(|e| e.iter().any(|c| c == &i.corpus_id))
+                            .unwrap_or(true)
+                })
+                .map(|i| i.path.to_string_lossy().into_owned())
+                .collect()
+        };
+        let q_tokens = extract_tokens(message, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+        let fetches = candidates.iter().map(|(title, _)| {
+            let title = title.clone();
+            let paths = fetch_corpora.clone();
+            let q_tokens = q_tokens.clone();
+            async move {
+                let mut article: Vec<corpus_engine::ScoredChunk> = Vec::new();
+                for path in &paths {
+                    let Ok(idx) = self
+                        .corpus_engine
+                        .as_ref()
+                        .expect("checked above")
+                        .open_index(std::path::Path::new(path))
+                        .await
+                    else {
+                        continue;
+                    };
+                    if let Ok(chunks) = idx
+                        .fetch_chunks_by_title(&title, PPR_ARTICLE_FETCH_LIMIT)
+                        .await
+                    {
+                        article.extend(chunks);
+                    }
+                    if !article.is_empty() {
+                        break;
+                    }
+                }
+                // Rank within the article by substantive question-token
+                // overlap; take the top few for the gate.
+                let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                    let body = c.content.to_lowercase();
+                    q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                };
+                article.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
+                article.truncate(PPR_CHUNKS_PER_ARTICLE);
+                article
+            }
+        });
+        let cand_chunks: Vec<corpus_engine::ScoredChunk> =
+            futures::future::join_all(fetches).await.concat();
+        let fetch_ms = t_fetch.elapsed().as_millis() as u64;
+        if cand_chunks.is_empty() {
+            return Some(Vec::new());
+        }
+
+        // ── Phase 3: cross-encoder admission gate ───────────────────
+        // Calibration tail = the direct hits sitting at the truncate
+        // boundary, i.e. exactly what an injected chunk would
+        // displace. One batched call scores candidates + tail.
+        let t_gate = std::time::Instant::now();
+        let boundary = chunks.len().min(KQ_MERGED_LIMIT);
+        let tail_start = boundary.saturating_sub(PPR_CALIBRATION_TAIL);
+        let tail: &[corpus_engine::ScoredChunk] = &chunks[tail_start..boundary];
+        let fmt_doc = |c: &corpus_engine::ScoredChunk| match &c.title {
+            Some(t) => format!("Title: {t}\n\n{}", c.content),
+            None => c.content.clone(),
+        };
+        let docs: Vec<String> = cand_chunks
+            .iter()
+            .map(fmt_doc)
+            .chain(tail.iter().map(fmt_doc))
+            .collect();
+        let scores = match (rerank_fn)(message, docs).await {
+            Ok(s) if s.len() == cand_chunks.len() + tail.len() => s,
+            Ok(s) => {
+                tracing::warn!(
+                    got = s.len(),
+                    expected = cand_chunks.len() + tail.len(),
+                    "ppr_expand: rerank length contract violated — admitting nothing"
+                );
+                return Some(Vec::new());
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "ppr_expand: rerank failed — admitting nothing");
+                return Some(Vec::new());
+            }
+        };
+        let (cand_scores, tail_scores) = scores.split_at(cand_chunks.len());
+        // The admission bar is the model's absolute yes/no floor:
+        // logit(yes) > logit(no), i.e. the cross-encoder judges the
+        // chunk to ANSWER the query. Iterations 1-3 additionally
+        // required beating max(calibration tail) — the displacement
+        // test — and admitted ~nothing anywhere (wiki A/B byte-
+        // identical to baseline three times): a candidate chunk that
+        // must out-score the best marginal direct hit is a bar even
+        // genuine answer-side chunks (Einstein's for the Manhattan
+        // question) rarely clear. The absolute floor is the variant
+        // the S3 title-cosine probes never had access to — a CE-yes
+        // chunk carries answer content by definition, which is
+        // precisely what yesterday's displaced-facts injections
+        // lacked. Tail scores stay in the audit event so the
+        // displacement margin remains observable per admission.
+        let bar = 0.0_f32;
+
+        let mut admitted_idx: Vec<usize> = (0..cand_chunks.len())
+            .filter(|&i| cand_scores[i] > bar)
+            .collect();
+        admitted_idx.sort_by(|&a, &b| {
+            cand_scores[b]
+                .partial_cmp(&cand_scores[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        admitted_idx.truncate(PPR_MAX_ADMITTED);
+        let gate_ms = t_gate.elapsed().as_millis() as u64;
+
+        // Placement: mid-pool, not boundary. The merged sort orders by
+        // vector_distance (None sorts LAST — a bare injected chunk
+        // would be truncated straight out). Boundary placement
+        // (probes 1-3b) survived the truncate but died downstream:
+        // `expand_from_dominant_source` rebuilds the pool as dominant
+        // chunks + the FIRST few non-dominant chunks in pool order,
+        // so tail-placed admissions were always its `dropped_noise`.
+        // An admitted chunk out-scored every marginal direct hit on
+        // cross-encoder judgment — mid-pool standing is what that
+        // means operationally.
+        let anchor = chunks[..boundary.div_euclid(2).max(1)]
+            .iter()
+            .rev()
+            .find_map(|c| c.vector_distance)
+            .unwrap_or(1.0);
+        let audit: Vec<String> = candidates
+            .iter()
+            .map(|(t, m)| format!("{t} (mass {m:.4})"))
+            .collect();
+        let mut added: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        for (rank_pos, &i) in admitted_idx.iter().enumerate() {
+            let mut c = cand_chunks[i].clone();
+            c.vector_distance = Some(anchor - 1e-4 - (rank_pos as f32) * 1e-5);
+            c.metadata
+                .insert("injected_by".to_string(), "ppr_expand".to_string());
+            c.metadata
+                .insert("ppr_ce_score".to_string(), format!("{:.4}", cand_scores[i]));
+            c.metadata.insert("ppr_bar".to_string(), format!("{bar:.4}"));
+            added.push(c);
+        }
+
+        let scored: Vec<String> = cand_chunks
+            .iter()
+            .zip(cand_scores.iter())
+            .map(|(c, s)| format!("{}:{s:+.2}", c.title.as_deref().unwrap_or("?")))
+            .collect();
+        eprintln!(
+            "[ppr_expand] seeds={live_seeds:?} typed={typed_n} candidates={audit:?} bar={bar:.3} \
+             scored={scored:?} admitted={}/{} walk={walk_ms}ms prerank={prerank_ms}ms fetch={fetch_ms}ms gate={gate_ms}ms",
+            added.len(),
+            cand_scores.len(),
+        );
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "ppr_expand",
+            query = %truncate_with_ellipsis(message, 120),
+            seeds = ?live_seeds,
+            typed = typed_n,
+            candidates = ?audit,
+            cand_scores = ?cand_scores,
+            tail_scores = ?tail_scores,
+            bar,
+            admitted = added.len(),
+            walk_ms,
+            prerank_ms,
+            fetch_ms,
+            gate_ms,
+            "retrieval_audit: ppr_expand"
+        );
+        Some(added)
+    }
+
     /// Heuristic question decomposition (opt-in via
     /// `SOVEREIGN_QUERY_DECOMP=1`). Pure-Rust, zero LLM calls.
     ///
