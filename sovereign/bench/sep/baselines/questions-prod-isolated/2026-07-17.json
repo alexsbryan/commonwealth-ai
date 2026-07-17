@@ -2,7 +2,7 @@
   "bank_name": "sep-core-v1.1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784254050,
+  "started_at_unix": 1784307552,
   "results": [
     {
       "question_id": "argument_consequence_against_compatibilism",
@@ -190,7 +190,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 3144,
+      "search_ms": 3029,
       "corpora_hit": [
         "sep"
       ],
@@ -266,6 +266,20 @@
         },
         {
           "corpus_id": "sep",
+          "title": "logic-epistemic",
+          "url": "https://plato.stanford.edu/entries/logic-epistemic/",
+          "score": 1.0,
+          "snippet": "logic-epistemic  Since the 1960s Kripke models, defined below, have served as the basis of the most widely used semantics for all varieties of modal logic. The use of Kripke models in the representation of epistemic concepts involves taking a philosophical stance with respect to those concepts. One widespread interpretation, especially in theoretical economics and theoretical computer science, understands knowledge in terms of informational indistinguishability between possible worlds. What we will refer to here as the indistinguishability interpretation goes back at least to Lehmann (1984)."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-game",
+          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "score": 1.0,
+          "snippet": "epistemic-game  These distinctions are not intended to be sharp. Rather, they describe various stages of information disclosure during the decision-making process. At the ex-ante stage, little is known except the structure of the game, who is taking part, and possibly (but not necessarily) some aspect of the agents’ character. At the ex-post stage the game is basically over: all player have made their decision and these are now irrevocably out in the open. This does not mean that all uncertainty is removed as an agent may remain uncertain about what exactly the others were expecting of her. In…"
+        },
+        {
+          "corpus_id": "sep",
           "title": "apriori",
           "url": "https://plato.stanford.edu/entries/apriori/",
           "score": 0.02662222,
@@ -329,97 +343,69 @@
         },
         {
           "corpus_id": "sep",
-          "title": "rigid-designators",
-          "url": "https://plato.stanford.edu/entries/rigid-designators/",
-          "score": 0.018782869,
-          "snippet": "rigid-designators  Some of the fundamental work concerns epistemology: e.g., the issue of whether a sentence like ‘Hesperus = Phosphorus’ is a posteriori as well as necessarily true. Would the above considerations in favor of distinguishing assertoric from ingredient sense  undermine Kripke’s ideas here, at least, even if the considerations do not undermine Kripke’s ideas about modality? That seems unlikely. On the contrary, the claim that names, though rigid, share the semantic content of descriptions seems likely to vindicate Kripke’s claims about the epistemic status of statements like the …"
+          "title": "two-dimensional-semantics",
+          "url": "https://plato.stanford.edu/entries/two-dimensional-semantics/",
+          "score": 0.6426214,
+          "snippet": "Two-dimensional semantics extends standard possible worlds frameworks to distinguish between epistemic and metaphysical necessity, thereby explaining how necessary truths can be known a priori. This approach relies on the Core Thesis that apriority corresponds to necessary first intensions, utilizing concepts like scrutability and PQTI sentences to ground conceptual analysis in metaphysics."
         },
         {
           "corpus_id": "sep",
-          "title": "possibilism-actualism",
-          "url": "https://plato.stanford.edu/entries/possibilism-actualism/",
-          "score": 0.016573902,
-          "snippet": "possibilism-actualism  However, Kripke (1963b, p. 89, note 1) is loath to adopt a solution that, like the ones just suggested, involves “revising quantification theory or modal logic”. So instead Kripke opts for another that he borrows from Quine. In his account of quantification, Quine (1951: §15) points out that any occurrence of a name in an ordinary logical truth is inessential to its truth: what is said of the referent of the name could just as well be said of anything. Thus, it is not in virtue of any distinctive properties of God or Socrates that the following proposition is true:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "modality-epistemology",
-          "url": "https://plato.stanford.edu/entries/modality-epistemology/",
-          "score": 1.0,
-          "snippet": "modality-epistemology  Actual facts are facts about how things are. For example, Mary actually wore her white dress to the party. Modal facts, by contrast, are facts about how things could, must, or could not have been. For example, Mary could have worn her red dress; but she couldn’t have worn a dress that is red and green all over at the same time. Modal reasoning is central to human cognition, since it is pervasive both in philosophy and in every-day contexts. It involves investigating and evaluating claims about what is possible, impossible, essential, necessary, and contingent. Some thing…"
+          "title": "possible-worlds",
+          "url": "https://plato.stanford.edu/entries/possible-worlds/",
+          "score": 0.5906633,
+          "snippet": "The passages argue that possible-worlds semantics, rooted in Tarskian model theory and Carnap's work, provides a framework for evaluating truth conditions by relativizing them to specific worlds. This approach allows for the definition of objective modal notions and essential properties through quantification over sets of possible individuals and propositions. Furthermore, it enables actualist and haecceitist metaphysical interpretations to reinterpret these semantic structures while avoiding possibilism."
         },
         {
           "corpus_id": "sep",
           "title": "modality-epistemology",
           "url": "https://plato.stanford.edu/entries/modality-epistemology/",
-          "score": 1.0,
-          "snippet": "modality-epistemology  Sentences (1)–(10) instantiate different kinds of modality. (1–3) are most naturally interpreted to be about metaphysical modality; (4) about logical modality, (5) about conceptual modality, (6) about epistemic modality, (7) about physical modality, (8) about technological modality, and (9–10) about practical modality."
+          "score": 0.57404745,
+          "snippet": "The passages argue that knowledge of metaphysical modality is acquired through diverse epistemic methods, including empirical investigation, counterfactual reasoning, and rational intuition, rather than relying on a single source. These approaches address fundamental questions about how humans access modal truths and justify claims regarding necessity and possibility across different philosophical frameworks. Key debates center on the roles of conceivability, essence, and imagination in grounding our understanding of what is possible or necessary."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "natural-properties",
+          "url": "https://plato.stanford.edu/entries/natural-properties/",
+          "score": 0.56671935,
+          "snippet": "The passages advance the thesis that metaphysical truths and facts are grounded in or supervene upon a base of perfectly natural properties. This framework utilizes concepts such as duplication, indiscernibility, and grounding completeness to establish how qualitative similarities across possible worlds determine metaphysical necessity. The argument further explores syntactic regimentation via higher-order logic and addresses minimality conditions for these fundamental properties."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "metaepistemology",
+          "url": "https://plato.stanford.edu/entries/metaepistemology/",
+          "score": 0.5621659,
+          "snippet": "The text examines metaepistemological debates concerning the nature of epistemic facts, contrasting realist views that posit mind-independent truths with idealism and various forms of relativism. It argues that epistemic judgments may function prescriptively or express non-representational mental states rather than describing objective reality. Furthermore, it highlights tensions between orthodox epistemology and experimental results regarding knowledge attributions in contexts involving shifting stakes or environmental luck."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "names",
+          "url": "https://plato.stanford.edu/entries/names/",
+          "score": 0.56095093,
+          "snippet": "The text distinguishes between empirical propositions, which require observation for confirmation, and a priori truths grounded in meaning that remain valid regardless of sensory evidence. It clarifies that while necessity can be known empirically, such as the atomic structure of gold, conceptual necessities like definitions are independent of experience but still depend on linguistic competence. The argument further critiques apriorist accounts by highlighting their reliance on speakers' implicit knowledge of meanings to form intuitive judgments."
         },
         {
           "corpus_id": "sep",
           "title": "modality-epistemology",
           "url": "https://plato.stanford.edu/entries/modality-epistemology/",
-          "score": 1.0,
-          "snippet": "modality-epistemology  Further examples of modal claims are found at crucial places in philosophical arguments, either in the set of premises or as the conclusion."
+          "score": 0.5576761,
+          "snippet": "The text examines the epistemology of modality, focusing on how a priori knowledge of essential properties is justified through conceptual analysis and intuition. It contrasts various philosophical accounts regarding the nature of essence and challenges to the a posteriori distinction with skeptical views that question the reality of essential versus accidental properties."
         },
         {
           "corpus_id": "sep",
-          "title": "physicalism",
-          "url": "https://plato.stanford.edu/entries/physicalism/",
-          "score": 1.0,
-          "snippet": "physicalism  Physicalism is, in slogan form, the thesis that everything is physical. The thesis is usually intended as a metaphysical thesis, parallel to the thesis attributed to the ancient Greek philosopher Thales, that everything is water, or the idealism of the 18th Century philosopher Berkeley, that everything is mental. The general idea is that the nature of the actual world (i.e. the universe and everything in it) conforms to a certain condition, the condition of being physical. Of course, physicalists don’t deny that the world might contain many items that at first glance don’t seem ph…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "physicalism",
-          "url": "https://plato.stanford.edu/entries/physicalism/",
-          "score": 1.0,
-          "snippet": "physicalism  Physicalism is sometimes known as ‘materialism’. Indeed, on one strand to contemporary usage, the terms ‘physicalism’ and ‘materialism’ are interchangeable. But the two terms have very different histories. The word ‘materialism’ appears in English towards the end of the 17th century, but the word ‘physicalism’ was introduced into philosophy only in the 1930s by  Otto Neurath  (1931) and  Rudolf Carnap  (1959/1932), both of whom were key members of the Vienna Circle, a group of philosophers, scientists and mathematicians active in Vienna prior to World War II. While it is not clear…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "physicalism",
-          "url": "https://plato.stanford.edu/entries/physicalism/",
-          "score": 1.0,
-          "snippet": "physicalism  Some philosophers suggest that ‘physicalism’ is distinct from ‘materialism’ for a reason quite unrelated to the one emphasized by Neurath and Carnap. As the name suggests, materialists historically held that everything was matter — where matter was conceived as “an inert, senseless substance, in which extension, figure, and motion do actually subsist” (Berkeley, Principles of Human Knowledge, par. 9). But physics itself has shown that not everything is matter in this sense; for example, forces such as gravity are physical but it is not clear that they are material in the tradition…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "modality-varieties",
-          "url": "https://plato.stanford.edu/entries/modality-varieties/",
-          "score": 1.0,
-          "snippet": "modality-varieties  Modal statements tell us something about what could be or must be the case. Such claims can come in many forms. Consider:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "modality-varieties",
-          "url": "https://plato.stanford.edu/entries/modality-varieties/",
-          "score": 1.0,
-          "snippet": "modality-varieties  Each of these claims appears to have a true reading. But it also seems that ‘cannot’ needs to be interpreted in different ways to make the different sentences true. For one thing, we can, in the same breath, accept a modal claim in one of the senses illustrated by (1)–(10) while rejecting it in another one of these senses, as in the following dialogue:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "modality-varieties",
-          "url": "https://plato.stanford.edu/entries/modality-varieties/",
-          "score": 1.0,
-          "snippet": "modality-varieties  Moreover, the modal claims (1)–(10) appear to be true for completely different reasons. For example, it may be held that the truth of (1) is due to the meanings of its constituent expressions; that (2) holds because it lies in your nature to be born of your actual parents; that (3) is true because the laws of nature preclude superluminal motion; that (4) holds because of technological limitations; that (5) owes its truth to the presence of insurmountable practical obstacles; that (6)–(9) are made true by the demands of morality, etiquette, the rules of chess, and the law re…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "zombies",
-          "url": "https://plato.stanford.edu/entries/zombies/",
-          "score": 1.0,
-          "snippet": "zombies  Zombies in philosophy are imaginary creatures designed to illuminate problems about consciousness and its relation to the physical world. Unlike the ones in films or witchcraft, they are exactly like us in all physical respects but without conscious experiences: by definition there is ‘nothing it is like’ to be a zombie. Yet zombies behave just like us, and some even spend a lot of time discussing consciousness."
+          "title": "natural-kinds",
+          "url": "https://plato.stanford.edu/entries/natural-kinds/",
+          "score": 0.55576414,
+          "snippet": "The Kripke-Putnam arguments challenge descriptivism by demonstrating that natural kind terms function as rigid designators, thereby supporting semantic externalism and essentialist conclusions. This position is defended through modal and epistemological reasoning regarding reference fixing, though it faces objections concerning empty terms and the alleged question-begging nature of deriving metaphysical facts from semantics."
         }
       ],
       "source_score": {
         "matched": [
-          "rigid-designators",
           "modality-varieties",
-          "natural-kinds"
+          "natural-kinds",
+          "possible-worlds"
         ],
         "missing": [
-          "possible-worlds"
+          "rigid-designators"
         ],
         "total_expected": 4,
         "ratio": 0.75
@@ -439,7 +425,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2611,
+      "search_ms": 2665,
       "corpora_hit": [
         "sep"
       ],
@@ -553,35 +539,35 @@
           "title": "locke-personal-identity",
           "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
           "score": 1.0,
-          "snippet": "locke-personal-identity  John Locke (1632–1704) added the chapter in which he treats persons and their persistence conditions (Book 2, Chapter 27) to the second edition of An Essay Concerning Human Understanding in 1694, only after being encouraged to do so by William Molyneux  (1692–1693).[1]  Nevertheless, Locke’s treatment of personal identity is one of the most discussed and debated aspects of his corpus. Locke’s discussion of persons received much attention from his contemporaries, ignited a heated debate over personal identity, and continues to influence and inform the debate over person…"
+          "snippet": "locke-personal-identity  which comes through, as Winkler notes, in Reid’s objection—an objection which Winkler thinks sympathetic readers of Locke can answer and which is discussed in section 3 below (Winkler 1991: 206)."
         },
         {
           "corpus_id": "sep",
           "title": "locke-personal-identity",
           "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
           "score": 1.0,
-          "snippet": "locke-personal-identity  Locke’s most thorough discussion of the persistence (or diachronic identity) of persons can be found in Book 2, Chapter 27 of the Essay (“Of Identity and Diversity”), though Locke anticipates this discussion as early as Book 1, Chapter 4, Section 5, and Locke refers to persons in other texts, including the Second Treatise of Government. The discussion of persons and their persistence conditions also features prominently in Locke’s lengthy exchange with Edward Stillingfleet, Bishop of Worcester (1697–1699)."
+          "snippet": "locke-personal-identity  Some scholars take Locke to be a strict memory theorist. In other words, consciousness just is memory for Locke. As will become clear below, this reading dates back at least as far as Thomas Reid. Of course, it is the case that the way a person extends their consciousness backward is via memory. It thus may seem as if the identity of consciousness consists in memory, or that to have the same consciousness as she who did x, one has to have a memory of doing x, under Locke’s view. Nevertheless, as Margaret Atherton points out, Locke talks at length about forgetfulness, a…"
         },
         {
           "corpus_id": "sep",
           "title": "identity-ethics",
           "url": "https://plato.stanford.edu/entries/identity-ethics/",
           "score": 1.0,
-          "snippet": "identity-ethics  What justifies our holding one person over another morally responsible for a past action? Why am I justified in having a special prudential concern for one particular future person over all others? Why do many of us think that  maximizing the good within a single life is perfectly acceptable, but maximizing the good across lives is wrong? For these and other  normative questions, it looks like any answer we come up with will  have to make essential reference to personal identity. So, for  instance, it seems we are justified in holding X responsible for some past action only if…"
+          "snippet": "identity-ethics  The second objection was Reid's, about transitivity of identity in  the Brave Officer case. What gets Locke in trouble is that memories  fade, so someone may no longer be capable of having direct memories  of what is clearly his earlier life. But one may certainly have  direct memories of some past stage that itself had direct memories of an earlier stage, and so on, until every stage in the life is linked  by a chain of overlapping direct memories. What one can then insert  into the criterion of identity across time is a  continuity  of direct (q-)memories, so that the retire…"
         },
         {
           "corpus_id": "sep",
           "title": "identity-ethics",
           "url": "https://plato.stanford.edu/entries/identity-ethics/",
           "score": 1.0,
-          "snippet": "identity-ethics  These are among the many issues relevant to an investigation into the relation between personal identity and ethics. “Ethics” here is broadly construed to be about the way(s) in which we ought to live our lives, and so it includes both self-regarding and other-regarding practical concerns. Among the self-regarding concerns for which personal identity seems relevant are those about the nature and grounds of survival and immortality, rational anticipation, advance directives, and general prudential concern. Among the other-regarding concerns for which personal identity seems rel…"
+          "snippet": "identity-ethics  Nevertheless, even if this objection to Locke is thwarted, the others remain in force. For one thing, memory does seem to presuppose  personal identity, and so cannot constitute a criterion of it. For  another, identity is a transitive relation, while memory isn't, so  the latter can't be a criterion of the former. Finally, there is the  obvious worry that identity seems to persist through the loss of  memory: it's hard to believe that I would cease to exist were I to  undergo amnesia. It's for all these reasons that contemporary  theorists working in the Lockean tradition hav…"
         },
         {
           "corpus_id": "sep",
           "title": "identity-ethics",
           "url": "https://plato.stanford.edu/entries/identity-ethics/",
           "score": 1.0,
-          "snippet": "identity-ethics  For the most part, the philosophical history of the relation between  identity and ethics up until the 17th Century is about the relation between identity and self-regarding practical concerns.  Plato is a prime example. He held in the Phaedo that I (and  all persons) will survive the death and destruction of my body  insofar as what I essentially am is a simple, immaterial soul,  something whose own essence is being alive. This yields the direct  implication that, insofar as I will survive the death of my body, I  am justified in anticipating post-mortem experiences. Lucretiu…"
+          "snippet": "identity-ethics  By far the most popular view of personal identity, until quite  recently, has been a significantly amended version of Locke's  relational memory criterion. To make such a view plausible, though,  the three objections just detailed need to be addressed. Start, then, with  Butler's complaint that memory presupposes identity, that I can  remember only my own experiences, so memory just reveals to me my identity relation to some past experiencer and cannot constitute that  relation. Following Sydney Shoemaker (1970) and Derek Parfit (1984),  one can introduce a more inclusive memo…"
         },
         {
           "corpus_id": "sep",
@@ -595,28 +581,28 @@
           "title": "reid",
           "url": "https://plato.stanford.edu/entries/reid/",
           "score": 1.0,
-          "snippet": "reid  After studying at the University of Aberdeen, Reid entered the ministry in New Machar in 1737. In 1748 he published a short essay entitled “An Essay on Quantity” concerning Hutcheson's Inquiry into the Origin of Our Ideas of Beauty and Virtue. Although this was his only published work, he was given a professorship at King's College Aberdeen in 1752. There he published An Inquiry Into the Human Mind on the Principles of Common Sense (or ‘IHM’) in 1764. Later he received a prestigious professorship at the University of Glasgow. He resigned from this position in 1781 in order to give himsel…"
+          "snippet": "reid  Note that the set of commitments that Reid refers to as “The Way of Ideas” and the “Ideal Theory” is drawn form the work of Locke, Berkeley, Hume and many others going back to Plato and Aristotle. Its principle commitment is to mental representations, called ‘ideas’ or ‘images’, that are believed to mediate all our experience of the world—from conception to memory and perception. Reid regards the Way of Ideas as founded on a flawed, anti-Newtonian methodology, is unscientific, and he argues that it has highly undesirable consequences."
         },
         {
           "corpus_id": "sep",
           "title": "identity-time",
           "url": "https://plato.stanford.edu/entries/identity-time/",
           "score": 1.0,
-          "snippet": "identity-time  Irving Copi once defined the problem of identity through time by noting that the following two statements both seem true but, on the assumption that there is change, appear to be inconsistent:"
+          "snippet": "identity-time  Lewis (2002) objects to this last solution on the grounds that a tensed proposition should itself be identified with a relational property. But, such identification leaves it unexplained how something can change its non-relational intrinsic properties. Ben Caplan in Caplan 2005 has replied to Lewis that Lewis's objection depends on a view about propositions that is not compulsory."
         },
         {
           "corpus_id": "sep",
           "title": "identity-time",
           "url": "https://plato.stanford.edu/entries/identity-time/",
           "score": 1.0,
-          "snippet": "identity-time  Traditionally, this puzzle has been solved in various ways. Aristotle, for example, distinguished between “accidental” and “essential” changes. Accidental changes are ones that don't result in a change in an objects' identity after the change, such as when a house is painted, or one's hair turns gray, etc. Aristotle thought of these as changes in the accidental properties of a thing. Essential changes, by contrast, are those which don't preserve the identity of the object when it changes, such as when a house burns to the ground and becomes ashes, or when someone dies. Armed wit…"
+          "snippet": "identity-time  Lewis' principle objection to this first solution is that it transforms intrinsic into extrinsic properties. He takes it as evident that properties such as being round and being red are intrinsic. Why so? Call the view that putatively one place intrinsic properties are two place relational properties the relational view. Why does Lewis so adamantly reject that view? One difficulty with answering this question is a difficulty about locating the source of Lewis' disquiet with the relational view."
         },
         {
           "corpus_id": "sep",
           "title": "identity-time",
           "url": "https://plato.stanford.edu/entries/identity-time/",
           "score": 1.0,
-          "snippet": "identity-time  Of course, this solution to the puzzle depends on there being a coherent distinction between accidental and essential changes, and between accidental and essential properties. Some philosophers find this distinction problematic and have developed other solutions that don't require this distinction. In what follows, we discuss these solutions to the puzzle, along with other puzzles that arise when considering the identity of objects over time."
+          "snippet": "identity-time  Moreover, a substance sortal is said to go together with a criterion of identity where a criterion of identity associated with substance sortal S is, inter alia, a criterion for some earlier S being the same S as some later S."
         },
         {
           "corpus_id": "sep",
@@ -689,7 +675,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2537,
+      "search_ms": 2761,
       "corpora_hit": [
         "sep"
       ],
@@ -882,7 +868,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 1856,
+      "search_ms": 1832,
       "corpora_hit": [
         "sep"
       ],
@@ -1038,21 +1024,35 @@
           "title": "justep-foundational",
           "url": "https://plato.stanford.edu/entries/justep-foundational/",
           "score": 1.0,
-          "snippet": "justep-foundational  Foundationalism is a view about the structure of (epistemic) justification or knowledge. The foundationalist’s thesis in short is that (a) there are some “basic” or “foundational” beliefs that have a positive epistemic status—e.g., they count as justified or as knowledge—without depending on any other beliefs for this status, and (b) any other beliefs with a positive epistemic status must depend, ultimately, on foundational beliefs for this status."
+          "snippet": "justep-foundational  One other response is to embrace infinitism and hold that an infinite regress is not necessarily vicious or problematic. Infinitism has a few defenders (e.g., Peter Klein (1998) and more recently, Fantl (2003) and Aikin (2011)). The infinitist accepts the need to be able to supply non-circular justification for believing what we do, but argues that given the complexity of the human mind and its capacity to entertain and justifiably believe an infinite number of propositions, there is nothing vicious about the relevant regresses we face. There is no reason to suppose that w…"
         },
         {
           "corpus_id": "sep",
           "title": "justep-foundational",
           "url": "https://plato.stanford.edu/entries/justep-foundational/",
           "score": 1.0,
-          "snippet": "justep-foundational  Many interesting and difficult questions can be raised about the relation between justification and knowledge, including whether knowledge should be analyzed in terms of justification, as epistemologists traditionally seem to have thought, or whether knowledge is prior to or independent of  justification.[1]  In what follows we will concentrate on foundationalism about justification, though much of what we say also applies to foundationalism about knowledge."
+          "snippet": "justep-foundational  Michael Bergmann (2006: chs. 1 and 2) argues, however, that if to avoid regress we drop the strong access requirements that are so dear to some internalists, we also lose the motivation for the view. As Bergmann sees it, the attraction of internalism is its claim to be able to construe justification in such a way that it gives a subject with a justified belief a certain assurance from the subjective perspective, an assurance that externalist views (discussed below) don’t offer. According to Bergmann, even acquaintance with truth bearers, truth makers and a correspondence h…"
         },
         {
           "corpus_id": "sep",
           "title": "justep-foundational",
           "url": "https://plato.stanford.edu/entries/justep-foundational/",
           "score": 1.0,
-          "snippet": "justep-foundational  A little reflection suggests that the vast majority of the propositions that we know or are justified in believing have that status only because we know or are justified in believing other propositions. So, for example, I am justified in believing that there is at least one dog in our neighborhood, because I am justified in believing that my next door neighbor has a dog; I am justified in believing that our garbage will get picked up tomorrow, because I am justified in believing that tomorrow is Tuesday and that our garbage gets picked up every Tuesday; and I am justified …"
+          "snippet": "justep-foundational  Although opponents of classical foundationalism are not always eager to admit it, we suspect that the primary dissatisfaction with classical foundationalism lies with the difficulty the view has avoiding radical skepticism. On infallible belief, infallible justification, or direct acquaintance theories of foundational justification, there is precious little included in the foundations of knowledge. Most classical foundationalists reject the idea that one can have noninferentially justified beliefs about the past, but the present disappears into the past in the blink of an …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reliabilism",
+          "url": "https://plato.stanford.edu/entries/reliabilism/",
+          "score": 1.0,
+          "snippet": "reliabilism  By now, a number of problems have been raised for process reliabilism. Here we review some of the main challenges, focusing on the three that have received the most attention in the literature: the clairvoyance problem  (§2.1),  the new evil demon problem  (§2.2),  and the generality problem  (§2.3).  Afterwards, we will briefly survey some challenges of a more recent vintage  (§2.4)."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reliabilism",
+          "url": "https://plato.stanford.edu/entries/reliabilism/",
+          "score": 1.0,
+          "snippet": "reliabilism  In “What is Justified Belief?”, Goldman acknowledged this sort of problem, and suggested adding a “No Defeaters” condition to the theory of epistemic justification. There, he elucidated an account of defeat in counterfactual terms. Roughly, your belief B is defeated provided there is some reliable (or conditionally reliable) process X available to you such that, if you were you use X, you would no longer hold B. On this view, Alice’s belief is defeated because if she were to use the process believing her friend’s testimony, she would not have believed B. However, this account of d…"
         },
         {
           "corpus_id": "sep",
@@ -1060,27 +1060,6 @@
           "url": "https://plato.stanford.edu/entries/reliabilism/",
           "score": 1.0,
           "snippet": "reliabilism  One of the main goals of epistemologists is to provide a substantive and explanatory account of the conditions under which a belief has some desirable epistemic status (typically, justification or knowledge). According to the reliabilist approach to epistemology, any adequate account will need to mention the reliability of the process responsible for the belief, or truth-conducive considerations more generally. Historically, one major motivation for reliabilism—and one source of its enduring interest—is its naturalistic potential. According to reliabilists, epistemic properties ca…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "reliabilism",
-          "url": "https://plato.stanford.edu/entries/reliabilism/",
-          "score": 1.0,
-          "snippet": "reliabilism  This article begins by surveying some of the main forms of reliabilism, concentrating on process reliabilism as a theory of justification. It proceeds to review some of the main objections to reliabilism, and some of the responses that have been offered on the reliabilist’s behalf. After canvassing some recent developments in reliabilist epistemology, the article concludes by considering various cousins and spin-offs of reliabilist epistemology, including virtue reliabilism and various evidentialist-reliabilist hybrids."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "reliabilism",
-          "url": "https://plato.stanford.edu/entries/reliabilism/",
-          "score": 1.0,
-          "snippet": "reliabilism  In the 1960s, a wide range of epistemologists were absorbed by the question: what does it take for a belief to amount to knowledge? It was generally agreed that for a person, S, to know some proposition p, at least three conditions must be met. First, p must be true. Second, S must believe p. And third, S must be justified in believing p. Thus, knowledge requires justified true belief. But does the satisfaction of these three conditions suffice to entail that S knows p? Unfortunately, as Edmund Gettier (1963) showed with several convincing cases, justified true belief doesn’t guar…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "epistemic-self-doubt",
-          "url": "https://plato.stanford.edu/entries/epistemic-self-doubt/",
-          "score": 1.0,
-          "snippet": "epistemic-self-doubt  And if I claim to be a wise man,  Well, it surely means that I don't know.  —Kansas"
         },
         {
           "corpus_id": "sep",
@@ -1094,14 +1073,21 @@
           "title": "epistemic-self-doubt",
           "url": "https://plato.stanford.edu/entries/epistemic-self-doubt/",
           "score": 1.0,
-          "snippet": "epistemic-self-doubt  Some ways of doubting that we are in a favorable epistemic state are easy to understand and unproblematic. Socrates was confident that he did not know the answers to his most important questions. He believed he did not have the answers, or the right kind of grasp of answers, that would be required for knowledge of what, for example, piety, virtue, and justice are. This recognition led him to avoid endorsing or believing particular answers to his questions, and motivated him to go around town asking others for their answers and making awkward observations about their repli…"
+          "snippet": "epistemic-self-doubt  It might seem that consistency and coherence are not strong enough to tell us what the relation should be between the first order and the second order in cases of epistemic self-doubt, in the same way that they don’t seem sufficient for explaining what is wrong with Moore-paradoxical statements (see entry on  epistemic paradoxes).  In the latter I assert either “p and I don’t believe p”, or “p and I believe not-p”. There is a lack of fit between my belief and my belief about my belief in either case, but the beliefs I hold simultaneously are not inconsistent in content. W…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-self-doubt",
+          "url": "https://plato.stanford.edu/entries/epistemic-self-doubt/",
+          "score": 1.0,
+          "snippet": "epistemic-self-doubt  The same problem can be seen with Egan and Elga’s treatment of cases of self-attributing less extreme unreliability (such as INP) that they regard as unproblematic. Consider a person with growing evidence that his memory isn’t what it once was. What effect should this have on his beliefs about the names of students? They compare what happens to his confidence that a given student is named “Sarah” when he hears counterevidence—overhearing someone calling her “Kate” for example—in the case where he has and the case where he hasn’t taken the evidence of his decline in memory…"
         },
         {
           "corpus_id": "sep",
           "title": "basing-epistemic",
           "url": "https://plato.stanford.edu/entries/basing-epistemic/",
           "score": 1.0,
-          "snippet": "basing-epistemic  The epistemic basing relation is the relation which holds between a reason and a belief if and only if the reason is a reason for which the belief is held. It is generally thought to be a necessary, but not sufficient, condition for a belief’s being justified that the belief be based on a reason. The basing relation is what distinguishes good reasons which a person possesses that contribute to the personal justification of a given belief from good reasons which the person possesses but that do not contribute to the personal justification of the belief."
+          "snippet": "basing-epistemic  Causal theories of the basing relation hold that for a belief to be based on a reason, the reason must cause the belief in an appropriate way. Causal theories of the basing relation must not be confused with causal theories of knowledge or justification. One might take a causal theory of the basing relation to explain how one has taken into account the reasons one possesses when forming or evaluating a belief, regardless of whether the reason actually contributes to the justification of the belief. Also, one might hold that a belief’s being justified requires not only being b…"
         }
       ],
       "source_score": {
@@ -1130,7 +1116,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 1127,
+      "search_ms": 1137,
       "corpora_hit": [
         "sep"
       ],
@@ -1363,7 +1349,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1164,
+      "search_ms": 1279,
       "corpora_hit": [
         "sep"
       ],
@@ -1534,7 +1520,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 1922,
+      "search_ms": 1915,
       "corpora_hit": [
         "sep"
       ],
@@ -1683,42 +1669,42 @@
           "title": "content-narrow",
           "url": "https://plato.stanford.edu/entries/content-narrow/",
           "score": 1.0,
-          "snippet": "content-narrow  What is narrow mental content? Mental content simply means the content of a mental state such as a thought, a belief, a desire, a fear, an intention, or a wish. Content is a deliberately vague term; it is a rough synonym of another vague term, ‘meaning’. A state with content is a state that represents some part or aspect of the world; its content is the way it represents the world as being. For example, consider my belief that water is a liquid at room temperature. The content of this belief is what it says about the world, namely that a certain substance, water, has a certain …"
+          "snippet": "content-narrow  The idea that mental content is broad is the idea that it is not determined entirely by an individual’s intrinsic properties, but is determined in part by features of the individual’s environment. But if the content of my beliefs is not determined entirely by my internal states, what else could determine it? How could anything other than my intrinsic properties determine what I think and believe? The examples just discussed point to two different sorts of environmental factor. Putnam’s example of Oscar and his Twin Earth duplicate focuses on the contribution of the natural envi…"
         },
         {
           "corpus_id": "sep",
           "title": "content-narrow",
           "url": "https://plato.stanford.edu/entries/content-narrow/",
           "score": 1.0,
-          "snippet": "content-narrow  A narrow content of a particular state is a content of that state that is completely determined by the individual’s intrinsic properties. An intrinsic property of an individual is a property that does not depend at all on the individual’s environment. For example, having a certain shape is, arguably, an intrinsic property of a particular penny; being in my pocket is not an intrinsic property of the penny. This is because the penny’s shape depends only on internal properties of the penny, whereas the fact that it is in my pocket depends on where it happens to be, which is an ext…"
+          "snippet": "content-narrow  Burge’s most famous example involves the concept of arthritis. He considers an individual who is unaware that arthritis is a disease specifically of the joints. His subject believes that he has arthritis in his thigh. This belief is false, since one cannot have arthritis in the thigh. However, Burge argues, in a world in which all the intrinsic facts about the subject were exactly the same as they actually are, but in which the term ‘arthritis’ is generally used in the subject’s community to refer to rheumatoid ailments in general, the subject’s belief would have a different co…"
         },
         {
           "corpus_id": "sep",
           "title": "content-narrow",
           "url": "https://plato.stanford.edu/entries/content-narrow/",
           "score": 1.0,
-          "snippet": "content-narrow  (The notion of an intrinsic property turns out to be surprisingly difficult to define precisely. A good guide to the various approaches that have been taken, and their difficulties and refinements, is the entry on  intrinsic vs. extrinsic properties.)"
+          "snippet": "content-narrow  A second response takes us to the opposite extreme, extreme internalism. According to this response, Putnam’s and Burge’s examples do not succeed in showing that any content is broad. This position has been defended by, among others, Kent Bach (1987), Tim Crane (1991), and Gabriel Segal (2000). These authors question the externalist interpretation of the examples we have discussed. For example, in response to Putnam, Segal points out that we have some empty natural kind concepts — that is, we have concepts which we intend to be natural kind concepts, but which in fact do not su…"
         },
         {
           "corpus_id": "sep",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
           "score": 1.0,
-          "snippet": "content-externalism  [Editor’s Note: The following new entry replaces the  former entry on this topic.]"
+          "snippet": "content-externalism  A second type of response objects to these externalist arguments on broadly methodological grounds that concern the use of thought experiments, and intuitions more generally, in determining whether content is wide or narrow. Cummins (1991) argues that empirical research is needed to find out about the nature of belief, not thought experiments. Chomsky (1995) holds a similar view. The reliance of Putnam’s and Burge’s arguments on intuitions is anathema to many in the experimental philosophy movement who regard them as culturally-relative and shifting and, therefore, not phi…"
         },
         {
           "corpus_id": "sep",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
           "score": 1.0,
-          "snippet": "content-externalism  In the philosophy of mind, externalism is the view that what is going on in an individual’s mind is not (entirely) determined by what is going on inside her body, including her brain. Externalism comes in two principal forms: externalism about mental content and externalism about the vehicles or bearers of that content. The latter form of externalism is commonly known as the extended mind. At stake are important issues concerning the nature of the mind and its relation to the world, both natural and social."
+          "snippet": "content-externalism  Externalism and Mind-Body Theories. Externalism has important consequences for a number of different mind-body theories. Burge (1979) believes that externalism refutes individualistic theories of intentional mental states. These are theories that define or explain what it is for a person to have an intentional mental state purely in terms of intrinsic facts about that person without reference to the environment. Examples of such theories include the identity theory, and  functionalism (see entry)  in its traditional guise. McGinn (1989) and Burge (1986, 1993) both argue th…"
         },
         {
           "corpus_id": "sep",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
           "score": 1.0,
-          "snippet": "content-externalism  In the philosophy of mind, externalism is the view that what is going on inside an individual’s body does not always, on its own, fix what is going on inside that individual’s mind. The mind, in this sense, simply denotes the totality of mental occurrences undergone by an individual at any given time. The body, in this sense, delineates the biological boundaries of the individual which, in creatures such as us, coincide with the individual’s skin and, of course, includes the brain, traditionally taken as the crucial determinant of an individual’s mental life. Thus, externa…"
+          "snippet": "content-externalism  Content externalism is typically understood as a claim of dependent possession which is, in turn, grounded in a more basic claim of individuation dependence. The idea of dependent possession is straightforward: whether or not an individual can entertain the content that p (for example, by having a belief, thought, desire or other propositional attitude with this content) depends on the nature of that individual’s environment (and facts about its relation to that environment). It is not possible for an individual to entertain this content unless the environment contains the…"
         },
         {
           "corpus_id": "sep",
@@ -1732,28 +1718,28 @@
           "title": "content-teleological",
           "url": "https://plato.stanford.edu/entries/content-teleological/",
           "score": 1.0,
-          "snippet": "content-teleological  According to teleological theories, the contents of mental representations depend, at least in part, on functions, such as the functions of the systems that use or produce them. The relevant notion of function is held to be one used in biology and neurobiology in attributing functions to items, as in “a function of the pineal gland is secreting melatonin” and “a function of brain area MT is processing information about motion”. Proponents of teleological theories of mental content usually understand these functions to be what the items with the functions were selected for…"
+          "snippet": "content-teleological  One important aspect of mental representations that a theory of mental content needs to account for is their so-called “normative” nature. We may evaluate beliefs as true or false, memories as accurate or inaccurate, perceptions as veridical or illusory, desires as satisfied or not satisfied, and motor instructions as correctly or incorrectly executed. The mental states we evaluate in these ways count as true or false, accurate or inaccurate (etc.) by virtue of their contents, as well as by virtue of other things (such as the actual state of the world). For example, the t…"
         },
         {
           "corpus_id": "sep",
           "title": "content-teleological",
           "url": "https://plato.stanford.edu/entries/content-teleological/",
           "score": 1.0,
-          "snippet": "content-teleological  Many (perhaps all) mental states are about things, or are directed on to things, in the way that a belief that spring is coming is about spring coming, or in the way that a desire for chocolate is directed on to chocolate. In the terminology re-introduced into philosophy by Franz Brentano (1874/1924), such mental states exhibit intentionality. Alternatively, they can be characterized as representational states, or states with representational content. Prima facie, the fact that mental states have content, i.e. the fact that they exhibit this particular form of directednes…"
+          "snippet": "content-teleological  While teleological theories of mental content are quite diverse, they all share the idea that psycho-semantic norms depend, in part at least, on functional norms. Later sections explain various ideas about the nature of this dependence. This section describes the notion of function employed. It is generally thought to be in some sense both teleological and normative, but both “teleological” and “normative” need qualifying, and the use of these terms can lead to unnecessary misunderstandings. Let’s take the first of these terms first."
         },
         {
           "corpus_id": "sep",
           "title": "self-knowledge-externalism",
           "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
           "score": 1.0,
-          "snippet": "self-knowledge-externalism  Externalism in the philosophy of mind contends that the meaning or content of a  thought[1]  is partly determined by the environment. The view has garnered attention since it denies the traditional assumption, associated with Descartes, that thought content is fixed independently of the external world. Apparently under this assumption, Descartes also believed that he could know the content of his thoughts while suspending all judgment about his environs. (Indeed, such knowledge was thought indubitable.) Yet if externalism is correct, this may well be a mistake. As w…"
+          "snippet": "self-knowledge-externalism  Predictably, such theories face various difficulties—so none provide a decisive case for EXT. Yet the foremost arguments for the view are not so parochial. These arguments instead rest on various thought experiments, purporting to show that internally identical subjects can host different thought contents, solely because of environmental differences (Putnam 1973; 1975, McGinn 1977, Stich 1978, Burge 1979; 1982; 1986). If the thought experiments are right about this, then internal states do not wholly determine thought content. The environment would play a part as we…"
         },
         {
           "corpus_id": "sep",
           "title": "self-knowledge-externalism",
           "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
           "score": 1.0,
-          "snippet": "self-knowledge-externalism  Officially, we can put the issue in terms of an apparent tension between the following:"
+          "snippet": "self-knowledge-externalism  This claim about linguistic meaning is then extended to the content of mental representations for natural kinds like water, and for non-natural kinds like sofas (where the latter are defined by social convention) (McGinn 1977, Stich 1978, Burge 1979; 1982; 1986). Consider that when Oscar says “sofas are delightful,” he expresses a thought that references sofas. But suppose that Twin Oscar’s community defines a “sofa” slightly differently, so that broad, overstuffed armchairs count as “sofas.” Consequently, when Twin Oscar asserts “sofas are delightful,” he differs f…"
         }
       ],
       "source_score": {
@@ -1783,7 +1769,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 1979,
+      "search_ms": 1960,
       "corpora_hit": [
         "sep"
       ],
@@ -2012,7 +1998,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1190,
+      "search_ms": 1197,
       "corpora_hit": [
         "sep"
       ],
@@ -2027,8 +2013,85 @@
           "corpus_id": "sep",
           "title": "aristotle-ethics",
           "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Aristotle conceives of ethical theory as a field distinct from the theoretical sciences. Its methodology must match its subject matter—good action—and must respect the fact that in this field many generalizations hold only for the most part. We study ethics in order to improve our lives, and therefore its principal concern is the nature of human well-being. Aristotle follows Socrates and Plato in taking the virtues to be central to a well-lived life. Like Plato, he regards the ethical virtues (justice, courage, temperance and so on) as complex rational, emotional and social s…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Aristotle wrote two ethical treatises: the Nicomachean Ethics and the Eudemian Ethics. He does not himself use either of these titles, although in the Politics (1295a36) he refers back to one of them—probably the Eudemian Ethics—as “ta êthika”—his writings about character. The words “Eudemian” and “Nicomachean” were added later, perhaps because the former was edited by his friend, Eudemus, and the latter by his son, Nicomachus. In any case, these two works cover more or less the same ground: they begin with a discussion of eudaimonia (“happiness”, “flourishing”), and turn to …"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
           "score": 0.06103405,
           "snippet": "aristotle-ethics  Though the general point of view expressed in each work is the same, there are many subtle differences in organization and content as well. Clearly, one is a re-working of the other, and although no single piece of evidence shows conclusively what their order is, it is widely assumed that the Nicomachean Ethics is a later and improved version of the Eudemian Ethics. (Not all of the Eudemian Ethics was revised: its Books IV, V, and VI re-appear as V, VI, VII of the Nicomachean Ethics.) Perhaps the most telling indication of this ordering is that in several instances the Nicoma…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  A third treatise, called the Magna Moralia (the “Big Ethics”) is included in complete editions of Aristotle’s works, but its authorship is disputed by scholars. It ranges over topics discussed more fully in the other two works and its point of view is similar to theirs. (Why, being briefer, is it named the Magna Moralia? Because each of the two papyrus rolls into which it is divided is unusually long. Just as a big mouse can be a small animal, two big chapters can make a small book. This work was evidently named “big” with reference to its parts, not the whole.) A few authors…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Although Aristotle is deeply indebted to Plato’s moral philosophy, particularly Plato’s central insight that moral thinking must be integrated with our emotions and appetites, and that the preparation for such unity of character should begin with childhood education, the systematic character of Aristotle’s discussion of these themes was a remarkable innovation. No one had written ethical treatises before Aristotle. Plato’s Republic, for example, does not treat ethics as a distinct subject matter; nor does it offer a systematic examination of the nature of happiness, virtue, v…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  The principal idea with which Aristotle begins is that there are differences of opinion about what is best for human beings, and that to profit from ethical inquiry we must resolve this disagreement. He insists that ethics is not a theoretical discipline: we are asking what the good for human beings is not simply because we want to have knowledge, but because we will be better able to achieve our good if we develop a fuller understanding of what it is to flourish. In raising this question—what is the good?—Aristotle is not looking for a list of items that are good. He assumes…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Gosling &amp;Taylor 1982 (chs 11–17); Gottlieb 1993; Natali (ed.) 2009; Owen 1971; Pearson 2012; Rorty 1974; Taylor 2003a, 2003b; Urmson 1967; Warren 2009; Wolfsdorf 2013 (ch. 6)."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Annas 1977, 1993 (ch. 12); Brewer 2005; J.M. Cooper 1999 (chs 14, 15); Hitz 2011; Kahn 1981; Milgram 1987; Nehamas 2010; Pakaluk 1998; Pangle 2003; Price 1989 (chs 4–7); Rogers 1994; Schollmeier 1994; Sherman 1987; Stern-Gillet 1995; Walker 2014; Whiting 1991."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Freeland 1998; Karbowski 2014a; Modrak 1994; Ward (ed.) 1996."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.042635147,
+          "snippet": "aristotle-ethics  Bielskis 2020; Broadie 2006; Chappell (ed.) 2006; Garver 2006; Gill (ed.) 2005; Kraut 2018; LeBar 2013; MacIntyre 1999; Peters 2014; Russell 2012b; Stohr 2003, 2009; Wiggins 2009."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Lockwood 2005."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 1.0,
+          "snippet": "aristotle-ethics  Aristotle |  character, moral |  egoism |  ethics: virtue |  friendship |  Plato |  pleasure |  wisdom"
         },
         {
           "corpus_id": "sep",
@@ -2043,125 +2106,6 @@
           "url": "https://plato.stanford.edu/entries/ethics-ancient/",
           "score": 0.0630517,
           "snippet": "ethics-ancient  Like Plato, Aristotle is a eudaimonist in that he argues that virtue (including in some way the moral virtues of courage, justice and the rest) is the dominant and most important component of happiness. However, he is not claiming that the only reason to be morally virtuous is that moral virtue is a constituent of happiness. He says that we seek to have virtue and virtuous action for itself as well (Nicomachean Ethics, 1097b 1–10); not to do so is to fail even to be virtuous. In this regard, it is like pleasure, which is also a constituent of the happy life. Like pleasure, virt…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle",
-          "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 0.04577554,
-          "snippet": "aristotle  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Aristotle, commentators on |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: biology |  Aristotle, General Topics: categories |  Aristotle, General Topics: ethics |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: political theory |  Aristotle, General Topics: psychology |  Aristotle, General Topics: rhetoric |  Aristotle, Special Topics: causality |  Aristotle, Special To…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle",
-          "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 0.036789298,
-          "snippet": "aristotle  For more on Aristotle’s virtue-based ethics, see the entry on   Aristotle’s Ethics."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-rhetoric",
-          "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
-          "score": 0.037304603,
-          "snippet": "aristotle-rhetoric  Aristotle |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: logic |  Cicero |  Plato: rhetoric and poetry"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-natphil",
-          "url": "https://plato.stanford.edu/entries/aristotle-natphil/",
-          "score": 0.037036397,
-          "snippet": "aristotle-natphil  Aristotle, General Topics: biology |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: psychology |  Aristotle, Special Topics: causality |  Aristotle, Special Topics: on non-contradiction"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "justice-virtue",
-          "url": "https://plato.stanford.edu/entries/justice-virtue/",
-          "score": 0.041643124,
-          "snippet": "justice-virtue  Aristotle does not see the virtue of justice in quite the comprehensive sense Plato does; he treats it as a virtue of character (in the entirety of one of the ten books of the Nicomachean Ethics, also common to the Eudemian Ethics), and as a virtue of constitutions and political arrangements (in Politics). The question naturally arises as to the relation between these forms of justice. Aristotle seems to think they are closely related, without being synonymous applications of the same concept. As the latter is a conception of political justice, we will focus here on the former.…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "practical-reason-med",
-          "url": "https://plato.stanford.edu/entries/practical-reason-med/",
-          "score": 0.03942308,
-          "snippet": "practical-reason-med  The earliest medieval commentators on the Nicomachean Ethics analyzed only the first three books of the work for reasons yet unexplained (Celano, 2022). The medieval authors of the first half of the 13th century, while aware of the existence of the remaining books of the Nicomachean Ethics generally had only the partial text at their disposal. Aristotle’s discussion of phronesis was mostly unknown until Robert Grosseteste’s complete translation of Aristotle’s text and the accompanying Greek commentaries appeared about 1248. During this period theologians such as Philip th…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "african-ethics",
-          "url": "https://plato.stanford.edu/entries/african-ethics/",
-          "score": 0.03359612,
-          "snippet": "african-ethics  I take note of a view expressed by some philosophers on Aristotle's ethics: Bertrand Russell observed that “Aristotle's opinions on moral questions are always such as were conventional in his day” (1945: 174). This view is re-echoed by Hardie: “[Aristotle's] moral ideas and moral ideals are, in some degree, the product of his time” (1968: 120); he also asserts that “Aristotle in the Nicomachean Ethics is at least in part an interpreter of Greek experience” (W. F. R Hardie, 1968: 123). In the same way, this entry present an interpretretation of the moral ideas and values as foun…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-rhetoric",
-          "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
-          "score": 0.036228392,
-          "snippet": "aristotle-rhetoric  Still, for many interpreters of Aristotle, from the times of the great Roman rhetoricians on, it is hard to embrace the thought that Aristotle — the famous author of the Nicomachean Ethics and the Politics — who in his ethical work praises the life in accordance with human virtue, could ever endorse a rhetorical project that is not meant to promote virtue and happiness in the city-state (polis). Is it, in other words, possible or likely that Aristotle, whose name in the history of moral philosophy stands for an ethics based on the sustainable development of moral virtues, e…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "well-being",
-          "url": "https://plato.stanford.edu/entries/well-being/",
-          "score": 0.04270804,
-          "snippet": "well-being  His primary argument is the notorious and perfectionist ‘function argument’, according to which the good for some being is to be identified through attention to its ‘function’ or characteristic activity. The characteristic activity of human beings is to exercise reason, and the good will lie in exercising reason well—that is, in accordance with the virtues. This argument, which is stated by Aristotle very briefly and relies on assumptions from elsewhere in his philosophy and indeed that of Plato, appears to conflate the two ideas of what is good for a person, and what is morally go…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle",
-          "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 0.03956607,
-          "snippet": "aristotle  Aristotle concludes his discussion of human happiness in his Nicomachean Ethics by introducing political theory as a continuation and completion of ethical theory.   Ethical theory characterizes the best form of human life; political theory characterizes the forms of social organization best suited to its realization (EN 1181b12–23)."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-aesthetics",
-          "url": "https://plato.stanford.edu/entries/aristotle-aesthetics/",
-          "score": 0.02808303,
-          "snippet": "aristotle-aesthetics  In the case of tragedy, Aristotle’s aim is to reconstruct for his readers what the art of poetic composition should be, in order to enable them to distinguish a good tragedy from a bad one and to explain why. There is no reason to think that this should not also have been his goal in writing on comedy. We have no direct echo of this in our Poetics, but a passage from the Nicomachean Ethics provides a clue worth following. It comes from the chapter devoted to the virtue of “sense of humor” (eutrapelia), which consists in being able to make good jokes among friends as well …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "ethics-business",
-          "url": "https://plato.stanford.edu/entries/ethics-business/",
-          "score": 0.03265115,
-          "snippet": "ethics-business  One influential approach to business ethics draws on virtue ethics. Moore (2017) develops and applies MacIntyre’s (1984) virtue ethics to business. For MacIntyre, there are goods internal to practices, and certain virtues are necessary to achieve those goods. Building on MacIntyre, Moore develops the idea that business is a practice (or contains practices), and thus has certain goods internal to it (or them), the attainment of which requires the cultivation of business virtues. Aristotelian approaches to virtue in business are found in Alzola (2012) and de Bruin (2015). Schola…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "moral-psych-emp",
-          "url": "https://plato.stanford.edu/entries/moral-psych-emp/",
-          "score": 0.02765907,
-          "snippet": "moral-psych-emp  One way of defusing empirically motivated skepticism—dubbed by Alfano (2013) “the dodge”—is simply to deny that virtue ethics makes empirical claims. On this understanding, virtue ethics is cast as a “purely normative” endeavor aiming at erecting ethical ideals in complete absence of empirical commitments regarding actual human psychologies. This sort of purity is perhaps less honored than honored in the breach: historically, virtue ethics has been typified by an interest in how actual people become good. Aristotle (Nicomachean Ethics, 1099b18–19) thought that anyone not “maim…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-politics",
-          "url": "https://plato.stanford.edu/entries/aristotle-politics/",
-          "score": 0.03227687,
-          "snippet": "aristotle-politics  In the Nicomachean Ethics Aristotle describes his subject matter as ‘political science’, which he characterizes as the most authoritative science. It prescribes which sciences are to be studied in the city-state, and the others — such as military science, household management, and rhetoric — fall under its authority. Since it governs the other practical sciences, their ends serve as means to its end, which is nothing less than the human good. “Even if the end is the same for an individual and for a city-state, that of the city-state seems at any rate greater and more comple…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "moral-relativism",
-          "url": "https://plato.stanford.edu/entries/moral-relativism/",
-          "score": 0.028590094,
-          "snippet": "moral-relativism  Various objectivist responses may be made to this argument. One is the Davidsonian approach, already considered, that precludes the possibility of incommensurable moral frameworks. Another response is that incommensurability does not preclude the possibility of rationally resolving differences between moral frameworks. For example, Alasdair MacIntyre (1988: ch. 18 and 1994) has argued that, in some circumstances, it is possible to realize, through an exercise in imagination, that a conflicting and incommensurable moral tradition is rationally superior to one’s own tradition. …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "moral-character",
-          "url": "https://plato.stanford.edu/entries/moral-character/",
-          "score": 0.03606581,
-          "snippet": "moral-character  Aristotle defines virtuous character in Nicomachean Ethics II.6:"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "alexander-aphrodisias",
-          "url": "https://plato.stanford.edu/entries/alexander-aphrodisias/",
-          "score": 0.026418028,
-          "snippet": "alexander-aphrodisias  Since Alexander did not write a commentary on Aristotle’s ethics, his Ethical Problems, despite their somewhat disorganized state, are of considerable interest (cf. Madigan 1987; Sharples 1990; 2001, 2). For, apart from Aspasius’ early commentary on parts of the Nicomachean Ethics there are no extant commentaries on Aristotle’s ethics before the composite commentary by various hands of the Byzantine age (Michael of Ephesus in the 11th/12th c. and his contemporary Eustratius, together with some material extracted from earlier authors, cf. Sharples 1990, 6–7, 95). This gap…"
         },
         {
           "corpus_id": "sep",
@@ -2248,7 +2192,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3913,
+      "search_ms": 3925,
       "corpora_hit": [
         "sep"
       ],
@@ -2404,42 +2348,56 @@
           "title": "theoretical-terms-science",
           "url": "https://plato.stanford.edu/entries/theoretical-terms-science/",
           "score": 1.0,
-          "snippet": "theoretical-terms-science  A simple explanation of theoreticity says that a term is theoretical if and only if it refers to nonobservational entities. Paradigmatic examples of such entities are electrons, neutrinos, gravitational forces, genes etc. There is yet another explanation of theoreticity: a theoretical term is one whose meaning becomes determined through the axioms of a scientific theory. The meaning of the term ‘force’, for example, is seen to be determined by Newton’s laws of motion and further laws about special forces, such as the law of gravitation. Theoreticity is a property tha…"
+          "snippet": "theoretical-terms-science  This account has two particular merits. First, it is much closer to the way scientists understand and use theoretical terms than purely causal accounts. Because of this, it is not only an account of reference but also one of meaning for theoretical terms. In purely causal accounts, by contrast, there is a tendency to abandon the notion of meaning altogether. Second, it promises to ensure a more stable notion of reference than in purely descriptivist accounts of reference and meaning. Notably, the kind of causation that Psillos’s hybrid account refers to is different …"
         },
         {
           "corpus_id": "sep",
           "title": "theoretical-terms-science",
           "url": "https://plato.stanford.edu/entries/theoretical-terms-science/",
           "score": 1.0,
-          "snippet": "theoretical-terms-science  Several semantics have been devised that aim to explain how a scientific theory contributes to the interpretation of its theoretical terms and as such determines what they mean and how they are understood. All of these semantics assume the respective theory to be given in an axiomatic fashion. Yet, theoretical terms are also recognizable in scientific theories which have as yet resisted a satisfying axiomatization."
+          "snippet": "theoretical-terms-science  The Pythagorean view shifts the problem of theoretical terms to the theory of meaning and reference for mathematical expressions. The question of how we are able to refer successfully to electrons is answered by the Pythagorean by pointing out that we are able to refer successfully to mathematical entities. Moreover, the Pythagorean explains, it is part of the notion of an electron that corresponding mathematical entities are connected to observable phenomena by means of axioms and inference rules. The empirical surplus of theoretical entities in comparison to “pure”…"
         },
         {
           "corpus_id": "sep",
           "title": "theoretical-terms-science",
           "url": "https://plato.stanford.edu/entries/theoretical-terms-science/",
           "score": 1.0,
-          "snippet": "theoretical-terms-science  Theoretical terms pertain to a number of topics in the philosophy of science. A fully fledged semantics of such terms commonly involves a statement about scientific realism and its alternatives. Such a semantics, moreover, may involve an account of how observation is related to theory in science. All formal accounts of theoretical terms deny the analytic-synthetic distinction to be applicable to the axioms of a scientific theory. The recognition of theoretical terms in the language of science by Carnap thus amounts to a rejection of an essential tenet of early logica…"
+          "snippet": "theoretical-terms-science  Now, there are three major accounts of reference and meaning that have been used, implicitly or explicitly, for the semantics of theoretical terms: (i) the descriptivist picture, (ii) causal and causal-historical theories and (iii) hybrid ones that combine descriptivist ideas with causal elements (Reimer 2010). Accounts of reference and meaning other than these play no significant role in the philosophy of science. Hence, we need to survey at least nine combinations consisting, first, of an abstract characterization of the nature of a theoretical entity (realist, non…"
         },
         {
           "corpus_id": "sep",
           "title": "reference",
           "url": "https://plato.stanford.edu/entries/reference/",
           "score": 1.0,
-          "snippet": "reference  Reference is a relation that obtains between certain sorts of representational tokens and objects. For instance, when I assert that “Barack Obama is a Democrat,” I use a particular sort of representational token—i.e. the name ‘Barack Obama’—which refers to a particular individual—i.e.  Barack Obama. While names and other referential terms are hardly the only type of representational token capable of referring (consider, for instance, concepts, mental maps, and pictures), linguistic tokens like these have long stood at the center of philosophical inquiries into the nature of referenc…"
+          "snippet": "reference  The most popular option has been to pair a Millian semantics with a metasemantic picture adumbrated at roughly the same time by Peter Geach (1969), Keith Donnellan (1970), and the aforementioned Kripke (1972). Typically called the ‘causal theory of reference’, the central idea developed in these works is that (the use of) a name refers to whatever is linked to it in the appropriate way—a way that does not require speakers to associate any identifying descriptive content whatsoever with the name. The causal theory is generally presented as having two components: one dealing with refe…"
         },
         {
           "corpus_id": "sep",
           "title": "reference",
           "url": "https://plato.stanford.edu/entries/reference/",
           "score": 1.0,
-          "snippet": "reference  Assuming that at least some token linguistic expressions really do refer, a number of interesting questions arise. How, for example, does linguistic reference relate to the act of referring—something that we as speakers do with referential terms? How exactly do referential terms come to refer? That is, in virtue of what do they refer to what they do? Is there a single answer to this question, a single mechanism of reference, or different answers depending on the sort of term in question? And what exactly is the relationship between reference and meaning? Answers to these various que…"
+          "snippet": "reference  Finding themselves dissatisfied with Kaplan’s proposal here, other direct reference theorists have opted for different responses to the problem of names with multiple bearers. For instance, both Francois Recanati (1997) and Michael Pelczar and Joe Rainsbury (1998) have suggested that names ought to be treated on the model of indexicals, a sort of term that we will consider in more detail shortly. Briefly though, the suggestion runs: there is one and only one name ‘David Cameron’, but context makes clear to which individual a particular utterance of this name refers. In effect, the p…"
         },
         {
           "corpus_id": "sep",
           "title": "reference",
           "url": "https://plato.stanford.edu/entries/reference/",
           "score": 1.0,
-          "snippet": "reference  We use language to talk about the world. Much of what we say about the world appears to be meaningful; some of it, presumably, is even true. For instance, I seem to be saying something true when, in the appropriate sort of setting, I assertively utter:"
+          "snippet": "reference  Now we have three basic models of reference, of the metasemantics of referential terms, on the table: the descriptivist model, the causal chain model, and the character model. With the last of these in view, we can clarify an important aspect of the indexical theory of names that was discussed at the end of the last section. Essentially, that theory proposed to hybridize our second and third models. Instead of names having constant characters, as Kaplan would have it, the proposal is to assign them more interesting ones. For instance, we might try stipulating that the context, in ad…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "information",
+          "url": "https://plato.stanford.edu/entries/information/",
+          "score": 1.0,
+          "snippet": "information  The same people would probably have no problems with the statement that “Secret services sometimes distribute false information”, or with the sentence “The information provided by the witnesses of the accident was vague and conflicting”. The first statement implies that information necessarily is true, while the other statements allow for the possibility that information is false, conflicting and vague. In everyday communication these inconsistencies do not seem to create great trouble and in general it is clear from the pragmatic context what type of information is designated. Th…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "information",
+          "url": "https://plato.stanford.edu/entries/information/",
+          "score": 1.0,
+          "snippet": "information  The empiricists methodology is not without problems. The biggest issue is that all knowledge becomes probabilistic and a posteriori. Immanuel Kant (1724–1804) was one of the first to point out that the human mind has a grasp of the meta-concepts of space, time and causality that itself can never be understood as the result of a mere combination of “ideas”. What is more, these intuitions allow us to formulate scientific insights with certainty: i.e., the fact that the sum of the angles of a triangle in Euclidean space is 180 degrees. This issue cannot be explained in the empirical …"
         },
         {
           "corpus_id": "sep",
@@ -2450,24 +2408,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "information",
-          "url": "https://plato.stanford.edu/entries/information/",
-          "score": 1.0,
-          "snippet": "information  There is no consensus about the exact nature of the field of philosophy of information. Several authors have proposed a more or less coherent philosophy of information as an attempt to rethink philosophy from a new perspective: e.g., quantum physics (Mugur-Schächter 2002),   logic (Brenner 2008), semantic information (Floridi 2011; Adams &amp; de Moraes 2016, see the entry on  semantic conceptions of information),  communication and message systems (Capurro &amp; Holgate 2011) and meta-philosophy (Wu 2010, 2016). Others (Adriaans &amp; van Benthem 2008a; Lenski 2010) see it more a…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "information",
-          "url": "https://plato.stanford.edu/entries/information/",
-          "score": 1.0,
-          "snippet": "information  The term “information” in colloquial speech is currently predominantly used as an abstract mass-noun used to denote any amount of data, code or text that is stored, sent, received or manipulated in any medium. The detailed history of both the term “information” and the various concepts that come with it is complex and for the larger part still has to be written (Seiffert 1968; Schnelle 1976; Capurro 1978, 2009; Capurro &amp; Hjørland 2003). The exact meaning of the term “information” varies in different philosophical traditions and its colloquial use varies geographically and over…"
-        },
-        {
-          "corpus_id": "sep",
           "title": "descriptions",
           "url": "https://plato.stanford.edu/entries/descriptions/",
           "score": 1.0,
-          "snippet": "descriptions  The analysis of descriptions has played an important role in debates about metaphysics, epistemology, semantics, psychology, logic and linguistics ever since the publication of Bertrand Russell’s paper “On Denoting,” in 1905.  Despite the apparent simplicity of definite and indefinite descriptions, the past 100+ years have seen heated debates about their proper analysis. For example, some philosophers and linguists treat definite descriptions as referential expressions, others treat them as quantificational expressions, and some treat them as predicational expressions. Other anal…"
+          "snippet": "descriptions  In spite of the great force of Kripke’s criticism of the descriptive theory of names, there have been some significant attempts to answer them. One idea (explored by Loar (1976), McDowell (1977), and Schiffer (1978)) would have the description be something like ‘the individual designated by the name ‘Aristotle’. For Kripke (1980), and Devitt (1981) this sort of approach was hopelessly circular. Indeed, Devitt and Sterelny disparagingly referred to the position as “circular descriptivism” (but see Kroon (1989) for an attempt to disarm the circularity charge). Another idea (taken u…"
         }
       ],
       "source_score": {
@@ -2486,17 +2430,16 @@
           "Kripke",
           "rigid designator",
           "initial baptism",
-          "qua-problem"
-        ],
-        "missing": [
           "reference borrowing",
+          "qua-problem",
           "descriptivism"
         ],
+        "missing": [],
         "total_expected": 7,
-        "ratio": 0.71428573
+        "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1837,
+      "search_ms": 1851,
       "corpora_hit": [
         "sep"
       ],
@@ -2642,10 +2585,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "naturalism-moral",
-          "url": "https://plato.stanford.edu/entries/naturalism-moral/",
-          "score": 0.022135416,
-          "snippet": "naturalism-moral  To understand the Moral Twin Earth Objection, we need to first understand how causal regulation semantics are supposed to work. The following thought experiment, from Putnam (1975), has been highly influential: Imagine a world—Twin Earth—where there is no H\\(_2\\)O, but there is another substance called XYZ. This substance XYZ, while distinct from H\\(_2\\)O, fills the rivers and lakes, is clear and tasteless, etc. XYZ even has the property of being called ‘water’—when residents of Twin Earth fill up a glass with XYZ from the tap, they will say “I have a cup of water.” Yet for a…"
+          "title": "skepticism-content-externalism",
+          "url": "https://plato.stanford.edu/entries/skepticism-content-externalism/",
+          "score": 0.023443673,
+          "snippet": "skepticism-content-externalism  To reach Putnam’s conclusion, Brueckner considers use of the following disquotation principle:"
         },
         {
           "corpus_id": "sep",
@@ -2729,7 +2672,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1888,
+      "search_ms": 1860,
       "corpora_hit": [
         "sep"
       ],
@@ -2924,7 +2867,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 2441,
+      "search_ms": 2551,
       "corpora_hit": [
         "sep"
       ],
@@ -3080,14 +3023,14 @@
           "title": "nozick-political",
           "url": "https://plato.stanford.edu/entries/nozick-political/",
           "score": 1.0,
-          "snippet": "nozick-political  Robert Nozick (1938–2002) was a renowned American philosopher who first came to be widely known through his 1974 book, Anarchy, State, and Utopia  (1974),[1]  which won the National Book Award for Philosophy and Religion in 1975. Pressing further the anti-consequentialist aspects of John Rawls’ A Theory of Justice, Nozick argued that respect for individual rights is the key standard for assessing state action and, hence, that the only legitimate state is a minimal state that restricts its activities to the protection of the rights of life, liberty, property, and contract. Des…"
+          "snippet": "nozick-political  There are four main topics that most deserve discussion with respect to Anarchy, State, and Utopia. They are: (1) the underpinning (if any) and the character and robustness of the moral rights that constitute the basic normative framework for most of Anarchy, State, and Utopia; (2) the character and degree of success of Nozick’s defense of the minimal state against the charge by the individualist anarchist that “the state itself is intrinsically immoral” (ASU 51); (3) Nozick’s articulation and defense of his historical entitlement doctrine of justice in holdings and his assoc…"
         },
         {
           "corpus_id": "sep",
           "title": "nozick-political",
           "url": "https://plato.stanford.edu/entries/nozick-political/",
           "score": 1.0,
-          "snippet": "nozick-political  Robert Nozick was born in Brooklyn in 1938 to a Russian Jewish immigrant family. He earned an undergraduate Philosophy degree from Columbia University in 1959 and a Ph.D. in Philosophy from Princeton University in 1963. He taught for a couple of years at Princeton, Harvard, and Rockefeller Universities before moving permanently to Harvard in 1969. He became widely known through his 1974 book, Anarchy, State, and Utopia, which shocked the philosophical world with its robust and sophisticated defense of the minimal state—the state that restricts its activities to the protection…"
+          "snippet": "nozick-political  So, Nozick offers very much the same type of argument for the existence of some correct regulative principle for social interaction as Rawls does in A Theory of Justice. The difference is that Nozick does not hold that the mark of principles being responsive to or reflective of the fact of our separate existences is that they would be agreed to by everyone under suitable agreement circumstances. Rather, he supposes that we can identify types of treatment of persons as not sufficiently respecting and taking account of the rationality of individuals pursuing of their own good w…"
         },
         {
           "corpus_id": "sep",
@@ -3101,49 +3044,49 @@
           "title": "original-position",
           "url": "https://plato.stanford.edu/entries/original-position/",
           "score": 1.0,
-          "snippet": "original-position  The idea of the moral point of view can be traced back to David Hume’s account of the “judicious spectator.” Hume sought to explain how moral judgments of approval and disapproval are possible given that people normally are focused on achieving their particular interests and concerns. He conjectured that in making moral judgments individuals abstract in imagination from their own particular interests and adopt an impartial point of view from which they assess the effects of their own and others’ actions on the interests of everyone. Since, according to Hume, we all can adopt…"
+          "snippet": "original-position  Historically the idea of a social contract had a more limited role than Rawls assigns to it. In Hobbes and Locke the social contract serves as an argument for the legitimacy of political authority. Hobbes argues that in a pre-social state of nature it would be rational for all to agree to authorize one person to exercise the absolute political power needed to enforce norms necessary for social cooperation. By contrast, Locke argued against absolute monarchy by contending that no existing political constitution is legitimate or just unless it could be contracted into starting…"
         },
         {
           "corpus_id": "sep",
           "title": "original-position",
           "url": "https://plato.stanford.edu/entries/original-position/",
           "score": 1.0,
-          "snippet": "original-position  Subsequently, philosophers posited similar perspectives for moral reasoning designed to yield impartial judgments once individuals abstract from their particular aims and interests and assess situations from an impartial point of view. But rather than being mainly explanatory of moral judgments like Hume’s “judicious spectator,” the role of these impartial perspectives is to serve as a basis from which to assess and justify moral rules and principles. Kant’s categorical imperative procedure, Adam Smith’s “impartial spectator,”, and Sidgwick’s “point of view of the universe” …"
+          "snippet": "original-position  To the objection that choice behind the veil of ignorance is psychologically impossible, Rawls says that it is important not to get too caught up in the theoretical fiction of the original position, as if it were some historical event among real people who are being asked to do something impossible. The original position is not supposed to be realistic, but is a “device of representation” (PL 27), or a “thought experiment,” (JF, 83), that is designed to organize our considered convictions of justice and clarify their implications. The parties in it are not real but are “arti…"
         },
         {
           "corpus_id": "sep",
           "title": "justice",
           "url": "https://plato.stanford.edu/entries/justice/",
           "score": 1.0,
-          "snippet": "justice  The idea of justice occupies centre stage both in ethics, and in legal and political philosophy. We apply it to individual actions, to laws, and to public policies, and we think in each case that if they are unjust this is a strong, maybe even conclusive, reason to reject them. Classically, justice was counted as one of the four cardinal virtues (and sometimes as the most important of the four); in modern times John Rawls famously described it as ‘the first virtue of social institutions’ (Rawls 1971, p.3; Rawls, 1999, p.3). We might debate which of these realms of practical philosophy…"
+          "snippet": "justice  The problem for Rawls, however, is to show that the principles that would be selected in such an original position are in fact recognizable as principles of justice. One might expect the parties to calculate how to weigh the primary goods (which Rawls catalogues as ‘rights and liberties, opportunities and powers, income and wealth’) against each other, and then to choose as their social principle ‘maximise the weighted sum of primary goods, averaged across all persons’. This, however, would bring the theory very close to utilitarianism, since the natural method of weighing primary goo…"
         },
         {
           "corpus_id": "sep",
           "title": "justice",
           "url": "https://plato.stanford.edu/entries/justice/",
           "score": 1.0,
-          "snippet": "justice  We begin by identifying four core features that distinguish justice from other moral and political ideas. We then examine some major conceptual contrasts: between conservative and ideal justice, between corrective and distributive justice, between procedural and substantive justice, and between comparative and non-comparative justice. Next we turn to questions of scope: to who or what do principles of justice apply? We ask whether non-human animals can be subjects of justice, whether justice applies only between people who already stand in a particular kind of relationship to one anot…"
+          "snippet": "justice  When he turns to the distribution of income and wealth, Rawls has to show why his choosers would pick the difference principle, which considers only the position of the worst-off social group, over other principles such as maximising average income across the whole society. In Theory of Justice he does this by attributing special psychological features to the choosers that make it appropriate for them to follow the ‘maximin’ rule for decisions under uncertainty (choose the option whose worst possible outcome is least bad for you). For example, they are said to be much more concerned t…"
         },
         {
           "corpus_id": "sep",
           "title": "justice",
           "url": "https://plato.stanford.edu/entries/justice/",
           "score": 1.0,
-          "snippet": "justice  More detailed discussions of particular forms of justice can be found in other entries: see especially  distributive justice,  global justice,  intergenerational justice,  international distributive justice,  justice and bad luck,  justice as a virtue, and  retributive justice."
+          "snippet": "justice  John Rawls’ theory of justice is the most widely-cited example of a contractarian theory, but before outlining it, two words of caution are necessary. First, the shape of the theory has evolved from its first incarnation in Rawls (1958) through his major work A Theory of Justice (Rawls 1971) and on to Rawls (1993) and Rawls (2001). Second, although Rawls has consistently claimed that the principles of justice he defends are the principles that would be selected by people in a suitably designed ‘original position’ in which they are asked to choose the social and political institutions …"
         },
         {
           "corpus_id": "sep",
           "title": "rawls",
           "url": "https://plato.stanford.edu/entries/rawls/",
           "score": 1.0,
-          "snippet": "rawls  John Rawls (b. 1921, d. 2002) was an American political philosopher in the liberal tradition. His theory of justice as fairness describes a society of free citizens holding equal basic rights and cooperating within an egalitarian economic system. His theory of political liberalism explores the legitimate use of political power in a democracy, and envisions how civic unity might endure despite the diversity of worldviews that free institutions allow. His writings on the law of peoples set out a liberal foreign policy that aims to create a permanently peaceful and tolerant international o…"
+          "snippet": "rawls  The use of political power in a liberal society will be legitimate if it is employed in accordance with the principles of any liberal conception of justice. By Rawls’s criteria, a libertarian conception of justice (such as Nozick’s in Anarchy, State, and Utopia) is not a liberal political conception of justice. Libertarianism does not assure all citizens sufficient means to make use of their basic liberties, and it permits excessive inequalities of wealth and power. By contrast, Rawls’s own conception of justice (justice as fairness) does qualify as a member of the family of liberal pol…"
         },
         {
           "corpus_id": "sep",
           "title": "rawls",
           "url": "https://plato.stanford.edu/entries/rawls/",
           "score": 1.0,
-          "snippet": "rawls  Rawls was born and raised in Baltimore, Maryland. His father was a prominent lawyer, his mother was a chapter president of the League of Women Voters. Rawls studied at Princeton and Cornell, where he was influenced by Wittgenstein’s student Norman Malcolm; and at Oxford, where he worked with H. L. A. Hart, Isaiah Berlin, and Stuart Hampshire. His first professorial appointments were at Cornell and MIT. In 1962 Rawls joined the faculty at Harvard, where he taught for more than thirty years."
+          "snippet": "rawls  Justice as fairness is Rawls’s theory of justice for a liberal society. As a member of the family of liberal political conceptions of justice it provides a framework for the legitimate use of political power. Yet legitimacy is only the minimal standard of moral acceptability; a political order can be legitimate without being just. Justice sets the maximal standard: the arrangement of social institutions that is morally best."
         }
       ],
       "source_score": {
@@ -3173,7 +3116,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2518,
+      "search_ms": 2632,
       "corpora_hit": [
         "sep"
       ],
@@ -3280,28 +3223,21 @@
           "title": "liberty-positive-negative",
           "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
           "score": 1.0,
-          "snippet": "liberty-positive-negative  Negative liberty is the absence of obstacles, barriers or constraints. One has negative liberty to the extent that actions are available to one in this negative sense. Positive liberty is the possibility of acting — or the fact of acting — in such a way as to take control of one’s life and realize one’s fundamental purposes. While negative liberty is usually attributed to individual agents, positive liberty is sometimes attributed to collectivities, or to individuals considered primarily as members of given collectivities."
+          "snippet": "liberty-positive-negative  Because the concept of negative freedom concentrates on the external sphere in which individuals interact, it seems to provide a better guarantee against the dangers of paternalism and authoritarianism perceived by Berlin. To promote negative freedom is to promote the existence of a sphere of action within which the individual is sovereign, and within which she can pursue her own projects subject only to the constraint that she respect the spheres of others. Humboldt and Mill, both advocates of negative freedom, compared the development of an individual to that of a …"
         },
         {
           "corpus_id": "sep",
           "title": "liberty-positive-negative",
           "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
           "score": 1.0,
-          "snippet": "liberty-positive-negative  The idea of distinguishing between a negative and a positive sense of the term ‘liberty’ goes back at least to Kant, and was examined and defended in depth by Isaiah Berlin in the 1950s and ’60s. Discussions about positive and negative liberty normally take place within the context of political and social philosophy. They are distinct from, though sometimes related to, philosophical discussions about  free will.  Work on the nature of positive liberty often overlaps, however, with work on the nature of  autonomy."
+          "snippet": "liberty-positive-negative  Many liberals, including Berlin, have suggested that the positive concept of liberty carries with it a danger of authoritarianism. Consider the fate of a permanent and oppressed minority. Because the members of this minority participate in a democratic process characterized by majority rule, they might be said to be free on the grounds that they are members of a society exercising self-control over its own affairs. But they are oppressed, and so are surely unfree. Moreover, it is not necessary to see a society as democratic in order to see it as self-controlled; one …"
         },
         {
           "corpus_id": "sep",
           "title": "liberty-positive-negative",
           "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
           "score": 1.0,
-          "snippet": "liberty-positive-negative  As Berlin showed, negative and positive liberty are not merely two distinct kinds of liberty; they can be seen as rival, incompatible interpretations of a single political ideal. Since few people claim to be against liberty, the way this term is interpreted and defined can have important political implications. Political  liberalism  tends to presuppose a negative definition of liberty: liberals generally claim that if one favors individual liberty one should place strong limitations on the activities of the state. Critics of liberalism often contest this implication…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "berlin",
-          "url": "https://plato.stanford.edu/entries/berlin/",
-          "score": 1.0,
-          "snippet": "berlin  Isaiah Berlin, 19 July 1968: photo by  Helen Muspratt, Ramsey and Muspratt  (courtesy Bodleian Library, Oxford)"
+          "snippet": "liberty-positive-negative  Such justifications of oppression in the name of liberty are no mere products of the liberal imagination, for there are notorious historical examples of their endorsement by authoritarian political leaders. Berlin, himself a liberal and writing during the cold war, was clearly moved by the way in which the apparently noble ideal of freedom as self-mastery or self-realization had been twisted and distorted by the totalitarian dictators of the twentieth century — most notably those of the Soviet Union — so as to claim that they, rather than the liberal West, were the t…"
         },
         {
           "corpus_id": "sep",
@@ -3312,10 +3248,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "green",
-          "url": "https://plato.stanford.edu/entries/green/",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
           "score": 1.0,
-          "snippet": "green  Thomas Hill Green (1836–82) is widely regarded as the founding and most influential figure in the tradition of British idealism that flourished in England, especially Oxford, and Scotland, especially Glasgow and Edinburgh, in the second half of the nineteenth century and early in the twentieth century (see, e.g., Mander 2011). Green’s idealism was systematic, embracing metaphysics and epistemology, ethical theory, political philosophy, and philosophy of history and religion. In metaphysics and epistemology, Green reflected the influence of Immanuel Kant, criticizing the British empirici…"
+          "snippet": "berlin  Berlin regarded the Enlightenment’s critics as in many ways dangerous and deluded. He attacked or dismissed their metaphysical beliefs, particularly the philosophies of history of Hegel and his successors. He was also wary of the aesthetic approach to politics that many Romantics had practised and fostered. And, while appreciative of some elements in the Romantic conception of liberty, he saw Romanticism’s influence on the development of the idea of liberty as largely perverting. But at the same time he thought the Enlightenment’s opponents had pointed to many important truths that the…"
         },
         {
           "corpus_id": "sep",
@@ -3329,7 +3265,14 @@
           "title": "green",
           "url": "https://plato.stanford.edu/entries/green/",
           "score": 1.0,
-          "snippet": "green  Green was born in Birkin, Yorkshire, April 7, 1836. His mother died when he was very young, and he was educated by his father, Valentine Green, until he attended Rugby School in 1850. Green entered Balliol College, Oxford University, in 1855, where he was taught by Benjamin Jowett and Charles Parker. Under Jowett’s mentorship, Green was introduced to both classical Greek and eighteenth and nineteenth century German philosophy and earned a First in Greats."
+          "snippet": "green  Green also thinks the Kantian dualism is unnecessary. The idealist can explain error. We can never have access to things-in-themselves. But we can have access to other appearances that, in various ways, might represent a particular appearance as anomalous. Here, we check one appearance by appeal to others (PE §§12–13, 64). On this view, we can distinguish between individual appearances or clusters of experiences and reality but not between reality and the entire system of appearances entertained by a particular mind (PE §13). We avoid answering the question how our conceptions of the wo…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "green",
+          "url": "https://plato.stanford.edu/entries/green/",
+          "score": 1.0,
+          "snippet": "green  Green makes clear that the sort of moral personality that is required by responsibility is a capacity to recognize and be guided by reasons. This is clear from his defense of Kant’s conception of freedom against criticisms. As we have seen, Green does not think that freedom and responsibility require Kant’s doctrine of transcendental freedom. But Green is sympathetic with Kant’s claims about positive freedom and autonomy in the Groundwork. There, Kant identifies positive freedom or autonomy with a will determined by practical reason and the moral law (4: 447). Sidgwick criticizes this c…"
         },
         {
           "corpus_id": "sep",
@@ -3343,14 +3286,14 @@
           "title": "anarchism",
           "url": "https://plato.stanford.edu/entries/anarchism/",
           "score": 1.0,
-          "snippet": "anarchism  There are various forms of anarchism. Uniting this variety is the general critique of centralized, hierarchical power and authority. Given that authority, centralization, and hierarchy show up in various ways and in different discourses, institutions, and practices, it is not surprising that the anarchist critique has been applied in diverse ways."
+          "snippet": "anarchism  Post-structuralism and trends in post-modernism and Continental philosophy can also be anarchistic (see May 1994). So-called “post-anarchism” is a decentered and free-flowing discourse that deconstructs power, questions essentialism, and undermines systems of authority. Following upon the deconstructive and critical work of authors such as Derrida, Deleuze, Foucault, and others, this critique of the arché goes all the way down. If there is no arché or foundation, then we are left with a proliferation of possibilities. Emerging trends in globalization, cyber-space, and post-humanism …"
         },
         {
           "corpus_id": "sep",
           "title": "anarchism",
           "url": "https://plato.stanford.edu/entries/anarchism/",
           "score": 1.0,
-          "snippet": "anarchism  Anarchism is primarily understood as a skeptical theory of political legitimation. The term anarchism is derived from the negation of the Greek term arché, which means first principle, foundation, or ruling power. Anarchy is thus rule by no one or non-rule. Some argue that non-ruling occurs when there is rule by all—with consensus or unanimity providing an optimistic goal (see Depuis-Déri 2010)."
+          "snippet": "anarchism  Traditional anarchists were primarily interested in sustained and focused political activism that led toward the abolition of the state. The difference between free-flowing post-anarchism and traditional anarchism can be seen in the realm of morality. Anarchism has traditionally been critical of centralized moral authority—but this critique was often based upon fundamental principles and traditional values, such as autonomy or liberty. But post-structuralism—along with critiques articulated by some feminists, critical race theorists, and critics of Eurocentrism—calls these values an…"
         },
         {
           "corpus_id": "sep",
@@ -3420,7 +3363,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1858,
+      "search_ms": 1829,
       "corpora_hit": [
         "sep"
       ],
@@ -3620,7 +3563,7 @@
         "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 1130,
+      "search_ms": 1224,
       "corpora_hit": [
         "sep"
       ],
@@ -3731,13 +3674,6 @@
         },
         {
           "corpus_id": "sep",
-          "title": "hume-freewill",
-          "url": "https://plato.stanford.edu/entries/hume-freewill/",
-          "score": 0.039835166,
-          "snippet": "hume-freewill  Hume considers the following objection:"
-        },
-        {
-          "corpus_id": "sep",
           "title": "hume-moral",
           "url": "https://plato.stanford.edu/entries/hume-moral/",
           "score": 0.03901895,
@@ -3773,73 +3709,80 @@
         },
         {
           "corpus_id": "sep",
-          "title": "kant-hume-causality",
-          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
-          "score": 1.0,
-          "snippet": "kant-hume-causality  Kant famously attempted to “answer” what he took to be Hume’s skeptical view of causality, most explicitly in the Prolegomena to Any Future Metaphysics (1783); and, because causality, for Kant, is a central example of a category or pure concept of the understanding, his relationship to Hume on this topic is central to his philosophy as a whole. Moreover, because Hume’s famous discussion of causality and induction is equally central to his philosophy, understanding the relationship between the two philosophers on this issue is crucial for a proper understanding of modern ph…"
+          "title": "transcendentalism",
+          "url": "https://plato.stanford.edu/entries/transcendentalism/",
+          "score": 0.014136906,
+          "snippet": "transcendentalism  civil disobedience |  Emerson, Ralph Waldo |  Hume, David: on religion |  Kant, Immanuel |  Kant, Immanuel: transcendental arguments |  Thoreau, Henry David"
         },
         {
           "corpus_id": "sep",
           "title": "kant-hume-causality",
           "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
           "score": 1.0,
-          "snippet": "kant-hume-causality  In the Preface to the Prolegomena Kant considers the supposed science of metaphysics. He states that “no event has occurred that could have been more decisive for the fate of this science than the attack made upon it by David Hume” and goes on to say that “Hume proceeded primarily from a single but important concept of metaphysics, namely, that of the connection of cause and effect” (4, 257; 7; see the Bibliography for our method of citation). Over the next few pages Kant defends the importance of Hume’s “attack” on metaphysics against common-sense opponents such as Thomas…"
+          "snippet": "kant-hume-causality  That metaphysics until now has remained in such a wavering state of uncertainty and contradictions is to be ascribed solely to the fact that this problem, and perhaps even the distinction between analytic and synthetic judgments, was not thought of earlier. Metaphysics stands or falls with the solution of this problem, or on a satisfactory proof that the possibility it requires to be explained does not in fact obtain."
         },
         {
           "corpus_id": "sep",
           "title": "kant-hume-causality",
           "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
           "score": 1.0,
-          "snippet": "kant-hume-causality  I freely admit that it was the remembrance of David Hume which, many years ago, first interrupted my dogmatic slumber and gave my investigations in the field of speculative philosophy a completely different direction."
+          "snippet": "kant-hume-causality  Later, in §§ 27–30 of the Prolegomena, Kant returns to Hume’s problem and presents his own solution. Kant begins, in § 27, by stating that “here is now the place to remove the Humean doubt from the ground up” (4, 310; 63); and he continues, in § 29, by proposing"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 1.0,
+          "snippet": "kant-hume-causality  Kant concludes, in § 30, by stating that we are now in possession of “a complete solution of the Humean problem” (4, 313; 66)—which, Kant adds,"
         },
         {
           "corpus_id": "sep",
           "title": "kant-transcendental",
           "url": "https://plato.stanford.edu/entries/kant-transcendental/",
           "score": 1.0,
-          "snippet": "kant-transcendental  Among Immanuel Kant’s (1724–1804) most influential contributions to philosophy is his development of the transcendental argument. In Kant’s conception, an argument of this kind begins with a compelling premise about our thought, experience, or knowledge, and then reasons to a conclusion that is a substantive and unobvious presupposition and necessary condition of this premise. The crucial steps in this reasoning are claims to the effect that a subconclusion or conclusion is a presupposition and necessary condition of a premise. Such a necessary condition might be a logical…"
+          "snippet": "kant-transcendental  Moreover, it might well be that the argument of §16 features a subtlety that obviates the need for actual co-consciousness. The text indicates that the argument crucially turns on the claim that only a priori synthesis – that is, synthesis by a priori concepts – can explain how I might represent the identity of my apperceptive consciousness (B133) or how I might represent the identity of the apperceiving subject (B135) for different elements of the manifold of intuition to which I can attach the I think. The inadequacy Kant claims for “empirical consciousness,” that is, fo…"
         },
         {
           "corpus_id": "sep",
           "title": "kant-transcendental",
           "url": "https://plato.stanford.edu/entries/kant-transcendental/",
           "score": 1.0,
-          "snippet": "kant-transcendental  The Transcendental Deduction (A84–130, B116–169) is Kant’s attempt to demonstrate against empiricist psychological theory that certain a priori concepts correctly apply to objects featured in our experience. Dieter Henrich (1989) points out that Kant’s use of ‘Deduktion’ redeploys German legal vocabulary; in Holy Roman Empire Law, ‘Deduktion’ signifies an argument intended to yield a historical justification for the legitimacy of a property claim. In Kant’s derivative epistemological sense, a deduction is an argument that aims to justify the use of a concept, one that demo…"
+          "snippet": "kant-transcendental  Hume might propose to explain our sense of the identity of the conscious subject of different self-attributions by the intrinsically self-conscious perceptions or the perceptions of perceptions being components of a single causally coherent bundle. However, this bundle would not itself be conscious of perceptions. Consciousness of perceptions would instead be an intrinsic feature of an individual self-conscious perception or a feature of individual perceptions of a perception. In Kant’s conception, by contrast, accounting for our sense of the identity of the conscious subj…"
         },
         {
           "corpus_id": "sep",
           "title": "kant",
           "url": "https://plato.stanford.edu/entries/kant/",
           "score": 1.0,
-          "snippet": "kant  Immanuel Kant (1724–1804) is the central figure in modern philosophy. He synthesized early modern rationalism and empiricism, set the terms for much of nineteenth and twentieth century philosophy, and continues to exercise a significant influence today in metaphysics, epistemology, ethics, political philosophy, aesthetics, and other fields. The fundamental idea of Kant’s “critical philosophy” – especially in his three Critiques: the Critique of Pure Reason (1781, 1787), the Critique of Practical Reason (1788), and the Critique of the Power of Judgment (1790) – is human autonomy. He argue…"
+          "snippet": "kant  Kant may have developed this thread of his argument in the transcendental deduction after reading Johann Nicolaus Tetens (1736–1807) rather than through a direct encounter with Locke’s texts (Tetens 1777, Kitcher 2011). On the subject of self-consciousness, Tetens was a follower of Locke and also engaged with Hume’s arguments for rejecting a continuing self. So Kant’s actual opponents in the deduction may have been Lockean and Humean positions as represented by Tetens, as well as rationalist views that Kant would have encountered directly in texts by Leibniz, Wolff, and some of their fol…"
         },
         {
           "corpus_id": "sep",
           "title": "kant",
           "url": "https://plato.stanford.edu/entries/kant/",
           "score": 1.0,
-          "snippet": "kant  Immanuel Kant was born April 22, 1724 in Königsberg, near the southeastern shore of the Baltic Sea. Today Königsberg has been renamed Kaliningrad and is part of Russia. But during Kant’s lifetime Königsberg was the capital of East Prussia, and its dominant language was German. Though geographically remote from the rest of Prussia and other German cities, Königsberg was then a major commercial center, an important military port, and a relatively cosmopolitan university  town.[1]"
+          "snippet": "kant  As an unsalaried lecturer at the Albertina Kant was paid directly by the students who attended his lectures, so he needed to teach an enormous amount and to attract many students in order to earn a living. Kant held this position from 1755 to 1770, during which period he would lecture an average of twenty hours per week on logic, metaphysics, and ethics, as well as mathematics, physics, and physical geography. In his lectures Kant used textbooks by Wolffian authors such as Alexander Gottlieb Baumgarten (1714–1762) and Georg Friedrich Meier (1718–1777), but he followed them loosely and us…"
         },
         {
           "corpus_id": "sep",
           "title": "kant",
           "url": "https://plato.stanford.edu/entries/kant/",
           "score": 1.0,
-          "snippet": "kant  Kant was born into an artisan family of modest means. His father was a master harness maker, and his mother was the daughter of a harness maker, though she was better educated than most women of her social class. Kant’s family was never destitute, but his father’s trade was in decline during Kant’s youth and his parents at times had to rely on extended family for financial support."
+          "snippet": "kant  Kant’s strategy in the Critique is similar to that of the Inaugural Dissertation in that both works attempt to reconcile modern science with traditional morality and religion by relegating them to distinct sensible and intelligible worlds, respectively. But the Critique gives a far more modest and yet revolutionary account of a priori knowledge. As Kant’s letter to Herz suggests, the main problem with his view in the Inaugural Dissertation is that it tries to explain the possibility of a priori knowledge about a world that is entirely independent of the human mind. This turned out to be …"
         },
         {
           "corpus_id": "sep",
           "title": "induction-problem",
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 1.0,
-          "snippet": "induction-problem  We generally think that the observations we make are able to justify some expectations or predictions about observations we have not yet made, as well as general claims that go beyond the observed. For example, the observation that bread of a certain appearance has thus far been nourishing seems to justify the expectation that the next similar piece of bread I eat will also be nourishing, as well as the claim that bread of this sort is generally nourishing. Such inferences from the observed to the unobserved, or to general laws, are known as “inductive inferences”."
+          "snippet": "induction-problem  Hume introduces the problem of induction as part of an analysis of the notions of cause and effect. Hume worked with a picture, widespread in the early modern period, in which the mind was populated with mental entities called “ideas”. Hume thought that ultimately all our ideas could be traced back to the “impressions” of sense experience. In the simplest case, an idea enters the mind by being “copied” from the corresponding impression (T. 1.1.1.7/4). More complex ideas are then created by the combination of simple ideas (E. 2.5/19). Hume took there to be a number of relatio…"
         },
         {
           "corpus_id": "sep",
           "title": "induction-problem",
           "url": "https://plato.stanford.edu/entries/induction-problem/",
           "score": 1.0,
-          "snippet": "induction-problem  The original source of what has become known as the “problem of induction” is in Book 1, part iii, section 6 of A Treatise of Human Nature by David Hume, published in 1739 (Hume 1739). In 1748, Hume gave a shorter version of the argument in Section iv of An enquiry concerning human understanding (Hume 1748). Throughout this article we will give references to the Treatise as “T”, and the Enquiry as “E”."
+          "snippet": "induction-problem  As we have seen in  section 1,  Hume takes demonstrative arguments to have conclusions which are “relations of ideas”, whereas “probable” or “moral” arguments have conclusions which are “matters of fact”. Hume’s distinction between “relations of ideas” and “matters of fact” anticipates the distinction drawn by Kant between “analytic” and “synthetic” propositions (Kant 1781). A classic example of an analytic proposition is “Bachelors are unmarried men”, and a synthetic proposition is “My bike tyre is flat”. For Hume, demonstrative arguments, which are based on a priori reason…"
         }
       ],
       "source_score": {
@@ -3869,7 +3812,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 2519,
+      "search_ms": 2640,
       "corpora_hit": [
         "sep"
       ],
@@ -4008,87 +3951,87 @@
         },
         {
           "corpus_id": "sep",
-          "title": "olivi",
-          "url": "https://plato.stanford.edu/entries/olivi/",
-          "score": 0.021771973,
-          "snippet": "olivi  Olivi accepts a doctrine that is known as “universal hylomorphism”, i.e. the view that every substance, except God, is composed of form and matter. The hylomorphic scheme as such is of course taken from Aristotle, but the idea that it must be applied also to spiritual entities, such as the human soul and angels, is an extension that was popularized by Dominicus Gundissalinus. The philosophical reason behind this view is related to the idea that forms are fully actual. Everything that can undergo a change from one state to another requires potentiality, and thus all created substances mu…"
+          "title": "aristotle-psychology",
+          "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
+          "score": 0.04593268,
+          "snippet": "aristotle-psychology  In De Anima, Aristotle makes extensive use of technical terminology introduced and explained elsewhere in his writings. He claims, for example, using vocabulary derived from his physical and metaphysical theories, that the soul is a “first actuality of a natural organic body” (De Anima ii 1, 412b5–6), that it is a “substance as form of a natural body which has life in potentiality” (De Anima ii 1, 412a20–1) and, similarly, that it “is a first actuality of a natural body which has life in potentiality” (De Anima ii 1, 412a27–8), all claims which apply to plants, animals an…"
         },
         {
           "corpus_id": "sep",
-          "title": "william-auvergne",
-          "url": "https://plato.stanford.edu/entries/william-auvergne/",
-          "score": 0.025251057,
-          "snippet": "william-auvergne  According to William, souls are among the simplest of created substances. Nevertheless, like all created substances, they must involve some kind of composition. This composition cannot be a bodily composition, of course, since they are not bodies and thus cannot be divided into bodily parts. According to Avicebron, as well as some of William's contemporaries, souls are composite in the sense that they are composites of form and matter, though not a matter that involves physical dimensions, but rather what some called “spiritual matter.” This view is part of the doctrine now t…"
+          "title": "radulphus-brito",
+          "url": "https://plato.stanford.edu/entries/radulphus-brito/",
+          "score": 0.027966488,
+          "snippet": "radulphus-brito  Most of these works are also extant only in manuscript. There are editions in progress of 1 and 4. [4] --> Only 7 (QE-2008) and 12 (QDc-2016) have been fully edited. Regarding 3, the questions on De anima I (QDA-2012-I) and on De anima III (QDA-1974-III) are fully edited, and there is a partial edition of the questions on De anima II (QDA-2012-II). Finally, there are partial editions of 1, 4–6 and  8.[3]"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-psychology",
           "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
           "score": 1.0,
-          "snippet": "aristotle-psychology  Aristotle (384–322 BC) was born in Macedon, in what is now northern Greece, but spent most of his adult life in Athens. His life in Athens divides into two periods, first as a member of Plato’s Academy (367–347) and later as director of his own school, the Lyceum (334–323). The intervening years were spent mainly in Assos and Lesbos, and briefly back in Macedon. His years away from Athens were predominantly taken up with biological research and writing. Judged on the basis of their content, Aristotle’s most important psychological writings probably belong to his second re…"
+          "snippet": "aristotle-psychology  Aristotle approaches his account of the nutritive soul by relying on a methodological precept which informs much of his psychological theorizing, namely that a capacity is individuated by its objects, so that, e.g., perception is distinguished from mind by being arrayed toward sensible qualities rather than intelligible forms (De Anima ii 4, 415a20–21). This induces him to offer what may sound initially like a pedestrian observation, that in nutrition there are three components, “that which is nourished, that by which it is nourished, and what nourishes (i.e. that which e…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-psychology",
           "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
           "score": 1.0,
-          "snippet": "aristotle-psychology  Because of the long tradition of exposition which has developed around Aristotle’s De Anima, the interpretation of even its most central theses is sometimes disputed. Moreover, because of its evident affinities with some prominent approaches in contemporary philosophy of mind, Aristotle’s psychology has received renewed interest and has incited intense interpretative dispute in recent decades. Consequently, this entry proceeds on two levels. The main article recounts the principal and distinctive claims of Aristotle’s psychology, avoiding so far as possible exegetical con…"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "aristotle-psychology",
-          "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
-          "score": 1.0,
-          "snippet": "aristotle-psychology  Aristotle investigates psychological phenomena primarily in De Anima and a loosely related collection of short works called the Parva Naturalia, whose most noteworthy pieces are De Sensu and De Memoria. He also touches upon psychological topics, often only incidentally, in his ethical, political, and metaphysical treatises, as well as in his scientific writings, especially De Motu Animalium. The works in the Parva Naturalia are, in comparison with De Anima, empirically oriented, investigating, as Aristotle says, “the phenomena common to soul and body” (De Sensu 1, 436a6–8…"
+          "snippet": "aristotle-psychology  This much, however, does not explain how perception occurs. Aristotle claims that perception is best understood on the model of hylomorphic change generally: just as a house changes from blue to white when acted upon by the agency of a painter applying paint, so “perception comes about with &lt;an organ’s&gt; being changed and affected … for it seems to be a kind of alteration” (De Anima ii 5, 416b33–34). So in line with his general account of alteration, Aristotle treats perception as a case of interaction between two suitable agents: objects capable of acting and capaci…"
         },
         {
           "corpus_id": "sep",
           "title": "dualism",
           "url": "https://plato.stanford.edu/entries/dualism/",
           "score": 1.0,
-          "snippet": "dualism  This entry concerns dualism in the philosophy of mind. The term ‘dualism’ has a variety of uses in the history of thought. In general, the idea is that, for some particular domain, there are two fundamental kinds or categories of things or principles. In theology, for example a ‘dualist’ is someone who believes that Good and Evil – or God and the  Devil – are independent and more or less equal forces in the world. Dualism contrasts with monism, which is the theory that there is only one fundamental kind, category of thing or principle; and, rather less commonly, with pluralism, which …"
+          "snippet": "dualism  The more modern versions of dualism have their origin in Descartes’ Meditations, and in the debate that was consequent upon Descartes’ theory. Descartes was a substance dualist. He believed that there were two kinds of substance: matter, of which the essential property is that it is spatially extended; and mind, of which the essential property is that it thinks. Descartes’ conception of the relation between mind and body was quite different from that held in the Aristotelian tradition. For Aristotle, there is no exact science of matter. How matter behaves is essentially affected by th…"
         },
         {
           "corpus_id": "sep",
           "title": "dualism",
           "url": "https://plato.stanford.edu/entries/dualism/",
           "score": 1.0,
-          "snippet": "dualism  The mind-body problem is the problem: what is the relationship between mind and body? Or alternatively: what is the relationship between mental properties and physical properties?"
+          "snippet": "dualism  It is common for modern Aristotelians, who otherwise have a high view of Aristotle’s relevance to modern philosophy, to treat this argument as being of purely historical interest, and not essential to Aristotle’s system as a whole. They emphasize that he was not a ‘Cartesian’ dualist, because the intellect is an aspect of the soul and the soul is the form of the body, not a separate substance. Kenny (1989) argues that Aristotle’s theory of mind as form gives him an account similar to Ryle (1949), for it makes the soul equivalent to the dispositions possessed by a living body. This ‘an…"
         },
         {
           "corpus_id": "sep",
           "title": "dualism",
           "url": "https://plato.stanford.edu/entries/dualism/",
           "score": 1.0,
-          "snippet": "dualism  Humans have (or seem to have) both physical properties and mental properties. People have (or seem to have)the sort of properties attributed in the physical sciences. These physical properties include size, weight, shape, colour, motion through space and time, etc. But they also have (or seem to have) mental properties, which we do not attribute to typical physical objects These properties involve consciousness (including perceptual experience, emotional experience, and much else), intentionality (including beliefs, desires, and much else), and they are possessed by a subject or a sel…"
+          "snippet": "dualism  There are two important concepts deployed in this notion. One is that of substance, the other is the dualism of these substances. A substance is characterized by its properties, but, according to those who believe in substances, it is more than the collection of the properties it possesses, it is the thing which possesses them. So the mind is not just a collection of thoughts, but is that which thinks, an immaterial substance over and above its immaterial states. Properties are the properties of objects. If one is a property dualist, one may wonder what kinds of objects possess the ir…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-metaphysics",
           "url": "https://plato.stanford.edu/entries/aristotle-metaphysics/",
           "score": 1.0,
-          "snippet": "aristotle-metaphysics  The first major work in the history of philosophy to bear the title “Metaphysics” was the treatise by Aristotle that we have come to know by that name. But Aristotle himself did not use that title or even describe his field of study as ‘metaphysics’; the name was evidently coined by the first century C.E. editor who assembled the treatise we know as Aristotle’s Metaphysics out of various smaller selections of Aristotle’s works. The title ‘metaphysics’—literally, ‘after the Physics’—very likely indicated the place the topics discussed therein were intended to occupy in th…"
+          "snippet": "aristotle-metaphysics  At this point there appears to be a close connection between the essence of a substance and its species (eidos), and this might tempt one to suppose that Aristotle is identifying the substance of a thing (since the substance of a thing is its essence) with its species. (A consequence of this idea would be that Aristotle is radically altering his conception of the importance of the species, which in the Categories he called a secondary substance, that is, a substance only in a secondary sense.) But such an identification would be a mistake, for two reasons. First, Aristot…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-metaphysics",
           "url": "https://plato.stanford.edu/entries/aristotle-metaphysics/",
           "score": 1.0,
-          "snippet": "aristotle-metaphysics  References in the text to the books of Aristotle’s Metaphysics are given by Greek letter. In order (with the corresponding Roman numeral given in parentheses) these are: Α (I), α (II), Β (III), Γ (IV), Δ (V), Ε (VI), Ζ (VII), Η (VIII), Θ (IX), I (X), Κ (XI), Λ (XII), Μ (XIII), Ν (XIV). Translations are taken from Reeve (2016)."
+          "snippet": "aristotle-metaphysics  The role of form in this hylomorphic context is the topic of Ζ.7–9. (Although these chapters were almost certainly not originally included in Book Ζ—there is no reference to them, for example, in the summary of Ζ given in Η.1, which skips directly from Ζ.6 to Ζ.10—they provide a link between substance and form and thus fill what would otherwise be a gap in the argument.) Since individual substances are seen as hylomorphic compounds, the role of matter and form in their generation must be accounted for. Whether we are thinking of natural objects, such as plants and animal…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle-metaphysics",
           "url": "https://plato.stanford.edu/entries/aristotle-metaphysics/",
           "score": 1.0,
-          "snippet": "aristotle-metaphysics  Aristotle himself described his subject matter in a variety of ways: as ‘first philosophy’, or ‘the study of being qua being’, or ‘wisdom’, or ‘theology’. A comment on these descriptions will help to clarify Aristotle’s topic."
+          "snippet": "aristotle-metaphysics  But Aristotle rejects this answer as impossible (1029a28), claiming that substance must be “separable” (chôriston) and “this something” (tode ti, sometimes translated “some this”), and implying that matter fails to meet this requirement. Precisely what the requirement amounts to is a matter of considerable scholarly debate, however. A plausible interpretation runs as follows. Separability has to do with being able to exist independently (x is separable from y if x is capable of existing independently of y), and being a this something means being a determinate individual.…"
         },
         {
           "corpus_id": "sep",
           "title": "aristotle",
           "url": "https://plato.stanford.edu/entries/aristotle/",
           "score": 1.0,
-          "snippet": "aristotle  Aristotle (384–322 B.C.E.) numbers among the greatest philosophers of all time. Judged solely in terms of his philosophical influence, only Plato is his peer: Aristotle’s works shaped centuries of philosophy from Late Antiquity through the Renaissance, and even today continue to be studied with keen, non-antiquarian interest. A prodigious researcher and writer, Aristotle left a great body of work, perhaps numbering as many as two-hundred treatises, from which approximately thirty-one  survive.[1]   His extant writings span a wide range of disciplines, from logic, metaphysics and phi…"
+          "snippet": "aristotle  As Aristotle sets them out, these problems take the form of puzzles, or aporiai, regarding whether and if so how time exists (Phys. 218a8–30). If we say that time is the totality of the past, present and future, we immediately find someone objecting that time exists but that the past and future do not. According to the objector, only the present exists. If we retort then that time is what did exist, what exists at present and what will exist, then we notice first that our account is insufficient: after all, there are many things which did, do, or will exist, but these are things tha…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 1.0,
+          "snippet": "aristotle  Aristotle rejects this approach for several reasons, including most notably that he thinks that certain non-essential features satisfy the definition. Thus, beyond the categorical and logical features (everyone is such as to be either identical or not identical with the number nine), Aristotle recognizes a category of properties which he calls idia (Cat. 3a21, 4a10; Top. 102a18–30, 134a5–135b6), now usually known by their Medieval Latin rendering propria. Propria are non-essential properties which flow from the essence of a kind, such that they are necessary to that kind even withou…"
         }
       ],
       "source_score": {
@@ -4117,7 +4060,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2588,
+      "search_ms": 2608,
       "corpora_hit": [
         "sep"
       ],
@@ -4309,7 +4252,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3871,
+      "search_ms": 3963,
       "corpora_hit": [
         "sep"
       ],
@@ -4465,14 +4408,21 @@
           "title": "xunzi",
           "url": "https://plato.stanford.edu/entries/xunzi/",
           "score": 1.0,
-          "snippet": "xunzi  Xunzi 荀子 (third century BCE) was a Confucian philosopher, sometimes reckoned as the third of the three great classical Confucians (after Confucius and Mencius). For most of imperial Chinese history, however, Xunzi was a bête noire who was typically cited as an example of a Confucian who went astray by rejecting Mencian convictions. Only in the last few decades has Xunzi been widely recognized as one of China’s greatest thinkers."
+          "snippet": "xunzi  In Xunzi, “Human Nature is Evil” is framed as an argument with Mencius (who was probably long dead), and takes the view that the xing of human beings is the very opposite of shan, namely e. The basic meaning of e is close to “detestable” (as a transitive verb, wu 惡 means “to hate”); the translation “evil” is acceptable only with the understanding that something like an Augustinian conception of evil is not intended. (Some scholars opt for “bad”, another standard antonym of “good” in English.) But in prosecuting this position, Xunzi uses xing in a fundamentally different sense: “What is …"
         },
         {
           "corpus_id": "sep",
           "title": "xunzi",
           "url": "https://plato.stanford.edu/entries/xunzi/",
           "score": 1.0,
-          "snippet": "xunzi  The name Xunzi means Master Xun and refers to Xun Kuang 荀況, who was renowned in his day as “the most revered of teachers” (zui wei laoshi 最爲老師). His precise dates are unknown, and extant sources contradict one another: in particular, there is disagreement as to whether he journeyed to the philosophical center of Qi 齊 at the age of fifteen sui 歲 (i.e. thirteen or fourteen years of age) or fifty sui (forty-eight or forty-nine). The former figure is more plausible (Goldin 1999: 110n.13; Knoblock 1982–83: 33–34), and would indicate a year of birth sometime around 310 BCE All we can surmise …"
+          "snippet": "xunzi  What prompted Xunzi to dissent from Mencius’s characterization of xing as good if he ultimately agreed with Mencius’s larger view: that people can perfect themselves and that such an achievement requires great exertion and self-motivation? Perhaps Xunzi wished to highlight his conviction that the proper models for moral behavior lie outside the self, which is fundamentally opposed to a Mencian notion of Four Beginnings (siduan 四端) lodged within the human heart (e.g., Mencius 2A.6). Whereas Mencians have always emphasized looking inwards for moral direction—sometimes complicated by the a…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "mencius",
+          "url": "https://plato.stanford.edu/entries/mencius/",
+          "score": 1.0,
+          "snippet": "mencius  Ironically, due to the pervasive influence of Buddhism, Neo–Confucian philosophers often reinterpreted Mencius’s views in the light of Buddhist metaphysical and ethical concepts. Confucians adopted the view that ethical cultivation was a matter of becoming enlightened (wù) about the fundamental Pattern (lǐ, also translated principle) of the universe and thereby overcoming the selfishness (sī) of human desires (rén yù) and forming one body (yì tǐ) with everyone and everything else. However, these terms are either absent or used in different senses in the texts of Confucius and  Mencius…"
         },
         {
           "corpus_id": "sep",
@@ -4483,38 +4433,31 @@
         },
         {
           "corpus_id": "sep",
-          "title": "mencius",
-          "url": "https://plato.stanford.edu/entries/mencius/",
+          "title": "ethics-chinese",
+          "url": "https://plato.stanford.edu/entries/ethics-chinese/",
           "score": 1.0,
-          "snippet": "mencius  “Mencius” is a Latinization (coined by Jesuit missionaries in the 17th century) of the Chinese “Mengzi,” meaning Master Meng. His full name was “Meng Ke.” Our main access to Mencius’s thinking is through the eponymous collection of his dialogues, debates, and sayings, the Mengzi (Mencius). This work was probably compiled by his disciples or disciples of his disciples. It was subsequently edited and shortened by Zhao Qi in the second century C.E., who also wrote a commentary on the text. This version of the text was used by subsequent scholars and is the version available to us nowaday…"
+          "snippet": "ethics-chinese  The passage demonstrates one characteristic of the text that is pertinent to Mencius’s response to Mohism. In contrast to the Analects, the ruler’s duties to care for his people are more frequently discussed and play a more prominent role in the conception of a ruler’s moral excellence. Mencius is portrayed in this text as very much engaged in getting the kings of Chinese states to stop mistreating their subjects, to stop drafting their subjects into their wars of territorial expansion, and to avoid overtaxing them to finance their wars and lavish projects. At the same time, Me…"
         },
         {
           "corpus_id": "sep",
           "title": "ethics-chinese",
           "url": "https://plato.stanford.edu/entries/ethics-chinese/",
           "score": 1.0,
-          "snippet": "ethics-chinese  The tradition of Chinese ethical thought is centrally concerned with questions about how one ought to live: what goes into a worthwhile life, how to weigh duties toward family versus duties toward strangers, whether human nature is predisposed to be morally good or bad, how one ought to relate to the non-human world, the extent to which one ought to become involved in reforming the larger social and political structures of one’s society, and how one ought to conduct oneself when in a position of influence or power. The personal, social, and political are often intertwined in Ch…"
+          "snippet": "ethics-chinese  In the Xing E (“[Human] Nature is Bad”) chapter, Xunzi explicitly opposes his position on human nature to Mencius’s. He asserts that far from being good, human nature is bad because it includes a love of profit, envy and hatred, and desires of the eyes and ears that lead to violence and anarchy. To avoid these consequences of indulging our spontaneous desires and impulses, it takes wei (conscious activity or deliberate effort), models and teaching, and guidance through observing ritual and yi (standards of righteousness). Through such efforts, natural emotions and desires are t…"
         },
         {
           "corpus_id": "sep",
           "title": "ethics-chinese",
           "url": "https://plato.stanford.edu/entries/ethics-chinese/",
           "score": 1.0,
-          "snippet": "ethics-chinese  In the Analects 13.18, the Governor of She tells Confucius of a Straight Body who reported his father to the authorities for stealing a sheep. Confucius (Kongzi, best known in the West under his latinized name, lived in the 6th and 5th century B.C.E) replies that in his village, uprightness lies in fathers and sons covering up for each other. In the Euthyphro, Socrates encounters Euthyphro (whose name can be translated as “Straight thinker”), reputed for his religious knowledge and on his way to bring charges against his father for murder. The conversation between Socrates and …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "ethics-chinese",
-          "url": "https://plato.stanford.edu/entries/ethics-chinese/",
-          "score": 1.0,
-          "snippet": "ethics-chinese  Confucius gives an immediate practical answer in 13.18, but the reader and commentators have been left to weave together the various remarks about filiality (or as it is often called, “filial piety”) so as to present a rationale for that answer. These remarks quite often concern rather particular matters, as is the matter of turning in one’s father for stealing a sheep, and the implications for more general issues are ambiguous. Do fathers and sons cover up for each other on all occasions, no matter how serious, and if there is a cover-up, is there also an attempt to compensate…"
+          "snippet": "ethics-chinese  Besides the concepts of dao and junzi, the concept of ren is a unifying theme in the Analects. Before Confucius’s time, the concept of ren referred to the aristocracy of bloodlines, meaning something like the strong and handsome appearance of an aristocrat. But in the Analects the concept is of a moral excellence that anyone has the potential to achieve. Various translations have been given of ren. Many translations attempt to convey the idea of complete ethical virtue, connoting a comprehensive state of ethical excellence. In a number of places in the Analects the ren person i…"
         },
         {
           "corpus_id": "sep",
           "title": "song-ming-confucianism",
           "url": "https://plato.stanford.edu/entries/song-ming-confucianism/",
           "score": 1.0,
-          "snippet": "song-ming-confucianism  Confucian thought in China’s Song (960–1279 CE), Yuan (1279–1368 CE), and Ming (1368–1644 CE) dynasties is marked by concerted efforts to weave the ideas expressed in traditional Confucian texts into more coherent and theoretical worldviews, and to make more explicit what its advocates and practitioners take to be the Confucian tradition’s metaphysics and moral psychology, and to refute and curtail the influence of Buddhism and Daoism. Many anthologies and histories of Chinese philosophy treat the Song-Ming period as second only to the classical, pre-Qin period in terms…"
+          "snippet": "song-ming-confucianism  By locating our good nature in Pattern, however, Cheng Yi introduced new philosophical challenges. His view assumes that all human beings have Pattern at all times, and yet it is obvious that few if any human beings are good at all times, so there must be some way of explaining the pervasiveness of human moral failure. Furthermore, Pattern is shared by all beings, human or otherwise, so the nature that we identify with Pattern cannot by itself suffice to distinguish us from non-human things. Cheng’s response in brief was to posit a second sort of nature consisting of on…"
         },
         {
           "corpus_id": "sep",
@@ -4528,7 +4471,7 @@
           "title": "song-ming-confucianism",
           "url": "https://plato.stanford.edu/entries/song-ming-confucianism/",
           "score": 1.0,
-          "snippet": "song-ming-confucianism  Most of the leading Confucian thinkers in the Song, Yuan, and Ming dynasties are now described in English as Neo-Confucians, using a term of somewhat ambiguous scope and significance. In the broadest sense, “Neo-Confucian” refers to a thinker and practitioner of the Tang dynasty (618–907) or later who identified with and worked to revive Confucian values, beliefs, and practices after the rise of Buddhism in China. Construed more narrowly, “Neo-Confucian” refers to a subset of the above thinkers that belonged or traced much of their philosophical origins to an important …"
+          "snippet": "song-ming-confucianism  At the center of this Northern Song group were the brothers Cheng Hao (1032–1085) and Cheng Yi (1033–1107), who studied with both Zhou and Zhang but developed their own systems of thought that came to be reflected in almost every area of Neo-Confucianism. The Chengs offered different metaphysical frameworks to account for Zhang Zai’s conception of all things as parts of a family-like or body-like whole, developed a sophisticated, multi-faceted moral psychology of the major virtues, honed Confucian objections to Buddhism and Daoism, and advanced distinctive theories of p…"
         }
       ],
       "source_score": {
@@ -4556,7 +4499,7 @@
         "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 2375,
+      "search_ms": 2502,
       "corpora_hit": [
         "sep"
       ],
@@ -4705,21 +4648,28 @@
           "title": "theory-bioethics",
           "url": "https://plato.stanford.edu/entries/theory-bioethics/",
           "score": 1.0,
-          "snippet": "theory-bioethics  The relation between bioethics and moral theory is a complicated one. To start, we have philosophers as major contributors to the field of bioethics, and to many philosophers, their discipline is almost by definition a theoretical one. So when asked to consider the role of moral theorizing in bioethics, a natural position of such philosophers is that moral theory has a crucial, if not indispensable, role. At the same time, there are those who call into question the “applied ethics” model of bioethics. Roughly, on this model, one moral theory or other (e.g., utilitarianism, Ka…"
+          "snippet": "theory-bioethics  There are other approaches to bioethics that embody alternatives to high theory. The first, casuistry, can in some sense be understood as a critical response to early versions of Beauchamp and Childress’ four principles approach. Recall a certain response to at least early versions of Beauchamp and Childress’ approach, namely that that approach was too abstract and that its alleged deductivism was objectionable. Advocates of casuistry, or case-based reasoning, objected to what they at least took to be the unidirectional “downward” movement from principles to cases (Arras 2017…"
         },
         {
           "corpus_id": "sep",
           "title": "theory-bioethics",
           "url": "https://plato.stanford.edu/entries/theory-bioethics/",
           "score": 1.0,
-          "snippet": "theory-bioethics  This entry starts by addressing the complexities surrounding the very notions of bioethics and moral theory. From there, we explore the question of what doing applied ethics amounts to. Moving on, the discussion centers upon the main methodological movements in bioethics’ relatively short history: its appeal to high moral theory, the emergence of mid-level approaches to bioethics, and approaches to bioethics that attribute a lesser role to theoretical tools, or no role at all. Feminist approaches to bioethics are treated next, followed by a look at the significance of moral t…"
+          "snippet": "theory-bioethics  The move to what is often referred to as mid-level theorizing was (partly) a result of the challenges with high theory just discussed, and manifested most prominently by the 1979 publication of Tom Beauchamp and James Childress’ influential Principles of Biomedical Ethics (PBE). The approach set out in that book, and its revised versions appearing in the book’s subsequent editions, feature mid-level moral norms, which take the form of four moral  principles.[6]  Beauchamp and Childress’ four principles are:"
         },
         {
           "corpus_id": "sep",
           "title": "theory-bioethics",
           "url": "https://plato.stanford.edu/entries/theory-bioethics/",
           "score": 1.0,
-          "snippet": "theory-bioethics  The question of the relation between moral theory and bioethics is made difficult by a number of factors, not the least of which is the absence of any one account of what constitutes philosophical theory. There are, of course, the standard moral theories of introduction to moral philosophy—consequentialism, deontology, and virtue ethics. And we also speak of mid-level theories, such as moral principlism and casuistry, though the extent to which such approaches are strictly speaking theoretical is somewhat unsettled. What do we mean by moral theory? What characterizes an appro…"
+          "snippet": "theory-bioethics  This, at least, was the impression given by a diagram appearing in the first edition of the book (Beauchamp &amp; Childress 1979: 5), which many took to endorse such a top down model. The approach was met with resistance, with those in favor of case-based reasoning (also known as casuistry) objecting to what at least appeared to be a unidirectional movement from principles to cases. Intuitive, case-based judgments seemed to be left out of the picture, and the possibility of a dialectical relationship between principles and our responses to cases ignored. In fact, and as a res…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "feminist-bioethics",
+          "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
+          "score": 1.0,
+          "snippet": "feminist-bioethics  As the preceding discussion illustrates, feminists have participated in scholarly discussion of virtually all the major topics in bioethics.  Their contributions are distinctive not least because of the foundational relationship of feminist scholarship to activism, which means that the scholarly treatment of these topics is grounded in a critique of the background norms and conditions that produce observable and persistent injustices in medicine and healthcare. This is one reason why feminist bioethical theory tends to have a practical orientation. Its criticisms most chara…"
         },
         {
           "corpus_id": "sep",
@@ -4733,49 +4683,42 @@
           "title": "feminist-bioethics",
           "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
           "score": 1.0,
-          "snippet": "feminist-bioethics  Bioethics and second wave feminism both independently gathered momentum during the 1960s, a pivotal era for social transformation in many areas of the world. Something that might be called the bioethics “movement” was first triggered by widespread protest against such gross abuses of medical authority as the Nazi doctors’ experiments on unconsenting concentration camp inmates, culminating in the Nuremberg Doctors’ Trial of 1946 (Weindling 2004), and the Tuskegee Syphilis Study, a forty-year study of poor black men with untreated syphilis in the American Deep South (Reverby …"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "feminist-bioethics",
-          "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
-          "score": 1.0,
-          "snippet": "feminist-bioethics  Many professional medical and allied health organizations require bioethics training for certification, while regulations in the United States and other countries now expect medical schools to include research ethics in their curricula. A few bioethicists have even become media celebrities."
+          "snippet": "feminist-bioethics  Feminist bioethics’ theoretical approaches also take some distinctive approaches to ontology and epistemology that challenge traditional philosophical positions on the way that knowledge, subjectivity and moral agency are mobilized within ethical discourse. The search for a more satisfactory moral grounding for bioethics has taken feminist scholars in several directions. A few favor dispensing with principles entirely and reconstituting bioethics through narrative case-specific interpretation along the lines pioneered by Nel Noddings (1984) and her followers. Others, withou…"
         },
         {
           "corpus_id": "sep",
           "title": "publichealth-ethics",
           "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
           "score": 1.0,
-          "snippet": "publichealth-ethics  At its core, public health is concerned with promoting and protecting the health of  populations,[1]  broadly understood. Promoting and protecting the health of populations often involves or requires coordinated action on the part of governments. In the United States, for example, the Centers for Disease Control and Prevention, the Food and Drug Administration, the Environmental Protection Agency and the Consumer Protection Agency are, at least in part, public health agencies. All nations and most states or provinces and municipalities have health departments whose functio…"
+          "snippet": "publichealth-ethics  There is no standard way of organizing the ethics of clinical practice, public health, and biomedical science. These different fields are often presented as discrete areas of inquiry that fall under the broader, umbrella term of bioethics, but sometimes bioethics is presented as the equivalent of medical ethics or in contrast to public health or population-level bioethics. Whichever approach is preferred, a key question remains: what distinguishes public health ethics from these other fields, and especially from the ethics of clinical care? The answer lies in two character…"
         },
         {
           "corpus_id": "sep",
           "title": "publichealth-ethics",
           "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
           "score": 1.0,
-          "snippet": "publichealth-ethics  This entry provides a general lay of the land of the central ethical issues and challenges that arise in public health policies and practices and that drive the literature in public health ethics. Some issues are conceptual: what is the public, and in what sense can a public be healthy? Other questions concern the moral foundations of the enterprise: what sort of value does public health have, and what morally justifies efforts to promote public health?"
+          "snippet": "publichealth-ethics  In large part in response to these difficulties with cost-benefit analysis and treating maximization as the relevant principle, scholars in public health ethics have defended alternative principles of distribution. These principles mirror familiar debates in the literature on distributive justice. Although some theorists argue for some form of equality in the distribution of health-related resources (Marmot 2005; Wilkinson 2005), including equality of opportunities (Daniels 2004, 2008), much of the literature is taken up with debates between prioritarianism and sufficienta…"
         },
         {
           "corpus_id": "sep",
           "title": "publichealth-ethics",
           "url": "https://plato.stanford.edu/entries/publichealth-ethics/",
           "score": 1.0,
-          "snippet": "publichealth-ethics  The literature in public health ethics often falls into two big categories. The first category focuses on the goals, targets and priorities of public health policies and programs from the standpoint of justice. Many of the issues engage familiar debates between utilitarian and various egalitarian approaches to the allocation of resources and the distribution of benefits and burdens (see also the entry on  justice);  in health policy circles these issues often play out as tensions between efficiency and equity. The justice literature in public health ethics also addresses b…"
+          "snippet": "publichealth-ethics  Several ethics frameworks directed at assisting policymakers in taking this broader perspective attempt to incorporate both value-for-money and other justice-based commitments in one guidance document (see Ottersen et al. 2014). Relatedly, there is increasing interest in multi-criteria decision analysis (MCDA) in public health, a formalized methodology in the operations research tradition that allows for systematic attention to a range of considerations inclusive of both efficiency and equity criteria. There is also continuing interest in incorporating equity- based concer…"
         },
         {
           "corpus_id": "sep",
           "title": "technology",
           "url": "https://plato.stanford.edu/entries/technology/",
           "score": 1.0,
-          "snippet": "technology  If philosophy is the attempt “to understand how things in the broadest possible sense of the term hang together in the broadest possible sense of the term”, as Sellars (1962) put it, philosophy should not ignore technology. It is largely by technology that contemporary society hangs together. It is hugely important not only as an economic force but also as a cultural force. Indeed during the last two centuries, when it gradually emerged as a discipline, philosophy of technology has mostly been concerned with the meaning of technology for, and its impact on, society and culture, rat…"
+          "snippet": "technology  The scope and the agenda for ethics of technology to a large extent depend on how technology is conceptualized. The second half of the twentieth century has witnessed a richer variety of conceptualizations of technology that move beyond the conceptualization of technology as a neutral tool, as a world view or as a historical necessity. This includes conceptualizations of technology as a political phenomenon (Winner, Feenberg, Sclove), as a social activity (Latour, Callon, Bijker and others in the area of science and technology studies), as a cultural phenomenon (Ihde, Borgmann), as…"
         },
         {
           "corpus_id": "sep",
           "title": "technology",
           "url": "https://plato.stanford.edu/entries/technology/",
           "score": 1.0,
-          "snippet": "technology  The entry starts with a brief historical overview, then continues with a presentation of the themes on which modern analytic philosophy of technology focuses. This is followed by a discussion of the societal and ethical aspects of technology, in which some of the concerns of humanities philosophy of technology are addressed. This twofold presentation takes into consideration the development of technology as the outcome of a process originating within and guided by the practice of engineering, by standards on which only limited societal control is exercised, as well as the consequen…"
+          "snippet": "technology  Philosophical reflection on technology is about as old as philosophy itself. Our oldest testimony is from ancient Greece. There are four prominent themes. One early theme is the thesis that technology learns from or imitates nature (Plato, Laws X 899a ff.). According to Democritus, for example, house-building and weaving were first invented by imitating swallows and spiders building their nests and nets, respectively (Diels 1903 and Freeman 1948: 154).  Perhaps the oldest extant source for the exemplary role of nature is Heraclitus (Diels 1903 and Freeman 1948: 112).  Aristotle ref…"
         }
       ],
       "source_score": {
@@ -4805,7 +4748,7 @@
         "ratio": 0.8888889
       },
       "embed_ms": 0,
-      "search_ms": 1790,
+      "search_ms": 1812,
       "corpora_hit": [
         "sep"
       ],

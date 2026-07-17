@@ -230,7 +230,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
         ("ppr_struct_spawn", FLAG_PPR_EXPAND),
         ("ppr_struct_expand", FLAG_PPR_EXPAND),
-        ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "off", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article) replacing the cap/reserve/truncate heuristic pile. A/B flag for the composition architecture." }),
+        ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "on", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article with within-article strength floor) replacing the cap/reserve/truncate heuristic pile. =0/false/off/no restores the legacy stack." }),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "see helper", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),

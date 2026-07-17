@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-core-v2",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784253526,
+  "started_at_unix": 1784307017,
   "results": [
     {
       "question_id": "factual_einstein_1905",
@@ -50,27 +50,6 @@
           "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
           "score": 1.0,
           "snippet": "Albert Einstein  laid out the implications of general relativity for the modeling of the structure and evolution of the universe as a whole."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
-          "score": 1.0,
-          "snippet": "Albert Einstein was born in Ulm, in the Kingdom of Württemberg in the German Empire, on 14 March 1879. His parents, secular Ashkenazi Jews, were Hermann Einstein, a salesman and engineer, and Pauline Koch. In 1880, the family moved to Munich 's borough of Ludwigsvorstadt-Isarvorstadt, where Einstein's father and his uncle Jakob founded Elektrotechnische Fabrik J. Einstein & Cie, a company that manufactured electrical equipment based on direct current. He often related a formative event from his youth, when he was sick in bed and his father brought him a compass. This sparked his lifelong fasci…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
-          "score": 1.0,
-          "snippet": "Albert Einstein  In 1894, Hermann and Jakob's company tendered for a contract to install electric lighting in Munich, but without success—they lacked the capital that would have been required to update their technology from direct current to the more efficient, alternating current alternative. The failure of their bid forced them to sell their Munich factory and search for new opportunities elsewhere. The Einstein family moved to Italy, first to Milan and a few months later to Pavia, where they settled in Palazzo Cornazzani. Einstein, then fifteen, stayed behind in Munich in order to finish hi…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
-          "score": 0.025000002,
-          "snippet": "Albert Einstein  While in Italy as a teenager, he wrote an essay entitled \"On the Investigation of the State of the Ether in a Magnetic Field\"."
         },
         {
           "corpus_id": "wikipedia",
@@ -129,7 +108,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 4966,
+      "search_ms": 5881,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -167,27 +146,6 @@
           "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Abstract",
           "score": 0.06956522,
           "snippet": "Yalta Conference  Europe, within a few years, with the Cold War dividing the continent, the conference became a subject of intense controversy.  Yalta was the second of three major wartime conferences among the Big Three. It was preceded by the Tehran Conference in November 1943 and was followed by the Potsdam Conference in July of the same year, 1945. It was also preceded by a conference in Moscow in October 1944, not attended by Roosevelt, in which Churchill and Stalin had spoken about Western and Soviet spheres of influence in Europe."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Yalta Conference",
-          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
-          "score": 1.0,
-          "snippet": "Yalta Conference  During the Yalta Conference, the Western Allies had liberated all of France and Belgium and were fighting on the western border of Germany. In the east, Soviet forces were 65 km (40 mi) from Berlin, having already pushed back the Germans from Poland, Romania, and Bulgaria. There was no longer a question regarding German defeat. The issue was the new shape of postwar Europe."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Yalta Conference",
-          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
-          "score": 1.0,
-          "snippet": "Yalta Conference  Romania, and Bulgaria. There was no longer a question regarding German defeat. The issue was the new shape of postwar Europe.  The French leader General Charles de Gaulle was not invited to either the Yalta or Potsdam Conferences, a diplomatic slight that was the occasion for deep and lasting resentment. De Gaulle attributed his exclusion from Yalta to the longstanding personal antagonism towards him by Roosevelt, but the Soviets had also objected to his inclusion as a full participant. However, the absence of French representation at Yalta also meant that extending an invita…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Yalta Conference",
-          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
-          "score": 0.06671815,
-          "snippet": "Yalta Conference  highly problematic since he would have felt honor-bound to insist that all issues agreed at Yalta in his absence be reopened.  The initiative for calling a second \"Big Three\" conference had come from Roosevelt, who hoped for a meeting before the US presidential elections in November 1944 but pressed for a meeting early in 1945 at a neutral location in the Mediterranean. Malta, Cyprus, Sicily, Athens, and Jerusalem were all suggested. Stalin, insisting that his doctors opposed any long trips, rejected those options. He proposed instead for them meet at the Black Sea resort of …"
         },
         {
           "corpus_id": "wikipedia",
@@ -233,10 +191,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "European Union",
-          "url": "https://en.wikipedia.org/wiki/European_Union",
-          "score": 0.025806451,
-          "snippet": "a new wave of global international institutions like the United Nations (founded 1945) or the Bretton Woods System (1944).  In 1943 at the Moscow Conference and Tehran Conference, plans to establish joint institutions for a post-war world and Europe increasingly became a part of the agenda. This led to a decision at the Yalta Conference in 1944 to form a European Advisory Commission, later replaced by the Council of Foreign Ministers and the Allied Control Council, following the German surrender and the Potsdam Agreement in 1945."
+          "title": "Western Allied invasion of Germany",
+          "url": "https://en.wikipedia.org/wiki/Western_Allied_invasion_of_Germany#Occupation_process",
+          "score": 1.0,
+          "snippet": "Western Allied invasion of Germany  When Allied soldiers arrived in a town, its leaders and remaining residents typically used white flags, bedsheets, and tablecloths to signal surrender. The officer in charge of the unit capturing the area, typically a company or battalion, accepted responsibility over the town. Soldiers posted copies of General Eisenhower's Proclamation No. 1, which began with \"We come as a victorious army, not as oppressors.\" The proclamation demanded compliance with all orders by the commanding officer, instituted a strict curfew and limited travel and confiscated all comm…"
         }
       ],
       "source_score": {
@@ -259,7 +217,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2748,
+      "search_ms": 3672,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -413,16 +371,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "History of special relativity",
-          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Mass_and_energy",
           "score": 1.0,
-          "snippet": "History of special relativity  The history of special relativity consists of many theoretical results and empirical findings obtained by Albert A. Michelson, Hendrik Lorentz, Henri Poincaré and others. It culminated in the theory of special relativity proposed by Albert Einstein and subsequent work of Max Planck, Hermann Minkowski and others."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "History of special relativity",
-          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Introduction",
-          "score": 1.0,
-          "snippet": "History of special relativity  Although Isaac Newton based his physics on absolute time and space, he also adhered to the principle of relativity of Galileo Galilei restating it precisely for mechanical systems. This can be stated as: as far as the laws of mechanics are concerned, all observers in inertial motion are equally privileged, and no preferred state of motion can be attributed to any particular inertial observer. However, as to electromagnetic theory and electrodynamics, during the 19th century the wave theory of light as a disturbance of a \"light medium\" or luminiferous aether was w…"
+          "snippet": "History of special relativity  mass (1900b) and his own paper were mainly the same, although the physical interpretation was different in light of relativity.  Kurd von Mosengeil (1906) by extending Hasenöhrl's calculation of black-body radiation in a cavity, derived the same expression for the additional mass of a body due to electromagnetic radiation as Hasenöhrl. Hasenöhrl's idea was that the mass of bodies included a contribution from the electromagnetic field, he imagined a body as a cavity containing light. His relationship between mass and energy, like all other pre-Einstein ones, conta…"
         },
         {
           "corpus_id": "wikipedia",
@@ -433,24 +384,31 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Tests of general relativity",
-          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity",
+          "title": "History of special relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Introduction",
           "score": 1.0,
-          "snippet": "Tests of general relativity serve to establish observational evidence for the theory of general relativity. The first three tests, proposed by Albert Einstein in 1915, concerned the \"anomalous\" precession of the perihelion of Mercury, the bending of light in gravitational fields, and the gravitational redshift. The precession of Mercury was already known; experiments showing light bending in accordance with the predictions of general relativity were performed in 1919, with increasingly precise measurements made in subsequent tests; and scientists claimed to have measured the gravitational reds…"
+          "snippet": "History of special relativity  preliminary transformation formulas, resulting in an exact set of equations that are now called the Lorentz transformations.  A little later in the same year Albert Einstein published his original paper on special relativity in which, again based on the relativity principle, he independently derived and radically reinterpreted the Lorentz transformations by changing the fundamental definitions of space and time intervals, while abandoning the absolute simultaneity of Galilean kinematics, thus avoiding the need for any reference to a luminiferous aether in classic…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Tests of general relativity",
-          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity",
+          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Post-Newtonian_tests_of_gravity",
           "score": 1.0,
-          "snippet": "Tests of general relativity  In the 1970s, scientists began to make additional tests, starting with Irwin Shapiro's measurement of the relativistic time delay in radar signal travel time near the Sun. Beginning in 1974, Hulse, Taylor and others studied the behaviour of binary pulsars experiencing much stronger gravitational fields than those found in the Solar System. Both in the weak field limit and with the stronger fields present in systems of binary pulsars the predictions of general relativity have been extremely well tested. In February 2016, the Advanced LIGO team announced that they ha…"
+          "snippet": "Tests of general relativity  Early tests of general relativity were hampered by the lack of viable competitors to the theory: it was not clear what sorts of tests would distinguish it from its competitors. General relativity was the only known relativistic theory of gravity compatible with special relativity and observations. Moreover, it is an extremely simple and elegant theory. This changed with the introduction of Brans–Dicke theory in 1960. This theory is arguably simpler, as it contains no dimensionful constants, and is compatible with a version of Mach's principle and Dirac's large numb…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Tests of general relativity",
-          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Equivalence_principle",
           "score": 1.0,
-          "snippet": "Tests of general relativity  in 1959 tested general relativity in the weak gravitational field limit, severely limiting possible deviations from the theory.  In the 1970s, scientists began to make additional tests, starting with Irwin Shapiro 's measurement of the relativistic time delay in radar signal travel time near the Sun. Beginning in 1974, Hulse, Taylor and others studied the behaviour of binary pulsars experiencing much stronger gravitational fields than those found in the Solar System. Both in the weak field limit (as in the Solar System) and with the stronger fields present in syste…"
+          "snippet": "Tests of general relativity  The equivalence principle, in its simplest form, asserts that the trajectories of falling bodies in a gravitational field should be independent of their mass and internal structure, provided they are small enough not to disturb the environment or be affected by tidal forces. This idea has been tested to extremely high precision by Eötvös torsion balance experiments, which look for a differential acceleration between two test masses. Constraints on this, and on the existence of a composition-dependent fifth force or gravitational Yukawa interaction are very strong, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tests of general relativity",
+          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Gravitational_redshift_and_time_dilation",
+          "score": 1.0,
+          "snippet": "Tests of general relativity  experiments testing general relativity. The experiment was later improved to better than the 1% level by Pound and Snider.  The blueshift of a falling photon can be found by assuming it has an equivalent mass based on its frequency E = hf (where h is the Planck constant) along with E = mc, a result of special relativity. Such simple derivations ignore the fact that in general relativity the experiment compares clock rates, rather than energies. In other words, the \"higher energy\" of the photon after it falls can be equivalently ascribed to the slower running of clo…"
         },
         {
           "corpus_id": "wikipedia",
@@ -469,9 +427,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Minkowski space",
-          "url": "https://en.wikipedia.org/wiki/Minkowski_space",
+          "url": "https://en.wikipedia.org/wiki/Minkowski_space#Abstract",
           "score": 1.0,
-          "snippet": "Minkowski space  Equipped with this inner product, the mathematical model of spacetime is called Minkowski space. The group of transformations for Minkowski space that preserves the spacetime interval is the Poincaré group."
+          "snippet": "Minkowski space  relativity, where motion causes time dilation changing the scale applied to the frame in motion and shifts the phase of light.  Spacetime is equipped with an indefinite non-degenerate bilinear form, called the Minkowski metric, the Minkowski norm squared or Minkowski inner product depending on the context. The Minkowski inner product is defined so as to yield the spacetime interval between two events when given their coordinate difference vector as an argument. Equipped with this inner product, the mathematical model of spacetime is called Minkowski space. The group of transfo…"
         }
       ],
       "source_score": {
@@ -498,7 +456,7 @@
         "ratio": 0.8333333
       },
       "embed_ms": 0,
-      "search_ms": 1345,
+      "search_ms": 2440,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -635,7 +593,7 @@
         "ratio": 0.33333334
       },
       "embed_ms": 0,
-      "search_ms": 3595,
+      "search_ms": 4863,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -711,6 +669,20 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb \" Arik \" Einstein (Hebrew: אָרִיק אַייְנְשְׁטֵייְן; 3 January 1939 – 26 November 2013) was an Israeli singer, songwriter, actor, comedian and screenwriter. He was a pioneer of Israeli rock music and was named \"the voice of Israel.\" Through both high public and critical acclaim, Einstein is regarded as one of the greatest, most popular, and most influential Israeli artists of all time.  An illustrious musical career that spanned over 50 years saw Einstein recording over 500 songs and releasing, collaborating, and featuring in 34 albums, far more than any other Israeli …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb \"Arik\" Einstein was an Israeli singer, songwriter, actor, comedian and screenwriter. He was a pioneer of Israeli rock music and was named \"the voice of Israel.\" Through both high public and critical acclaim, Einstein is regarded as one of the greatest, most popular, and most influential Israeli artists of all time. An illustrious musical career that spanned over 50 years saw Einstein recording over 500 songs and releasing, collaborating, and featuring in 34 albums, far more than any other Israeli musician. Through the years he collaborated with many well-known Israeli…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Niels Bohr",
           "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Institute_of_Physics",
           "score": 0.025,
@@ -722,13 +694,6 @@
           "url": "https://en.wikipedia.org/wiki/Mathematical_formulation_of_quantum_mechanics#Later_developments",
           "score": 0.04190075,
           "snippet": "Mathematical formulation of quantum mechanics  theory whose classical limit is a given and known classical theory, becomes an important area of quantum physics in itself.  Finally, some of the originators of quantum theory (notably Einstein and Schrödinger) were unhappy with what they thought were the philosophical implications of quantum mechanics. In particular, Einstein took the position that quantum mechanics must be incomplete, which motivated research into so-called hidden-variable theories. The issue of hidden variables has become in part an experimental issue with the help of quantum o…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Niels Bohr",
-          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
-          "score": 0.023550725,
-          "snippet": "Niels Bohr  In February 1927, Heisenberg developed the first version of the uncertainty principle, presenting it using a thought experiment where an electron was observed through a gamma-ray microscope. Bohr was dissatisfied with Heisenberg's argument, since it required only that a measurement disturb properties that already existed, rather than the more radical idea that the electron's properties could not be discussed at all apart from the context they were measured in. In a paper presented at the Volta Conference at Como in September 1927, Bohr emphasized that Heisenberg's uncertainty relat…"
         },
         {
           "corpus_id": "wikipedia",
@@ -767,13 +732,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Niels Bohr",
-          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_physics",
-          "score": 0.022540983,
-          "snippet": "Niels Bohr  these truth conditions have to include reference to the experimental setup as well as the actual outcome of the experiment.  Faye notes that Bohr's interpretation makes no reference to a \"collapse of the wave function during measurements\" (and indeed, he never mentioned this idea). Instead, Bohr \"accepted the Born statistical interpretation because he believed that the ψ -function has only a symbolic meaning and does not represent anything real\". Since for Bohr, the ψ -function is not a literal pictorial representation of reality, there can be no real collapse of the wavefunction."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Correspondence principle",
           "url": "https://en.wikipedia.org/wiki/Correspondence_principle#Bohr's_correspondence_principle",
           "score": 0.035233516,
@@ -788,10 +746,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Quantum mechanics",
-          "url": "https://en.wikipedia.org/wiki/Quantum_mechanics",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Early_life",
           "score": 1.0,
-          "snippet": "Quantum mechanics is a fundamental theory that describes the behavior of nature at and below the scale of atoms. It is the foundation of all quantum physics, which includes quantum chemistry, quantum field theory, quantum technology, and quantum information science. Quantum mechanics can describe many systems that classical physics cannot. Classical physics can describe many aspects of nature at an ordinary scale, but is not sufficient for describing them at very small submicroscopic scales. Most theories in classical physics can be derived from quantum mechanics as an approximation valid at l…"
+          "snippet": "Arik Einstein  Arieh Lieb Einstein was born and raised in Tel Aviv, the only child of Ya'akov and Dvora (Dubno) Einstein. His father, Ya'akov, was an actor with the Ohel theater. Einstein was Israel's junior high jump and shot put champion, and also played basketball for Hapoel Tel Aviv B.C. His father urged him to audition for an army entertainment troupe, and he was accepted into the Lahakat HaNahal troupe."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Early_years_and_Nahal_Army_Troupe",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Before joining the army, Einstein, a sports enthusiast and an athlete throughout his teenage years, was interested in becoming a military fitness instructor. However, due to his poor eyesight, his father encouraged him to try out for the army band. After a few auditions, Einstein was accepted to the prestigious and highly regarded Nahal Brigade army band, which historically paved the way for many of Israel's most talented and successful musicians. Despite his shyness, Einstein's unique voice and singing was quickly noticed and he was picked soon thereafter to perform a few solo …"
         },
         {
           "corpus_id": "wikipedia",
@@ -799,6 +764,13 @@
           "url": "https://en.wikipedia.org/wiki/Quantum_mechanics",
           "score": 1.0,
           "snippet": "Quantum mechanics  Measurements of quantum systems show characteristics of both particles and waves, and there are limits to how accurately the value of a physical quantity can be predicted prior to its measurement, given a complete set of initial conditions. Quantum mechanics arose gradually from theories to explain observations that could not be reconciled with classical physics, such as Max Planck's solution in 1900 to the black-body radiation problem, and the correspondence between energy and frequency in Albert Einstein's 1905 paper, which explained the photoelectric effect. These early a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Quantum_mechanics#Abstract",
+          "score": 1.0,
+          "snippet": "Quantum mechanics  quantity can be predicted prior to its measurement, given a complete set of initial conditions (the uncertainty principle).  Quantum mechanics arose gradually from theories to explain observations that could not be reconciled with classical physics, such as Max Planck 's solution in 1900 to the black-body radiation problem, and the correspondence between energy and frequency in Albert Einstein 's 1905 paper, which explained the photoelectric effect. These early attempts to understand microscopic phenomena, now known as the \" old quantum theory \", led to the full development …"
         },
         {
           "corpus_id": "wikipedia",
@@ -812,28 +784,28 @@
           "title": "Albert Einstein",
           "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
           "score": 1.0,
-          "snippet": "Albert Einstein  In 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914, he moved to Berlin in order to join the Prussian Academy of Sciences and the Humboldt University of Berlin. In 1917, he became director of the Kaiser Wilhelm Institute for Physics; he also became a German citizen again, this time as a subject of the Kingdom of Prussia. In 1933, while Einstein was visiting the United States, Adolf Hitler came to power in Germany. Horrified by the Nazi war of extermination against …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Interpretations of quantum mechanics",
-          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics",
-          "score": 1.0,
-          "snippet": "Interpretations of quantum mechanics  An interpretation of quantum mechanics is an attempt to explain how the mathematical theory of quantum mechanics might correspond to experienced reality. Quantum mechanics has held up to rigorous and extremely precise tests in an extraordinarily broad range of experiments. However, there exist a number of contending schools of thought over their interpretation. These views on interpretation differ on such fundamental questions as whether quantum mechanics is deterministic or stochastic, local or non-local, which elements of quantum mechanics can be conside…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Interpretations of quantum mechanics",
-          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Abstract",
-          "score": 1.0,
-          "snippet": "Interpretations of quantum mechanics  An interpretation of quantum mechanics is an attempt to explain how the mathematical theory of quantum mechanics might correspond to experienced reality. Quantum mechanics has held up to rigorous and extremely precise tests in an extraordinarily broad range of experiments. However, there exist a number of contending schools of thought over their interpretation. These views on interpretation differ on such fundamental questions as whether quantum mechanics is deterministic or stochastic, local or non-local, which elements of quantum mechanics can be conside…"
+          "snippet": "Albert Einstein  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis. These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field—and demonstrated that if the special theory is correct, mass and energy are equivalent to each other. In 1915, he proposed a general theory of rel…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Interpretations of quantum mechanics",
           "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#History",
           "score": 1.0,
-          "snippet": "Interpretations of quantum mechanics  The definition of quantum theorists' terms, such as wave function and matrix mechanics, progressed through many stages. For instance, Erwin Schrödinger originally viewed the electron's wave function as its charge density smeared across space, but Max Born reinterpreted the absolute square value of the wave function as the electron's probability density distributed across space; the Born rule, as it is now called, matched experiment, whereas Schrödinger's charge density view did not."
+          "snippet": "Interpretations of quantum mechanics  across space; the Born rule, as it is now called, matched experiment, whereas Schrödinger's charge density view did not.  The views of several early pioneers of quantum mechanics, such as Niels Bohr and Werner Heisenberg, are often grouped together as the \" Copenhagen interpretation \", though physicists and historians of physics have argued that this terminology obscures differences between the views so designated. Copenhagen-type ideas were never universally embraced, and challenges to a perceived Copenhagen orthodoxy gained increasing attention in the 19…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Nature",
+          "score": 1.0,
+          "snippet": "Interpretations of quantum mechanics  More or less, all interpretations of quantum mechanics share two qualities:  Two qualities vary among interpretations:  In the philosophy of science, the distinction between knowledge and reality is termed epistemic versus ontic. A general law can be seen as a generalisation of the regularity of outcomes (epistemic), whereas a causal mechanism may be thought of as determining or regulating outcomes (ontic). A phenomenon can be interpreted either as ontic or as epistemic. For instance, indeterminism may be attributed to limitations of human observation and …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Nature",
+          "score": 1.0,
+          "snippet": "Interpretations of quantum mechanics  actually \"governs\" outcomes, and that the statement of a regularity has the role of a causal mechanism—is a category mistake.  In a broad sense, scientific theory can be viewed as offering an approximately true description or explanation of the natural world (scientific realism) or as providing nothing more than an account of our knowledge of the natural world (antirealism). A realist stance sees the epistemic as giving us a window onto the ontic, whereas an antirealist stance sees the epistemic as providing only a logically consistent picture of the ontic…"
         }
       ],
       "source_score": {
@@ -851,17 +823,17 @@
           "Copenhagen interpretation",
           "EPR paradox",
           "hidden variables",
-          "Solvay Conference",
-          "complementarity"
+          "Solvay Conference"
         ],
         "missing": [
-          "God does not play dice"
+          "God does not play dice",
+          "complementarity"
         ],
         "total_expected": 6,
-        "ratio": 0.8333333
+        "ratio": 0.6666667
       },
       "embed_ms": 0,
-      "search_ms": 2817,
+      "search_ms": 3751,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1000,7 +972,7 @@
         "ratio": 0.75
       },
       "embed_ms": 0,
-      "search_ms": 2849,
+      "search_ms": 3658,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1062,13 +1034,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "On the Origin of Species",
-          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species#Geological_record",
-          "score": 0.044684686,
-          "snippet": "On the Origin of Species  Chapter X examines whether patterns in the fossil record are better explained by common descent and branching evolution through natural selection, than by the individual creation of fixed species. Darwin expected species to change slowly, but not at the same rate – some organisms such as Lingula were unchanged since the earliest fossils. The pace of natural selection would depend on variability and change in the environment. This distanced his theory from Lamarckian laws of inevitable progress. It has been argued that this anticipated the punctuated equilibrium hypoth…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Alfred Russel Wallace",
           "url": "https://en.wikipedia.org/wiki/Alfred_Russel_Wallace#Assessment_of_Wallace's_role_in_history_of_evolutionary_theory",
           "score": 0.045963302,
@@ -1076,17 +1041,24 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Darwin's frog",
+          "url": "https://en.wikipedia.org/wiki/Darwin%27s_frog#Abstract",
+          "score": 1.0,
+          "snippet": "Darwin's frog  Darwin’s frog (Rhinoderma darwinii), also called the Southern Darwin's frog, is a species of Chilean/Argentinian frog of the family Rhinodermatidae. It was discovered by Charles Darwin during his voyage on HMS Beagle. on a trip to Chile. In 1841, French zoologist André Marie Constant Duméril and his assistant Gabriel Bibron described and named Darwin's frog. The diet of R. darwinii consists mostly of herbivore invertebrates. R. darwinii is currently classified as an endangered species by the International Union for Conservation of Nature.  Darwin’s frog is most known for its uni…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Darwin's frog",
+          "url": "https://en.wikipedia.org/wiki/Darwin%27s_frog",
+          "score": 1.0,
+          "snippet": "Darwin's frog  Darwin’s frog, also called the Southern Darwin's frog, is a species of Chilean/Argentinian frog of the family Rhinodermatidae. It was discovered by Charles Darwin during his voyage on HMS Beagle. on a trip to Chile. In 1841, French zoologist André Marie Constant Duméril and his assistant Gabriel Bibron described and named Darwin's frog. The diet of R. darwinii consists mostly of herbivore invertebrates. R. darwinii is currently classified as an endangered species by the International Union for Conservation of Nature. Darwin’s frog is most known for its unique method of brooding.…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Existence of God",
           "url": "https://en.wikipedia.org/wiki/Existence_of_God#Empirical_arguments",
           "score": 0.04008977,
           "snippet": "Existence of God  changes in brain chemistry and oxygen deprivation, rather than as evidence of an afterlife.  The Argument from Evolution  The Argument from Evolution against God's existence is a philosophical argument that attempts to prove the non-existence of God by using the theory of evolution. The argument is based on the idea that the theory of evolution provides a natural explanation for the diversity of life on Earth, and therefore, there is no need to invoke a divine creator.  The theory of evolution was first proposed by Charles Darwin in his book \" On the Origin of Species \" in 18…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "On the Origin of Species",
-          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species#Modern_influence",
-          "score": 0.03198294,
-          "snippet": "On the Origin of Species  Fisher, Sewall Wright and J. B. S. Haldane, merged Darwinian selection with a statistical understanding of Mendelian genetics.  Modern evolutionary theory continues to develop. Darwin's theory of evolution by natural selection, with its tree-like model of branching common descent, has become the unifying theory of the life sciences. The theory explains the diversity of living organisms and their adaptation to the environment. It makes sense of the geological record, biogeography, parallels in embryonic development, biological homologies, vestigiality, cladistics, phyl…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1139,17 +1111,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of evolutionary thought",
-          "url": "https://en.wikipedia.org/wiki/History_of_evolutionary_thought#Abstract",
-          "score": 0.03682279,
-          "snippet": "History of evolutionary thought  In 1858 Charles Darwin and Alfred Russel Wallace published a new evolutionary theory, explained in detail in Darwin's On the Origin of Species (1859). Darwin's theory, originally called descent with modification is known contemporarily as Darwinism or Darwinian theory. Unlike Lamarck, Darwin proposed common descent and a branching tree of life, meaning that two very different species could share a common ancestor. Darwin based his theory on the idea of natural selection: it synthesized a broad range of evidence from animal husbandry, biogeography, geology, morp…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Personality psychology",
           "url": "https://en.wikipedia.org/wiki/Personality_psychology#Evolutionary_theory",
           "score": 0.02857143,
           "snippet": "Personality psychology  Charles Darwin is the founder of the theory of the evolution of the species. The evolutionary approach to personality psychology is based on this theory. This theory examines how individual personality differences are based on natural selection. Through natural selection organisms change over time through adaptation and selection. Traits are developed and certain genes come into expression based on an organism's environment and how these traits aid in an organism's survival and reproduction."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Social Darwinism",
+          "url": "https://en.wikipedia.org/wiki/Social_Darwinism#Usage",
+          "score": 0.02764977,
+          "snippet": "Social Darwinism  and forms of social Darwinism, social Darwinism is not a necessary consequence of the principles of biological evolution.  While the term has been applied to the claim that Darwin's theory of evolution by natural selection can be used to understand the social endurance of a nation or country, social Darwinism commonly refers to ideas that predate Darwin's publication of On the Origin of Species. Others whose ideas are given the label include the 18th-century clergyman Thomas Malthus, and Darwin's cousin Francis Galton who founded eugenics towards the end of the 19th century."
         }
       ],
       "source_score": {
@@ -1179,7 +1151,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2081,
+      "search_ms": 2461,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1318,13 +1290,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#433–454:_Ascendancy_of_Aetius,_loss_of_Carthage",
-          "score": 0.056666672,
-          "snippet": "Fall of the Western Roman Empire  For by what other causes were they made Bagaudae save by our unjust acts, the wicked decisions of the magistrates, the proscription and extortion of those who have turned the public exactions to the increase of their private fortunes and made the tax indictions their opportunity for plunder?\""
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Turkey",
           "url": "https://en.wikipedia.org/wiki/Turkey",
           "score": 0.03383399,
@@ -1332,52 +1297,59 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
-          "score": 1.0,
-          "snippet": "Western Roman Empire  In modern historiography, the Western Roman Empire was the western provinces of the Roman Empire, collectively, during any period in which they were administered separately from the eastern provinces by a separate, independent imperial court. Particularly during the period from AD 395 to 476, there were separate, coequal courts dividing the governance of the empire into the Western provinces and the Eastern provinces with a distinct imperial succession in the separate courts. The terms Western Roman Empire and Eastern Roman Empire were coined in modern times to describe p…"
+          "title": "Christian art",
+          "url": "https://en.wikipedia.org/wiki/Christian_art#Middle_Ages",
+          "score": 0.029508194,
+          "snippet": "Christian art  Much of the art surviving from Europe after the fall of the Western Roman Empire is Christian art, although this is in large part because the continuity of church ownership has preserved church art better than secular works. While the Western Roman Empire 's political structure essentially collapsed after the fall of Rome, its religious hierarchy, what is today the modern-day Roman Catholic Church commissioned and funded production of religious art imagery."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western Roman Empire",
           "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
           "score": 1.0,
-          "snippet": "Western Roman Empire  Though there were periods with more than one emperor ruling jointly before, the view that it was impossible for a single emperor to govern the entire Empire was institutionalized by emperor Diocletian following the disastrous civil wars and disintegrations of the Crisis of the Third Century. He introduced the system of the Tetrarchy in 286, with two senior emperors titled Augustus, one in the East and one in the West, each with an appointed subordinate and heir titled Caesar. Though the tetrarchic system would collapse in a matter of years, the East–West administrative di…"
+          "snippet": "Western Roman Empire  On the death of Theodosius in 395, the empire was divided between his two infant sons, with Honorius as his successor in the West governing briefly from Mediolanum then from Ravenna, and Arcadius as his successor in the East governing from Constantinople. In 476, after the Battle of Ravenna, the Roman army in the West suffered defeat at the hands of Odoacer and his Germanic foederati. Odoacer forced the abdication of the emperor Romulus Augustulus and became the first King of Italy. In 480, following the assassination of the previous Western emperor Julius Nepos, the East…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Abstract",
+          "score": 1.0,
+          "snippet": "Western Roman Empire  in 476, and the Western imperial court in Ravenna disappeared by AD 554, at the end of Justinian 's Gothic War.  In 476, after the Battle of Ravenna, the Roman army in the West suffered defeat at the hands of Odoacer and his Germanic foederati. Odoacer forced the abdication of the emperor Romulus Augustulus and became the first King of Italy. In 480, following the assassination of the previous Western emperor Julius Nepos, the Eastern emperor Zeno dissolved the Western court and proclaimed himself the sole emperor of the Roman Empire. The date of 476 was popularized by th…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
           "score": 1.0,
-          "snippet": "Empire  An empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\". The center of the empire exercises political control over the peripheries. Within an empire, different populations have different sets of rights and are governed differently. Narrowly defined, an empire is a sovereign state whose head of state is an emperor or empress; but not all states with aggregate territory under the rule of supreme authorities are called empires or are ruled by an emperor; n…"
+          "snippet": "Empire  In his book The Fall of the Roman Empire, Peter Heather contends that there are many factors, including issues of money and manpower, which produce military limitations and culminate in the Roman army's inability to effectively repel invading barbarians at the frontier. The Western Roman economy was already stretched to its limit in the 4th and 5th centuries C.E. due to continual conflict and loss of territory which, in turn, generated loss of revenue from the tax base. There was also the looming presence of the Persians which, at any time, took a large percentage of the fighting force…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Bronze_and_Iron_Age_empires",
           "score": 1.0,
-          "snippet": "Empire  An important distinction has been between land empires made up solely of contiguous territories, such as the Austrian Empire or the Russian Empire; and those created by sea-power, which include territories that are remote from the 'home' country of the empire, such as the Carthaginian Empire or the British Empire. Aside from the more formal usage, the word empire can also refer colloquially to a large-scale business enterprise, a political organization controlled by a single individual, or a group. The concept of empire is associated with other such concepts as imperialism, colonialism…"
+          "snippet": "Empire  Stephen Howe writes that with the exception of the Roman, Chinese and \"perhaps ancient Egyptian states\", early empires seldom survived the death of their founder and were usually limited in scope to conquest and collection of tribute, having little impact on the everyday lives of their subjects.  With the exception of Rome, the periods of dissolution following imperial falls were equally short. Successor states seldom outlived their founders and disappeared in the next and often larger empire. Some empires, like the Neo-Babylonian, Median and Lydian were outright conquered by a larger …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Empire#Classical_period",
           "score": 1.0,
-          "snippet": "Empire  An empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\". The center of the empire (sometimes referred to as the metropole) exercises political control over the peripheries. Within an empire, different populations have different sets of rights and are governed differently. Narrowly defined, an empire is a sovereign state whose head of state is an emperor or empress; but not all states with aggregate territory under the rule of supreme authorities are cal…"
+          "snippet": "Empire  The Romans were the first people to invent and embody the concept of empire in their two mandates: to wage war and to make and execute laws. They were the most extensive Western empire until the early modern period, and left a lasting impact on European society. Many languages, cultural values, religious institutions, political divisions, urban centers, and legal systems can trace their origins to the Roman Empire. The Roman Empire governed and rested on exploitative actions. They took slaves and money from the peripheries to support the imperial center. However, the absolute reliance …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western world",
-          "url": "https://en.wikipedia.org/wiki/Western_world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Introduction",
           "score": 1.0,
-          "snippet": "Western world  The Western world, also known as the West, primarily refers to various nations and states in the regions of Western Europe, Northern America, and Australasia; with some debate as to whether those in Eastern Europe and Latin America also constitute the West. The Western world likewise is called the Occident in contrast to the Eastern world known as the Orient. The West is considered an evolving concept; made up of cultural, political, and economic synergy among diverse groups of people, and not a rigid region with fixed borders and members. Definitions of \"Western world\" vary acc…"
+          "snippet": "Western world  not only with Christianity but also with the intellectual and political achievements of the ancient Greeks and Romans.  Historians, such as Carroll Quigley in \"The Evolution of Civilizations\", contend that Western civilization was born around AD 500, after the fall of the Western Roman Empire, leaving a vacuum for new ideas to flourish that were impossible in Classical societies. In either view, between the fall of the Western Roman Empire and the Renaissance, the West (or those regions that would later become the heartland of the culturally \"western sphere\") experienced a perio…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western world",
-          "url": "https://en.wikipedia.org/wiki/Western_world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#The_West_of_the_Mediterranean_Region_during_the_Antiquity",
           "score": 1.0,
-          "snippet": "Western world  The East Roman Empire, later called the Byzantine Empire, continued for a millennium, while the West Roman Empire lasted for only about a century and a half. Significant theological and ecclesiastical differences led Western Europeans to consider the Christians in the Byzantine Empire as heretics. In 1054 CE, when the church in Rome excommunicated the patriarch of Byzantium, the politico-religious division between the Western church and Eastern church culminated in the Great Schism or the East–West Schism. Even though friendly relations continued between the two parts of the Chr…"
+          "snippet": "Western world  The geopolitical divisions in Europe that created a concept of East and West originated in the ancient tyrannical and imperialistic Graeco-Roman times. The Eastern Mediterranean was home to the highly urbanized cultures that had Greek as their common language (owing to the older empire of Alexander the Great and of the Hellenistic successors), whereas the West was much more rural in its character and more readily adopted Latin as its common language. After the fall of the Western Roman Empire and the beginning of the medieval times (or Middle Ages), Western and Central Europe we…"
         }
       ],
       "source_score": {
@@ -1407,7 +1379,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2040,
+      "search_ms": 2467,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1462,13 +1434,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "French Revolution",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
-          "score": 0.041666668,
-          "snippet": "French Revolution  The French Revolution differed from other revolutions in being not merely national, for it aimed at benefiting all humanity.\"  The revolution permanently crippled the power of the aristocracy and drained the wealth of the Church, although the two institutions survived. Hanson suggests the French underwent a fundamental transformation in self-identity, evidenced by the elimination of privileges and their replacement by intrinsic human rights. After the collapse of the First French Empire in 1815, the French public lost many of the rights and privileges earned since the revolu…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "French Revolution of 1848",
           "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848#Background",
           "score": 0.059490483,
@@ -1487,13 +1452,6 @@
           "url": "https://en.wikipedia.org/wiki/France",
           "score": 0.024590163,
           "snippet": "The French Revolution of 1789 overthrew the  and produced the Declaration of the Rights of Man, which expresses the nation's ideals to this day. France reached its political and military zenith in the early 19th century under Napoleon Bonaparte, subjugating much of continental Europe and establishing the First French Empire. Its collapse initiated a period of relative decline during which France endured the Bourbon Restoration until the founding of the French Second Republic, which was succeeded by the Second French Empire upon Napoleon III's takeover. His empire collapsed during the Franco-Pr…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
-          "score": 0.0234375,
-          "snippet": "rule, including the decadence of his court, discredited the monarchy, which in part paved the way for the French Revolution.  Louis XVI supported America with money, fleets and armies, helping them win independence from Great Britain. France gained revenge but verged on bankruptcyâa factor that contributed to the Revolution. Some of the Enlightenment occurred in French intellectual circles, and scientific breakthroughs, such as the naming of oxygen and the first hot air balloon carrying passengers, were achieved by French scientists. French explorers took part in the voyages of scientific ex…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1560,38 +1518,66 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Social science",
+          "url": "https://en.wikipedia.org/wiki/Social_science#History",
+          "score": 0.01923077,
+          "snippet": "Social science  The history of the social sciences began in the Age of Enlightenment after 1651, which saw a revolution within natural philosophy, changing the basic framework by which individuals understood what was scientific. Social sciences came forth from the moral philosophy of the time and were influenced by the Age of Revolutions, such as the Industrial Revolution and the French Revolution. The social sciences developed from the sciences (experimental and applied), or the systematic knowledge-bases or prescriptive practices, relating to the social improvement of a group of interacting …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Socialism",
+          "url": "https://en.wikipedia.org/wiki/Socialism#History",
+          "score": 0.021875,
+          "snippet": "Socialism  The history of socialism has its origins in the Age of Enlightenment and the 1789 French Revolution, along with the changes that brought, although it has precedents in earlier movements and ideas. The Communist Manifesto was written by Karl Marx and Friedrich Engels in 1847-48 just before the Revolutions of 1848 swept Europe, expressing what they termed scientific socialism. In the last third of the 19th century parties dedicated to Democratic socialism arose in Europe, drawing mainly from Marxism. The Australian Labor Party was the first elected socialist party when it formed gover…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "French Revolution of 1848",
-          "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848#Background",
           "score": 1.0,
-          "snippet": "French Revolution of 1848  The French Revolution of 1848, also known as the February Revolution, was a period of civil unrest in France, in February 1848, that led to the collapse of the July Monarchy and the foundation of the French Second Republic. It sparked the wave of revolutions of 1848. The revolution took place in Paris, and was preceded by the French government's crackdown on the campagne des banquets. Starting on 22 February as a large-scale protest against the government of François Guizot, it later developed into a violent uprising against the monarchy. After intense urban fighting…"
+          "snippet": "French Revolution of 1848  branch, rose to power, replacing the old Charter by the Charter of 1830, and his rule became known as the July Monarchy.  Nicknamed the \"Bourgeois Monarch\", Louis Philippe sat at the head of a moderately liberal state controlled mainly by an educated elite. He was supported by the Orléanists and opposed on his right by the Legitimists (former ultra-royalists) and on his left by the Republicans. Louis Philippe was an expert businessman and, by means of his businesses, he had become one of the richest men in France. Louis Philippe saw himself as the successful embodime…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "France",
-          "url": "https://en.wikipedia.org/wiki/France",
+          "url": "https://en.wikipedia.org/wiki/France#Revolutionary_France_(1789–1799)",
           "score": 1.0,
-          "snippet": "France, officially the French Republic, is a country located primarily in Western Europe. Its overseas regions and territories include French Guiana in South America, Saint Pierre and Miquelon in the North Atlantic, the French West Indies, and many islands in Oceania and the Indian Ocean, giving it one of the largest discontiguous exclusive economic zones in the world. Metropolitan France shares borders with Belgium and Luxembourg to the north, Germany to the northeast, Switzerland to the east, Italy and Monaco to the southeast, Andorra and Spain to the south, and a maritime border with the Un…"
+          "snippet": "France  The French Revolution was a period of political and societal change that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in 1799 and the formation of the French Consulate. Many of its ideas are fundamental principles of liberal democracy, while its values and institutions remain central to modern political discourse.  Its causes were a combination of social, political and economic factors, which the Ancien Régime proved unable to manage. A financial crisis and social distress led in May 1789 to the convocation of the Estates General, which was converted i…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France#1946–present",
+          "score": 1.0,
+          "snippet": "France  Pied-Noirs and Harkis fled from Algeria to France. A vestige of empire is the French overseas departments and territories.  During the Cold War, de Gaulle pursued a policy of \"national independence\" towards the Western and Eastern blocs. He withdrew from NATO's military-integrated command (while remaining within the alliance), launched a nuclear development programme and made France the fourth nuclear power. He restored cordial Franco-German relations to create a European counterweight between American and Soviet spheres of influence. However, he opposed any development of a supranatio…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution",
+          "score": 1.0,
+          "snippet": "French Revolution  The French Revolution was a period of political and societal change in France that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central to modern French political discourse. Its causes are generally agreed to be a combination of social, political, and economic factors, which the Ancien Régime proved unable to manage. A financial crisis and widespread social distress…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Inflation",
-          "url": "https://en.wikipedia.org/wiki/Inflation",
+          "url": "https://en.wikipedia.org/wiki/Inflation#Before_1936",
           "score": 1.0,
-          "snippet": "Inflation  In economics, inflation is a general increase in the prices of goods and services in an economy. This is usually measured using the consumer price index (CPI). When the general price level rises, each unit of currency buys fewer goods and services; consequently, inflation corresponds to a reduction in the purchasing power of money. The opposite of CPI inflation is deflation, a decrease in the general price level of goods and services. The common measure of inflation is the inflation rate, the annualized percentage change in a general price index. As prices faced by households do not…"
+          "snippet": "Inflation  in the payment technology, in particular the increased use of bills of exchange, contributed to the price revolution.  An alternative theory, the real bills doctrine (RBD), originated in the 17th and 18th century, receiving its first authoritative exposition in Adam Smith 's The Wealth of Nations. It asserts that banks should issue their money in exchange for short-term real bills of adequate value. As long as banks only issue a dollar in exchange for assets worth at least a dollar, the issuing bank's assets will naturally move in step with its issuance of money, and the money will …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Inflation",
-          "url": "https://en.wikipedia.org/wiki/Inflation",
+          "url": "https://en.wikipedia.org/wiki/Inflation#2021–2022_inflation_spike",
           "score": 1.0,
-          "snippet": "Inflation  The negative effects would include an increase in the opportunity cost of holding money, uncertainty over future inflation, which may discourage investment and savings, and, if inflation were rapid enough, shortages of goods as consumers begin hoarding out of concern that prices will increase in the future. Positive effects include reducing unemployment due to nominal wage rigidity, allowing the central bank greater freedom in carrying out monetary policy, encouraging loans and investment instead of money hoarding, and avoiding the inefficiencies associated with deflation."
+          "snippet": "Inflation  In 2021–2022, most countries experienced a considerable increase in inflation, peaking in 2022 and declining in 2023. The causes are believed to be a mixture of demand and supply shocks, whereas inflation expectations generally seem to remain anchored (as per May 2023). Possible causes on the demand side include expansionary fiscal and monetary policy in the wake of the global COVID-19 pandemic, whereas supply shocks include supply chain problems also caused by the pandemic and exacerbated by energy price rises following the Russian invasion of Ukraine in 2022."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Inflation",
-          "url": "https://en.wikipedia.org/wiki/Inflation",
+          "url": "https://en.wikipedia.org/wiki/Inflation#Overview",
           "score": 1.0,
-          "snippet": "Inflation  Today, some economists favour a low and steady rate of inflation, though inflation is less popular with the general public than with economists, since \"...inflation simultaneously transfers some of [the] people’s income into the hands of government.\" Low inflation reduces the probability of economic recessions by enabling the labor market to adjust more quickly in a downturn and reduces the risk that a liquidity trap prevents monetary policy from stabilizing the economy while avoiding the costs associated with high inflation. The task of keeping the rate of inflation low and stable …"
+          "snippet": "Inflation  The hyperinflation in Venezuela is the highest in the world, with an annual inflation rate of 833,997% as of October 2018.  Historically, inflations of varying magnitudes have occurred, interspersed with corresponding deflationary periods, from the price revolution of the 16th century, which was driven by the flood of gold and particularly silver seized and mined by the Spaniards in Latin America, to the largest paper money inflation of all time in Hungary after World War II.  However, since the 1980s, inflation has been held low and stable in countries with independent central bank…"
         }
       ],
       "source_score": {
@@ -1620,7 +1606,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2045,
+      "search_ms": 2455,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1682,17 +1668,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fascism",
-          "url": "https://en.wikipedia.org/wiki/Fascism#International_impact_of_the_Great_Depression_and_buildup_to_World_War_II",
-          "score": 0.053544976,
-          "snippet": "Fascism  The conditions of economic hardship caused by the Great Depression brought about an international surge of social unrest. According to historian Philip Morgan, \"the onset of the Great Depression... was the greatest stimulus yet to the diffusion and expansion of fascism outside Italy.\" Fascist propaganda blamed the problems of the long depression of the 1930s on minorities and scapegoats: \" Judeo - Masonic - bolshevik \" conspiracies, left-wing internationalism and the presence of immigrants."
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe#Abstract",
+          "score": 1.0,
+          "snippet": "Europe  centuries, European powers colonised at various times the Americas, almost all of Africa and Oceania, and the majority of Asia.  The Age of Enlightenment, the French Revolution, and the Napoleonic Wars shaped the continent culturally, politically, and economically from the end of the 17th century until the first half of the 19th century. The Industrial Revolution, which began in Great Britain at the end of the 18th century, gave rise to radical economic, cultural, and social change in Western Europe and eventually the wider world. Both world wars began and were fought to a great extent…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fascism",
-          "url": "https://en.wikipedia.org/wiki/Fascism#International_impact_of_the_Great_Depression_and_buildup_to_World_War_II",
-          "score": 0.052150108,
-          "snippet": "Fascism  A variety of para-fascist governments that borrowed elements from fascism were formed during the Great Depression, including those of Greece, Lithuania, Poland and Yugoslavia. In the Netherlands, the National Socialist Movement in the Netherlands was at its height in the 1930s due to the Great Depression, especially in 1935 when it won almost eight percent of votes, until the year 1937."
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe",
+          "score": 1.0,
+          "snippet": "Europe  Between the 16th and 20th centuries, European powers colonised at various times the Americas, almost all of Africa and Oceania, and the majority of Asia. The Age of Enlightenment, the French Revolution, and the Napoleonic Wars shaped the continent culturally, politically, and economically from the end of the 17th century until the first half of the 19th century. The Industrial Revolution, which began in Great Britain at the end of the 18th century, gave rise to radical economic, cultural, and social change in Western Europe and eventually the wider world. Both world wars began and were…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1738,13 +1724,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fascism",
-          "url": "https://en.wikipedia.org/wiki/Fascism#Ideological_dishonesty:_Italian_fascism",
-          "score": 0.02173913,
-          "snippet": "Fascism  1936, when Germany was the only significant power that did not denounce Italy's invasion and occupation of Ethiopia."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "History of Thailand",
           "url": "https://en.wikipedia.org/wiki/History_of_Thailand#2014_coup_d'état",
           "score": 0.038690478,
@@ -1773,24 +1752,31 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Modern dance",
+          "url": "https://en.wikipedia.org/wiki/Modern_dance#Radical_dance",
+          "score": 0.030555556,
+          "snippet": "Modern dance  Disturbed by the Great Depression and the rising threat of fascism in Europe, the radical dancers tried to raise consciousness by dramatizing the economic, social, ethnic and political crises of their time."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe#Modern_definitions",
+          "score": 1.0,
+          "snippet": "Europe  that once connected the Black Sea and the Caspian Sea, and subsequently was proposed as a natural boundary between continents.  By the mid-19th century, there were three main conventions, one following the Don, the Volga–Don Canal and the Volga, the other following the Kuma–Manych Depression to the Caspian and then the Ural River, and the third abandoning the Don altogether, following the Greater Caucasus watershed to the Caspian. The question was still treated as a \"controversy\" in geographical literature of the 1860s, with Douglas Freshfield advocating the Caucasus crest boundary as …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe",
+          "score": 1.0,
+          "snippet": "Europe  Ōshū Europe is a continent located entirely in the Northern Hemisphere and mostly in the Eastern Hemisphere. It is bordered by the Arctic Ocean to the north, the Atlantic Ocean to the west, the Mediterranean Sea to the south, and Asia to the east. Europe shares the landmass of Eurasia with Asia, and of Afro-Eurasia with both Asia and Africa. Europe is commonly considered to be separated from Asia by the watershed of the Ural Mountains, the Ural River, the Caspian Sea, the Greater Caucasus, the Black Sea, and the waterway of the Bosporus Strait. Europe covers about 10.18 million km⁲ (3.…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Great Depression",
-          "url": "https://en.wikipedia.org/wiki/Great_Depression",
+          "url": "https://en.wikipedia.org/wiki/Great_Depression#Austrian_School",
           "score": 1.0,
-          "snippet": "Great Depression  The Great Depression (1929–1939) was a severe global economic downturn that affected many countries across the world. It became evident after a sharp decline in stock prices in the United States, the largest economy in the world at the time, leading to a period of economic depression. The economic contagion began around September 1929 and led to the Wall Street stock market crash of October. This crisis marked the start of a prolonged period of economic hardship characterized by high unemployment rates and widespread business failures. Between 1929 and 1932, worldwide gross d…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Liberalism",
-          "url": "https://en.wikipedia.org/wiki/Liberalism",
-          "score": 1.0,
-          "snippet": "Liberalism is a political and moral philosophy based on the rights of the individual, liberty, consent of the governed, political equality, right to private property and equality before the law. Liberals espouse various and often mutually warring views depending on their understanding of these principles but generally support private property, market economies, individual rights, liberal democracy, secularism, rule of law, economic and political freedom, freedom of speech, freedom of the press, freedom of assembly, and freedom of religion, Liberalism is frequently cited as the dominant ideolog…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Liberalism",
-          "url": "https://en.wikipedia.org/wiki/Liberalism",
-          "score": 1.0,
-          "snippet": "Liberalism  Liberals also ended mercantilist policies, royal monopolies, and other trade barriers, instead promoting free trade and marketization. Philosopher John Locke is often credited with founding liberalism as a distinct tradition based on the social contract, arguing that each man has a natural right to life, liberty and property, and governments must not violate these rights. While the British liberal tradition has emphasized expanding democracy, French liberalism has emphasized rejecting authoritarianism and is linked to nation-building. Leaders in the British Glorious Revolution of 1…"
+          "snippet": "Great Depression  published a paper predicting the Federal Reserve's actions would lead to a crisis starting in the stock and credit markets.  According to Rothbard, the government support for failed enterprises and efforts to keep wages above their market values actually prolonged the Depression. Unlike Rothbard, after 1970 Hayek believed that the Federal Reserve had further contributed to the problems of the Depression by permitting the money supply to shrink during the earliest years of the Depression. However, during the Depression (in 1932 and in 1934) Hayek had criticized both the Federa…"
         },
         {
           "corpus_id": "wikipedia",
@@ -1801,10 +1787,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Lost Generation",
-          "url": "https://en.wikipedia.org/wiki/Lost_Generation",
+          "title": "Liberalism",
+          "url": "https://en.wikipedia.org/wiki/Liberalism#Abstract",
           "score": 1.0,
-          "snippet": "Lost Generation  The Lost Generation is the demographic cohort that reached early adulthood during World War I, and preceded the Greatest Generation. The social generation is generally defined as people born from 1883 to 1900, coming of age in either the 1900s or the 1910s, and were the first generation to mature in the 20th century. The term is also particularly used to refer to a group of American expatriate writers living in Paris during the 1920s. Gertrude Stein is credited with coining the term, and it was subsequently popularised by Ernest Hemingway, who used it in the epigraph for his 1…"
+          "snippet": "Liberalism  Leaders in the British Glorious Revolution of 1688, the American Revolution of 1776, and the French Revolution of 1789 used liberal philosophy to justify the armed overthrow of royal sovereignty. The 19th century saw liberal governments established in Europe and South America, and it was well-established alongside republicanism in the United States. In Victorian Britain, it was used to critique the political establishment, appealing to science and reason on behalf of the people. During the 19th and early 20th centuries, liberalism in the Ottoman Empire and the Middle East influence…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Liberalism",
+          "url": "https://en.wikipedia.org/wiki/Liberalism#Abstract",
+          "score": 1.0,
+          "snippet": "Liberalism  Before 1920, the main ideological opponents of liberalism were communism, conservatism, and socialism; liberalism then faced major ideological challenges from fascism and Marxism–Leninism as new opponents. During the 20th century, liberal ideas spread even further, especially in Western Europe, as liberal democracies found themselves as the winners in both world wars and the Cold War."
         },
         {
           "corpus_id": "wikipedia",
@@ -1818,7 +1811,14 @@
           "title": "Lost Generation",
           "url": "https://en.wikipedia.org/wiki/Lost_Generation",
           "score": 1.0,
-          "snippet": "Lost Generation  In the developed world, they tended to reach retirement and average life expectancy during the decades after the conflict, but some significantly outlived the norm. The last surviving person who was known to have been born during the 19th century was Nabi Tajima, who died in 2018 at age 117, while the last man born during the 19th century was Jiroemon Kimura, who died in 2013 at age 116. Most members were parents of the Greatest Generation and Silent Generation."
+          "snippet": "Lost Generation  The Lost Generation is the demographic cohort that reached early adulthood during World War I, and preceded the Greatest Generation. The social generation is generally defined as people born from 1883 to 1900, coming of age in either the 1900s or the 1910s, and were the first generation to mature in the 20th century. The term is also particularly used to refer to a group of American expatriate writers living in Paris during the 1920s. Gertrude Stein is credited with coining the term, and it was subsequently popularised by Ernest Hemingway, who used it in the epigraph for his 1…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lost Generation",
+          "url": "https://en.wikipedia.org/wiki/Lost_Generation#Abstract",
+          "score": 1.0,
+          "snippet": "Lost Generation  refers to the \"disoriented, wandering, directionless\" spirit of many of the war's survivors in the early postwar period.  In the wake of the Industrial Revolution, Western members of the Lost Generation grew up in societies that were more literate, consumerist, and media-saturated than ever before, but which also tended to maintain strictly conservative social values. Young men of the cohort were mobilized on a mass scale for World War I, a conflict that was often seen as the defining moment of their age group's lifespan. Young women also contributed to and were affected by th…"
         }
       ],
       "source_score": {
@@ -1848,7 +1848,7 @@
         "ratio": 0.8333333
       },
       "embed_ms": 0,
-      "search_ms": 2823,
+      "search_ms": 3644,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1914,13 +1914,6 @@
           "url": "https://en.wikipedia.org/wiki/Afterlife#Buddhism",
           "score": 0.049073435,
           "snippet": "Afterlife in Buddhism consists of intermediated spirit realm that's beyond spatial means, which includes the six realms of existence, the 31 planes of existence, Naraka, Tengoku and the pure land after achieving enlightenment. Ancestor worship, and links to one's ancestors, was once an important component of early Buddhism, but became less relevant already before the formation of the different Buddhist streams. The concepts and importance of afterlife vary among modern Buddhist teachings."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Afterlife",
-          "url": "https://en.wikipedia.org/wiki/Afterlife#The_Catholic_Church",
-          "score": 0.03444056,
-          "snippet": "Afterlife  The Catholic conception of the afterlife teaches that after the body dies, the soul is judged, the righteous and free of sin enter Heaven. However, those who die in unrepented mortal sin go to hell. In the 1990s, the Catechism of the Catholic Church defined hell not as punishment imposed on the sinner but rather as the sinner's self-exclusion from God. Unlike other Christian groups, the Catholic Church teaches that those who die in a state of grace, but still carry venial sin, go to a place called Purgatory where they undergo purification to enter Heaven."
         },
         {
           "corpus_id": "wikipedia",
@@ -2001,66 +1994,80 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Comparative religion",
-          "url": "https://en.wikipedia.org/wiki/Comparative_religion",
-          "score": 1.0,
-          "snippet": "Comparative religion is the branch of the study of religions with the systematic comparison of the doctrines and practices, themes and impacts of the world's religions. In general the comparative study of religion yields a deeper understanding of the fundamental philosophical concerns of religion such as ethics, metaphysics and the nature and forms of salvation. It also considers and compares the origins and similarities shared between the various religions of the world. Studying such material facilitates a broadened and more sophisticated understanding of human beliefs and practices regarding…"
+          "title": "Saṃsāra",
+          "url": "https://en.wikipedia.org/wiki/Sa%E1%B9%83s%C4%81ra#In_Buddhism",
+          "score": 0.022228396,
+          "snippet": "Saṃsāra  hellish realms\" respectively formulate the ritual, literary and moral spheres of many contemporary Buddhist traditions.  The saṃsāra concept, in Buddhism, envisions that these six realms are interconnected, and everyone cycles life after life, and death is just a state for an afterlife, through these realms, because of a combination of ignorance, desires and purposeful karma, or ethical and unethical actions. Nirvāṇa is typically described as the freedom from rebirth and the only alternative to suffering of saṃsāra, in Buddhism. However, the Buddhist texts developed a more comprehensi…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Comparative religion",
-          "url": "https://en.wikipedia.org/wiki/Comparative_religion#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Comparative_religion#History",
           "score": 1.0,
-          "snippet": "Comparative religion is the branch of the study of religions with the systematic comparison of the doctrines and practices, themes and impacts (including migration) of the world's religions. In general the comparative study of religion yields a deeper understanding of the fundamental philosophical concerns of religion such as ethics, metaphysics and the nature and forms of salvation. It also considers and compares the origins and similarities shared between the various religions of the world. Studying such material facilitates a broadened and more sophisticated understanding of human beliefs a…"
+          "snippet": "Comparative religion  century, antiquarians such as Athanasius Kircher along with Sir Thomas Browne were pioneering scholars of comparative religion.  Social scientists in the 19th century took a strong interest in comparative and \"primitive\" religion through the work of Max Müller, Edward Burnett Tylor, William Robertson Smith, James George Frazer, Émile Durkheim, Max Weber, and Rudolf Otto. Nicholas de Lange, Professor of Hebrew and Jewish Studies at Cambridge University, says that  The comparative study of religions is an academic discipline which has been developed within Christian theolog…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Comparative religion",
-          "url": "https://en.wikipedia.org/wiki/Comparative_religion#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Comparative_religion#Abrahamic_or_Western_Asian_religions",
           "score": 1.0,
-          "snippet": "Comparative religion  religions, East Asian religions, African religions, American religions, Oceanic religions, and classical Hellenistic religions.  There also exist various sociological classifications of religious movements."
+          "snippet": "Comparative religion  Hebrew Bible, they also believe in a supplemental oral tradition represented by later texts such as the Midrash and the Talmud.  Christians believe that Christianity is the fulfillment and continuation of the Jewish Old Testament. Christians believe that Jesus (Hebrew Yeshua יֵשׁוּעַ) is the awaited Messiah (Christ) foretold in the Old Testament prophecies, and believe in subsequent New Testament scripture. Christians in general believe that Jesus is the incarnation or Son of God. Their creeds generally hold in common that the incarnation, ministry, suffering, death on th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Comparative religion",
+          "url": "https://en.wikipedia.org/wiki/Comparative_religion#Abrahamic_or_Western_Asian_religions",
+          "score": 1.0,
+          "snippet": "Comparative religion  within the Hebrew Bible or from post-biblical Jewish traditions. These practices are known collectively as the Isra'iliyat.  The historical interaction between Christianity and Islam connects fundamental ideas in Christianity with similar ones in Islam. Islam accepts many aspects of Christianity as part of its faith – with some differences in interpretation – and rejects other aspects. Islam believes the Quran is the final revelation from God and a completion of all previous revelations, including the Bible."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Afterlife",
-          "url": "https://en.wikipedia.org/wiki/Afterlife",
+          "url": "https://en.wikipedia.org/wiki/Afterlife#Reincarnation",
           "score": 1.0,
-          "snippet": "Afterlife  The afterlife or life after death is a purported existence in which the essential part of an individual's stream of consciousness or identity continues to exist after the death of their physical body. The surviving essential aspect varies between belief systems; it may be some partial element, or the entire soul or spirit, which carries with it one's personal identity. In some views, this continued existence takes place in a spiritual realm, while in others, the individual may be reborn into this world and begin the life cycle over again, known as reincarnation, likely with no memor…"
+          "snippet": "Afterlife  Reincarnation is the philosophical or religious concept that an aspect of a living being starts a new life in a different physical body or form after each death. This concept is also known as rebirth or transmigration and is part of the Saṃsāra /karma doctrine of cyclic existence. Samsara refers to the process in which souls (jivas) go through a sequence of human and animal forms. Traditional Hinduism teaches that each life helps the soul (jivas) learn until the soul becomes purified to the point of liberation. All major Indian religions, namely Buddhism, Hinduism, Jainism, and Sikh…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Afterlife",
+          "url": "https://en.wikipedia.org/wiki/Afterlife#Purgatory",
+          "score": 1.0,
+          "snippet": "Afterlife  The notion of purgatory is associated particularly with the Catholic Church. In the Catholic Church, all those who die in God's grace and friendship, but still imperfectly purified, are indeed assured of their eternal salvation; but after death they undergo purification, so as to achieve the holiness necessary to enter the joy of heaven or the final purification of the elect, which is entirely different from the punishment of the damned. The tradition of the church, by reference to certain texts of scripture, speaks of a \"cleansing fire\" although it is not always called purgatory.  …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Tenrikyo",
-          "url": "https://en.wikipedia.org/wiki/Tenrikyo",
+          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Comparison_to_karmic_belief",
           "score": 1.0,
-          "snippet": "Tenrikyo is a Japanese new religion which is neither strictly monotheistic nor pantheistic, originating from the teachings of a 19th-century woman named Nakayama Miki, known to her followers as \"Oyasama\". Followers of Tenrikyo believe that God of Origin, God in Truth, known by several names including \"Tsukihi,\" \"Tenri-Ō-no-Mikoto\" and \"Oyagamisama\" revealed divine intent through Miki Nakayama as the Shrine of God and to a lesser extent the roles of the Honseki Izo Iburi and other leaders. Tenrikyo's worldly aim is to teach and promote the Joyous Life, which is cultivated through acts of charit…"
+          "snippet": "Tenrikyo  The concept of innen (いんねん, \"causality\") in Tenrikyo is a unique understanding of karmic belief. Although causality resembles karmic beliefs found in religious traditions originating in ancient India, such as Hinduism, Buddhism and Jainism, Tenrikyo's doctrine does not claim to inherit the concept from these traditions and differs from their explanations of karma in a few significant ways."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Tenrikyo",
-          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Comparison_to_karmic_belief",
           "score": 1.0,
-          "snippet": "Tenrikyo (天 理 教, Tenrikyō, sometimes rendered as Tenriism) is a Japanese new religion which is neither strictly monotheistic nor pantheistic, originating from the teachings of a 19th-century woman named Nakayama Miki, known to her followers as \"Oyasama\". Followers of Tenrikyo believe that God of Origin, God in Truth, known by several names including \"Tsukihi,\" \" Tenri-Ō-no-Mikoto \" and \"Oyagamisama (God the Parent)\" revealed divine intent through Miki Nakayama as the Shrine of God and to a lesser extent the roles of the Honseki Izo Iburi and other leaders. Tenrikyo's worldly aim is to teach an…"
+          "snippet": "Tenrikyo's ontology, however, differs from older karmic religious traditions such as Buddhism. In Tenrikyo, the human person is believed to consist of mind, body, and soul. The mind, which is given the freedom to sense, feel, and act by God the Parent, ceases to function at death. On the other hand, the soul, through the process of denaoshi (出直し, lit. ' to make a fresh start '), takes on a new body lent from God the Parent and is reborn into this world. Though the reborn person has no memory of the previous life, the person's thoughts and deeds leave their mark on the soul and are carried over…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Tenrikyo",
-          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Beliefs",
           "score": 1.0,
-          "snippet": "Tenrikyo  aim is to teach and promote the Joyous Life, which is cultivated through acts of charity and mindfulness called hinokishin.  The primary operations of Tenrikyo today are located at Tenrikyo Church Headquarters (Tenri, Nara, Japan), which supports 16,833 locally managed churches in Japan, the construction and maintenance of the oyasato-yakata and various community-focused organisations. It has 1.75 million followers in Japan and is estimated to have over 2 million worldwide."
+          "snippet": "Tenrikyo  The ultimate spiritual aim of Tenrikyo is the construction of the Kanrodai, a divinely ordained pillar in an axis mundi called the Jiba, and the correct performance of the Kagura ritual around the Kanrodai, which will bring about the salvation of all human beings. The idea of the Jiba as the origin of earthly creation is called moto-no-ri, or the principle of origin. A pilgrimage to the Jiba is interpreted as a return to one's origin, so the greeting okaeri nasai ('welcome home') is seen on many inns in Tenri City.  Other key teachings include:"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Salvation",
-          "url": "https://en.wikipedia.org/wiki/Salvation",
+          "url": "https://en.wikipedia.org/wiki/Salvation#Christianity",
           "score": 1.0,
-          "snippet": "Salvation is the state of being saved or protected from harm or a dire situation. In religion and theology, salvation generally refers to the deliverance of the soul from sin and its consequences. The academic study of salvation is called soteriology."
+          "snippet": "Salvation  important position, however, only when the ills in question form part of a great system against which human power is helpless.  According to Christian belief, sin as the human predicament is considered to be universal. For example, in Romans 1:18–3:20 the Apostle Paul declared everyone to be under sin—Jew and Gentile alike. Salvation is made possible by the life, death, and resurrection of Jesus, which in the context of salvation is referred to as the \" atonement \". Christian soteriology ranges from exclusive salvation to universal reconciliation concepts. While some of the differen…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Salvation",
-          "url": "https://en.wikipedia.org/wiki/Salvation#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Salvation#Indian_religions",
           "score": 1.0,
-          "snippet": "Salvation (from Latin: salvatio, from salva, 'safe, saved') is the state of being saved or protected from harm or a dire situation. In religion and theology, salvation generally refers to the deliverance of the soul from sin and its consequences. The academic study of salvation is called soteriology."
+          "snippet": "Salvation  Hinduism, Buddhism, Jainism and Sikhism share certain key concepts, which are interpreted differently by different groups and individuals. In these religions one is not liberated from sin and its consequences, but from the saṃsāra (cycle of rebirth) perpetuated by passions and delusions and its resulting karma. They differ however on the exact nature of this liberation.  Salvation is always self-attained in Dharmic traditions, and a more appropriate term would be moksha ('liberation') or mukti ('release'). This state and the conditions considered necessary for its realization is des…"
         }
       ],
       "source_score": {
@@ -2091,7 +2098,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2853,
+      "search_ms": 3648,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -2167,6 +2174,27 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Abstract",
+          "score": 1.0,
+          "snippet": "Isaac Newton  Gottfried Wilhelm Leibniz for formulating infinitesimal calculus, though some say he developed calculus years before Leibniz.  In the Principia, Newton formulated the laws of motion and universal gravitation that formed the dominant scientific viewpoint for centuries until it was superseded by the theory of relativity. He used his mathematical description of gravity to derive Kepler's laws of planetary motion, account for tides, the trajectories of comets, the precession of the equinoxes and other phenomena, eradicating doubt about the Solar System 's heliocentricity. He demonstr…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton",
+          "score": 1.0,
+          "snippet": "Isaac Newton  He used his mathematical description of gravity to derive Kepler's laws of planetary motion, account for tides, the trajectories of comets, the precession of the equinoxes and other phenomena, eradicating doubt about the Solar System's heliocentricity. He demonstrated that the motion of objects on Earth and celestial bodies could be accounted for by the same principles. Newton's inference that the Earth is an oblate spheroid was later confirmed by the geodetic measurements of Maupertuis, La Condamine, and others, convincing most European scientists of the superiority of Newtonian…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb \"Arik\" Einstein was an Israeli singer, songwriter, actor, comedian and screenwriter. He was a pioneer of Israeli rock music and was named \"the voice of Israel.\" Through both high public and critical acclaim, Einstein is regarded as one of the greatest, most popular, and most influential Israeli artists of all time. An illustrious musical career that spanned over 50 years saw Einstein recording over 500 songs and releasing, collaborating, and featuring in 34 albums, far more than any other Israeli musician. Through the years he collaborated with many well-known Israeli…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Gravitational lens",
           "url": "https://en.wikipedia.org/wiki/Gravitational_lens#History",
           "score": 0.0384265,
@@ -2223,107 +2251,86 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Equivalence principle",
-          "url": "https://en.wikipedia.org/wiki/Equivalence_principle#History",
-          "score": 0.032936256,
-          "snippet": "Equivalence principle  Galileo compared different materials experimentally to determine that the acceleration due to gravitation is independent of the amount of mass being accelerated.  Newton, just 50 years after Galileo, developed the idea that gravitational and inertial mass were different concepts and compared the periods of pendulums composed of different materials to verify that these masses are the same. This form of the equivalence principle became known as \"weak equivalence\".  A version of the equivalence principle consistent with special relativity was introduced by Albert Einstein i…"
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#The_High_Windows",
+          "score": 1.0,
+          "snippet": "Arik Einstein  In 1966, Einstein joined The High Windows with Shmulik Kraus and Josie Katz. Their first album went on sale in April 1967, six weeks before the Six-Day War, signaling a new direction in Israeli rock and pop. The album achieved considerable commercial success and its popularity was felt even in parts of Western Europe, primarily France. After a few concerts in Europe Einstein left the group after one year in the wake of a professional disagreement with Kraus. At the heart of things, Einstein felt uncomfortable creating music for a European audience who cannot truly appreciate the…"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "History of physics",
-          "url": "https://en.wikipedia.org/wiki/History_of_physics#General_relativity",
-          "score": 0.039012928,
-          "snippet": "History of physics  By 1916, Einstein was able to generalize this further, to deal with all states of motion including non-uniform acceleration, which became the general theory of relativity. In this theory Einstein also specified a new concept, the curvature of space-time, which described the gravitational effect at every point in space. In fact, the curvature of space-time completely replaced Newton's universal law of gravitation. According to Einstein, gravitational force in the normal sense is a kind of illusion caused by the geometry of space. The presence of a mass causes a curvature of …"
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb \" Arik \" Einstein (Hebrew: אָרִיק אַייְנְשְׁטֵייְן; 3 January 1939 – 26 November 2013) was an Israeli singer, songwriter, actor, comedian and screenwriter. He was a pioneer of Israeli rock music and was named \"the voice of Israel.\" Through both high public and critical acclaim, Einstein is regarded as one of the greatest, most popular, and most influential Israeli artists of all time.  An illustrious musical career that spanned over 50 years saw Einstein recording over 500 songs and releasing, collaborating, and featuring in 34 albums, far more than any other Israeli …"
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Introduction to general relativity",
-          "url": "https://en.wikipedia.org/wiki/Introduction_to_general_relativity#Sources_of_gravity",
-          "score": 0.03519847,
-          "snippet": "Introduction to general relativity  In Newton's description of gravity, the gravitational force is caused by matter. More precisely, it is caused by a specific property of material objects: their mass. In Einstein's theory and related theories of gravitation, curvature at every point in spacetime is also caused by whatever matter is present. Here, too, mass is a key property in determining the gravitational influence of matter. But in a relativistic theory of gravity, mass cannot be the only source of gravity. Relativity links mass with energy, and energy with momentum."
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Early_life",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb Einstein was born and raised in Tel Aviv, the only child of Ya'akov and Dvora (Dubno) Einstein. His father, Ya'akov, was an actor with the Ohel theater. Einstein was Israel's junior high jump and shot put champion, and also played basketball for Hapoel Tel Aviv B.C. His father urged him to audition for an army entertainment troupe, and he was accepted into the Lahakat HaNahal troupe."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Calculus",
+          "score": 1.0,
+          "snippet": "Isaac Newton  Newton's work has been said \"to distinctly advance every branch of mathematics then studied\". His work on the subject, usually referred to as fluxions or calculus, seen in a manuscript of October 1666, is now published among Newton's mathematical papers. His work De analysi per aequationes numero terminorum infinitas, sent by Isaac Barrow to John Collins in June 1669, was identified by Barrow in a letter sent to Collins that August as the work \"of an extraordinary genius and proficiency in these things\". Newton later became involved in a dispute with Leibniz over priority in the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Calculus",
+          "score": 1.0,
+          "snippet": "Isaac Newton  Leibniz's notation and \"differential Method\", nowadays recognised as much more convenient notations, were adopted by continental European mathematicians, and after 1820 or so, also by British mathematicians."
         },
         {
           "corpus_id": "wikipedia",
           "title": "General relativity",
-          "url": "https://en.wikipedia.org/wiki/General_relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity#Abstract",
           "score": 1.0,
-          "snippet": "General relativity  Some predictions of general relativity, however, are beyond Newton's law of universal gravitation in classical physics. These predictions concern the passage of time, the geometry of space, the motion of bodies in free fall, and the propagation of light, and include gravitational time dilation, gravitational lensing, the gravitational redshift of light, the Shapiro time delay and singularities/black holes. So far, all tests of general relativity have been shown to be in agreement with the theory. The time-dependent solutions of general relativity enable us to talk about the…"
+          "snippet": "General relativity, also known as the general theory of relativity, and as Einstein's theory of gravity, is the geometric theory of gravitation published by Albert Einstein in 1915 and is the current description of gravitation in modern physics. General relativity generalizes special relativity and refines Newton's law of universal gravitation, providing a unified description of gravity as a geometric property of space and time or four-dimensional spacetime. In particular, the curvature of spacetime is directly related to the energy and momentum of whatever matter and radiation are present. Th…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "General relativity",
-          "url": "https://en.wikipedia.org/wiki/General_relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity#Abstract",
           "score": 1.0,
-          "snippet": "General relativity  Reconciliation of general relativity with the laws of quantum physics remains a problem, however, as there is a lack of a self-consistent theory of quantum gravity. It is not yet known how gravity can be unified with the three non-gravitational forces: strong, weak and electromagnetic. Einstein's theory has astrophysical implications, including the prediction of black holes—regions of space in which space and time are distorted in such a way that nothing, not even light, can escape from them. Black holes are the end-state for massive stars. Microquasars and active galactic …"
+          "snippet": "General relativity  present. The relation is specified by the Einstein field equations, a system of second-order partial differential equations.  Reconciliation of general relativity with the laws of quantum physics remains a problem, however, as there is a lack of a self-consistent theory of quantum gravity. It is not yet known how gravity can be unified with the three non-gravitational forces: strong, weak and electromagnetic."
         },
         {
           "corpus_id": "wikipedia",
           "title": "General relativity",
-          "url": "https://en.wikipedia.org/wiki/General_relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity#History",
           "score": 1.0,
-          "snippet": "General relativity  In addition, general relativity has provided the base of cosmological models of an expanding universe. Widely acknowledged as a theory of extraordinary beauty, general relativity has often been described as the most beautiful of all existing physical theories."
+          "snippet": "General relativity  During that period, general relativity remained something of a curiosity among physical theories. It was clearly superior to Newtonian gravity, being consistent with special relativity and accounting for several effects unexplained by the Newtonian theory. Einstein showed in 1915 how his theory explained the anomalous perihelion advance of the planet Mercury without any arbitrary parameters (\" fudge factors \"), and in 1919 an expedition led by Eddington confirmed general relativity's prediction for the deflection of starlight by the Sun during the total solar eclipse of 29 …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Einstein field equations",
-          "url": "https://en.wikipedia.org/wiki/Einstein_field_equations",
+          "url": "https://en.wikipedia.org/wiki/Einstein_field_equations#The_correspondence_principle",
           "score": 1.0,
-          "snippet": "Einstein field equations  In the general theory of relativity, the Einstein field equations relate the geometry of spacetime to the distribution of matter within it. The equations were published by Albert Einstein in 1915 in the form of a tensor equation which related the local spacetime curvature with the local energy, momentum and stress within that spacetime. Analogously to the way that electromagnetic fields are related to the distribution of charges and currents via Maxwell's equations, the EFE relate the spacetime geometry to the distribution of mass–energy, momentum and stress, that is,…"
+          "snippet": "Einstein field equations  The EFE reduce to Newton's law of gravity by using both the weak-field approximation and the slow-motion approximation. In fact, the constant G appearing in the EFE is determined by making these two approximations.  Newtonian gravitation can be written as the theory of a scalar field, Φ, which is the gravitational potential in joules per kilogram of the gravitational field g = −∇Φ, see Gauss's law for gravity ∇ 2 Φ (x →, t) = 4 π G ρ (x →, t) {\\displaystyle \\nabla ^{2}\\Phi \\left({\\vec {x}},t\\right)=4\\pi G\\rho \\left({\\vec {x}},t\\right)} where ρ is the mass density. The…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Einstein field equations",
-          "url": "https://en.wikipedia.org/wiki/Einstein_field_equations",
+          "url": "https://en.wikipedia.org/wiki/Einstein_field_equations#Solutions",
           "score": 1.0,
-          "snippet": "Einstein field equations  The inertial trajectories of particles and radiation (geodesics) in the resulting geometry are then calculated using the geodesic equation. As well as implying local energy–momentum conservation, the EFE reduce to Newton's law of gravitation in the limit of a weak gravitational field and velocities that are much less than the speed of light. Exact solutions for the EFE can only be found under simplifying assumptions such as symmetry. Special classes of exact solutions are most often studied since they model many gravitational phenomena, such as rotating black holes an…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Einstein field equations",
-          "url": "https://en.wikipedia.org/wiki/Einstein_field_equations#Abstract",
-          "score": 1.0,
-          "snippet": "Einstein field equations  Einstein tensor) with the local energy, momentum and stress within that spacetime (expressed by the stress–energy tensor).  Analogously to the way that electromagnetic fields are related to the distribution of charges and currents via Maxwell's equations, the EFE relate the spacetime geometry to the distribution of mass–energy, momentum and stress, that is, they determine the metric tensor of spacetime for a given arrangement of stress–energy–momentum in the spacetime. The relationship between the metric tensor and the Einstein tensor allows the EFE to be written as a…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Gravity",
-          "url": "https://en.wikipedia.org/wiki/Gravity",
-          "score": 1.0,
-          "snippet": "Gravity  In physics, gravity is a fundamental interaction primarily observed as mutual attraction between all things that have mass. Gravity is, by far, the weakest of the four fundamental interactions, approximately 10⁳⁸ times weaker than the strong interaction, 10⁳⁶ times weaker than the electromagnetic force and 10⁲⁹ times weaker than the weak interaction. As a result, it has no significant influence at the level of subatomic particles. However, gravity is the most significant interaction between objects at the macroscopic scale, and it determines the motion of planets, stars, galaxies, and…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Gravity",
-          "url": "https://en.wikipedia.org/wiki/Gravity",
-          "score": 1.0,
-          "snippet": "Gravity also has many important biological functions, helping to guide the growth of plants through the process of gravitropism and influencing the circulation of fluids in multicellular organisms. The gravitational attraction between the original gaseous matter in the universe caused it to coalesce and form stars which eventually condensed into galaxies, so gravity is responsible for many of the large-scale structures in the universe. Gravity has an infinite range, although its effects become weaker as objects get farther away. Gravity is most accurately described by the general theory of rel…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
-          "score": 1.0,
-          "snippet": "Albert Einstein was a German-born theoretical physicist who is widely held as one of the most influential scientists. Best known for developing the theory of relativity, Einstein also made important contributions to quantum mechanics. His mass–energy equivalence formula E = mc⁲, which arises from special relativity, has been called \"the world's most famous equation\". He received the 1921 Nobel Prize in Physics \"for his services to theoretical physics, and especially for his discovery of the law of the photoelectric effect\", a pivotal step in the development of quantum theory. Born in the Germa…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Albert Einstein",
-          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
-          "score": 1.0,
-          "snippet": "Albert Einstein  In 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914, he moved to Berlin in order to join the Prussian Academy of Sciences and the Humboldt University of Berlin. In 1917, he became director of the Kaiser Wilhelm Institute for Physics; he also became a German citizen again, this time as a subject of the Kingdom of Prussia. In 1933, while Einstein was visiting the United States, Adolf Hitler came to power in Germany. Horrified by the Nazi war of extermination against …"
+          "snippet": "Einstein field equations  The solutions of the Einstein field equations are metrics of spacetime. These metrics describe the structure of the spacetime including the inertial motion of objects in the spacetime. As the field equations are non-linear, they cannot always be completely solved (i.e. without making approximations). For example, there is no known complete solution for a spacetime with two massive bodies in it (which is a theoretical model of a binary star system, for example). However, approximations are usually made in these cases. These are commonly referred to as post-Newtonian ap…"
         }
       ],
       "source_score": {
         "matched": [
+          "Isaac Newton",
           "Albert Einstein",
           "General relativity"
         ],
         "missing": [
-          "Isaac Newton",
           "Newton's law of universal gravitation"
         ],
         "total_expected": 4,
-        "ratio": 0.5
+        "ratio": 0.75
       },
       "fact_score": {
         "matched": [
@@ -2331,16 +2338,15 @@
           "spacetime curvature",
           "inverse-square law",
           "geodesic",
-          "equivalence principle"
-        ],
-        "missing": [
+          "equivalence principle",
           "Mercury perihelion"
         ],
+        "missing": [],
         "total_expected": 6,
-        "ratio": 0.8333333
+        "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2820,
+      "search_ms": 3654,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -2465,6 +2471,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Later_life",
+          "score": 0.042476565,
+          "snippet": "Lise Meitner  contract with Girton College, Cambridge, but the Second World War broke out in September 1939 before she could make the move."
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Meitnerium",
           "url": "https://en.wikipedia.org/wiki/Meitnerium#Naming",
           "score": 0.04555822,
@@ -2501,9 +2514,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Chien-Shiung Wu",
-          "url": "https://en.wikipedia.org/wiki/Chien-Shiung_Wu#Early_life",
+          "url": "https://en.wikipedia.org/wiki/Chien-Shiung_Wu#Berkeley",
           "score": 1.0,
-          "snippet": "Chien-Shiung Wu was born in the town of Liuhe, Taicang in Jiangsu province, China, on May 31, 1912, the second of three children of Wu Zhong-Yi (吳仲裔) and Fan Fu-Hua(樊復華). The family custom was that children of this generation had Chien as the first character (generation name) of their forename, followed by the characters in the phrase Ying-Shiung-Hao-Jie, which means \"heroes and outstanding figures\". Accordingly, she had an older brother, Chien-Ying, and a younger brother, Chien-Hao. Wu and her father were extremely close, and he encouraged her interests passionately, creating an environment w…"
+          "snippet": "Chien-Shiung Wu  room next door, and was called \"Gee Gee\". She was the most talented and most beautiful experimental physicist I have ever met.  Segrè recognized Wu's brilliance and compared her to Wu's heroine Marie Curie, whom Wu always quoted, but said that Wu was more \"worldly, elegant, and witty.\" Meanwhile, Lawrence described Wu as \"the most talented female experimental physicist he had ever known, and that she would make any laboratory shine.\" When it came time to present her thesis in 1940, it had two separate parts presented in very neat fashion. The first was on bremsstrahlung, the e…"
         },
         {
           "corpus_id": "wikipedia",
@@ -2552,7 +2565,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2766,
+      "search_ms": 3630,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -2649,13 +2662,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Ada Lovelace",
-          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Commemoration",
-          "score": 0.047985345,
-          "snippet": "Ada Lovelace  people the skills, experience, and community support to become professional software developers to change the face of tech.  On 17 September 2013, the BBC Radio 4 biography programme Great Lives devoted an episode to Ada Lovelace; she was sponsored by TV presenter Konnie Huq.  As of November 2015, all new British passports have included an illustration of Lovelace and Babbage.  In 2017, a Google Doodle honoured her with other women on International Women's Day.  On 2 February 2018, Satellogic, a high-resolution Earth observation imaging and analytics company, launched a ÑuSat typ…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Algorithm",
           "url": "https://en.wikipedia.org/wiki/Algorithm#Weight-driven_clocks",
           "score": 0.045223303,
@@ -2705,24 +2711,38 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Analytical engine",
-          "url": "https://en.wikipedia.org/wiki/Analytical_engine",
-          "score": 1.0,
-          "snippet": "Analytical engine  It was not until 1941 that Konrad Zuse built the first general-purpose computer, Z3, more than a century after Babbage had proposed the pioneering analytical engine in 1837."
+          "title": "Programmer",
+          "url": "https://en.wikipedia.org/wiki/Programmer#History",
+          "score": 0.028427081,
+          "snippet": "Programmer  British countess and mathematician Ada Lovelace is often considered to be the first computer programmer.She authored an algorithm, which was published in October 1842, for calculating Bernoulli numbers on the Charles Babbage analytical engine. Because the machine was not completed in her lifetime, she never experienced the algorithm in action.  In 1941, German civil engineer Konrad Zuse was the first person to execute a program on a working, program-controlled, electronic computer. From 1943 to 1945, per computer scientist Wolfgang K. Giloi and AI professor Raúl Rojas et al., Zuse …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Analytical engine",
-          "url": "https://en.wikipedia.org/wiki/Analytical_engine#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
           "score": 1.0,
-          "snippet": "Analytical engine  The analytical engine was a proposed digital mechanical general-purpose computer designed by English mathematician and computer pioneer Charles Babbage. It was first described in 1837 as the successor to Babbage's difference engine, which was a design for a simpler mechanical calculator.  The analytical engine incorporated an arithmetic logic unit, control flow in the form of conditional branching and loops, and integrated memory, making it the first design for a general-purpose computer that could be described in modern terms as Turing-complete. In other words, the structur…"
+          "snippet": "Analytical engine  Babbage's first attempt at a mechanical computing device, the Difference Engine, was a special-purpose machine designed to tabulate logarithms and trigonometric functions by evaluating finite differences to create approximating polynomials. Construction of this machine was never completed; Babbage had conflicts with his chief engineer, Joseph Clement, and ultimately the British government withdrew its funding for the project.  During this project, Babbage realised that a much more general design, the analytical engine, was possible. The work on the design of the analytical e…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytical engine",
+          "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
+          "score": 1.0,
+          "snippet": "Analytical engine  1840, and one program later. These programs treat polynomials, iterative formulas, Gaussian elimination, and Bernoulli numbers.  In 1842, the Italian mathematician Luigi Federico Menabrea published a description of the engine in French, based on lectures Babbage gave when he visited Turin in 1840. In 1843, the description was translated into English and extensively annotated by Ada Lovelace, who had become interested in the engine eight years earlier. In recognition of her additions to Menabrea's paper, which included a way to calculate Bernoulli numbers using the machine (w…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Charles Babbage",
-          "url": "https://en.wikipedia.org/wiki/Charles_Babbage",
+          "url": "https://en.wikipedia.org/wiki/Charles_Babbage#British_Lagrangian_School",
           "score": 1.0,
-          "snippet": "Charles Babbage was an English polymath. A mathematician, philosopher, inventor and mechanical engineer, Babbage originated the concept of a digital programmable computer. Babbage is considered by some to be \"father of the computer\". He is credited with inventing the first mechanical computer, the Difference Engine, that eventually led to more complex electronic designs, though all the essential ideas of modern computers are to be found in his Analytical Engine, programmed using a principle openly borrowed from the Jacquard loom. Babbage had a broad range of interests in addition to his work o…"
+          "snippet": "Charles Babbage  at bay. Woodhouse had already founded this second \"British Lagrangian School\" with its treatment of Taylor series as formal.  In this context function composition is complicated to express, because the chain rule is not simply applied to second and higher derivatives. This matter was known to Woodhouse by 1803, who took from Louis François Antoine Arbogast what is now called Faà di Bruno's formula. In essence it was known to Abraham De Moivre (1697). Herschel found the method impressive, Babbage knew of it, and it was later noted by Ada Lovelace as compatible with the analytic…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Charles Babbage",
+          "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Ada_Lovelace_and_Italian_followers",
+          "score": 1.0,
+          "snippet": "Charles Babbage  may say most aptly that the Analytical Engine weaves algebraical patterns just as the Jacquard loom weaves flowers and leaves.\"  Babbage visited Turin in 1840 at the invitation of Giovanni Plana, who had developed in 1831 an analog computing machine that served as a perpetual calendar. Here in 1840 in Turin, Babbage gave the only public explanation and lectures about the Analytical Engine. In 1842 Charles Wheatstone approached Lovelace to translate a paper of Luigi Menabrea, who had taken notes of Babbage's Turin talks; and Babbage asked her to add something of her own. Fortun…"
         },
         {
           "corpus_id": "wikipedia",
@@ -2733,31 +2753,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Charles Babbage",
-          "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Abstract",
+          "title": "Algorithm",
+          "url": "https://en.wikipedia.org/wiki/Algorithm#Definition",
           "score": 1.0,
-          "snippet": "Charles Babbage KH FRS (/ ˈ b æ b ɪ dʒ /; 26 December 1791 – 18 October 1871) was an English polymath. A mathematician, philosopher, inventor and mechanical engineer, Babbage originated the concept of a digital programmable computer."
+          "snippet": "Algorithm  can be followed by either a computing machine or a human who could only carry out specific elementary operations on symbols.  The concept of algorithm is also used to define the notion of decidability —an idea that is central for explaining how formal systems come into being starting from a small set of axioms and rules. In logic, the time an algorithm requires to complete cannot be measured, as it is unrelated to the customary physical dimension. Such uncertainties that characterize ongoing work stem from the unavailability of a definition of algorithm that suits both concrete (in …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Algorithm",
-          "url": "https://en.wikipedia.org/wiki/Algorithm",
+          "url": "https://en.wikipedia.org/wiki/Algorithm#Definition",
           "score": 1.0,
-          "snippet": "Algorithm  In mathematics and computer science, an algorithm is a finite sequence of mathematically rigorous instructions, typically used to solve a class of specific problems or to perform a computation. Algorithms are used as specifications for performing calculations and data processing. More advanced algorithms can use conditionals to divert the code execution through various routes and deduce valid inferences, achieving automation eventually. Using human characteristics as descriptors of machines in metaphorical ways was already practiced by Alan Turing with terms such as \"memory\", \"searc…"
+          "snippet": "Algorithm  One informal definition is \"a set of rules that precisely defines a sequence of operations\", which would include all computer programs (including programs that do not perform numeric calculations), and (for example) any prescribed bureaucratic procedure or cook-book recipe. In general, a program is an algorithm only if it stops eventually —even though infinite loops may sometimes prove desirable. Boolos, Jeffrey & 1974, 1999 define an algorithm to be a set of instructions for determining an output, given explicitly, in a form that can be followed by either a computing machine or a h…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Algorithm",
-          "url": "https://en.wikipedia.org/wiki/Algorithm",
+          "url": "https://en.wikipedia.org/wiki/Algorithm#Ancient_algorithms",
           "score": 1.0,
-          "snippet": "Algorithm  For example, social media recommender systems rely on heuristics in such a way that, although widely characterized as \"algorithms\" in 21st-century popular media, cannot deliver correct results due to the nature of the problem. As an effective method, an algorithm can be expressed within a finite amount of space and time and in a well-defined formal language for calculating a function. Starting from an initial state and initial input, the instructions describe a computation that, when executed, proceeds through a finite number of well-defined successive states, eventually producing \"…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Algorithm",
-          "url": "https://en.wikipedia.org/wiki/Algorithm#Abstract",
-          "score": 1.0,
-          "snippet": "Algorithm  In mathematics and computer science, an algorithm (/ ˈ æ l ɡ ə r ɪ ð əm /) is a finite sequence of mathematically rigorous instructions, typically used to solve a class of specific problems or to perform a computation. Algorithms are used as specifications for performing calculations and data processing. More advanced algorithms can use conditionals to divert the code execution through various routes (referred to as automated decision-making) and deduce valid inferences (referred to as automated reasoning), achieving automation eventually. Using human characteristics as descriptors …"
+          "snippet": "Algorithm  Since antiquity, step-by-step procedures for solving mathematical problems have been recorded. This includes in Babylonian mathematics (around 2500 BC), Egyptian mathematics (around 1550 BC), Indian mathematics (around 800 BC and later), the Ifa Oracle (around 500 BC), Greek mathematics (around 240 BC), and Arabic mathematics (around 800 AD).  The earliest evidence of algorithms is found in the mathematics of ancient Mesopotamia (modern Iraq). A Sumerian clay tablet found in Shuruppak near Baghdad and dated to c. 2500 BC describes the earliest division algorithm. During the Hammurab…"
         }
       ],
       "source_score": {
@@ -2785,7 +2798,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2805,
+      "search_ms": 3683,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -2918,7 +2931,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2696,
+      "search_ms": 3562,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -2929,13 +2942,6 @@
       "category": "boundary_coverage",
       "question": "What is the Copenhagen interpretation of quantum mechanics?",
       "retrieved": [
-        {
-          "corpus_id": "wikipedia",
-          "title": "Interpretations of quantum mechanics",
-          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Abstract",
-          "score": 0.077487245,
-          "snippet": "Interpretations of quantum mechanics  An interpretation of quantum mechanics is an attempt to explain how the mathematical theory of quantum mechanics might correspond to experienced reality. Quantum mechanics has held up to rigorous and extremely precise tests in an extraordinarily broad range of experiments. However, there exist a number of contending schools of thought over their interpretation. These views on interpretation differ on such fundamental questions as whether quantum mechanics is deterministic or stochastic, local or non-local, which elements of quantum mechanics can be conside…"
-        },
         {
           "corpus_id": "wikipedia",
           "title": "Interpretations of quantum mechanics",
@@ -3005,7 +3011,7 @@
         "ratio": 0.8333333
       },
       "embed_ms": 0,
-      "search_ms": 2049,
+      "search_ms": 2416,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -3081,13 +3087,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
-          "score": 0.067075334,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Air raids on Japan",
           "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
           "score": 0.047931984,
@@ -3158,17 +3157,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
-          "score": 1.0,
-          "snippet": "Air raids on Japan  During the Pacific War, Allied forces conducted air raids on Japan from 1942 to 1945, causing extensive destruction to the country's cities and killing between 241,000 and 900,000 people. During the first years of the Pacific War these attacks were limited to the Doolittle Raid in April 1942 and small-scale raids on military positions in the Kuril Islands from mid-1943. Strategic bombing raids began in June 1944 and continued until the end of the war in August 1945. Allied naval and land-based tactical air units also attacked Japan during 1945. The United States Army Air Fo…"
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Transportation",
+          "score": 0.022916667,
+          "snippet": "Nagasaki  The nearest airport is Nagasaki Airport in the nearby city of Ōmura. The Kyushu Railway Company (JR Kyushu) provides rail transportation on the Nishi Kyushu Shinkansen and Nagasaki Main Line, whose terminal is at Nagasaki Station. In addition, the Nagasaki Electric Tramway operates five routes in the city. The Nagasaki Expressway serves vehicular traffic with interchanges at Nagasaki and Susukizuka. In addition, six national highways crisscross the city: Route 34, 202, 206, 251, 324, and 499."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Abstract",
           "score": 1.0,
-          "snippet": "Air raids on Japan  From June 1944 until January 1945, B-29s stationed in India staged through bases in China to make a series of nine raids on targets in western Japan, but this effort proved ineffective. The strategic bombing campaign was greatly expanded from November 1944 when bases in the Mariana Islands became available as a result of the Mariana Islands Campaign. Initial attempts to target industrial facilities using high-altitude daylight \"precision\" bombing were largely ineffective. From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much …"
+          "snippet": "Air raids on Japan  From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much of the manufacturing process was carried out in small workshops and private homes: this approach resulted in large-scale urban damage and high civilian casualties. Aircraft flying from Allied aircraft carriers and the Ryukyu Islands also frequently struck targets in Japan during 1945 in preparation for the planned invasion of Japan scheduled for October 1945. During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs."
         },
         {
           "corpus_id": "wikipedia",
@@ -3179,10 +3178,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Hiroshima",
-          "url": "https://en.wikipedia.org/wiki/Hiroshima",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
           "score": 1.0,
-          "snippet": "Hiroshima is the capital of Hiroshima Prefecture in Japan. As of June 1, 2019, the city had an estimated population of 1,199,391. The gross domestic product (GDP) in Greater Hiroshima, Hiroshima Urban Employment Area, was US$61.3 billion as of 2010. Kazumi Matsui has been the city's mayor since April 2011. The Hiroshima metropolitan area is the second largest urban area in the Chugoku Region of Japan, following the Okayama metropolitan area. Hiroshima was founded in 1589 as a castle town on the Ōta River delta. Following the Meiji Restoration in 1868, Hiroshima rapidly transformed into a major…"
+          "snippet": "Air raids on Japan  However, there has been a long-running debate over the morality of the attacks on Japanese cities, and the use of atomic weapons is particularly controversial. The most commonly cited estimate of Japanese casualties from the raids is 333,000 killed and 473,000 wounded. Other estimates of total fatalities range from 241,000 to 900,000. In addition to the loss of mostly civilian life, the raids contributed to a large decline in industrial production."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#World_War_II_and_the_atomic_bombing_(1939–1945)",
+          "score": 1.0,
+          "snippet": "Hiroshima  During World War II, the Second General Army and Chūgoku Regional Army was headquartered in Hiroshima, and the Army Marine Headquarters was located at Ujina port. The city also had large depots of military supplies, and was a key center for shipping.  The bombing of Tokyo and other cities in Japan during World War II caused widespread destruction and hundreds of thousands of civilian deaths. There were no such air raids on Hiroshima. However, a real threat existed and was recognized. To protect against potential firebombings in Hiroshima, school children aged 11–14 years were mobili…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#History",
+          "score": 1.0,
+          "snippet": "Nagasaki Prefecture  of Tsushima and Iki. Facing China and Korea, the region around Hirado was a traditional center for traders and pirates.  Today, Nagasaki has prominent Catholic churches, and the Hidden Christian Sites in the Nagasaki Region, have been included on the UNESCO World Heritage List.  During the Meiji Restoration, Nagasaki and Sasebo became major ports for foreign trade, and eventually major military bases and shipbuilding centers for the Imperial Japanese Navy and the Mitsubishi Heavy Industries up to World War II. On August 9, 1945, the United States dropped an atomic bomb on …"
         },
         {
           "corpus_id": "wikipedia",
@@ -3194,16 +3207,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Nagasaki Prefecture",
-          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
-          "score": 1.0,
-          "snippet": "Nagasaki Prefecture is home to several of the Hidden Christian Sites in the Nagasaki Region which have been declared a UNESCO World Heritage Site."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Nagasaki Prefecture",
           "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Abstract",
           "score": 1.0,
-          "snippet": "Nagasaki Prefecture (長崎県, Nagasaki-ken) is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 (1 June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast."
+          "snippet": "Nagasaki Prefecture  June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast.  Nagasaki is the capital and largest city of Nagasaki Prefecture, with other major cities including Sasebo, Isahaya, and Ōmura. Nagasaki Prefecture is located in western Kyūshū with a territory consisting of many mainland peninsulas centered around Ōmura Bay, as well as islands and archipelagos including Tsushima and Iki in the Korea Strait and the Gotō Islands in the East China Sea. Nagasaki Prefecture is known for its century-long trading history …"
         }
       ],
       "source_score": {
@@ -3229,7 +3235,7 @@
         "ratio": 0.16666667
       },
       "embed_ms": 0,
-      "search_ms": 2769,
+      "search_ms": 3627,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -3316,7 +3322,7 @@
         "ratio": 0.42857143
       },
       "embed_ms": 0,
-      "search_ms": 2750,
+      "search_ms": 3681,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -3470,16 +3476,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Free trade",
-          "url": "https://en.wikipedia.org/wiki/Free_trade",
+          "url": "https://en.wikipedia.org/wiki/Free_trade#Economic_models",
           "score": 1.0,
-          "snippet": "Free trade is a trade policy that does not restrict imports or exports. In government, free trade is predominantly advocated by political parties that hold economically liberal positions, while economic nationalist and left-wing political parties generally support protectionism, the opposite of free trade. Most nations are today members of the World Trade Organization multilateral trade agreements. States can unilaterally reduce regulations and duties on imports and exports, as well as form bilateral and multilateral free trade agreements. Free trade areas between groups of countries, such as …"
+          "snippet": "Free trade  and demand and the economic effects of a tax can be used to show the theoretical benefits and disadvantages of free trade.  Most economists would recommend that even developing nations should set their tariff rates quite low, but the economist Ha-Joon Chang, a proponent of industrial policy, believes higher levels may be justified in developing nations because the productivity gap between them and developed nations today is much higher than what developed nations faced when they were at a similar level of technological development. Underdeveloped nations today, Chang believes, are …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Free trade",
-          "url": "https://en.wikipedia.org/wiki/Free_trade",
+          "url": "https://en.wikipedia.org/wiki/Free_trade#Politics",
           "score": 1.0,
-          "snippet": "Free trade  Governments may also restrict free trade to limit exports of natural resources. Other barriers that may hinder trade include import quotas, taxes and non-tariff barriers, such as regulatory legislation. Historically, openness to free trade substantially increased from 1815 to the outbreak of World War I. Trade openness increased again during the 1920s, but collapsed during the Great Depression. Trade openness increased substantially again from the 1950s onwards. Economists and economic historians contend that current levels of trade openness are the highest they have ever been. Eco…"
+          "snippet": "Free trade  including concerns about:  Economic arguments against free trade criticize the assumptions or conclusions of economic theories.  Domestic industries often oppose free trade on the grounds that lower prices for imported goods would reduce their profits and market share. For example, if the United States reduced tariffs on imported sugar, sugar producers would receive lower prices and profits, and sugar consumers would spend less for the same amount of sugar because of those same lower prices. The economic theory of David Ricardo holds that consumers would necessarily gain more than …"
         },
         {
           "corpus_id": "wikipedia",
@@ -3491,23 +3497,30 @@
         {
           "corpus_id": "wikipedia",
           "title": "Global North and Global South",
-          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South",
+          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South#Abstract",
           "score": 1.0,
-          "snippet": "Global North and Global South are terms that denote a method of grouping countries based on their defining characteristics with regard to socioeconomics and politics. According to UN Trade and Development (UNCTAD), the Global South broadly comprises Africa, Latin America and the Caribbean, Asia, and Oceania. Most of the Global South's countries are commonly identified as lacking in their standard of living, which includes having lower incomes, high levels of poverty, high population growth rates, inadequate housing, limited educational opportunities, and deficient health systems, among other i…"
+          "snippet": "Global North and Global South  as being newly industrialized or in the process of industrializing, many of them are current or former subjects of colonialism.  The Global North and the Global South are often defined in terms of their differing levels of wealth, economic development, income inequality, and strength of democracy, as well as by their political freedom and economic freedom, as defined by a variety of freedom indices. Countries of the Global North tend to be wealthier, and capable of exporting technologically advanced manufactured products, among other characteristics. In contrast,…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Global North and Global South",
-          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South",
+          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South#Definition",
           "score": 1.0,
-          "snippet": "Global North and Global South  As such, the two terms do not refer to the Northern Hemisphere or the Southern Hemisphere, as many of the Global South's countries are geographically located in the former and, similarly, a number of the Global North's countries are geographically located in the latter. More specifically, the Global North consists of the world's developed countries, whereas the Global South consists of the world's developing countries and least developed countries. The Global South classification, as used by governmental and developmental organizations, was first introduced as a …"
+          "snippet": "Global North and Global South  The terms \"Global North\" and \"Global South\" are not strictly geographical, and are not \"an image of the world divided by the equator, separating richer countries from their poorer counterparts.\" Rather, geography should be more readily understood as economic and migratory, in the \"wider context of globalization or global capitalism.\""
         },
         {
           "corpus_id": "wikipedia",
           "title": "Global North and Global South",
-          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South",
+          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South#Definition",
           "score": 1.0,
-          "snippet": "Global North and Global South  Since World War II, the phenomenon of “South–South cooperation” (SSC) to “challenge the political and economic dominance of the North” has become more prominent among the Global South's countries. It has become popular in light of the geographical migration of manufacturing and production activity from the Global North to the Global South, and has since influenced the diplomatic policies of the Global South’s more powerful countries, such as China. Thus, these contemporary economic trends have “enhanced the historical potential of economic growth and industrializ…"
+          "snippet": "Global North and Global South  should be more readily understood as economic and migratory, in the \"wider context of globalization or global capitalism.\"  In general, definitions for Global North and Global South, do not refer to the geographical North or the geographical South. The Global North broadly comprises Northern America and Europe, Israel, Japan, South Korea, Australia, and New Zealand, as per the UNCTAD. The Global South broadly comprises Africa, Latin America and the Caribbean, Asia excluding Israel, Japan, and South Korea, and Oceania excluding Australia and New Zealand, also acco…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Economic globalization",
+          "url": "https://en.wikipedia.org/wiki/Economic_globalization#\"Race_to_the_bottom\"",
+          "score": 1.0,
+          "snippet": "Economic globalization  Globalization is sometimes perceived as a cause of a phenomenon called the \" race to the bottom \" that implies that to minimize cost and increase delivery speed, businesses tend to locate operations in countries with the least stringent environmental and labor regulations. Pressure to do this is increased if competitors lower costs by the same means. This both directly results poor working conditions, low wages, job insecurity, and pollution, but also encourages governments to under-regulate in order to attract jobs and economic investment. However, if business demand i…"
         },
         {
           "corpus_id": "wikipedia",
@@ -3515,13 +3528,6 @@
           "url": "https://en.wikipedia.org/wiki/Economic_globalization",
           "score": 1.0,
           "snippet": "Economic globalization is one of the three main dimensions of globalization commonly found in academic literature, with the two others being political globalization and cultural globalization, as well as the general term of globalization."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Economic globalization",
-          "url": "https://en.wikipedia.org/wiki/Economic_globalization",
-          "score": 1.0,
-          "snippet": "Economic globalization refers to the widespread international movement of goods, capital, services, technology and information. It is the increasing economic integration and interdependence of national, regional, and local economies across the world through an intensification of cross-border movement of goods, services, technologies and capital. Economic globalization primarily comprises the globalization of production, finance, markets, technology, organizational regimes, institutions, corporations, and people. While economic globalization has been expanding since the emergence of trans-natio…"
         }
       ],
       "source_score": {
@@ -3541,18 +3547,18 @@
           "inequality",
           "development",
           "poverty",
+          "labor",
+          "competition",
           "growth"
         ],
         "missing": [
-          "labor",
-          "competition",
           "outsourcing"
         ],
         "total_expected": 8,
-        "ratio": 0.625
+        "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 1316,
+      "search_ms": 1306,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -3656,6 +3662,13 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Position-momentum",
+          "score": 0.031392045,
+          "snippet": "Uncertainty principle  It is vital to illustrate how the principle applies to relatively intelligible physical situations since it is indiscernible on the macroscopic scales that humans experience. Two alternative frameworks for quantum physics offer different explanations for the uncertainty principle. The wave mechanics picture of the uncertainty principle is more visually intuitive, but the more abstract matrix mechanics picture formulates it in a way that generalizes more easily."
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "A Brief History of Time",
           "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_4:_The_Uncertainty_Principle",
           "score": 0.039066624,
@@ -3699,6 +3712,13 @@
         {
           "corpus_id": "wikipedia",
           "title": "Uncertainty",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty#Philosophy",
+          "score": 1.0,
+          "snippet": "Uncertainty  In Western philosophy the first philosopher to embrace uncertainty was Pyrrho resulting in the Hellenistic philosophies of Pyrrhonism and Academic Skepticism, the first schools of philosophical skepticism. Aporia and acatalepsy represent key concepts in ancient Greek philosophy regarding uncertainty.  William MacAskill, a philosopher at Oxford University, has also discussed the concept of Moral Uncertainty. Moral Uncertainty is \"uncertainty about how to act given lack of certainty in any one moral theory, as well as the study of how we ought to act given this uncertainty.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty",
           "url": "https://en.wikipedia.org/wiki/Uncertainty",
           "score": 1.0,
           "snippet": "Uncertainty or incertitude refers to epistemic situations involving imperfect or unknown information. It applies to predictions of future events, to physical measurements that are already made, or to the unknown. Uncertainty arises in partially observable or stochastic environments, as well as due to ignorance, indolence, or both. It arises in any number of fields, including insurance, philosophy, physics, statistics, economics, finance, medicine, psychology, sociology, engineering, metrology, meteorology, ecology and information science."
@@ -3712,10 +3732,10 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Uncertainty",
-          "url": "https://en.wikipedia.org/wiki/Uncertainty#Uncertainty",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
           "score": 1.0,
-          "snippet": "Uncertainty  The lack of certainty, a state of limited knowledge where it is impossible to exactly describe the existing state, a future outcome, or more than one possible outcome."
+          "snippet": "Niels Bohr  to mathematical clarity and simplicity that it represents a gigantic advance over all previous forms of quantum mechanics\".  When Kramers left the institute in 1926 to take up a chair as professor of theoretical physics at the Utrecht University, Bohr arranged for Heisenberg to return and take Kramers's place as a lektor at the University of Copenhagen. Heisenberg worked in Copenhagen as a university lecturer and assistant to Bohr from 1926 to 1927.  Bohr became convinced that light behaved like both waves and particles and, in 1927, experiments confirmed the de Broglie hypothesis …"
         },
         {
           "corpus_id": "wikipedia",
@@ -3733,13 +3753,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Niels Bohr",
-          "url": "https://en.wikipedia.org/wiki/Niels_Bohr",
-          "score": 1.0,
-          "snippet": "Niels Bohr  He was involved with the establishment of CERN and the Research Establishment Risø of the Danish Atomic Energy Commission and became the first chairman of the Nordic Institute for Theoretical Physics in 1957."
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Werner Heisenberg",
           "url": "https://en.wikipedia.org/wiki/Werner_Heisenberg",
           "score": 1.0,
@@ -3748,9 +3761,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Werner Heisenberg",
-          "url": "https://en.wikipedia.org/wiki/Werner_Heisenberg",
+          "url": "https://en.wikipedia.org/wiki/Werner_Heisenberg#Abstract",
           "score": 1.0,
-          "snippet": "Werner Heisenberg  Following World War II, he was appointed director of the Kaiser Wilhelm Institute for Physics, which soon thereafter was renamed the Max Planck Institute for Physics. He was director of the institute until it was moved to Munich in 1958. He then became director of the Max Planck Institute for Physics and Astrophysics from 1960 to 1970. Heisenberg was also president of the German Research Council, chairman of the Commission for Atomic Physics, chairman of the Nuclear Physics Working Group, and president of the Alexander von Humboldt Foundation."
+          "snippet": "Werner Heisenberg  Werner Karl Heisenberg (/ ˈ h aɪ z ən b ɜːr ɡ /; German:; 5 December 1901 – 1 February 1976) was a German theoretical physicist, one of the main pioneers of the theory of quantum mechanics, and a principal scientist in the Nazi nuclear weapons program during World War II. He published his Umdeutung paper in 1925, a major reinterpretation of old quantum theory. In the subsequent series of papers with Max Born and Pascual Jordan, during the same year, his matrix formulation of quantum mechanics was substantially elaborated. He is known for the uncertainty principle, which he p…"
         }
       ],
       "source_score": {
@@ -3780,7 +3793,7 @@
         "ratio": 0.6666667
       },
       "embed_ms": 0,
-      "search_ms": 2081,
+      "search_ms": 2490,
       "corpora_hit": [
         "wikipedia"
       ],
