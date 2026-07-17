@@ -1799,12 +1799,8 @@ fn deep_top_sources_expand<'a, 'ctx>(
         // table). Deep's prompt budget stays EXPANDED_KNOWLEDGE_CHARS
         // unconditionally — only KQ varies budget by expansion outcome.
         let shape = compute_evidence_shape(&st.chunks, st.message);
-        let (strategy, reason) = decide_expansion_strategy(
-            st.intent,
-            SynthesisRoute::PrimarySynthesis,
-            &shape,
-            crate::runtime::evidence::question_breadth_shape(st.message),
-        );
+        let (strategy, reason) =
+            decide_expansion_strategy(st.intent, SynthesisRoute::PrimarySynthesis, &shape);
         tracing::info!(
             target: "retrieval_audit",
             event = "expansion_decision",

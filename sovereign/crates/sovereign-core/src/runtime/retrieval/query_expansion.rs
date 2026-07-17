@@ -564,10 +564,18 @@ pub(crate) async fn ppr_propose_and_gate(
 
         // ── Phase 1: seeds + forward-push walk ──────────────────────
         let t_walk = std::time::Instant::now();
+        let mut t_sub = std::time::Instant::now();
+        let mut sub_extract_ms = 0u64;
+        let mut sub_gliner_ms = 0u64;
+        let mut sub_record_ms = 0u64;
+        let mut sub_pulls_ms = 0u64;
+        let mut sub_hops_ms = 0u64;
         let mut seeds: Vec<String> = extract_comparison_entities(message);
         if seeds.is_empty() {
             seeds = extract_question_entities(message);
         }
+        sub_extract_ms = t_sub.elapsed().as_millis() as u64;
+        t_sub = std::time::Instant::now();
         // GLiNER confirmation filter (when the extractor is wired):
         // keep only heuristic seeds the NER model also sees as
         // entities. The heuristics over-trigger on capitalized
@@ -600,6 +608,8 @@ pub(crate) async fn ppr_propose_and_gate(
                 }
             }
         }
+        sub_gliner_ms = t_sub.elapsed().as_millis() as u64;
+        t_sub = std::time::Instant::now();
         for title in pool_titles.iter() {
             if seeds.len() >= PPR_MAX_SEEDS {
                 break;
@@ -619,6 +629,8 @@ pub(crate) async fn ppr_propose_and_gate(
                 live_seeds.push(s.clone());
             }
         }
+        sub_record_ms = t_sub.elapsed().as_millis() as u64;
+        t_sub = std::time::Instant::now();
         if live_seeds.is_empty() {
             return Vec::new();
         }
@@ -670,8 +682,14 @@ pub(crate) async fn ppr_propose_and_gate(
             String,
             Vec<corpus_engine::WikipediaNeighbor>,
         > = std::collections::HashMap::new();
-        for (i, s) in live_seeds.iter().enumerate() {
-            let nbrs = graph.neighbors(s, PPR_SEED_PULL).await;
+        // The wide pulls are independent Lance point-queries —
+        // sequential they cost ~200ms × seeds (measured pulls=1042ms
+        // of a 1222ms walk); concurrent, wall = the slowest one.
+        let pulled: Vec<Vec<corpus_engine::WikipediaNeighbor>> = futures::future::join_all(
+            live_seeds.iter().map(|s| graph.neighbors(s, PPR_SEED_PULL)),
+        )
+        .await;
+        for (i, (s, nbrs)) in live_seeds.iter().zip(pulled.into_iter()).enumerate() {
             for n in &nbrs {
                 if typed.len() >= PPR_TYPED_CAP {
                     break;
@@ -707,17 +725,30 @@ pub(crate) async fn ppr_propose_and_gate(
             }
             seed_pulls.insert(s.clone(), nbrs);
         }
+        sub_pulls_ms = t_sub.elapsed().as_millis() as u64;
+        t_sub = std::time::Instant::now();
         for _hop in 0..PPR_HOPS {
             let mut frontier: Vec<(String, f64)> = mass.into_iter().collect();
             frontier.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             frontier.truncate(PPR_FRONTIER_CAP);
             let mut next: std::collections::HashMap<String, f64> =
                 std::collections::HashMap::new();
-            for (title, m) in frontier {
-                let nbrs = match seed_pulls.remove(&title) {
-                    Some(pulled) => pulled,
-                    None => graph.neighbors(&title, PPR_NEIGHBORS_PER_NODE).await,
-                };
+            // Frontier pulls are independent point-queries; fetch the
+            // uncached ones concurrently (same rationale as the seed
+            // pulls above).
+            let fetched: Vec<(String, f64, Vec<corpus_engine::WikipediaNeighbor>)> =
+                futures::future::join_all(frontier.into_iter().map(|(title, m)| {
+                    let cached = seed_pulls.remove(&title);
+                    async move {
+                        let nbrs = match cached {
+                            Some(pulled) => pulled,
+                            None => graph.neighbors(&title, PPR_NEIGHBORS_PER_NODE).await,
+                        };
+                        (title, m, nbrs)
+                    }
+                }))
+                .await;
+            for (_title, m, nbrs) in fetched {
                 let push: Vec<_> = nbrs.into_iter().take(PPR_NEIGHBORS_PER_NODE).collect();
                 let total_w: f64 = push
                     .iter()
@@ -761,7 +792,12 @@ pub(crate) async fn ppr_propose_and_gate(
             }
         }
         let typed_n = typed.len();
+        sub_hops_ms = t_sub.elapsed().as_millis() as u64;
         let walk_ms = t_walk.elapsed().as_millis() as u64;
+        tracing::debug!(
+            sub_extract_ms, sub_gliner_ms, sub_record_ms, sub_pulls_ms, sub_hops_ms,
+            "ppr_walk sub-phase timing"
+        );
         if candidates.is_empty() {
             return Vec::new();
         }

@@ -845,6 +845,34 @@ demand_plan entirely (router already classifies) — their path gets
   `--limit` is 10, but `bench all --prod-pipeline` passes
   `--retrieval-limit 30`; the miss vanishes at 30. Default OFF; kept for
   banks/corpora where base retrieval genuinely misses a named concept.
+- **Breadth/depth signal moved to the ROUTER (2026-07-17).** A forensic
+  of the 16 wiki source misses (traced each through the audit at
+  limit=30) refuted the checkpoint's decomposition: ~4 were FETCHED then
+  evicted by the `dominant_source` expansion collapsing breadth
+  questions (Buddhism/Salvation/Scramble/Decolonization); ~10 genuinely
+  not fetched (narrow base pool when the question doesn't NAME its
+  source — "What is the Copenhagen interpretation" never surfaces
+  Bohr/Heisenberg); ~1 gate-reject (Fermi −1.44); ~1 ruler variant
+  (Decolonisation of Africa). The eviction traced to
+  `question_breadth_shape` — a CONTESTED/CAUSAL/COMPARATIVE keyword list
+  that was a shadow re-implementation of the router's intent classifier,
+  firing only because the bench parity surface pinned intent to
+  KnowledgeQuery. **Deleted it.** `decide_expansion_strategy` now takes
+  breadth from `Intent` (`Comparison | Deep`); `retrieve_evidence` routes
+  for real (`router.classify`) AND dispatches per intent
+  (`DeepQuery → deep_pipeline`, else `kq_pipeline`) so the parity surface
+  runs exactly what production runs. A/B (prod-pipeline --isolate
+  --limit 30): **wiki questions 42/58·104/130 → 45/58·113/130 (+3 src,
+  +9 facts)** — recovered the eviction bucket with ZERO bank phrasing;
+  sep questions flat; wiki summarize 78%→74% (the 78% was itself an
+  artifact — prod summarize is DeepQuery→deep_pipeline→breadth always;
+  the old eval measured a fictional kq_pipeline depth path). Production
+  behavior unchanged (Deep/Comparison were breadth before+after; keyword
+  deletion only drops a breadth safety-net for router-MISCLASSIFIED
+  KnowledgeQuery — fix the router, not with vocabulary). Pre-dispatch and
+  dispatch numbers byte-identical; suite 7714/0. Re-baseline summarize to
+  the honest 74%. LESSON: `feedback_no_teaching_to_test` — when a
+  keyword list is patching bench phrasing, the signal belongs upstream.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.

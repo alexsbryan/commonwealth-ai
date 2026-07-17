@@ -269,19 +269,25 @@ impl Runtime {
     /// and the streaming KQ branch in
     /// [`Self::handle_message_stream`] so both paths cannot diverge
     /// in how they search, expand, or build the request.
-    /// Retrieve-only entry: run the FULL production KnowledgeQuery
-    /// retrieval path (context build → `prepare_knowledge_query_plan` →
-    /// the 19-step `kq_pipeline()` + post-pipeline expansion) and return
-    /// the composed evidence pool without a synthesis pass.
+    /// Retrieve-only entry: route the message, then run the SAME
+    /// per-intent retrieval pipeline production runs — `deep_pipeline`
+    /// for `DeepQuery`, `kq_pipeline` for `KnowledgeQuery` /
+    /// `ComparisonQuery` — and return the composed evidence pool without
+    /// a synthesis pass.
     ///
     /// This is the bench parity surface (RETRIEVAL_REDESIGN.md §7.1):
     /// `eval run --prod-pipeline` scores THIS pool, so CI measures the
     /// same code path chat users get — not a parallel bare-index search.
-    /// Intent is pinned to `KnowledgeQuery` deliberately: routing is
-    /// scored by its own lane, and a HARD retrieval lane must stay
-    /// deterministic. The conversation (typically freshly inserted by
-    /// the caller, optionally with `enabled_corpora` seeded for
-    /// isolation) scopes retrieval exactly as a live turn would.
+    /// It ROUTES for real (the router's Intent is the breadth/depth
+    /// signal — see `decide_expansion_strategy`); pinning intent to
+    /// `KnowledgeQuery` used to hide that signal and forced a keyword
+    /// shadow-classifier that overfit bank phrasing. The embed router is
+    /// deterministic, so the HARD lane stays reproducible; a
+    /// classification error falls back to `KnowledgeQuery` so a router
+    /// hiccup can never zero the lane. The conversation (typically
+    /// freshly inserted by the caller, optionally with `enabled_corpora`
+    /// seeded for isolation) scopes retrieval exactly as a live turn
+    /// would.
     pub async fn retrieve_evidence(
         &self,
         message: &str,
@@ -294,7 +300,30 @@ impl Runtime {
             None,
         )
         .await?;
-        let intent = Intent::KnowledgeQuery;
+        let intent = self
+            .router
+            .classify(message, &context, &[])
+            .await
+            .map(|c| c.primary.intent)
+            .unwrap_or(Intent::KnowledgeQuery);
+        // Dispatch to the SAME per-intent pipeline production runs, so
+        // the parity surface measures the real path, not a stand-in:
+        // DeepQuery drives `deep_pipeline` (via prepare_knowledge_context);
+        // KnowledgeQuery / ComparisonQuery (bounded-contrast, pinned to
+        // FastFocused inside the KQ handler) drive `kq_pipeline`. Running
+        // DeepQuery through the KQ pipeline would score a path production
+        // never takes for it.
+        if matches!(intent, Intent::DeepQuery) {
+            let t0 = std::time::Instant::now();
+            let kc = self
+                .prepare_knowledge_context(message, &context, &intent, None)
+                .await;
+            return Ok(EvidenceRetrieval {
+                chunks: kc.chunks,
+                search_ms: t0.elapsed().as_millis() as u64,
+                result_quality: "deep_pipeline",
+            });
+        }
         let plan = self
             .prepare_knowledge_query_plan(message, &context, &intent, None)
             .await;
@@ -601,17 +630,12 @@ impl Runtime {
         // coverage of the dominant article. The cost is occasional
         // displacement of title-expand chunks (T2/T7/T8 v22) but
         // the net is +19pt fact, +22pt src vs baseline.
-        // Which expander to run. Intent- AND question-shape-aware:
-        // comparisons and breadth-shaped questions (contested / causal /
-        // comparative phrasing — `question_breadth_shape`) take breadth,
-        // never the single-dominant-source collapse (which would strip a
-        // contrast down to one side — see `decide_expansion_strategy`).
-        let (expansion_strategy, expansion_reason) = decide_expansion_strategy(
-            intent,
-            route,
-            &shape,
-            super::super::evidence::question_breadth_shape(message),
-        );
+        // Which expander to run. Driven by the router's Intent:
+        // Comparison and Deep questions take breadth, never the
+        // single-dominant-source collapse (which would strip a contrast
+        // down to one side — see `decide_expansion_strategy`).
+        let (expansion_strategy, expansion_reason) =
+            decide_expansion_strategy(intent, route, &shape);
         tracing::info!(
             target: "retrieval_audit",
             event = "expansion_decision",

@@ -746,97 +746,6 @@ pub(crate) enum ExpansionStrategy {
     NoExpansion,
 }
 
-/// Lexical breadth-shape classifier for a knowledge question — the
-/// P2-lite demand signal (RETRIEVAL_REDESIGN.md S2; heuristic floor,
-/// no LLM call). Returns a grep-friendly reason when the QUESTION's
-/// shape needs evidence breadth across several sources, `None` when
-/// depth-on-one-source is appropriate.
-///
-/// Measured basis (2026-07-16 parity lane, pool-controlled @20): the
-/// unconditional DominantSource expansion cost wikipedia multi-fact
-/// questions −6 sources/−12 facts (contested/causal/synthesis shapes
-/// collapsed onto one article) while WINNING +9 facts on
-/// summarize shapes. So this classifier is deliberately asymmetric:
-///
-/// - **Summary/overview shape takes precedence and returns `None`** —
-///   "give an overview of X, cover the main lines of criticism" wants
-///   comprehensive depth on one canonical source, and a stance word
-///   inside the summary prompt must not flip it to breadth.
-/// - **Contested/stance shape** → the answer is a debate across
-///   perspectives, which never lives in one article's own chunks.
-/// - **Causal/synthesis shape** → causes/origins/consequences draw on
-///   the event's article PLUS each factor's own article.
-/// - **Comparative shape** → belt-and-suspenders for comparisons the
-///   router didn't classify as `ComparisonQuery` (and for surfaces
-///   that pin the intent, e.g. the bench parity lane).
-///
-/// Rules describe question SHAPES, not bank vocabulary (no
-/// bank-specific entities or phrasings — see
-/// `feedback_no_teaching_to_test`).
-pub(crate) fn question_breadth_shape(message: &str) -> Option<&'static str> {
-    let m = message.to_lowercase();
-    const SUMMARY: &[&str] = &[
-        "overview",
-        "comprehensive",
-        "summarize",
-        "summarise",
-        "summary",
-        "introduction to",
-    ];
-    if SUMMARY.iter().any(|s| m.contains(s)) {
-        return None;
-    }
-    const CONTESTED: &[&str] = &[
-        "for and against",
-        "pros and cons",
-        "debate",
-        "controvers",
-        "criticism",
-        "critique",
-        "morality",
-        "morally",
-        "ethical",
-        "justified",
-        "arguments against",
-    ];
-    if CONTESTED.iter().any(|s| m.contains(s)) {
-        return Some("contested_breadth");
-    }
-    const CAUSAL: &[&str] = &[
-        "causes of",
-        "caused",
-        "factors",
-        "origins of",
-        "led to",
-        "lead to",
-        // Stem: contribute/contributed/contributing/contribution to.
-        // "How did X contribute to Y?" is the same causal shape as
-        // "X contributed to Y" — the un-stemmed form silently missed
-        // present-tense phrasings (measured 2026-07-17: the
-        // depression→fascism bank question routed DominantSource and
-        // the expander evicted admitted structural chunks as noise).
-        "contribut",
-        "consequences",
-        "resulted in",
-        "gave rise",
-    ];
-    if CAUSAL.iter().any(|s| m.contains(s)) {
-        return Some("causal_breadth");
-    }
-    const COMPARATIVE: &[&str] = &[
-        "compare",
-        "difference between",
-        "differences between",
-        " versus ",
-        " vs ",
-        "how did each",
-    ];
-    if COMPARATIVE.iter().any(|s| m.contains(s)) {
-        return Some("comparative_breadth");
-    }
-    None
-}
-
 /// Decide the cohesion-expansion strategy for a knowledge turn —
 /// **intent-aware** by design.
 ///
@@ -860,16 +769,18 @@ pub(crate) fn decide_expansion_strategy(
     intent: &Intent,
     route: SynthesisRoute,
     shape: &EvidenceShape,
-    question_breadth: Option<&'static str>,
 ) -> (ExpansionStrategy, &'static str) {
-    // Two structural breadth signals: the ComparisonQuery intent, and
-    // the question's own lexical shape (`question_breadth_shape` —
-    // contested / causal / comparative questions never want the pool
-    // collapsed onto one dominant source, however concentrated the
-    // evidence looks). The 2026-07-16 parity measurement is the
-    // receipt: unconditional DominantSource cost wiki multi-fact
-    // questions −6 sources/−12 facts at equal pool size.
-    let needs_breadth = matches!(intent, Intent::ComparisonQuery) || question_breadth.is_some();
+    // Breadth-vs-depth is the ROUTER's call, carried by Intent.
+    // Comparison and Deep questions are inherently multi-source and must
+    // never collapse onto one dominant article, however concentrated the
+    // evidence looks (2026-07-16 receipt: unconditional DominantSource
+    // cost wiki multi-fact questions −6 sources/−12 facts at equal pool
+    // size). This used to also consult a `question_breadth_shape`
+    // keyword list — a shadow re-implementation of the router that only
+    // existed because the bench parity surface pinned intent to
+    // KnowledgeQuery, stripping the real signal. That surface now routes
+    // for real (`retrieve_evidence`), so the keyword lists are retired.
+    let needs_breadth = matches!(intent, Intent::ComparisonQuery | Intent::DeepQuery);
 
     // Depth: a clearly-dominant single source — but never for a
     // breadth-shaped turn, which would defeat the contrast/synthesis.
@@ -888,8 +799,8 @@ pub(crate) fn decide_expansion_strategy(
     {
         let reason = if matches!(intent, Intent::ComparisonQuery) {
             "comparison_breadth"
-        } else if let Some(shape_reason) = question_breadth {
-            shape_reason
+        } else if matches!(intent, Intent::DeepQuery) {
+            "deep_breadth"
         } else {
             "multi_source_synthesis"
         };
@@ -1426,8 +1337,7 @@ mod operation_tests {
 #[cfg(test)]
 mod expansion_strategy_tests {
     use super::{
-        build_test_evidence_shape, decide_expansion_strategy, question_breadth_shape,
-        ExpansionStrategy, SynthesisRoute,
+        build_test_evidence_shape, decide_expansion_strategy, ExpansionStrategy, SynthesisRoute,
     };
     use crate::types::Intent;
 
@@ -1436,18 +1346,29 @@ mod expansion_strategy_tests {
         // Concentrated pool (top source repeats 4×, title match) that
         // WOULD trigger dominant-source expansion for a normal query.
         // A comparison must instead spread across its distinct sources.
-        // This is the 2026-05-25 wiki regression guard: comparative
-        // questions were collapsing onto a single dense SEP article and
-        // scoring 0 of the compared wiki sources. See RERANK_EXPERIMENT.md.
+        // 2026-05-25 wiki regression guard: comparative questions were
+        // collapsing onto a single dense SEP article and scoring 0 of
+        // the compared wiki sources. See RERANK_EXPERIMENT.md.
         let shape = build_test_evidence_shape(10, 3, true, 4);
-        let (strategy, reason) = decide_expansion_strategy(
-            &Intent::ComparisonQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-            None,
-        );
+        let (strategy, reason) =
+            decide_expansion_strategy(&Intent::ComparisonQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::TopSources);
         assert_eq!(reason, "comparison_breadth");
+    }
+
+    #[test]
+    fn deep_query_never_collapses_onto_dominant_source() {
+        // The breadth guard, now at ROUTER altitude. A DeepQuery
+        // (whatever the router routes to Deep — contested / causal /
+        // analytical) is inherently multi-source and must never collapse
+        // a concentrated pool onto one dominant article. This replaces
+        // the retired `question_breadth_shape` keyword path: the signal
+        // is the router's Intent, not a question-vocabulary lookup.
+        let shape = build_test_evidence_shape(10, 7, true, 10);
+        let (strategy, reason) =
+            decide_expansion_strategy(&Intent::DeepQuery, SynthesisRoute::FastFocused, &shape);
+        assert_eq!(strategy, ExpansionStrategy::TopSources);
+        assert_eq!(reason, "deep_breadth");
     }
 
     #[test]
@@ -1455,27 +1376,19 @@ mod expansion_strategy_tests {
         // Only one distinct source present — no breadth to spread over.
         // Better to expand nothing than to collapse depth-first.
         let shape = build_test_evidence_shape(6, 1, true, 4);
-        let (strategy, reason) = decide_expansion_strategy(
-            &Intent::ComparisonQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-            None,
-        );
+        let (strategy, reason) =
+            decide_expansion_strategy(&Intent::ComparisonQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
         assert_eq!(reason, "comparison_single_source_pool");
     }
 
     #[test]
-    fn concentrated_non_comparison_still_takes_dominant_source() {
-        // The fix must NOT regress the single-source-lookup case.
+    fn concentrated_knowledge_query_still_takes_dominant_source() {
+        // The depth case must NOT regress: a focused KnowledgeQuery with
+        // a clearly-dominant source deepens on it.
         let shape = build_test_evidence_shape(10, 2, true, 3);
         let (strategy, _) =
-            decide_expansion_strategy(
-                &Intent::KnowledgeQuery,
-                SynthesisRoute::FastFocused,
-                &shape,
-                None,
-            );
+            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::DominantSource);
     }
 
@@ -1486,99 +1399,29 @@ mod expansion_strategy_tests {
             &Intent::KnowledgeQuery,
             SynthesisRoute::PrimarySynthesis,
             &shape,
-            None,
         );
         assert_eq!(strategy, ExpansionStrategy::TopSources);
         assert_eq!(reason, "multi_source_synthesis");
     }
 
     #[test]
-    fn weak_non_comparison_fast_focused_expands_nothing() {
+    fn weak_knowledge_query_fast_focused_expands_nothing() {
         // FastFocused but below the repeat floor and single-source:
         // no dominant signal, nothing to spread — expand nothing.
         let shape = build_test_evidence_shape(4, 1, false, 1);
         let (strategy, _) =
-            decide_expansion_strategy(
-                &Intent::KnowledgeQuery,
-                SynthesisRoute::FastFocused,
-                &shape,
-                None,
-            );
+            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
     }
 
     #[test]
-    fn breadth_shaped_question_never_collapses_onto_dominant_source() {
-        // The 2026-07-16 parity-lane regression guard: a contested
-        // question under KnowledgeQuery with a concentrated pool used
-        // to take DominantSource and collapse 7 distinct sources into
-        // near-monoculture (RETRIEVAL_REDESIGN.md §8 P1). The question
-        // shape must force breadth like a ComparisonQuery does.
-        let shape = build_test_evidence_shape(10, 7, true, 10);
-        let breadth =
-            question_breadth_shape("What are the major arguments for and against X?");
-        assert_eq!(breadth, Some("contested_breadth"));
-        let (strategy, reason) = decide_expansion_strategy(
-            &Intent::KnowledgeQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-            breadth,
-        );
-        assert_eq!(strategy, ExpansionStrategy::TopSources);
-        assert_eq!(reason, "contested_breadth");
-    }
-
-    #[test]
-    fn summary_shape_takes_precedence_over_stance_words() {
-        // "overview … cover the main lines of criticism" is a
-        // comprehensive-summary ask: depth on one canonical source wins
-        // (+9 facts on the summarize banks through DominantSource). A
-        // stance word inside the summary prompt must not flip it.
-        assert_eq!(
-            question_breadth_shape(
-                "Provide a comprehensive overview of idealism. Cover its central \
-                 claims, the principal arguments for it, and the main lines of criticism."
-            ),
-            None
-        );
-        let shape = build_test_evidence_shape(10, 3, true, 5);
-        let (strategy, _) = decide_expansion_strategy(
-            &Intent::KnowledgeQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-            None,
-        );
-        assert_eq!(strategy, ExpansionStrategy::DominantSource);
-    }
-
-    #[test]
-    fn causal_and_comparative_shapes_classify_as_breadth() {
-        assert_eq!(
-            question_breadth_shape("What were the causes of the French Revolution?"),
-            Some("causal_breadth")
-        );
-        assert_eq!(
-            question_breadth_shape(
-                "How did Einstein's explanation of gravity differ? Compare the two theories."
-            ),
-            Some("comparative_breadth")
-        );
-        // Plain factual lookups stay depth-shaped.
-        assert_eq!(
-            question_breadth_shape("When was the Yalta Conference held and who attended?"),
-            None
-        );
-    }
-
-    #[test]
-    fn breadth_shape_with_single_source_pool_expands_nothing() {
+    fn deep_query_with_single_source_pool_expands_nothing() {
+        // Breadth intent but only one distinct source present — nothing
+        // to spread over, so expand nothing (a recall problem, visible
+        // in the trace as `breadth_single_source_pool`).
         let shape = build_test_evidence_shape(6, 1, true, 4);
-        let (strategy, reason) = decide_expansion_strategy(
-            &Intent::KnowledgeQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-            Some("contested_breadth"),
-        );
+        let (strategy, reason) =
+            decide_expansion_strategy(&Intent::DeepQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
         assert_eq!(reason, "breadth_single_source_pool");
     }
