@@ -65,6 +65,27 @@ pub(crate) fn merge_select_enabled() -> bool {
     }
 }
 
+/// Whether the entity-obligation lane also fetches GLiNER-extracted
+/// CONCEPT articles (lowercase abstract nouns the uppercase-only
+/// heuristic can't see — "determinism", "colonialism").
+///
+/// Ships DARK (default OFF). The lane is correct and fires, but a
+/// limit=30 scoreboard A/B (2026-07-17, `eval run --prod-pipeline
+/// --isolate --limit 30`) measured ZERO source lift on its entire
+/// addressable set — base retrieval already surfaces the concept
+/// articles at the real bench limit, so the checkpoint's "lowercase
+/// extraction gap" did not reproduce. Kept behind
+/// `SOVEREIGN_CONCEPT_OBLIGATIONS=1` for future banks/corpora where
+/// base retrieval genuinely misses a named concept.
+pub(crate) fn concept_obligations_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_CONCEPT_OBLIGATIONS")
+            .ok()
+            .as_deref(),
+        Some("1" | "true" | "on" | "yes")
+    )
+}
+
 fn source_tag_is(c: &ScoredChunk, tag: &str) -> bool {
     c.metadata.get("source").map(|s| s == tag).unwrap_or(false)
 }

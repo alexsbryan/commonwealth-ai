@@ -426,6 +426,13 @@ pub(crate) const OBLIGATION_RESOLVE_LIMIT: usize = 24;
 /// gravitation" — both are bank-expected sources).
 pub(crate) const OBLIGATION_TITLES_PER_ENTITY: usize = 2;
 
+/// Concept-pass obligations added on top of the `MAX_ENTITY_QUERIES`
+/// named-entity budget. Kept small: a question usually turns on one or
+/// two named concepts, and every extra concept is an FTS resolve + a
+/// wholesale article fetch. The FTS-exact-title gate drops concepts
+/// without a canonical article, so this caps cost, not correctness.
+pub(crate) const MAX_CONCEPT_QUERIES: usize = 3;
+
 /// Chunks kept per resolved title (top question-token overlap).
 pub(crate) const OBLIGATION_CHUNKS_PER_TITLE: usize = 2;
 

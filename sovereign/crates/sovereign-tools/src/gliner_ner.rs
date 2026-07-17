@@ -57,6 +57,25 @@ pub const DEFAULT_THRESHOLD: f32 = 0.6;
 /// conv corpus actually contains in production data.
 pub const DEFAULT_LABELS: &[&str] = &["Person", "Organization", "Work", "Location", "Event"];
 
+/// Label set for the retrieval-side CONCEPT extraction pass (see
+/// [`EntityExtractor::extract_concepts`](sovereign_core::traits::EntityExtractor::extract_concepts)).
+/// Deliberately a SEPARATE, single-label pass rather than an addition to
+/// [`DEFAULT_LABELS`]: GLiNER does joint inference over the provided
+/// labels, so folding `Concept` into the 5-label set would shift the
+/// other labels' spans and perturb the tuned seed-confirmation filter —
+/// and the conv-ingestion path excludes `Concept` for precision (see
+/// module docstring). Isolating it here keeps both callers unperturbed.
+pub const CONCEPT_LABELS: &[&str] = &["Concept"];
+
+/// Score cutoff for the concept pass. Set below the concepts a question
+/// actually names (probe 2026-07-17 on the wiki bank: `determinism` 0.80,
+/// `uncertainty principle` 0.72, `globalization` 0.83, `European
+/// colonialism` 0.55, `Enlightenment` 0.56) and above the low-confidence
+/// noise a bare `Concept` label admits. Remaining precision is recovered
+/// downstream by the FTS-exact-title obligation gate, which only fires
+/// for a concept that has a canonical article.
+pub const CONCEPT_THRESHOLD: f32 = 0.5;
+
 /// Default model id. Maps to a directory inside `MODELS_ROOT`
 /// containing `tokenizer.json` + `onnx/model.onnx`.
 pub const DEFAULT_MODEL_ID: &str = "gliner_small-v2.1";
@@ -226,13 +245,28 @@ impl GlinerExtractor {
     /// (case-insensitive `(text, label)` collision wins by highest
     /// score).
     pub fn extract(&self, raw_chunk_text: &str) -> Result<Vec<EntityMention>> {
+        let labels_ref: Vec<&str> = self.labels.iter().map(|s| s.as_str()).collect();
+        self.extract_labeled(raw_chunk_text, &labels_ref, self.threshold)
+    }
+
+    /// Core single-chunk extraction over an EXPLICIT label set +
+    /// threshold. [`extract`](Self::extract) runs it with the slot's
+    /// configured 5 labels; the retrieval `Concept` pass runs it with
+    /// [`CONCEPT_LABELS`] / [`CONCEPT_THRESHOLD`]. gline-rs takes the
+    /// label set per inference call, so both share one model and one
+    /// code path — no second extractor, no divergent dedup logic.
+    pub fn extract_labeled(
+        &self,
+        raw_chunk_text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<EntityMention>> {
         let processed = self.preprocess(raw_chunk_text);
         if processed.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let labels_ref: Vec<&str> = self.labels.iter().map(|s| s.as_str()).collect();
         let texts = vec![processed.as_str()];
-        let input = TextInput::from_str(&texts, &labels_ref)
+        let input = TextInput::from_str(&texts, labels)
             .map_err(|e| Error::Storage(format!("TextInput::from_str: {e}")))?;
         let guard = self
             .model
@@ -248,7 +282,7 @@ impl GlinerExtractor {
         for spans in output.spans {
             for span in spans {
                 let prob = span.probability();
-                if prob < self.threshold {
+                if prob < threshold {
                     continue;
                 }
                 let text = normalize_mention_text(span.text());
@@ -355,19 +389,35 @@ impl GlinerExtractor {
 /// `tracing::debug!`.
 impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
     fn extract_entities(&self, text: &str) -> Vec<String> {
-        let Ok(mentions) = self.extract(text) else {
-            return Vec::new();
-        };
-        let mut seen = std::collections::HashSet::new();
-        let mut out = Vec::with_capacity(mentions.len());
-        for m in mentions {
-            let key = m.text.to_lowercase();
-            if seen.insert(key.clone()) {
-                out.push(key);
-            }
-        }
-        out
+        dedup_mention_texts(self.extract(text).ok())
     }
+
+    /// Run the dedicated `Concept` pass (see [`CONCEPT_LABELS`]). Errors
+    /// (rare ORT runtime issues) degrade to no concepts — retrieval's
+    /// obligation lane just doesn't gain the concept articles this turn,
+    /// exactly as when the model isn't installed.
+    fn extract_concepts(&self, text: &str) -> Vec<String> {
+        dedup_mention_texts(self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD).ok())
+    }
+}
+
+/// Lower-case, dedupe (preserving first-seen order) the text of a set of
+/// mentions. Shared by `extract_entities` and `extract_concepts` so the
+/// two produce identically-shaped output. `None` (an extraction error)
+/// yields an empty Vec.
+fn dedup_mention_texts(mentions: Option<Vec<EntityMention>>) -> Vec<String> {
+    let Some(mentions) = mentions else {
+        return Vec::new();
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(mentions.len());
+    for m in mentions {
+        let key = m.text.to_lowercase();
+        if seen.insert(key.clone()) {
+            out.push(key);
+        }
+    }
+    out
 }
 
 /// Boot-critical-path-free wrapper around [`GlinerExtractor`].
@@ -432,6 +482,15 @@ impl sovereign_core::traits::EntityExtractor for LazyGlinerExtractor {
             Some(g) => g.extract_entities(text),
             // Not warm yet (or load failed): same soft-fallback as an
             // uninstalled model — the retrieval path degrades to cosine+MMR.
+            None => Vec::new(),
+        }
+    }
+
+    fn extract_concepts(&self, text: &str) -> Vec<String> {
+        match self.inner.get() {
+            Some(g) => g.extract_concepts(text),
+            // Not warm yet (or load failed): no concept obligations this
+            // turn, same soft-fallback as an uninstalled model.
             None => Vec::new(),
         }
     }

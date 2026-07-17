@@ -106,6 +106,21 @@ impl StandaloneReranker {
             slot: Arc::new(slot),
         })
     }
+
+    /// Reference-path scoring (see [`RerankSlot::score_sequential`]):
+    /// fully independent per-pair decode, no shared-prefix reuse and no
+    /// multi-sequence batching. Exists so the `rerank_batch_check`
+    /// example can hold the production `rerank_batch` against a
+    /// machinery-free oracle — a correct batched decode of independent
+    /// sequences must reproduce these scores.
+    pub async fn rerank_sequential(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        let slot = Arc::clone(&self.slot);
+        let query = query.to_string();
+        let docs = docs.to_vec();
+        tokio::task::spawn_blocking(move || slot.score_sequential(&query, &docs))
+            .await
+            .map_err(|e| Error::Inference(format!("Rerank seq task failed: {e}")))?
+    }
 }
 
 #[async_trait]

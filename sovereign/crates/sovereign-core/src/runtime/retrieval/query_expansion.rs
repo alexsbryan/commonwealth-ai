@@ -305,8 +305,13 @@ impl Runtime {
         let message = message.to_string();
         let enabled = enabled_corpora.map(|s| s.to_vec());
         let ceiling = corpus_ceiling.map(|s| s.to_vec());
+        // GLiNER concept pass runs inside the spawned task (off the
+        // pipeline setup path) to surface lowercase concept articles the
+        // uppercase-only heuristic can't. `None` when the model isn't
+        // installed → no concept obligations, unchanged behavior.
+        let gliner = self.gliner.clone();
         Some(tokio::spawn(fetch_entity_obligations(
-            engine, rerank_fn, message, enabled, ceiling,
+            engine, rerank_fn, message, enabled, ceiling, gliner,
         )))
     }
 }
@@ -322,13 +327,48 @@ pub(crate) async fn fetch_entity_obligations(
     message: String,
     enabled_corpora: Option<Vec<String>>,
     corpus_ceiling: Option<Vec<String>>,
+    gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
 ) -> Vec<corpus_engine::ScoredChunk> {
     let mut entities: Vec<String> = extract_comparison_entities(&message);
     if entities.is_empty() {
         entities = extract_question_entities(&message);
     }
     entities.truncate(MAX_ENTITY_QUERIES);
-    if entities.is_empty() {
+
+    // Work list of (surface term, is_concept). Named entities come from
+    // the uppercase-only heuristic; concepts come from the GLiNER
+    // `Concept` pass and cover the lowercase abstract nouns the
+    // heuristic structurally cannot see ("determinism", "colonialism",
+    // "uncertainty principle"). Concepts are tagged so resolution can
+    // use bidirectional title matching (see below); everything else
+    // about the fetch is identical.
+    let mut work: Vec<(String, bool)> = entities.into_iter().map(|e| (e, false)).collect();
+    if let Some(g) = gliner.as_ref().filter(|_| concept_obligations_enabled()) {
+        let mut added = 0usize;
+        for c in g.extract_concepts(&message) {
+            if added >= MAX_CONCEPT_QUERIES {
+                break;
+            }
+            // Skip a concept only when a named entity ALREADY covers it
+            // (equal, or the named span contains the concept). Do NOT
+            // skip when the concept merely contains a named entity: a
+            // junk short entity like "European" is a substring of the
+            // real concept "European colonialism", and the two resolve
+            // to DIFFERENT articles ("European long-distance paths" vs
+            // "Colonialism") — dropping the concept there was the bug
+            // that starved the colonialism source (receipt 2026-07-17).
+            let cl = c.to_lowercase();
+            if work.iter().any(|(t, _)| {
+                let tl = t.to_lowercase();
+                tl == cl || tl.contains(&cl)
+            }) {
+                continue;
+            }
+            work.push((c, true));
+            added += 1;
+        }
+    }
+    if work.is_empty() {
         return Vec::new();
     }
 
@@ -358,8 +398,9 @@ pub(crate) async fn fetch_entity_obligations(
 
     let q_tokens = extract_tokens(&message, EVIDENCE_TITLE_MIN_TOKEN_LEN);
     let t_start = std::time::Instant::now();
-    let fetches = entities.iter().map(|entity| {
+    let fetches = work.iter().map(|(entity, is_concept)| {
         let entity = entity.clone();
+        let is_concept = *is_concept;
         let paths = paths.clone();
         let engine = engine.clone();
         let q_tokens = q_tokens.clone();
@@ -381,7 +422,21 @@ pub(crate) async fn fetch_entity_obligations(
                 let mut candidates: Vec<String> = Vec::new();
                 for h in hits {
                     let Some(t) = h.title else { continue };
-                    if t.to_lowercase().contains(&e_lower) && !candidates.contains(&t) {
+                    let tl = t.to_lowercase();
+                    // Named entities keep titles that CONTAIN the surface
+                    // form (the entity is usually shorter than its
+                    // canonical title: "Newton" ⊂ "Isaac Newton"). A
+                    // concept's canonical title is often SHORTER than the
+                    // extracted span ("Colonialism" ⊂ "European
+                    // colonialism"), so concepts additionally accept
+                    // titles the entity contains — bidirectional match,
+                    // still exact-title-first below.
+                    let keep = if is_concept {
+                        tl.contains(&e_lower) || e_lower.contains(&tl)
+                    } else {
+                        tl.contains(&e_lower)
+                    };
+                    if keep && !candidates.contains(&t) {
                         candidates.push(t);
                     }
                 }
@@ -470,10 +525,16 @@ pub(crate) async fn fetch_entity_obligations(
     });
     let obligations: Vec<corpus_engine::ScoredChunk> =
         futures::future::join_all(fetches).await.concat();
+    // Glassbox: name the named entities AND the concept articles that
+    // fired separately, so a reader of the audit trail can see exactly
+    // which lowercase concepts the GLiNER pass contributed this turn.
+    let named: Vec<&String> = work.iter().filter(|(_, c)| !c).map(|(t, _)| t).collect();
+    let concepts: Vec<&String> = work.iter().filter(|(_, c)| *c).map(|(t, _)| t).collect();
     tracing::info!(
         target: "retrieval_audit",
         event = "entity_obligations",
-        entities = ?entities,
+        entities = ?named,
+        concepts = ?concepts,
         fetched = obligations.len(),
         ms = t_start.elapsed().as_millis() as u64,
         "retrieval_audit: entity_obligations"
