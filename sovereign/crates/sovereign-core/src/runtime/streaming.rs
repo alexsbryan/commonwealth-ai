@@ -88,6 +88,10 @@ async fn run_synthesis_stream(
     // ungated/naked paths (they stream tokens live, nothing to bridge).
     progress_tx: Option<&tokio::sync::mpsc::Sender<SynthBeat>>,
     log_tag: &'static str,
+    // Phase A scaffold (SOVEREIGN_GATE_PIPELINE): evidence to verify completed
+    // sentences against on the fast slot AS they stream. `None` → no pipeline
+    // (the default, and every ungated/naked path).
+    pipeline_evidence: Option<&crate::runtime::grounding::EvidenceContext>,
 ) -> Option<SynthStreamOutcome> {
     let mut observed_finish: Option<crate::types::FinishReason> = None;
     let mut observed_completion_tokens: Option<u32> = None;
@@ -103,6 +107,18 @@ async fn run_synthesis_stream(
     // each beat can carry the delta (see SynthBeat).
     let draft_preview = draft_stream_enabled();
     let mut pending_delta = String::new();
+    // Phase A scaffold: verify completed sentences on the FAST slot as the 35B
+    // streams (behind SOVEREIGN_GATE_PIPELINE; None otherwise → zero cost). The
+    // verdicts are glassbox-logged at draft-end, NOT yet consumed by the gate —
+    // see docs/specs/STREAMING_GATE_PIPELINE.md.
+    let mut gate_pipeline = pipeline_evidence.and_then(|ev| {
+        crate::runtime::grounding::StreamingVerifier::maybe_new(
+            inference,
+            gate_on,
+            &ev.chunks,
+            crate::slot_policy::posture_of(request),
+        )
+    });
 
     'synth: loop {
         loop {
@@ -155,6 +171,11 @@ async fn run_synthesis_stream(
                                     delta,
                                 });
                                 last_heartbeat = std::time::Instant::now();
+                                // Phase A: dispatch fast-slot checks for any
+                                // sentences that completed since the last beat.
+                                if let Some(p) = gate_pipeline.as_mut() {
+                                    p.ingest(full_text);
+                                }
                             }
                         }
                     } else if head_flushed {
@@ -299,6 +320,22 @@ async fn run_synthesis_stream(
         "{}: synth draft complete",
         log_tag
     );
+    // Phase A scaffold: await the sentence verifications that ran on the fast
+    // slot DURING the draft. `tail_ms` is how long we waited after draft-end for
+    // them to finish — small = the overlap worked. Glassbox only; the gate below
+    // still runs its own full audit (verdicts not yet consumed).
+    if let Some(p) = gate_pipeline.take() {
+        let started = std::time::Instant::now();
+        let (unsupported, verified) = p.collect(full_text).await;
+        tracing::info!(
+            target: "gate.pipeline",
+            verified,
+            unsupported,
+            tail_ms = started.elapsed().as_millis() as u64,
+            "{}: streaming verify overlapped the draft (scaffold — verdicts not yet consumed)",
+            log_tag
+        );
+    }
     if matches!(observed_finish, Some(crate::types::FinishReason::Length)) {
         tracing::warn!(
             target: "synth.truncation",
@@ -953,6 +990,7 @@ impl Runtime {
                 false, // gate_on — no grounding gate
                 None,  // no heartbeat — naked streams tokens live
                 "naked",
+                None, // pipeline: the naked path has no evidence
             )
             .await;
 
@@ -1398,6 +1436,7 @@ impl Runtime {
                 gate_on,
                 hb_tx.as_ref(),
                 "kq-stream",
+                Some(&gate_evidence), // Phase A pipeline (flag-gated)
             )
             .await
             else {
@@ -2289,6 +2328,7 @@ impl Runtime {
                 deep_gate_on,
                 hb_tx.as_ref(),
                 "deep-stream",
+                Some(&deep_gate_evidence), // Phase A pipeline (flag-gated)
             )
             .await
             else {

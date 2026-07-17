@@ -104,6 +104,19 @@ pub(crate) fn exactval_fix_enabled() -> bool {
     )
 }
 
+/// Opt-in (SOVEREIGN_GATE_PIPELINE=1): PHASE A SCAFFOLD — verify sentences on the
+/// fast slot AS the draft streams on the 35B, so audit #1 overlaps synthesis
+/// instead of running after it (see docs/specs/STREAMING_GATE_PIPELINE.md).
+/// Default OFF. In the scaffold the streamed verdicts are glassbox-logged but NOT
+/// yet consumed by the gate — wiring them into gate_longform (to skip
+/// re-verification) is the next increment, gated on a fast-slot-verify calibration.
+pub(crate) fn gate_pipeline_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_GATE_PIPELINE").ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
 /// Default-ON (SOVEREIGN_SURGICAL_REWRITE=0 opts out): correct only the failed
 /// sentences of a longform answer on the fast slot instead of re-synthesising
 /// the whole answer on the 35B, then run the SAME full re-audit the full-rewrite
