@@ -590,21 +590,16 @@ pub(crate) async fn ppr_propose_and_gate(
         // reason answer-side people score -1..-3 under a bare
         // does-this-answer framing).
         let mut typed: Vec<(String, String, String)> = Vec::new();
-        // Front-loaded per-seed quota: the first (primary-entity) seed
-        // gets half the cap — its typed edges are the question's own
-        // Origins/Criticism people, the highest-prior channel — and
-        // later seeds split the rest. A flat split measured 4 slots
-        // for Manhattan Project's 25 causal edges: Szilard and Fermi
-        // (occurrence weight 1, tie-ordered arbitrarily) usually lost
-        // the draw to w=2 administrative targets.
-        let seed_quota = |i: usize| -> usize {
-            match i {
-                0 => PPR_TYPED_CAP / 2,
-                _ => (PPR_TYPED_CAP / 2)
-                    .div_euclid(live_seeds.len().saturating_sub(1).max(1))
-                    .max(2),
-            }
-        };
+        // Funnel-widening (2026-07-17, graph reconnaissance): EVERY
+        // measured proposal-gap miss is one hop from the seeds —
+        // Watt/Steam engine/Enclosure are causal-typed (lost the old
+        // per-seed quota draw), Bohr/Heisenberg are causal from the
+        // seed the quota starved, Hahn/Nirvana/Bastille/Weimar are
+        // TOPICAL edges the typed filter never saw. Occurrence
+        // weights carry no signal at w∈{1,2}, so pre-cutting by
+        // quota/occurrence was a lottery. The funnels now stay wide
+        // and the title-CE prerank (semantic, measured ranking
+        // Fermi/Wigner/Einstein top-4) does ALL the picking.
         for s in &live_seeds {
             rank.insert(s.clone(), seed_mass);
             mass.insert(s.clone(), seed_mass);
@@ -616,10 +611,8 @@ pub(crate) async fn ppr_propose_and_gate(
         > = std::collections::HashMap::new();
         for (i, s) in live_seeds.iter().enumerate() {
             let nbrs = graph.neighbors(s, PPR_SEED_PULL).await;
-            let quota = seed_quota(i);
-            let mut took = 0usize;
             for n in &nbrs {
-                if took >= quota || typed.len() >= PPR_TYPED_CAP {
+                if typed.len() >= PPR_TYPED_CAP {
                     break;
                 }
                 if matches!(n.relationship_type.as_str(), "causal" | "contested")
@@ -628,7 +621,27 @@ pub(crate) async fn ppr_propose_and_gate(
                     && !typed.iter().any(|(t, _, _)| t == &n.title)
                 {
                     typed.push((n.title.clone(), s.clone(), n.relationship_type.clone()));
-                    took += 1;
+                }
+            }
+            // Topical bridge channel: the first two seeds' strongest
+            // plain links (Hahn from Meitner, Nirvana from Buddhism,
+            // Bastille from French Revolution — all topical w=1-2).
+            // Reuses the wide pull already in hand; zero extra
+            // queries. The prerank separates the wheat.
+            if i < 2 {
+                let mut took = 0usize;
+                for n in &nbrs {
+                    if took >= PPR_TOPICAL_PER_SEED || typed.len() >= PPR_TYPED_CAP {
+                        break;
+                    }
+                    if n.relationship_type == "topical"
+                        && n.in_scope
+                        && !already_present.contains(n.title.as_str())
+                        && !typed.iter().any(|(t, _, _)| t == &n.title)
+                    {
+                        typed.push((n.title.clone(), s.clone(), n.relationship_type.clone()));
+                        took += 1;
+                    }
                 }
             }
             seed_pulls.insert(s.clone(), nbrs);
@@ -669,7 +682,7 @@ pub(crate) async fn ppr_propose_and_gate(
             .map(|(t, m)| (t.clone(), *m))
             .collect();
         by_mass.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        by_mass.truncate(PPR_CANDIDATE_ARTICLES);
+        by_mass.truncate(PPR_MASS_INTO_PRERANK);
 
         // Merge channels (typed first — they carry the structural
         // signal mass cannot), dedupe by title.
