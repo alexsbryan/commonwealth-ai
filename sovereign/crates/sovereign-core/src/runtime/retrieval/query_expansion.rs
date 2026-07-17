@@ -200,38 +200,107 @@ impl Runtime {
     /// 4. **Fetch** — FTS-only title-anchored retrieval per surviving
     ///    candidate (title-only query; empty embedding ⇒ no ANN).
     /// 5. **Gate** — one batched rerank call scores candidate chunks
-    ///    plus a calibration tail of direct hits at the truncate
-    ///    boundary. Admitted chunks are placed just inside the
-    ///    boundary via a synthetic `vector_distance` (the merged sort
-    ///    orders by distance; `None` would sort them straight out).
-    pub(crate) async fn expand_via_ppr_gated(
+    ///    against the model's absolute yes/no floor. Admitted chunks
+    ///    are placed mid-pool via a synthetic `vector_distance` (the
+    ///    merged sort orders by distance; `None` would sort them
+    ///    straight out, and tail placement made them the downstream
+    ///    expander's first eviction).
+    ///
+    /// # Concurrency shape (promotion, 2026-07-17)
+    ///
+    /// The lane is POOL-INDEPENDENT except at its edges — seeds are a
+    /// spawn-time snapshot (entities + top pool titles) and placement
+    /// needs only the join-time pool — so it runs as a spawned task
+    /// overlapping the core pipeline steps (atlas/RAPTOR grounding,
+    /// reweight): `spawn_ppr_lane` right after `entity_boost`,
+    /// join + placement at the old step position. Measured serial
+    /// cost was ~1.3-1.9s per question; overlapped, the wall cost is
+    /// max(0, lane − core), near zero on knowledge-query turns.
+    pub(crate) fn spawn_ppr_lane(
         &self,
         chunks: &[corpus_engine::ScoredChunk],
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
-    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        if std::env::var("SOVEREIGN_PPR_EXPAND").ok().as_deref() != Some("1") {
-            return None;
+    ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
+        // Default ON (promoted 2026-07-17 after the v10 battery:
+        // +2 wiki sources, facts held, +182ms p50 = harness noise;
+        // "0"/"false"/"off"/"no" disables — same convention as
+        // SOVEREIGN_ATLAS_GROUNDING). Boxes without a reranker
+        // no-op a few lines down.
+        if let Ok(v) = std::env::var("SOVEREIGN_PPR_EXPAND") {
+            if matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no") {
+                return None;
+            }
         }
-        let graph = self.wikipedia_graph.as_ref()?;
+        let graph = self.wikipedia_graph.clone()?;
+        let engine = self.corpus_engine.clone()?;
         let Some(rerank_fn) = self.rerank_fn.clone() else {
             // The gate IS the feature — ungated structural injection
-            // is a measured regression. Refuse loudly rather than
-            // degrade to the failure mode.
-            tracing::warn!(
-                "ppr_expand: enabled but no rerank_fn installed — skipping \
+            // is a measured regression. No reranker ⇒ the lane stays
+            // dark (debug, not warn: the flag defaults ON and most
+            // installs have no reranker model yet).
+            tracing::debug!(
+                "ppr_expand: no rerank_fn installed — lane dark \
                  (set SOVEREIGN_RERANK_MODEL_PATH, optionally with \
                  SOVEREIGN_RERANK_GATE_ONLY=1)"
             );
             return None;
         };
         if chunks.is_empty() {
-            return Some(Vec::new());
+            return None;
         }
+        let lane = PprLane {
+            graph,
+            engine,
+            rerank_fn,
+            gliner: self.gliner.clone(),
+        };
+        let pool_titles: Vec<String> = chunks
+            .iter()
+            .filter_map(|c| c.title.clone())
+            .collect();
+        let message = message.to_string();
+        let enabled = enabled_corpora.map(|s| s.to_vec());
+        let ceiling = corpus_ceiling.map(|s| s.to_vec());
+        Some(tokio::spawn(ppr_propose_and_gate(
+            lane,
+            pool_titles,
+            message,
+            enabled,
+            ceiling,
+        )))
+    }
+}
+
+/// The owned components the spawned PPR lane needs — all cheap Arc
+/// clones, so the task runs detached from the pipeline borrow.
+pub(crate) struct PprLane {
+    pub graph: std::sync::Arc<dyn corpus_engine::WikipediaGraphApi>,
+    pub engine: std::sync::Arc<corpus_engine::CorpusEngine>,
+    pub rerank_fn: corpus_engine::RerankFn,
+    pub gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
+}
+
+/// Walk → typed edges → title prerank → fetch → chunk gate. Returns
+/// ADMITTED chunks (cross-encoder metadata attached) with NO placement
+/// — the join step assigns `vector_distance` against the live pool.
+pub(crate) async fn ppr_propose_and_gate(
+    lane: PprLane,
+    pool_titles: Vec<String>,
+    message: String,
+    enabled_corpora: Option<Vec<String>>,
+    corpus_ceiling: Option<Vec<String>>,
+) -> Vec<corpus_engine::ScoredChunk> {
+    {
+        let graph = &lane.graph;
+        let message = message.as_str();
+        let enabled_corpora = enabled_corpora.as_deref();
+        let corpus_ceiling = corpus_ceiling.as_deref();
+        let rerank_fn = lane.rerank_fn.clone();
 
         let already_present: std::collections::HashSet<&str> =
-            chunks.iter().filter_map(|c| c.title.as_deref()).collect();
+            pool_titles.iter().map(|t| t.as_str()).collect();
 
         // ── Phase 1: seeds + forward-push walk ──────────────────────
         let t_walk = std::time::Instant::now();
@@ -249,7 +318,7 @@ impl Runtime {
         // case-sensitive graph directly — it CONFIRMS cased spans
         // instead. Substring match in both directions covers
         // span-boundary differences ("nazi germany" vs "Germany").
-        if let Some(g) = self.gliner.as_ref() {
+        if let Some(g) = lane.gliner.as_ref() {
             let ner: Vec<String> = g.extract_entities(message);
             if !ner.is_empty() {
                 let confirmed: Vec<String> = seeds
@@ -271,7 +340,7 @@ impl Runtime {
                 }
             }
         }
-        for title in chunks.iter().filter_map(|c| c.title.as_ref()) {
+        for title in pool_titles.iter() {
             if seeds.len() >= PPR_MAX_SEEDS {
                 break;
             }
@@ -291,7 +360,7 @@ impl Runtime {
             }
         }
         if live_seeds.is_empty() {
-            return Some(Vec::new());
+            return Vec::new();
         }
 
         // rank = accumulated PPR mass per article; mass = the frontier
@@ -411,7 +480,7 @@ impl Runtime {
         let typed_n = typed.len();
         let walk_ms = t_walk.elapsed().as_millis() as u64;
         if candidates.is_empty() {
-            return Some(Vec::new());
+            return Vec::new();
         }
 
         // ── Phase 1b: title prerank — semantic selection of which
@@ -457,9 +526,12 @@ impl Runtime {
         // the same substantive-token overlap `reweight_by_query_
         // relevance` uses — cheap, and the CE gate still judges.
         let t_fetch = std::time::Instant::now();
-        let engine = self.corpus_engine.as_ref()?;
+        let engine = &lane.engine;
         let fetch_corpora: Vec<String> = {
-            let installed = engine.installed_indexes().await.ok()?;
+            let Ok(installed) = engine.installed_indexes().await else {
+                tracing::warn!("ppr_expand: installed_indexes failed — admitting nothing");
+                return Vec::new();
+            };
             installed
                 .into_iter()
                 .filter(|i| {
@@ -481,13 +553,7 @@ impl Runtime {
             async move {
                 let mut article: Vec<corpus_engine::ScoredChunk> = Vec::new();
                 for path in &paths {
-                    let Ok(idx) = self
-                        .corpus_engine
-                        .as_ref()
-                        .expect("checked above")
-                        .open_index(std::path::Path::new(path))
-                        .await
-                    else {
+                    let Ok(idx) = engine.open_index(std::path::Path::new(path)).await else {
                         continue;
                     };
                     if let Ok(chunks) = idx
@@ -515,42 +581,37 @@ impl Runtime {
             futures::future::join_all(fetches).await.concat();
         let fetch_ms = t_fetch.elapsed().as_millis() as u64;
         if cand_chunks.is_empty() {
-            return Some(Vec::new());
+            return Vec::new();
         }
 
         // ── Phase 3: cross-encoder admission gate ───────────────────
-        // Calibration tail = the direct hits sitting at the truncate
-        // boundary, i.e. exactly what an injected chunk would
-        // displace. One batched call scores candidates + tail.
+        // One batched call scores the candidate chunks. (Probes 1-3
+        // also scored a calibration tail of boundary direct hits for a
+        // displacement bar; with the absolute CE-yes bar that became
+        // pure telemetry, and its pairs were ~25% of the gate's
+        // prefill cost — cut 2026-07-17.)
         let t_gate = std::time::Instant::now();
-        let boundary = chunks.len().min(KQ_MERGED_LIMIT);
-        let tail_start = boundary.saturating_sub(PPR_CALIBRATION_TAIL);
-        let tail: &[corpus_engine::ScoredChunk] = &chunks[tail_start..boundary];
         let fmt_doc = |c: &corpus_engine::ScoredChunk| match &c.title {
             Some(t) => format!("Title: {t}\n\n{}", c.content),
             None => c.content.clone(),
         };
-        let docs: Vec<String> = cand_chunks
-            .iter()
-            .map(fmt_doc)
-            .chain(tail.iter().map(fmt_doc))
-            .collect();
+        let docs: Vec<String> = cand_chunks.iter().map(fmt_doc).collect();
         let scores = match (rerank_fn)(message, docs).await {
-            Ok(s) if s.len() == cand_chunks.len() + tail.len() => s,
+            Ok(s) if s.len() == cand_chunks.len() => s,
             Ok(s) => {
                 tracing::warn!(
                     got = s.len(),
-                    expected = cand_chunks.len() + tail.len(),
+                    expected = cand_chunks.len(),
                     "ppr_expand: rerank length contract violated — admitting nothing"
                 );
-                return Some(Vec::new());
+                return Vec::new();
             }
             Err(e) => {
                 tracing::warn!(error = %e, "ppr_expand: rerank failed — admitting nothing");
-                return Some(Vec::new());
+                return Vec::new();
             }
         };
-        let (cand_scores, tail_scores) = scores.split_at(cand_chunks.len());
+        let cand_scores: &[f32] = &scores;
         // The admission bar is the model's absolute yes/no floor:
         // logit(yes) > logit(no), i.e. the cross-encoder judges the
         // chunk to ANSWER the query. Iterations 1-3 additionally
@@ -578,29 +639,16 @@ impl Runtime {
         admitted_idx.truncate(PPR_MAX_ADMITTED);
         let gate_ms = t_gate.elapsed().as_millis() as u64;
 
-        // Placement: mid-pool, not boundary. The merged sort orders by
-        // vector_distance (None sorts LAST — a bare injected chunk
-        // would be truncated straight out). Boundary placement
-        // (probes 1-3b) survived the truncate but died downstream:
-        // `expand_from_dominant_source` rebuilds the pool as dominant
-        // chunks + the FIRST few non-dominant chunks in pool order,
-        // so tail-placed admissions were always its `dropped_noise`.
-        // An admitted chunk out-scored every marginal direct hit on
-        // cross-encoder judgment — mid-pool standing is what that
-        // means operationally.
-        let anchor = chunks[..boundary.div_euclid(2).max(1)]
-            .iter()
-            .rev()
-            .find_map(|c| c.vector_distance)
-            .unwrap_or(1.0);
+        // Admitted chunks carry their gate metadata; PLACEMENT is the
+        // join step's job (`place_ppr_admitted`) — it needs the live
+        // pool, which this spawned task deliberately never sees.
         let audit: Vec<String> = candidates
             .iter()
             .map(|(t, m)| format!("{t} (mass {m:.4})"))
             .collect();
         let mut added: Vec<corpus_engine::ScoredChunk> = Vec::new();
-        for (rank_pos, &i) in admitted_idx.iter().enumerate() {
+        for &i in admitted_idx.iter() {
             let mut c = cand_chunks[i].clone();
-            c.vector_distance = Some(anchor - 1e-4 - (rank_pos as f32) * 1e-5);
             c.metadata
                 .insert("injected_by".to_string(), "ppr_expand".to_string());
             c.metadata
@@ -628,7 +676,6 @@ impl Runtime {
             typed = typed_n,
             candidates = ?audit,
             cand_scores = ?cand_scores,
-            tail_scores = ?tail_scores,
             bar,
             admitted = added.len(),
             walk_ms,
@@ -637,9 +684,45 @@ impl Runtime {
             gate_ms,
             "retrieval_audit: ppr_expand"
         );
-        Some(added)
+        added
     }
+}
 
+/// Join-time placement for gate-admitted chunks: mid-pool, not
+/// boundary. The merged sort orders by `vector_distance` (`None`
+/// sorts LAST — a bare injected chunk would be truncated straight
+/// out). Boundary placement (probes 1-3b) survived the truncate but
+/// died downstream: `expand_from_dominant_source` rebuilds the pool
+/// as dominant chunks + the FIRST few non-dominant chunks in pool
+/// order, so tail-placed admissions were always its `dropped_noise`.
+/// An admitted chunk out-scored the marginal direct hits on
+/// cross-encoder judgment — mid-pool standing is what that means
+/// operationally. Chunks whose title is already in the live pool are
+/// dropped (the pool may have gained them while the lane ran).
+pub(crate) fn place_ppr_admitted(
+    admitted: Vec<corpus_engine::ScoredChunk>,
+    pool: &[corpus_engine::ScoredChunk],
+) -> Vec<corpus_engine::ScoredChunk> {
+    let present: std::collections::HashSet<&str> =
+        pool.iter().filter_map(|c| c.title.as_deref()).collect();
+    let boundary = pool.len().min(KQ_MERGED_LIMIT);
+    let anchor = pool[..boundary.div_euclid(2).max(1)]
+        .iter()
+        .rev()
+        .find_map(|c| c.vector_distance)
+        .unwrap_or(1.0);
+    admitted
+        .into_iter()
+        .filter(|c| !c.title.as_deref().map(|t| present.contains(t)).unwrap_or(false))
+        .enumerate()
+        .map(|(rank_pos, mut c)| {
+            c.vector_distance = Some(anchor - 1e-4 - (rank_pos as f32) * 1e-5);
+            c
+        })
+        .collect()
+}
+
+impl Runtime {
     /// Heuristic question decomposition (opt-in via
     /// `SOVEREIGN_QUERY_DECOMP=1`). Pure-Rust, zero LLM calls.
     ///

@@ -589,9 +589,59 @@ demand_plan entirely (router already classifies) — their path gets
     evidence composition) — untested because (a) already eats
     positive admissions; (c) fetch cost — a title scalar index or
     the atoms substrate instead of filtered scans; (d) batched CE
-    decode for >20-pair calls. The lane ships default-OFF; the gate
-    infrastructure (reranker slot, GATE_ONLY, GLiNER confirmation)
-    is the kept asset.
+    decode for >20-pair calls.
+
+  **S4 promotion (2026-07-17, same day, continued iteration —
+  PROMOTED to default-ON).** Unlock (a) turned out to be the whole
+  ballgame, and each named unlock fell in order:
+
+  - *v4 — survival:* the eviction site was `expand_from_dominant_
+    source`, which rebuilds the pool as dominant chunks + the FIRST
+    few non-dominant chunks in pool order — tail-placed admissions
+    were always its `dropped_noise`. Mid-pool placement (anchor at
+    boundary/2) + stemming the causal lexeme (`contribut` — "How did
+    X contribute to Y" silently missed the causal shape and routed
+    DominantSource) produced the first movement in seven probes:
+    wiki 34/101 → **37/105**, zero regressions.
+  - *v5 — fetch:* BTree scalar index on `title`
+    (`build_title_scalar_index`, 4s build on 1.9M rows) turned the
+    ~450ms filtered scans into index seeks (fetch 4.2s → 272ms/turn;
+    also speeds the PROD dominant-source expander, flag-independent).
+  - *v6 — instruct reframe is DEAD:* an out-of-distribution instruct
+    paraphrase collapsed admissions 13 → 1 and lost both wins. The
+    trained default instruct IS the calibration; do not touch it.
+  - *v7 — prefix-reuse KV in `score_batch`* (decode scaffold+query
+    once, roll back per doc via `clear_kv_cache_seq`; verified on
+    llama-cpp-4 0.4.2, smoke scores identical ±0.1 logit) + the
+    calibration-tail pairs cut (bar=0 made them telemetry).
+  - *v8/v9 — overlap:* the lane is pool-independent except at its
+    edges, so it runs as a spawned task (`ppr_struct_spawn`, FIRST
+    core step — it extracts its own entities) joined at
+    `ppr_struct_expand` with a 4s abandon deadline. Attached-doc
+    turns drop both steps.
+  - *v10 — trims:* candidates 8→6, frontier 8→6 (every observed
+    admission ranked top-4 post-prerank).
+
+  **Attribution honesty (same-harness flag-OFF anchors):** the
+  causal-stem fix alone moved flag-OFF prod wiki to 35/105 — the
+  committed 34/101 baselines are STALE flag-independently, and
+  sep/summarize's +6 facts and sep/questions' +1/+1 were entirely
+  the stem, not the lane (sep seeds don't map to the wiki graph;
+  the lane early-outs there). The lane's own contribution: wiki
+  **+2 sources (37 vs 35), facts held, +182ms p50** (2956 vs 2774
+  same-harness — within run noise; the overlap window here is
+  atlas-dark, real prod is wider). Final battery all green: wiki
+  37/105 · sep-q 56/147 (= flag-OFF) · sep-sum 8/59 (= flag-OFF) ·
+  canaries byte-identical.
+
+  `SOVEREIGN_PPR_EXPAND` now defaults ON (=0/false/off/no disables),
+  dark without a reranker (`SOVEREIGN_RERANK_MODEL_PATH`, gate-only
+  by default sensible via `SOVEREIGN_RERANK_GATE_ONLY=1`). Open
+  follow-ups: resident rerank slot in models.toml profiles (the
+  RERANK_EXPERIMENT system-design decision, unchanged), multi-seq
+  batched CE decode (n_seq_max + seq_cp exist in 0.4.2), and a
+  graph substrate for non-wikipedia corpora (S3's atom-CSR walk) so
+  the lane stops being wiki-only.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.
