@@ -291,6 +291,98 @@ agentic search loops (worst EM-per-latency class, arXiv:2507.09477),
 community-summary global search for QA (loses fine-grained evidence,
 arXiv:2502.11371).
 
+## 5b. Theory check-in (2026-07-17 literature sweep, 2024-26)
+
+A 28-source sweep (harvest: scratchpad/research_harvest.txt of the
+2026-07-17 session; claims are primary-source extractions, not yet
+adversarially verified) mapped our measured phenomena onto current
+theory. Three imports are actionable; the validations and negatives
+are recorded so we stop re-deriving them.
+
+**Validations of the shipped design:**
+- Merge-level demand selection IS the 2024-26 submodular thread:
+  S-RAG (knapsack-constrained monotone submodular, 1−1/e guarantee),
+  AdaGReS (greedy relevance−redundancy, ε-approximate submodularity),
+  IDCO/GeoRAG (demand-weighted facility location). GeoRAG's
+  Proposition 1 proves any query-proximity-monotone selector misses
+  one peak of a bimodal information demand outright — the theorem
+  behind our contested/multi-article measurements.
+- "What Survives Into Context" (arXiv:2607.00725): 27% of
+  retrieval-perfect questions lose the answer AT PACKING; and
+  set-level packing pays with SMALL readers (wins at 3B, reverses at
+  14B) — our A3B-active reader sits in the paying regime.
+- Power of Noise (SIGIR 2024) + The Distracting Effect: the strict
+  admission gate is the right call — similar-but-not-answering
+  passages cut accuracy up to 25%/single passage. Gold POSITION in
+  context matters (middle is worst) — mid-pool placement is not just
+  a survival trick.
+- HippoRAG 2's own recognition-memory filter over-rejects with a 70B
+  LLM (18% of failure cases end with ZERO admitted triples): our
+  gate refusing Fermi at 0.6B is a structural property of admission
+  filtering, not a local calibration bug.
+- Negatives we measured, now externally replicated: plain
+  MMR/diversity HURTS (only full coverage objectives win); iterative
+  retrieval is question-shape-conditional; offline relevance metrics
+  correlate weakly-to-NEGATIVELY with end-task F1 under multi-passage
+  injection; coverage-maximization ≠ answer quality.
+
+**Actionable imports, in leverage order:**
+1. **Bridge-conditioned admission** (BridgeRAG, arXiv:2604.03384,
+   training-free): score later-hop candidates by utility CONDITIONED
+   on the bridge evidence — s(q, bridge, candidate) — not similarity
+   to the original question. Their measured failure is ours verbatim
+   ("cross-encoder reranking causes catastrophic failure on
+   multi-hop" by demoting bridge evidence). Implemented same session
+   as doc-side conditioning (typed-edge provenance prefixed to the
+   gate doc; query side untouched to preserve shared-prefix KV).
+   Their negative: LLM-generated rewrites CANNOT substitute real
+   bridge passages.
+2. **Utility-calibrated admission** (relevance→utility thread:
+   arXiv:2507.19102 utility distillation at 1.7B; arXiv:2601.17532
+   IGP): score candidates by the reduction in OUR OWN fast
+   generator's uncertainty when the chunk is injected — label-free,
+   logits-only, 1.5B+IGP beat 7B-without. Their key negative matches
+   ours: reordering without admission thresholding does nothing.
+   ECoRAG/EXIT formalize evidence-vs-answer calibration (EXIT's
+   three-class scheme — direct evidence / relevant-but-lacking /
+   irrelevant — is the training recipe if we ever tune the gate).
+3. **LinearRAG recipe for non-wiki substrates** (arXiv:2510.10114):
+   relation-free entity–sentence–passage tri-graph from NER +
+   embeddings, ZERO LLM extraction, beats HippoRAG2 on 2Wiki at 77%
+   less indexing time — the validated blueprint for the SEP graph
+   (we already own GLiNER, embeddings, and the atom store) that the
+   'Kripke' resolution gap needs.
+   Also: Provence (ICLR 2025) unifies rerank+prune in one 0.4B
+   cross-encoder pass (sentence sequence-labeling head) — the
+   long-term shape for within-article selection; SEAL-RAG names our
+   fetch-obligation pattern ("replace, don't expand"; context
+   dilution).
+
+**Import (1) executed same session — bridge-conditioned admission,
+VALIDATED + kept.** Typed-edge candidates carry (seed, relationship)
+provenance into the gate; each gate doc opens with its bridge context
+("[causal link from 'Manhattan Project'] Title: Leo Szilard …") —
+doc-side conditioning, so `score_batch`'s shared-prefix KV reuse is
+untouched. Measured effect on the very chunks the bare framing
+rejected: Einstein −1.18 → **+4.25**, Wigner −2.21 → **+1.00**, junk
+unchanged at −6..−8. Downstream, admitted chunks are retained by the
+dominant expander (priority grounding) and additive at the truncate
+(raptor precedent). Three successive budget-widening attempts then
+produced byte-identical −2-source deltas — resolved by a
+single-question forensic run (`SOVEREIGN_FORENSIC=1` + mini-bank):
+the "additive" retention shared `grounding.len()` with the generic
+loop's budget check, so every retained admission silently evicted the
+last pool-order grounding chunk (receipt: admitted 'Quantum
+mechanics' evicting the 'Copenhagen interpretation' chunk). One-line
+fix: generic budget = `EXPANSION_GROUNDING_CHUNKS +
+retained_admitted`. Result: `synth_manhattan` converts end-to-end
+(+Albert Einstein source AND fact — the first answer-side conversion
+through the full typed-edges → prerank → gate → retention chain),
+boundary questions hold, sepq and all canaries byte-identical; sole
+residual −1 marginal fact on contested_globalization. **Production
+bar now: wiki/questions 38/58 (66%) sources · 109/130 (84%) facts at
+p50 ~3.0s** — from 34/58 · 101/130 at the start of 2026-07-16.
+
 ## 6. The dual tension, accounted
 
 Interactive budget target: **p50 retrieval wall ≤ today's** (1.8–3.2s on
@@ -642,6 +734,58 @@ demand_plan entirely (router already classifies) — their path gets
   batched CE decode (n_seq_max + seq_cp exist in 0.4.2), and a
   graph substrate for non-wikipedia corpora (S3's atom-CSR walk) so
   the lane stops being wiki-only.
+
+  **S1/S2-at-the-merge — the merge-select architecture (2026-07-17
+  night; landed behind `SOVEREIGN_MERGE_SELECT`, default OFF).**
+  The bucket-1 forensic (~10 of 21 missing wiki sources are entities
+  the question NAMES) killed the merge-ordering knob class with
+  receipts — front-pull entity reservation measured −1 src/−7 facts
+  (bio chunks displaced specific chunks), conditional gap-fill
+  measured null (the named entity's chunks never ENTERED the pool:
+  entity_boost's ANN on the entity's surface form lands topic-near,
+  not canonical). Composition can't fix what retrieval didn't fetch,
+  so the architecture has two halves:
+
+  - **Entity fetch OBLIGATIONS** (`fetch_entity_obligations`, second
+    spawned lane beside PPR): named entities are title-resolved via
+    FTS and fetched deterministically (`fetch_chunks_by_title`, top-2
+    by question overlap, `obligation_entity` tag). Resolution lessons,
+    each measured: title-contains alone resolves 'Newton' to 'Newton
+    (unit)'/'Arik Einstein'; the CE scoring candidate TITLES against
+    the QUESTION picks 'Isaac Newton' — but an EXACT title match must
+    bypass the CE entirely (it preferred 'Eastern Christianity' over
+    the exact 'Christianity', flooding the pool with sibling-article
+    chunks).
+  - **`merge_demand_select`** (merge_select.rs, 5 unit tests):
+    replaces the cap → 4-reserve-passes → truncate pile inside
+    `step_cap_and_reserve` when ON. Pins honored (RAPTOR additive,
+    atom-enum budgeted), one demand slot per named entity, greedy
+    `max(1/(rank+20), 1/(article_best_rank+20)) · 0.7^dup` fill. The
+    within-article strength floor is the load-bearing refinement:
+    valuing depth chunks by their own global rank double-charged
+    depth (rank + decay) and made the decay constant bank-contested
+    (sep best at 0.7, wiki at 0.75+); the floor dissolved that.
+
+  Standing (same-substrate A/B): within ±1 item of the legacy stack
+  on every bank, PLUS Isaac Newton (the proven bucket-1 conversion)
+  and news +2 sources — not yet STRICTLY better, so the flag ships
+  dark. Open threads: sepq 'rawls' −1 src under exact-match-first
+  resolution; arch-arm canaries on the current substrate.
+
+  **Question-aware multi-source top-up (same night; KEPT,
+  flag-independent — both regimes benefit).** The residual −1-fact
+  class ('grace', 'complementarity') traced to
+  `expand_from_top_sources` topping up articles with their first-N
+  chunks in DOCUMENT ORDER — fact coverage was a chunk-position
+  lottery. It now fetches candidates wide (`EXPANSION_WIDE_FETCH=64`,
+  ~ms via the BTree title index) and ranks the top-up by substantive
+  question-token overlap. The dominant expander keeps document order
+  (narrative-cohesion contract; the sepsum win is defended). A/B:
+  wiki/questions facts 105→109 (grace + complementarity + 2 more),
+  sep/questions 147→149, single_atomic depth canary 1/6→2/6,
+  sroman/news/wsum held exactly. Day total on the production path:
+  wiki/questions 34/58 · 101/130 (morning) → **37/58 · 109/130**
+  (64% sources · 84% facts) at p50 ~2.9s.
 - **P2:** S2 demand_plan behind `SOVEREIGN_DEMAND_PLAN` (subsumes
   `query_decomp`/`title_expand` — retire those flags after two green
   A/Bs). Stance + section quotas ride the same flag.

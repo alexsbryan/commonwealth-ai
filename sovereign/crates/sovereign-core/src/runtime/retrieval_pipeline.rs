@@ -230,6 +230,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
         ("ppr_struct_spawn", FLAG_PPR_EXPAND),
         ("ppr_struct_expand", FLAG_PPR_EXPAND),
+        ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "off", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article) replacing the cap/reserve/truncate heuristic pile. A/B flag for the composition architecture." }),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "see helper", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
@@ -310,6 +311,11 @@ pub struct PipelineState<'ctx> {
     /// pool-independent, so it overlaps the core grounding steps
     /// instead of serializing after them.
     pub ppr_pending: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
+    /// In-flight entity-obligations fetch (merge-select architecture;
+    /// spawned with the PPR lane, joined with it). Question-named
+    /// entities title-resolved and title-fetched directly — supply for
+    /// the merge selector's demand slots.
+    pub obligations_pending: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
     // ── deep-only products ──
     /// corpus_id → peer name for mesh-served corpora we don't host.
     pub peer_attribution: HashMap<String, String>,
@@ -345,6 +351,7 @@ impl<'ctx> PipelineState<'ctx> {
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
+            obligations_pending: None,
             peer_attribution: HashMap::new(),
             local_hits: 0,
             sources_expanded: 0,
@@ -1124,14 +1131,23 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
 
 fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
-        // Spawn the PPR structural-expansion lane (env-gated inside
-        // the helper; requires wikipedia_graph + rerank_fn). The task
-        // owns Arc clones and a seed snapshot — no pipeline borrow.
+        // Spawn the pool-independent lanes (each env-gated inside its
+        // helper): the PPR structural-expansion lane (wikipedia_graph
+        // + rerank_fn) and the entity-obligations fetch
+        // (merge-select). The tasks own Arc clones and a seed
+        // snapshot — no pipeline borrow — and join at
+        // `ppr_struct_expand`, overlapping every step in between.
         st.ppr_pending =
             rt.spawn_ppr_lane(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling);
-        StepOutcome {
-            note: st.ppr_pending.is_some().then(|| "lane spawned".to_string()),
-        }
+        st.obligations_pending =
+            rt.spawn_entity_obligations(st.message, st.enabled_corpora, st.corpus_ceiling);
+        let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
+            (true, true) => Some("ppr + obligations spawned".to_string()),
+            (true, false) => Some("ppr lane spawned".to_string()),
+            (false, true) => Some("obligations spawned".to_string()),
+            (false, false) => None,
+        };
+        StepOutcome { note: spawned }
     })
 }
 
@@ -1146,38 +1162,62 @@ fn step_ppr_struct_expand<'a, 'ctx>(
         // compound score multipliers on the whole pool). A lane that
         // overruns the deadline is abandoned, not awaited — the
         // pipeline's latency contract wins over a slow expansion.
-        let Some(handle) = st.ppr_pending.take() else {
-            return StepOutcome::default();
-        };
         const PPR_JOIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(4);
-        let admitted = match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
-            Ok(Ok(a)) => a,
-            Ok(Err(e)) => {
-                tracing::warn!(error = %e, "ppr_expand: lane task failed — skipping");
-                return StepOutcome::default();
-            }
-            Err(_) => {
-                tracing::warn!(
-                    deadline_secs = PPR_JOIN_DEADLINE.as_secs(),
-                    "ppr_expand: lane overran the join deadline — abandoned"
-                );
-                return StepOutcome::default();
-            }
+        let join = |handle: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
+                        what: &'static str| {
+            let handle = handle?;
+            Some(async move {
+                match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
+                    Ok(Ok(a)) => a,
+                    Ok(Err(e)) => {
+                        tracing::warn!(error = %e, what, "lane task failed — skipping");
+                        Vec::new()
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            deadline_secs = PPR_JOIN_DEADLINE.as_secs(),
+                            what,
+                            "lane overran the join deadline — abandoned"
+                        );
+                        Vec::new()
+                    }
+                }
+            })
         };
-        if admitted.is_empty() {
-            return StepOutcome::default();
+        let ppr = join(st.ppr_pending.take(), "ppr_expand");
+        let obligations = join(st.obligations_pending.take(), "entity_obligations");
+        let mut total_added = 0usize;
+        if let Some(fut) = ppr {
+            let admitted = fut.await;
+            if !admitted.is_empty() {
+                let placed = crate::runtime::retrieval::query_expansion::place_ppr_admitted(
+                    admitted, &st.chunks,
+                );
+                total_added += placed.len();
+                st.chunks.extend(placed);
+            }
         }
-        let placed =
-            crate::runtime::retrieval::query_expansion::place_ppr_admitted(admitted, &st.chunks);
-        if !placed.is_empty() {
-            let added = placed.len();
-            st.chunks.extend(placed);
+        if let Some(fut) = obligations {
+            // Obligation chunks get the same mid-pool placement as PPR
+            // admissions (bare chunks carry no vector_distance and
+            // would sort last — the exact tail position the budget
+            // trim and dominant-expander eat first).
+            let fetched = fut.await;
+            if !fetched.is_empty() {
+                let placed = crate::runtime::retrieval::query_expansion::place_ppr_admitted(
+                    fetched, &st.chunks,
+                );
+                total_added += placed.len();
+                st.chunks.extend(placed);
+            }
+        }
+        if total_added > 0 {
             st.chunks.sort_by(cross_corpus_sort_cmp);
             tracing::info!(
-                added,
+                added = total_added,
                 total = st.chunks.len(),
                 label = st.label,
-                "retrieval: ppr structural expansion (gated)"
+                "retrieval: structural + obligation injection"
             );
         }
         StepOutcome::default()
@@ -1333,6 +1373,21 @@ fn step_cap_and_reserve<'a, 'ctx>(
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
+        // Merge-select architecture (SOVEREIGN_MERGE_SELECT): ONE
+        // demand-aware set-composition objective replaces the whole
+        // heuristic pile below (per-article cap → comparison/title/
+        // atom/RAPTOR reserve passes → downstream truncate). Pins and
+        // RAPTOR additivity are honored inside the selector; the
+        // legacy path is byte-identical when the flag is off. See
+        // merge_select.rs for the objective and the bucket-1 receipts.
+        if merge_select_enabled() {
+            st.chunks =
+                merge_demand_select(take(&mut st.chunks), &st.entities, KQ_MERGED_LIMIT);
+            audit_pipeline_stage(&st.chunks, "after_cap_and_reserve", st.message);
+            return StepOutcome {
+                note: Some("merge_demand_select".to_string()),
+            };
+        }
         st.chunks = cap_chunks_per_article(take(&mut st.chunks), MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
         // ComparisonQuery only (KQ pipeline): reserve per-entity slots
         // before truncate so neither side of the contrast can be
@@ -1387,7 +1442,22 @@ fn kq_truncate_merged<'a, 'ctx>(
                     .unwrap_or(false)
             })
             .count();
-        st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
+        // Gate-admitted structural chunks are additive like RAPTOR's
+        // slots (bounded ≤ PPR_MAX_ADMITTED): an admission that
+        // displaces a scoring marginal chunk converts a win into a
+        // 1-for-1 trade (measured three times, 2026-07-17); the
+        // formatter's char budget remains the true ceiling.
+        let admitted_n = st
+            .chunks
+            .iter()
+            .filter(|c| {
+                c.metadata
+                    .get("injected_by")
+                    .map(|s| s == "ppr_expand")
+                    .unwrap_or(false)
+            })
+            .count();
+        st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n + admitted_n);
         audit_pipeline_stage(&st.chunks, "after_truncate", st.message);
 
         // Naturalistic audit — post-merge composition. Answers "after
@@ -1747,7 +1817,7 @@ fn deep_top_sources_expand<'a, 'ctx>(
             "retrieval_audit: expansion_decision"
         );
         let (expanded, sources_expanded, _total_fetched) = match strategy {
-            ExpansionStrategy::TopSources => rt.expand_from_top_sources(take(&mut st.chunks)).await,
+            ExpansionStrategy::TopSources => rt.expand_from_top_sources(take(&mut st.chunks), st.message).await,
             // NoExpansion (< 2 source keys): the helper would return
             // the set unchanged — skip the call. DominantSource:
             // unreachable here, treated identically for totality.

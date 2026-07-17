@@ -403,6 +403,20 @@ pub(crate) const PPR_CHUNKS_PER_ARTICLE: usize = 2;
 /// (wiki articles chunk to ~10-40 rows; 64 covers the long tail).
 pub(crate) const PPR_ARTICLE_FETCH_LIMIT: usize = 64;
 
+// ─── Entity fetch obligations (merge-select architecture) ────
+
+/// FTS pull per entity when resolving its surface form to article
+/// titles (title-contains filter applied to the hits).
+pub(crate) const OBLIGATION_RESOLVE_LIMIT: usize = 24;
+
+/// Distinct matching titles fetched per entity ("Newton" legitimately
+/// resolves to both "Isaac Newton" and "Newton's law of universal
+/// gravitation" — both are bank-expected sources).
+pub(crate) const OBLIGATION_TITLES_PER_ENTITY: usize = 2;
+
+/// Chunks kept per resolved title (top question-token overlap).
+pub(crate) const OBLIGATION_CHUNKS_PER_TITLE: usize = 2;
+
 /// Hard cap on injected chunks per query — every admitted chunk
 /// displaces a direct hit at the truncate, so this bounds the
 /// worst-case fact cost when the gate misjudges.
@@ -836,6 +850,10 @@ pub(crate) const EXPANSION_MULTI_SOURCE_GROUPS: usize = 4;
 /// dominant + 2 grounding = 18 chunks — fits the 8000-char budget
 /// after the formatter's per-chunk truncation.
 pub(crate) const EXPANSION_MULTI_PER_SOURCE: usize = 4;
+
+/// Wide-fetch pull for the multi-source top-up's question-overlap
+/// ranking (whole article; BTree title index makes this ~ms).
+pub(crate) const EXPANSION_WIDE_FETCH: usize = 64;
 
 /// Maximum chunks of any one (corpus_id, title) article kept in the
 /// merged top-K before expansion runs.

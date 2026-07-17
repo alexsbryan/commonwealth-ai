@@ -282,6 +282,205 @@ pub(crate) struct PprLane {
     pub gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
 }
 
+impl Runtime {
+    /// Spawn the entity-obligations fetch (the SUPPLY half of the
+    /// merge-select architecture; gated with it). Question-named
+    /// entities become fetch OBLIGATIONS — title-resolved and
+    /// title-fetched directly — instead of embedding-search hints:
+    /// the bucket-1 forensic (2026-07-17) showed the named entity's
+    /// canonical chunks usually never entered the pool at all, so no
+    /// merge-side ordering could recover them. Pool-independent, so
+    /// it overlaps the core steps exactly like the PPR lane.
+    pub(crate) fn spawn_entity_obligations(
+        &self,
+        message: &str,
+        enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
+    ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
+        if !merge_select_enabled() {
+            return None;
+        }
+        let engine = self.corpus_engine.clone()?;
+        let rerank_fn = self.rerank_fn.clone();
+        let message = message.to_string();
+        let enabled = enabled_corpora.map(|s| s.to_vec());
+        let ceiling = corpus_ceiling.map(|s| s.to_vec());
+        Some(tokio::spawn(fetch_entity_obligations(
+            engine, rerank_fn, message, enabled, ceiling,
+        )))
+    }
+}
+
+/// Resolve each question-named entity to its best-matching article
+/// title(s) via title-FTS, pull the articles wholesale
+/// (`fetch_chunks_by_title` — BTree-indexed), keep the top chunks by
+/// substantive question-token overlap, and tag them
+/// (`obligation_entity`) for the merge selector's demand slots.
+pub(crate) async fn fetch_entity_obligations(
+    engine: std::sync::Arc<corpus_engine::CorpusEngine>,
+    rerank_fn: Option<corpus_engine::RerankFn>,
+    message: String,
+    enabled_corpora: Option<Vec<String>>,
+    corpus_ceiling: Option<Vec<String>>,
+) -> Vec<corpus_engine::ScoredChunk> {
+    let mut entities: Vec<String> = extract_comparison_entities(&message);
+    if entities.is_empty() {
+        entities = extract_question_entities(&message);
+    }
+    entities.truncate(MAX_ENTITY_QUERIES);
+    if entities.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(installed) = engine.installed_indexes().await else {
+        return Vec::new();
+    };
+    let paths: Vec<std::path::PathBuf> = installed
+        .into_iter()
+        .filter(|i| {
+            matches!(
+                i.kind,
+                corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
+            ) && enabled_corpora
+                .as_deref()
+                .map(|e| e.iter().any(|c| c == &i.corpus_id))
+                .unwrap_or(true)
+                && corpus_ceiling
+                    .as_deref()
+                    .map(|e| e.iter().any(|c| c == &i.corpus_id))
+                    .unwrap_or(true)
+        })
+        .map(|i| i.path)
+        .collect();
+    if paths.is_empty() {
+        return Vec::new();
+    }
+
+    let q_tokens = extract_tokens(&message, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    let t_start = std::time::Instant::now();
+    let fetches = entities.iter().map(|entity| {
+        let entity = entity.clone();
+        let paths = paths.clone();
+        let engine = engine.clone();
+        let q_tokens = q_tokens.clone();
+        let rerank_fn = rerank_fn.clone();
+        let message = message.clone();
+        async move {
+            let e_lower = entity.to_lowercase();
+            let mut out: Vec<corpus_engine::ScoredChunk> = Vec::new();
+            for path in &paths {
+                let Ok(idx) = engine.open_index(path).await else {
+                    continue;
+                };
+                // Title resolution: FTS-only search on the entity's
+                // surface form; keep distinct titles CONTAINING it
+                // ("Newton" → "Isaac Newton", "Newton's law of …").
+                let hits = idx.search(&[], &entity, OBLIGATION_RESOLVE_LIMIT).await;
+                let Ok(hits) = hits else { continue };
+                #[allow(unused_mut)]
+                let mut candidates: Vec<String> = Vec::new();
+                for h in hits {
+                    let Some(t) = h.title else { continue };
+                    if t.to_lowercase().contains(&e_lower) && !candidates.contains(&t) {
+                        candidates.push(t);
+                    }
+                }
+                // Disambiguate toward the CANONICAL article. Title-
+                // contains alone measured wrong: entity "Newton"
+                // resolved to 'Newton (unit)' / "Newton's method" /
+                // 'Arik Einstein' while 'Isaac Newton' sat unused.
+                // The cross-encoder judging candidate TITLES against
+                // the QUESTION is the same prerank the PPR lane
+                // proved (~30ms/pair, overlapped); without a
+                // reranker: exact match first, then shortest title
+                // (canonical bios are short; qualified variants are
+                // long).
+                // An EXACT title match IS the canonical resolution —
+                // never let the CE second-guess it (measured: it
+                // preferred 'Eastern Christianity' over the exact
+                // 'Christianity' for a Buddhism-vs-Christianity
+                // question, flooding the pool with sibling-article
+                // chunks that displaced fact-bearing depth).
+                if let Some(exact) = candidates
+                    .iter()
+                    .position(|t| t.eq_ignore_ascii_case(&entity))
+                {
+                    let t = candidates.swap_remove(exact);
+                    candidates.clear();
+                    candidates.push(t);
+                }
+                let titles: Vec<String> = if candidates.len() <= OBLIGATION_TITLES_PER_ENTITY {
+                    candidates
+                } else if let Some(rf) = rerank_fn.as_ref() {
+                    match (rf)(&message, candidates.clone()).await {
+                        Ok(scores) if scores.len() == candidates.len() => {
+                            let mut order: Vec<usize> = (0..candidates.len()).collect();
+                            order.sort_by(|&a, &b| {
+                                scores[b]
+                                    .partial_cmp(&scores[a])
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                            order
+                                .into_iter()
+                                .take(OBLIGATION_TITLES_PER_ENTITY)
+                                .map(|i| candidates[i].clone())
+                                .collect()
+                        }
+                        _ => candidates
+                            .into_iter()
+                            .take(OBLIGATION_TITLES_PER_ENTITY)
+                            .collect(),
+                    }
+                } else {
+                    let mut c = candidates;
+                    c.sort_by_key(|t| {
+                        (
+                            !t.eq_ignore_ascii_case(&entity), // exact first
+                            t.len(),                          // then shortest
+                        )
+                    });
+                    c.truncate(OBLIGATION_TITLES_PER_ENTITY);
+                    c
+                };
+                for title in titles {
+                    let Ok(mut article) = idx
+                        .fetch_chunks_by_title(&title, PPR_ARTICLE_FETCH_LIMIT)
+                        .await
+                    else {
+                        continue;
+                    };
+                    let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                        let body = c.content.to_lowercase();
+                        q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                    };
+                    article.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
+                    article.truncate(OBLIGATION_CHUNKS_PER_TITLE);
+                    for mut c in article {
+                        c.metadata
+                            .insert("obligation_entity".to_string(), entity.clone());
+                        out.push(c);
+                    }
+                }
+                if !out.is_empty() {
+                    break; // first corpus that resolves the entity wins
+                }
+            }
+            out
+        }
+    });
+    let obligations: Vec<corpus_engine::ScoredChunk> =
+        futures::future::join_all(fetches).await.concat();
+    tracing::info!(
+        target: "retrieval_audit",
+        event = "entity_obligations",
+        entities = ?entities,
+        fetched = obligations.len(),
+        ms = t_start.elapsed().as_millis() as u64,
+        "retrieval_audit: entity_obligations"
+    );
+    obligations
+}
+
 /// Walk → typed edges → title prerank → fetch → chunk gate. Returns
 /// ADMITTED chunks (cross-encoder metadata attached) with NO placement
 /// — the join step assigns `vector_distance` against the live pool.
@@ -383,7 +582,14 @@ pub(crate) async fn ppr_propose_and_gate(
         let mut mass: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
         let mut in_scope: std::collections::HashMap<String, bool> =
             std::collections::HashMap::new();
-        let mut typed: Vec<String> = Vec::new();
+        // (candidate title, seed article, relationship type) — the
+        // provenance rides to the GATE, where the candidate's doc is
+        // scored WITH its bridge context (BridgeRAG, arXiv:2604.03384:
+        // later-hop evidence must be judged conditioned on the bridge,
+        // not on similarity to the original question — the measured
+        // reason answer-side people score -1..-3 under a bare
+        // does-this-answer framing).
+        let mut typed: Vec<(String, String, String)> = Vec::new();
         // Front-loaded per-seed quota: the first (primary-entity) seed
         // gets half the cap — its typed edges are the question's own
         // Origins/Criticism people, the highest-prior channel — and
@@ -419,9 +625,9 @@ pub(crate) async fn ppr_propose_and_gate(
                 if matches!(n.relationship_type.as_str(), "causal" | "contested")
                     && n.in_scope
                     && !already_present.contains(n.title.as_str())
-                    && !typed.contains(&n.title)
+                    && !typed.iter().any(|(t, _, _)| t == &n.title)
                 {
-                    typed.push(n.title.clone());
+                    typed.push((n.title.clone(), s.clone(), n.relationship_type.clone()));
                     took += 1;
                 }
             }
@@ -467,9 +673,12 @@ pub(crate) async fn ppr_propose_and_gate(
 
         // Merge channels (typed first — they carry the structural
         // signal mass cannot), dedupe by title.
+        let mut provenance: std::collections::HashMap<String, (String, String)> =
+            std::collections::HashMap::new();
         let mut candidates: Vec<(String, f64)> = Vec::new();
-        for t in typed.iter() {
+        for (t, seed, rel) in typed.iter() {
             let m = rank.get(t).copied().unwrap_or(0.0);
+            provenance.insert(t.clone(), (seed.clone(), rel.clone()));
             candidates.push((t.clone(), m));
         }
         for (t, m) in by_mass {
@@ -591,9 +800,24 @@ pub(crate) async fn ppr_propose_and_gate(
         // pure telemetry, and its pairs were ~25% of the gate's
         // prefill cost — cut 2026-07-17.)
         let t_gate = std::time::Instant::now();
-        let fmt_doc = |c: &corpus_engine::ScoredChunk| match &c.title {
-            Some(t) => format!("Title: {t}\n\n{}", c.content),
-            None => c.content.clone(),
+        // Doc-side bridge conditioning: a typed-edge candidate's doc
+        // opens with WHY the graph proposed it, so the cross-encoder
+        // judges "is this useful given its connection to the seed"
+        // rather than the bare "does this answer the question" that
+        // rejects answer-side people (Fermi -2.72 / Einstein -1.18
+        // under the bare framing). Query side stays untouched — the
+        // shared-prefix KV reuse in score_batch depends on it.
+        let fmt_doc = |c: &corpus_engine::ScoredChunk| {
+            let bridge = c
+                .title
+                .as_deref()
+                .and_then(|t| provenance.get(t))
+                .map(|(seed, rel)| format!("[{rel} link from '{seed}'] "))
+                .unwrap_or_default();
+            match &c.title {
+                Some(t) => format!("{bridge}Title: {t}\n\n{}", c.content),
+                None => c.content.clone(),
+            }
         };
         let docs: Vec<String> = cand_chunks.iter().map(fmt_doc).collect();
         let scores = match (rerank_fn)(message, docs).await {

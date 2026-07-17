@@ -633,7 +633,7 @@ impl Runtime {
             }
             ExpansionStrategy::TopSources => {
                 let (expanded, sources_expanded, _total) =
-                    self.expand_from_top_sources(chunks).await;
+                    self.expand_from_top_sources(chunks, message).await;
                 // Only count as "fired" when the expander actually pulled
                 // from ≥ 2 sources — otherwise we're back to the initial
                 // chunk set and the prompt budget should reflect that.

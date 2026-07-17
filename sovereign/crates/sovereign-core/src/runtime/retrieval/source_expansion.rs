@@ -205,6 +205,39 @@ impl Runtime {
         let mut dropped_noise = 0usize;
         let mut dropped_conversation_history = 0usize;
         let mut dropped_untitled = 0usize;
+        // Gate-admitted structural chunks are PRIORITY grounding: they
+        // carry a cross-encoder judgment (bridge-conditioned, 2026-07-17)
+        // that they answer the question — a strictly stronger signal
+        // than pool order. Without this, a Dominant-routed question
+        // discards exactly the admissions the gate fought for
+        // (measured: Einstein +4.25 admitted on synth_manhattan, then
+        // evicted here; the chunk cost its displacement WITHOUT ever
+        // scoring). They still count against the grounding budget.
+        for c in &initial {
+            let key = (c.corpus_id.clone(), c.title.clone().unwrap_or_default());
+            if key == dominant_key {
+                continue;
+            }
+            // ADDITIVE, like the truncate's raptor slots: admitted
+            // chunks are ≤ PPR_MAX_ADMITTED and must not preempt the
+            // grounding budget (measured: preemption displaced the
+            // Copenhagen-interpretation grounding chunk — an expected
+            // source — to seat a Wigner admission; −2 src net).
+            if c.metadata.get("injected_by").map(|v| v == "ppr_expand").unwrap_or(false)
+                && seen_contents.insert(c.content.clone())
+            {
+                grounding.push(c.clone());
+            }
+        }
+        // The retained admissions must EXTEND the grounding budget,
+        // not consume it — the generic loop below counts
+        // `grounding.len()`, so without this offset a retained
+        // admission silently evicts the last pool-order grounding
+        // chunk (forensic receipt, boundary_copenhagen: admitted
+        // 'Quantum mechanics' displaced the 'Copenhagen
+        // interpretation' grounding chunk through three separate
+        // "additive" attempts that all shared this counter).
+        let retained_admitted = grounding.len();
         for c in &initial {
             let key = (c.corpus_id.clone(), c.title.clone().unwrap_or_default());
             if key == dominant_key {
@@ -219,7 +252,7 @@ impl Runtime {
                 dropped_untitled += 1;
                 continue;
             }
-            if grounding.len() < EXPANSION_GROUNDING_CHUNKS
+            if grounding.len() < EXPANSION_GROUNDING_CHUNKS + retained_admitted
                 && seen_contents.insert(c.content.clone())
             {
                 grounding.push(c.clone());
@@ -285,6 +318,7 @@ impl Runtime {
     pub(crate) async fn expand_from_top_sources(
         &self,
         initial: Vec<corpus_engine::ScoredChunk>,
+        message: &str,
     ) -> (Vec<corpus_engine::ScoredChunk>, usize, usize) {
         use std::collections::{HashMap, HashSet};
 
@@ -373,11 +407,31 @@ impl Runtime {
             // Fetch the full quota — the dedupe loop below drops the
             // ones already present, leaving us with up to `need` net
             // additions per group.
+            // Fetch the article WIDE and rank the top-up candidates by
+            // substantive question-token overlap (2026-07-17: the
+            // document-order first-N fetch made fact coverage a
+            // chunk-position lottery — the 'grace' fact sat deeper in
+            // 'Afterlife' than N on the comparative-religion bank
+            // question, in both composition regimes). The BTree title
+            // index makes the wide fetch ~ms. Document order remains
+            // the DOMINANT expander's contract (narrative cohesion on
+            // summarize shapes) — this is the multi-source top-up
+            // only, where per-source slots are scarce and must carry
+            // answer content.
             match idx
-                .fetch_chunks_by_title(&key.1, EXPANSION_MULTI_PER_SOURCE)
+                .fetch_chunks_by_title(&key.1, EXPANSION_WIDE_FETCH)
                 .await
             {
-                Ok(group_chunks) => {
+                Ok(mut group_chunks) => {
+                    let q_tokens = crate::runtime::evidence::extract_tokens(
+                        message,
+                        crate::runtime::evidence::EVIDENCE_TITLE_MIN_TOKEN_LEN,
+                    );
+                    let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                        let body = c.content.to_lowercase();
+                        q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                    };
+                    group_chunks.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
                     let mut added_this_group = 0usize;
                     for c in group_chunks {
                         if added_this_group >= need {
