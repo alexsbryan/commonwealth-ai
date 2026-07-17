@@ -102,7 +102,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 # Minimum supported Rust version. While every crate is unpublished the pinned
 # toolchain (rust-toolchain.toml) IS the MSRV; the liftable leaf crates
