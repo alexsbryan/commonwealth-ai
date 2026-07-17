@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-newsworthy-smoke",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784253401,
+  "started_at_unix": 1784306891,
   "results": [
     {
       "question_id": "newsworthy-israel-lebanon-ceasefire",
@@ -115,7 +115,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 4043,
+      "search_ms": 4460,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -130,27 +130,6 @@
           "corpus_id": "wikipedia",
           "title": "2025–2026 Iran–United States negotiations",
           "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "develop a framework for a possible nuclear agreement was led by Michael Anton for the US and by Majid Takht-Ravanchi for Iran.  The US military had been building up its presence in the Middle East as the threat of war escalated. US bases throughout the region accommodate approximately 50,000 American troops, as well as the biggest air force presence in the Middle East since the 2003 invasion of Iraq. As part of the peace proposals, Iran proposed building at least 19 additional reactors, suggesting that American involvement in these projects could help revitalize the US nuclear industry. A plan…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "On May 27, Trump said both sides were close to finalizing an agreement involving strong inspections. Araghchi stated he was unsure whether a deal was imminent, while Khamenei's advisor, Ali Shamkhani, dismissed Trump's desired control over the Iranian nuclear program as a \"fantasy\". Israel reportedly threatened to preemptively attack Iranian nuclear installations, although this was denied by Benjamin Netanyahu. On May 31, the International Atomic Energy Agency (IAEA) reported that Iran had amassed a record amount of military-grade enriched uranium. On June 11, US embassies in Iraq and other Ar…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "On June 12, the IAEA declared Iran in breach of its non-proliferation obligations."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
           "score": 0.08902692,
           "snippet": "revitalize the US nuclear industry. A planned address by Araghchi to formally announce this proposal was ultimately cancelled.  On June 13, Israel launched large-scale attacks targeting Iran's military leadership and nuclear scientists. Consequently, Iran withdrew and suspended nuclear talks indefinitely. The United States also carried out a series of strikes on Iranian nuclear sites and negotiations between the United States and Iran were subsequently suspended. Talks resumed in early 2026 after large-scale protests in Iran. Meanwhile, the US military buildup in the Middle East continued.  On…"
         },
@@ -158,57 +137,8 @@
           "corpus_id": "wikipedia",
           "title": "2025–2026 Iran–United States negotiations",
           "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "a key figure in the negotiations. On April 7, 2026, Iran and the United States announced a temporary two-week ceasefire.  On May 24, 2026, reports indicated that the United States and Iran were nearing a broader peace agreement following months of conflict and stalled negotiations. US President Donald Trump stated that a memorandum of understanding was close to finalisation and suggested that the Strait of Hormuz could soon reopen under a ceasefire framework."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "714964 |access-date=2026-05-25 |work=ABC News |language=en-AU}}"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "Iran's nuclear program has been a focal point of international scrutiny for decades. Although the country suspended its formal nuclear weapons program in 2003, in December 2024, the UN nuclear watchdog IAEA reported enrichment to levels approaching weapons-grade. It also found an unprecedented stockpile of highly enriched uranium without a credible civilian purpose, giving Iran the capacity to produce enough fissile material for multiple bombs on short notice. The program has received external assistance, including from Pakistan and North Korea, with the latter supplying both missiles and uran…"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "said that Iran will not agree to extend the ceasefire if it does not include Iranian control of the Strait of Hormuz.  Former special representative for Iran Elliott Abrams argued that Trump did not seek war. However, should the talks fail, Iran's nuclear program should be destroyed by Israel and/or the US Political commentator Tucker Carlson argued this was the worst time for US military intervention in Iran. It was"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "reported that Witkoff and Kushner told Trump that it would be \"difficult, if not impossible\" to reach a deal with Iran. After talks fell through, leading to the armed conflict, Witkoff blamed Iran for trying to \"strong-arm\" the US team, and said the Iranian insistence on enrichment hampered a deal. He also claimed the Iranians boasted about having deceived monitors. During the 2026 State of the Union Address, Trump said that he preferred a diplomatic solution, but he would not allow Iran to get nuclear weapons. While President Trump is pursuing a peace agreement regarding Iran, Prime Minister …"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "intelligence reports indicate that Israeli spy agencies have allegedly been eavesdropping on American negotiators, specifically those working on a potential peace deal with Iran. Israeli embassy in Washington has denied the allegations."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
           "score": 0.084168956,
           "snippet": "On 15 June 2026, following reports of a preliminary agreement between the United States and Iran that reportedly included provisions for ending the war, including in Lebanon,"
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "2025–2026 Iran–United States negotiations",
-          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
-          "score": 1.0,
-          "snippet": "work deal to end war and reopen the Strait of Hormuz |url=https://www.nbcnews.com/news/us-news/deal-reached-united-states-iran-war-rcna350039 |access-date=2026-06-15 |website=NBC News |language=en}} Yedioth Ahronoth reported that Benjamin Netanyahu told the President of the United States that Israel does not consider itself âboundâ by the Lebanon clause in the emerging agreement. According to the report, Netanyahu emphasized that Israel would not withdraw from Lebanon and that its military forces would remain in their current positions. The same source stated that Israeli officials said Is…"
         },
         {
           "corpus_id": "wikipedia",
@@ -223,18 +153,200 @@
           "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran",
           "score": 0.07018924,
           "snippet": "On 13 April 2026, the United States imposed a naval blockade on Iran following the failure of the Islamabad Talks to end the 2026 Iran war. The blockade began 10 a.m. ET and applied only to ships going to and from Iran. Iran said that it viewed the entry of US military vessels near the Strait of Hormuz as a breach of the ceasefire agreement that had been reached days earlier and that it would respond accordingly. On 22 April, US president Donald Trump claimed that the naval blockade had cost Iran $500 million daily while the US Department of Defense estimated that Iran had lost $4.8 billion in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Censorship during the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Censorship_during_the_2026_Iran_war",
+          "score": 0.066641405,
+          "snippet": "During the 2026 Iran war, the United States, Israel and Iran all implemented severe censorship to hide their actual amount of damage and success in the war."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reactions to the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/Reactions_to_the_2026_Iran_war",
+          "score": 0.06654515,
+          "snippet": "[[File:Reactions to the 2026 Iran conflict.svg|thumb|400px|Reactions to the 2026 Iran war:  ]]  On 28 February 2026, the United States and Israel launched joint airstrikes on Iran, starting the 2026 Iran war. The strikes targeted Iranian officials, military commanders, and military assets, assassinating Ali Khamenei, the supreme leader of Iran. Iran responded with missile and drone strikes against Israel, U.S. bases, and Arab countries in the Middle East, as well as closing the Strait of Hormuz.  Most countries did not take a definitive side in the conflict but called for peace. In the Middle …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.059209615,
+          "snippet": "On 8 April 2026, the United States and Iran agreed to a two-week ceasefire in the 2026 Iran war, mediated by Pakistan. Iran had rejected the draft proposal for a 45-day two-phase ceasefire framework introduced on 5 April by  Pakistan, instead proposing its own 10-point plan for a peace agreement. The proposal was developed as part of ongoing mediation efforts involving regional and international actors during the 2025â2026 negotiations. Since its declaration, the ceasefire has been violated by both sides numerous times. On 21 April, President Trump extended the ceasefire indefinitely."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran–United States relations",
+          "url": "https://en.wikipedia.org/wiki/Iran–United_States_relations",
+          "score": 0.04993816,
+          "snippet": "them and that the United States should instead be removed as host for failing to ensure the safety of participating teams.  In April 2026, U.S. special envoy Paolo Zampolli proposed that Italy replace Iran at the 2026 FIFA World Cup, prompting swift rejection from Italian officials who called the idea \"not appropriate\" and \"shameful.\" Italian Sports Minister Andrea Abodi stated that qualification \"must be earned on the pitch,\" while FIFA president Gianni Infantino reiterated that Iran would participate as scheduled.  On April 8, 2026, the United States and Iran agreed to a provisional two-week…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iran war ceasefire",
+          "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+          "score": 0.060799323,
+          "snippet": "ondo/2026/04/10/iran-usa-guerra-israele-libano-diretta |access-date=10 April 2026 |website=TG24 |language=it}}  The United States imposed a  naval blockade on Iran on Iran following the failure of the Islamabad Talks to end the war. Iran said it will view the entry of military vessels near the strait as a breach of the ceasefire and will respond accordingly."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States Armed Forces",
+          "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces",
+          "score": 1.0,
+          "snippet": "United States Armed Forces  They helped forge a sense of national unity and identity through victories in the early-19th-century First and Second Barbary Wars. They played a critical role in the territorial evolution of the U.S., including the American Civil War. The National Security Act of 1947 created the modern U.S. military framework, establishing the National Military Establishment headed by the secretary of defense and creating both the U.S. Air Force and National Security Council; in 1949, an amendment to the act merged the cabinet-level departments of the Army, Navy, and Air Force int…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States Armed Forces",
+          "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces",
+          "score": 1.0,
+          "snippet": "United States Armed Forces  The United States Armed Forces are the military forces of the United States. The armed forces consist of six service branches: the Army, Marine Corps, Navy, Air Force, Space Force, and Coast Guard. All six armed services are among the eight uniformed services of the United States, along with the U.S. Public Health Service Commissioned Corps and the NOAA Commissioned Officer Corps. Each of the different military services is assigned a role and domain. The Army conducts land operations. The Navy and Marine Corps conduct maritime operations, the Marine Corps specializi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States dollar",
+          "url": "https://en.wikipedia.org/wiki/United_States_dollar#Note_issues,_19th_century",
+          "score": 1.0,
+          "snippet": "United States dollar  In order to finance the War of 1812, Congress authorized the issuance of Treasury Notes, interest-bearing short-term debt that could be used to pay public dues. While they were intended to serve as debt, they did function \"to a limited extent\" as money. Treasury Notes were again printed to help resolve the reduction in public revenues resulting from the Panic of 1837 and the Panic of 1857, as well as to help finance the Mexican–American War and the Civil War."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran",
+          "url": "https://en.wikipedia.org/wiki/Iran",
+          "score": 1.0,
+          "snippet": "Iran  The government is authoritarian and has attracted widespread criticism for its significant violations of human rights and civil liberties. Iran is a major regional power, due to its large reserves of fossil fuels, including the world's second largest natural gas supply, third largest proven oil reserves, its geopolitically significant location, military capabilities, cultural hegemony, regional influence, and role as the world's focal point of Shia Islam. The Iranian economy is the world's 19th-largest by PPP. Iran is an active and founding member of the United Nations, OIC, OPEC, ECO, N…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "China in the 2026 Iran war",
+          "url": "https://en.wikipedia.org/wiki/China_in_the_2026_Iran_war",
+          "score": 0.041201554,
+          "snippet": "The involvement of the People's Republic of China in the 2026 Iran war has encompassed a range of diplomatic, intelligence, and logistical actions amid the conflict that began with coordinated airstrikes by Israel and the United States against Iran on 28 February 2026. China has maintained a longstanding partnership with Iran, including economic ties and military cooperation. Since the beginning of the conflict, China has focused on diplomatic mediation while Chinese companies have provided dual-use technology, such as missile parts, and geospatial intelligence to Iran. Jasim Al-Azzawi describ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "List of 2026 FIFA World Cup controversies",
+          "url": "https://en.wikipedia.org/wiki/List_of_2026_FIFA_World_Cup_controversies",
+          "score": 0.0479025,
+          "snippet": "2026|via=www.rferl.org}}  Further complications regarding Iran's participation occurred as a result of the 2026 IranâUnited States crisis in February 2026, which resulted in the United States and Israel launching missiles at Iran. In retaliation, Iran launched missiles at Israel and Persian Gulf Arab states, as well as additional spillover missile strikes in Jordan. FIFA stated that it was monitoring the situation and was focused on getting all countries to participate, despite reports suggesting Iran might not participate."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Middle Eastern crisis (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Middle_Eastern_crisis_(2023–present)",
+          "score": 0.046918765,
+          "snippet": "contemporary history\". On 11 February 2026, Iranian President Masoud Pezeshkian apologized to the nation for the massacres.  Beginning in late January 2026, the United States carried out its largest military buildup in the Middle East since the 2003 invasion of Iraq, deploying air, naval, and missile defense assets amid escalating tensions with Iran, which the United States has attributed to Iran's nuclear program, the 2025â2026 Iranian protests, and a government crackdown that killed thousands of demonstrators. On 28 February 2026, this culminated in joint military strikes on Iran by the Un…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2026 Iranian strikes on Jordan",
+          "url": "https://en.wikipedia.org/wiki/2026_Iranian_strikes_on_Jordan",
+          "score": 0.044913422,
+          "snippet": "On 28 February 2026, during the 2026 Iran war, Iran launched a series of drone and missile strikes targeting American and allied military facilities across the Middle East. Several projectiles crossed into Jordanian airspace and were intercepted by the Jordanian Armed Forces and United States Armed Forces operating in the country."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Esmail Baghaei",
+          "url": "https://en.wikipedia.org/wiki/Esmail_Baghaei",
+          "score": 0.039339103,
+          "snippet": "football team members to Australia during the 2026 Asia Cup, he claimed that the players were taken \"hostage\" by Australia.  After the successful April 2026 U.S. rescue operation in Iran, in which the U.S. military rescued two crew members of an F-15E Strike Eagle who had been shot down over Iran by Iranian forces during the 2026 Iran war, Baghaei claimed that the rescue operation had been \"a disaster\" for the United States."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abbas Araghchi",
+          "url": "https://en.wikipedia.org/wiki/Abbas_Araghchi",
+          "score": 0.039840452,
+          "snippet": "held a \"crystal clear\" position against developing nuclear weapons, while defending its right to peaceful nuclear technology.  Following the start of the  2026 Iran war on 28 February 2026, Araghchi condemned the attacks as \"wholly unprovoked, illegal, and illegitimate\", and said  that Iran maintained a right to self-defense. On 9 March, speaking to PBS News Hour, Araghchi called the American strikes \"a failure\" while vowing that Iran would fight \"as long as it takes\".  On 14 March 2026, Araghchi acknowledged the \"good cooperation\" of  Russia and of China with Iran in the war. He noted that th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Asim Munir",
+          "url": "https://en.wikipedia.org/wiki/Asim_Munir",
+          "score": 0.042006806,
+          "snippet": "of five years, with his tenure as army chief deemed to have recommenced from the date of notification of the CDF appointment.  In April 2026, Pakistan played a mediating role between Iran and the United States amid 2026 Iran war. Prime Minister Shehbaz Sharif tasked Munir with maintaining behind-the-scenes contacts with American and Iranian political and military leadership in an effort to de-escalate the crisis. On 6 April 2026, it was reported that Munir has been in contact \"all night long\" with U.S. Vice President JD Vance, U.S. special envoy Steve Witkoff and Iranian Foreign Minister Abbas…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States dollar",
+          "url": "https://en.wikipedia.org/wiki/United_States_dollar#Nicknames",
+          "score": 1.0,
+          "snippet": "United States dollar  term greenback is also used by the financial press in other countries, such as Australia, New Zealand, South Africa, and India.  Other well-known names of the dollar as a whole in denominations include greenmail, green, and dead presidents, the latter of which referring to the deceased presidents pictured on most bills. Dollars in general have also been known as bones (e.g. \"twenty bones\" = $20). The newer designs, with portraits displayed in the main body of the obverse (rather than in cameo insets), upon paper color-coded by denomination, are sometimes referred to as bi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States dollar",
+          "url": "https://en.wikipedia.org/wiki/United_States_dollar#Gold_standard,_20th_century",
+          "score": 1.0,
+          "snippet": "United States dollar  Though the dollar came under the gold standard de jure only after 1900, the bimetallic era was ended de facto when the Coinage Act of 1873 suspended the minting of the standard silver dollar of 412.5 Troy grains = 26.73 g; 0.859 ozt, the only fully legal tender coin that individuals could convert bullion into in unlimited (or Free silver) quantities, and right at the onset of the silver rush from the Comstock Lode in the 1870s. This was the so-called \"Crime of '73\".  The Gold Standard Act of 1900 repealed the U.S. dollar's historic link to silver and defined it solely as …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States dollar",
+          "url": "https://en.wikipedia.org/wiki/United_States_dollar#Gold_standard,_20th_century",
+          "score": 1.0,
+          "snippet": "United States dollar  D. Roosevelt, and in 1934 the standard was changed to $35 per troy ounce fine gold, or 13.71 grains (0.888 g) per dollar.  After 1968 a series of revisions to the gold peg was implemented, culminating in the Nixon Shock of August 15, 1971, which suddenly ended the convertibility of dollars to gold. The U.S. dollar has since floated freely on the foreign exchange markets."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran",
+          "url": "https://en.wikipedia.org/wiki/Iran#Abstract",
+          "score": 1.0,
+          "snippet": "Iran  first Supreme Leader. In 1980, Iraq invaded Iran, sparking the eight-year-long Iran–Iraq War, which ended in stalemate.  Iran is officially governed as a unitary Islamic Republic with a Presidential system, with ultimate authority vested in a Supreme Leader. The government is authoritarian and has attracted widespread criticism for its significant violations of human rights and civil liberties. Iran is a major regional power, due to its large reserves of fossil fuels, including the world's second largest natural gas supply, third largest proven oil reserves, its geopolitically significan…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran",
+          "url": "https://en.wikipedia.org/wiki/Iran#History",
+          "score": 1.0,
+          "snippet": "Iran  a leading power once again. Persia's arch-rival during this time was the Roman Empire and its successor, the Byzantine Empire.  Iran remained a monarchy until the 1979 Iranian Revolution, when it officially became an Islamic republic on 1 April 1979. Since then, Iran has experienced significant political, social, and economic changes. The establishment of the Islamic Republic of Iran led to the restructuring of its political system, with Ayatollah Khomeini as the Supreme Leader. Iran's foreign relations have been shaped by the Iran–Iraq War (1980–1988), ongoing tensions with the United S…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iran",
+          "url": "https://en.wikipedia.org/wiki/Iran#Foreign_relations",
+          "score": 1.0,
+          "snippet": "Iran maintains diplomatic relations with 165 countries, but not the United States and Israel —a state which Iran derecognised in 1979.  Iran has an adversarial relationship with Saudi Arabia due to different political and ideologies. Iran and Turkey have been involved in modern proxy conflicts such as in Syria, Libya, and the South Caucasus. However, they have shared common interests, such as the issue of Kurdish separatism and the Qatar diplomatic crisis. Iran has a close and strong relationship with Tajikistan. Iran has deep economic relations and alliance with Iraq, Lebanon and Syria, with …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States Armed Forces",
+          "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces#Abstract",
+          "score": 1.0,
+          "snippet": "United States Armed Forces  space operations. The Coast Guard is unique in that it specializes in maritime operations and is also a law enforcement agency.  From their inception during the American Revolutionary War, the U.S. Armed Forces have played a decisive role in the country's history. They helped forge a sense of national unity and identity through victories in the early-19th-century First and Second Barbary Wars. They played a critical role in the territorial evolution of the U.S., including the American Civil War. The National Security Act of 1947 created the modern U.S. military fram…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "United States Armed Forces",
+          "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces#Abstract",
+          "score": 1.0,
+          "snippet": "United States Armed Forces  The United States Armed Forces are the military forces of the United States. The armed forces consist of six service branches: the Army, Marine Corps, Navy, Air Force, Space Force, and Coast Guard. All six armed services are among the eight uniformed services of the United States, along with the U.S. Public Health Service Commissioned Corps and the NOAA Commissioned Officer Corps.  Each of the different military services is assigned a role and domain. The Army conducts land operations. The Navy and Marine Corps conduct maritime operations, the Marine Corps specializ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 1.0,
+          "snippet": "tions |url=https://edition.cnn.com/2025/06/12/middleeast/iran-threatens-nuclear-escalation-iaea-intl |access-date=May 23, 2026 |publisher=CNN |language=en}}  Beginning on June 13, 2025, Israel struck multiple targets across Iran with the stated goal of preventing Iran from developing nuclear weapons. The attacks damaged key nuclear facilities and killed several of Iran's top military leaders. Among those injured was Khamenei's political advisor Ali Shamkhani, who oversaw negotiations between the United States and Iran. Following the attack, the sixth round of US-Iran talks, scheduled in Oman o…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "2025–2026 Iran–United States negotiations",
+          "url": "https://en.wikipedia.org/wiki/2025–2026_Iran–United_States_negotiations",
+          "score": 1.0,
+          "snippet": "a key figure in the negotiations. On April 7, 2026, Iran and the United States announced a temporary two-week ceasefire.  On May 24, 2026, reports indicated that the United States and Iran were nearing a broader peace agreement following months of conflict and stalled negotiations. US President Donald Trump stated that a memorandum of understanding was close to finalisation and suggested that the Strait of Hormuz could soon reopen under a ceasefire framework."
         }
       ],
       "source_score": {
         "matched": [
+          "2026 Iran war ceasefire",
           "2025–2026 Iran–United States negotiations"
         ],
         "missing": [
-          "2026 Iran war",
-          "2026 Iran war ceasefire"
+          "2026 Iran war"
         ],
         "total_expected": 3,
-        "ratio": 0.33333334
+        "ratio": 0.6666667
       },
       "fact_score": {
         "matched": [
@@ -248,7 +360,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2878,
+      "search_ms": 3747,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -363,7 +475,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2775,
+      "search_ms": 3633,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -493,7 +605,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2086,
+      "search_ms": 2519,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -624,7 +736,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2049,
+      "search_ms": 2489,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -750,7 +862,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2837,
+      "search_ms": 3728,
       "corpora_hit": [
         "wikipedia"
       ],

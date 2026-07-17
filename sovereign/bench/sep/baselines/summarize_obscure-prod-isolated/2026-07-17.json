@@ -2,7 +2,7 @@
   "bank_name": "sep-summarize-obscure-v1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784254230,
+  "started_at_unix": 1784307735,
   "results": [
     {
       "question_id": "summary_proof_theory",
@@ -232,7 +232,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1883,
+      "search_ms": 1857,
       "corpora_hit": [
         "sep"
       ],
@@ -425,7 +425,7 @@
         "ratio": 0.9
       },
       "embed_ms": 0,
-      "search_ms": 1948,
+      "search_ms": 1943,
       "corpora_hit": [
         "sep"
       ],
@@ -639,7 +639,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1133,
+      "search_ms": 1149,
       "corpora_hit": [
         "sep"
       ],
@@ -874,7 +874,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1197,
+      "search_ms": 1179,
       "corpora_hit": [
         "sep"
       ],
@@ -1067,7 +1067,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1759,
+      "search_ms": 1760,
       "corpora_hit": [
         "sep"
       ],
@@ -1223,7 +1223,14 @@
           "title": "ibn-rushd",
           "url": "https://plato.stanford.edu/entries/ibn-rushd/",
           "score": 1.0,
-          "snippet": "ibn-rushd  The Andalusian philosopher, physician and judge Ibn Rushd (1126–1198) is one of the great figures of philosophy within the Muslim contexts, and a foundational source for post-classical European thought."
+          "snippet": "ibn-rushd  Ibn Rushd remained productive for at least four decades. He was the author of a large corpus that extends over medicine, logic and philosophy in all its branches, including natural philosophy, astronomy, metaphysics, psychology, politics, and ethics. His work also includes the sciences of Islamic religion: jurisprudence (fiqh), the foundations of Islamic law (usūl al-fiqh), the foundations of religion (usūl al-dīn), and the science of the Arabic language, including grammar. With important exceptions, most of his works are available in the original Arabic. For those works that have b…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "score": 1.0,
+          "snippet": "ibn-rushd  Unlike  Ibn Sīnā  and  al-Ghazālī,  Ibn Rushd did not write an autobiography, and as a result many aspects of his life are obscure and will remain so unless new documents are discovered. The limited information we have from his biographers unanimously agrees on his good conduct, his diligence in science, and his fairness as a judge, while noting his interests in philosophy and his adoption of certain “audacious” views. The surviving historical sources tell us much about his teachers in the religious sciences, but, with the exception of medicine, we know little about those who taught…"
         },
         {
           "corpus_id": "sep",
@@ -1234,10 +1241,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "ibn-rushd",
-          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "title": "ibn-rushd-natural",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
           "score": 1.0,
-          "snippet": "ibn-rushd  Abū al-Walīd Muḥammad ibn Ahmad Ibn Rushd was born in Cordova in 1126. He belonged to an influential Andalusian family, famous for its judicial power and for its scholarship in the religious sciences. His father was a prominent judge, but the most important figure in the family was his grandfather, who also bears his name, Ibn Rushd, and so the philosopher is called “the grandson” (al-ḥafīd) to distinguish him from his grandfather (al-jadd). The latter was both a well-known judge and a famed jurist, being the author of many books in jurisprudence following the Mālikī school."
+          "snippet": "ibn-rushd-natural  Averroes composed Long, Middle, and Short commentaries on Aristotle’s Physics and some essays, masā’il, quaestiones, on physical matters. The Middle and Short commentaries were revised by Averroes himself, and the Long Commentary shows traces of revision, but in general, the Long Commentary represents the last stage of his thought. The Middle Commentaries were favored by later Jewish philosophers, but, as S. Harvey has shown, the Long Commentary on the Physics was soon translated into Hebrew and also drew their interest (Harvey 1985). The Long Commentary was the most influen…"
         },
         {
           "corpus_id": "sep",
@@ -1245,13 +1252,6 @@
           "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
           "score": 1.0,
           "snippet": "ibn-rushd-natural  Philosophy has been divided into theoretical and practical since the time of Aristotle’s distinction of the sciences, and within theoretical philosophy, the enquire on nature was of major import in Ancient and Medieval times. Most of its contents later developed into modern natural science as the seeds of physics or chemistry, but its founding concepts are still worth reflecting upon. Concepts such as those of body and extension, motion and change, time and place, finiteness and infiniteness, and of nature itself have kept their philosophical gist."
-        },
-        {
-          "corpus_id": "sep",
-          "title": "ibn-rushd-natural",
-          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
-          "score": 1.0,
-          "snippet": "ibn-rushd-natural  The Iranian philosopher Ibn Sina [Avicenna] (d. 1037 CE) organized his philosophical encyclopedia “The Healing” in four sections: Logic, mathematical, and natural sciences, and sciences of the Divine; the doctrine on the human soul was part of the natural sciences. The Andalusian Ibn Rushd [Averroes] (d. 1198 CE) was a faithful disciple of Aristotle and he stuck to the organization of the Aristotelian corpus implemented by Andronicus of Rhodes (fl. 1st century BCE), a scholar of the Peripatetic school who gave the science of the soul a place of its own, as would Averroes. On…"
         },
         {
           "corpus_id": "sep",
@@ -1272,21 +1272,21 @@
           "title": "ibn-arabi",
           "url": "https://plato.stanford.edu/entries/ibn-arabi/",
           "score": 1.0,
-          "snippet": "ibn-arabi  Several scholars have pointed to parallels between Ibn ‘Arabî and figures like Eckhart and Cusanus (Sells 1994, Shah-Kazemi 2006, Smirnov 1993, Dobie 2009), and others have suggested that he anticipates trends in physics (Yousef 2007) or modern philosophy (Almond 2004, Coates 2002, Dobie 2007). The most serious attempt to fit him into the history of Western philosophy argues that his notion of barzakh (see section 3.4) offers a viable solution to the problem of defining the indefinable, which has dogged epistemology from the time of Aristotle and led to the despair of modern philoso…"
+          "snippet": "ibn-arabi  Ibn ‘Arabî referred to himself with fuller versions of his name, such as Abû ‘Abdallâh Muhammad ibn ‘Alî ibn al-‘Arabî al-Tâ’î al-Hâtimî (the last three names indicating his noble Arab lineage). He was born in Murcia in 1165 to the family of a minor official and received the standard education of a literatus, without any special attention to religious topics. In his early teens he underwent a visionary conversion “at the hands of Jesus” (albeit the Jesus of the Koran), and this resulted in an “opening” (futûh) of his soul toward the divine realm. Shortly thereafter, in about 1180, h…"
         },
         {
           "corpus_id": "sep",
           "title": "medieval-philosophy",
           "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
           "score": 1.0,
-          "snippet": "medieval-philosophy  [Editor’s Note: The following new entry by John Marenbon replaces the  former entry  on this topic by the previous author.]"
+          "snippet": "medieval-philosophy  When Jews living in Latin Europe began to engage in philosophy, using Hebrew, their language of law and liturgy, they turned primarily to works in Arabic. A central text was Maimonides’s Guide of the Perplexed  (§2.4),  translated into Hebrew twice soon after it was written, and a few other Jewish philosophical texts were also translated. During the thirteenth and early fourteenth centuries, translators also provided an almost complete Aristotelian curriculum but, although there were some direct translations, it was mostly by way of Averroes’s short and middle paraphrase c…"
         },
         {
           "corpus_id": "sep",
           "title": "medieval-philosophy",
           "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
           "score": 1.0,
-          "snippet": "medieval-philosophy  “Medieval philosophy” has changed its meaning among specialists over the last twenty years. The change is not in chronology, where views remain divided (see  §5):  most agree that the period stretches at least from 500–1500, but some push the starting point back and/or the end point forward."
+          "snippet": "medieval-philosophy  Philosophical thinking took place in the monasteries and, later, cathedral schools in Latin Europe in the ninth to eleventh centuries, although it was first stimulated at the end of the eighth century by Alcuin, Theodulf of Orleans and other scholars at the court of  Charlemagne.[10]  Based on the seven Liberal Arts (the trivium: grammar, logic, rhetoric; the quadrivium: arithmetic, geometry, astronomy, music), it was usually focused on the first two. Grammar ran from elementary language learning to complex semantic analysis. Logic, at first known from encyclopaedic accoun…"
         }
       ],
       "source_score": {
@@ -1303,20 +1303,20 @@
           "philosophy and religion",
           "eternity of the world",
           "Latin Averroism",
+          "demonstrative knowledge",
           "against al-Ghazali",
           "the Decisive Treatise",
           "natural philosophy"
         ],
         "missing": [
           "unity of the intellect",
-          "Tahafut al-Tahafut",
-          "demonstrative knowledge"
+          "Tahafut al-Tahafut"
         ],
         "total_expected": 10,
-        "ratio": 0.7
+        "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1811,
+      "search_ms": 1813,
       "corpora_hit": [
         "sep"
       ],

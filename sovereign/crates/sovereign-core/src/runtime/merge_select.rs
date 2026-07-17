@@ -51,13 +51,18 @@ const RANK_K: f64 = 20.0;
 /// once by their own global rank, once by the decay.)
 const ARTICLE_DECAY: f64 = 0.7;
 
-/// `SOVEREIGN_MERGE_SELECT`: "1"/"true"/"on"/"yes" enables the
-/// demand-aware selector in place of cap/reserves/truncate. Default
-/// OFF during the architecture A/B.
+/// `SOVEREIGN_MERGE_SELECT`: demand-aware composition (entity fetch
+/// obligations + merge_demand_select) in place of the legacy
+/// cap/reserves/truncate stack. Default ON (promoted 2026-07-17
+/// after the re-verdict battery: +2 structural sources — Isaac
+/// Newton via obligations, news breadth — vs −2 saturated-budget
+/// flicker facts; both hard gates held, all canaries byte-identical).
+/// "0"/"false"/"off"/"no" restores the legacy stack byte-identically.
 pub(crate) fn merge_select_enabled() -> bool {
-    std::env::var("SOVEREIGN_MERGE_SELECT")
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"))
-        .unwrap_or(false)
+    match std::env::var("SOVEREIGN_MERGE_SELECT") {
+        Ok(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Err(_) => true,
+    }
 }
 
 fn source_tag_is(c: &ScoredChunk, tag: &str) -> bool {

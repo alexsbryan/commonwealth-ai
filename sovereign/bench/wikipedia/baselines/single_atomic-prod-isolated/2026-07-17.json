@@ -2,7 +2,7 @@
   "bank_name": "single-atomic-bombings",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784253751,
+  "started_at_unix": 1784307251,
   "results": [
     {
       "question_id": "contested_atomic_bombings_morality",
@@ -71,13 +71,6 @@
           "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
           "score": 0.0703125,
           "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Atomic bombings of Hiroshima and Nagasaki",
-          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
-          "score": 0.067075334,
-          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
         },
         {
           "corpus_id": "wikipedia",
@@ -151,17 +144,17 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
-          "score": 1.0,
-          "snippet": "Air raids on Japan  During the Pacific War, Allied forces conducted air raids on Japan from 1942 to 1945, causing extensive destruction to the country's cities and killing between 241,000 and 900,000 people. During the first years of the Pacific War these attacks were limited to the Doolittle Raid in April 1942 and small-scale raids on military positions in the Kuril Islands from mid-1943. Strategic bombing raids began in June 1944 and continued until the end of the war in August 1945. Allied naval and land-based tactical air units also attacked Japan during 1945. The United States Army Air Fo…"
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Transportation",
+          "score": 0.022916667,
+          "snippet": "Nagasaki  The nearest airport is Nagasaki Airport in the nearby city of Ōmura. The Kyushu Railway Company (JR Kyushu) provides rail transportation on the Nishi Kyushu Shinkansen and Nagasaki Main Line, whose terminal is at Nagasaki Station. In addition, the Nagasaki Electric Tramway operates five routes in the city. The Nagasaki Expressway serves vehicular traffic with interchanges at Nagasaki and Susukizuka. In addition, six national highways crisscross the city: Route 34, 202, 206, 251, 324, and 499."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Air raids on Japan",
-          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Abstract",
           "score": 1.0,
-          "snippet": "Air raids on Japan  From June 1944 until January 1945, B-29s stationed in India staged through bases in China to make a series of nine raids on targets in western Japan, but this effort proved ineffective. The strategic bombing campaign was greatly expanded from November 1944 when bases in the Mariana Islands became available as a result of the Mariana Islands Campaign. Initial attempts to target industrial facilities using high-altitude daylight \"precision\" bombing were largely ineffective. From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much …"
+          "snippet": "Air raids on Japan  From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much of the manufacturing process was carried out in small workshops and private homes: this approach resulted in large-scale urban damage and high civilian casualties. Aircraft flying from Allied aircraft carriers and the Ryukyu Islands also frequently struck targets in Japan during 1945 in preparation for the planned invasion of Japan scheduled for October 1945. During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs."
         },
         {
           "corpus_id": "wikipedia",
@@ -172,10 +165,24 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Hiroshima",
-          "url": "https://en.wikipedia.org/wiki/Hiroshima",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
           "score": 1.0,
-          "snippet": "Hiroshima is the capital of Hiroshima Prefecture in Japan. As of June 1, 2019, the city had an estimated population of 1,199,391. The gross domestic product (GDP) in Greater Hiroshima, Hiroshima Urban Employment Area, was US$61.3 billion as of 2010. Kazumi Matsui has been the city's mayor since April 2011. The Hiroshima metropolitan area is the second largest urban area in the Chugoku Region of Japan, following the Okayama metropolitan area. Hiroshima was founded in 1589 as a castle town on the Ōta River delta. Following the Meiji Restoration in 1868, Hiroshima rapidly transformed into a major…"
+          "snippet": "Air raids on Japan  However, there has been a long-running debate over the morality of the attacks on Japanese cities, and the use of atomic weapons is particularly controversial. The most commonly cited estimate of Japanese casualties from the raids is 333,000 killed and 473,000 wounded. Other estimates of total fatalities range from 241,000 to 900,000. In addition to the loss of mostly civilian life, the raids contributed to a large decline in industrial production."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#World_War_II_and_the_atomic_bombing_(1939–1945)",
+          "score": 1.0,
+          "snippet": "Hiroshima  During World War II, the Second General Army and Chūgoku Regional Army was headquartered in Hiroshima, and the Army Marine Headquarters was located at Ujina port. The city also had large depots of military supplies, and was a key center for shipping.  The bombing of Tokyo and other cities in Japan during World War II caused widespread destruction and hundreds of thousands of civilian deaths. There were no such air raids on Hiroshima. However, a real threat existed and was recognized. To protect against potential firebombings in Hiroshima, school children aged 11–14 years were mobili…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#History",
+          "score": 1.0,
+          "snippet": "Nagasaki Prefecture  of Tsushima and Iki. Facing China and Korea, the region around Hirado was a traditional center for traders and pirates.  Today, Nagasaki has prominent Catholic churches, and the Hidden Christian Sites in the Nagasaki Region, have been included on the UNESCO World Heritage List.  During the Meiji Restoration, Nagasaki and Sasebo became major ports for foreign trade, and eventually major military bases and shipbuilding centers for the Imperial Japanese Navy and the Mitsubishi Heavy Industries up to World War II. On August 9, 1945, the United States dropped an atomic bomb on …"
         },
         {
           "corpus_id": "wikipedia",
@@ -187,16 +194,9 @@
         {
           "corpus_id": "wikipedia",
           "title": "Nagasaki Prefecture",
-          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
-          "score": 1.0,
-          "snippet": "Nagasaki Prefecture is home to several of the Hidden Christian Sites in the Nagasaki Region which have been declared a UNESCO World Heritage Site."
-        },
-        {
-          "corpus_id": "wikipedia",
-          "title": "Nagasaki Prefecture",
           "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Abstract",
           "score": 1.0,
-          "snippet": "Nagasaki Prefecture (長崎県, Nagasaki-ken) is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 (1 June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast."
+          "snippet": "Nagasaki Prefecture  June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast.  Nagasaki is the capital and largest city of Nagasaki Prefecture, with other major cities including Sasebo, Isahaya, and Ōmura. Nagasaki Prefecture is located in western Kyūshū with a territory consisting of many mainland peninsulas centered around Ōmura Bay, as well as islands and archipelagos including Tsushima and Iki in the Korea Strait and the Gotō Islands in the East China Sea. Nagasaki Prefecture is known for its century-long trading history …"
         }
       ],
       "source_score": {
@@ -222,7 +222,7 @@
         "ratio": 0.16666667
       },
       "embed_ms": 0,
-      "search_ms": 4866,
+      "search_ms": 5727,
       "corpora_hit": [
         "wikipedia"
       ],

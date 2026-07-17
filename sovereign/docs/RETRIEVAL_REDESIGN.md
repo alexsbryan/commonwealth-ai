@@ -772,6 +772,28 @@ demand_plan entirely (router already classifies) — their path gets
   dark. Open threads: sepq 'rawls' −1 src under exact-match-first
   resolution; arch-arm canaries on the current substrate.
 
+  **FLIPPED default-ON (2026-07-17 morning re-verdict).** After the
+  bridge-conditioning chain + grounding-budget fix landed, the
+  re-verdict battery read: wiki 39/58 (+Isaac Newton, structurally
+  unreachable in the legacy arm) · 107/130 (−2 flicker-class facts —
+  saturated-budget marginals that flip between configs, 'labor' vs
+  'poverty'); news 9/12 (+1, facts 100%); sepq 55/149 (−1 tail-flip);
+  sepsum/canaries byte-identical. Both hard gates pass, no category
+  regresses >1 item; +2 structural sources outrank −2 flicker facts,
+  and the arch arm is the substrate the queued supply work (SEP
+  tri-graph, IGP chunk-pick — which targets exactly those fact
+  tails) builds on. `=0` restores the legacy stack byte-identically.
+  Gates at flip: lint pass, suite 7,717/0, prod-isolated lanes
+  re-baselined (wiki 3 green · 2 improved · 0 regressed; sep 3
+  improved · 0 regressed). Post-flip loss ledger (system-wide
+  forensic, same day): #1 proposal gaps in the answer-side channels
+  (Szilard's quota lottery, Watt/Steam-engine not typed-reachable,
+  Bohr/Heisenberg) → LinearRAG-style activation spread; #2
+  within-article chunk pick at the lane fetch (Fermi −1.45
+  near-misses on wrong chunks) → IGP/CE pick; #3 scorer strictness +
+  sibling-article facts → ruler pass. Base retrieval and composition
+  now account for ≈ zero remaining loss.
+
   **Question-aware multi-source top-up (same night; KEPT,
   flag-independent — both regimes benefit).** The residual −1-fact
   class ('grace', 'complementarity') traced to

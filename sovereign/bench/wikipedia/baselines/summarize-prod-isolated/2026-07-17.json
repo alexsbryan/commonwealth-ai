@@ -2,7 +2,7 @@
   "bank_name": "wikipedia-summarize-pilot-v1",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784253905,
+  "started_at_unix": 1784307406,
   "results": [
     {
       "question_id": "summary_einstein",
@@ -133,7 +133,7 @@
         "ratio": 0.5
       },
       "embed_ms": 0,
-      "search_ms": 4392,
+      "search_ms": 4905,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -268,7 +268,7 @@
         "ratio": 0.3
       },
       "embed_ms": 0,
-      "search_ms": 2234,
+      "search_ms": 2633,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -354,7 +354,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1457,
+      "search_ms": 1434,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -482,7 +482,7 @@
         "ratio": 0.3
       },
       "embed_ms": 0,
-      "search_ms": 2216,
+      "search_ms": 2616,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -617,7 +617,7 @@
         "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2216,
+      "search_ms": 2615,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -728,13 +728,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Later_claims_to_the_Imperial_title_in_the_West",
-          "score": 0.021666666,
-          "snippet": "Western Roman Empire  In addition to remaining as a concept for an administrative unit in the remaining Empire, the ideal of the Roman Empire as a mighty Christian Empire with a single ruler further continued to appeal to many powerful rulers in western Europe. With the papal coronation of Charlemagne as \" Emperor of the Romans \" in AD 800, his realm was explicitly proclaimed as a restoration of the Roman Empire in Western Europe under the concept of translatio imperii. Though the Carolingian Empire collapsed in 888 and Berengar, the last \"Emperor\" claiming succession from Charlemagne, died in…"
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "History of Tunisia",
           "url": "https://en.wikipedia.org/wiki/History_of_Tunisia#Renaissance_of_Carthage",
           "score": 0.022222223,
@@ -770,10 +763,24 @@
         },
         {
           "corpus_id": "wikipedia",
+          "title": "Women's history",
+          "url": "https://en.wikipedia.org/wiki/Women%27s_history#Pre-modern_Middle_East",
+          "score": 0.018571427,
+          "snippet": "Women's history  Scholarship on the Middle East before the 1800s has suffered from the limited number direct records of women's lives during ancient and medieval periods. Since the vast majority of historical information has come from male authors and is primarily focused on men, accounts and data which are authored by and center on women are rare. Much of what has been synthesized has come from art, court records, religious doctrine, and other mentions. Researchers have made particular use of court records from the Ottoman Empire. Despite relative sparseness, valuable sources have been identi…"
+        },
+        {
+          "corpus_id": "wikipedia",
           "title": "Western Roman Empire",
           "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
           "score": 1.0,
-          "snippet": "Western Roman Empire  In modern historiography, the Western Roman Empire was the western provinces of the Roman Empire, collectively, during any period in which they were administered separately from the eastern provinces by a separate, independent imperial court. Particularly during the period from AD 395 to 476, there were separate, coequal courts dividing the governance of the empire into the Western provinces and the Eastern provinces with a distinct imperial succession in the separate courts. The terms Western Roman Empire and Eastern Roman Empire were coined in modern times to describe p…"
+          "snippet": "Western Roman Empire  Odoacer's Italy and other barbarian kingdoms, many of them representing former Western Roman allies that had been granted lands in return for military assistance, would maintain a pretense of Roman continuity through the continued use of the old Roman administrative systems and nominal subservience to the Eastern Roman court. In the 6th century, Emperor Justinian I re-imposed direct Imperial rule on large parts of the former Western Roman Empire, including the prosperous regions of North Africa, the ancient Roman heartland of Italy and parts of Hispania. Political instabi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Further_divisions",
+          "score": 1.0,
+          "snippet": "Western Roman Empire  Battle of Mursa Major and committed suicide, a complete reunification of the whole Empire occurred under Constantius in 353.  Constantius II focused most of his power in the East. Under his rule, the city of Byzantium – only recently re-founded as Constantinople – was fully developed as a capital. At Constantinople, the political, economic and military control of the Eastern Empire's resources would remain safe for centuries to come. The city was well fortified and located at the crossroads of several major trade and military routes. The site had been acknowledged for its…"
         },
         {
           "corpus_id": "wikipedia",
@@ -785,30 +792,30 @@
         {
           "corpus_id": "wikipedia",
           "title": "Byzantine Empire",
-          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire#Early_history_(pre-518)",
           "score": 1.0,
-          "snippet": "Byzantine Empire  The appearance of plague and a devastating war with Persia exhausted the empire's resources; the early Muslim conquests that followed saw the loss of the empire's richest provinces—Egypt and Syria—to the Rashidun Caliphate. In 698, Africa was lost to the Umayyad Caliphate, but the empire subsequently stabilised under the Isaurian dynasty. The empire was able to expand once more under the Macedonian dynasty, experiencing a two-century-long renaissance. This came to an end in 1071, with the defeat by the Seljuk Turks at the Battle of Manzikert. Thereafter, periods of civil war …"
+          "snippet": "Byzantine Empire  and western halves. Although the Tetrarchy system quickly failed, the division of the empire proved an enduring concept.  Constantine I (r. 306–337) secured sole power in 324. Over the following six years, he rebuilt the city of Byzantium as a capital city, which was renamed Constantinople. Rome, the previous capital, was further from the important eastern provinces and in a less strategically important location; it was not esteemed by the \"soldier-emperors\" who ruled from the frontiers or by the empire's population who, having been granted citizenship, considered themselves …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Byzantine Empire",
-          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire#867–1081",
           "score": 1.0,
-          "snippet": "Byzantine Empire  The empire was largely dismantled in 1204, following the Sack of Constantinople by Latin armies at the end of the Fourth Crusade; its former territories were then divided into competing Greek rump states and Latin realms. Despite the eventual recovery of Constantinople in 1261, the reconstituted empire would wield only regional power during its final two centuries of existence. Its remaining territories were progressively annexed by the Ottomans in perennial wars fought throughout the 14th and 15th centuries. The fall of Constantinople to the Ottomans in 1453 ultimately broug…"
+          "snippet": "Byzantine Empire  The Byzantine Empire then fell into a period of difficulties, caused to a large extent by the undermining of the theme system and the neglect of the military. Nikephoros II, John Tzimiskes, and Basil II shifted the emphasis of the military divisions (τάγματα, tagmata) from a reactive, defence-oriented citizen army into an army of professional career soldiers, increasingly dependent on foreign mercenaries. Mercenaries were expensive, however, and as the threat of invasion receded in the 10th century, so did the need for maintaining large garrisons and expensive fortifications.…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
           "score": 1.0,
-          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure. In 376, a large migration of Goths and other non-Roman people, fleeing from the Huns, entered the Empire. Roman forces were unable to exterminate, expel or subjugate them. In 395, after winning two destructive civil wars, Theodosius I died. He left a collapsing field army, and the Empire divided between the warring ministers of his two incapable sons. Goths and other non-Romans became a force that could challenge ei…"
+          "snippet": "Fall of the Western Roman Empire  few and ineffective, and despite brief recoveries under able leaders, central rule was never again effectively consolidated.  By 476, the position of Western Roman Emperor wielded negligible military, political, or financial power, and had no effective control over the scattered Western domains that could still be described as Roman. Barbarian kingdoms had established their own power in much of the area of the Western Empire. In 476, the Germanic barbarian king Odoacer deposed the last emperor of the Western Roman Empire in Italy, Romulus Augustulus, and the S…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Another_paradigm_of_the_period",
           "score": 1.0,
-          "snippet": "Fall of the Western Roman Empire  By 476, the position of Western Roman Emperor wielded negligible military, political, or financial power, and had no effective control over the scattered Western domains that could still be described as Roman. Barbarian kingdoms had established their own power in much of the area of the Western Empire. In 476, the Germanic barbarian king Odoacer deposed the last emperor of the Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno. While its legitimacy lasted for centuries longer and its c…"
+          "snippet": "Fall of the Western Roman Empire  From at least the time of Henri Pirenne (1862–1935), scholars have described a continuity of Roman culture and political legitimacy long after 476. Pirenne postponed the demise of classical civilization to the 8th century. He challenged the notion that Germanic barbarians had caused the Western Roman Empire to end, and he refused to equate the end of the Western Roman Empire with the end of the office of emperor in Italy. He pointed out the essential continuity of the economy of the Roman Mediterranean even after the barbarian invasions, and suggested that onl…"
         },
         {
           "corpus_id": "wikipedia",
@@ -820,16 +827,16 @@
         {
           "corpus_id": "wikipedia",
           "title": "Ancient Rome",
-          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
           "score": 1.0,
-          "snippet": "Ancient Rome  It achieved impressive technological and architectural feats, such as the empire-wide construction of aqueducts and roads, as well as more grandiose monuments and facilities."
+          "snippet": "Ancient Rome began as an Italic settlement, traditionally dated to 753 BC, beside the River Tiber in the Italian Peninsula. The settlement grew into the city and polity of Rome, and came to control its neighbours through a combination of treaties and military strength. It eventually controlled the Italian Peninsula, assimilating the Greek culture of southern Italy (Magna Grecia) and the Etruscan culture, and then became the dominant power in the Mediterranean region and parts of Europe. At its height it controlled the North African coast, Egypt, Southern Europe, and most of Western Europe, the…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Ancient Rome",
           "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
           "score": 1.0,
-          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom (753–509 BC), the Roman Republic (509–27 BC), and the Roman Empire (27 BC–476 AD) until the fall of the western empire."
+          "snippet": "Ancient Rome  (753–509 BC), the Roman Republic (509–27 BC), and the Roman Empire (27 BC–476 AD) until the fall of the western empire.  Ancient Rome is often grouped into classical antiquity together with ancient Greece, and their similar cultures and societies are known as the Greco-Roman world. Ancient Roman civilisation has contributed to modern language, religion, society, technology, law, politics, government, warfare, art, literature, architecture, and engineering. Rome professionalised and expanded its military and created a system of government called res publica, the inspiration for mo…"
         }
       ],
       "source_score": {
@@ -857,7 +864,7 @@
         "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2219,
+      "search_ms": 2578,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -978,7 +985,7 @@
         "ratio": 0.7
       },
       "embed_ms": 0,
-      "search_ms": 2164,
+      "search_ms": 2534,
       "corpora_hit": [
         "wikipedia"
       ],
@@ -1113,7 +1120,7 @@
         "ratio": 0.5
       },
       "embed_ms": 0,
-      "search_ms": 1427,
+      "search_ms": 1411,
       "corpora_hit": [
         "wikipedia"
       ],

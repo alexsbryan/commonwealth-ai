@@ -2,7 +2,7 @@
   "bank_name": "sep-summarize-v1",
   "corpus": "sep",
   "limit": 30,
-  "started_at_unix": 1784254165,
+  "started_at_unix": 1784307670,
   "results": [
     {
       "question_id": "summary_idealism",
@@ -233,7 +233,7 @@
         "ratio": 0.6
       },
       "embed_ms": 0,
-      "search_ms": 2151,
+      "search_ms": 2258,
       "corpora_hit": [
         "sep"
       ],
@@ -468,7 +468,7 @@
         "ratio": 0.9
       },
       "embed_ms": 0,
-      "search_ms": 1980,
+      "search_ms": 2003,
       "corpora_hit": [
         "sep"
       ],
@@ -703,7 +703,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1237,
+      "search_ms": 1206,
       "corpora_hit": [
         "sep"
       ],
@@ -889,7 +889,7 @@
         "ratio": 0.4
       },
       "embed_ms": 0,
-      "search_ms": 2617,
+      "search_ms": 2623,
       "corpora_hit": [
         "sep"
       ],
@@ -1124,7 +1124,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1841,
+      "search_ms": 1813,
       "corpora_hit": [
         "sep"
       ],
@@ -1359,7 +1359,7 @@
         "ratio": 0.8
       },
       "embed_ms": 0,
-      "search_ms": 1230,
+      "search_ms": 1216,
       "corpora_hit": [
         "sep"
       ],
@@ -1594,7 +1594,7 @@
         "ratio": 0.6
       },
       "embed_ms": 0,
-      "search_ms": 1186,
+      "search_ms": 1187,
       "corpora_hit": [
         "sep"
       ],
@@ -1750,7 +1750,14 @@
           "title": "infinity",
           "url": "https://plato.stanford.edu/entries/infinity/",
           "score": 1.0,
-          "snippet": "infinity  Infinity is a big topic. Most people have some conception of things that have no bound, no boundary, no limit, no end. The rigorous study of infinity began in mathematics and philosophy, but the engagement with infinity traverses the history of cosmology, astronomy, physics, and theology. In the natural and social sciences, the infinite sometimes appears as a consequence of our theories themselves (Barrow 2006, Luminet and Lachièze-Rey 2005) or in the modelling of the relevant phenomena (Fletcher et al. 2019). Mathematics itself has appealed to some form of infinity from its beginnin…"
+          "snippet": "infinity  Given the magnitude of our topic, we clearly cannot cover all aspects of it, or even a sizable proportion of them. For example, we do not engage much with the many roles infinitude plays in science and the social sciences (except in section   8), retaining our focus on its roles in philosophy. We limit our discussion to what can be understood without highly advanced mathematics, but provide links to a number of supplementary documents that discuss further issues: infinite idealizations, quadratures of the circle, overviews of two recent developments in mathematics that promise to mak…"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "infinity",
+          "url": "https://plato.stanford.edu/entries/infinity/",
+          "score": 1.0,
+          "snippet": "infinity  If the urgency of problems related to the infinite reached Greek consciousness with Zeno’s paradoxes, the most influential discussion was due to Aristotle. In order to put Aristotle’s discussion in perspective, we need to list a number of ways in which mathematical infinity had emerged not only in philosophy, as we have described, but also in mathematics. We have already seen with Archytas the notion of spatial infinitude of the cosmos. But in number theory, the natural numbers were considered infinite, at least in the sense that given any natural number a greater one could be found.…"
         },
         {
           "corpus_id": "sep",
@@ -1761,10 +1768,10 @@
         },
         {
           "corpus_id": "sep",
-          "title": "infinity",
-          "url": "https://plato.stanford.edu/entries/infinity/",
+          "title": "settheory-early",
+          "url": "https://plato.stanford.edu/entries/settheory-early/",
           "score": 1.0,
-          "snippet": "infinity  Concerns about infinity (and human finitude) appear in continental philosophy, not only in its 19th century historical sources (e.g., among others, Fichte, Schelling, Hegel, Kierkegaard, and Nietzsche) but in contemporary developments as well (e.g., among others, Heidegger 1929, Levinas 1961, Adorno 1966, Foucault 1966, Deleuze 1969, Badiou 2019). This list can be continued, if not ad infinitum, then ad nauseam."
+          "snippet": "settheory-early  Chronologically, Bernard Bolzano was the first, but he exerted almost no influence. The high quality of his work in logic and the foundations of mathematics is well known. A book entitled Paradoxien des Unendlichen was posthumously published in 1851. Here Bolzano argued in detail that a host of paradoxes surrounding infinity are logically harmless, and mounted a forceful defence of actual infinity. He proposed an interesting argument attempting to prove the existence of infinite sets, which bears comparison with Dedekind’s later argument (1888). Although he employed complicate…"
         },
         {
           "corpus_id": "sep",
@@ -1778,42 +1785,35 @@
           "title": "settheory-early",
           "url": "https://plato.stanford.edu/entries/settheory-early/",
           "score": 1.0,
-          "snippet": "settheory-early  In 1910, Hilbert wrote that set theory is"
-        },
-        {
-          "corpus_id": "sep",
-          "title": "settheory-early",
-          "url": "https://plato.stanford.edu/entries/settheory-early/",
-          "score": 1.0,
-          "snippet": "settheory-early  that mathematical discipline which today occupies an outstanding role in our science, and radiates [ausströmt] its powerful influence into all branches of mathematics. [Hilbert 1910, 466;  translation by entry author]"
+          "snippet": "settheory-early  The concept of a set appears deceivingly simple, at least to the trained mathematician, and to such an extent that it becomes difficult to judge and appreciate correctly the contributions of the pioneers. What cost them much effort to produce, and took the mathematical community considerable time to accept, may seem to us rather self-explanatory or even trivial. Three historical misconceptions that are widespread in the literature should be noted at the outset:"
         },
         {
           "corpus_id": "sep",
           "title": "paradoxes-contemporary-logic",
           "url": "https://plato.stanford.edu/entries/paradoxes-contemporary-logic/",
           "score": 1.0,
-          "snippet": "paradoxes-contemporary-logic  By “paradox” one usually means a statement claiming something which goes beyond (or even against) ‘common opinion’ (what is usually believed or held). Paradoxes form a natural object of philosophical investigation ever since the origins of rational thought; they have been invented as part of complex arguments and as tools for refuting philosophical theses (think of the celebrated paradoxes credited to Zeno of Elea, concerning motion, the continuum, the opposition between unity and plurality, or of the arguments entangling the notions of truth and vagueness, credit…"
+          "snippet": "paradoxes-contemporary-logic  As a consequence, Cantor suggested a crucial distinction—still regarded as “subjective”, i.e., mathematically not precise, by Hilbert (as late as 1904, see van Heijenoort 1967, p. 131)—between totalities that cannot be conceived as a whole (the inconsistent ones) and those which can be regarded as completed (fertige Menge). Roughly, the former is a collection that cannot be an element of other collections, whereas the latter is a small collection, which can be an element of other collections (see also the entry on  the early development of set theory).  This corre…"
         },
         {
           "corpus_id": "sep",
           "title": "paradoxes-contemporary-logic",
           "url": "https://plato.stanford.edu/entries/paradoxes-contemporary-logic/",
           "score": 1.0,
-          "snippet": "paradoxes-contemporary-logic  This entry concentrates on the emergence of non-trivial logical themes and notions from the discussion on paradoxes from the beginning of the 20th century until 1945, and attempts to assess their importance for the development of contemporary logic. Paradoxes involving  vagueness,  knowledge,  belief,  and  space and time  are treated in separate entries."
+          "snippet": "paradoxes-contemporary-logic  Russell was at first entangled in the study of “the contradictions in the relation of continuous quantity to number and the continuum” (cited in Moore 1995, p. 219), and he obtained his contradiction (May 1901) as a result of considering the antinomy arising with Cantor’s theorem (see Russell 1903, footnote 7, par. 344; par. 100, p. 101). Russell probably realized the importance of the discovery only after Frege’s reply. The effect of the antinomy is that it is impossible to have an abstraction operation \\(\\phi \\mapsto \\{x \\mid \\phi \\}\\) mapping injectively any co…"
         },
         {
           "corpus_id": "sep",
           "title": "paradoxes-contemporary-logic",
           "url": "https://plato.stanford.edu/entries/paradoxes-contemporary-logic/",
           "score": 1.0,
-          "snippet": "paradoxes-contemporary-logic  A terminological warning is in order. The word “antinomy” is used below as alternative to, and synonymous with, “paradox”. Most paradoxes—but not all—involve contradictions; for such cases, we often use the word “contradiction” as well."
+          "snippet": "paradoxes-contemporary-logic  The need for a specification of infinite sets is crucial in the discussion of the related well-ordering problem. It also affects the related issue of the classification of discontinuous functions and analytically representable functions of real variables, tackled by the French semi-intuitionists Borel, Baire and Lebesgue. At the same time, they held the view that a mathematical entity (like an infinite set or a function) exists only insofar as it is “nameable by a finite number of words”, against the platonistic views of Hadamard and Zermelo (see Borel et al. 1905…"
         },
         {
           "corpus_id": "sep",
           "title": "mathematics-explanation",
           "url": "https://plato.stanford.edu/entries/mathematics-explanation/",
           "score": 1.0,
-          "snippet": "mathematics-explanation  The philosophical analysis of mathematical explanations concerns itself with two different, although connected, areas of investigation. The first area addresses the problem of whether mathematics can play an explanatory role in the natural and social sciences. The second deals with the problem of whether mathematical explanations occur within mathematics itself. Accordingly, this entry surveys the contributions to both areas, it shows their relevance to the history of philosophy, mathematics, and science, it articulates their connection, and points to the philosophical…"
+          "snippet": "mathematics-explanation  While not everyone agrees as to the role of mathematics in the above explanations, or whether they are explanations, it is clear that one of the reasons why philosophers are especially interested in such explanations is that they appear to be counterexamples to the claim that all explanations in the natural sciences must be causal. The dominant accounts of scientific explanation (see Salmon 1984, Cartwright 1989, Woodward 2003, Strevens 2008, and Woodward 2014 for an overview) in the natural sciences have been causal accounts: to provide an explanation of a scientific …"
         }
       ],
       "source_score": {
@@ -1829,21 +1829,21 @@
           "Cantor",
           "Zeno's paradoxes",
           "the continuum",
-          "set-theoretic infinity"
+          "set-theoretic infinity",
+          "one-to-one correspondence",
+          "cardinality"
         ],
         "missing": [
           "actual versus potential infinity",
           "transfinite numbers",
           "Aristotle on potential infinity",
-          "infinitesimals",
-          "one-to-one correspondence",
-          "cardinality"
+          "infinitesimals"
         ],
         "total_expected": 10,
-        "ratio": 0.4
+        "ratio": 0.6
       },
       "embed_ms": 0,
-      "search_ms": 1128,
+      "search_ms": 1127,
       "corpora_hit": [
         "sep"
       ],

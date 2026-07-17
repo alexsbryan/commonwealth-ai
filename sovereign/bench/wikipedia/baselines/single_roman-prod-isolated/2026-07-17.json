@@ -2,7 +2,7 @@
   "bank_name": "single-causal-roman",
   "corpus": "wikipedia",
   "limit": 30,
-  "started_at_unix": 1784253829,
+  "started_at_unix": 1784307329,
   "results": [
     {
       "question_id": "causal_roman_empire_fall",
@@ -137,13 +137,6 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Fall of the Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#433–454:_Ascendancy_of_Aetius,_loss_of_Carthage",
-          "score": 0.056666672,
-          "snippet": "Fall of the Western Roman Empire  For by what other causes were they made Bagaudae save by our unjust acts, the wicked decisions of the magistrates, the proscription and extortion of those who have turned the public exactions to the increase of their private fortunes and made the tax indictions their opportunity for plunder?\""
-        },
-        {
-          "corpus_id": "wikipedia",
           "title": "Turkey",
           "url": "https://en.wikipedia.org/wiki/Turkey",
           "score": 0.03383399,
@@ -151,52 +144,59 @@
         },
         {
           "corpus_id": "wikipedia",
-          "title": "Western Roman Empire",
-          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
-          "score": 1.0,
-          "snippet": "Western Roman Empire  In modern historiography, the Western Roman Empire was the western provinces of the Roman Empire, collectively, during any period in which they were administered separately from the eastern provinces by a separate, independent imperial court. Particularly during the period from AD 395 to 476, there were separate, coequal courts dividing the governance of the empire into the Western provinces and the Eastern provinces with a distinct imperial succession in the separate courts. The terms Western Roman Empire and Eastern Roman Empire were coined in modern times to describe p…"
+          "title": "Christian art",
+          "url": "https://en.wikipedia.org/wiki/Christian_art#Middle_Ages",
+          "score": 0.029508194,
+          "snippet": "Christian art  Much of the art surviving from Europe after the fall of the Western Roman Empire is Christian art, although this is in large part because the continuity of church ownership has preserved church art better than secular works. While the Western Roman Empire 's political structure essentially collapsed after the fall of Rome, its religious hierarchy, what is today the modern-day Roman Catholic Church commissioned and funded production of religious art imagery."
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western Roman Empire",
           "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
           "score": 1.0,
-          "snippet": "Western Roman Empire  Though there were periods with more than one emperor ruling jointly before, the view that it was impossible for a single emperor to govern the entire Empire was institutionalized by emperor Diocletian following the disastrous civil wars and disintegrations of the Crisis of the Third Century. He introduced the system of the Tetrarchy in 286, with two senior emperors titled Augustus, one in the East and one in the West, each with an appointed subordinate and heir titled Caesar. Though the tetrarchic system would collapse in a matter of years, the East–West administrative di…"
+          "snippet": "Western Roman Empire  On the death of Theodosius in 395, the empire was divided between his two infant sons, with Honorius as his successor in the West governing briefly from Mediolanum then from Ravenna, and Arcadius as his successor in the East governing from Constantinople. In 476, after the Battle of Ravenna, the Roman army in the West suffered defeat at the hands of Odoacer and his Germanic foederati. Odoacer forced the abdication of the emperor Romulus Augustulus and became the first King of Italy. In 480, following the assassination of the previous Western emperor Julius Nepos, the East…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Abstract",
+          "score": 1.0,
+          "snippet": "Western Roman Empire  in 476, and the Western imperial court in Ravenna disappeared by AD 554, at the end of Justinian 's Gothic War.  In 476, after the Battle of Ravenna, the Roman army in the West suffered defeat at the hands of Odoacer and his Germanic foederati. Odoacer forced the abdication of the emperor Romulus Augustulus and became the first King of Italy. In 480, following the assassination of the previous Western emperor Julius Nepos, the Eastern emperor Zeno dissolved the Western court and proclaimed himself the sole emperor of the Roman Empire. The date of 476 was popularized by th…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
           "score": 1.0,
-          "snippet": "Empire  An empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\". The center of the empire exercises political control over the peripheries. Within an empire, different populations have different sets of rights and are governed differently. Narrowly defined, an empire is a sovereign state whose head of state is an emperor or empress; but not all states with aggregate territory under the rule of supreme authorities are called empires or are ruled by an emperor; n…"
+          "snippet": "Empire  In his book The Fall of the Roman Empire, Peter Heather contends that there are many factors, including issues of money and manpower, which produce military limitations and culminate in the Roman army's inability to effectively repel invading barbarians at the frontier. The Western Roman economy was already stretched to its limit in the 4th and 5th centuries C.E. due to continual conflict and loss of territory which, in turn, generated loss of revenue from the tax base. There was also the looming presence of the Persians which, at any time, took a large percentage of the fighting force…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Bronze_and_Iron_Age_empires",
           "score": 1.0,
-          "snippet": "Empire  An important distinction has been between land empires made up solely of contiguous territories, such as the Austrian Empire or the Russian Empire; and those created by sea-power, which include territories that are remote from the 'home' country of the empire, such as the Carthaginian Empire or the British Empire. Aside from the more formal usage, the word empire can also refer colloquially to a large-scale business enterprise, a political organization controlled by a single individual, or a group. The concept of empire is associated with other such concepts as imperialism, colonialism…"
+          "snippet": "Empire  Stephen Howe writes that with the exception of the Roman, Chinese and \"perhaps ancient Egyptian states\", early empires seldom survived the death of their founder and were usually limited in scope to conquest and collection of tribute, having little impact on the everyday lives of their subjects.  With the exception of Rome, the periods of dissolution following imperial falls were equally short. Successor states seldom outlived their founders and disappeared in the next and often larger empire. Some empires, like the Neo-Babylonian, Median and Lydian were outright conquered by a larger …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Empire",
-          "url": "https://en.wikipedia.org/wiki/Empire#Abstract",
+          "url": "https://en.wikipedia.org/wiki/Empire#Classical_period",
           "score": 1.0,
-          "snippet": "Empire  An empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\". The center of the empire (sometimes referred to as the metropole) exercises political control over the peripheries. Within an empire, different populations have different sets of rights and are governed differently. Narrowly defined, an empire is a sovereign state whose head of state is an emperor or empress; but not all states with aggregate territory under the rule of supreme authorities are cal…"
+          "snippet": "Empire  The Romans were the first people to invent and embody the concept of empire in their two mandates: to wage war and to make and execute laws. They were the most extensive Western empire until the early modern period, and left a lasting impact on European society. Many languages, cultural values, religious institutions, political divisions, urban centers, and legal systems can trace their origins to the Roman Empire. The Roman Empire governed and rested on exploitative actions. They took slaves and money from the peripheries to support the imperial center. However, the absolute reliance …"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western world",
-          "url": "https://en.wikipedia.org/wiki/Western_world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Introduction",
           "score": 1.0,
-          "snippet": "Western world  The Western world, also known as the West, primarily refers to various nations and states in the regions of Western Europe, Northern America, and Australasia; with some debate as to whether those in Eastern Europe and Latin America also constitute the West. The Western world likewise is called the Occident in contrast to the Eastern world known as the Orient. The West is considered an evolving concept; made up of cultural, political, and economic synergy among diverse groups of people, and not a rigid region with fixed borders and members. Definitions of \"Western world\" vary acc…"
+          "snippet": "Western world  not only with Christianity but also with the intellectual and political achievements of the ancient Greeks and Romans.  Historians, such as Carroll Quigley in \"The Evolution of Civilizations\", contend that Western civilization was born around AD 500, after the fall of the Western Roman Empire, leaving a vacuum for new ideas to flourish that were impossible in Classical societies. In either view, between the fall of the Western Roman Empire and the Renaissance, the West (or those regions that would later become the heartland of the culturally \"western sphere\") experienced a perio…"
         },
         {
           "corpus_id": "wikipedia",
           "title": "Western world",
-          "url": "https://en.wikipedia.org/wiki/Western_world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#The_West_of_the_Mediterranean_Region_during_the_Antiquity",
           "score": 1.0,
-          "snippet": "Western world  The East Roman Empire, later called the Byzantine Empire, continued for a millennium, while the West Roman Empire lasted for only about a century and a half. Significant theological and ecclesiastical differences led Western Europeans to consider the Christians in the Byzantine Empire as heretics. In 1054 CE, when the church in Rome excommunicated the patriarch of Byzantium, the politico-religious division between the Western church and Eastern church culminated in the Great Schism or the East–West Schism. Even though friendly relations continued between the two parts of the Chr…"
+          "snippet": "Western world  The geopolitical divisions in Europe that created a concept of East and West originated in the ancient tyrannical and imperialistic Graeco-Roman times. The Eastern Mediterranean was home to the highly urbanized cultures that had Greek as their common language (owing to the older empire of Alexander the Great and of the Hellenistic successors), whereas the West was much more rural in its character and more readily adopted Latin as its common language. After the fall of the Western Roman Empire and the beginning of the medieval times (or Middle Ages), Western and Central Europe we…"
         }
       ],
       "source_score": {
@@ -226,7 +226,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 4120,
+      "search_ms": 4567,
       "corpora_hit": [
         "wikipedia"
       ],
