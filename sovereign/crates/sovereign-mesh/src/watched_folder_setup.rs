@@ -143,6 +143,30 @@ impl WatchedSubsystem {
             });
         }
 
+        // Same restart-resume, but for CONVERSATION corpora (chat imports).
+        // Those aren't LocalCorpus (not watched-folder/vault), so the
+        // manager sweep above never sees them: an import killed at
+        // conversation 800/3000 would leave 800..3000 silently unenriched
+        // with no recovery. This scans installed conversation-shaped tiered
+        // corpora whose `_enrichment_state.json` is a resumable interruption
+        // and re-runs their tiered enrichment (cheap — the per-conversation
+        // content-hash skip means only the never-reached conversations do
+        // real work). Detached so a slow rebuild never blocks boot.
+        {
+            let resume_engine = Arc::clone(&engine);
+            tokio::spawn(async move {
+                let kicked = resume_engine
+                    .resume_interrupted_conversation_enrichment()
+                    .await;
+                if kicked > 0 {
+                    tracing::info!(
+                        corpora = kicked,
+                        "watched_folder: resumed interrupted conversation-corpus enrichment after restart"
+                    );
+                }
+            });
+        }
+
         // Sink fans every worker event into the manager so the
         // auto-rebuild watchdog can debounce tiered rebuilds against
         // `SweepCompleted` events (Move 8 — folder-ingest v1 §3.6).

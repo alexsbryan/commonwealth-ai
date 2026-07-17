@@ -824,7 +824,15 @@ pub async fn launch_tier2_extraction_with_advice(
     }
     let workspace_id = format!("{source_corpus_id}{TIER2_WORKSPACE_SUFFIX}");
     let workspace_dir = enrichment_dir.join(&workspace_id);
-    let chapters_manifest_path = indexes_dir.join(&workspace_id).join("chapters.json");
+    // The Tier-2 workspace's OWN index dir — where its `chapters.json`
+    // lives and where we durably record a launch failure. We stamp the
+    // WORKSPACE's `_enrichment_state.json` (not the source corpus's): by
+    // the time this runs the source corpus is already `Complete`, and the
+    // referential-atlas pass is an optional deepening — a failure here must
+    // NOT regress a usable corpus to `Failed`. Recording it on the
+    // workspace keeps the failure machine-readable and honest.
+    let ws_index_dir = indexes_dir.join(&workspace_id);
+    let chapters_manifest_path = ws_index_dir.join("chapters.json");
 
     // Already complete?
     if let Some((done, total)) = checkpoint_progress(&workspace_dir, &chapters_manifest_path) {
@@ -842,7 +850,12 @@ pub async fn launch_tier2_extraction_with_advice(
     // checkpoint left off.
     let config_exists = workspace_dir.join("config.json").exists();
     if !config_exists {
-        let init_status = tokio::process::Command::new(&cli_binary)
+        // Bound `enrich init` so a MISCONFIGURED $SOVEREIGN_CLI_LLM_BIN —
+        // a binary that hangs instead of parsing `enrich init` — surfaces
+        // as InitFailed instead of blocking this (detached) post-install
+        // task forever. A real sovereign-cli-llm init is just workspace
+        // setup (seconds), so 300s never false-trips a legitimate run.
+        let init_fut = tokio::process::Command::new(&cli_binary)
             .args([
                 "enrich",
                 "init",
@@ -857,8 +870,20 @@ pub async fn launch_tier2_extraction_with_advice(
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .output()
-            .await;
+            .output();
+        let init_status = match tokio::time::timeout(
+            std::time::Duration::from_secs(300),
+            init_fut,
+        )
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                let reason = "enrich init timed out after 300s (is $SOVEREIGN_CLI_LLM_BIN a real sovereign-cli-llm?)".to_string();
+                stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+                return Tier2LaunchOutcome::InitFailed { reason };
+            }
+        };
         match init_status {
             Ok(out) if out.status.success() => {
                 // Drop the auto-managed sentinel so the daemon's
@@ -868,21 +893,21 @@ pub async fn launch_tier2_extraction_with_advice(
                 let _ = std::fs::write(workspace_dir.join(AUTO_MANAGED_MARKER), "");
             }
             Ok(out) => {
-                return Tier2LaunchOutcome::InitFailed {
-                    reason: format!(
-                        "enrich init exit {}: {}",
-                        out.status,
-                        String::from_utf8_lossy(&out.stderr)
-                            .lines()
-                            .last()
-                            .unwrap_or("(no stderr)")
-                    ),
-                }
+                let reason = format!(
+                    "enrich init exit {}: {}",
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr)
+                        .lines()
+                        .last()
+                        .unwrap_or("(no stderr)")
+                );
+                stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+                return Tier2LaunchOutcome::InitFailed { reason };
             }
             Err(e) => {
-                return Tier2LaunchOutcome::InitFailed {
-                    reason: format!("enrich init spawn failed: {e}"),
-                }
+                let reason = format!("enrich init spawn failed: {e}");
+                stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+                return Tier2LaunchOutcome::InitFailed { reason };
             }
         }
     }
@@ -901,17 +926,17 @@ pub async fn launch_tier2_extraction_with_advice(
     {
         Ok(f) => f,
         Err(e) => {
-            return Tier2LaunchOutcome::SpawnFailed {
-                reason: format!("open extraction.log: {e}"),
-            }
+            let reason = format!("open extraction.log: {e}");
+            stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+            return Tier2LaunchOutcome::SpawnFailed { reason };
         }
     };
     let stderr_file = match log_file.try_clone() {
         Ok(f) => f,
         Err(e) => {
-            return Tier2LaunchOutcome::SpawnFailed {
-                reason: format!("clone log handle: {e}"),
-            }
+            let reason = format!("clone log handle: {e}");
+            stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+            return Tier2LaunchOutcome::SpawnFailed { reason };
         }
     };
     let spawn = std::process::Command::new(&cli_binary)
@@ -921,15 +946,87 @@ pub async fn launch_tier2_extraction_with_advice(
         .stderr(Stdio::from(stderr_file))
         .env("RUST_LOG", "info")
         .spawn();
-    match spawn {
-        Ok(child) => Tier2LaunchOutcome::Spawned {
-            workspace_id,
-            log_path,
-            pid: child.id(),
-        },
-        Err(e) => Tier2LaunchOutcome::SpawnFailed {
-            reason: format!("enrich extract spawn: {e}"),
-        },
+    let mut child = match spawn {
+        Ok(c) => c,
+        Err(e) => {
+            let reason = format!("enrich extract spawn: {e}");
+            stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+            return Tier2LaunchOutcome::SpawnFailed { reason };
+        }
+    };
+    // Validate the child actually STAYS UP. `spawn()` succeeding only
+    // means fork/exec worked — a binary that immediately rejects
+    // `enrich extract` (wrong binary, bad args) dies within a beat.
+    // Returning `Spawned` the instant spawn() succeeds is a false-success
+    // the desktop reads as "extraction running". Give it a short grace
+    // and check `try_wait` before we claim it launched.
+    let pid = child.id();
+    for _ in 0..4 {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        match child.try_wait() {
+            Ok(Some(status)) if !status.success() => {
+                let reason = format!(
+                    "enrich extract exited immediately ({status}); {}",
+                    tail_log(&log_path, 3)
+                );
+                stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
+                return Tier2LaunchOutcome::SpawnFailed { reason };
+            }
+            // Exited 0 within the grace (already resumed to completion) OR
+            // still running — both are healthy launches. On `Err` we can't
+            // determine liveness, so don't raise a false alarm.
+            Ok(_) | Err(_) => break,
+        }
+    }
+    // Detach: dropping a std `Child` neither waits nor kills, so the
+    // extract keeps running in the background (reaped on next daemon boot
+    // per the resume scan) — the intended long-running behaviour.
+    Tier2LaunchOutcome::Spawned {
+        workspace_id,
+        log_path,
+        pid,
+    }
+}
+
+/// Durably record a Tier-2 launch failure on the WORKSPACE's own
+/// `_enrichment_state.json` — never the source corpus's. By the time the
+/// launcher runs, the source corpus is already `Complete` and the
+/// referential-atlas pass is an OPTIONAL deepening, so a launch failure
+/// must not regress a usable corpus to `Failed`. Recording it on the
+/// workspace keeps the failure honest and machine-readable. Best-effort:
+/// creates the workspace index dir if the failure happened before
+/// `enrich init` made it, and swallows any write error (we are already on
+/// a failure path).
+fn stamp_tier2_workspace_failed(ws_index_dir: &Path, workspace_id: &str, reason: &str) {
+    let _ = std::fs::create_dir_all(ws_index_dir);
+    if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+        ws_index_dir,
+        workspace_id,
+        reason,
+    ) {
+        tracing::debug!(
+            workspace = workspace_id,
+            error = %e,
+            "tier-2: could not stamp workspace enrichment state Failed"
+        );
+    }
+}
+
+/// Last `max_lines` of a log file, joined with ` / ` for a one-line
+/// failure reason. Returns a short marker when the log is missing/empty.
+fn tail_log(path: &Path, max_lines: usize) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(s) => {
+            let mut tail: Vec<&str> = s.lines().rev().take(max_lines).collect();
+            tail.reverse();
+            let joined = tail.join(" / ");
+            if joined.is_empty() {
+                "extraction.log empty".to_string()
+            } else {
+                format!("log tail: {joined}")
+            }
+        }
+        Err(_) => "extraction.log unreadable".to_string(),
     }
 }
 
@@ -1190,6 +1287,65 @@ mod tests {
         // Expansion disabled.
         assert_eq!(v["seed_count"].as_u64(), Some(3));
         assert_eq!(v["expansion_count"].as_u64(), Some(0));
+    }
+
+    #[tokio::test]
+    async fn tier2_launch_failure_stamps_workspace_state_failed() {
+        // A bogus cli_binary can't run `enrich init`, so the launch must
+        // (a) return InitFailed (not hang) and (b) durably record the
+        // failure on the Tier-2 WORKSPACE's own _enrichment_state.json —
+        // the glassbox surface that used to be a tracing::warn only.
+        let tmp = tempfile::tempdir().unwrap();
+        let enrichment_dir = tmp.path().join("enrichment");
+        let indexes_dir = tmp.path().join("indexes");
+        std::fs::create_dir_all(&enrichment_dir).unwrap();
+        std::fs::create_dir_all(&indexes_dir).unwrap();
+        let corpus = "src-corpus";
+        let bogus_cli = tmp.path().join("does-not-exist-cli");
+        let triage = tmp.path().join("triage.json");
+        std::fs::write(&triage, "{}").unwrap();
+
+        let outcome = launch_tier2_extraction(
+            corpus,
+            triage,
+            bogus_cli,
+            enrichment_dir,
+            indexes_dir.clone(),
+        )
+        .await;
+        assert!(
+            matches!(outcome, Tier2LaunchOutcome::InitFailed { .. }),
+            "a nonexistent cli must yield InitFailed, got {outcome:?}"
+        );
+
+        // The failure is machine-readable on the workspace state file.
+        let ws_index_dir = indexes_dir.join(format!("{corpus}{TIER2_WORKSPACE_SUFFIX}"));
+        let state =
+            corpus_engine::enrichment::state::EnrichmentStateFile::read(&ws_index_dir)
+                .unwrap()
+                .expect("workspace _enrichment_state.json must exist after a launch failure");
+        assert_eq!(
+            state.phase,
+            corpus_engine::enrichment::state::EnrichmentPhase::Failed
+        );
+        assert!(state.error.is_some(), "the failure reason must be captured");
+    }
+
+    #[test]
+    fn tail_log_returns_last_lines_joined() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("x.log");
+        std::fs::write(&p, "l1\nl2\nl3\nl4\n").unwrap();
+        assert_eq!(tail_log(&p, 2), "log tail: l3 / l4");
+
+        let empty = tmp.path().join("empty.log");
+        std::fs::write(&empty, "").unwrap();
+        assert_eq!(tail_log(&empty, 3), "extraction.log empty");
+
+        assert_eq!(
+            tail_log(&tmp.path().join("nope.log"), 3),
+            "extraction.log unreadable"
+        );
     }
 
     /// Seed-expansion: a small seed (one L1 vital article) plus a

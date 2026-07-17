@@ -370,6 +370,32 @@ pub async fn run_tiered_enrichment(
         return Ok(plan);
     };
 
+    // Leave a resumable NON-TERMINAL signal from the very start of the run.
+    // The provider stamps finer per-conversation phases once the loop is
+    // under way, but until the first of those lands (index open, chunk
+    // grouping, the first conv's NER pass) there is no state file — so an
+    // EARLY interruption of a conversation import would be invisible to the
+    // boot-time resume scan (`CorpusEngine::resume_interrupted_conversation_enrichment`).
+    // The watched-folder DRIVER already pre-stamps for folder/vault corpora;
+    // the conversation runner has no driver, so it stamps here. Best-effort:
+    // a write failure only costs the resume signal, not the run. The
+    // run-level terminal stamp below supersedes this on a clean finish.
+    if let Err(e) = EnrichmentStateFile::stamp(
+        index_path,
+        &corpus_id,
+        Some("folder_tiered"),
+        EnrichmentPhase::Starting,
+        0,
+        plan.total_conversations as u64,
+        Some("scanning conversations"),
+    ) {
+        tracing::warn!(
+            corpus = %corpus_id,
+            error = %e,
+            "tiered enrichment: pre-loop resume-signal stamp failed"
+        );
+    }
+
     // Per-conversation dispatch. Sort by ascending chunk count so the
     // cheapest (`Tiny`) work fires first — operator sees progress
     // quickly and any provider crash on a tiny conv surfaces before

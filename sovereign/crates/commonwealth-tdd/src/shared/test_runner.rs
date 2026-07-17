@@ -72,6 +72,16 @@ pub async fn run_tests(
                     .args(["-KILL", "--", &pgid])
                     .status();
             }
+            // A timeout returns an EMPTY result (0p/0f) — indistinguishable
+            // downstream from "the tests ran and found nothing". Warn so a
+            // killed-under-load run is diagnosable rather than silently
+            // reading as "no progress" and stalling the solve loop
+            // (2026-07-16). If this fires in a unit test, the candidate
+            // timeout is too tight for the load the suite runs under.
+            tracing::warn!(
+                timeout_secs = timeout.as_secs(),
+                "run_tests: test command timed out; returning empty (0p/0f)"
+            );
             return TestRunResult::empty(&format!("timeout after {}s", timeout.as_secs()));
         }
     };

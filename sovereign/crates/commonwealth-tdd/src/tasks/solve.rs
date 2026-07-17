@@ -483,7 +483,13 @@ def is_palindrome(s):
             candidates_per_round: 1,
             rounds_per_trial: 2,
             max_stall_rounds: 1,
-            candidate_test_timeout: std::time::Duration::from_secs(30),
+            // Generous ceiling: this asserts the pin→green TRAJECTORY, not
+            // pytest's speed. The timeout is only a hang-guard. At 30s the
+            // real `python3 -m pytest` spawn was starved past the deadline
+            // under full-suite oversubscription → killed → empty 0p/0f → no
+            // red pin → spurious Stalled (2026-07-16). pytest runs in <0.1s
+            // in isolation, so 120s never trips legitimately.
+            candidate_test_timeout: std::time::Duration::from_secs(120),
             ..TrialConfig::default()
         };
         let seen: Arc<Mutex<Vec<SolveStage>>> = Arc::new(Mutex::new(Vec::new()));
@@ -576,7 +582,10 @@ def is_palindrome(s):
             candidates_per_round: 2,
             rounds_per_trial: 2,
             max_stall_rounds: 1,
-            candidate_test_timeout: std::time::Duration::from_secs(20),
+            // Hang-guard only (asserts round/observer labeling, not speed).
+            // Same starvation-under-load risk as the pin→green test above —
+            // give the real pytest spawn generous headroom. See 2026-07-16.
+            candidate_test_timeout: std::time::Duration::from_secs(120),
             ..TrialConfig::default()
         };
         let outcome = solve(
