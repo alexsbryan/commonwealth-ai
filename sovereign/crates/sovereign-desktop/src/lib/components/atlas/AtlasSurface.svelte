@@ -174,6 +174,7 @@
   <AtlasConvCorpusView
     corpusId={selection.corpusId}
     onBack={resetToRoot}
+    showBack={!startingCorpusId}
     onSelectConv={handleSelectConv}
   />
 {:else if selection}
@@ -182,6 +183,7 @@
     atomCountsHint={selection.atomCounts}
     totalAtomsHint={selection.totalAtoms}
     onBack={resetToRoot}
+    showBack={!startingCorpusId}
     onSelectAtom={handleSelectAtom}
   />
 {:else}

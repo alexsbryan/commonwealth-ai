@@ -143,13 +143,31 @@ pub async fn recall_relevant_memories_embed_scored(
     let mut embs: Vec<Option<Vec<f32>>> = Vec::with_capacity(all.len());
     let mut missing_idx: Vec<usize> = Vec::new();
     for (i, m) in all.iter().enumerate() {
-        let usable = model_known
-            && m.embedding_model.as_deref() == Some(current_model.as_str())
+        // "Attempted under the current model" = the stored
+        // `embedding_model` equals the live model. Such a row has already
+        // had its one embed attempt for this model: if that attempt
+        // produced a usable vector we score it; if it produced an EMPTY /
+        // wrong-length vector (content that is empty or unembeddable) we
+        // skip it — but we do NOT re-embed it. Deriving "needs embed"
+        // purely from vector presence re-embedded every unembeddable row
+        // on EVERY recall turn, forever (a done-set derived from produced
+        // output never converging — same class as the NER delta bug).
+        // Only rows never attempted under the current model — or under an
+        // "unknown" model we refuse to persist against — go into
+        // `missing_idx`.
+        let attempted_under_current =
+            model_known && m.embedding_model.as_deref() == Some(current_model.as_str());
+        let usable = attempted_under_current
             && m.embedding
                 .as_ref()
                 .is_some_and(|e| e.len() == query_emb.len());
         if usable {
             embs.push(m.embedding.clone());
+        } else if attempted_under_current {
+            // Tried under this exact model, no usable vector — the content
+            // is unembeddable. It contributes nothing to cosine scoring;
+            // skip it without re-embedding.
+            embs.push(None);
         } else {
             embs.push(None);
             missing_idx.push(i);
@@ -166,7 +184,19 @@ pub async fn recall_relevant_memories_embed_scored(
                 for (&i, emb) in missing_idx.iter().zip(fresh) {
                     // Lazy backfill — best-effort: a failed write just
                     // means this row re-embeds next turn.
-                    if model_known && !emb.is_empty() {
+                    //
+                    // Persist under the current model REGARDLESS of whether
+                    // the vector is empty. An empty result means the content
+                    // is unembeddable; stamping `embedding_model =
+                    // current_model` anyway records that this row was
+                    // ATTEMPTED under this model, so next turn it is
+                    // recognised as done-but-empty (above) and not
+                    // re-embedded forever. A later model swap
+                    // (`embedding_model` != the new live model) correctly
+                    // re-attempts. `model_known` still gates persistence: we
+                    // never write under an "unknown" model we can't trust to
+                    // rank against later.
+                    if model_known {
                         if let Err(e) = store
                             .update_memory_embedding(&all[i].id, &emb, &current_model)
                             .await
@@ -178,7 +208,9 @@ pub async fn recall_relevant_memories_embed_scored(
                             );
                         }
                     }
-                    embs[i] = Some(emb);
+                    // An empty vector never contributes to cosine scoring —
+                    // store None so the scoring loop's `emb?` skips it.
+                    embs[i] = if emb.is_empty() { None } else { Some(emb) };
                 }
             }
             _ => {
@@ -2108,6 +2140,114 @@ mod tests {
             source_skill_id: None,
             ..Default::default()
         }
+    }
+
+    /// Embed provider that records every text handed to `embed_batch`
+    /// and treats empty/whitespace content as UNEMBEDDABLE (returns an
+    /// empty vector for it) — the exact degenerate input that used to
+    /// re-embed on every recall turn forever. Reports a KNOWN model id so
+    /// backfills persist.
+    struct CountingEmbed {
+        model: String,
+        batched: Mutex<Vec<String>>,
+    }
+    impl CountingEmbed {
+        fn new() -> Self {
+            Self {
+                model: "test-embed-v1".into(),
+                batched: Mutex::new(Vec::new()),
+            }
+        }
+        fn embed_one(text: &str) -> Vec<f32> {
+            if text.trim().is_empty() {
+                vec![]
+            } else {
+                vec![1.0, 0.0, 0.0]
+            }
+        }
+    }
+    #[async_trait]
+    impl InferenceProvider for CountingEmbed {
+        async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::NotImplemented("CountingEmbed: complete unused".into()))
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("CountingEmbed: stream unused".into()))
+        }
+        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+            Ok(Self::embed_one(text))
+        }
+        async fn embed_query(&self, _q: &str) -> Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+        async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            self.batched.lock().unwrap().extend(texts.iter().cloned());
+            Ok(texts.iter().map(|t| Self::embed_one(t)).collect())
+        }
+        fn embed_model_id(&self) -> String {
+            self.model.clone()
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    // A memory whose content is unembeddable (empty vector) must be
+    // stamped "attempted under the current model" on its first recall and
+    // then NEVER re-embedded — otherwise it re-embeds on every single
+    // recall turn forever (a done-set derived from produced output that
+    // never converges).
+    #[tokio::test]
+    async fn unembeddable_memory_is_marked_and_not_re_embedded_every_recall() {
+        use crate::traits::MemoryStore;
+        use sovereign_store::sqlite::SqliteStateStore;
+        let store = SqliteStateStore::open_in_memory().unwrap();
+
+        let real = relational_mem("real", "the user prefers dark mode", 1.0, now(), None);
+        let empty = relational_mem("empty", "   ", 1.0, now(), None);
+        store.save_memory(&real).await.unwrap();
+        store.save_memory(&empty).await.unwrap();
+
+        let infer = CountingEmbed::new();
+        let scope = MemoryScope::General;
+
+        // First recall: neither memory has a stored embedding, so both are
+        // embedded exactly once.
+        let _ = recall_relevant_memories_embed(&infer, &store, &scope, "preferences", 10)
+            .await
+            .unwrap();
+        {
+            let batched = infer.batched.lock().unwrap();
+            assert!(batched.iter().any(|t| t == "the user prefers dark mode"));
+            assert!(batched.iter().any(|t| t.trim().is_empty()));
+        }
+
+        // The unembeddable memory is now stamped with the current model
+        // even though its vector is empty — the marker that stops the loop.
+        let after = store.get_all_memories_for_scope(&scope).await.unwrap();
+        let stored_empty = after.iter().find(|m| m.id == "empty").unwrap();
+        assert_eq!(stored_empty.embedding_model.as_deref(), Some("test-embed-v1"));
+
+        // Second recall: the real memory has a usable vector, the empty one
+        // is recognised as attempted-but-unembeddable — so NEITHER is
+        // re-embedded. The batch record must not grow.
+        let count_after_first = infer.batched.lock().unwrap().len();
+        let _ = recall_relevant_memories_embed(&infer, &store, &scope, "preferences", 10)
+            .await
+            .unwrap();
+        let count_after_second = infer.batched.lock().unwrap().len();
+        assert_eq!(
+            count_after_second, count_after_first,
+            "no memory should be re-embedded on the second recall (convergence)"
+        );
     }
 
     #[tokio::test]

@@ -19,10 +19,16 @@
   interface Props {
     corpusId: string;
     onBack: () => void;
+    /** Whether the "← Atlas" control leads anywhere. False when this
+     *  view IS the surface root (a notebook's scoped Explore tab, where
+     *  there is no corpus index to return to) — the host then hides the
+     *  button rather than render a dead no-op. Defaults to true so the
+     *  standalone Atlas Inspector keeps its back-to-index affordance. */
+    showBack?: boolean;
     onSelectConv: (convUuid: string) => void;
   }
 
-  let { corpusId, onBack, onSelectConv }: Props = $props();
+  let { corpusId, onBack, showBack = true, onSelectConv }: Props = $props();
 
   /** Seed entity for the drawer; `null` = drawer closed. Click an
    *  `entity-chip` to open. */
@@ -117,9 +123,11 @@
 
 <div class="conv-corpus-view">
   <header class="view-header">
-    <button class="back-button" type="button" onclick={onBack}>
-      ← Atlas
-    </button>
+    {#if showBack}
+      <button class="back-button" type="button" onclick={onBack}>
+        ← Atlas
+      </button>
+    {/if}
     <div class="header-text">
       <h1>{corpusId}</h1>
       {#if page}

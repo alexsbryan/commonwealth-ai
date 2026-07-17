@@ -952,6 +952,120 @@ async fn list_extracted_chunk_ids_unions_for_and_non_grouped_writes() {
     assert!(!ids.contains(&99));
 }
 
+// The entity-less-chunk convergence guard. A chunk GliNER finds no
+// entities in writes no `chunk_entities` row, so the incremental delta
+// used to treat it as unprocessed forever and re-run NER on it every
+// pass. `record_ner_processed_chunks` + `list_ner_processed_chunk_ids`
+// give the delta a durable "processed, entities or not" signal so it
+// converges to zero.
+#[tokio::test]
+async fn ner_processed_marker_makes_empty_chunks_converge() {
+    let store = sqlite_store();
+    // Chunk 10 produced an entity; chunks 11 and 12 were NER'd but empty.
+    store
+        .save_chunk_entities(&[mk_entity_row("corpus-a", 10, "Borges")])
+        .await
+        .unwrap();
+    store
+        .record_ner_processed_chunks("corpus-a", &[10, 11, 12])
+        .await
+        .unwrap();
+
+    // The processed set unions entity-bearing + explicitly-marked chunks,
+    // so all three count as done — the empty ones no longer reappear in
+    // the delta.
+    let processed = store
+        .list_ner_processed_chunk_ids("corpus-a")
+        .await
+        .unwrap();
+    assert_eq!(processed.len(), 3);
+    assert!(processed.contains(&10));
+    assert!(processed.contains(&11));
+    assert!(processed.contains(&12));
+
+    // The entity view is unchanged — the marker never leaks into
+    // `chunk_entities`, so entity aggregation still sees only chunk 10.
+    let extracted = store
+        .list_extracted_chunk_ids_for_corpus("corpus-a")
+        .await
+        .unwrap();
+    assert_eq!(extracted.len(), 1);
+    assert!(extracted.contains(&10));
+
+    // Scoping: a sibling corpus's markers stay out.
+    store
+        .record_ner_processed_chunks("corpus-b", &[500])
+        .await
+        .unwrap();
+    let a = store
+        .list_ner_processed_chunk_ids("corpus-a")
+        .await
+        .unwrap();
+    assert!(!a.contains(&500));
+
+    // Idempotent — re-recording an already-marked chunk is a no-op.
+    store
+        .record_ner_processed_chunks("corpus-a", &[11])
+        .await
+        .unwrap();
+    let again = store
+        .list_ner_processed_chunk_ids("corpus-a")
+        .await
+        .unwrap();
+    assert_eq!(again.len(), 3);
+}
+
+// The conversation runner's skip-already-built marker. `record_conv_content_hash`
+// stamps the fingerprint of a conv's last successful enrichment;
+// `get_conv_content_hash` reads it back so a re-import can skip an
+// unchanged conv. Absent → None (fail-safe re-enrich); upsert overwrites
+// on a content-changed re-enrich; scoped per (corpus_id, conv_uuid).
+#[tokio::test]
+async fn conv_content_hash_marker_roundtrips_and_upserts() {
+    let store = sqlite_store();
+
+    // Never enriched → None, so the runner re-enriches (fail-safe).
+    assert_eq!(
+        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        None
+    );
+
+    // First enrichment stamps a hash; read-back matches.
+    store
+        .record_conv_content_hash("corpus-a", "note-1", "hash-v1")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        Some("hash-v1".to_string())
+    );
+
+    // A content-changed re-enrich overwrites (upsert on the PK), it does
+    // not accumulate a second row.
+    store
+        .record_conv_content_hash("corpus-a", "note-1", "hash-v2")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        Some("hash-v2".to_string())
+    );
+
+    // Scoped: a sibling conv and a sibling corpus keep their own state.
+    assert_eq!(
+        store.get_conv_content_hash("corpus-a", "note-2").await.unwrap(),
+        None
+    );
+    store
+        .record_conv_content_hash("corpus-b", "note-1", "other")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        Some("hash-v2".to_string())
+    );
+}
+
 fn mk_entity_row_labeled(
     corpus_id: &str,
     chunk_id: u64,

@@ -751,6 +751,25 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
 
         CREATE INDEX IF NOT EXISTS idx_conv_summary_corrections_status
             ON conv_summary_corrections(corpus_id, status);
+
+        -- Content fingerprint of the last SUCCESSFUL enrichment of a
+        -- conversation/note. Written by the provider only on the Ready
+        -- path, so a row here means \"this conv is fully built from
+        -- exactly this content\". Read by the conversation runner's
+        -- skip-already-built check: on a chat RE-IMPORT it skips the
+        -- expensive NER + RAPTOR passes for a conv whose content hash is
+        -- unchanged. Keyed on CONTENT (not chunk_count) because
+        -- conversation corpora have no changed-source sweep the way
+        -- watched folders do -- an edited-but-same-length conversation
+        -- must still re-enrich. Separate table (not a conv_skeletons
+        -- column) mirrors the chunk_ner_processed marker precedent and
+        -- keeps the write off the widely-constructed ConvSkeletonRow.
+        CREATE TABLE IF NOT EXISTS conv_content_hash (
+            corpus_id     TEXT    NOT NULL,
+            conv_uuid     TEXT    NOT NULL,
+            content_hash  TEXT    NOT NULL,
+            PRIMARY KEY (corpus_id, conv_uuid)
+        );
         ",
     )
 }
@@ -874,6 +893,24 @@ pub fn run_chunk_entities_migration(conn: &Connection) -> rusqlite::Result<()> {
             threshold           REAL,
             labels_json         TEXT,
             error_msg           TEXT
+        );
+
+        -- Per-chunk \"NER has run on this chunk\" marker, recorded
+        -- INDEPENDENTLY of whether GliNER found any entities. Without
+        -- it, the incremental delta derived \"already processed\" purely
+        -- from `chunk_entities` membership — but a chunk that yields
+        -- zero entities writes no `chunk_entities` row, so it looked
+        -- unprocessed forever and NER re-ran it on every pass. The
+        -- entity-less chunks of a vault (headers, code, tables, short
+        -- lines) never converged, pinning the CPU on every boot and
+        -- keeping the enrichment phase from ever completing. Recording
+        -- the processed chunk id here — entities or not — lets the delta
+        -- shrink to zero. `chunk_entities` reads are untouched, so this
+        -- marker never leaks into entity aggregation or the subgraph.
+        CREATE TABLE IF NOT EXISTS chunk_ner_processed (
+            corpus_id  TEXT    NOT NULL,
+            chunk_id   INTEGER NOT NULL,
+            PRIMARY KEY (corpus_id, chunk_id)
         );
         ",
     )

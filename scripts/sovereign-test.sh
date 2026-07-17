@@ -49,6 +49,13 @@
 #                           --package. Falls back to the full workspace
 #                           (with a loud note) when no crate is detected,
 #                           so the gate never silently under-covers.
+#                           Scoped runs (--changed/--package) build into an
+#                           ISOLATED target dir (target/sovereign-test-scoped)
+#                           so their smaller feature-unification set can't
+#                           invalidate the --workspace cache the watcher and
+#                           pre-merge gate keep warm. sccache (keyed by
+#                           compiler inputs, not target dir) keeps the isolated
+#                           build fast. Set CARGO_TARGET_DIR to override.
 #   --filter <pattern>      Pass <pattern> to cargo test as a libtest
 #                           NAME filter. This narrows which tests RUN, not
 #                           which crates COMPILE: a name filter can't tell
@@ -221,6 +228,27 @@ if [[ ${#PACKAGES[@]} -eq 0 ]]; then
 else
     for p in "${PACKAGES[@]}"; do cargo_argv+=(-p "$p"); done
 fi
+
+# ── Target-dir isolation for scoped runs ───────────────────────────────────
+# A scoped `-p` build resolves feature UNIFICATION over a smaller crate set
+# than `--workspace` does. On a SHARED target dir that flip changes the rustc
+# inputs for corpus-engine + its ~17 dependents, so every alternation between
+# a `--changed`/`--package` run and a full `--workspace` run (the daemon
+# watcher, the pre-merge gate) misses the sccache cache key and triggers a
+# full recompile of that closure — the observed 14-minute "build" cost.
+#
+# sccache is keyed by compiler inputs, NOT by target dir, so a dedicated
+# CARGO_TARGET_DIR for scoped runs (a) stops them poisoning the workspace
+# cache the watcher keeps warm, and (b) still builds fast because the shared
+# sccache serves every unchanged crate. Full-workspace runs keep the default
+# target dir so the daemon watcher and the pre-merge gate share one warm cache.
+#
+# Respect an explicit CARGO_TARGET_DIR from the environment (CI / operator
+# override) — only redirect when the caller hasn't pinned one.
+if [[ ${#PACKAGES[@]} -gt 0 && -z "${CARGO_TARGET_DIR:-}" ]]; then
+    export CARGO_TARGET_DIR="${REPO_ROOT}/target/sovereign-test-scoped"
+    echo "sovereign-test: scoped run → isolated target dir ${CARGO_TARGET_DIR#$REPO_ROOT/} (keeps the --workspace cache warm)" >&2
+fi
 # shellcheck disable=SC2206
 cargo_argv+=($EXTRA_FEATURES --no-fail-fast)
 if [[ -n "$FILTER" ]]; then
@@ -256,6 +284,20 @@ start_ms=$(($(date +%s%N) / 1000000))
 
 elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
 exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
+
+# ── Build-vs-run split (glassbox) ──────────────────────────────────────────
+# cargo prints exactly one `Finished ... target(s) in <Xm >Ys` line the moment
+# compilation ends and test execution begins. Parse it so the summary can say
+# whether a slow run was COMPILE cost (cache thrash / cold build) or genuinely
+# slow tests — the distinction that turns "it's slow" into an actionable lead.
+build_secs=""
+build_line="$(grep -E 'Finished .* target\(s\) in ' "$raw_log" 2>/dev/null | tail -1)"
+if [[ -n "$build_line" ]]; then
+    # Forms: "in 13m 56s", "in 2m 03s", "in 8.42s".
+    bmin=$(sed -nE 's/.* in ([0-9]+)m .*/\1/p' <<< "$build_line")
+    bsec=$(sed -nE 's/.* in ([0-9]+m )?([0-9]+(\.[0-9]+)?)s.*/\2/p' <<< "$build_line")
+    build_secs=$(awk -v m="${bmin:-0}" -v s="${bsec:-0}" 'BEGIN{printf "%.0f", m*60+s}')
+fi
 
 # ── Aggregate ───────────────────────────────────────────────────────────────
 # ONE python pass over the adapter JSONL — not three-forks-per-line.
@@ -340,6 +382,23 @@ if [[ $HUMAN -eq 1 ]]; then
         printf " %-12s  %s\n" "pass:" "$total_pass"
         printf " %-12s  %s\n" "fail:" "$total_fail"
         printf " %-12s  %s\n" "elapsed:" "${elapsed_ms}ms"
+        if [[ -n "$build_secs" ]]; then
+            # Clamp: cargo's build marker and our wall-clock are measured a
+            # beat apart, so a fast build can round just above total — never
+            # show a negative "tests" figure.
+            run_secs=$(awk -v e="$elapsed_ms" -v b="$build_secs" 'BEGIN{r=e/1000-b; printf "%.0f", (r<0?0:r)}')
+            printf " %-12s  %s\n" "  build:" "${build_secs}s"
+            if [[ "$run_secs" -lt 1 ]]; then
+                printf " %-12s  %s\n" "  tests:" "<1s"
+            else
+                printf " %-12s  %s\n" "  tests:" "~${run_secs}s"
+            fi
+            # A build that dominates a multi-minute run is the cache-thrash tell.
+            if [[ "$build_secs" -gt 300 ]]; then
+                printf " %-12s  %s\n" "  ⚠ note:" "build > 5min — likely a cold/thrashed cache, not slow tests."
+                printf " %-12s  %s\n" "" "sccache hit-rate: sccache --show-stats | grep 'hits rate'"
+            fi
+        fi
         printf " %-12s  %s\n" "cargo exit:" "$exit_val"
         echo
 

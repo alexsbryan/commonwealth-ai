@@ -142,6 +142,69 @@ pub trait TieredEnrichmentProvider: Send + Sync {
     async fn reenrich_sources(&self, _corpus_id: &str, _source_doc_ids: &[String]) -> Result<()> {
         Ok(())
     }
+
+    /// Skip-already-built fast path for `run_folder_tiered_enrichment`.
+    /// Answers "is `conv_uuid` already fully enriched AND unchanged since,
+    /// so the runner can skip it entirely?" — no chunk fetch, no LLM, no
+    /// checkpoint load. This is what makes an interrupted vault build
+    /// "pick up from note 320" instead of re-grinding all 320 already-
+    /// built notes: the per-note RAPTOR checkpoint only makes a *re-run*
+    /// cheap, but a re-run of 320 done notes is still 320 store round-
+    /// trips + node re-persists. Skipping them outright is the real win.
+    ///
+    /// Default `false` (never skip) so the conversation provider keeps
+    /// its rebuild-everything behavior unchanged. `chunk_count` is the
+    /// live count the runner is about to dispatch; an impl must return
+    /// `true` only when its persisted state for `conv_uuid` is terminal
+    /// (`Ready`) AND still matches that count, so a note whose chunk set
+    /// changed (a content edit re-chunks with new ids) still rebuilds.
+    /// A pending user correction must also veto the skip so the guided
+    /// re-enrich actually runs.
+    async fn note_already_current(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+        _chunk_count: usize,
+    ) -> bool {
+        false
+    }
+
+    /// Skip-already-built fast path for `run_tiered_enrichment` (the
+    /// CONVERSATION runner). Same intent as [`Self::note_already_current`]
+    /// but keyed on chunk CONTENT rather than chunk_count, because
+    /// conversation corpora have no changed-source sweep the way watched
+    /// folders do (`reenrich_sources`): the folder runner can trust
+    /// chunk_count because a genuine content edit re-enrichs via the
+    /// sweep, but a conversation is only ever re-touched by a whole-
+    /// archive RE-IMPORT — so an edited conversation that happens to
+    /// re-chunk to the SAME count must still rebuild. The runner passes
+    /// the chunks it just fetched (chunk ids are reallocated on re-import,
+    /// so an id-based signal is useless — the impl must hash the text). An
+    /// impl returns `true` only when its persisted state for `conv_uuid`
+    /// is terminal (`Ready`) AND the stored content hash matches these
+    /// chunks AND no pending user correction vetoes. Default `false` so
+    /// providers that don't track content hashes never skip.
+    async fn note_content_current(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+        _chunks: &[EnrichmentChunkRow],
+    ) -> bool {
+        false
+    }
+
+    /// Best-effort work that runs AFTER the runner stamps the terminal
+    /// `Complete` — so it can never gate the user-facing "map ready"
+    /// signal (the desktop "Building the map" banner). The folder
+    /// provider uses this for the bench-side typed-extension pass
+    /// (atoms.json): chat retrieval is unaffected by it, yet it is
+    /// LLM-heavy and would otherwise hold the vault non-terminal for
+    /// minutes while it ran inside `finalize_corpus`. Implementations
+    /// should return promptly (spawn detached work if it is slow); the
+    /// runner does not await any spawned task and the corpus is already
+    /// `Complete`, so a killed deferred pass simply re-runs on the next
+    /// enrichment. Default no-op.
+    async fn post_finalize_corpus(&self, _corpus_id: &str) {}
 }
 
 /// Size bucket for a single conversation; drives the slot routing
@@ -346,6 +409,28 @@ pub async fn run_tiered_enrichment(
         }
         let (chunks, embeddings): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
 
+        // Skip-already-built (conversation runner): if this conv is
+        // already `Ready` and its content is byte-identical to the last
+        // enrichment, skip the expensive NER + RAPTOR passes below. This
+        // is what stops a chat RE-IMPORT from re-grinding every already-
+        // enriched conversation. Content-hash (not chunk_count) because
+        // conversation corpora have no changed-source sweep, so an
+        // edited-but-same-length conv must still rebuild — see
+        // `TieredEnrichmentProvider::note_content_current`. The fetch
+        // above is cheap; the GliNER + LLM work below is the cost we save.
+        if provider
+            .note_content_current(&corpus_id, &conv_uuid, &chunks)
+            .await
+        {
+            tracing::debug!(
+                corpus = %corpus_id,
+                conv = %conv_uuid,
+                "tiered enrichment: conv already Ready and content unchanged; skipping NER + RAPTOR"
+            );
+            completed += 1;
+            continue;
+        }
+
         // Cheap CPU-only pass first: per-chunk NER. Runs ahead of
         // the LLM-heavy provider call so even if the provider fails
         // (e.g. inference timeout), chunk_entities still
@@ -534,6 +619,29 @@ pub async fn run_folder_tiered_enrichment(
     let mut completed = 0usize;
     let mut failed = 0usize;
     for (doc_id, bucket) in doc_buckets {
+        // Skip-already-built: a note already `Ready` with an unchanged
+        // chunk set needs no work, so an interrupted vault build resumes
+        // where it stopped instead of re-grinding every already-enriched
+        // note. This is one indexed store lookup — no chunk fetch, no
+        // embedding load, no LLM. `groups` already holds the live
+        // chunk-id set from the up-front scan, so the count is free.
+        // Notes whose chunks changed (re-chunk → new count) or that
+        // carry a pending user correction return false and fall through
+        // to a full rebuild.
+        let live_chunk_count = groups.get(&doc_id).map(|v| v.len()).unwrap_or(0);
+        if provider
+            .note_already_current(&corpus_id, &doc_id, live_chunk_count)
+            .await
+        {
+            tracing::debug!(
+                corpus = %corpus_id,
+                doc = %doc_id,
+                chunks = live_chunk_count,
+                "tiered enrichment (folder): note already enriched and unchanged — skipping (skip-already-built)"
+            );
+            completed += 1;
+            continue;
+        }
         let rows = match index.chunks_for_source_doc_with_embeddings(&doc_id).await {
             Ok(r) => r,
             Err(e) => {
@@ -612,7 +720,18 @@ pub async fn run_folder_tiered_enrichment(
     // failing must not flip the whole corpus to terminal — that was the
     // "went silent after one note" bug). So the runner, which alone
     // knows the full per-document loop settled, owns Complete/Failed.
+    //
+    // Stamped BEFORE `post_finalize_corpus` so the user-facing "map
+    // ready" signal fires the moment the load-bearing work (per-note
+    // enrichment + cross-note synthesis) is done — it must not wait on
+    // best-effort/bench-side passes.
     stamp_folder_terminal(index_path, &corpus_id, completed, failed);
+
+    // Post-terminal, best-effort work (folder provider: the bench-side
+    // typed-extension pass). Runs AFTER Complete is stamped so it never
+    // gates the banner; the provider spawns it detached, so this returns
+    // promptly and the corpus stays `Complete` regardless of its outcome.
+    provider.post_finalize_corpus(&corpus_id).await;
 
     Ok(plan)
 }

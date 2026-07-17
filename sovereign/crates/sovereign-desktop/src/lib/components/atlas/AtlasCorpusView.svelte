@@ -32,12 +32,24 @@
      *  shape as `AtlasCorpusSummary.atom_counts`. */
     atomCountsHint?: Partial<Record<AtomType, number>>;
     onBack: () => void;
+    /** Whether the "Atlas" back control leads anywhere. False when this
+     *  view IS the surface root (a notebook's scoped Explore tab, where
+     *  there is no corpus index to return to) — the host hides the button
+     *  rather than render a dead no-op. Defaults to true so the standalone
+     *  Atlas Inspector keeps its back-to-index affordance. */
+    showBack?: boolean;
     /** Drill into a single atom's detail view. */
     onSelectAtom?: (atomId: string) => void;
   }
 
-  let { corpusId, totalAtomsHint, atomCountsHint, onBack, onSelectAtom }: Props =
-    $props();
+  let {
+    corpusId,
+    totalAtomsHint,
+    atomCountsHint,
+    onBack,
+    showBack = true,
+    onSelectAtom,
+  }: Props = $props();
 
   const ATOM_TYPE_ORDER: readonly AtomType[] = [
     "Entity",
@@ -272,14 +284,16 @@
 
 <div class="atlas-corpus-view">
   <header class="corpus-header">
-    <button class="back-btn" type="button" onclick={onBack} aria-label="Back to atlas index">
-      <!-- Lucide: arrow-left -->
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="m12 19-7-7 7-7"/>
-        <path d="M19 12H5"/>
-      </svg>
-      <span>Atlas</span>
-    </button>
+    {#if showBack}
+      <button class="back-btn" type="button" onclick={onBack} aria-label="Back to atlas index">
+        <!-- Lucide: arrow-left -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m12 19-7-7 7-7"/>
+          <path d="M19 12H5"/>
+        </svg>
+        <span>Atlas</span>
+      </button>
+    {/if}
     <h1 class="corpus-title">{corpusId}</h1>
     {#if totalAtomsHint !== undefined}
       <span class="total-hint">{totalAtomsHint.toLocaleString()} atoms</span>
