@@ -132,6 +132,52 @@ impl SqliteStateStore {
         Ok(row)
     }
 
+    /// Record the content fingerprint of a conversation/note's last
+    /// SUCCESSFUL enrichment. The provider calls this only on the Ready
+    /// path (after skeleton + RAPTOR nodes persist), so a stored hash
+    /// means "fully built from exactly this content". Upsert (one row per
+    /// `(corpus_id, conv_uuid)`): a content-changed re-enrich overwrites
+    /// the prior hash. Read back by [`Self::get_conv_content_hash`] for
+    /// the conversation runner's skip-already-built check on re-import.
+    pub async fn record_conv_content_hash(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        content_hash: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO conv_content_hash (corpus_id, conv_uuid, content_hash)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(corpus_id, conv_uuid) DO UPDATE SET
+                content_hash = excluded.content_hash",
+            rusqlite::params![corpus_id, conv_uuid, content_hash],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    /// The content fingerprint stored for a conversation/note by the last
+    /// successful enrichment, or `None` if it was never enriched (or was
+    /// enriched before this marker existed). `None` makes the runner
+    /// re-enrich — the fail-safe direction (never wrongly skip).
+    pub async fn get_conv_content_hash(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Option<String>> {
+        let conn = self.conn.lock().await;
+        let hash = conn
+            .query_row(
+                "SELECT content_hash FROM conv_content_hash
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2",
+                rusqlite::params![corpus_id, conv_uuid],
+                |r| r.get::<_, String>(0),
+            )
+            .ok();
+        Ok(hash)
+    }
+
     /// Upsert the user's summary correction for one note. One active
     /// correction per note (PK `(corpus_id, conv_uuid)`) — re-flagging
     /// supersedes. `status` is `"pending"` on flag, flipped to
@@ -876,11 +922,21 @@ impl SqliteStateStore {
         Ok(())
     }
 
-    /// Distinct `chunk_id` values already present in `chunk_entities`
-    /// for a corpus, returned as a `HashSet` so the Phase B
-    /// incremental hook can compute the delta against the current
-    /// Lance chunk set in one membership-test pass. Empty set when no
-    /// extraction has run yet for the corpus.
+    /// Distinct `chunk_id` values that produced at least one
+    /// `chunk_entities` row for a corpus (i.e. ENTITY-BEARING chunks
+    /// only), returned as a `HashSet`. Empty set when no extraction has
+    /// run yet for the corpus.
+    ///
+    /// DO NOT use this as the "already processed" set for an incremental
+    /// NER delta. A chunk that GliNER finds no entities in writes no
+    /// `chunk_entities` row, so this query omits every entity-less chunk
+    /// (headers, code blocks, short lines). Deriving "done" from it makes
+    /// those chunks look unprocessed forever — they stay in the delta and
+    /// re-NER on every pass, pinning CPU and never converging (the
+    /// 2026-07-16 vault-enrichment bug). The correct done-set is
+    /// [`Self::list_ner_processed_chunk_ids`], which unions this with the
+    /// `chunk_ner_processed` marker table. This method is retained only
+    /// for callers that genuinely want the entity-bearing subset.
     pub async fn list_extracted_chunk_ids_for_corpus(
         &self,
         corpus_id: &str,
@@ -888,6 +944,67 @@ impl SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare("SELECT DISTINCT chunk_id FROM chunk_entities WHERE corpus_id = ?1")
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id], |r| r.get::<_, i64>(0))
+            .map_err(map_db)?;
+        let mut out = std::collections::HashSet::new();
+        for row in rows {
+            out.insert(row.map_err(map_db)? as u64);
+        }
+        Ok(out)
+    }
+
+    /// Record that NER has been run on these chunks, regardless of
+    /// whether any entities were found. This is the durable "processed"
+    /// marker the incremental delta needs: a chunk that yields zero
+    /// entities writes no `chunk_entities` row, so without this it would
+    /// look unprocessed forever and be re-run on every pass. Idempotent
+    /// (INSERT OR IGNORE) so re-recording an already-marked chunk is a
+    /// no-op — safe to call once per note after its NER batch completes.
+    pub async fn record_ner_processed_chunks(
+        &self,
+        corpus_id: &str,
+        chunk_ids: &[u64],
+    ) -> Result<()> {
+        if chunk_ids.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        for &chunk_id in chunk_ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO chunk_ner_processed (corpus_id, chunk_id)
+                 VALUES (?1, ?2)",
+                rusqlite::params![corpus_id, chunk_id as i64],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// The set of chunk ids that have been NER-processed for a corpus —
+    /// the UNION of chunks that produced an entity (`chunk_entities`) and
+    /// chunks explicitly marked processed-but-empty (`chunk_ner_processed`).
+    /// This is the correct "already done" set for the incremental delta:
+    /// `list_extracted_chunk_ids_for_corpus` alone omits entity-less
+    /// chunks, so the delta never converged and NER re-ran them every
+    /// pass. The union with `chunk_entities` means corpora enriched
+    /// before the marker table existed still recognise their entity-
+    /// bearing chunks as done without a re-run — only the entity-less
+    /// tail is re-processed once, and then marked.
+    pub async fn list_ner_processed_chunk_ids(
+        &self,
+        corpus_id: &str,
+    ) -> Result<std::collections::HashSet<u64>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT chunk_id FROM chunk_entities WHERE corpus_id = ?1
+                 UNION
+                 SELECT chunk_id FROM chunk_ner_processed WHERE corpus_id = ?1",
+            )
             .map_err(map_db)?;
         let rows = stmt
             .query_map(rusqlite::params![corpus_id], |r| r.get::<_, i64>(0))

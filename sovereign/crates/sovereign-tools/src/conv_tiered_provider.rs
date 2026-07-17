@@ -139,14 +139,18 @@ impl GlinerChunkExtractor {
         let index = CorpusIndex::open(index_path).await?;
         let groups = index.group_chunks_by_source_doc().await?;
         let total_chunks: usize = groups.values().map(|v| v.len()).sum();
+        // "Already processed" must include chunks NER ran on but found
+        // no entities in — otherwise those entity-less chunks (headers,
+        // code, tables) write no `chunk_entities` row, look unprocessed
+        // forever, and get re-run on every pass, never letting the delta
+        // converge. `list_ner_processed_chunk_ids` unions the entity-
+        // bearing chunks with the explicit processed markers.
         let already = self
             .store
-            .list_extracted_chunk_ids_for_corpus(corpus_id)
+            .list_ner_processed_chunk_ids(corpus_id)
             .await
             .map_err(|e| {
-                Error::Database(format!(
-                    "list_extracted_chunk_ids_for_corpus({corpus_id}): {e}"
-                ))
+                Error::Database(format!("list_ner_processed_chunk_ids({corpus_id}): {e}"))
             })?;
 
         let now = crate::gliner_ner::now_unix();
@@ -181,6 +185,10 @@ impl GlinerChunkExtractor {
             if delta.is_empty() {
                 continue;
             }
+            // Capture the ids up front so we can mark them processed
+            // after the batch — including chunks GliNER finds nothing in,
+            // which is the whole point of the durable marker.
+            let delta_ids: Vec<u64> = delta.iter().map(|c| c.id).collect();
             let texts: Vec<&str> = delta.iter().map(|c| c.content.as_str()).collect();
             let mention_batches = match self.extractor.extract_batch(&texts) {
                 Ok(b) => b,
@@ -210,6 +218,24 @@ impl GlinerChunkExtractor {
                     conv = %conv_uuid,
                     error = %e,
                     "extract_delta_for_corpus: save_chunk_entities failed; continuing"
+                );
+            }
+            // Mark every chunk we just ran NER on as processed — entities
+            // or not — so the entity-less ones don't reappear in the delta
+            // on the next pass. Recorded per-note (after its batch) so an
+            // interrupted sweep still keeps the notes it finished. A
+            // failure here only risks re-processing next time, never data
+            // loss, so it is logged and swallowed like the save above.
+            if let Err(e) = self
+                .store
+                .record_ner_processed_chunks(corpus_id, &delta_ids)
+                .await
+            {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    conv = %conv_uuid,
+                    error = %e,
+                    "extract_delta_for_corpus: record_ner_processed_chunks failed; continuing"
                 );
             }
         }
@@ -953,7 +979,7 @@ impl FolderTieredProvider {
     ///
     /// Returns the number of themes persisted (or 0 on a no-op skip).
     pub(crate) async fn run_vault_synthesis(&self, corpus_id: &str) -> Result<usize> {
-        use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
+        use crate::raptor_atlas::{build_raptor_atlas_with_checkpoint, ChunkInput};
         use sovereign_core::conv_tiered::VaultThemeRow;
 
         // Bound below which synthesis is pointless. 8 = a vault with
@@ -1031,11 +1057,73 @@ impl FolderTieredProvider {
             "vault_synthesis: building cross-note RAPTOR tree"
         );
 
-        let nodes = build_raptor_atlas(
+        // Honest phase for the ~N/20-LLM-call cross-vault build. Without
+        // it the label stays frozen on the last stamp ("Finding people,
+        // places, and ideas") for the whole synthesis — reading as a
+        // wedge — because the skip-already-built loop emits no per-note
+        // stamps. The sink below then refines it with live per-cluster
+        // progress ("Summarizing sections (17 / 45)").
+        self.stamp_state(
+            corpus_id,
+            corpus_engine::enrichment::state::EnrichmentPhase::RaptorTree,
+            0,
+            chunks.len() as u64,
+            Some(&format!(
+                "weaving {} notes into vault themes",
+                source_doc_ids.len()
+            )),
+        );
+
+        // Durable checkpoint for the vault-level synthesis — the same
+        // resume-across-restarts guarantee as the per-note RAPTOR
+        // checkpoint. This cross-vault build is the single most expensive
+        // step and, uncheckpointed, restarts from scratch on every daemon
+        // boot; if the process dies mid-synthesis (a tauri reload, an app
+        // update, a crash) it never converges and the vault never reaches
+        // Complete. A dedicated slot keyed on a reserved pseudo-note id
+        // never collides with a real note's checkpoint. The input hash is
+        // over the leaf *content* (the `ChunkInput` ids here are ephemeral
+        // 0..N indices, not stable chunk ids), so a note edit that changes
+        // the leaves invalidates it and rebuilds, while an unchanged vault
+        // resumes (or short-circuits) with zero LLM.
+        let (checkpoint, sink) = match self
+            .index_dir_resolver
+            .as_ref()
+            .and_then(|r| r.resolve(corpus_id))
+        {
+            Some(index_dir) => {
+                let mut hasher = blake3::Hasher::new();
+                for c in &chunks {
+                    hasher.update(c.content.as_bytes());
+                }
+                hasher.update(
+                    &(embeddings.first().map(|e| e.len()).unwrap_or(0) as u32).to_le_bytes(),
+                );
+                let input_hash = hasher.finalize().to_hex().to_string();
+                let cp = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
+                    &index_dir,
+                    "__vault_synthesis__",
+                    input_hash,
+                );
+                let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
+                    Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+                        index_dir,
+                        corpus_id.to_string(),
+                        Some("folder_tiered".into()),
+                    ));
+                (Some(cp), Some(sink))
+            }
+            None => (None, None),
+        };
+
+        let nodes = build_raptor_atlas_with_checkpoint(
             &self.inference,
             &chunks,
             &embeddings,
             DocumentTypeTag::Unknown,
+            checkpoint.as_ref(),
+            sink.as_ref(),
+            None,
         )
         .await
         .map_err(|e| {
@@ -1283,6 +1371,26 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
+                // Record the content fingerprint LAST — after the skeleton
+                // and nodes have durably persisted `Ready`. A stored hash
+                // therefore means "this conv is fully built from exactly
+                // this content", which is what the conversation runner's
+                // skip-already-built check keys on to avoid re-grinding an
+                // unchanged conversation on a chat re-import. Best-effort:
+                // a write failure just makes the next import re-enrich this
+                // conv (the fail-safe direction — never wrongly skip).
+                if let Err(e) = self
+                    .store
+                    .record_conv_content_hash(corpus_id, conv_uuid, &conv_content_hash(&chunks))
+                    .await
+                {
+                    tracing::warn!(
+                        corpus = corpus_id,
+                        conv = conv_uuid,
+                        error = %e,
+                        "folder_tiered: record_conv_content_hash failed; conv will re-enrich on next import"
+                    );
+                }
                 // The pending correction (if any) has now been applied —
                 // the corrected summary is persisted. Flip the ledger so
                 // later rebuilds don't needlessly force again (the hint is
@@ -1360,55 +1468,61 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
             }
         }
 
-        // Typed-extension pass over RAPTOR leaves + vault_themes →
-        // atoms.json. Bench-side concern (per
-        // `sovereign/docs/specs/TYPED_EXTENSION_PASS.md`). Best-effort:
-        // a failure here only loses bench-side typed atoms — chat-side
-        // retrieval is unaffected. Skipped when the resolver doesn't
-        // know this corpus's index dir (unit tests, transient bring-up).
-        if let Some(resolver) = self.index_dir_resolver.as_ref() {
-            if let Some(index_dir) = resolver.resolve(corpus_id) {
-                let atlas_dir = index_dir.join("atlas");
-                match crate::typed_extension::run_typed_extension(
-                    corpus_id,
-                    &self.store,
-                    &self.inference,
-                    &atlas_dir,
-                )
-                .await
-                {
-                    Ok(report) => {
-                        tracing::info!(
-                            corpus = corpus_id,
-                            status = ?report.status,
-                            pass_a = report.pass_a_calls,
-                            pass_b = report.pass_b_calls,
-                            soft_failures = report.soft_failures.len(),
-                            "folder_tiered: typed extension complete"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            corpus = corpus_id,
-                            error = %e,
-                            "folder_tiered: typed extension failed; bench atoms.json will be stale until next enrichment"
-                        );
-                    }
-                }
-            } else {
-                tracing::debug!(
-                    corpus = corpus_id,
-                    "folder_tiered: typed extension skipped — index dir resolver returned None"
-                );
-            }
-        } else {
+        // The bench-side typed-extension pass is deliberately NOT run
+        // here — it moved to `post_finalize_corpus`, which the runner
+        // calls AFTER the terminal `Complete` stamp so it never gates the
+        // user-facing "map ready" banner (chat retrieval is unaffected by
+        // it). `finalize_corpus` now owns only the load-bearing cross-note
+        // synthesis that the briefing block actually depends on.
+        Ok(())
+    }
+
+    /// Post-terminal, best-effort bench-side work: the typed-extension
+    /// pass (RAPTOR leaves + vault_themes → atoms.json). SPAWNED DETACHED
+    /// so it returns immediately — by the time the runner calls this the
+    /// corpus is already stamped `Complete`, so the "Building the map"
+    /// banner has cleared and questions already use the full synthesized
+    /// map. typed-extension self-gates on a raptor+themes manifest hash
+    /// (so it converges) and is best-effort, so if the detached task is
+    /// killed (a tauri reload / app quit) it simply re-runs on the next
+    /// enrichment. Skipped when the index dir is unknown (unit tests,
+    /// transient bring-up).
+    async fn post_finalize_corpus(&self, corpus_id: &str) {
+        let Some(index_dir) = self
+            .index_dir_resolver
+            .as_ref()
+            .and_then(|r| r.resolve(corpus_id))
+        else {
             tracing::debug!(
                 corpus = corpus_id,
-                "folder_tiered: typed extension skipped — no index dir resolver wired"
+                "folder_tiered: deferred typed extension skipped — index dir unknown"
             );
-        }
-
-        Ok(())
+            return;
+        };
+        let store = self.store.clone();
+        let inference = self.inference.clone();
+        let corpus = corpus_id.to_string();
+        tokio::spawn(async move {
+            let atlas_dir = index_dir.join("atlas");
+            match crate::typed_extension::run_typed_extension(
+                &corpus, &store, &inference, &atlas_dir,
+            )
+            .await
+            {
+                Ok(report) => tracing::info!(
+                    corpus = %corpus,
+                    status = ?report.status,
+                    pass_a = report.pass_a_calls,
+                    pass_b = report.pass_b_calls,
+                    "folder_tiered: deferred typed extension complete"
+                ),
+                Err(e) => tracing::warn!(
+                    corpus = %corpus,
+                    error = %e,
+                    "folder_tiered: deferred typed extension failed; bench atoms.json stale until next enrichment"
+                ),
+            }
+        });
     }
 
     /// Incremental re-enrichment for the notes whose chunk set changed,
@@ -1426,6 +1540,87 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
     async fn reenrich_sources(&self, corpus_id: &str, source_doc_ids: &[String]) -> Result<()> {
         self.reenrich_changed_sources(corpus_id, source_doc_ids).await
     }
+
+    /// Skip-already-built: the folder runner calls this before dispatching
+    /// each note so an interrupted vault build resumes at the note it
+    /// stopped on instead of re-grinding all the already-enriched ones.
+    /// Returns `true` only when the note is durably done and unchanged:
+    /// its skeleton reached terminal `Ready` AND the persisted
+    /// `chunk_count` still matches the live set. A content edit re-chunks
+    /// the note (count changes → rebuild); a freshly-flagged correction
+    /// vetoes the skip so the guided re-enrich actually regenerates the
+    /// summary. `reset_enrichment_state` does NOT clear `conv_skeletons`,
+    /// so a `Ready` row is an authoritative "this note is built" signal.
+    async fn note_already_current(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        chunk_count: usize,
+    ) -> bool {
+        if let Ok(Some(c)) = self.store.get_active_correction(corpus_id, conv_uuid).await {
+            if c.status == "pending" {
+                return false;
+            }
+        }
+        match self.store.get_conv_skeleton(corpus_id, conv_uuid).await {
+            Ok(Some(sk)) => {
+                sk.state.as_str() == ConvTieredState::Ready.as_str()
+                    && sk.chunk_count == chunk_count as i64
+            }
+            _ => false,
+        }
+    }
+
+    /// Content-hash skip for the conversation runner. Skip iff (a) no
+    /// pending correction, (b) the skeleton is terminal `Ready`, and (c)
+    /// the content fingerprint stored by the last successful enrichment
+    /// matches these freshly-fetched chunks. All three reads are cheap
+    /// SQLite lookups; getting a `true` here saves the GliNER NER pass +
+    /// the full RAPTOR tree build for this conversation. A missing hash
+    /// (conv never enriched, or enriched before this marker existed)
+    /// returns false → re-enrich, which is the fail-safe direction.
+    async fn note_content_current(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        chunks: &[EnrichmentChunkRow],
+    ) -> bool {
+        if let Ok(Some(c)) = self.store.get_active_correction(corpus_id, conv_uuid).await {
+            if c.status == "pending" {
+                return false;
+            }
+        }
+        let ready = matches!(
+            self.store.get_conv_skeleton(corpus_id, conv_uuid).await,
+            Ok(Some(sk)) if sk.state.as_str() == ConvTieredState::Ready.as_str()
+        );
+        if !ready {
+            return false;
+        }
+        match self.store.get_conv_content_hash(corpus_id, conv_uuid).await {
+            Ok(Some(stored)) => stored == conv_content_hash(chunks),
+            _ => false,
+        }
+    }
+}
+
+/// Content fingerprint of a conversation/note, used by the conversation
+/// runner's skip-already-built check to decide whether a re-import can
+/// skip re-enrichment. Hashes chunk TEXT in fetch order (document order),
+/// NOT chunk ids — the chunk-id allocator is high-water per corpus, so
+/// ids are reallocated on re-import and an id-based hash would never
+/// match across imports. Each chunk's content is length-prefixed so the
+/// boundary between chunks is unambiguous (`["ab","c"]` and `["a","bc"]`
+/// hash differently). Deterministic: identical content always yields the
+/// same hash, any content change yields a different one.
+fn conv_content_hash(chunks: &[EnrichmentChunkRow]) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&(chunks.len() as u64).to_le_bytes());
+    for c in chunks {
+        hasher.update(&(c.content.len() as u64).to_le_bytes());
+        hasher.update(c.content.as_bytes());
+    }
+    hasher.finalize().to_hex().to_string()
 }
 
 /// Folder Non-Tiny path: call the corpus-free `build_atlas_artifacts`
@@ -1522,6 +1717,46 @@ mod tests {
     fn untitled_fallback_when_no_chunk_carries_title() {
         let chunks = vec![mk_chunk(1, "msg", None), mk_chunk(2, "msg", None)];
         assert_eq!(conv_title_from_chunks(&chunks), "(untitled conversation)");
+    }
+
+    #[test]
+    fn conv_content_hash_is_stable_and_chunk_id_independent() {
+        // The whole point of the conversation runner's skip: a re-import
+        // reallocates chunk ids (high-water allocator), so the hash MUST
+        // ignore ids and key only on text. Same text under different ids
+        // → same hash → the conv is recognised as unchanged and skipped.
+        let first_import = vec![mk_chunk(1, "alpha", None), mk_chunk(2, "beta", None)];
+        let re_import = vec![mk_chunk(9001, "alpha", None), mk_chunk(9002, "beta", None)];
+        assert_eq!(
+            conv_content_hash(&first_import),
+            conv_content_hash(&re_import),
+            "identical text under reallocated ids must hash identically"
+        );
+    }
+
+    #[test]
+    fn conv_content_hash_detects_same_length_edit() {
+        // The exact edge the content-hash guard exists for: an edited
+        // conversation that re-chunks to the SAME count. chunk_count alone
+        // would wrongly skip it; the content hash must differ so it
+        // re-enriches.
+        let before = vec![mk_chunk(1, "the cat sat", None), mk_chunk(2, "on the mat", None)];
+        let after = vec![mk_chunk(1, "the cat sat", None), mk_chunk(2, "on the RUG", None)];
+        assert_eq!(before.len(), after.len(), "same chunk count by construction");
+        assert_ne!(
+            conv_content_hash(&before),
+            conv_content_hash(&after),
+            "a same-length content edit must change the hash"
+        );
+    }
+
+    #[test]
+    fn conv_content_hash_length_prefix_disambiguates_boundaries() {
+        // Without a per-chunk length prefix, ["ab","c"] and ["a","bc"]
+        // would concatenate to the same bytes and collide.
+        let split_a = vec![mk_chunk(1, "ab", None), mk_chunk(2, "c", None)];
+        let split_b = vec![mk_chunk(1, "a", None), mk_chunk(2, "bc", None)];
+        assert_ne!(conv_content_hash(&split_a), conv_content_hash(&split_b));
     }
 
     #[test]
