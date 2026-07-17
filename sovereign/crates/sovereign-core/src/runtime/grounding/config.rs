@@ -104,6 +104,17 @@ pub(crate) fn exactval_fix_enabled() -> bool {
     )
 }
 
+/// Opt-in: correct only the failed sentences of a longform answer on the fast
+/// slot instead of re-synthesising the whole answer on the 35B. Default OFF
+/// until the calibration bank confirms no fabrication-catch regression; flip to
+/// default-ON (the `exactval_fix` shape) once proven.
+pub(crate) fn surgical_rewrite_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_SURGICAL_REWRITE").ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
 /// The closed set of answer-producing surfaces the gate covers.
 /// Adding a surface = adding a variant + a profile + a bank — there
 /// is no open registration, by design: every gated surface must have
