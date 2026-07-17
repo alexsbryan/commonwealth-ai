@@ -284,75 +284,121 @@ impl SyntaxValidator for PythonSyntaxValidator {
     }
 
     fn check_file(&self, path: &Path, content: &str) -> Vec<SyntaxError> {
-        use std::io::Write;
-        use std::process::Stdio;
-
-        const PY_SCRIPT: &str = "import ast, sys; ast.parse(sys.stdin.read())";
-
-        // Wrap python3 in `timeout(1)` so a spinning / hung subprocess
-        // can never wedge the bench. Observed 2026-05-23: orphaned
-        // python3 subprocesses at 100% CPU caused the bench's
-        // wait_with_output() to futex_wait indefinitely. SIGTERM
-        // after 10s, SIGKILL after 10+1s. Syntax check should
-        // complete in <100ms on well-formed input, so 10s is a
-        // generous ceiling that never trips legitimately.
-        //
-        // GNU `timeout` is not present on macOS by default, so we fall
-        // back to `gtimeout` (coreutils) and, failing both, run python3
-        // directly. The wrapper is hang-insurance, not a correctness
-        // requirement — without it the validator still parses, it just
-        // loses the runaway-subprocess guard on hosts that lack any
-        // timeout binary. Before this fallback, a missing `timeout`
-        // made the *spawn itself* fail on macOS → the validator
-        // fail-opened on every file and silently caught nothing.
-        let mut cmd = match timeout_prefix() {
-            Some((bin, pre)) => {
-                let mut c = std::process::Command::new(bin);
-                c.args(pre).arg("python3").arg("-c").arg(PY_SCRIPT);
-                c
+        // Every fail-open branch below WARNs before returning empty. The
+        // validator degrades to "no-op" (rather than blocking writes) when
+        // it genuinely cannot run python3 — but a SILENT fail-open is a
+        // glassbox violation: it's indistinguishable from "python said the
+        // code is valid", and under heavy concurrent load (the full test
+        // suite) a transient spawn hiccup masqueraded as "valid", flaking
+        // the `*_rejects_*` tests AND — in production — letting broken
+        // Python through the executor's pre-write gate unseen (2026-07-16).
+        // Retrying the transient spawn/wait class and logging the rest turns
+        // an invisible fail-open into a diagnosable one.
+        const MAX_ATTEMPTS: u32 = 3;
+        let mut last_err = String::new();
+        for attempt in 1..=MAX_ATTEMPTS {
+            let output = match run_python_syntax_probe(content) {
+                Ok(o) => o,
+                Err(e) => {
+                    // Spawn/wait failure is the transient, load-induced class
+                    // (EAGAIN / resource exhaustion) — brief backoff and retry
+                    // rather than fail-open on the first hiccup.
+                    last_err = e;
+                    if attempt < MAX_ATTEMPTS {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            20 * attempt as u64,
+                        ));
+                    }
+                    continue;
+                }
+            };
+            // timeout(1) exits 124 on SIGTERM-after-cap. Fail-open: we could
+            // not determine validity, so let the write through and let
+            // cargo/pytest catch it later — but say so, loudly.
+            if output.status.code() == Some(124) {
+                tracing::warn!(
+                    path = %path.display(),
+                    "PythonSyntaxValidator: timeout(10s) elapsed; fail-open"
+                );
+                return Vec::new();
             }
-            None => {
-                let mut c = std::process::Command::new("python3");
-                c.arg("-c").arg(PY_SCRIPT);
-                c
+            if output.status.success() {
+                return Vec::new(); // valid python
             }
-        };
-        let mut child = match cmd
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(_) => return Vec::new(), // fail-open if python3 unavailable
-        };
-        if let Some(mut stdin) = child.stdin.take() {
-            // Best-effort write; if the pipe closes early we'll still
-            // collect whatever stderr ast produced.
-            let _ = stdin.write_all(content.as_bytes());
+            // stderr from CPython's SyntaxError has shape:
+            //   File "<string>", line N
+            //     <source line>
+            //         ^^^
+            //   SyntaxError: <message>
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let errors = parse_cpython_syntax_error(&stderr, path, content);
+            if errors.is_empty() {
+                // Non-zero exit but no SyntaxError we could parse: the probe
+                // failed for a reason we don't recognize (not a syntax defect
+                // we can surface). Fail-open, but never silently.
+                tracing::warn!(
+                    path = %path.display(),
+                    code = ?output.status.code(),
+                    stderr_tail = %stderr.lines().last().unwrap_or(""),
+                    "PythonSyntaxValidator: non-zero exit but no SyntaxError parsed; fail-open"
+                );
+            }
+            return errors;
         }
-        let output = match child.wait_with_output() {
-            Ok(o) => o,
-            Err(_) => return Vec::new(), // fail-open on subprocess death
-        };
-        // timeout(1) exits 124 on SIGTERM-after-cap. Treat as fail-
-        // open: we couldn't determine if the content was valid, so
-        // let the write through and let cargo/pytest catch it later.
-        if output.status.code() == Some(124) {
-            tracing::warn!("PythonSyntaxValidator: timeout(10s) elapsed; fail-open");
-            return Vec::new();
-        }
-        if output.status.success() {
-            return Vec::new();
-        }
-        // stderr from CPython's SyntaxError has shape:
-        //   File "<string>", line N
-        //     <source line>
-        //         ^^^
-        //   SyntaxError: <message>
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        parse_cpython_syntax_error(&stderr, path, content)
+        tracing::warn!(
+            path = %path.display(),
+            attempts = MAX_ATTEMPTS,
+            error = %last_err,
+            "PythonSyntaxValidator: python3 probe failed after retries; fail-open"
+        );
+        Vec::new()
     }
+}
+
+/// Run the `python3 ast.parse` syntax probe over `content` exactly once.
+/// Returns the process `Output`, or `Err(reason)` on spawn/wait failure —
+/// the transient class the caller retries (EAGAIN / resource exhaustion
+/// under heavy concurrent load). A non-zero *exit* is a successful probe
+/// with a result (a SyntaxError), NOT an `Err` — the caller inspects it.
+///
+/// Wraps python3 in `timeout` so a spinning / hung subprocess can never
+/// wedge the caller. Observed 2026-05-23: orphaned python3 subprocesses at
+/// 100% CPU caused `wait_with_output()` to block indefinitely. SIGTERM
+/// after 10s, SIGKILL after 10+1s. A syntax check completes in <100ms on
+/// well-formed input, so 10s is a generous ceiling that never trips
+/// legitimately. GNU `timeout` is absent on stock macOS, so we fall back to
+/// `gtimeout` (coreutils) and, failing both, run python3 directly — the
+/// wrapper is hang-insurance, not a correctness requirement.
+fn run_python_syntax_probe(content: &str) -> Result<std::process::Output, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    const PY_SCRIPT: &str = "import ast, sys; ast.parse(sys.stdin.read())";
+
+    let mut cmd = match timeout_prefix() {
+        Some((bin, pre)) => {
+            let mut c = std::process::Command::new(bin);
+            c.args(pre).arg("python3").arg("-c").arg(PY_SCRIPT);
+            c
+        }
+        None => {
+            let mut c = std::process::Command::new("python3");
+            c.arg("-c").arg(PY_SCRIPT);
+            c
+        }
+    };
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("spawn: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // Best-effort write; if the pipe closes early we'll still collect
+        // whatever stderr ast produced.
+        let _ = stdin.write_all(content.as_bytes());
+    }
+    child.wait_with_output().map_err(|e| format!("wait: {e}"))
 }
 
 /// Parse the CPython traceback shape produced by `ast.parse` failures.

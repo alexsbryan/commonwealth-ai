@@ -582,6 +582,90 @@ impl CorpusEngine {
         self.index_dir.join(corpus_id)
     }
 
+    /// Boot-time resume for interrupted CONVERSATION-corpus tiered
+    /// enrichment — the counterpart to
+    /// `LocalCorpusManager::resume_interrupted_enrichment`, which only
+    /// covers watched-folder / vault (LocalCorpus) corpora. Conversation
+    /// corpora (chat imports) enrich through `run_tiered_enrichment` inside
+    /// `ingest`; when the in-process daemon is killed mid-import (app quit,
+    /// auto-update, crash) the conversations it never reached are left
+    /// unenriched with no recovery — the watched-folder sweep that heals
+    /// vaults doesn't see them, so they stay silently partial until the
+    /// user notices and re-imports.
+    ///
+    /// This scans every installed corpus and re-kicks the ones that are
+    /// (a) `tiered` enrichment, (b) NOT folder-shaped (`vault` /
+    /// `watched_folder` — handled elsewhere), and (c) carrying a
+    /// resumable-interruption `_enrichment_state.json` (a non-terminal
+    /// phase a killed process left behind — never a clean `Complete`, never
+    /// a deliberate `Failed`). The re-kick calls `run_tiered_enrichment`
+    /// directly with the engine's already-wired provider + extractor: no
+    /// re-acquire, no re-index, and the per-conversation content-hash skip
+    /// makes already-built conversations cheap, so an interrupted import
+    /// pays only for what it never reached. Best-effort. Returns the number
+    /// of corpora re-kicked.
+    pub async fn resume_interrupted_conversation_enrichment(&self) -> usize {
+        let Some(provider) = self.tiered_provider() else {
+            return 0; // no tiered provider wired — nothing to resume with
+        };
+        let extractor = self.chunk_entity_extractor();
+        let indexes = match self.installed_indexes().await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "conversation enrichment resume: installed_indexes failed");
+                return 0;
+            }
+        };
+        let mut kicked = 0usize;
+        for info in indexes {
+            let corpus_id = info.corpus_id;
+            // Reload the recipe by id — the same call the install path uses
+            // — for the shape (category) + whether this is tiered at all.
+            let recipe = match self.registry().fetch_recipe(&corpus_id).await {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let enrichment_type = recipe
+                .enrichment
+                .as_ref()
+                .map(|e| e.enrichment_type.as_str());
+            let category = recipe
+                .display
+                .as_ref()
+                .and_then(|d| d.category.as_deref())
+                .unwrap_or("");
+            let index_dir = self.canonical_path(&corpus_id);
+            let phase = match crate::enrichment::state::EnrichmentStateFile::read(&index_dir) {
+                Ok(Some(s)) => s.phase,
+                _ => continue, // no prior enrichment attempt → nothing to resume
+            };
+            if !conversation_enrichment_is_resumable(category, enrichment_type, phase) {
+                continue;
+            }
+            tracing::info!(
+                corpus = %corpus_id,
+                phase = phase.label(),
+                "conversation enrichment resume: prior tiered import was interrupted by a process restart; re-kicking"
+            );
+            match crate::enrichment::tiered::run_tiered_enrichment(
+                &recipe,
+                &index_dir,
+                Some(provider),
+                extractor,
+            )
+            .await
+            {
+                Ok(_) => kicked += 1,
+                Err(e) => tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "conversation enrichment resume: run_tiered_enrichment failed"
+                ),
+            }
+        }
+        kicked
+    }
+
     /// Declare the name of the embedding model backing the
     /// configured `EmbedFn`. Required before `ingest()` — the
     /// engine writes this string to `_corpus_meta.json.embedding_model`
@@ -2529,6 +2613,23 @@ pub(crate) fn normalize_content(s: &str) -> String {
     out
 }
 
+/// Selection rule for [`CorpusEngine::resume_interrupted_conversation_enrichment`].
+/// Pure so the boot-resume corpus filter is unit-testable without a wired
+/// engine: re-kick only `tiered`, NON-folder-shaped corpora whose
+/// enrichment state is a resumable interruption. Folder/vault corpora are
+/// handled by `LocalCorpusManager::resume_interrupted_enrichment`; a clean
+/// `Complete` needs nothing; a deliberate `Failed` is never auto-retried
+/// (that would loop every boot).
+fn conversation_enrichment_is_resumable(
+    category: &str,
+    enrichment_type: Option<&str>,
+    phase: crate::enrichment::state::EnrichmentPhase,
+) -> bool {
+    enrichment_type == Some("tiered")
+        && !matches!(category, "vault" | "watched_folder")
+        && phase.is_resumable_interruption()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2536,6 +2637,67 @@ mod tests {
 
     fn mock_embed_fn() -> EmbedFn {
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
+    }
+
+    #[test]
+    fn conversation_enrichment_resume_selection() {
+        use crate::enrichment::state::EnrichmentPhase::*;
+        // Re-kick: conversation-shaped tiered corpora left mid-run.
+        assert!(conversation_enrichment_is_resumable(
+            "conversation",
+            Some("tiered"),
+            Starting
+        ));
+        assert!(conversation_enrichment_is_resumable(
+            "conversation",
+            Some("tiered"),
+            RaptorLeaves
+        ));
+        // Stalled is terminal but IS a resumable interruption.
+        assert!(conversation_enrichment_is_resumable(
+            "conversation",
+            Some("tiered"),
+            Stalled
+        ));
+        // Empty / other non-folder categories still route through the
+        // conversation runner, so they resume too.
+        assert!(conversation_enrichment_is_resumable("", Some("tiered"), Persisting));
+        assert!(conversation_enrichment_is_resumable(
+            "reference",
+            Some("tiered"),
+            Scanning
+        ));
+
+        // Skip: folder-shaped corpora (LocalCorpusManager resumes those).
+        assert!(!conversation_enrichment_is_resumable(
+            "vault",
+            Some("tiered"),
+            RaptorLeaves
+        ));
+        assert!(!conversation_enrichment_is_resumable(
+            "watched_folder",
+            Some("tiered"),
+            RaptorLeaves
+        ));
+        // Skip: not a tiered corpus.
+        assert!(!conversation_enrichment_is_resumable(
+            "conversation",
+            Some("atlas"),
+            RaptorLeaves
+        ));
+        assert!(!conversation_enrichment_is_resumable("conversation", None, RaptorLeaves));
+        // Skip: terminal states — a clean finish or a deliberate failure
+        // must never be auto-retried on boot.
+        assert!(!conversation_enrichment_is_resumable(
+            "conversation",
+            Some("tiered"),
+            Complete
+        ));
+        assert!(!conversation_enrichment_is_resumable(
+            "conversation",
+            Some("tiered"),
+            Failed
+        ));
     }
 
     #[test]
