@@ -375,7 +375,7 @@ pub(crate) const PPR_DAMPING: f64 = 0.85;
 
 /// Articles expanded per push round (top-mass first) — bounds the
 /// per-hop neighbor queries.
-pub(crate) const PPR_FRONTIER_CAP: usize = 8;
+pub(crate) const PPR_FRONTIER_CAP: usize = 6;
 
 /// Outbound neighbors pulled per expanded article.
 pub(crate) const PPR_NEIGHBORS_PER_NODE: usize = 24;
@@ -391,7 +391,10 @@ pub(crate) const PPR_SEED_PULL: usize = 512;
 pub(crate) const PPR_TYPED_CAP: usize = 16;
 
 /// Top-mass candidate articles that get a chunk fetch + gate score.
-pub(crate) const PPR_CANDIDATE_ARTICLES: usize = 8;
+/// Every observed admission (probes v3b-v9) ranked within the top 4
+/// post-prerank; 6 keeps a margin while trimming 4 gate pairs + 2
+/// fetches per turn.
+pub(crate) const PPR_CANDIDATE_ARTICLES: usize = 6;
 
 /// Chunks kept per candidate article after the title filter.
 pub(crate) const PPR_CHUNKS_PER_ARTICLE: usize = 2;
@@ -404,10 +407,6 @@ pub(crate) const PPR_ARTICLE_FETCH_LIMIT: usize = 64;
 /// displaces a direct hit at the truncate, so this bounds the
 /// worst-case fact cost when the gate misjudges.
 pub(crate) const PPR_MAX_ADMITTED: usize = 3;
-
-/// Direct hits at the truncate boundary scored as the calibration
-/// tail — the displacement bar is their max.
-pub(crate) const PPR_CALIBRATION_TAIL: usize = 4;
 
 // ─── Question decomposition (opt-in retrieval expansion) ─────
 

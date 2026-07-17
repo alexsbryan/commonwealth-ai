@@ -198,8 +198,8 @@ const FLAG_META_BRIDGE: EnvFlag = EnvFlag {
 };
 const FLAG_PPR_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_PPR_EXPAND",
-    default: "off",
-    purpose: "PPR walk over the wikipedia link graph proposes answer-side articles; a cross-encoder admission gate (requires rerank_fn) injects only candidates that out-score the marginal direct hits they'd displace (RETRIEVAL_REDESIGN.md S4+S3).",
+    default: "on (dark without a reranker)",
+    purpose: "PPR walk + typed causal/contested edges over the wikipedia link graph propose answer-side articles; a cross-encoder admission gate (requires rerank_fn — SOVEREIGN_RERANK_MODEL_PATH) injects only CE-yes candidates, placed mid-pool. Spawned early, joined late: overlaps the core steps. =0/false/off/no disables (RETRIEVAL_REDESIGN.md S4 attempt log).",
 };
 
 /// Every env knob the retrieval pipeline (and its immediate post-steps)
@@ -228,6 +228,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_MIN_LEVEL", default: "see helper", purpose: "Minimum tree level for injected summaries." }),
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_DEDUPE", default: "see helper", purpose: "Collapse one entry's multi-level nodes to its best." }),
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
+        ("ppr_struct_spawn", FLAG_PPR_EXPAND),
         ("ppr_struct_expand", FLAG_PPR_EXPAND),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "see helper", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks." }),
@@ -304,6 +305,11 @@ pub struct PipelineState<'ctx> {
     pub is_comparison: bool,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
+    /// In-flight PPR structural-expansion lane (spawned right after
+    /// `entity_boost`, joined at `ppr_struct_expand`) — the lane is
+    /// pool-independent, so it overlaps the core grounding steps
+    /// instead of serializing after them.
+    pub ppr_pending: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
     // ── deep-only products ──
     /// corpus_id → peer name for mesh-served corpora we don't host.
     pub peer_attribution: HashMap<String, String>,
@@ -338,6 +344,7 @@ impl<'ctx> PipelineState<'ctx> {
             is_comparison: matches!(intent, Intent::ComparisonQuery),
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
+            ppr_pending: None,
             peer_attribution: HashMap::new(),
             local_hits: 0,
             sources_expanded: 0,
@@ -696,6 +703,14 @@ fn step_readiness_disclosure<'a, 'ctx>(
 
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
+        // Spawned FIRST in the core (the lane extracts its own
+        // entities from the message and seeds from head-pool titles —
+        // it does not need `entity_boost`'s products) and joined at
+        // `ppr_struct_expand`. Everything between the two positions —
+        // entity-boost's per-entity embed+searches, grounding,
+        // reweight — is the overlap window that hides the lane's
+        // ~1.2s walk/prerank/fetch/gate instead of adding wall.
+        step("ppr_struct_spawn", Some(FLAG_PPR_EXPAND), step_ppr_spawn),
         step("entity_boost", None, step_entity_boost),
         step("meta_atlas_boost", None, step_meta_atlas_boost),
         step("bridge_boost", Some(FLAG_META_BRIDGE), step_bridge_boost),
@@ -784,7 +799,15 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
     if include_corpus_search {
         steps.extend(shared_head_steps());
     } else {
-        core.retain(|s| s.name != "raptor_grounding_early" && s.name != "atlas_grounding");
+        core.retain(|s| {
+            s.name != "raptor_grounding_early"
+                && s.name != "atlas_grounding"
+                // No corpus retrieval ⇒ no pool to seed from and no
+                // pool to inject into — the PPR lane pair is inert
+                // weight on attached-doc turns.
+                && s.name != "ppr_struct_spawn"
+                && s.name != "ppr_struct_expand"
+        });
     }
     steps.extend(core);
     steps.push(step("truncate_merged", None, deep_truncate_merged));
@@ -1099,32 +1122,63 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
     })
 }
 
+fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
+    Box::pin(async move {
+        // Spawn the PPR structural-expansion lane (env-gated inside
+        // the helper; requires wikipedia_graph + rerank_fn). The task
+        // owns Arc clones and a seed snapshot — no pipeline borrow.
+        st.ppr_pending =
+            rt.spawn_ppr_lane(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling);
+        StepOutcome {
+            note: st.ppr_pending.is_some().then(|| "lane spawned".to_string()),
+        }
+    })
+}
+
 fn step_ppr_struct_expand<'a, 'ctx>(
-    rt: &'a Runtime,
+    _rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
-        // PPR structural expansion, cross-encoder-gated (env-gated
-        // inside the helper; requires wikipedia_graph + rerank_fn).
-        // Admitted chunks carry a synthetic vector_distance that
-        // places them just inside the truncate boundary, so a plain
+        // Join the spawned PPR lane and place its gate-admitted
+        // chunks mid-pool (synthetic vector_distance), then a plain
         // re-sort integrates them — no reweight pass (which would
-        // compound score multipliers on the whole pool).
-        if let Some(admitted) = rt
-            .expand_via_ppr_gated(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling)
-            .await
-        {
-            if !admitted.is_empty() {
-                let added = admitted.len();
-                st.chunks.extend(admitted);
-                st.chunks.sort_by(cross_corpus_sort_cmp);
-                tracing::info!(
-                    added,
-                    total = st.chunks.len(),
-                    label = st.label,
-                    "retrieval: ppr structural expansion (gated)"
-                );
+        // compound score multipliers on the whole pool). A lane that
+        // overruns the deadline is abandoned, not awaited — the
+        // pipeline's latency contract wins over a slow expansion.
+        let Some(handle) = st.ppr_pending.take() else {
+            return StepOutcome::default();
+        };
+        const PPR_JOIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(4);
+        let admitted = match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
+            Ok(Ok(a)) => a,
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "ppr_expand: lane task failed — skipping");
+                return StepOutcome::default();
             }
+            Err(_) => {
+                tracing::warn!(
+                    deadline_secs = PPR_JOIN_DEADLINE.as_secs(),
+                    "ppr_expand: lane overran the join deadline — abandoned"
+                );
+                return StepOutcome::default();
+            }
+        };
+        if admitted.is_empty() {
+            return StepOutcome::default();
+        }
+        let placed =
+            crate::runtime::retrieval::query_expansion::place_ppr_admitted(admitted, &st.chunks);
+        if !placed.is_empty() {
+            let added = placed.len();
+            st.chunks.extend(placed);
+            st.chunks.sort_by(cross_corpus_sort_cmp);
+            tracing::info!(
+                added,
+                total = st.chunks.len(),
+                label = st.label,
+                "retrieval: ppr structural expansion (gated)"
+            );
         }
         StepOutcome::default()
     })
@@ -1773,6 +1827,7 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
+                "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
                 "bridge_boost",
@@ -1802,6 +1857,7 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
+                "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
                 "bridge_boost",
@@ -1831,16 +1887,16 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 16-step core (the 16th is
+        // Shared 3-step head + shared 17-step core (the 17th is
         // `readiness_disclosure` (was `dim_mismatch_disclosure`) — the last core step, inert
         // when retrieval found anything); the pipelines differ ONLY in their tails
         // (KQ: audited truncate; deep: plain truncate + strategy-driven
         // top-sources expansion).
-        assert_eq!(&kq[..19], &deep[..19]);
-        assert_eq!(kq.len(), 20);
-        assert_eq!(deep.len(), 21);
-        assert_eq!(kq[19], "truncate_merged");
-        assert_eq!(&deep[19..], &["truncate_merged", "top_sources_expand"]);
+        assert_eq!(&kq[..20], &deep[..20]);
+        assert_eq!(kq.len(), 21);
+        assert_eq!(deep.len(), 22);
+        assert_eq!(kq[20], "truncate_merged");
+        assert_eq!(&deep[20..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but
@@ -1855,7 +1911,9 @@ mod tests {
         assert!(!names.contains(&"store_search"));
         assert!(!names.contains(&"atlas_grounding"));
         assert!(!names.contains(&"raptor_grounding_early"));
-        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 5);
+        assert!(!names.contains(&"ppr_struct_spawn"));
+        assert!(!names.contains(&"ppr_struct_expand"));
+        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 7);
     }
 
     /// The personal-scope retain predicate: metadata stamp first,

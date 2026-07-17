@@ -1,0 +1,1123 @@
+{
+  "bank_name": "wikipedia-summarize-pilot-v1",
+  "corpus": "wikipedia",
+  "limit": 30,
+  "started_at_unix": 1784253905,
+  "results": [
+    {
+      "question_id": "summary_einstein",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of Albert Einstein. Cover his major scientific\ncontributions, the key ideas and how they changed physics, his role in the\nquantum debates, and the main arc of his personal and political life. Aim for\nbreadth across the whole topic rather than depth on any single point.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Born in the German Empire, Einstein moved to Switzerland in 1895, forsaking his German citizenship (as a subject of the Kingdom of Württemberg) the following year. In 1897, at the age of seventeen, he enrolled in the mathematics and physics teaching diploma program at the Swiss federal polytechnic school in Zürich, graduating in 1900. In 1901, he acquired Swiss citizenship, which he kept for the rest of his life. In 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914,…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Horrified by the Nazi war of extermination against his fellow Jews, Einstein decided to remain in the US, and was granted American citizenship in 1940. On the eve of World War II, he endorsed a letter to President Franklin D. Roosevelt alerting him to the potential German nuclear weapons program and recommended that the US begin similar research. Einstein supported the Allies but generally viewed the idea of nuclear weapons with great dismay."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  and especially for his discovery of the law of the photoelectric effect \", a pivotal step in the development of quantum theory.  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis (miracle year). These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field —a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.04273701,
+          "snippet": "Albert Einstein  In the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose, he laid the groundwork for Bose-Einstein statistics. For much of the last phase of his academic life, Einstein worked on two endeavors that proved ultimately unsuccessful. First, he advocated against quantum theory's introduction of fundamental randomness into science's picture of t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  laid out the implications of general relativity for the modeling of the structure and evolution of the universe as a whole."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 1.0,
+          "snippet": "Albert Einstein was born in Ulm, in the Kingdom of Württemberg in the German Empire, on 14 March 1879. His parents, secular Ashkenazi Jews, were Hermann Einstein, a salesman and engineer, and Pauline Koch. In 1880, the family moved to Munich 's borough of Ludwigsvorstadt-Isarvorstadt, where Einstein's father and his uncle Jakob founded Elektrotechnische Fabrik J. Einstein & Cie, a company that manufactured electrical equipment based on direct current. He often related a formative event from his youth, when he was sick in bed and his father brought him a compass. This sparked his lifelong fasci…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 1.0,
+          "snippet": "Albert Einstein  In 1894, Hermann and Jakob's company tendered for a contract to install electric lighting in Munich, but without success—they lacked the capital that would have been required to update their technology from direct current to the more efficient, alternating current alternative. The failure of their bid forced them to sell their Munich factory and search for new opportunities elsewhere. The Einstein family moved to Italy, first to Milan and a few months later to Pavia, where they settled in Palazzo Cornazzani. Einstein, then fifteen, stayed behind in Munich in order to finish hi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 0.020370372,
+          "snippet": "Albert Einstein  While in Italy as a teenager, he wrote an essay entitled \"On the Investigation of the State of the Ether in a Magnetic Field\"."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 1.0,
+          "snippet": "Albert Einstein  eight, he was transferred to the Luitpold Gymnasium, where he received advanced primary and then secondary school education."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 1.0,
+          "snippet": "Albert Einstein  he was transferred to the Luitpold Gymnasium, where he received advanced primary and then secondary school education.  Einstein excelled at physics and mathematics from an early age, and soon acquired the mathematical expertise normally only found in a child several years his senior. He began teaching himself algebra, calculus and Euclidean geometry when he was twelve; he made such rapid progress that he discovered an original proof of the Pythagorean theorem before his thirteenth birthday. A family tutor, Max Talmud, said that only a short time after he had given the twelve y…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 1.0,
+          "snippet": "Albert Einstein  geometry was so great that at twelve, he was already confident that nature could be understood as a \"mathematical structure\".  At thirteen, when his range of enthusiasms had broadened to include music and philosophy, Talmud introduced Einstein to Kant 's Critique of Pure Reason. Kant became his favorite philosopher; according to Talmud, \"At the time he was still a child, only thirteen years old, yet Kant's works, incomprehensible to ordinary mortals, seemed to be clear to him.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bohr_versus_Einstein",
+          "score": 0.038439956,
+          "snippet": "Albert Einstein  The Bohr–Einstein debates were a series of public disputes about quantum mechanics between Einstein and Niels Bohr, who were two of its founders. Their debates are remembered because of their importance to the philosophy of science. Their debates would influence later interpretations of quantum mechanics."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of general relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Developing_general_relativity",
+          "score": 0.017361112,
+          "snippet": "History of general relativity  about nature\"; fellow laureate Paul Dirac was quoted saying it was \"probably the greatest scientific discovery ever made\".  There have been claims that scrutiny of the specific photographs taken on the Eddington expedition showed the experimental uncertainty to be comparable to the magnitude of the effect Eddington claimed to have demonstrated, and that a 1962 British expedition concluded that the method was inherently unreliable. The deflection of light during a solar eclipse was confirmed by later, more accurate observations. Some resented the newcomer's fame, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Isaac Newton",
+          "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Fame",
+          "score": 0.017396186,
+          "snippet": "Isaac Newton  has existed such and so great an ornament of the human race! He was born on 25th December 1642, and died on 20th March 1726.  In 2005, a dual survey of both the public and of members of Britain's Royal Society (formerly headed by Newton) asking who had the greater effect on the history of science, Newton or Albert Einstein, both the Royal Society members and the public deemed Newton to have made the greater overall contributions. In 1999, an opinion poll of 100 of the day's leading physicists voted Einstein the \"greatest physicist ever,\" with Newton the runner-up, while a paralle…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "special relativity (1905)",
+          "general relativity",
+          "photoelectric effect and the quantum/photon",
+          "Brownian motion",
+          "Bose-Einstein statistics"
+        ],
+        "missing": [
+          "mass-energy equivalence E=mc^2",
+          "Nobel Prize in Physics",
+          "EPR paradox and debates with Niels Bohr over quantum mechanics",
+          "fled Nazi Germany and emigrated to the United States",
+          "pacifism, civil-rights advocacy, and the letter to Roosevelt"
+        ],
+        "total_expected": 10,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 4392,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_wwii",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of World War II. Cover its scope and timeline,\nthe major belligerents, the principal theaters and turning points, its human\ncost, and its consequences. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 0.020000001,
+          "snippet": "World War&nbsp;II, or the Second World War (1 September 1939 â 2 September 1945), was a global conflict between two coalitions: the Allies and the Axis powers. Nearly all of the world's countries participated. Tanks and aircraft played major roles, the latter enabling the strategic bombing of cities and delivery of the only nuclear weapons used in war. World War II was the deadliest conflict in history, causing the death of 60 to 75 million people. Millions died as a result of massacres, starvation, disease, and genocides, including the Holocaust. After the Allied victory, Germany, Austria, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "The causes of World War II included unresolved tensions in the aftermath of World War I and the rise of fascism in Europe and militarism in Japan. Key events preceding the war included Japan's invasion of Manchuria in 1931, the Spanish Civil War, the outbreak of the Second Sino-Japanese War in 1937, and Germany's annexations of Austria and the Sudetenland. World War&nbsp;II is generally considered to have begun on 1 September 1939, when Nazi Germany, under Adolf Hitler, invaded Poland, after which the United Kingdom and France declared war on Germany. Poland was also invaded by the Soviet Unio…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "After the fall of France in June 1940, the war continued mainly between Germany, now assisted by Fascist Italy, and the British Empire and British Commonwealth, with fighting in the Balkans, Mediterranean, Middle East, East Africa, the aerial Battle of Britain, the Blitz, and the naval Battle of the Atlantic. By mid-1941, Yugoslavia and Greece had also been defeated by Axis countries. In June 1941, Germany invaded the Soviet Union, opening the Eastern Front."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "Allied victory, Germany, Austria, Japan, and Korea were occupied, and German and Japanese leaders were tried for war crimes.  In December 1941, Japan attacked American and British territories in Asia and the Pacific, including Pearl Harbor in Hawaii, leading the United States to enter the war against the Axis. Japan conquered much of coastal China and Southeast Asia, but its advances in the Pacific were halted in June 1942 at the Battle of Midway. In early 1943, Axis forces were defeated in North Africa and at Stalingrad in the Soviet Union. An Allied invasion of Italy in July resulted in the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "The war in Europe concluded with the liberation of German-occupied territories and the invasion of Germany by the Allies, which culminated in the fall of Berlin to Soviet troops and Germany's unconditional surrender on 8 May 1945. On 6 and 9 August, the US dropped atomic bombs on Hiroshima and Nagasaki followed by a Soviet invasion of Japanese-occupied Manchuria. Japan announced its unconditional surrender on 15 August and signed a surrender document on 2 September 1945. World War&nbsp;II transformed the political, economic, and social structures of the world, and established the foundation of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "to encircle Germany and renounced the Anglo-German Naval Agreement and the GermanâPolish declaration of non-aggression.  (right) and the Soviet leader Joseph Stalin after signing the MolotovâRibbentrop Pact, 23 August 1939]] The situation became a crisis in late August as Germany concentrated its forces near the Polish border. On 23 August, the Soviet Union signed a non-aggression pact with Germany, after tripartite negotiations for a military alliance between France, the United Kingdom, and Soviet Union had stalled. This pact had a secret protocol that defined German and Soviet spheres of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "had concluded a formal mutual assistance pact with Poland and that Italy would maintain neutrality, he decided to delay it.  Germany offered Britain an alliance if Britain helped Germany gain Danzig, the Polish corridor and its former colonies, but Britain replied that it would honour its guarantee to Poland. On 29 August, Hitler demanded that a Polish plenipotentiary travel to Berlin by the following day to negotiate a solution to the crisis, but Britain rejected the timeline as unreasonable. On the night of 30â31 August, the British ambassador Nevile Henderson met German Foreign Minister J…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "ounced that the deadline for Poland's acceptance had already passed."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 0.019672131,
+          "snippet": "timelines of World War II}}"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "photograph reenacting the removal of the Polish border crossing in Sopot]] On 1 September 1939, Germany invaded Poland after having staged several false flag border incidents as a pretext to initiate the invasion. The first German attack of the war came against the Polish defences at Westerplatte. The United Kingdom responded with an ultimatum for Germany to cease military operations, and on 3 September, after the ultimatum was ignored, Britain and France declared war on Germany. During the Phoney War period, the alliance provided no direct military support to Poland, outside of a cautious Fre…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "The Polish counter-offensive to the west halted the German advance for several days, but it was outflanked and encircled by the Wehrmacht. Remnants of the Polish army broke through to besieged Warsaw. On 17 September 1939, two days after signing a cease-fire with Japan, the Soviet Union invaded Poland under the supposed pretext that the Polish state had ceased to exist. On 27 September, the Warsaw garrison surrendered to the Germans, and the last large operational unit of the Polish Army surrendered on 6October. Despite the military defeat, Poland never surrendered; instead, it formed the Poli…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 1.0,
+          "snippet": "of World War II}}  Germany annexed western Poland and occupied central Poland; the Soviet Union annexed eastern Poland. Small shares of Polish territory were transferred to Lithuania and Slovakia. On 6 October, Hitler made a public peace overture to the United Kingdom and France but said that the future of Poland was to be determined exclusively by Germany and the Soviet Union. The proposal was rejected and Hitler ordered an immediate offensive against France, which was postponed until the spring of 1940 due to bad weather."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Allies of World War II",
+          "url": "https://en.wikipedia.org/wiki/Allies_of_World_War_II",
+          "score": 0.018461538,
+          "snippet": "Allies of World War II  The Allies, formally referred to as the United Nations from 1942, were an international military coalition formed during World War II (1939–1945) to oppose the Axis powers. Its principal members by the end of 1941 were the \"Big Four\" – the United Kingdom, United States, Soviet Union, and China. Membership in the Allies varied during the course of the war. When the conflict broke out on 1 September 1939, the Allied coalition consisted of the United Kingdom, France, and Poland, as well as their respective dependencies, such as British India. They were soon joined by the i…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Russia",
+          "url": "https://en.wikipedia.org/wiki/Russia",
+          "score": 0.016935483,
+          "snippet": "the Red Army invaded Manchuria and ousted the Japanese from Northeast Asia, contributing to the Allied victory over Japan.  The 1941â1945 period of World War&nbsp;II is known in Russia as the Great Patriotic War. The Soviet Union, along with the United States, the United Kingdom and China were considered the Big Four of Allied powers in World War II, and later became the Four Policemen, which was the foundation of the United Nations Security Council. During the war, Soviet civilian and military death were about 26â27 million, accounting for about half of all World War&nbsp;II casualties."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "fought 1939 to 1945",
+          "the Holocaust and genocide",
+          "the Eastern Front and the Soviet Union"
+        ],
+        "missing": [
+          "Axis powers versus the Allies",
+          "German invasion of Poland started the war in Europe",
+          "Pearl Harbor and the entry of the United States",
+          "the Pacific theater against Japan",
+          "D-Day / the Normandy landings",
+          "atomic bombings of Hiroshima and Nagasaki",
+          "deadliest conflict in history, tens of millions of deaths"
+        ],
+        "total_expected": 10,
+        "ratio": 0.3
+      },
+      "embed_ms": 0,
+      "search_ms": 2234,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_evolution",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of evolution as a scientific theory. Cover its\ncentral claim, the main mechanisms, the principal lines of evidence, and its\nhistorical development. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution",
+          "score": 0.020833334,
+          "snippet": "Evolution is the change in the heritable characteristics of biological populations over successive generations. It occurs when evolutionary processes such as natural selection and genetic drift act on genetic variation, resulting in certain characteristics becoming more or less common within a population over successive generations. The process of evolution has given rise to biodiversity at every level of biological organisation. The scientific theory of evolution by natural selection was conceived independently by two British naturalists, Charles Darwin and Alfred Russel Wallace, in the mid-1…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution",
+          "score": 1.0,
+          "snippet": "Evolution by natural selection is established by observable facts about living organisms: (1) more offspring are often produced than can possibly survive; (2) traits vary among individuals with respect to their morphology, physiology, and behaviour; (3) different traits confer different rates of survival and reproduction; and (4) traits can be passed from generation to generation. In successive generations, members of a population are therefore more likely to be replaced by the offspring of parents with favourable characteristics for that environment. In the early 20th century, competing ideas…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution",
+          "score": 1.0,
+          "snippet": "Evolution  All life on Earth—including humanity—shares a last universal common ancestor (LUCA), which lived approximately 3.5–3.8 billion years ago. The fossil record includes a progression from early biogenic graphite to microbial mat fossils to fossilised multicellular organisms. Existing patterns of biodiversity have been shaped by repeated formations of new species (speciation), changes within species (anagenesis), and loss of species (extinction) throughout the evolutionary history of life on Earth. Morphological and biochemical traits tend to be more similar among species that share a mo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution",
+          "score": 1.0,
+          "snippet": "Evolutionary biologists have continued to study various aspects of evolution by forming and testing hypotheses as well as constructing theories based on evidence from the field or laboratory and on data generated by the methods of mathematical and theoretical biology. Their discoveries have influenced not just the development of biology but also other fields including agriculture, medicine, and computer science."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution#The_'modern_synthesis'",
+          "score": 0.02016129,
+          "snippet": "Evolution  In the 1920s and 1930s, the modern synthesis connected natural selection and population genetics, based on Mendelian inheritance, into a unified theory that included random genetic drift, mutation, and gene flow. This new version of evolutionary theory focused on changes in allele frequencies in population. It explained patterns observed across species in populations, through fossil transitions in palaeontology."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to evolution",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_evolution",
+          "score": 0.040064104,
+          "snippet": "Introduction to evolution  These differences accumulate resulting in changes within the population. This process is responsible for the many diverse life forms in the world. The modern understanding of evolution began with the 1859 publication of Charles Darwin's On the Origin of Species. In addition, Gregor Mendel's work with plants helped to explain the hereditary patterns of genetics. Fossil discoveries in palaeontology, advances in population genetics and a global network of scientific research have provided further details into the mechanisms of evolution. Scientists now have a good under…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "On the Origin of Species",
+          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species",
+          "score": 0.032402985,
+          "snippet": "On the Origin of Species  Huxley and his fellow members of the X Club to secularise science by promoting scientific naturalism. Within two decades, there was widespread scientific agreement that evolution, with a branching pattern of common descent, had occurred, but scientists were slow to give natural selection the significance that Darwin thought appropriate. During \"the eclipse of Darwinism\" from the 1880s to the 1930s, various other mechanisms of evolution were given more credit. With the development of the modern evolutionary synthesis in the 1930s and 1940s, Darwin's concept of evolutio…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "common descent / a last universal common ancestor",
+          "natural selection (Darwin and Wallace)",
+          "genetic variation and mutation",
+          "genetic drift",
+          "speciation",
+          "fossil evidence",
+          "the modern evolutionary synthesis",
+          "adaptation"
+        ],
+        "missing": [
+          "comparative anatomy and homologous structures",
+          "molecular / DNA evidence"
+        ],
+        "total_expected": 10,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 1457,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_french_revolution",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the French Revolution. Cover its causes,\nthe major events and phases, the key factions and figures, and its outcomes and\nlegacy. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution",
+          "score": 0.021701388,
+          "snippet": "French Revolution  The French Revolution was a period of political and societal change in France that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central to modern French political discourse. Its causes are generally agreed to be a combination of social, political, and economic factors, which the Ancien Régime proved unable to manage. A financial crisis and widespread social distress…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution",
+          "score": 1.0,
+          "snippet": "French Revolution  Military defeats following the outbreak of the French Revolutionary Wars in April 1792 resulted in the insurrection of 10 August 1792. The monarchy was replaced by the French First Republic in September, while Louis XVI was executed in January 1793. After another revolt in June 1793, the constitution was suspended, and adequate political power passed from the National Convention to the Committee of Public Safety. About 16,000 people were executed in a Reign of Terror, which ended in July 1794. Weakened by external threats and internal opposition, the Republic was replaced in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
+          "score": 1.0,
+          "snippet": "French Revolution  The long-term impact on France was profound, shaping politics, society, religion and ideas, and polarising politics for more than a century. Historian François Aulard wrote:  \"From the social point of view, the Revolution consisted in the suppression of what was called the feudal system, in the emancipation of the individual, in greater division of landed property, the abolition of the privileges of noble birth, the establishment of equality, the simplification of life.... The French Revolution differed from other revolutions in being not merely national, for it aimed at ben…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
+          "score": 0.022222225,
+          "snippet": "French Revolution  The French Revolution differed from other revolutions in being not merely national, for it aimed at benefiting all humanity.\"  The revolution permanently crippled the power of the aristocracy and drained the wealth of the Church, although the two institutions survived. Hanson suggests the French underwent a fundamental transformation in self-identity, evidenced by the elimination of privileges and their replacement by intrinsic human rights. After the collapse of the First French Empire in 1815, the French public lost many of the rights and privileges earned since the revolu…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
+          "score": 1.0,
+          "snippet": "French Revolution  that characterised the period. According to Paul Hanson, \"Revolution became a tradition, and republicanism an enduring option.\"  The Revolution meant an end to arbitrary royal rule and held out the promise of rule by law under a constitutional order. Napoleon as emperor set up a constitutional system and the restored Bourbons were forced to retain one. After the abdication of Napoleon III in 1871, the French Third Republic was launched with a deep commitment to upholding the ideals of the Revolution. The Vichy regime (1940–1944), tried to undo the revolutionary heritage, but…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
+          "score": 1.0,
+          "snippet": "French Revolution  privileges that had been stripped away from the nobility in 1789. France permanently became a society of equals under the law.  Agriculture was transformed by the Revolution. With the breakup of large estates controlled by the Church and the nobility and worked by hired hands, rural France became more a land of small independent farms. Harvest taxes were ended, such as the tithe and seigneurial dues. Primogeniture was ended both for nobles and peasants, thereby weakening the family patriarch, and led to a fall in the birth rate since all children had a share in the family pr…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#France",
+          "score": 1.0,
+          "snippet": "French Revolution  had a share in the family property. Cobban argues the Revolution bequeathed to the nation \"a ruling class of landowners.\"  Economic historians are divided on the economic impact of the Revolution. One suggestion is the resulting fragmentation of agricultural holdings had a significant negative impact in the early years of 19th century, then became positive in the second half of the century because it facilitated the rise in human capital investments. Others argue the redistribution of land had an immediate positive impact on agricultural productivity, before the scale of the…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Historiography",
+          "score": 0.02314815,
+          "snippet": "French Revolution  The first writings on the French revolution were near contemporaneous with events and mainly divided along ideological lines. These included Edmund Burke 's conservative critique Reflections on the Revolution in France (1790) and Thomas Paine 's response Rights of Man (1791). From 1815, narrative histories dominated, often based on first-hand experience of the revolutionary years. By the mid-nineteenth century, more scholarly histories appeared, written by specialists and based on original documents and a more critical assessment of contemporary accounts."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Historiography",
+          "score": 1.0,
+          "snippet": "French Revolution  appeared, written by specialists and based on original documents and a more critical assessment of contemporary accounts.  Dupuy identifies three main strands in nineteenth century historiography of the Revolution. The first is represented by reactionary writers who rejected the revolutionary ideals of popular sovereignty, civil equality, and the promotion of rationality, progress and personal happiness over religious faith. The second stream is those writers who celebrated its democratic, and republican values. The third were liberals like Germaine de Staël and Guizot, who …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Historiography",
+          "score": 1.0,
+          "snippet": "French Revolution  man, but rejected state interference with private property and individual rights, even when supported by a democratic majority.  Jules Michelet was a leading 19th-century historian of the democratic republican strand, and Thiers, Mignet and Tocqueville were prominent in the liberal strand. Hippolyte Taine 's Origins of Contemporary France (1875–1894) was modern in its use of departmental archives, but Dupuy sees him as reactionary, given his contempt for the crowd, and Revolutionary values."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Historiography",
+          "score": 1.0,
+          "snippet": "French Revolution  use of departmental archives, but Dupuy sees him as reactionary, given his contempt for the crowd, and Revolutionary values.  The broad distinction between conservative, democratic-republican and liberal interpretations of the Revolution persisted in the 20th-century, although historiography became more nuanced, with greater attention to critical analysis of documentary evidence. Alphonse Aulard (1849–1928) was the first professional historian of the Revolution; he promoted graduate studies, scholarly editions, and learned journals. His major work, The French Revolution, a P…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
+          "score": 0.019125681,
+          "snippet": "The French Revolution of 1789 overthrew the  and produced the Declaration of the Rights of Man, which expresses the nation's ideals to this day. France reached its political and military zenith in the early 19th century under Napoleon Bonaparte, subjugating much of continental Europe and establishing the First French Empire. Its collapse initiated a period of relative decline during which France endured the Bourbon Restoration until the founding of the French Second Republic, which was succeeded by the Second French Empire upon Napoleon III's takeover. His empire collapsed during the Franco-Pr…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
+          "score": 0.019444445,
+          "snippet": "the primary source of legitimacy, undermined the power of and support for the monarchy and was a factor in the Revolution.  on 14 July 1789 was the most emblematic event of the French Revolution.]] The French Revolution was a period of political and societal change that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in 1799 and the formation of the French Consulate. Many of its ideas are fundamental principles of liberal democracy, while its values and institutions remain central to modern political discourse.  Its causes were a combination of social, political …"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "the Estates-General and the National Assembly",
+          "the storming of the Bastille",
+          "rise of Napoleon Bonaparte"
+        ],
+        "missing": [
+          "occurred 1789 to 1799",
+          "financial crisis and social inequality as causes",
+          "Enlightenment ideas",
+          "the Declaration of the Rights of Man and of the Citizen",
+          "abolition of the monarchy and execution of Louis XVI",
+          "the Reign of Terror and Robespierre",
+          "end of feudalism and lasting political legacy"
+        ],
+        "total_expected": 10,
+        "ratio": 0.3
+      },
+      "embed_ms": 0,
+      "search_ms": 2216,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_kant",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the philosophy of Immanuel Kant. Cover his\ncentral doctrines in metaphysics and epistemology, his moral philosophy, and his\nbroader significance. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
+          "score": 0.052645277,
+          "snippet": "Immanuel Kant (born Emanuel Kant; 22 April 1724 – 12 February 1804) was a German philosopher and one of the central Enlightenment thinkers. Born in Königsberg, Kant's comprehensive and systematic works in epistemology, metaphysics, ethics, and aesthetics have made him one of the most influential and controversial figures in modern Western philosophy, being called the \"father of modern ethics\", the \"father of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy \"."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  of modern aesthetics\", and for bringing together rationalism and empiricism earned the title of \"father of modern philosophy \".  In his doctrine of transcendental idealism, Kant argued that space and time are mere \"forms of intuition\" that structure all experience and that the objects of experience are mere \"appearances\". The nature of things as they are in themselves is unknowable to us. In an attempt to counter the philosophical doctrine of skepticism, he wrote the Critique of Pure Reason (1781/1787), his best-known work. Kant drew a parallel to the Copernican Revolution in hi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Abstract",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  the social sciences, particularly sociology and anthropology, which regard human activities as pre-oriented by cultural norms.  Kant believed that reason is the source of morality, and that aesthetics arises from a faculty of disinterested judgment. Kant's religious views were deeply connected to his moral theory. Their exact nature remains in dispute. He hoped that perpetual peace could be secured through an international federation of republican states and international cooperation. His cosmopolitan reputation is called into question by his promulgation of scientific racism fo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  When he nevertheless published a second edition in 1794, the censor was so irate that he arranged for a royal order that required Kant never to publish or even speak publicly about religion. Kant then published his response to the King's reprimand and explained himself in the preface of The Conflict of the Faculties."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  He also wrote a number of semi-popular essays on history, religion, politics, and other topics. These works were well received by Kant's contemporaries and confirmed his preeminent status in eighteenth-century philosophy. There were several journals devoted solely to defending and criticizing Kantian philosophy. Despite his success, philosophical trends were moving in another direction. Many of Kant's most important disciples and followers (including Reinhold, Beck, and Fichte) transformed the Kantian position. The progressive stages of revision of Kant's teachings marked the em…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  In 1800, a student of Kant named Gottlob Benjamin Jäsche (1762–1842) published a manual of logic for teachers called Logik, which he had prepared at Kant's request. Jäsche prepared the Logik using a copy of a textbook in logic by Georg Friedrich Meier entitled Excerpt from the Doctrine of Reason, in which Kant had written copious notes and annotations. The Logik has been considered of fundamental importance to Kant's philosophy, and the understanding of it. The great 19th-century logician Charles Sanders Peirce remarked, in an incomplete review of Thomas Kingsmill Abbott 's Engl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 0.044188596,
+          "snippet": "Immanuel Kant  but in its position within the whole of Kant's work.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Later_work",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  a stance on philosophical questions, Kant opposed these developments and publicly denounced Fichte in an open letter in 1799."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  Kant's deduction of the categories in the \"Analytic of Concepts\", if successful, demonstrates its claims about the categories only in an abstract way. The task of the \"Analytic of Principles\" is to show both that they must universally apply to objects given in actual experience (i.e., manifolds of intuition) and how it is they do so. In the first book of this section on the \" schematism \", Kant connects each of the purely logical categories of the understanding to the temporality of intuition to show that, although non-empirical, they do have purchase upon the objects of experie…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  Some commentators consider this the most significant section of the Critique. The analogies are three in number:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
+          "score": 1.0,
+          "snippet": "Immanuel Kant  The fourth section of this chapter, which is not an analogy, deals with the empirical use of the modal categories. That was the end of the chapter in the A edition of the Critique. The B edition includes one more short section, \"The Refutation of Idealism\". In this section, by analysis of the concept of self-consciousness, Kant argues that his transcendental idealism is a \"critical\" or \"formal\" idealism that does not deny the existence of reality apart from our subjective representations. The final chapter of \"The Analytic of Principles\" distinguishes phenomena, of which we can …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
+          "score": 0.042489033,
+          "snippet": "Immanuel Kant  Against this, Kant reasserts his own insistence upon the necessity of a sensible component in all genuine knowledge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Anti-war movement",
+          "url": "https://en.wikipedia.org/wiki/Anti-war_movement",
+          "score": 0.035662927,
+          "snippet": "es to warn against or fight against wars.  Immanuel Kant: In (1795) \"Perpetual Peace\" (\"Zum ewigen Frieden\"). Immanuel Kant booklet on \"Perpetual Peace\" in 1795. Politically, Kant was one of the earliest exponents of the idea that perpetual peace could be secured through universal democracy and international cooperation."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kantian ethics",
+          "url": "https://en.wikipedia.org/wiki/Kantian_ethics#The_Metaphysics_of_Morals",
+          "score": 0.039628483,
+          "snippet": "Kantian ethics  as such, and in this way to set forth completely the whole of morals, needs anthropology for its application to human beings.  His promised Metaphysics of Morals, however, was much delayed and did not appear until its two parts, The Doctrine of Right and The Doctrine of Virtue, were published separately in 1797 and 1798. In the twelve years between the Groundwork and The Doctrine of Right, Kant decided that the metaphysics of morals and its application should, after all, be integrated (though still as distinct from practical anthropology). The distinction between its groundwork…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "transcendental idealism",
+          "the Critique of Pure Reason",
+          "the distinction between phenomena and noumena",
+          "space and time as a priori forms of intuition",
+          "the categories of the understanding",
+          "the Critique of Practical Reason",
+          "central figure of the Enlightenment"
+        ],
+        "missing": [
+          "synthetic a priori knowledge",
+          "the categorical imperative",
+          "deontological / duty-based ethics"
+        ],
+        "total_expected": 10,
+        "ratio": 0.7
+      },
+      "embed_ms": 0,
+      "search_ms": 2216,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_roman_empire",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the Roman Empire. Cover its political\nevolution, its military and administration, its economy and culture, the\nreligious changes it underwent, and its decline. Aim for breadth across the\nwhole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Imperialism",
+          "url": "https://en.wikipedia.org/wiki/Imperialism#Rome",
+          "score": 0.018333334,
+          "snippet": "Imperialism  The Roman Empire was the post- Republican period of ancient Rome. As a polity, it included large territorial holdings around the Mediterranean Sea in Europe, North Africa, and Western Asia, ruled by emperors."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire",
+          "score": 0.02377049,
+          "snippet": "Roman Empire  Constantine the Great (r. 306–337), the first Christian emperor, moved the imperial seat from Rome to Byzantium in 330, and renamed it Constantinople. The Migration Period, involving large invasions by Germanic peoples and by the Huns of Attila, led to the decline of the Western Roman Empire. With the fall of Ravenna to the Germanic Herulians and the deposition of Romulus Augustus in 476 by Odoacer, the Western Empire finally collapsed. The Eastern Roman Empire survived for another millennium with Constantinople as its sole capital, until the city's fall in 1453. Due to the Empir…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.036866356,
+          "snippet": "Western Roman Empire  Roman cultural traditions continued throughout the territory of the Western Empire for long after its disappearance, and a recent school of interpretation argues that the great political changes can more accurately be described as a complex cultural transformation, rather than a fall."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.03218584,
+          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "score": 0.0368364,
+          "snippet": "Byzantine Empire  The Byzantine Empire, also referred to as the Eastern Roman Empire, was the continuation of the Roman Empire centred in Constantinople during Late Antiquity and the Middle Ages. The eastern half of the Empire survived the conditions that caused the fall of the West in the 5th century AD, and continued to exist until the fall of Constantinople to the Ottoman Empire in 1453. During most of its existence, the empire remained the most powerful economic, cultural, and military force in the Mediterranean world. The term \"Byzantine Empire\" was only coined following the empire's demi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Background",
+          "score": 0.033761468,
+          "snippet": "Western Roman Empire  Africa (roughly modern Tunisia). Octavian soon took Africa from Lepidus, while adding Sicilia (modern Sicily) to his holdings.  Upon the defeat of Mark Antony, a victorious Octavian controlled a united Roman Empire. The Empire featured many distinct cultures, all experienced a gradual Romanization. While the predominantly Greek culture of the East and the predominantly Latin culture of the West functioned effectively as an integrated whole, political and military developments would ultimately realign the Empire along those cultural and linguistic lines. More often than no…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Religion in ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Religion_in_ancient_Rome#Later_Republic_to_Principate",
+          "score": 0.018115941,
+          "snippet": "Religion in ancient Rome  for the Imperial cult. The claim was further elaborated and justified in Vergil's poetic, Imperial vision of the past.  In the late Republic, the so-called Marian reforms supposedly did the following: lowered an existing property bar on conscription, increased the efficiency of Rome's armies, and made them available as instruments of political ambition and factional conflict. The consequent civil wars led to changes at every level of Roman society. Augustus' principate established peace and subtly transformed Rome's religious life – or, in the new ideology of Empire, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 0.028361345,
+          "snippet": "Ancient Rome  That empire was among the largest empires in the ancient world, covering around 5 million square kilometres in AD 117, with an estimated 50 to 90 million inhabitants, roughly 20% of the world's population at the time. The Roman state evolved from an elective monarchy to a classical republic and then to an increasingly autocratic military dictatorship during the Empire. Ancient Rome is often grouped into classical antiquity together with ancient Greece, and their similar cultures and societies are known as the Greco-Roman world. Ancient Roman civilisation has contributed to modern…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Languages",
+          "score": 0.023076924,
+          "snippet": "Roman Empire  Latin and Greek were the main languages of the Empire, but the Empire was deliberately multilingual. Andrew Wallace-Hadrill says \"The main desire of the Roman government was to make itself understood\". At the start of the Empire, knowledge of Greek was useful to pass as educated nobility and knowledge of Latin was useful for a career in the military, government, or law. Bilingual inscriptions indicate the everyday interpenetration of the two languages.  Latin and Greek's mutual linguistic and cultural influence is a complex topic. Latin words incorporated into Greek were very com…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 0.02666667,
+          "snippet": "Fall of the Western Roman Empire  The fall of the Western Roman Empire, also called the fall of the Roman Empire or the fall of Rome, was the loss of central political control in the Western Roman Empire, a process in which the Empire failed to enforce its rule, and its vast territory was divided between several successor polities. The Roman Empire lost the strengths that had allowed it to exercise effective control over its Western provinces; modern historians posit factors including the effectiveness and numbers of the army, the health and numbers of the Roman population, the strength of the…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century",
+          "score": 0.016666668,
+          "snippet": "Crisis of the Third Century  Roman commanders in the field, although nominally loyal to the state, became increasingly independent of Rome's central authority. During the crisis, there were at least 26 claimants to the title of emperor, mostly prominent Roman army generals, who assumed imperial power over all or part of the empire. The same number of men became accepted by the Roman Senate as emperor during this period and so became legitimate emperors. By 268, the empire had split into three competing states: the Gallic Empire; the Palmyrene Empire; and, between them, the Italian-centered Rom…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of science",
+          "url": "https://en.wikipedia.org/wiki/History_of_science#Greek_scholarship_under_Roman_rule",
+          "score": 0.015189874,
+          "snippet": "History of science  After the death of the Roman Emperor Marcus Aurelius in 180 CE, the favorable conditions for scholarship and learning in the Roman Empire were upended by political unrest, civil war, urban decay, and looming economic crisis. In around 250 CE, barbarians began attacking and invading the Roman frontiers. These combined events led to a general decline in political and economic conditions. The living standards of the Roman upper class was severely impacted, and their loss of leisure diminished scholarly pursuits. Moreover, during the 3rd and 4th centuries CE, the Roman Empire w…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient history",
+          "url": "https://en.wikipedia.org/wiki/Ancient_history#Late_antiquity",
+          "score": 0.026590483,
+          "snippet": "Ancient history  The Roman Empire underwent considerable social, cultural and organizational change starting with reign of Diocletian, who began the custom of splitting the empire into eastern and western halves ruled by multiple emperors. Constantine the Great began the process of Christianizing the empire and established a new capital at Constantinople. Migrations of Germanic tribes disrupted Roman rule from the late 4th century onwards, culminating in the eventual collapse of the empire in the West in 476, replaced by the so-called barbarian kingdoms. The resultant cultural fusion of Greco-…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Egypt",
+          "url": "https://en.wikipedia.org/wiki/Roman_Egypt#Roman_government_in_Egypt",
+          "score": 0.021852518,
+          "snippet": "Roman Egypt  As Rome overtook the Ptolemaic system in place for areas of Egypt, they made many changes. The effect of the Roman conquest was at first to strengthen the position of the Greeks and of Hellenism against Egyptian influences. Some of the previous offices and names of offices under the Hellenistic Ptolemaic rule were kept, some were changed, and some names would have remained but the function and administration would have changed.  The Romans introduced important changes in the administrative system, aimed at achieving a high level of efficiency and maximizing revenue. The duties of …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Later_claims_to_the_Imperial_title_in_the_West",
+          "score": 0.021666666,
+          "snippet": "Western Roman Empire  In addition to remaining as a concept for an administrative unit in the remaining Empire, the ideal of the Roman Empire as a mighty Christian Empire with a single ruler further continued to appeal to many powerful rulers in western Europe. With the papal coronation of Charlemagne as \" Emperor of the Romans \" in AD 800, his realm was explicitly proclaimed as a restoration of the Roman Empire in Western Europe under the concept of translatio imperii. Though the Carolingian Empire collapsed in 888 and Berengar, the last \"Emperor\" claiming succession from Charlemagne, died in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of Tunisia",
+          "url": "https://en.wikipedia.org/wiki/History_of_Tunisia#Renaissance_of_Carthage",
+          "score": 0.022222223,
+          "snippet": "History of Tunisia  contacts with the Mediterranean. Extensive trade across the Sahara directly with the lands to the south had not yet developed.  People from all over the Empire began to migrate into Africa Province, e.g., veterans in early retirement settled in Africa on farming plots promised for their military service. A sizable Latin speaking population that was multinational developed, which shared the region with those speaking the Punic and Berber languages. The local population began eventually to provide the Roman security forces. That the Romans \"did not display any racial exclusiv…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Chariot racing",
+          "url": "https://en.wikipedia.org/wiki/Chariot_racing",
+          "score": 0.0203125,
+          "snippet": "Chariot racing  In the Eastern Roman (Byzantine) Empire, the traditional Roman chariot-racing factions continued to play a prominent role in mass entertainment, religion and politics for several centuries. Supporters of the Blue teams vied with supporters of the Greens for control of foreign, domestic and religious policies, and Imperial subsidies for themselves. Their displays of civil discontent and disobedience culminated in an indiscriminate slaughter of Byzantine citizenry by the military in the Nika riots. Thereafter, rising costs and a failing economy saw the gradual decline of Byzantin…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spain",
+          "url": "https://en.wikipedia.org/wiki/Spain",
+          "score": 0.019852942,
+          "snippet": "the Portuguese Succession, clashes with the Ottomans, intervention in the French Wars of Religion, and the Anglo-Spanish War.  The Protestant Reformation increased Spain's involvement in religiously charged wars, forcing ever-expanding military efforts across Europe and in the Mediterranean. By the middle decades of a war- and plague-ridden 17th-century Europe, the Spanish Habsburgs had enmeshed Spain in continent-wide religious-political conflicts. These conflicts drained Spain of resources and undermined the economy generally. Spain managed to hold on to most of the scattered Habsburg empire…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "First Bulgarian Empire",
+          "url": "https://en.wikipedia.org/wiki/First_Bulgarian_Empire#The_Balkans_during_the_early_Migration_Period",
+          "score": 0.020149253,
+          "snippet": "First Bulgarian Empire  Parts of the eastern Balkan Peninsula were in antiquity inhabited by the Thracians who were a group of Indo-European tribes. The whole region as far north as the Danube River was gradually incorporated into the Roman Empire by the 1st century AD. The decline of the Roman Empire after the 3rd century AD and the continuous invasions of Goths and Huns left much of the region devastated, depopulated and in economic decline by the 5th century. The surviving eastern half of the Roman Empire, called by later historians the Byzantine Empire, could not exercise effective control…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sociocultural evolution",
+          "url": "https://en.wikipedia.org/wiki/Sociocultural_evolution",
+          "score": 0.020454546,
+          "snippet": "Sociocultural evolution, sociocultural evolutionism or social evolution are theories of sociobiology and cultural evolution that describe how societies and culture change over time. Whereas sociocultural development traces processes that tend to increase the complexity of a society or culture, sociocultural evolution also considers process that can lead to decreases in complexity (degeneration) or that can produce variation or proliferation without any seemingly significant changes in complexity (cladogenesis). Sociocultural evolution is \"the process by which structural reorganization is affec…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire",
+          "score": 1.0,
+          "snippet": "Western Roman Empire  In modern historiography, the Western Roman Empire was the western provinces of the Roman Empire, collectively, during any period in which they were administered separately from the eastern provinces by a separate, independent imperial court. Particularly during the period from AD 395 to 476, there were separate, coequal courts dividing the governance of the empire into the Western provinces and the Eastern provinces with a distinct imperial succession in the separate courts. The terms Western Roman Empire and Eastern Roman Empire were coined in modern times to describe p…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "score": 1.0,
+          "snippet": "Byzantine Empire  During the earlier Pax Romana period, the western parts of the empire became increasingly Latinised, while the eastern parts largely retained their preexisting Hellenistic culture. This created a dichotomy between the Greek East and Latin West. These cultural spheres continued to diverge after Constantine I (r. 324–337) moved the capital to Constantinople and legalised Christianity. Under Theodosius I (r. 379–395), Christianity became the state religion, and other religious practices were proscribed. Greek gradually replaced Latin for official use as Latin fell into disuse. T…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "score": 1.0,
+          "snippet": "Byzantine Empire  The appearance of plague and a devastating war with Persia exhausted the empire's resources; the early Muslim conquests that followed saw the loss of the empire's richest provinces—Egypt and Syria—to the Rashidun Caliphate. In 698, Africa was lost to the Umayyad Caliphate, but the empire subsequently stabilised under the Isaurian dynasty. The empire was able to expand once more under the Macedonian dynasty, experiencing a two-century-long renaissance. This came to an end in 1071, with the defeat by the Seljuk Turks at the Battle of Manzikert. Thereafter, periods of civil war …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Byzantine Empire",
+          "url": "https://en.wikipedia.org/wiki/Byzantine_Empire",
+          "score": 1.0,
+          "snippet": "Byzantine Empire  The empire was largely dismantled in 1204, following the Sack of Constantinople by Latin armies at the end of the Fourth Crusade; its former territories were then divided into competing Greek rump states and Latin realms. Despite the eventual recovery of Constantinople in 1261, the reconstituted empire would wield only regional power during its final two centuries of existence. Its remaining territories were progressively annexed by the Ottomans in perennial wars fought throughout the 14th and 15th centuries. The fall of Constantinople to the Ottomans in 1453 ultimately broug…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 1.0,
+          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure. In 376, a large migration of Goths and other non-Roman people, fleeing from the Huns, entered the Empire. Roman forces were unable to exterminate, expel or subjugate them. In 395, after winning two destructive civil wars, Theodosius I died. He left a collapsing field army, and the Empire divided between the warring ministers of his two incapable sons. Goths and other non-Romans became a force that could challenge ei…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 1.0,
+          "snippet": "Fall of the Western Roman Empire  By 476, the position of Western Roman Emperor wielded negligible military, political, or financial power, and had no effective control over the scattered Western domains that could still be described as Roman. Barbarian kingdoms had established their own power in much of the area of the Western Empire. In 476, the Germanic barbarian king Odoacer deposed the last emperor of the Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno. While its legitimacy lasted for centuries longer and its c…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 1.0,
+          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom, the Roman Republic, and the Roman Empire until the fall of the western empire. Ancient Rome began as an Italic settlement, traditionally dated to 753 BC, beside the River Tiber in the Italian Peninsula. The settlement grew into the city and polity of Rome, and came to control its neighbours through a combination of treaties and military strength. It …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome",
+          "score": 1.0,
+          "snippet": "Ancient Rome  It achieved impressive technological and architectural feats, such as the empire-wide construction of aqueducts and roads, as well as more grandiose monuments and facilities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
+          "score": 1.0,
+          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom (753–509 BC), the Roman Republic (509–27 BC), and the Roman Empire (27 BC–476 AD) until the fall of the western empire."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "the Pax Romana",
+          "vast territorial extent around the Mediterranean",
+          "the legions and the military",
+          "Roman law and administration",
+          "division into Western and Eastern empires",
+          "the fall of the Western Roman Empire",
+          "continuation as the Byzantine (Eastern) Empire"
+        ],
+        "missing": [
+          "transition from republic to empire under Augustus",
+          "economy, trade, and infrastructure such as roads and aqueducts",
+          "the spread of Christianity and Constantine"
+        ],
+        "total_expected": 10,
+        "ratio": 0.7
+      },
+      "embed_ms": 0,
+      "search_ms": 2219,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_dna",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of DNA. Cover its structure, how it encodes\ninformation, how that information is copied and expressed, and its role in\nheredity. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  Genetics is the study of genes and tries to explain what they are and how they work. Genes are how living organisms inherit features or traits from their ancestors; for example, children usually look like their parents because they have inherited their parents' genes. Genetics tries to identify which traits are inherited and to explain how these traits are passed from generation to generation."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  Genetics tries to identify which traits are inherited and to explain how these traits are passed from generation to generation.  Some traits are part of an organism's physical appearance, such as eye color or height. Other sorts of traits are not easily seen and include blood types or resistance to diseases. Some traits are inherited through genes, which is the reason why tall and thin people tend to have tall and thin children. Other traits come from interactions between genes and the environment, so a child who inherited the tendency of being tall will still be shor…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 0.023369566,
+          "snippet": "Introduction to genetics  For example, the chances of somebody dying of cancer or heart disease seems to depend on both their genes and their lifestyle.  Genes are made from a long molecule called DNA, which is copied and inherited across generations. DNA is made of simple units that line up in a particular order within it, carrying genetic information. The language used by DNA is called genetic code, which lets organisms read the information in the genes. This information is the instructions for the construction and operation of a living organism."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Abstract",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  the information in the genes. This information is the instructions for the construction and operation of a living organism.  The information within a particular gene is not always exactly the same between one organism and another, so different copies of a gene do not always give exactly the same instructions. Each unique form of a single gene is called an allele. As an example, one allele for the gene for hair color could instruct the body to produce much pigment, producing black hair, while a different allele of the same gene might give garbled instructions that fail…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  The function of genes is to provide the information needed to make molecules called proteins in cells. Cells are the smallest independent parts of organisms: the human body contains about 100 trillion cells, while very small organisms like bacteria are just a single cell. A cell is like a miniature and very complex factory that can make all the parts needed to produce a copy of itself, which happens when cells divide. There is a simple division of labor in cells—genes give instructions and proteins carry out these instructions, tasks like building a new copy of a cell…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  or less of the protein responsible. Genes tell cells what to do by telling them which proteins to make and in what amounts.  Proteins are made of a chain of 20 different types of amino acid molecules. This chain folds up into a compact shape, rather like an untidy ball of string. The shape of the protein is determined by the sequence of amino acids along its chain and it is this shape that, in turn, determines what the protein does. For example, some proteins have parts of their surface that perfectly match the shape of another molecule, allowing the protein to bind t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 0.026852693,
+          "snippet": "Introduction to genetics  to bind to this molecule very tightly. Other proteins are enzymes, which are like tiny machines that alter other molecules.  The information in DNA is held in the sequence of the repeating units along the DNA chain. These units are four types of nucleotides (A, T, G and C) and the sequence of nucleotides stores information in an alphabet called the genetic code. When a gene is read by a cell the DNA sequence is copied into a very similar molecule called RNA (this process is called transcription). Transcription is controlled by other DNA sequences (such as promoters), …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_make_proteins",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  active form. The process of moving information from the language of RNA into the language of amino acids is called translation.  If the sequence of the nucleotides in a gene changes, the sequence of the amino acids in the protein it produces may also change—if part of a gene is deleted, the protein produced is shorter and may not work anymore. This is the reason why different alleles of a gene can have different effects on an organism. As an example, hair color depends on how much of a dark substance called melanin is put into the hair as it grows. If a person has a n…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_are_copied",
+          "score": 0.019791668,
+          "snippet": "Introduction to genetics  Genes are copied each time a cell divides into two new cells. The process that copies DNA is called DNA replication. It is through a similar process that a child inherits genes from its parents when a copy from the mother is mixed with a copy from the father.  DNA can be copied very easily and accurately because each piece of DNA can direct the assembly of a new copy of its information. This is because DNA is made of two strands that pair together like the two sides of a zipper. The nucleotides are in the center, like the teeth in the zipper, and pair up to hold the t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to genetics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_genetics#Genes_are_copied",
+          "score": 1.0,
+          "snippet": "Introduction to genetics  up properly, an A nucleotide must go opposite a T nucleotide, and a G opposite a C. This exact pairing is called base pairing.  When DNA is copied, the two strands of the old DNA are pulled apart by enzymes; then they pair up with new nucleotides and then close. This produces two new pieces of DNA, each containing one strand from the old DNA and one newly made strand. This process is not predictably perfect as proteins attach to a nucleotide while they are building and cause a change in the sequence of that gene. These changes in the DNA sequence are called mutations.…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Heredity",
+          "url": "https://en.wikipedia.org/wiki/Heredity#Overview",
+          "score": 0.04266245,
+          "snippet": "Heredity  Heritable traits are known to be passed from one generation to the next via DNA, a molecule that encodes genetic information. DNA is a long polymer that incorporates four types of bases, which are interchangeable. The Nucleic acid sequence (the sequence of bases along a particular DNA molecule) specifies the genetic information: this is comparable to a sequence of letters spelling out a passage of text. Before a cell divides through mitosis, the DNA is copied, so that each of the resulting two cells will inherit the DNA sequence. A portion of a DNA molecule that specifies a single fu…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Molecular genetics",
+          "url": "https://en.wikipedia.org/wiki/Molecular_genetics#Structure_of_DNA",
+          "score": 0.03665454,
+          "snippet": "Molecular genetics  genetic code for all biological life and contains the information for all the proteins the organism will be able to synthesize.  Its unique structure allows DNA to store and pass on biological information across generations during cell division. At cell division, cells must be able to copy its genome and pass it on to daughter cells. This is possible due to the double-stranded structure of DNA because one strand is complementary to its partner strand, and therefore each of these strands can act as a template strand for the formation of a new complementary strand. This is wh…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "nucleotides and complementary base pairing (A-T, G-C)",
+          "genes and the genetic code",
+          "DNA replication",
+          "transcription into RNA",
+          "translation into proteins",
+          "chromosomes",
+          "mutations"
+        ],
+        "missing": [
+          "double-helix structure (Watson, Crick, and Franklin)",
+          "the sugar-phosphate backbone and antiparallel strands",
+          "the molecular basis of heredity"
+        ],
+        "total_expected": 10,
+        "ratio": 0.7
+      },
+      "embed_ms": 0,
+      "search_ms": 2164,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "summary_ai",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of artificial intelligence. Cover its main\napproaches, its historical development, major subfields and applications, and\nits risks and open debates. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 1.0,
+          "snippet": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems. It is a field of research in computer science that develops and studies methods and software that enable machines to perceive their environment and use learning and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs. Some high-profile applications of AI include advanced web search engines; recommendation systems; interacting via human speech; autonomous vehicles; generative and creative tools; and superhuman…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  The traditional goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, perception, and support for robotics. General intelligence—the ability to complete any task performable by a human on an at least equal level—is among the field's long-term goals. To reach these goals, AI researchers have adapted and integrated a wide range of techniques, including search and mathematical optimization, formal logic, artificial neural networks, and methods based on statistics, operations research, and economics. AI also draw…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.01875,
+          "snippet": "Artificial intelligence  This growth accelerated further after 2017 with the transformer architecture, and by the early 2020s hundreds of billions of dollars were being invested in AI. The widespread use of AI in the 21st century exposed several unintended consequences and harms in the present and raised concerns about its risks and long-term effects in the future, prompting discussions about regulatory policies to ensure the safety and benefits of the technology."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems. It is a field of research in computer science that develops and studies methods and software that enable machines to perceive their environment and use learning and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 0.020454546,
+          "snippet": "Artificial intelligence  and intelligence to take actions that maximize their chances of achieving defined goals. Such machines may be called AIs.  Some high-profile applications of AI include advanced web search engines (e.g., Google Search); recommendation systems (used by YouTube, Amazon, and Netflix); interacting via human speech (e.g., Google Assistant, Siri, and Alexa); autonomous vehicles (e.g., Waymo); generative and creative tools (e.g., ChatGPT, Apple Intelligence, and AI art); and superhuman play and analysis in strategy games (e.g., chess and Go). However, many AI applications are …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  often without being called AI because once something becomes useful enough and common enough it's not labeled AI anymore.\"  The various subfields of AI research are centered around particular goals and the use of particular tools. The traditional goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, perception, and support for robotics. General intelligence —the ability to complete any task performable by a human on an at least equal level—is among the field's long-term goals. To reach these goals, AI researc…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Abstract",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  operations research, and economics. AI also draws upon psychology, linguistics, philosophy, neuroscience, and other fields.  Artificial intelligence was founded as an academic discipline in 1956, and the field went through multiple cycles of optimism, followed by periods of disappointment and loss of funding, known as AI winter. Funding and interest vastly increased after 2012 when deep learning outperformed previous AI techniques. This growth accelerated further after 2017 with the transformer architecture, and by the early 2020s hundreds of billions of dollars were b…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Goals",
+          "score": 0.022131147,
+          "snippet": "Artificial intelligence  The general problem of simulating (or creating) intelligence has been broken into subproblems. These consist of particular traits or capabilities that researchers expect an intelligent system to display. The traits described below have received the most attention and cover the scope of AI research."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Ethical_machines_and_alignment",
+          "score": 0.021969698,
+          "snippet": "Artificial intelligence  Friendly AI are machines that have been designed from the beginning to minimize risks and to make choices that benefit humans. Eliezer Yudkowsky, who coined the term, argues that developing friendly AI should be a higher research priority: it may require a large investment and it must be completed before AI becomes an existential risk.  Machines with intelligence have the potential to use their intelligence to make ethical decisions. The field of machine ethics provides machines with ethical principles and procedures for resolving ethical dilemmas. The field of machine…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Narrow_vs._general_AI",
+          "score": 0.02096774,
+          "snippet": "Artificial intelligence  AI researchers are divided as to whether to pursue the goals of artificial general intelligence and superintelligence directly or to solve as many specific problems as possible (narrow AI) in hopes these solutions will lead indirectly to the field's long-term goals. General intelligence is difficult to define and difficult to measure, and modern AI has had more verifiable successes by focusing on specific problems with specific solutions. The experimental sub-field of artificial general intelligence studies this area exclusively."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#AI_welfare_and_rights",
+          "score": 1.0,
+          "snippet": "Artificial intelligence  basis for AI rights. Robot rights are also sometimes proposed as a practical way to integrate autonomous agents into society.  In 2017, the European Union considered granting \"electronic personhood\" to some of the most capable AI systems. Similarly to the legal status of companies, it would have conferred rights but also responsibilities. Critics argued in 2018 that granting rights to AI systems would downplay the importance of human rights, and that legislation should focus on user needs rather than speculative futuristic scenarios. They also noted that robots lacked …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#AI_welfare_and_rights",
+          "score": 0.02109375,
+          "snippet": "Artificial intelligence  the term “AI welfare” and outlined the new field of AI welfare science, which is derived from animal welfare science.  Progress in AI increased interest in the topic. Proponents of AI welfare and rights often argue that AI sentience, if it emerges, would be particularly easy to deny. They warn that this may be a moral blind spot analogous to slavery or factory farming, which could lead to large-scale suffering if sentient AI is created and carelessly exploited."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/History_of_artificial_intelligence#Soft_computing_and_probabilistic_reasoning",
+          "score": 0.020634921,
+          "snippet": "History of artificial intelligence  problems that precise symbolic methods could not handle. Press accounts often claimed these tools could \"think like a human\".  Judea Pearl 's influential 1988 book brought probability and decision theory into AI. Fuzzy logic, developed by Lofti Zadeh in the 60s, began to be more widely used in AI and robotics. Evolutionary computation and artificial neural networks also handle imprecise information, and are classified as \"soft\". In the 90s and early 2000s many other soft computing tools were developed and put into use, including Bayesian networks, hidden Mar…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
+          "score": 0.019178081,
+          "snippet": "Artificial general intelligence  adult comes to about 100 on average. Similar tests were carried out in 2014, with the IQ score reaching a maximum value of 27.  In 2020, OpenAI developed GPT-3, a language model capable of performing many diverse tasks without specific training. According to Gary Grossman in a VentureBeat article, while there is consensus that GPT-3 is not an example of AGI, it is considered by some to be too advanced to be classified as a narrow AI system.  In the same year, Jason Rohrer used his GPT-3 account to develop a chatbot, and provided a chatbot-developing platform ca…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "machine learning",
+          "neural networks and deep learning",
+          "search and problem-solving",
+          "natural language processing",
+          "ethics, safety risks, and artificial general intelligence"
+        ],
+        "missing": [
+          "early history including Turing and the Dartmouth workshop",
+          "computer vision",
+          "symbolic / expert systems",
+          "the AI winters",
+          "real-world applications"
+        ],
+        "total_expected": 10,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 1427,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

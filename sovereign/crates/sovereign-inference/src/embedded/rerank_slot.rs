@@ -370,87 +370,11 @@ fn resolve_special_token(model: &LlamaModel, name: &str) -> Option<i32> {
 
 // Continuation of the RerankSlot impl block (split for the helper above).
 impl RerankSlot {
-    /// Score a single (query, doc) pair: build the protocol's chat
-    /// prompt around the pair, run one forward pass, and read the
-    /// relevance score off the last position's logits — the
-    /// `<|score_token|>` logit (jina) or `logit(yes) − logit(no)`
-    /// (Qwen3-Reranker family). Higher = more relevant.
-    #[allow(clippy::too_many_arguments)]
-    fn score_pair_sync(
-        model: &LlamaModel,
-        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
-        query: &str,
-        doc: &str,
-        max_input_tokens: usize,
-        protocol: RerankProtocol,
-        prefix_tokens: &[LlamaToken],
-        middle_tokens: &[LlamaToken],
-        suffix_tokens: &[LlamaToken],
-    ) -> Result<f32> {
-        ctx.clear_kv_cache();
-
-        // Tokenise the dynamic parts.
-        let query_tokens = model
-            .str_to_token(query, AddBos::Never)
-            .map_err(|e| Error::Inference(format!("Rerank query tokenise: {e}")))?;
-        let doc_tokens = model
-            .str_to_token(doc, AddBos::Never)
-            .map_err(|e| Error::Inference(format!("Rerank doc tokenise: {e}")))?;
-
-        // Truncation budget. Fixed overhead = prefix + middle +
-        // suffix + 1 (the trailing rerank token). Whatever's left
-        // is split: query keeps its full length up to a ceiling
-        // (queries are usually short), and doc takes everything
-        // else. When even the query won't fit, truncate query too.
-        let fixed = prefix_tokens.len() + middle_tokens.len() + suffix_tokens.len() + 1;
-        let dynamic_budget = max_input_tokens.saturating_sub(fixed);
-        const QUERY_HARD_CAP: usize = 256;
-        let query_budget = query_tokens.len().min(QUERY_HARD_CAP).min(dynamic_budget);
-        let doc_budget = dynamic_budget.saturating_sub(query_budget);
-        if dynamic_budget == 0 {
-            return Err(Error::Inference(
-                "Rerank context too small for prompt scaffold".to_string(),
-            ));
-        }
-
-        let mut tokens: Vec<LlamaToken> = Vec::with_capacity(
-            prefix_tokens.len()
-                + query_budget
-                + middle_tokens.len()
-                + doc_budget
-                + suffix_tokens.len()
-                + 1,
-        );
-        tokens.extend_from_slice(prefix_tokens);
-        tokens.extend(query_tokens.iter().take(query_budget).copied());
-        tokens.extend_from_slice(middle_tokens);
-        tokens.extend(doc_tokens.iter().take(doc_budget).copied());
-        tokens.extend_from_slice(suffix_tokens);
-        if let RerankProtocol::JinaScoreToken {
-            rerank_token_id, ..
-        } = protocol
-        {
-            tokens.push(LlamaToken(rerank_token_id));
-        }
-
-        let mut batch = LlamaBatch::new(tokens.len(), 1);
-        let last = tokens.len() - 1;
-        for (i, &tok) in tokens.iter().enumerate() {
-            // We only need logits at the LAST position — that's
-            // where the model predicts the token after
-            // `<|rerank_token|>` and the score-token logit lives.
-            // Marking every position would waste memory and decode
-            // time; marking only the last position is exactly what
-            // the protocol needs.
-            batch
-                .add(tok, i as i32, &[0], i == last)
-                .map_err(|e| Error::Inference(format!("Rerank batch add: {e}")))?;
-        }
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
-
-        // Read the relevance score off the last position's logits.
-        let logits = ctx.get_logits_ith(last as i32);
+    /// Read the protocol's relevance score off a logit slice (the
+    /// last decoded position): the `<|score_token|>` logit (jina) or
+    /// `logit(yes) − logit(no)` (Qwen3-Reranker family). Higher =
+    /// more relevant.
+    fn read_score(protocol: RerankProtocol, logits: &[f32]) -> Result<f32> {
         let read = |id: i32| -> Result<f32> {
             let idx = id as usize;
             if idx >= logits.len() {
@@ -470,31 +394,111 @@ impl RerankSlot {
         }
     }
 
-    /// Score multiple docs against one query. Sequential under the
-    /// slot mutex — generative decode of ~50-100 tokens per pair is
-    /// fast on a 0.6B model (Vulkan/ROCm: ~10ms/pair), so a 50-doc
-    /// rerank pass costs ~0.5s. True intra-sequence batching is
-    /// possible but the engineering cost only pays off above ~200
-    /// pairs/call, well beyond what corpus search produces.
+    /// Score multiple docs against one query, sequential under the
+    /// slot mutex with SHARED-PREFIX KV reuse: every pair in a call
+    /// shares `scaffold + query + middle`, so that prefix is decoded
+    /// ONCE and each doc only pays for its own `doc + suffix` tokens —
+    /// the KV cache is rolled back to the prefix boundary between
+    /// docs (`clear_kv_cache_seq`). Measured motivation (2026-07-17):
+    /// per-pair full re-prefill cost ~37ms on short pairs and ~90ms on
+    /// long-query SEP pairs; the admission gate + title prerank issue
+    /// 16-24 pair calls per retrieval turn, and for title pairs the
+    /// shared prefix is ~95% of the tokens.
     pub fn score_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        let mut out = Vec::with_capacity(docs.len());
+        if docs.is_empty() {
+            return Ok(Vec::new());
+        }
         let mut guard = self
             .ctx
             .lock()
             .map_err(|e| Error::Inference(format!("rerank lock poisoned: {e}")))?;
-        for doc in docs {
-            let score = Self::score_pair_sync(
-                &self.model,
-                &mut guard.ctx,
-                query,
-                doc,
-                self.max_input_tokens,
-                self.protocol,
-                &self.prefix_tokens,
-                &self.middle_tokens,
-                &self.suffix_tokens,
-            )?;
-            out.push(score);
+        let ctx = &mut guard.ctx;
+        ctx.clear_kv_cache();
+
+        // Truncation budget. Fixed overhead = prefix + middle +
+        // suffix + 1 (the trailing rerank token). Whatever's left
+        // is split: query keeps its full length up to a ceiling
+        // (queries are usually short), and doc takes everything
+        // else. When even the query won't fit, truncate query too.
+        let query_tokens = self
+            .model
+            .str_to_token(query, AddBos::Never)
+            .map_err(|e| Error::Inference(format!("Rerank query tokenise: {e}")))?;
+        let fixed =
+            self.prefix_tokens.len() + self.middle_tokens.len() + self.suffix_tokens.len() + 1;
+        let dynamic_budget = self.max_input_tokens.saturating_sub(fixed);
+        if dynamic_budget == 0 {
+            return Err(Error::Inference(
+                "Rerank context too small for prompt scaffold".to_string(),
+            ));
+        }
+        const QUERY_HARD_CAP: usize = 256;
+        let query_budget = query_tokens.len().min(QUERY_HARD_CAP).min(dynamic_budget);
+        let doc_budget = dynamic_budget.saturating_sub(query_budget);
+
+        // Decode the shared prefix once: scaffold + query + middle.
+        // The last prefix token requests logits purely as decode
+        // insurance (some backends reject zero-logit batches); the
+        // value is never read.
+        let mut shared: Vec<LlamaToken> = Vec::with_capacity(
+            self.prefix_tokens.len() + query_budget + self.middle_tokens.len(),
+        );
+        shared.extend_from_slice(&self.prefix_tokens);
+        shared.extend(query_tokens.iter().take(query_budget).copied());
+        shared.extend_from_slice(&self.middle_tokens);
+        let shared_len = shared.len();
+        let mut batch = LlamaBatch::new(shared_len, 1);
+        for (i, &tok) in shared.iter().enumerate() {
+            batch
+                .add(tok, i as i32, &[0], i + 1 == shared_len)
+                .map_err(|e| Error::Inference(format!("Rerank prefix batch add: {e}")))?;
+        }
+        ctx.decode(&mut batch)
+            .map_err(|e| Error::Inference(format!("Rerank prefix decode: {e}")))?;
+
+        let mut out = Vec::with_capacity(docs.len());
+        for (di, doc) in docs.iter().enumerate() {
+            // Roll the cache back to the shared prefix (no-op for the
+            // first doc). A failed partial removal would silently
+            // corrupt every subsequent score, so it is a hard error.
+            if di > 0 {
+                let ok = ctx
+                    .clear_kv_cache_seq(Some(0), Some(shared_len as u32), None)
+                    .map_err(|e| Error::Inference(format!("Rerank kv rollback: {e}")))?;
+                if !ok {
+                    return Err(Error::Inference(
+                        "Rerank kv rollback rejected (partial seq removal unsupported)"
+                            .to_string(),
+                    ));
+                }
+            }
+            let doc_tokens = self
+                .model
+                .str_to_token(doc, AddBos::Never)
+                .map_err(|e| Error::Inference(format!("Rerank doc tokenise: {e}")))?;
+            let mut tail: Vec<LlamaToken> =
+                Vec::with_capacity(doc_budget.min(doc_tokens.len()) + self.suffix_tokens.len() + 1);
+            tail.extend(doc_tokens.iter().take(doc_budget).copied());
+            tail.extend_from_slice(&self.suffix_tokens);
+            if let RerankProtocol::JinaScoreToken {
+                rerank_token_id, ..
+            } = self.protocol
+            {
+                tail.push(LlamaToken(rerank_token_id));
+            }
+            let last = tail.len() - 1;
+            let mut batch = LlamaBatch::new(tail.len(), 1);
+            for (i, &tok) in tail.iter().enumerate() {
+                // Positions continue from the shared prefix; only the
+                // last position's logits carry the score.
+                batch
+                    .add(tok, (shared_len + i) as i32, &[0], i == last)
+                    .map_err(|e| Error::Inference(format!("Rerank batch add: {e}")))?;
+            }
+            ctx.decode(&mut batch)
+                .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
+            let logits = ctx.get_logits_ith(last as i32);
+            out.push(Self::read_score(self.protocol, logits)?);
         }
         Ok(out)
     }

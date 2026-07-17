@@ -21,7 +21,7 @@ mod boosts;
 mod conv_tiered;
 mod corpus_search;
 mod history;
-mod query_expansion;
+pub(crate) mod query_expansion;
 mod raptor_grounding;
 mod source_expansion;
 mod turn_prepass;

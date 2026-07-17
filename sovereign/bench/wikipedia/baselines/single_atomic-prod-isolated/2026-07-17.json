@@ -1,0 +1,232 @@
+{
+  "bank_name": "single-atomic-bombings",
+  "corpus": "wikipedia",
+  "limit": 30,
+  "started_at_unix": 1784253751,
+  "results": [
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.08198924,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bombings were unnecessary for the war's end and were a war crime, raising moral and ethical implications."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
+          "score": 0.07642962,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  all major belligerents during World War II was not prohibited by positive or specific customary international humanitarian law.  In 1963 the bombings were subjected to judicial review in Ryuichi Shimoda v. The State. The District Court of Tokyo ruled the use of nuclear weapons in warfare was not illegal, but held in its obiter dictum that the atomic bombings of both Hiroshima and Nagasaki were illegal under international law of that time, as an indiscriminate bombardment of undefended cities. The court denied the appellants compensation on the grounds…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.07619487,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.067116484,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06951219,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Ward Wilson believes that the bombing of Hiroshima was not the reason for Japan's surrender, because the preliminary report of the Japanese Army investigation team on the bombing of Hiroshima was not submitted until August 10. Ward Wilson believes that Japan decided to surrender long before its leaders realized the devastation caused by the atomic bombs on Hiroshima and Nagasaki.According to Ward Wilson, Japanese leaders had long concluded: it is possible to fight a decisive battle against a great power attacking from one direction, but it is impossib…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06308663,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06305739,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  During the previous months, the bombing of Tokyo alone had killed more than 100,000 civilians in just one day, so the destruction of Hiroshima and Truman's vague threat did not make much impression on the Japanese commander. Ward Wilson argued that the Japanese Imperial Supreme Council's cancellation of the meeting about the bombing of Hiroshima proved that Council members did not consider this bombing more serious than previous incidents. In Ward Wilson's view, the Soviet campaign had a decisive strategic significance in causing Japan to surrender, w…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.07687794,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.0703125,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.067075334,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
+          "score": 0.047931984,
+          "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Sports",
+          "score": 0.042282864,
+          "snippet": "Nagasaki is represented in the J. League of football with its local club, V-Varen Nagasaki."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#Other_sports",
+          "score": 0.022916667,
+          "snippet": "Hiroshima  The Woodone Open Hiroshima was part of the Japan Golf Tour between 1973 and 2007. The city also hosted the 1994 Asian Games, using the Big Arch stadium, which is now used for the annual Mikio Oda Memorial International Amateur Athletic Game. The now-called Hiroshima Prefectural Sports Center was one of the host arenas of the 2006 FIBA World Championship (basketball)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#University",
+          "score": 0.022540983,
+          "snippet": "Hiroshima  Notable art institutions include the Elisabeth University of Music and Actor's School Hiroshima."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Historical revisionism",
+          "url": "https://en.wikipedia.org/wiki/Historical_revisionism#Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.03447832,
+          "snippet": "Historical revisionism  The atomic bombings of Hiroshima and Nagasaki have generated controversy and debate. Historians who accepted President Harry Truman 's reasoning in justifying dropping atomic bombs in order to force Japanese surrender end of World War II are known as \"orthodox,\" while \"revisionists\" generally deny that the bombs were necessary. Some also claim that Truman knew they were not necessary but wanted to pressure the Soviet Union. These historians see Truman's decision as a major factor in starting the Cold War. They and others also may charge that Truman ignored or downplayed…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Cities",
+          "score": 0.042761568,
+          "snippet": "Nagasaki Prefecture  Thirteen cities are located in Nagasaki Prefecture:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Bertrand Russell",
+          "url": "https://en.wikipedia.org/wiki/Bertrand_Russell#Later_life",
+          "score": 0.033631466,
+          "snippet": "Bertrand Russell  explaining the usefulness of America's atomic arsenal in deterring the USSR from continuing its domination of Eastern Europe.  Just after the atomic bombs exploded over Hiroshima and Nagasaki, Russell wrote letters, and published articles in newspapers from 1945 to 1948, stating clearly that it was morally justified and better to go to war against the USSR using atomic bombs while the United States possessed them and before the USSR did. In September 1949, one week after the USSR tested its first A-bomb, but before this became known, Russell wrote that the USSR would be unabl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "score": 0.018333334,
+          "snippet": "History of nuclear weapons  \"Super\" bomb. Only Teller continued working on the project—against the will of project leaders Oppenheimer and Hans Bethe.  The Joe-1 atomic bomb test by the Soviet Union that took place in August 1949 came earlier than expected by Americans, and over the next several months there was an intense debate within the U.S. government, military, and scientific communities regarding whether to proceed with development of the far more powerful Super.  After the atomic bombings of Japan, many scientists at Los Alamos rebelled against the notion of creating a weapon thousands…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima#Prefectural_Route",
+          "score": 0.04375,
+          "snippet": "Hiroshima Prefectural Route 37 (Hiroshima-Miyoshi Route), Hiroshima Prefectural Route 70 (Hiroshima-Nakashima Route), Hiroshima Prefectural Route 84 (Higashi Kaita Hiroshima Route), Hiroshima Prefectural Route 164 (Hiroshima-Kaita Route), and Hiroshima Prefectural Route 264 (Nakayama-Onaga Route)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Puyi",
+          "url": "https://en.wikipedia.org/wiki/Puyi#Collapse_of_Manchukuo",
+          "score": 0.032666966,
+          "snippet": "Puyi  In his address, the Showa Emperor described the Americans as having used a \"most unusual and cruel bomb\" that had just destroyed the cities of Hiroshima and Nagasaki; this was the first time that Puyi heard of the atomic bombings of Hiroshima and Nagasaki, which the Japanese had not seen fit to tell him about until then."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 1.0,
+          "snippet": "Air raids on Japan  During the Pacific War, Allied forces conducted air raids on Japan from 1942 to 1945, causing extensive destruction to the country's cities and killing between 241,000 and 900,000 people. During the first years of the Pacific War these attacks were limited to the Doolittle Raid in April 1942 and small-scale raids on military positions in the Kuril Islands from mid-1943. Strategic bombing raids began in June 1944 and continued until the end of the war in August 1945. Allied naval and land-based tactical air units also attacked Japan during 1945. The United States Army Air Fo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 1.0,
+          "snippet": "Air raids on Japan  From June 1944 until January 1945, B-29s stationed in India staged through bases in China to make a series of nine raids on targets in western Japan, but this effort proved ineffective. The strategic bombing campaign was greatly expanded from November 1944 when bases in the Mariana Islands became available as a result of the Mariana Islands Campaign. Initial attempts to target industrial facilities using high-altitude daylight \"precision\" bombing were largely ineffective. From February 1945, the bombers switched to low-altitude night firebombing against urban areas as much …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 1.0,
+          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima",
+          "score": 1.0,
+          "snippet": "Hiroshima is the capital of Hiroshima Prefecture in Japan. As of June 1, 2019, the city had an estimated population of 1,199,391. The gross domestic product (GDP) in Greater Hiroshima, Hiroshima Urban Employment Area, was US$61.3 billion as of 2010. Kazumi Matsui has been the city's mayor since April 2011. The Hiroshima metropolitan area is the second largest urban area in the Chugoku Region of Japan, following the Okayama metropolitan area. Hiroshima was founded in 1589 as a castle town on the Ōta River delta. Following the Meiji Restoration in 1868, Hiroshima rapidly transformed into a major…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
+          "score": 1.0,
+          "snippet": "Nagasaki Prefecture is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 and has a geographic area of 4,130 km⁲. Nagasaki Prefecture borders Saga Prefecture to the northeast. Nagasaki is the capital and largest city of Nagasaki Prefecture, with other major cities including Sasebo, Isahaya, and Ōmura. Nagasaki Prefecture is located in western Kyūshū with a territory consisting of many mainland peninsulas centered around Ōmura Bay…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture",
+          "score": 1.0,
+          "snippet": "Nagasaki Prefecture is home to several of the Hidden Christian Sites in the Nagasaki Region which have been declared a UNESCO World Heritage Site."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki_Prefecture#Abstract",
+          "score": 1.0,
+          "snippet": "Nagasaki Prefecture (長崎県, Nagasaki-ken) is a prefecture of Japan, mainly located on the island of Kyūshū, although it also includes a number of islands off Kyūshū's northwest coast - including Tsushima and Iki. Nagasaki Prefecture has a population of 1,314,078 (1 June 2020) and has a geographic area of 4,130 km (1,594 sq mi). Nagasaki Prefecture borders Saga Prefecture to the northeast."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 4866,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}
