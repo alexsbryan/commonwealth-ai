@@ -104,6 +104,33 @@ pub(crate) fn exactval_fix_enabled() -> bool {
     )
 }
 
+/// Opt-in (SOVEREIGN_GATE_PIPELINE=1): PHASE A SCAFFOLD — verify sentences on the
+/// fast slot AS the draft streams on the 35B, so audit #1 overlaps synthesis
+/// instead of running after it (see docs/specs/STREAMING_GATE_PIPELINE.md).
+/// Default OFF. In the scaffold the streamed verdicts are glassbox-logged but NOT
+/// yet consumed by the gate — wiring them into gate_longform (to skip
+/// re-verification) is the next increment, gated on a fast-slot-verify calibration.
+pub(crate) fn gate_pipeline_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_GATE_PIPELINE").ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
+/// Default-ON (SOVEREIGN_SURGICAL_REWRITE=0 opts out): correct only the failed
+/// sentences of a longform answer on the fast slot instead of re-synthesising
+/// the whole answer on the 35B, then run the SAME full re-audit the full-rewrite
+/// path runs. Proven fabrication-safe by the 2026-07-17 re-calibration: surgical
+/// + full re-audit matched the OFF baseline exactly (hallucination 0.00,
+/// grounding 1.00, CONFAB-LEAKED 0). The full re-audit is the safety floor; an
+/// earlier scoped re-audit that skipped it leaked and was reverted.
+pub(crate) fn surgical_rewrite_enabled() -> bool {
+    !matches!(
+        std::env::var("SOVEREIGN_SURGICAL_REWRITE").ok().as_deref(),
+        Some("0") | Some("false") | Some("off")
+    )
+}
+
 /// The closed set of answer-producing surfaces the gate covers.
 /// Adding a surface = adding a variant + a profile + a bank — there
 /// is no open registration, by design: every gated surface must have
