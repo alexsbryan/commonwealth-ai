@@ -1567,44 +1567,33 @@ async fn gate_longform(
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(3);
-    if config::surgical_rewrite_enabled() && !failed.is_empty() && failed.len() <= surgical_cap {
-        let pairs: Vec<(String, Vec<String>)> = failed
-            .iter()
-            .map(|f| (f.claim.clone(), f.evidence.clone()))
-            .collect();
-        if let Some(edited) =
-            surgical::surgical_rewrite(inference, base_request, &text, &pairs, chunks, tau).await
+    // Corrected text: surgical span-edits when every failed claim maps, else a
+    // full re-synthesis. EITHER result runs the FULL re-audit ladder below — an
+    // earlier scoped re-audit (verify only the changed spans) was faster but
+    // leaked a GK-caveated fabrication the holistic scan catches (calibration
+    // 2026-07-17, CONFAB-LEAKED 0→1), so surgery now only changes HOW the
+    // corrected text is produced, never the safety floor.
+    let second: String = 'produce: {
+        if config::surgical_rewrite_enabled()
+            && !failed.is_empty()
+            && failed.len() <= surgical_cap
         {
-            // Surgery kept every verified sentence verbatim and self-verified its
-            // edits (scoped re-audit over only the changed spans), so the answer
-            // is already clean — release directly and skip the redundant FULL
-            // re-audit the full-rewrite path below must run.
-            dbg(&format!(
-                "surgical rewrite applied — skipped full re-synthesis + full re-audit ({} failed of {n_claims})",
-                failed.len()
-            ));
-            emit_gate_progress(
-                progress,
-                NarrationPhase::ClaimCheckComplete {
-                    confirmed: n_claims,
-                    flagged: 0,
-                },
-            );
-            return GateOutcome {
-                text: edited,
-                meta: serde_json::json!({
-                    "surface": profile.surface.id(),
-                    "action": "surgical_rewrite_released", "retried": true,
-                    "claims_checked": n_claims, "failed_claims": [],
-                    "threshold": tau, "mode": "surgical",
-                }),
-            };
+            let pairs: Vec<(String, Vec<String>)> = failed
+                .iter()
+                .map(|f| (f.claim.clone(), f.evidence.clone()))
+                .collect();
+            if let Some(edited) =
+                surgical::surgical_rewrite(inference, base_request, &text, &pairs).await
+            {
+                dbg(&format!(
+                    "surgical rewrite applied — full re-audit follows ({} failed of {n_claims})",
+                    failed.len()
+                ));
+                break 'produce edited;
+            }
         }
-    }
-
-    // Full re-synthesis fallback (flag off, too many failures, or surgery could
-    // not confidently map a claim). Its result runs the full re-audit ladder.
-    let second: String = {
+        // Full re-synthesis fallback (flag off, too many failures, or surgery
+        // could not confidently map a claim).
         let mut rewrite_req = base_request.clone();
         let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
         rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
