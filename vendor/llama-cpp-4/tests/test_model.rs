@@ -1,55 +1,21 @@
 //! Tests for model, vocab, and context APIs.
 //!
-//! These tests require a GGUF model. Set `LLAMA_TEST_MODEL` to the path of a GGUF model file.
-//! If not set, a vocab-only GGUF from the build directory is used if available.
+//! These tests require a GGUF model. Set `LLAMA_TEST_MODEL` to the path of a GGUF model file,
+//! or run [`scripts/fetch-test-model.sh`](../../scripts/fetch-test-model.sh) for the default tiny
+//! checkpoint. If neither is available, a vocab-only GGUF from the build directory is used.
+
+mod support;
 
 use llama_cpp_4::llama_backend::LlamaBackend;
-use llama_cpp_4::model::params::LlamaModelParams;
-use llama_cpp_4::model::{AddBos, LlamaModel};
-use std::path::PathBuf;
+use llama_cpp_4::model::{AddBos, LlamaModel, Special};
+use llama_cpp_4::token::LlamaToken;
+use llama_cpp_4::TokenToStringError;
 
-/// Try to find a test model. Prefers LLAMA_TEST_MODEL env var,
-/// then falls back to a vocab-only GGUF in the build directory.
-fn find_test_model() -> Option<(PathBuf, bool)> {
-    // Check env var for a full model
-    if let Ok(path) = std::env::var("LLAMA_TEST_MODEL") {
-        let p = PathBuf::from(path);
-        if p.exists() {
-            return Some((p, false)); // not vocab_only
-        }
-    }
+use support::model::{backend, load_model};
 
-    // Look for vocab-only GGUF in build dir
-    let build_dir = PathBuf::from("target/debug/build");
-    if let Ok(entries) = std::fs::read_dir(&build_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            if name
-                .to_str()
-                .map_or(false, |n| n.starts_with("llama-cpp-sys-4-"))
-            {
-                let vocab_path = entry
-                    .path()
-                    .join("out/llama.cpp/models/ggml-vocab-llama-bpe.gguf");
-                if vocab_path.exists() {
-                    return Some((vocab_path, true));
-                }
-            }
-        }
-    }
-    None
-}
-
-fn load_test_model() -> Option<(LlamaBackend, LlamaModel, bool)> {
-    let (path, vocab_only) = find_test_model()?;
-    let backend = LlamaBackend::init().ok()?;
-    let mut params = LlamaModelParams::default();
-    if vocab_only {
-        params = params.with_vocab_only(true);
-    }
-    let params = std::pin::pin!(params);
-    let model = LlamaModel::load_from_file(&backend, &path, &params).ok()?;
-    Some((backend, model, vocab_only))
+fn load_test_model() -> Option<(&'static LlamaBackend, LlamaModel, bool)> {
+    let (model, vocab_only) = load_model()?;
+    Some((backend(), model, vocab_only))
 }
 
 // ============================================================
@@ -90,6 +56,7 @@ fn test_model_numeric_properties() {
     assert!(model.n_ctx_train() > 0);
     assert!(model.n_embd() > 0);
     assert!(model.n_layer() > 0);
+    assert!(model.n_layer_nextn() >= 0);
     assert!(model.n_head() > 0);
     assert!(model.n_head_kv() > 0);
     assert!(model.n_vocab() > 0);
@@ -109,6 +76,9 @@ fn test_model_boolean_properties() {
     let _ = model.is_recurrent();
     let _ = model.is_hybrid();
     let _ = model.is_diffusion();
+    let _ = model.n_expert();
+    let _ = model.n_devices();
+    let _ = model.target_layer_ids();
     let _ = model.add_bos_token();
     let _ = model.add_eos_token();
 }
@@ -183,6 +153,159 @@ fn test_token_attr() {
     };
     let bos = model.token_bos();
     let _ = model.token_attr(bos);
+}
+
+#[test]
+fn test_raw_token_bytes_preserve_filtered_special_piece() {
+    let Some((_backend, model, _)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    let Some((token, raw)) = find_token_filtered_by_wrapper_with_raw_piece(&model) else {
+        panic!("expected at least one filtered token with a raw llama.cpp piece");
+    };
+
+    let filtered = model
+        .token_to_bytes(token, Special::Tokenize)
+        .expect("filtered token conversion should not error");
+    assert!(
+        filtered.is_empty(),
+        "selected token should be filtered by token_to_bytes"
+    );
+    assert!(
+        raw.len() > 1,
+        "selected token should exercise insufficient-buffer behavior"
+    );
+
+    let too_small =
+        model.token_to_raw_bytes_with_size(token, raw.len() - 1, Special::Tokenize, None);
+    assert!(
+        matches!(
+            too_small,
+            Err(TokenToStringError::InsufficientBufferSpace(size))
+                if size < 0 && usize::try_from(-size).ok() == Some(raw.len())
+        ),
+        "raw helper should surface llama.cpp's required buffer size"
+    );
+    let exact = model
+        .token_to_raw_bytes_with_size(token, raw.len(), Special::Tokenize, None)
+        .expect("exact raw token buffer should be sufficient");
+    assert_eq!(exact, raw);
+}
+
+fn find_token_filtered_by_wrapper_with_raw_piece(
+    model: &LlamaModel,
+) -> Option<(LlamaToken, Vec<u8>)> {
+    for id in 0..model.n_vocab() {
+        let token = LlamaToken::new(id);
+        let Ok(filtered) = model.token_to_bytes(token, Special::Tokenize) else {
+            continue;
+        };
+        if !filtered.is_empty() {
+            continue;
+        }
+        let raw = raw_token_bytes(model, token)?;
+        if raw.len() > 1 {
+            return Some((token, raw));
+        }
+    }
+    None
+}
+
+fn raw_token_bytes(model: &LlamaModel, token: LlamaToken) -> Option<Vec<u8>> {
+    match model.token_to_raw_bytes(token, Special::Tokenize) {
+        Ok(bytes) => Some(bytes),
+        Err(TokenToStringError::InsufficientBufferSpace(size)) if size < 0 => model
+            .token_to_raw_bytes_with_size(
+                token,
+                usize::try_from(-size).ok()?,
+                Special::Tokenize,
+                None,
+            )
+            .ok(),
+        Err(_) => None,
+    }
+}
+
+#[test]
+fn test_token_to_raw_bytes_autosizes_over_whole_vocab() {
+    let Some((_backend, model, _)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    // The convenience helper must never surface InsufficientBufferSpace: it
+    // grows the buffer to whatever llama.cpp requires. Cross-check every token
+    // against an explicitly oversized buffer.
+    for id in 0..model.n_vocab() {
+        let token = LlamaToken::new(id);
+        let auto = model.token_to_raw_bytes(token, Special::Tokenize);
+        assert!(
+            !matches!(auto, Err(TokenToStringError::InsufficientBufferSpace(_))),
+            "token {id} should have auto-sized instead of reporting insufficient buffer"
+        );
+        if let Ok(auto) = auto {
+            let explicit = model
+                .token_to_raw_bytes_with_size(token, 4096, Special::Tokenize, None)
+                .expect("oversized buffer should always succeed");
+            assert_eq!(
+                auto, explicit,
+                "auto-sized bytes must match explicit buffer"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_tokens_to_raw_bytes_matches_per_token_concatenation() {
+    let Some((_backend, model, _)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    let tokens = model
+        .str_to_token("The quick brown fox", AddBos::Never)
+        .expect("tokenizing ascii should succeed");
+
+    let batch = model
+        .tokens_to_raw_bytes(&tokens, Special::Plaintext)
+        .expect("batch raw conversion should succeed");
+
+    let mut expected = Vec::new();
+    for &token in &tokens {
+        expected.extend_from_slice(
+            &model
+                .token_to_raw_bytes(token, Special::Plaintext)
+                .expect("per-token raw conversion should succeed"),
+        );
+    }
+    assert_eq!(batch, expected);
+}
+
+#[test]
+fn test_stream_detokenizer_matches_bulk_raw_bytes() {
+    use llama_cpp_4::token::detokenizer::StreamDetokenizer;
+
+    let Some((_backend, model, _)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    let tokens = model
+        .str_to_token("The quick brown fox", AddBos::Never)
+        .expect("tokenizing ascii should succeed");
+
+    let mut detok = StreamDetokenizer::new(&model, Special::Plaintext);
+    let mut streamed = detok
+        .push_all(tokens.iter().copied())
+        .expect("streaming push should succeed");
+    streamed.push_str(&detok.finish().expect("finish should succeed"));
+
+    let bulk = String::from_utf8(
+        model
+            .tokens_to_raw_bytes(&tokens, Special::Plaintext)
+            .expect("bulk raw conversion should succeed"),
+    )
+    .expect("ascii round-trip is valid utf-8");
+
+    assert_eq!(streamed, bulk);
 }
 
 // ============================================================
@@ -414,6 +537,47 @@ fn test_context_thread_control() {
     ctx.set_n_threads(2, 2);
     assert_eq!(ctx.n_threads(), 2);
     assert_eq!(ctx.n_threads_batch(), 2);
+}
+
+#[test]
+fn test_context_memory_breakdown() {
+    let Some((backend, model, vocab_only)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    if vocab_only {
+        eprintln!("SKIP: memory breakdown needs a full model");
+        return;
+    }
+    let ctx = model
+        .new_context(
+            &backend,
+            llama_cpp_4::context::params::LlamaContextParams::default(),
+        )
+        .unwrap();
+    let breakdown = ctx.memory_breakdown();
+    assert!(
+        breakdown
+            .iter()
+            .all(|e| e.buft_name.is_empty() || e.total() > 0 || e.total() == 0),
+        "entries should be well-formed"
+    );
+}
+
+#[test]
+fn test_model_devices_iterator() {
+    let Some((_backend, model, _)) = load_test_model() else {
+        eprintln!("SKIP: no test model available");
+        return;
+    };
+    let count = model.devices().count();
+    assert_eq!(count, model.n_devices().max(0) as usize);
+    for dev in model.devices() {
+        let _ = dev.name();
+        let _ = dev.description();
+        let _ = dev.device_type();
+        let _ = dev.memory();
+    }
 }
 
 #[test]
