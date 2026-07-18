@@ -4,7 +4,6 @@
 //! synthesis with the user's tweak folded in.
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 

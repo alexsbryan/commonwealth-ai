@@ -4,7 +4,6 @@
 //! recalled memories, and emits a single non-streaming synthesis call.
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 

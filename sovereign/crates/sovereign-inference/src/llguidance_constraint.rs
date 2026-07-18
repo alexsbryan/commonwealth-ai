@@ -758,7 +758,7 @@ mod tests {
             TEST_SCHEMA,
         )
         .expect("constraint from schema");
-        let bytes = drive_to_completion(&mut c, &[b'}', b'"', b'a', b':', b'7', b'{'], 64);
+        let bytes = drive_to_completion(&mut c, b"}\"a:7{", 64);
         let text = String::from_utf8(bytes).expect("mask admitted non-UTF8");
         let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
             panic!(

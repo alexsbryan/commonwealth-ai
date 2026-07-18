@@ -5,7 +5,6 @@
 
 use crate::error::Result;
 use crate::slot_policy::Workload;
-use crate::traits::*;
 
 use super::super::*;
 

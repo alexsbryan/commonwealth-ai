@@ -605,9 +605,9 @@ async fn main() {
     // default model id; if installed, load it and wire it onto the
     // Runtime. Failures soft-fall-through to pure cosine + MMR.
     {
-        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
-            match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+        let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
+            match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
                 Ok(g) => {
                     let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
                     runtime_builder = runtime_builder.with_gliner(arc);

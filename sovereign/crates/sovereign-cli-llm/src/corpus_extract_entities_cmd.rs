@@ -21,7 +21,7 @@ use std::time::Instant;
 use corpus_engine::index::CorpusIndex;
 use sovereign_core::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::gliner_ner::{
+use sovereign_gliner::gliner_ner::{
     self, GlinerExtractor, DEFAULT_LABELS, DEFAULT_MODEL_ID, DEFAULT_THRESHOLD,
 };
 
@@ -314,7 +314,7 @@ struct Parsed {
 /// huggingface.co/onnx-community/<model_id>. Idempotent — skips
 /// files already present. Reports per-file progress.
 async fn run_download_model(model_id: &str) -> i32 {
-    use sovereign_tools::gliner_ner::{download_model, models_root};
+    use sovereign_gliner::gliner_ner::{download_model, models_root};
     let root = models_root().join(model_id);
     eprintln!("Downloading GliNER model '{model_id}' → {}", root.display());
     let last_pct = std::sync::Arc::new(std::sync::Mutex::new((String::new(), 0u8)));

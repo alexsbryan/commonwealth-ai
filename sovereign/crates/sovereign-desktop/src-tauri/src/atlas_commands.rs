@@ -443,9 +443,9 @@ pub struct GlinerModelStatus {
 
 #[tauri::command]
 pub async fn atlas_check_gliner_model() -> Result<GlinerModelStatus, String> {
-    let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string();
-    let installed = sovereign_tools::gliner_ner::probe_model_available(&model_id);
-    let expected_path = sovereign_tools::gliner_ner::models_root()
+    let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID.to_string();
+    let installed = sovereign_gliner::gliner_ner::probe_model_available(&model_id);
+    let expected_path = sovereign_gliner::gliner_ner::models_root()
         .join(&model_id)
         .display()
         .to_string();
@@ -469,7 +469,7 @@ pub async fn atlas_download_gliner_model(
 ) -> Result<(), String> {
     use tauri::Emitter;
     let model_id =
-        model_id.unwrap_or_else(|| sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string());
+        model_id.unwrap_or_else(|| sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID.to_string());
     let app_for_cb = app.clone();
     let on_progress = move |file: &str, downloaded: u64, total: u64| {
         let _ = app_for_cb.emit(
@@ -481,7 +481,7 @@ pub async fn atlas_download_gliner_model(
             }),
         );
     };
-    sovereign_tools::gliner_ner::download_model(&model_id, on_progress)
+    sovereign_gliner::gliner_ner::download_model(&model_id, on_progress)
         .await
         .map_err(|e| format!("atlas_download_gliner_model: {e}"))?;
     let _ = app.emit(

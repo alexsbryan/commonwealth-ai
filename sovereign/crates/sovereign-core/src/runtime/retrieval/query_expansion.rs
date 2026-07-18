@@ -689,7 +689,7 @@ pub(crate) async fn ppr_propose_and_gate(
             live_seeds.iter().map(|s| graph.neighbors(s, PPR_SEED_PULL)),
         )
         .await;
-        for (i, (s, nbrs)) in live_seeds.iter().zip(pulled.into_iter()).enumerate() {
+        for (i, (s, nbrs)) in live_seeds.iter().zip(pulled).enumerate() {
             for n in &nbrs {
                 if typed.len() >= PPR_TYPED_CAP {
                     break;
