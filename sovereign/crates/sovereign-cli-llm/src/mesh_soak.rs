@@ -45,6 +45,23 @@ pub struct NodeStatusView {
     /// pass against the sanity ceiling.
     #[serde(default)]
     pub fanout_inflight_current: usize,
+    /// Track W: this node's own founder reachability (relay-home + discovery
+    /// self-heal watchdog). Absent on non-iroh / older nodes → `None` → treated
+    /// as not-degraded (inert), so the reachability SLI is a no-op there.
+    #[serde(default)]
+    pub founder_reachability: Option<FounderReachabilityView>,
+}
+
+/// Minimal projection of `founder_reachability` for the soak's reachability SLI:
+/// is the founder's self-heal watchdog currently `degraded` (mid-recovery)?
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FounderReachabilityView {
+    #[serde(default)]
+    pub degraded: bool,
+    #[serde(default)]
+    pub relay_homed: bool,
+    #[serde(default)]
+    pub rebuilds: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -255,12 +272,28 @@ pub fn evaluate_invariants(
 // distils them into a few SLIs and gates each against a committed baseline
 // (direction + tolerance), the same shape as the `lane_baseline` quality gate.
 
+/// Addrs whose founder-reachability watchdog currently reports `degraded`
+/// (self-heal in progress / not yet recovered). A PERSISTENT non-empty set —
+/// captured across checkpoints by `founder_degraded_rate` — is the "self-heal
+/// isn't recovering" signal the soak gates on; transient degraded during a fast
+/// recovery keeps the rate low. `None`/unreachable status is not counted.
+pub fn founder_degraded_addrs(snapshots: &[NodeSnapshot]) -> Vec<String> {
+    snapshots
+        .iter()
+        .filter_map(|s| {
+            let fr = s.status.as_ref()?.founder_reachability.as_ref()?;
+            fr.degraded.then(|| s.addr.clone())
+        })
+        .collect()
+}
+
 /// Extract soak SLIs from the parsed findings lines. Pure + testable.
 /// Recognised line shapes (others — fault markers — are ignored):
-///   - invariant check: `{ "ok": bool, "violations": [...] }`
+///   - invariant check: `{ "ok": bool, "violations": [...], "founder_degraded": [...] }`
 ///   - load sample:     `{ "kind": "load", "latency_ms": N, "ok": bool }`
 pub fn soak_slis(lines: &[serde_json::Value]) -> BTreeMap<String, f64> {
     let (mut checks, mut check_fail, mut loads, mut load_ok) = (0u64, 0u64, 0u64, 0u64);
+    let mut founder_degraded_checks = 0u64;
     let mut latencies: Vec<f64> = Vec::new();
     for v in lines {
         if v.get("kind").and_then(|k| k.as_str()) == Some("load") {
@@ -275,6 +308,16 @@ pub fn soak_slis(lines: &[serde_json::Value]) -> BTreeMap<String, f64> {
             checks += 1;
             if !v.get("ok").and_then(|b| b.as_bool()).unwrap_or(true) {
                 check_fail += 1;
+            }
+            // Track W: a checkpoint where any node's founder self-heal is still
+            // `degraded`. Transient under chaos (fast recovery → low rate); a
+            // wedged self-heal that never recovers spikes it.
+            if v.get("founder_degraded")
+                .and_then(|a| a.as_array())
+                .map(|a| !a.is_empty())
+                .unwrap_or(false)
+            {
+                founder_degraded_checks += 1;
             }
         }
     }
@@ -305,6 +348,14 @@ pub fn soak_slis(lines: &[serde_json::Value]) -> BTreeMap<String, f64> {
     );
     m.insert("load_p50_ms".into(), pct(50.0));
     m.insert("load_p99_ms".into(), pct(99.0));
+    m.insert(
+        "founder_degraded_rate".into(),
+        if checks == 0 {
+            0.0
+        } else {
+            founder_degraded_checks as f64 / checks as f64
+        },
+    );
     m
 }
 
@@ -346,6 +397,15 @@ pub fn soak_slo_specs() -> &'static [SliSpec] {
             name: "load_p99_ms",
             dir: SliDir::LowerIsBetter,
             tolerance: 200.0,
+        },
+        // Track W: fraction of checkpoints where a founder's self-heal was still
+        // degraded. Self-heal is fast, so under reachability chaos this stays
+        // low; a self-heal that stops recovering (the regression this guards)
+        // ratchets it up past the tolerance.
+        SliSpec {
+            name: "founder_degraded_rate",
+            dir: SliDir::LowerIsBetter,
+            tolerance: 0.15,
         },
     ]
 }
@@ -411,6 +471,7 @@ mod tests {
             peer_inflight_current: 0,
             peer_inflight_ceiling: 0,
             fanout_inflight_current: 0,
+            founder_reachability: None,
         }
     }
     fn snap(addr: &str, v: NodeStatusView) -> NodeSnapshot {
@@ -422,6 +483,34 @@ mod tests {
     }
     fn live_set(ids: &[&str]) -> BTreeSet<String> {
         ids.iter().map(|s| s.to_string()).collect()
+    }
+    fn snap_reach(addr: &str, degraded: bool) -> NodeSnapshot {
+        let mut v = view(&[("n1", "online", true)], 1);
+        v.founder_reachability = Some(FounderReachabilityView {
+            degraded,
+            relay_homed: !degraded,
+            rebuilds: 0,
+        });
+        snap(addr, v)
+    }
+
+    #[test]
+    fn founder_degraded_addrs_and_reachability_sli() {
+        // Only the degraded node is reported; a node with no reachability data
+        // is inert (self-heal not applicable there).
+        let snaps = vec![snap_reach("a", true), snap_reach("b", false)];
+        assert_eq!(founder_degraded_addrs(&snaps), vec!["a".to_string()]);
+        assert!(founder_degraded_addrs(&[snap("c", view(&[], 0))]).is_empty());
+
+        // SLI: 1 of 2 check lines had a degraded founder → rate 0.5.
+        let lines = vec![
+            serde_json::json!({"ok": true, "violations": [], "founder_degraded": ["a:9741"]}),
+            serde_json::json!({"ok": true, "violations": [], "founder_degraded": []}),
+        ];
+        assert_eq!(soak_slis(&lines)["founder_degraded_rate"], 0.5);
+        // Inert 0.0 when older nodes emit no reachability field at all.
+        let none = vec![serde_json::json!({"ok": true, "violations": []})];
+        assert_eq!(soak_slis(&none)["founder_degraded_rate"], 0.0);
     }
 
     #[test]

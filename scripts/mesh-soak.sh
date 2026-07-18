@@ -85,6 +85,13 @@ DESKTOPS="${DESKTOPS:-0}"; DRIVER_MINUTES="${DRIVER_MINUTES:-}"
 # dial by key over gossiped `iroh_direct_addrs` (127.0.0.1), which is exactly
 # the LAN-without-internet iroh path. See TRANSPORT_MIGRATION.md W3.
 SOAK_IROH="${SOAK_IROH:-0}"
+# --reachability-chaos (SOAK_REACH_CHAOS): the founder-reachability self-heal
+# axis (Track W). Each node boots with a fast watchdog + the periodic chaos hook
+# (SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS), injecting reachability wedges; the
+# invariant checker records each node's `founder_reachability.degraded` and the
+# `founder_degraded_rate` SLI (baseline-gated) asserts self-heal keeps recovering
+# them. Implies --iroh (the watchdog only runs when the iroh endpoint is up).
+SOAK_REACH_CHAOS="${SOAK_REACH_CHAOS:-0}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --nodes)    NODES="$2"; shift 2;;
@@ -93,6 +100,7 @@ while [ $# -gt 0 ]; do
     --workload) WORKLOAD="$2"; shift 2;;
     --with-desktops) DESKTOPS=1; shift;;
     --iroh)     SOAK_IROH=1; shift;;
+    --reachability-chaos) SOAK_REACH_CHAOS=1; SOAK_IROH=1; shift;;
     --driver-minutes) DRIVER_MINUTES="$2"; shift 2;;
     --keep)     KEEP=1; shift;;
     --gate)     GATE=1; shift;;
@@ -105,13 +113,15 @@ case "$WORKLOAD" in crash|ingest|corrupt) ;; *) echo "bad --workload: $WORKLOAD 
 # splices verbatim. Accept the usual truthy spellings so `SOAK_IROH=true` and
 # `--iroh` and `SOAK_IROH=1` all mean the same thing.
 case "$SOAK_IROH" in 1|true|yes|on) IROH_ON=1; IROH_TOML=true;; *) IROH_ON=0; IROH_TOML=false;; esac
+case "$SOAK_REACH_CHAOS" in 1|true|yes|on) REACH_CHAOS=1;; *) REACH_CHAOS=0;; esac
 
 # ── Re-exec into a fresh rootless netns (loopback up) for the local backend ────
 if [ "$BACKEND" = "local" ] && [ -z "${MESH_SOAK_IN_NETNS:-}" ]; then
   exec unshare -rn env MESH_SOAK_IN_NETNS=1 \
     NODES="$NODES" MINUTES="$MINUTES" SEED="$SEED" KEEP="$KEEP" GATE="$GATE" \
     MESH_SOAK_BACKEND="$BACKEND" WORKLOAD="$WORKLOAD" \
-    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" SOAK_IROH="$SOAK_IROH" bash "$0"
+    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" SOAK_IROH="$SOAK_IROH" \
+    SOAK_REACH_CHAOS="$SOAK_REACH_CHAOS" bash "$0"
 fi
 [ "$BACKEND" = "local" ] && ip link set lo up
 
@@ -216,7 +226,12 @@ EOF
   # smoke run.
   local rust_log=""
   [ "$IROH_ON" = 1 ] && rust_log="RUST_LOG=sovereign_cli_daemon=info,sovereign_mesh=info,transport=debug"
-  env $rust_log "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
+  # Reachability self-heal axis (--reachability-chaos): a fast watchdog + the
+  # periodic chaos wedge, so the founder_degraded_rate SLI observes real
+  # detect→escalate→rebuild→recover cycles under the soak.
+  local reach_env=""
+  [ "$REACH_CHAOS" = 1 ] && reach_env="SOVEREIGN_MESH_WATCHDOG_POLL_SECS=5 SOVEREIGN_MESH_WATCHDOG_GRACE_SECS=8 SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS=20 SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS=45"
+  env $rust_log $reach_env "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
   PIDS[$i]=$!
 }
 wait_port() { local i="$1" _; for _ in $(seq 1 40); do

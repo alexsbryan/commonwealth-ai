@@ -221,6 +221,10 @@ async fn cmd_check_invariants(args: &[String]) -> i32 {
             .filter(|s| s.status.is_none())
             .map(|s| s.addr.as_str())
             .collect();
+        // Track W: nodes whose founder self-heal is currently degraded (soft
+        // signal — transient under reachability chaos, gated by the
+        // `founder_degraded_rate` SLI, NOT a hard invariant `ok` failure).
+        let founder_degraded = crate::mesh_soak::founder_degraded_addrs(&snapshots);
         let line = serde_json::json!({
             "nodes": nodes,
             "unreachable": unreachable,
@@ -229,6 +233,7 @@ async fn cmd_check_invariants(args: &[String]) -> i32 {
                 .map(|v| serde_json::json!({ "invariant": v.invariant, "detail": v.detail }))
                 .collect::<Vec<_>>(),
             "ok": violations.is_empty(),
+            "founder_degraded": founder_degraded,
         });
         println!("{line}");
     } else {
