@@ -332,7 +332,7 @@ pub async fn mesh_rotate_invite(
     })
 }
 
-/// Leave the current mesh and stop the daemon.
+/// Leave the current mesh and return the node to a fresh solo mesh.
 #[tauri::command]
 pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     if let Some(port) = attached_port(&state) {
@@ -352,10 +352,14 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let Some(mesh) = state.mesh.as_ref() else {
         return Err("mesh daemon not available".into());
     };
-    // User clicked "Leave" — clear persisted mesh state. Distinct
-    // from the daemon's graceful shutdown path which uses
-    // `daemon.shutdown()` to PRESERVE state across restarts.
-    mesh.leave().await.map_err(|e| e.to_string())
+    // User clicked "Leave" — leave the current mesh AND re-create a fresh
+    // solo mesh in-process (rebinding the client API) so the embedded
+    // daemon stays reachable, exactly like the Attach-mode HTTP path.
+    // Uses `leave_to_solo`, NOT the bare `leave()` (which only tears down
+    // and is reserved for `join_mesh`'s mesh-switch auto-leave), and NOT
+    // `daemon.shutdown()` (the graceful process-exit path that PRESERVES
+    // state).
+    mesh.leave_to_solo().await.map_err(|e| e.to_string())
 }
 
 // ── Diagnostics ──────────────────────────────────────────

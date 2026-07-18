@@ -1,0 +1,89 @@
+# Integration surfaces
+
+Which parts of this system are contracts you can build against, and
+which are internals that happen to be visible. Read this before
+writing an integration — it exists so you don't spend a day on a
+surface that was never meant to hold your weight.
+
+## Build on these
+
+**OpenAI-compatible inference API** — `:9741` serves
+`POST /v1/chat/completions`, `POST /v1/responses` (the OpenAI
+Responses dialect), `POST /v1/embeddings`, and `GET /v1/models`. Any
+OpenAI-SDK client works. Non-loopback callers need a bearer token
+(`[daemon] client_token`).
+
+**Ollama-native shim** — the same port serves `/api/chat`,
+`/api/generate`, `/api/tags`, and friends, so Ollama-native clients
+(Open WebUI's Ollama mode, IDE plugins) connect unmodified. One
+caveat in v1: `chat`/`generate` compute the full answer and frame it
+as a single NDJSON turn — incremental streaming is a tracked
+follow-up.
+
+**MCP server** — `POST :9741/mcp` (JSON-RPC 2.0, Streamable HTTP,
+with the legacy HTTP+SSE path at `/mcp/message`). Negotiates protocol
+revisions 2025-06-18, 2025-03-26, and 2024-11-05, and accepts batch
+requests. Tools only — no resources or prompts yet — and deliberately
+loopback-only: it exposes local dev tooling, not a remote service.
+
+**OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
+spec ([commonwealth/docs/oicp-v0.4.md](../commonwealth/docs/oicp-v0.4.md),
+v0.3 as fallback) is CC0 — implement it freely on either side.
+`commonwealth/crates/oicp-conformance` is a standalone certifier you
+can lift wholesale to test your own implementation.
+
+**Recipes** — the corpus-ingestion TOML format. The schema reference
+([sovereign-recipes/SCHEMA.md](../sovereign-recipes/SCHEMA.md)) is
+generated from the code and test-gated, and the loader keeps old
+recipes working by convention (serde defaults, aliases, versioned
+opt-ins). Start from
+[sovereign-recipes/GETTING_STARTED.md](../sovereign-recipes/GETTING_STARTED.md).
+
+**Corpus snapshots** — `.tar.zst` archives with a versioned manifest
+(`_snapshot_manifest.json`); restore refuses on embedding-model
+mismatch rather than corrupting silently. Prebuilt corpora ship the
+same way via the recipe `[prebuilt]` block from Hugging Face.
+
+**Mesh apps** — corpus-explorer web apps running in the desktop. The
+contract is the `window.meshApp` bridge plus a `meshapp.json`
+manifest; see
+[sovereign/docs/MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md)
+and copy a shipped example.
+
+**CLI scripting** — `sovereign tools call <id> --format json` is the
+stable machine-readable path (stdout stays clean; logs go to stderr).
+Other commands print for humans unless they document a `--format
+json` of their own — don't parse human output.
+
+## Internal — no compatibility promise
+
+**`:9742` and everything under `/internal/*`.** The mesh-internal
+API is perimeter-trusted plaintext: no per-request auth, by design,
+on the assumption it rides a private network or WireGuard/Tailscale
+overlay (see [THREAT_MODEL.md](./THREAT_MODEL.md)). Its routes and
+wire shapes change without notice.
+
+**Gossip and join wire types.** Serde structs, not a published
+protocol. A non-Sovereign node can't speak the mesh today; if you
+want to build one, open an issue first — the OICP treatment (spec +
+conformance) is the intended path for anything that graduates.
+
+**The `~/.sovereign/` directory layout**, beyond what the snapshot
+manifest documents.
+
+## Experimental — here today, different tomorrow
+
+**iroh encrypted transport** (`cwth/http/0` ALPNs) — feature-gated,
+excluded from default builds.
+
+**The desktop command bridge on `:9745`** — a debug-build-only,
+env-gated Playwright test harness. It must never ship enabled in a
+release binary and is not an integration point, however much it
+looks like one.
+
+---
+
+If the surface you need isn't here, say so — see
+[CONTRIBUTING.md](../CONTRIBUTING.md). An issue describing what you're
+trying to integrate is the fastest way to get a surface promoted from
+internal to contract.

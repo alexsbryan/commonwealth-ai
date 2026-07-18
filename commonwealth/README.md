@@ -18,7 +18,7 @@ The trust model is social rather than cryptographic: you join a mesh because som
 - `commonwealth-transport` — the PeerTransport seam, mapping a (peer, traffic class) to endpoints; IP today, iroh-ready.
 - `commonwealth-discovery` — mDNS, gossip, latency probing, hardware detection, TLS, mesh peering.
 - `commonwealth-inference` — scheduling and orchestration: which model runs where, and the process lifecycle around it.
-- `commonwealth-api` — the HTTP servers: client-facing on 9741, internal mTLS on 9742.
+- `commonwealth-api` — the HTTP servers: client-facing on 9741 (bearer token for non-loopback callers), internal on 9742 (no per-request auth — perimeter-trusted, meant to ride a private network or WireGuard/Tailscale overlay).
 - `commonwealth-knowledge` — corpus-engine integration: install, shard, and search corpora across the mesh.
 - `commonwealth-app` — the mesh-app platform: manifests, lifecycle, registry, proxy.
 - `commonwealth-state` — MeshStore, a gossip-replicated SQLite key-value store with TTL-based GC.

@@ -705,25 +705,14 @@ async fn wait_for_ready(timeout: std::time::Duration) -> bool {
     }
     false
 }
-/// What ended the daemon's run loop. Determines the process exit code,
-/// which is how we tell launchd (`KeepAlive.SuccessfulExit=false`) /
-/// systemd (`Restart=on-failure`) whether to relaunch us.
-pub(super) enum ShutdownTrigger {
-    /// SIGINT/SIGTERM — a deliberate stop (`svrn daemon stop`, launchd
-    /// bootout, Ctrl-C). Exit 0 → the service manager leaves us down.
-    Signal,
-    /// The user left the mesh via `POST /v1/mesh/leave`. Exit non-zero
-    /// so the service manager relaunches us — the fresh process boots
-    /// into a solo mesh because `leave()` already cleared persistence.
-    LeaveRelaunch,
-}
-
-/// Wait for SIGINT (Ctrl-C), SIGTERM (systemd/launchd shutdown), or a
-/// user-initiated mesh-leave. Returns which one arrived so the caller
-/// can pick the exit code that drives (or suppresses) a relaunch.
-pub(super) async fn wait_for_shutdown(
-    daemon: &std::sync::Arc<sovereign_mesh::EmbeddedDaemon>,
-) -> ShutdownTrigger {
+/// Wait for SIGINT (Ctrl-C) or SIGTERM (systemd/launchd shutdown) — the
+/// only triggers that end the daemon's run loop. A user-initiated mesh
+/// leave no longer exits the process: `POST /v1/mesh/leave` re-creates a
+/// solo mesh in-process (`EmbeddedDaemon::leave_to_solo`, rebinding `:9741`)
+/// so there's nothing to relaunch. Both signals are a deliberate stop →
+/// exit 0; the RSS-hard-limit self-exit in `shutdown_daemon` is the only
+/// path that asks the service manager for a relaunch.
+pub(super) async fn wait_for_shutdown() {
     // Glassbox: shutdown forensics. A 2026-05-20 incident left the
     // daemon abort-crashing in ggml-metal's `__cxa_finalize_ranges`
     // path with no breadcrumb naming the trigger — was it SIGINT
@@ -750,57 +739,22 @@ pub(super) async fn wait_for_shutdown(
                         error = %e,
                         "sigterm handler install failed — falling back to SIGINT-only"
                     );
-                    return tokio::select! {
-                        _ = tokio::signal::ctrl_c() => {
-                            log_shutdown_context("SIGINT", "fallback");
-                            ShutdownTrigger::Signal
-                        }
-                        _ = daemon.leave_relaunch_requested() => {
-                            log_leave_relaunch();
-                            ShutdownTrigger::LeaveRelaunch
-                        }
-                    };
+                    tokio::signal::ctrl_c().await.ok();
+                    log_shutdown_context("SIGINT", "fallback");
+                    return;
                 }
             };
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                log_shutdown_context("SIGINT", "primary");
-                ShutdownTrigger::Signal
-            }
-            _ = sigterm.recv() => {
-                log_shutdown_context("SIGTERM", "primary");
-                ShutdownTrigger::Signal
-            }
-            _ = daemon.leave_relaunch_requested() => {
-                log_leave_relaunch();
-                ShutdownTrigger::LeaveRelaunch
-            }
+            _ = tokio::signal::ctrl_c() => log_shutdown_context("SIGINT", "primary"),
+            _ = sigterm.recv() => log_shutdown_context("SIGTERM", "primary"),
         }
     }
 
     #[cfg(not(unix))]
     {
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                tracing::info!(signal = "ctrl_c", "daemon: shutdown signal received");
-                ShutdownTrigger::Signal
-            }
-            _ = daemon.leave_relaunch_requested() => {
-                log_leave_relaunch();
-                ShutdownTrigger::LeaveRelaunch
-            }
-        }
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!(signal = "ctrl_c", "daemon: shutdown signal received");
     }
-}
-
-/// Glassbox breadcrumb for the leave-relaunch exit path — mirrors
-/// `log_shutdown_context` so `grep "left the mesh"` walks the trail.
-fn log_leave_relaunch() {
-    tracing::info!(
-        pid = std::process::id(),
-        "daemon: user left the mesh via /v1/mesh/leave — exiting for \
-         relaunch into a fresh solo mesh (service manager will restart us)"
-    );
 }
 
 /// One-line shutdown-receipt log with forensic context. Field names

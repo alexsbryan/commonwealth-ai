@@ -403,18 +403,18 @@
     showLeaveConfirm = false;
   }
 
-  /** Poll `:9741` until the daemon answers again, then refresh. Leaving
-   *  a mesh makes the standalone daemon exit so the service manager
-   *  relaunches it into a fresh solo mesh — a bounded window (~10-20s)
-   *  where every mesh call fails at the transport layer. Treat those
-   *  throws as "still restarting" and keep waiting; only give up after
-   *  `timeoutMs`. `meshIsRunning()` succeeding (even returning false)
-   *  proves the daemon is serving again, so it's our readiness probe. */
+  /** Poll `:9741` until the daemon answers again, then refresh. Leaving a
+   *  mesh re-creates a solo mesh IN-PROCESS (`leave_to_solo` rebinds :9741,
+   *  no restart), so there's only a brief (~1s) window where mesh calls fail
+   *  at the transport layer while the client API rebinds. Treat those throws
+   *  as "still reconnecting" and keep waiting; only give up after `timeoutMs`.
+   *  A successful `refresh()` (which fetches mesh state over :9741) proves the
+   *  solo mesh is serving again, so it's our readiness probe. */
   async function waitForDaemonAndRefresh(timeoutMs = 45000): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
-    // Small head start: the daemon flushes the 204 and then takes a beat
-    // to drop its listener, so an immediate probe can spuriously succeed
-    // against the still-closing old process.
+    // Small head start: the daemon flushes the 204, then a detached task
+    // waits a beat before tearing down and rebinding, so an immediate probe
+    // can spuriously succeed against the still-live pre-teardown listener.
     await new Promise((r) => setTimeout(r, 800));
     while (Date.now() < deadline) {
       try {
@@ -435,9 +435,9 @@
     try {
       await meshLeave();
       showLeaveConfirm = false;
-      // The daemon is exiting to relaunch clean. Show a reconnecting
-      // state and poll through the outage rather than flashing a hard
-      // "Failed to load mesh state" the instant :9741 goes away.
+      // The daemon re-solos in-process (no restart). Show a reconnecting
+      // state and poll through the brief :9741 rebind window rather than
+      // flashing a hard "Failed to load mesh state" the instant it blips.
       running = false;
       meshState = null;
       reconnecting = true;

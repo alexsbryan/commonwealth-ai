@@ -4,8 +4,9 @@
 //! Exposes Sovereign's Code Intelligence tools to any MCP-compatible
 //! coding agent (Claude Code, Cursor, Cline, OmO, …) at:
 //!
-//! - `POST /mcp`          initialize handshake (JSON-RPC 2.0)
-//! - `POST /mcp/message`  tool discovery + invocation
+//! - `POST /mcp`          full JSON-RPC 2.0 surface (initialize, tools/*,
+//!                        ping, notifications) — the Streamable-HTTP path
+//! - `POST /mcp/message`  same surface at the legacy HTTP+SSE path
 //! - `GET  /mcp`          SSE keep-alive stream (MCP requires one; v1
 //!                        emits no server-initiated notifications)
 //!
@@ -50,6 +51,8 @@ pub struct JsonRpcRequest {
     #[allow(dead_code)]
     #[serde(default)]
     pub jsonrpc: String,
+    /// Absent (→ `Null`) for JSON-RPC notifications, which get no reply.
+    #[serde(default)]
     pub id: Value,
     pub method: String,
     #[serde(default)]
@@ -112,8 +115,8 @@ impl JsonRpcResponse {
 /// routes don't want API keys, they want localhost addresses.
 pub fn mcp_router() -> Router {
     Router::new()
-        .route("/mcp", post(mcp_initialize).get(mcp_sse))
-        .route("/mcp/message", post(mcp_message))
+        .route("/mcp", post(mcp_post).get(mcp_sse))
+        .route("/mcp/message", post(mcp_post))
         .route("/mcp/stats", axum::routing::get(mcp_stats))
 }
 
@@ -126,15 +129,22 @@ fn is_localhost(addr: &SocketAddr) -> bool {
 
 // ─── Handlers ─────────────────────────────────────────────────
 
-async fn mcp_initialize(
+/// Single JSON-RPC handler for both `POST /mcp` (Streamable HTTP) and
+/// `POST /mcp/message` (legacy HTTP+SSE). Accepts a single request
+/// object or a batch array (batches are a MUST in the 2025-03-26 MCP
+/// revision; removed again in 2025-06-18, so we take either).
+/// Notifications (requests without an `id`) receive an empty 202.
+async fn mcp_post(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Json(req): Json<JsonRpcRequest>,
+    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tdd): Extension<crate::routes_tdd::TddState>,
+    Json(body): Json<Value>,
 ) -> impl IntoResponse {
     if !is_localhost(&peer) {
         return (
             StatusCode::FORBIDDEN,
             Json(JsonRpcResponse::error(
-                req.id,
+                Value::Null,
                 -32001,
                 "MCP is local-only — remote access is refused",
             )),
@@ -142,24 +152,86 @@ async fn mcp_initialize(
             .into_response();
     }
 
-    let session_id = generate_session_id(&req.params);
-    let result = serde_json::json!({
-        "protocolVersion": "2024-11-05",
-        "capabilities": {
-            "tools": {}
+    match body {
+        Value::Array(items) => {
+            // JSON-RPC batch. An empty array is invalid per the spec.
+            if items.is_empty() {
+                return (
+                    StatusCode::OK,
+                    Json(JsonRpcResponse::error(Value::Null, -32600, "empty batch")),
+                )
+                    .into_response();
+            }
+            let mut responses = Vec::new();
+            for item in items {
+                match serde_json::from_value::<JsonRpcRequest>(item) {
+                    Ok(req) => {
+                        if let Some(response) = dispatch_one(req, &runtime, &tdd).await {
+                            responses.push(response);
+                        }
+                    }
+                    Err(_) => responses.push(JsonRpcResponse::error(
+                        Value::Null,
+                        -32600,
+                        "invalid request",
+                    )),
+                }
+            }
+            if responses.is_empty() {
+                // All notifications — nothing to reply with.
+                StatusCode::ACCEPTED.into_response()
+            } else {
+                (StatusCode::OK, Json(responses)).into_response()
+            }
+        }
+        single => match serde_json::from_value::<JsonRpcRequest>(single) {
+            Ok(req) => match dispatch_one(req, &runtime, &tdd).await {
+                Some(response) => (StatusCode::OK, Json(response)).into_response(),
+                None => StatusCode::ACCEPTED.into_response(),
+            },
+            Err(_) => (
+                StatusCode::OK,
+                Json(JsonRpcResponse::error(Value::Null, -32600, "invalid request")),
+            )
+                .into_response(),
         },
-        "serverInfo": {
-            "name": "svrnmesh",
-            "version": env!("CARGO_PKG_VERSION")
-        },
-        "sessionId": session_id
-    });
+    }
+}
 
-    (
-        StatusCode::OK,
-        Json(JsonRpcResponse::result(req.id, result)),
-    )
-        .into_response()
+/// Dispatch one JSON-RPC request. Returns `None` for notifications
+/// (requests without an `id`) — per JSON-RPC 2.0 they get no reply.
+async fn dispatch_one(
+    req: JsonRpcRequest,
+    runtime: &Arc<Runtime>,
+    tdd: &crate::routes_tdd::TddState,
+) -> Option<JsonRpcResponse> {
+    if req.id.is_null() {
+        tracing::debug!(method = %req.method, "mcp: notification received");
+        return None;
+    }
+    let id = req.id.clone();
+    Some(match req.method.as_str() {
+        "initialize" => {
+            let session_id = generate_session_id(&req.params);
+            let result = serde_json::json!({
+                "protocolVersion":
+                    sovereign_tools::mcp_surface::negotiate_mcp_protocol_version(
+                        req.params.as_ref(),
+                    ),
+                "capabilities": { "tools": {} },
+                "serverInfo": {
+                    "name": "svrnmesh",
+                    "version": env!("CARGO_PKG_VERSION")
+                },
+                "sessionId": session_id
+            });
+            JsonRpcResponse::result(id, result)
+        }
+        "tools/list" => handle_tools_list_with_tdd(&runtime.tools, id),
+        "tools/call" => handle_tools_call_with_tdd(&runtime.tools, tdd, req.params, id).await,
+        "ping" => JsonRpcResponse::result(id, serde_json::json!({})),
+        other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
+    })
 }
 
 /// Generate a session ID that encodes the username for cross-session note attribution.
@@ -212,49 +284,6 @@ async fn mcp_sse(
     // idle connections don't get dropped by intermediaries.
     let s = stream::pending::<Result<Event, std::convert::Infallible>>();
     Ok(Sse::new(s).keep_alive(KeepAlive::default()))
-}
-
-async fn mcp_message(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(tdd): Extension<crate::routes_tdd::TddState>,
-    Json(req): Json<JsonRpcRequest>,
-) -> impl IntoResponse {
-    if !is_localhost(&peer) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(JsonRpcResponse::error(
-                req.id,
-                -32001,
-                "MCP is local-only — remote access is refused",
-            )),
-        )
-            .into_response();
-    }
-
-    let id = req.id.clone();
-    let response = match req.method.as_str() {
-        "tools/list" => handle_tools_list_with_tdd(&runtime.tools, id),
-        "tools/call" => handle_tools_call_with_tdd(&runtime.tools, &tdd, req.params, id).await,
-        "initialize" => {
-            // Some clients send initialize as a regular message rather
-            // than via the POST /mcp handshake. Accept both.
-            let session_id = generate_session_id(&req.params);
-            let result = serde_json::json!({
-                "protocolVersion": "2024-11-05",
-                "capabilities": { "tools": {} },
-                "serverInfo": {
-                    "name": "svrnmesh",
-                    "version": env!("CARGO_PKG_VERSION")
-                },
-                "sessionId": session_id
-            });
-            JsonRpcResponse::result(id, result)
-        }
-        other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
-    };
-
-    (StatusCode::OK, Json(response)).into_response()
 }
 
 // ─── GET /mcp/stats ───────────────────────────────────────────

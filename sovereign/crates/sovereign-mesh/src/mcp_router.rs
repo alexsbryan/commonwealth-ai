@@ -95,7 +95,9 @@ fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
 // standalone `sovereign serve` HTTP module agree on exactly the
 // same surface. See that module for the full contract; this file
 // just imports the helpers.
-use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
+use sovereign_tools::mcp_surface::{
+    is_mcp_exposed, negotiate_mcp_protocol_version, render_tools_list_gated, resolve_alias,
+};
 
 /// Phase 5 feature-root extension. When set, `tools/list` calls
 /// [`render_tools_list_gated`] with this path so spec-gated tools
@@ -328,8 +330,10 @@ async fn mcp_sse(
 }
 
 /// Single JSON-RPC handler for both `/mcp` and `/mcp/message`.
-/// Notifications (requests without an `id`) receive an empty 204 response
-/// — per JSON-RPC 2.0, notifications have no reply.
+/// Notifications (requests without an `id`) receive an empty 202 response
+/// — per JSON-RPC 2.0, notifications have no reply. Accepts both a single
+/// request object and a batch array (batches are a MUST in the 2025-03-26
+/// MCP revision; removed again in 2025-06-18, so we take either).
 async fn mcp_handle(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(tools): Extension<Arc<ToolRegistry>>,
@@ -341,13 +345,16 @@ async fn mcp_handle(
         Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
     >,
     headers: axum::http::HeaderMap,
-    Json(req): Json<JsonRpcRequest>,
+    Json(body): Json<Value>,
 ) -> axum::response::Response {
     if !is_localhost(&peer) {
-        let id = req.id.clone().unwrap_or(Value::Null);
         return (
             StatusCode::FORBIDDEN,
-            Json(JsonRpcResponse::err(id, -32001, "MCP is local-only")),
+            Json(JsonRpcResponse::err(
+                Value::Null,
+                -32001,
+                "MCP is local-only",
+            )),
         )
             .into_response();
     }
@@ -364,20 +371,75 @@ async fn mcp_handle(
         .map(|s| s.to_string())
         .unwrap_or_else(|| format!("conn:{}", session_id.as_str()));
 
-    match dispatch(
-        req,
-        tools,
-        logger,
-        session_id,
-        call_counter,
-        feature_root,
-        pattern_matcher,
-        agent_session_token,
-    )
-    .await
-    {
-        Some(response) => (StatusCode::OK, Json(response)).into_response(),
-        None => StatusCode::NO_CONTENT.into_response(),
+    match body {
+        Value::Array(items) => {
+            // JSON-RPC batch. An empty array is invalid per the spec.
+            if items.is_empty() {
+                return (
+                    StatusCode::OK,
+                    Json(JsonRpcResponse::err(Value::Null, -32600, "empty batch")),
+                )
+                    .into_response();
+            }
+            let mut responses = Vec::new();
+            for item in items {
+                match serde_json::from_value::<JsonRpcRequest>(item) {
+                    Ok(req) => {
+                        if let Some(response) = dispatch(
+                            req,
+                            Arc::clone(&tools),
+                            Arc::clone(&logger),
+                            Arc::clone(&session_id),
+                            Arc::clone(&call_counter),
+                            feature_root.clone(),
+                            Arc::clone(&pattern_matcher),
+                            agent_session_token.clone(),
+                        )
+                        .await
+                        {
+                            responses.push(response);
+                        }
+                    }
+                    Err(_) => responses.push(JsonRpcResponse::err(
+                        Value::Null,
+                        -32600,
+                        "invalid request",
+                    )),
+                }
+            }
+            if responses.is_empty() {
+                // All notifications — nothing to reply with.
+                StatusCode::ACCEPTED.into_response()
+            } else {
+                (StatusCode::OK, Json(responses)).into_response()
+            }
+        }
+        single => match serde_json::from_value::<JsonRpcRequest>(single) {
+            Ok(req) => match dispatch(
+                req,
+                tools,
+                logger,
+                session_id,
+                call_counter,
+                feature_root,
+                pattern_matcher,
+                agent_session_token,
+            )
+            .await
+            {
+                Some(response) => (StatusCode::OK, Json(response)).into_response(),
+                None => StatusCode::ACCEPTED.into_response(),
+            },
+            Err(_) => (
+                StatusCode::OK,
+                Json(JsonRpcResponse::err(
+                    Value::Null,
+                    -32600,
+                    "invalid request",
+                )),
+            )
+                .into_response(),
+        },
     }
 }
 
@@ -397,7 +459,7 @@ async fn dispatch(
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
     // method (e.g. `notifications/initialized`) so the client doesn't see
-    // an error. Return None so the handler sends 204 No Content.
+    // an error. Return None so the handler sends 202 Accepted.
     let Some(id) = req.id else {
         tracing::debug!(method = %req.method, "mcp: notification received");
         return None;
@@ -411,7 +473,7 @@ async fn dispatch(
             // server-pushed notification we now emit on spec
             // create/modify/remove.
             let result = serde_json::json!({
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": negotiate_mcp_protocol_version(req.params.as_ref()),
                 "capabilities": {
                     "tools": { "listChanged": true }
                 },
