@@ -26,12 +26,22 @@
     <key>RunAtLoad</key>
     <true/>
 
-    <!-- Auto-restart if the daemon exits with a non-zero status (crash). -->
+    <!-- Auto-restart if the daemon exits with a non-zero status (crash).
+         The daemon's own memory watch (RAM-derived limits, default ON —
+         DAEMON_RESILIENCE.md P0.3) exits 102 on RSS-hard-limit breach to
+         request exactly this relaunch. launchd's default ThrottleInterval
+         (10s) spaces respawns; there is no StartLimitBurst equivalent, so
+         a boot-crashing daemon relaunches every ~10s until unloaded. -->
     <key>KeepAlive</key>
     <dict>
         <key>SuccessfulExit</key>
         <false/>
     </dict>
+
+    <!-- SIGKILL grace after SIGTERM at unload: graceful drain takes well
+         under 30s; past that the daemon is wedged. -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
 
     <key>StandardOutPath</key>
     <string>{DATA_DIR}/logs/daemon.log</string>

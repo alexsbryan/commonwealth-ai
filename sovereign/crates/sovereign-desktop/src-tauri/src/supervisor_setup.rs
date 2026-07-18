@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri-side wiring for the daemon supervisor (see `crate::supervisor`).
 //!
-//! Engaged when [`is_enabled`] returns true (`SOVEREIGN_USE_SUPERVISOR=1`) — an
-//! opt-in dogfood path, default off. When engaged, the desktop's Local-mode
-//! boot does NOT construct an in-process `EmbeddedDaemon` — it spawns
-//! `sovereign-cli daemon run` as a child and talks to it over HTTP using the
-//! existing Attach-mode plumbing. This also protects the Tauri UI from
-//! process-level ggml/llama.cpp crashes: when the daemon dies, the supervisor
-//! surfaces a `supervisor-state` event the frontend can render as a Reconnect
-//! banner.
+//! **Default ON since the W1 flip** (DAEMON_RESILIENCE.md P0.1,
+//! 2026-07-18; formerly opt-in via `SOVEREIGN_USE_SUPERVISOR=1`).
+//! When engaged, the desktop's Local-mode boot does NOT construct an
+//! in-process `EmbeddedDaemon` — it spawns the daemon as a child
+//! (`current_exe() --daemon-child`, the desktop binary re-entering as a
+//! headless daemon) and talks to it over HTTP using the existing
+//! Attach-mode plumbing. This protects the Tauri UI from process-level
+//! ggml/llama.cpp crashes: when the daemon dies, the supervisor
+//! surfaces a `supervisor-state` event the frontend renders as a
+//! Reconnect banner, and restarts the child behind it. Opt-outs in
+//! [`is_enabled`].
 //!
 //! This module owns the Tauri-side surface — binary-path resolution,
 //! event forwarding, the startup wait — so `supervisor.rs` itself
@@ -23,37 +26,56 @@ use tracing::{info, warn};
 
 use crate::supervisor::{Supervisor, SupervisorConfig, SupervisorState};
 
-/// `SOVEREIGN_USE_SUPERVISOR=1` (or any truthy value) opts this
-/// process into the supervised path. Default off — PR-2 dogfood is
-/// explicitly env-gated.
+/// Supervised child-process mode is the DEFAULT (DAEMON_RESILIENCE.md
+/// P0.1 — the W1 flip, 2026-07-18). Two opt-outs:
+///
+/// - `SOVEREIGN_USE_SUPERVISOR=0` (or `false`) — the kill-switch back
+///   to the in-process `EmbeddedDaemon`. (`=1`/`true`, the old opt-IN
+///   spelling, is accepted and redundant.)
+/// - `SOVEREIGN_FORCE_LOCAL=1` — its documented meaning is "THIS
+///   process runs the weights" (the real-mode desktop harnesses and
+///   the run-local-while-a-daemon-is-up power case), which a child
+///   daemon would contradict.
 pub fn is_enabled() -> bool {
-    std::env::var("SOVEREIGN_USE_SUPERVISOR")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    if std::env::var("SOVEREIGN_FORCE_LOCAL").is_ok_and(|v| v == "1") {
+        return false;
+    }
+    !std::env::var("SOVEREIGN_USE_SUPERVISOR")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
         .unwrap_or(false)
 }
 
-/// Locate the `sovereign-cli` binary. Probes in order:
-/// 1. `SOVEREIGN_CLI_PATH` env override.
-/// 2. Next to the running desktop binary — `tauri dev` puts the cli
-///    binary alongside the desktop binary under the same workspace
-///    target dir. (A packaged build would need the cli bundled as a
-///    Tauri sidecar — not wired; this path is dev/opt-in only.)
-fn resolve_sovereign_cli() -> Option<PathBuf> {
+/// What to spawn as the daemon child.
+struct SpawnSpec {
+    binary: PathBuf,
+    args: Vec<String>,
+}
+
+/// Resolve the daemon child to spawn. Probes in order:
+/// 1. `SOVEREIGN_CLI_PATH` env override → `<path> daemon run`
+///    (dev/dogfood: point at a CLI build).
+/// 2. **This very binary** with `--daemon-child` — the packaged-app
+///    path. `main.rs` detects the flag before Tauri init and calls
+///    `sovereign_cli_daemon::daemon_child_main()`, so the child is the
+///    real daemon with zero extra bundle bytes (no sidecar).
+///
+/// `None` only when `current_exe()` itself fails — effectively never;
+/// the caller surfaces it loudly rather than silently degrading.
+fn resolve_daemon_child() -> Option<SpawnSpec> {
     if let Ok(env_path) = std::env::var("SOVEREIGN_CLI_PATH") {
         let p = PathBuf::from(env_path);
         if p.exists() {
-            return Some(p);
+            return Some(SpawnSpec {
+                binary: p,
+                args: vec!["daemon".into(), "run".into()],
+            });
         }
     }
     let exe = std::env::current_exe().ok()?;
-    let parent = exe.parent()?;
-    for name in &["sovereign-cli", "sovereign-cli.exe"] {
-        let candidate = parent.join(name);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-    None
+    Some(SpawnSpec {
+        binary: exe,
+        args: vec!["--daemon-child".into()],
+    })
 }
 
 /// If supervised mode is requested AND the bootstrap probe returned
@@ -89,13 +111,12 @@ pub async fn maybe_start(
         return (mode, None);
     }
 
-    let binary = match resolve_sovereign_cli() {
-        Some(p) => p,
+    let spec = match resolve_daemon_child() {
+        Some(s) => s,
         None => {
-            warn!(
-                "SOVEREIGN_USE_SUPERVISOR=1 but sovereign-cli binary not found \
-                 (set SOVEREIGN_CLI_PATH or place it next to the desktop \
-                 binary); falling back to in-process daemon"
+            surface_fallback(
+                &app_handle,
+                "cannot resolve the daemon child binary (current_exe failed)",
             );
             return (mode, None);
         }
@@ -105,8 +126,8 @@ pub async fn maybe_start(
     let crash_log_dir = cli_setup.data.dir.join("crash-logs");
 
     let config = SupervisorConfig {
-        binary_path: binary,
-        args: vec!["daemon".into(), "run".into()],
+        binary_path: spec.binary,
+        args: spec.args,
         working_dir: None,
         env: vec![],
         health_url: format!("http://127.0.0.1:{client_port}/v1/models"),
@@ -185,22 +206,36 @@ pub async fn maybe_start(
             )
         }
         Ok(StartupOutcome::Failed(reason)) => {
-            warn!(
-                reason = %reason,
-                "supervisor: child daemon entered Failed during startup; \
-                 falling back to in-process daemon"
+            surface_fallback(
+                &app_handle,
+                &format!("child daemon entered Failed during startup: {reason}"),
             );
             (mode, None)
         }
         Err(_) => {
-            warn!(
-                deadline_secs = healthy_deadline.as_secs(),
-                "supervisor: timeout waiting for child daemon to become healthy; \
-                 falling back to in-process daemon"
+            surface_fallback(
+                &app_handle,
+                &format!(
+                    "child daemon not healthy within {}s",
+                    healthy_deadline.as_secs()
+                ),
             );
             (mode, None)
         }
     }
+}
+
+/// Falling back to the in-process daemon must be VISIBLE, not silent
+/// (DAEMON_RESILIENCE.md P0.1): the user keeps a working app, but
+/// crash isolation is off — a ggml crash would take the window down —
+/// and support triage needs to know which mode a session ran in. The
+/// frontend renders `supervisor-fallback` as a dismissible notice.
+fn surface_fallback(app_handle: &AppHandle, reason: &str) {
+    warn!(reason, "supervisor: falling back to IN-PROCESS daemon (crash isolation off)");
+    let _ = app_handle.emit(
+        "supervisor-fallback",
+        serde_json::json!({ "reason": reason }),
+    );
 }
 
 enum StartupOutcome {
@@ -211,18 +246,21 @@ enum StartupOutcome {
 #[cfg(test)]
 mod tests {
 
+    /// The W1 flip: supervised mode is ON by default; only an explicit
+    /// `0`/`false` disables it. Inline the parse (mirroring
+    /// `is_enabled`) so the assertion doesn't depend on global env
+    /// state, which other tests may mutate.
     #[test]
-    fn is_enabled_off_by_default() {
-        // We can't safely scrub the env in unit tests (other tests
-        // may set it), but the default value of an unset var is the
-        // path we care about.
-        let key = "SOVEREIGN_USE_SUPERVISOR_test_unset_marker";
-        std::env::remove_var(key);
-        // Inline the parse so the assertion doesn't depend on global
-        // env state.
-        let parsed = std::env::var(key)
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        assert!(!parsed);
+    fn is_enabled_on_by_default_with_explicit_kill_switch() {
+        let parse = |v: Option<&str>| -> bool {
+            !v.map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+                .unwrap_or(false)
+        };
+        assert!(parse(None), "unset must mean supervised (default ON)");
+        assert!(parse(Some("1")), "legacy opt-in spelling stays enabled");
+        assert!(parse(Some("true")));
+        assert!(!parse(Some("0")), "0 is the kill-switch");
+        assert!(!parse(Some("false")));
+        assert!(!parse(Some("FALSE")));
     }
 }

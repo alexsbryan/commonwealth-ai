@@ -12,18 +12,32 @@
 //! 1. publishes the latest RSS to a process-global (read by `/status`
 //!    consumers in this process and by future doctor checks),
 //! 2. `warn!`s on upward crossing of a soft limit
-//!    (`SOVEREIGN_RSS_SOFT_LIMIT_MB`, default 20480 — comfortably
-//!    under the 24 GiB forensic flag line), re-warning at most every
+//!    (`SOVEREIGN_RSS_SOFT_LIMIT_MB`), re-warning at most every
 //!    15 minutes while above, and
-//! 3. optionally (`SOVEREIGN_RSS_HARD_LIMIT_MB`, **unset = disabled**)
-//!    triggers a graceful self-SIGTERM with a **non-zero exit code**
-//!    on breach, so a service-managed daemon (launchd
-//!    `KeepAlive.SuccessfulExit=false` / systemd `Restart=on-failure`)
-//!    is relaunched clean *before* jetsam can SIGKILL it mid-write.
-//!    In-process beats unit-file MemoryMax: cgroup limits deliver
-//!    SIGKILL with no drain — exactly the corruption being avoided.
+//! 3. triggers a graceful self-SIGTERM with a **non-zero exit code**
+//!    on hard-limit breach (`SOVEREIGN_RSS_HARD_LIMIT_MB`), so a
+//!    service-managed daemon (launchd `KeepAlive.SuccessfulExit=false`
+//!    / systemd `Restart=on-failure`) is relaunched clean *before*
+//!    jetsam can SIGKILL it mid-write. In-process beats unit-file
+//!    MemoryMax: cgroup limits deliver SIGKILL with no drain — exactly
+//!    the corruption being avoided.
 //!
-//! Loop shape cloned from `log_rotation::spawn_rotation_loop`
+//! **Both limits default ON, derived from total system RAM**
+//! (DAEMON_RESILIENCE.md P0.3). The defense originally shipped
+//! disabled-unless-env-set, and the only thing that set the env was
+//! `scripts/daemon-supervised.sh` — so every launchd/systemd install
+//! ran with the hard limit off and died to kernel-OOM/jetsam SIGKILL
+//! with no drain (observed twice at ~39.5 GB, 2026-07). Defaults:
+//! hard = 85% of RAM / soft = 70% on Linux; 65% / 50% on macOS, where
+//! jetsam has been observed SIGKILLing at ~69% of RAM (~44 GB on a
+//! 64 GB host — see the incident above), so the limit must sit below
+//! jetsam's trigger zone to be reachable at all. On Linux a cgroup v2
+//! `memory.max` (container / toolbox deployments) caps the detected
+//! total. Env still overrides either limit; `SOVEREIGN_RSS_HARD_LIMIT_MB=0`
+//! (or `off`) is the explicit kill-switch. RAM detection failing falls
+//! back to the legacy posture (soft 20 GiB, hard disabled).
+//!
+//! Loop shape cloned from `log_rotation::rotation_loop`
 //! (interval ticker, skip the first tick, `spawn_blocking` for the
 //! sample).
 
@@ -49,28 +63,119 @@ pub fn hard_exit_requested() -> bool {
     HARD_EXIT_REQUESTED.load(Ordering::Relaxed)
 }
 
-/// Soft warn threshold. Env-overridable; default 20 GiB.
+/// RAM-fraction defaults (percent). macOS sits well under the observed
+/// jetsam trigger zone (~69% of RAM); Linux leaves headroom for the
+/// rest of the system before the kernel OOM killer engages. Aligned
+/// with the inference fit gate's refuse-to-load headroom
+/// (`sovereign-inference` capacity check), so a config the daemon
+/// agreed to load does not sit above its own hard limit.
+const HARD_PCT: u64 = if cfg!(target_os = "macos") { 65 } else { 85 };
+const SOFT_PCT: u64 = if cfg!(target_os = "macos") { 50 } else { 70 };
+
+/// Legacy fallback when total RAM cannot be detected: the historical
+/// defaults (soft 20 GiB, hard disabled).
+const LEGACY_SOFT_MB: u64 = 20_480;
+
+/// Soft warn threshold. Env-overridable; default 70% (Linux) / 50%
+/// (macOS) of total RAM, legacy 20 GiB when RAM is undetectable.
 pub fn soft_limit_mb() -> u64 {
+    let default = derived_soft_limit_mb(total_system_ram_mb()).unwrap_or(LEGACY_SOFT_MB);
     parse_limit_mb(
         std::env::var("SOVEREIGN_RSS_SOFT_LIMIT_MB").ok().as_deref(),
-        Some(20_480),
+        Some(default),
     )
-    .unwrap_or(20_480)
+    .unwrap_or(default)
 }
 
-/// Hard restart threshold. `None` (the default — env unset/invalid)
-/// disables the behavior entirely.
+/// Hard restart threshold. Default ON at 85% (Linux) / 65% (macOS) of
+/// total RAM; `SOVEREIGN_RSS_HARD_LIMIT_MB` overrides; `0`/`off` is the
+/// explicit kill-switch; RAM undetectable → disabled (legacy posture).
 pub fn hard_limit_mb() -> Option<u64> {
-    parse_limit_mb(
+    hard_limit_policy(
         std::env::var("SOVEREIGN_RSS_HARD_LIMIT_MB").ok().as_deref(),
-        None,
+        total_system_ram_mb(),
     )
+}
+
+fn derived_soft_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
+    total_ram_mb.map(|ram| ram * SOFT_PCT / 100)
+}
+
+fn derived_hard_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
+    total_ram_mb.map(|ram| ram * HARD_PCT / 100)
+}
+
+/// Pure policy for the hard limit so the precedence (explicit disable >
+/// explicit value > RAM-derived default > disabled) is unit-testable.
+fn hard_limit_policy(raw: Option<&str>, total_ram_mb: Option<u64>) -> Option<u64> {
+    match raw.map(str::trim) {
+        // Explicit kill-switch — the ONLY way to run without the defense.
+        Some("0") | Some("off") | Some("OFF") => None,
+        Some(v) => v
+            .parse::<u64>()
+            .ok()
+            .filter(|&n| n > 0)
+            .or_else(|| derived_hard_limit_mb(total_ram_mb)),
+        None => derived_hard_limit_mb(total_ram_mb),
+    }
 }
 
 fn parse_limit_mb(raw: Option<&str>, default: Option<u64>) -> Option<u64> {
     match raw {
         None => default,
         Some(v) => v.trim().parse::<u64>().ok().filter(|&n| n > 0).or(default),
+    }
+}
+
+/// Total system RAM in MiB. Linux additionally respects a cgroup v2
+/// `memory.max` below the host total (container / toolbox deployments
+/// see their real ceiling, not the host's). `None` on detection
+/// failure — callers fall back to the legacy posture.
+fn total_system_ram_mb() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        // /proc/meminfo "MemTotal:  131072000 kB"
+        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+        let host_mb = meminfo.lines().find_map(|l| {
+            let rest = l.strip_prefix("MemTotal:")?;
+            let kb: u64 = rest.trim().trim_end_matches("kB").trim().parse().ok()?;
+            Some(kb / 1024)
+        })?;
+        // cgroup v2 unified hierarchy; "max" = unlimited. Best-effort —
+        // absent/unparseable just means the host total stands.
+        let cgroup_mb = std::fs::read_to_string("/sys/fs/cgroup/memory.max")
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .map(|bytes| bytes / (1024 * 1024));
+        Some(match cgroup_mb {
+            Some(limit) if limit < host_mb => limit,
+            _ => host_mb,
+        })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // sysctl hw.memsize (bytes). SAFETY: fixed-size out-param with
+        // its size passed alongside; the call writes at most `len` bytes.
+        let mut bytes: u64 = 0;
+        let mut len = std::mem::size_of::<u64>();
+        let name = std::ffi::CString::new("hw.memsize").expect("static name");
+        let rc = unsafe {
+            libc::sysctlbyname(
+                name.as_ptr(),
+                &mut bytes as *mut _ as *mut libc::c_void,
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if rc != 0 || bytes == 0 {
+            return None;
+        }
+        Some(bytes / (1024 * 1024))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
     }
 }
 
@@ -116,19 +221,43 @@ impl WarnGate {
     }
 }
 
-/// Spawn the watch loop. Limits are read once at spawn (a daemon
-/// restart picks up env changes — same posture as every other
-/// `SOVEREIGN_*` knob in this binary).
-pub fn spawn_memory_watch(interval: Duration) -> tokio::task::JoinHandle<()> {
+/// The watch-loop body, exposed so the daemon can run it under
+/// `supervise::spawn_supervised` — a panic here used to silently
+/// disarm the OOM defense for the rest of the process's life
+/// (DAEMON_RESILIENCE.md P0.4). Limits are re-read on entry, so a
+/// supervised restart re-arms with a fresh "armed" log line.
+pub async fn watch_loop(interval: Duration) {
     let soft = soft_limit_mb();
     let hard = hard_limit_mb();
+    let total_ram = total_system_ram_mb();
     tracing::info!(
         soft_limit_mb = soft,
         hard_limit_mb = hard,
+        total_ram_mb = total_ram,
+        soft_from_env = std::env::var_os("SOVEREIGN_RSS_SOFT_LIMIT_MB").is_some(),
+        hard_from_env = std::env::var_os("SOVEREIGN_RSS_HARD_LIMIT_MB").is_some(),
         interval_secs = interval.as_secs(),
         "memory-watch: armed"
     );
-    tokio::spawn(async move {
+    if hard.is_none() {
+        // Grep-stable breadcrumb: a daemon running WITHOUT the OOM
+        // defense should say so once at boot, loudly.
+        tracing::warn!(
+            "memory-watch: hard limit DISABLED — kernel OOM/jetsam will SIGKILL with no drain \
+             (explicit SOVEREIGN_RSS_HARD_LIMIT_MB=0, or total RAM undetectable)"
+        );
+    }
+    if let Some(hard_mb) = hard {
+        if soft >= hard_mb {
+            tracing::warn!(
+                soft_limit_mb = soft,
+                hard_limit_mb = hard_mb,
+                "memory-watch: soft limit >= hard limit (env override inversion) — \
+                 soft warnings will never fire before the hard restart"
+            );
+        }
+    }
+    {
         let mut ticker = tokio::time::interval(interval);
         // Skip the immediate first tick — startup RSS is still
         // climbing through model loads; the first meaningful sample
@@ -183,7 +312,7 @@ pub fn spawn_memory_watch(interval: Duration) -> tokio::task::JoinHandle<()> {
                 );
             }
         }
-    })
+    }
 }
 
 /// Current resident set size in MiB, platform-native (no extra deps).
@@ -264,11 +393,47 @@ mod tests {
         assert_eq!(parse_limit_mb(Some("nope"), Some(20_480)), Some(20_480));
         assert_eq!(parse_limit_mb(Some("0"), Some(20_480)), Some(20_480));
         assert_eq!(parse_limit_mb(Some("4096"), Some(20_480)), Some(4096));
-        // hard: unset/garbage/zero stay DISABLED (None)
-        assert_eq!(parse_limit_mb(None, None), None);
-        assert_eq!(parse_limit_mb(Some("nope"), None), None);
-        assert_eq!(parse_limit_mb(Some("0"), None), None);
-        assert_eq!(parse_limit_mb(Some("30000"), None), Some(30_000));
+    }
+
+    #[test]
+    fn hard_limit_defaults_on_from_ram() {
+        // Default ON: unset env + detectable RAM derives HARD_PCT of total.
+        let ram = Some(100_000);
+        assert_eq!(hard_limit_policy(None, ram), Some(100_000 * HARD_PCT / 100));
+        // Garbage env falls back to the derived default, not disabled.
+        assert_eq!(
+            hard_limit_policy(Some("nope"), ram),
+            Some(100_000 * HARD_PCT / 100)
+        );
+        // Explicit value wins over derivation.
+        assert_eq!(hard_limit_policy(Some("30000"), ram), Some(30_000));
+        // Explicit kill-switch: 0 / off disable even with detectable RAM.
+        assert_eq!(hard_limit_policy(Some("0"), ram), None);
+        assert_eq!(hard_limit_policy(Some("off"), ram), None);
+        assert_eq!(hard_limit_policy(Some(" OFF "), ram), None);
+        // RAM undetectable + no env → legacy posture (disabled).
+        assert_eq!(hard_limit_policy(None, None), None);
+        assert_eq!(hard_limit_policy(Some("nope"), None), None);
+    }
+
+    #[test]
+    fn derived_limits_track_platform_percentages() {
+        assert_eq!(derived_soft_limit_mb(Some(100_000)), Some(SOFT_PCT * 1000));
+        assert_eq!(derived_hard_limit_mb(Some(100_000)), Some(HARD_PCT * 1000));
+        assert_eq!(derived_soft_limit_mb(None), None);
+        // Soft must sit below hard by construction so the warn ladder
+        // fires before the restart.
+        assert!(SOFT_PCT < HARD_PCT);
+    }
+
+    #[test]
+    fn total_ram_detects_on_supported_platforms() {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let ram = total_system_ram_mb().expect("total RAM detectable");
+            assert!(ram >= 1024, "implausibly small RAM: {ram} MiB");
+            assert!(ram < 16 * 1024 * 1024, "implausibly large RAM: {ram} MiB");
+        }
     }
 
     #[test]

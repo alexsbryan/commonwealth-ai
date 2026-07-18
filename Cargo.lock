@@ -12304,6 +12304,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-authoring-harness",
+ "sovereign-cli-daemon",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-gliner",

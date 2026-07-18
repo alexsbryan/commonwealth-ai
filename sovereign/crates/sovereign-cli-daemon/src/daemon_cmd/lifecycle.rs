@@ -25,18 +25,7 @@ pub(super) async fn stop_daemon() -> i32 {
                 libc_kill(pid, 15 /* SIGTERM */)
             };
             if rc == 0 {
-                // Wait up to 10s for graceful exit, polling liveness.
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-                while std::time::Instant::now() < deadline {
-                    if unsafe { libc_kill(pid, 0) } != 0 {
-                        let _ = std::fs::remove_file(daemon_pid_path());
-                        eprintln!("✓ stopped (pid {pid})");
-                        return 0;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                }
-                eprintln!("⚠ pid {pid} didn't exit after 10s; leaving it alone");
-                return 1;
+                return await_exit_or_sigkill(pid, "").await;
             }
             // kill() failed — pid likely stale. Clean up and fall
             // through to service_install so a service-managed instance
@@ -75,17 +64,7 @@ pub(super) async fn stop_daemon() -> i32 {
                 libc_kill(pid, 15 /* SIGTERM */)
             };
             if rc == 0 {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-                while std::time::Instant::now() < deadline {
-                    if unsafe { libc_kill(pid, 0) } != 0 {
-                        let _ = std::fs::remove_file(daemon_pid_path());
-                        eprintln!("✓ stopped (pid {pid}, found by :9741 listener)");
-                        return 0;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                }
-                eprintln!("⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone");
-                return 1;
+                return await_exit_or_sigkill(pid, ", found by :9741 listener").await;
             }
             // kill() failed (most likely EPERM on a daemon owned by another
             // user). Fall through to the service-manager path; it might be
@@ -110,6 +89,62 @@ pub(super) async fn stop_daemon() -> i32 {
             1
         }
     }
+}
+
+/// Poll for `pid` to exit within the SIGTERM grace window; past it,
+/// escalate to SIGKILL (DAEMON_RESILIENCE.md P0.5). The old behavior —
+/// "didn't exit after 10s; leaving it alone" — left a wedged daemon
+/// holding the models and `:9741`, and `daemon restart` then aborted
+/// on the non-zero stop, stranding the operator with a zombie. A stop
+/// verb must stop the daemon; a process wedged past the SIGTERM grace
+/// has already forfeited its graceful drain.
+#[cfg(unix)]
+async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
+    const TERM_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+    const KILL_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+    let deadline = std::time::Instant::now() + TERM_GRACE;
+    while std::time::Instant::now() < deadline {
+        if unsafe { libc_kill(pid, 0) } != 0 {
+            let _ = std::fs::remove_file(daemon_pid_path());
+            eprintln!("✓ stopped (pid {pid}{found_via})");
+            return 0;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
+    eprintln!(
+        "⚠ pid {pid} didn't exit within {}s of SIGTERM — escalating to SIGKILL \
+         (daemon is wedged; graceful drain forfeited)",
+        TERM_GRACE.as_secs()
+    );
+    // SAFETY: same contract as the SIGTERM above — signalling a pid we
+    // identified as the daemon (pidfile owner or :9741 listener).
+    if unsafe { libc_kill(pid, 9 /* SIGKILL */) } != 0 {
+        // Either it exited between the poll and the kill (a win), or we
+        // lack permission (EPERM — another user's daemon).
+        if unsafe { libc_kill(pid, 0) } != 0 {
+            let _ = std::fs::remove_file(daemon_pid_path());
+            eprintln!("✓ stopped (pid {pid}{found_via}; exited during escalation)");
+            return 0;
+        }
+        eprintln!("error: SIGKILL pid {pid} failed (permission?) — daemon left running");
+        return 1;
+    }
+    let deadline = std::time::Instant::now() + KILL_GRACE;
+    while std::time::Instant::now() < deadline {
+        if unsafe { libc_kill(pid, 0) } != 0 {
+            let _ = std::fs::remove_file(daemon_pid_path());
+            eprintln!("✓ stopped (pid {pid}{found_via}; required SIGKILL)");
+            return 0;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    eprintln!(
+        "error: pid {pid} survived SIGKILL for {}s (uninterruptible I/O?) — inspect manually",
+        KILL_GRACE.as_secs()
+    );
+    1
 }
 
 /// See the sandbox note in `stop_daemon` — automation-only escape
@@ -186,6 +221,36 @@ fn parse_ss_first_pid(text: &str) -> Option<i32> {
         }
     }
     None
+}
+
+#[cfg(all(test, unix))]
+mod run_lock_tests {
+    use super::*;
+
+    #[test]
+    fn second_flock_refused_while_first_held() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("daemon.lock");
+        let first = try_flock_exclusive(&path)
+            .expect("open lock file")
+            .expect("first acquire succeeds");
+        // A second open file description on the same path must be
+        // refused while the first is held — this is exactly the
+        // second-`daemon run` scenario.
+        assert!(
+            try_flock_exclusive(&path)
+                .expect("open lock file")
+                .is_none(),
+            "second acquire must be refused while first is held"
+        );
+        drop(first);
+        assert!(
+            try_flock_exclusive(&path)
+                .expect("open lock file")
+                .is_some(),
+            "lock must be re-acquirable after the holder drops (kernel release)"
+        );
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -471,6 +536,64 @@ fn parse_ready_timeout(raw: Option<&str>) -> std::time::Duration {
 /// Path to the pidfile written by `daemon start`.
 pub(super) fn daemon_pid_path() -> std::path::PathBuf {
     home_dir_buf().join(".sovereign").join("daemon.pid")
+}
+
+/// Single-instance run lock (DAEMON_RESILIENCE.md P0.5).
+///
+/// `daemon start` has always had a port-collision guard, but the
+/// `daemon run` path (systemd, launchd, the shell supervisor, a stray
+/// manual run) had NONE: a second `run` loaded every model (double
+/// RAM), unconditionally overwrote the pidfile so `stop` targeted the
+/// zombie, and — its bind being best-effort — parked forever with no
+/// listener. flock(2) is the primitive built for this: the kernel
+/// releases it on ANY exit path including SIGKILL, so there is no
+/// stale-lock cleanup logic to get wrong.
+///
+/// The returned `File` must be held for the daemon's lifetime —
+/// dropping it releases the lock. `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1`
+/// skips the guard for multi-daemon harnesses that drive `daemon run`
+/// under a shared HOME (per-HOME harnesses like mesh-soak don't need
+/// it — the lock file is per data dir).
+#[cfg(unix)]
+pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
+    if std::env::var("SOVEREIGN_ALLOW_MULTIPLE_DAEMONS").ok().as_deref() == Some("1") {
+        return Ok(None);
+    }
+    let dir = home_dir_buf().join(".sovereign");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("daemon.lock");
+    match try_flock_exclusive(&path) {
+        Err(e) => Err(format!("cannot open run lock {}: {e}", path.display())),
+        Ok(None) => Err(format!(
+            "another daemon already holds the run lock ({}) — refusing to run a second \
+             instance.\n  Check `svrn daemon status`; stop the running daemon with \
+             `svrn daemon stop`.\n  (Multi-daemon test harnesses under one HOME: set \
+             SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1.)",
+            path.display()
+        )),
+        Ok(Some(file)) => Ok(Some(file)),
+    }
+}
+
+/// The flock core, path-parameterized for unit tests. `Ok(None)` =
+/// held by another open file description (i.e. another daemon).
+#[cfg(unix)]
+fn try_flock_exclusive(path: &std::path::Path) -> std::io::Result<Option<std::fs::File>> {
+    use std::os::unix::io::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(path)?;
+    // SAFETY: flock on an fd we own; LOCK_NB means it never blocks.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Ok(None);
+    }
+    Ok(Some(file))
+}
+
+#[cfg(not(unix))]
+pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
+    Ok(None)
 }
 
 /// Read the pidfile and return its pid if the process is still alive.

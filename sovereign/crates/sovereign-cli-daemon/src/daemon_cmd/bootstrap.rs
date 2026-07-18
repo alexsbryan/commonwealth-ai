@@ -394,7 +394,17 @@ pub(super) fn spawn_rpc_worker_discovery(
         sovereign_mesh::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));
         let daemon_for_disco = Arc::clone(&daemon);
         let engine_for_reload = engine_handle.clone();
-        tokio::spawn(async move {
+        // Supervised: a panic here used to silently freeze worker
+        // discovery + shared-model host failover for the rest of the
+        // process's life (DAEMON_RESILIENCE.md P0.4). Loop state
+        // (last_loaded / debounce) resets on restart — rediscovery
+        // reconverges within a tick.
+        crate::supervise::spawn_supervised("rpc_worker_discovery", move || {
+            let daemon_for_disco = Arc::clone(&daemon_for_disco);
+            let engine_for_reload = engine_for_reload.clone();
+            let snapshot = Arc::clone(&snapshot);
+            let eligibility = std::sync::Arc::clone(&eligibility);
+            async move {
             // `last_loaded` = worker set the resident primary was loaded across;
             // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
             // to stop changing before paying a reload).
@@ -498,6 +508,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
             }
+            }
         });
     }
 }
@@ -522,7 +533,13 @@ pub(super) fn spawn_slot_alias_push(
     // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
     let daemon_for_alias_push = Arc::clone(&daemon);
     let mesh_for_alias_push = mesh_provider.clone();
-    tokio::spawn(async move {
+    // Supervised one-shot: publisher install + alias push are
+    // idempotent, so a panic-restart just retries the wiring
+    // (DAEMON_RESILIENCE.md P0.4).
+    crate::supervise::spawn_supervised("slot_alias_push", move || {
+        let daemon_for_alias_push = Arc::clone(&daemon_for_alias_push);
+        let mesh_for_alias_push = mesh_for_alias_push.clone();
+        async move {
         // Poll briefly for the AppState to be available. The
         // setup transition usually completes within a few
         // hundred ms; cap at 30s so a stuck setup never hangs
@@ -561,6 +578,7 @@ pub(super) fn spawn_slot_alias_push(
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
         }
     });
 }
@@ -644,18 +662,24 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
     // Runs once per daemon start. Best-effort: rows that error
     // skip + pick up on the next start.
     let notes_for_backfill = Arc::clone(&notes_store);
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        let report = notes_for_backfill.backfill_tier_artifacts(0).await;
-        if report.embeddings_backfilled > 0 || report.entities_backfilled > 0 {
-            tracing::info!(
-                target = "notes",
-                embeddings = report.embeddings_backfilled,
-                entities = report.entities_backfilled,
-                embed_skipped = report.embed_skipped,
-                entity_skipped = report.entity_skipped,
-                "notes: tier-artifact backfill done"
-            );
+    // Supervised one-shot: best-effort + idempotent per the contract
+    // above (rows that error skip + pick up next start) —
+    // DAEMON_RESILIENCE.md P0.4.
+    crate::supervise::spawn_supervised("notes_tier_backfill", move || {
+        let notes_for_backfill = Arc::clone(&notes_for_backfill);
+        async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            let report = notes_for_backfill.backfill_tier_artifacts(0).await;
+            if report.embeddings_backfilled > 0 || report.entities_backfilled > 0 {
+                tracing::info!(
+                    target = "notes",
+                    embeddings = report.embeddings_backfilled,
+                    entities = report.entities_backfilled,
+                    embed_skipped = report.embed_skipped,
+                    entity_skipped = report.entity_skipped,
+                    "notes: tier-artifact backfill done"
+                );
+            }
         }
     });
 
@@ -666,7 +690,11 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
     // Global telemetry, gossips the removal to peers. TTL tunable via
     // SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS (default 30; <=0 disables).
     let notes_for_ttl = Arc::clone(&notes_store);
-    tokio::spawn(async move {
+    // Supervised: the sweep is tombstone-idempotent; a panic must not
+    // silently end TTL hygiene (DAEMON_RESILIENCE.md P0.4).
+    crate::supervise::spawn_supervised("notes_ttl_sweep", move || {
+        let notes_for_ttl = Arc::clone(&notes_for_ttl);
+        async move {
         let ttl_days: i64 = std::env::var("SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -697,6 +725,7 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
                 }
             }
         }
+        }
     });
 }
 
@@ -719,7 +748,14 @@ pub(super) fn spawn_notes_ingest_poller(
     let mesh_for_poller = Arc::clone(&work_atlas_mesh_store);
     let notes_for_poller = Arc::clone(&notes_store);
     let self_id_for_poller = self_node_id;
-    tokio::spawn(async move {
+    // Supervised: ingest is content-hash idempotent; a panic must not
+    // silently stop cross-peer note convergence (DAEMON_RESILIENCE.md
+    // P0.4).
+    crate::supervise::spawn_supervised("notes_ingest_poller", move || {
+        let mesh_for_poller = Arc::clone(&mesh_for_poller);
+        let notes_for_poller = Arc::clone(&notes_for_poller);
+        let self_id_for_poller = self_id_for_poller;
+        async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -778,6 +814,7 @@ pub(super) fn spawn_notes_ingest_poller(
                 }
             }
         }
+        }
     });
 }
 
@@ -791,8 +828,13 @@ pub(super) fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
     // `corpus_engine::CorpusEngine::lazy_stamp_legacy_fingerprints`
     // for the contract.
     let engine_for_stamp = Arc::clone(&engine);
-    tokio::spawn(async move {
-        engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
+    // Supervised one-shot: idempotent per the contract above —
+    // DAEMON_RESILIENCE.md P0.4.
+    crate::supervise::spawn_supervised("lazy_stamp_fingerprints", move || {
+        let engine_for_stamp = Arc::clone(&engine_for_stamp);
+        async move {
+            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
+        }
     });
 }
 
@@ -806,7 +848,12 @@ pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
     // and `--resume` skips chapters already in the checkpoint.
     let enrich_dir = data_dir.join("enrichment");
     let idx_dir = data_dir.join("indexes");
-    tokio::spawn(async move {
+    // Supervised one-shot: safe on every boot per the contract above,
+    // so a panic-restart just rescans (DAEMON_RESILIENCE.md P0.4).
+    crate::supervise::spawn_supervised("tier2_enrichment_resume", move || {
+        let enrich_dir = enrich_dir.clone();
+        let idx_dir = idx_dir.clone();
+        async move {
         let cli_binary =
             std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
         tracing::info!(
@@ -840,6 +887,7 @@ pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
                     tracing::warn!(reason, "tier-2 resume: re-spawn failed")
                 }
             }
+        }
         }
     });
 }

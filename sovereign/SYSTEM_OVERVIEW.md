@@ -157,7 +157,7 @@ crates/
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
 ├── sovereign-cli-shared     # Tiny shared lib (dirs, repo, help, prompts, tracing init)
-├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary)
+├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib — the desktop's --daemon-child re-enters via daemon_child_main)
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
 ├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
@@ -1772,11 +1772,24 @@ work pins the GPU while the user is chatting. Components:
   (`sovereign-desktop/src-tauri/src/supervisor.rs`) — Tauri-free,
   broadcast-driven, heartbeat, exponential backoff
   (1s→5s→30s→2min), crash-loop ceiling, bounded stderr buffer,
-  crash-log persistence to `<data_dir>/crash-logs/`. Opt-in via
-  `SOVEREIGN_USE_SUPERVISOR=1`. The child-process boundary makes
+  crash-log persistence to `<data_dir>/crash-logs/`. **Default ON
+  since the 2026-07-18 flip** (DAEMON_RESILIENCE.md P0.1):
+  `supervisor_setup.rs` spawns **this very desktop binary** as
+  `current_exe() --daemon-child` — the argv arm calls
+  `sovereign_cli_daemon::daemon_child_main()` (the crate is bin+lib),
+  so the child is the REAL daemon with all its defenses and zero
+  sidecar bytes in the bundle. Opt-outs: `SOVEREIGN_USE_SUPERVISOR=0`
+  (kill-switch back to in-process `EmbeddedDaemon`) and
+  `SOVEREIGN_FORCE_LOCAL=1` ("this process runs the weights" — the
+  real-mode harnesses). Falling back to in-process is surfaced via the
+  `supervisor-fallback` event (rendered by ReconnectBanner), never
+  silent; `supervisor_reconnect` / `supervisor_active` commands back
+  the banner's Reconnect button. The child-process boundary makes
   "daemon crashed → click Reconnect" a recoverable UI state instead
   of a dead window. Motivated by ggml/llama.cpp SIGSEGVs an
-  in-process supervisor can't catch.
+  in-process supervisor can't catch. Known softening: the first
+  session right after the wizard still bootstraps in-process;
+  isolation engages from the next launch.
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port
   `/v1/chat/completions` + internal-port
@@ -1914,9 +1927,13 @@ Control routes (loopback-only, on the internal port :9742):
 `GET /internal/activity/summary`,
 `GET /internal/activity/recent`.
 
-Open polish: tray icon tint, HintCues nudge to Sharing tab, the W1
-PR-3 default-flip removing in-process EmbeddedDaemon, graceful
-SIGTERM-with-grace on daemon shutdown.
+Open polish: tray icon tint, HintCues nudge to Sharing tab, removing
+the in-process `EmbeddedDaemon` fallback entirely (the default-flip
+itself landed 2026-07-18 — the fallback remains as a surfaced degraded
+mode), graceful SIGTERM-with-grace on daemon shutdown, and
+supervised-child engagement in the first post-wizard session (today it
+starts at the second launch). Daemon-side resilience roadmap:
+[`docs/specs/DAEMON_RESILIENCE.md`](./docs/specs/DAEMON_RESILIENCE.md).
 
 **W7 — live-turn re-attach (streaming survives a conversation switch).**
 `chat.machine` owns exactly ONE conversation's `messages` +
