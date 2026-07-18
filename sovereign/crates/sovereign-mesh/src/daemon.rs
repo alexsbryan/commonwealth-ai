@@ -205,18 +205,6 @@ pub struct EmbeddedDaemon {
     /// set during bootstrap before `start_daemon`. When `None`,
     /// `start_daemon` falls back to the legacy in-memory MeshStore.
     mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
-    /// Fired by the `POST /v1/mesh/leave` HTTP handler after a
-    /// *user-initiated* leave, to ask a standalone `daemon run`
-    /// process to exit so the service manager relaunches it into a
-    /// fresh solo mesh (the relaunch re-creates the solo mesh because
-    /// `leave()` cleared persistence). See [`Self::request_leave_relaunch`].
-    ///
-    /// Deliberately NOT fired inside `leave()`/`stop_inner`: `join_mesh`'s
-    /// internal auto-leave also calls `leave()`, and switching meshes must
-    /// not restart the process. The embedded/desktop daemon never runs the
-    /// standalone wait-for-shutdown loop, so this notify simply has no
-    /// consumer there (a harmless stored permit).
-    leave_relaunch_notify: Arc<tokio::sync::Notify>,
 }
 
 enum DaemonState {
@@ -242,6 +230,13 @@ enum DaemonState {
         /// gossip; no explicit teardown.
         _gossip_handle: GossipHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
+        /// The API-server task that owns the `:9741`/`:9742` listeners.
+        /// Kept (not discarded) so `stop_inner` can await its exit after
+        /// dropping `_shutdown_tx`, guaranteeing the listeners are fully
+        /// released before an in-process re-create (`leave_to_solo`)
+        /// rebinds the same ports — otherwise the rebind races the
+        /// still-`LISTEN`ing socket and hits EADDRINUSE.
+        serve_handle: tokio::task::JoinHandle<()>,
         /// Server-half iroh endpoint + acceptor (Track W, W1 — see
         /// `crate::iroh_access`). `None` unless iroh is enabled
         /// (explicit config or mesh participation). Read live by
@@ -319,7 +314,6 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
-            leave_relaunch_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -355,7 +349,6 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
-            leave_relaunch_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -1191,12 +1184,24 @@ impl EmbeddedDaemon {
         let handshake = match handshake {
             Ok(h) => h,
             Err(e) => {
-                // Tear down the placeholder daemon so the next attempt
-                // from the UI doesn't hit AlreadyRunning. Use leave —
-                // we never persisted the placeholder mesh, so leave's
-                // clear is a no-op against persistence and matches the
-                // user-facing intent ("the join failed, go back to no-mesh").
-                let _ = self.leave().await;
+                // Roll back to a fresh SOLO mesh rather than leaving the
+                // daemon meshless. A failed join (bad key, peer offline,
+                // network blip) must NOT strand the client API on :9741 —
+                // that was the recurring "daemon alive but :9741 down"
+                // wedge. `leave_to_solo` tears down the placeholder join
+                // mesh (its persistence clear is a no-op — we never
+                // persisted the placeholder) and rebinds a solo mesh, so
+                // the caller's post-join reconnect poll finds a working
+                // daemon. Mirrors the user-facing Leave button, which also
+                // re-solos in-process. The join still returns Err so the UI
+                // reports the failure.
+                if let Err(re) = self.leave_to_solo().await {
+                    warn!(
+                        error = %re,
+                        "join rollback: re-solo after failed handshake failed \
+                         — daemon may be left meshless"
+                    );
+                }
                 return Err(MeshError::Network(e.to_string()));
             }
         };
@@ -1281,28 +1286,33 @@ impl EmbeddedDaemon {
         self.stop_inner(StopMode::Leave).await
     }
 
-    /// Signal that a **user-initiated** leave just completed and, on a
-    /// standalone `daemon run` process, the daemon should exit so the
-    /// service manager relaunches it into a fresh solo mesh.
+    /// Leave the current mesh and immediately re-create a fresh **solo**
+    /// mesh in this SAME process, rebinding `:9741`/`:9742`.
     ///
-    /// Called ONLY by the `POST /v1/mesh/leave` HTTP handler — never by
-    /// `leave()` itself, because `join_mesh`'s auto-leave and the
-    /// deprecated `stop()` also route through `leave()` and must NOT
-    /// restart the process. The standalone daemon awaits this via
-    /// [`Self::leave_relaunch_requested`]; the embedded/desktop daemon
-    /// never awaits it, so this is a harmless no-op there.
-    pub fn request_leave_relaunch(&self) {
-        // notify_one stores a permit even if the waiter hasn't parked
-        // yet, so the signal can't be lost to a startup race.
-        self.leave_relaunch_notify.notify_one();
-    }
-
-    /// Await a user-initiated leave-relaunch request (see
-    /// [`Self::request_leave_relaunch`]). The standalone daemon selects
-    /// on this alongside SIGINT/SIGTERM so the UI "Leave" button exits
-    /// the process and lets launchd/systemd relaunch it clean.
-    pub async fn leave_relaunch_requested(&self) {
-        self.leave_relaunch_notify.notified().await;
+    /// This is the user-initiated "Leave" behavior: a node that leaves a
+    /// populated mesh returns to being its own solo mesh, with the client
+    /// API staying available on the same process — no restart, no model
+    /// reload, no dependency on a service manager to relaunch us. Both the
+    /// `POST /v1/mesh/leave` HTTP handler and the desktop Local-mode leave
+    /// command call this.
+    ///
+    /// Distinct from [`leave`](Self::leave), which only tears down and
+    /// clears persistence: `join_mesh`'s auto-leave uses that so it can
+    /// switch meshes without bouncing back to solo. `leave()` sets the
+    /// state to `Stopped` and (via `stop_inner`) awaits the old listener
+    /// task's exit, so the `create_mesh` below binds `:9741` cleanly
+    /// instead of racing the just-dropped socket.
+    pub async fn leave_to_solo(&self) -> Result<(), MeshError> {
+        self.leave().await?;
+        // Mirror the standalone daemon's boot-time solo mesh
+        // (`{hostname}'s Mesh`, node = hostname) so a re-solo looks
+        // identical to a fresh launch.
+        let host = hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_else(|| "sovereign-node".to_string());
+        self.create_mesh(&format!("{host}'s Mesh"), &host).await?;
+        Ok(())
     }
 
     /// **Shutdown** the daemon for process exit. Stops gossip,
@@ -1326,12 +1336,33 @@ impl EmbeddedDaemon {
     async fn stop_inner(&self, mode: StopMode) -> Result<(), MeshError> {
         let mut state = self.state.write().await;
         match std::mem::replace(&mut *state, DaemonState::Stopped) {
-            DaemonState::Running { _shutdown_tx, .. } => {
+            DaemonState::Running {
+                _shutdown_tx,
+                serve_handle,
+                ..
+            } => {
                 // Dropping the sender signals the daemon to shut down.
                 drop(_shutdown_tx);
                 // Drop the write guard before touching the filesystem
                 // — persistence shouldn't gate the in-memory stop.
                 drop(state);
+                // Wait for the API-server task to actually observe the
+                // shutdown signal and drop its `:9741`/`:9742` listeners
+                // before we return. Without this, a follow-on in-process
+                // re-create (`leave_to_solo` → `create_mesh` → `start_daemon`)
+                // races the just-dropped sockets: SO_REUSEADDR lets a new
+                // bind past a socket in TIME_WAIT but NOT one still in
+                // LISTEN, so an unsynchronised rebind can hit EADDRINUSE.
+                // Bounded so a wedged serve task can never hang `leave()`.
+                if tokio::time::timeout(std::time::Duration::from_secs(2), serve_handle)
+                    .await
+                    .is_err()
+                {
+                    warn!(
+                        "API-server task did not exit within 2s of shutdown signal; \
+                         a subsequent rebind of :9741/:9742 may briefly fail"
+                    );
+                }
                 if matches!(mode, StopMode::Leave) && self.persistence_enabled() {
                     if let Err(e) = persist::clear(&self.data_dir) {
                         warn!(
@@ -2198,9 +2229,12 @@ impl EmbeddedDaemon {
         let reading_http = self.reading_http_router.read().await.clone();
         let solve_http = self.solve_http_router.read().await.clone();
 
-        // Spawn the API servers in the background.
+        // Spawn the API servers in the background. The JoinHandle is stored
+        // in `DaemonState::Running` (not discarded) so `stop_inner` can await
+        // teardown — dropping the old `:9741`/`:9742` listeners — before an
+        // in-process re-create (`leave_to_solo`) rebinds the same ports.
         let app_state_clone = app_state.clone();
-        tokio::spawn(async move {
+        let serve_handle = tokio::spawn(async move {
             let mut client_router =
                 commonwealth_api::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
@@ -2247,39 +2281,43 @@ impl EmbeddedDaemon {
             }
             let internal_router = commonwealth_api::server::internal_router(app_state_clone);
 
-            // Phase 3 takeover: a `sovereign init` invocation may
-            // have spawned a standalone `sovereign serve` background
-            // process holding `:9741`. Before we bind, look for the
-            // pid pointer in `~/.sovereign/server.pid` and SIGTERM
-            // the process so we can take ownership of the port. If
-            // the daemon was started by a service manager (launchd,
-            // systemd) on a fresh boot, the pointer file won't exist
-            // and this is a no-op.
+            // Phase 3 takeover: a `sovereign init` invocation may have
+            // spawned a standalone `sovereign serve` process holding `:9741`.
+            // SIGTERM it (via the `~/.sovereign/server.pid` pointer) so we can
+            // take ownership of the port; a no-op on a service-manager boot
+            // where the pointer file doesn't exist.
             takeover_standalone_serve_if_present();
 
-            let client_listener = match tokio::net::TcpListener::bind(client_addr).await {
+            // Bind with a short EADDRINUSE retry: an in-process re-create
+            // (`leave_to_solo`) can momentarily race the previous mesh's
+            // just-dropped socket. `stop_inner` already awaits the old serve
+            // task via `serve_handle` before the rebind, so this retry is
+            // belt-and-suspenders. A bind that STILL fails is logged and the
+            // task returns — best-effort, matching long-standing behavior (a
+            // hard error here would strand the many default-port tests that
+            // bind `:9741` under parallel contention).
+            let client_listener = match bind_listener_with_retry(client_addr, "client API").await {
                 Ok(l) => l,
                 Err(e) => {
-                    warn!("Failed to bind client API on {client_addr}: {e}");
+                    warn!("{e}");
                     return;
                 }
             };
-            let internal_listener = match tokio::net::TcpListener::bind(internal_addr).await {
-                Ok(l) => l,
-                Err(e) => {
-                    warn!("Failed to bind internal API on {internal_addr}: {e}");
-                    return;
-                }
-            };
+            let internal_listener =
+                match bind_listener_with_retry(internal_addr, "internal API").await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        warn!("{e}");
+                        return;
+                    }
+                };
 
             info!("Commonwealth daemon started (client: {client_addr}, internal: {internal_addr})");
 
-            // Enumerate local non-loopback IPs and log them so the
-            // founder can copy one into a `?relay=<IP>` query param
-            // if mDNS doesn't reach the joiner (e.g. WiFi AP
-            // isolation, router multicast filtering, different
-            // subnets). Matches the exact workaround documented in
-            // the Tailscale section of the crate README.
+            // Enumerate local non-loopback IPs so the founder can copy one
+            // into a `?relay=<IP>` query param if mDNS doesn't reach the
+            // joiner (WiFi AP isolation, multicast filtering, different
+            // subnets). Matches the crate README's Tailscale workaround.
             for iface in local_ip_candidates() {
                 info!(
                     ip = %iface,
@@ -2650,6 +2688,7 @@ impl EmbeddedDaemon {
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
             _shutdown_tx: shutdown_tx,
+            serve_handle,
             iroh_access,
         };
 
@@ -2672,6 +2711,54 @@ impl EmbeddedDaemon {
             .await;
         }
     }
+}
+
+/// Bind a TCP listener, retrying briefly on `EADDRINUSE`.
+///
+/// An in-process mesh re-create (`leave_to_solo` → `create_mesh` →
+/// `start_daemon`) can momentarily race the just-dropped listener socket
+/// from the previous mesh. `stop_inner` already awaits the old serve task,
+/// so this is belt-and-suspenders — but `SO_REUSEADDR` (which mio sets)
+/// only lets a new bind past a socket in `TIME_WAIT`, NOT one still in
+/// `LISTEN`, so if the old task is slow to drop we give it a few tries.
+///
+/// On any non-`EADDRINUSE` error, or after exhausting retries, this returns
+/// `MeshError::Network`; the caller (the serve task) logs it and returns
+/// best-effort — a hard `start_daemon` failure here would strand the many
+/// default-port tests that bind `:9741` under parallel contention.
+async fn bind_listener_with_retry(
+    addr: SocketAddr,
+    label: &str,
+) -> Result<tokio::net::TcpListener, MeshError> {
+    const ATTEMPTS: usize = 5;
+    const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
+    let mut last_err: Option<std::io::Error> = None;
+    for attempt in 1..=ATTEMPTS {
+        match tokio::net::TcpListener::bind(addr).await {
+            Ok(listener) => return Ok(listener),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                warn!(
+                    %addr, attempt, attempts = ATTEMPTS,
+                    "bind {label}: address in use — retrying in {}ms (old listener \
+                     may still be releasing)",
+                    BACKOFF.as_millis()
+                );
+                last_err = Some(e);
+                tokio::time::sleep(BACKOFF).await;
+            }
+            Err(e) => {
+                return Err(MeshError::Network(format!(
+                    "bind {label} on {addr} failed: {e}"
+                )));
+            }
+        }
+    }
+    Err(MeshError::Network(format!(
+        "bind {label} on {addr} failed after {ATTEMPTS} attempts: {}",
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "address in use".to_string())
+    )))
 }
 
 /// Write minimal `ModelInfo` entries into the inference store for

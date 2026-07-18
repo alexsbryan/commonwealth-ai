@@ -254,3 +254,60 @@ async fn join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake() {
         }
     }
 }
+
+/// A failed join (unreachable peer / bad handshake) must roll the daemon
+/// back to a RUNNING solo mesh — NOT leave it meshless with `:9741` down.
+/// Regression guard for the "daemon alive but client API stranded after a
+/// failed join" wedge: `join_mesh`'s handshake-failure rollback now calls
+/// `leave_to_solo` (rebinding the client API) instead of a bare `leave()`.
+#[tokio::test]
+async fn failed_join_rolls_back_to_running_solo_mesh() {
+    let tmp = tempfile::tempdir().unwrap();
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
+    daemon
+        .create_mesh("solo-mesh test", "founder")
+        .await
+        .expect("create_mesh succeeds");
+    assert!(daemon.is_running().await, "precondition: daemon is running");
+
+    // Valid-format key for a mesh no peer here serves → the handshake scan
+    // finds nothing and errors (Network), triggering the rollback.
+    let foreign_link = deep_link::DeepLink::Join {
+        join_key: membership::generate_join_key(),
+        mesh_name: Some("nowhere".into()),
+        relay_hint: None,
+        iroh_dial: None,
+        encrypted: false,
+        expires_at: None,
+    };
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(15),
+        daemon.join_mesh(&foreign_link, "joiner"),
+    )
+    .await
+    .expect("join_mesh should return (fail) well within the timeout");
+    assert!(
+        result.is_err(),
+        "join against an unreachable peer must fail"
+    );
+
+    // The fix: after a failed join the daemon is back in a live SOLO mesh,
+    // NOT left Stopped. Before this change it stranded :9741.
+    assert!(
+        daemon.is_running().await,
+        "a failed join must roll back to a running solo mesh, not leave the \
+         daemon meshless (which strands the client API on :9741)"
+    );
+    let members = daemon
+        .app_state()
+        .await
+        .expect("app_state after re-solo")
+        .inner
+        .mesh
+        .read()
+        .await
+        .members
+        .len();
+    assert_eq!(members, 1, "rolled-back mesh must be solo (self only)");
+}

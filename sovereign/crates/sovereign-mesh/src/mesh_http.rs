@@ -540,8 +540,15 @@ async fn mesh_relay_candidates(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> im
         .into_response()
 }
 
-/// `POST /v1/mesh/leave` — stop the daemon and clear persisted mesh
-/// state. Mirrors the desktop "Leave mesh" button.
+/// `POST /v1/mesh/leave` — leave the current mesh and re-create a fresh
+/// solo mesh **in this same process**. Mirrors the desktop "Leave mesh"
+/// button.
+///
+/// The node returns to being its own solo mesh with the client API
+/// staying available on the same process — no restart, no model reload,
+/// no dependency on a service manager to relaunch us (the old design
+/// exited with code 103 and hoped launchd/systemd would bring us back,
+/// which stranded `:9741` when nothing supervised the daemon).
 async fn mesh_leave(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
@@ -549,32 +556,82 @@ async fn mesh_leave(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    match daemon.leave().await {
-        Ok(()) => {
-            // A user-initiated leave should return the node to a fresh
-            // solo mesh. On the standalone `daemon run` process that
-            // means exiting so launchd/systemd relaunches (the relaunch
-            // re-creates the solo mesh, because `leave()` just cleared
-            // persistence). Signal that HERE — not inside `leave()` —
-            // because `join_mesh`'s auto-leave also calls `leave()` and
-            // must not restart the process. Embedded/desktop daemons
-            // have no consumer for this signal, so it's a no-op there.
-            daemon.request_leave_relaunch();
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(e) => (
+    // Must be running to leave — preserve the 409 contract for callers.
+    if !daemon.is_running().await {
+        return (
             StatusCode::CONFLICT,
-            Json(serde_json::json!({ "error": e.to_string() })),
+            Json(serde_json::json!({ "error": "mesh is not running" })),
         )
-            .into_response(),
+            .into_response();
     }
+    // Do NOT tear down synchronously: this handler is being served BY the
+    // `:9741` listener that `leave()` drops, so leaving inline would cancel
+    // our own response mid-flight (the historical "connection reset / :9741
+    // down forever on leave" bug). Instead ACK now on the still-live
+    // listener, then re-solo in a detached task after a short grace so the
+    // `204` flushes first. `leave_to_solo` rebinds `:9741` in THIS process
+    // within ~1s — the desktop's reconnect poll catches it.
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        if let Err(e) = daemon.leave_to_solo().await {
+            tracing::error!(
+                error = %e,
+                "mesh leave: in-process re-solo failed; :9741 may stay down \
+                 until a daemon restart"
+            );
+        }
+    });
+    StatusCode::NO_CONTENT.into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::EmbeddedDaemon;
+    use sovereign_core::setup_config::{
+        DaemonSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
+    };
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    /// Hermetic daemon config for tests: ephemeral ports (`0`) so parallel
+    /// `create`/`leave` tests never fight over the real `:9741`/`:9742` — a
+    /// bind conflict is now a hard error (`MeshError::Network`) rather than
+    /// silently swallowed — and mDNS + iroh off so no unit test touches a
+    /// multicast socket or binds an iroh endpoint. Everything else defaulted.
+    fn hermetic_cfg() -> SetupConfig {
+        SetupConfig {
+            models: ModelsSection {
+                primary: PathBuf::from("/models/primary.gguf"),
+                fast: None,
+                embed: PathBuf::from("/models/embed.gguf"),
+                code: None,
+                context_size: None,
+                max_extras_memory_gb: None,
+                extra: BTreeMap::new(),
+                primary_pool: None,
+            },
+            daemon: DaemonSection {
+                client_port: 0,
+                internal_port: 0,
+                ..Default::default()
+            },
+            data: Default::default(),
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: IrohSection {
+                enabled: Some(false),
+                ..Default::default()
+            },
+            shared_model: Default::default(),
+            discovery: DiscoverySection {
+                mdns: false,
+                ..Default::default()
+            },
+            mcp_servers: Vec::new(),
+        }
+    }
 
     /// Stand up the mesh HTTP router over a no-mesh daemon bound to
     /// an ephemeral localhost port. Returns `(daemon_arc, base_url,
@@ -582,6 +639,7 @@ mod tests {
     async fn spawn_test_router() -> (Arc<EmbeddedDaemon>, String, TempDir) {
         let tmp = tempfile::tempdir().unwrap();
         let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+        daemon.set_setup_config(hermetic_cfg()).await;
         let app = mesh_router(Arc::clone(&daemon));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -641,18 +699,17 @@ mod tests {
         assert_eq!(body["members_total"], 1);
     }
 
-    /// The user-facing `POST /v1/mesh/leave` must fire the leave-relaunch
-    /// signal so a standalone `daemon run` exits and the service manager
-    /// relaunches into a fresh solo mesh. Regression guard for the bug
-    /// where leaving a mesh killed `:9741` with no way back (the daemon
-    /// stopped its servers but never exited, so launchd never restarted).
+    /// The user-facing `POST /v1/mesh/leave` must return the node to a live
+    /// SOLO mesh in the SAME process — `/v1/mesh/status` keeps answering, no
+    /// restart. Regression guard for the bug where leaving a mesh killed
+    /// `:9741` with no way back (the daemon tore down its listeners and
+    /// relied on a service manager that wasn't there to relaunch it).
     #[tokio::test]
-    async fn http_leave_fires_relaunch_signal() {
-        let (daemon, base, _tmp) = spawn_test_router().await;
+    async fn http_leave_returns_to_solo_mesh() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
         let client = reqwest::Client::new();
 
-        // Bring the daemon up so leave() succeeds (a Stopped daemon
-        // returns NotRunning and the handler 409s without signalling).
+        // Create a mesh so leave() has something to leave.
         let resp = client
             .post(format!("{base}/v1/mesh/create"))
             .json(&serde_json::json!({ "name": "test mesh", "node_name": "alice" }))
@@ -668,23 +725,43 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status(), 204);
 
-        // The relaunch signal must have fired. notify_one stores a permit
-        // even though it was raised before we await here, so this resolves
-        // immediately; a missing signal would hang until the timeout.
-        tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            daemon.leave_relaunch_requested(),
-        )
-        .await
-        .expect("POST /v1/mesh/leave should fire the leave-relaunch signal");
+        // The re-solo runs in a detached task after a short grace, so poll
+        // status until the fresh solo mesh is back up (same process, same
+        // test listener). We wait specifically for a mesh that is NOT the
+        // old "test mesh" — the pre-teardown window still reports the old
+        // one as running. A missing re-solo would never satisfy this and
+        // fail the assertion after the loop.
+        let mut running_solo = false;
+        for _ in 0..40 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let body: serde_json::Value = client
+                .get(format!("{base}/v1/mesh/status"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            if body["running"] == true
+                && body["members_total"] == 1
+                && body["mesh_name"].as_str() != Some("test mesh")
+            {
+                running_solo = true;
+                break;
+            }
+        }
+        assert!(
+            running_solo,
+            "POST /v1/mesh/leave should re-create a live solo mesh in-process"
+        );
     }
 
     /// A DIRECT `leave()` — the path `join_mesh`'s auto-leave and the
-    /// deprecated `stop()` take when switching meshes — must NOT fire the
-    /// relaunch signal. If it did, joining a new mesh (which leaves the
-    /// old one first) would restart the whole daemon mid-join.
+    /// deprecated `stop()` take when switching meshes — must NOT re-create a
+    /// solo mesh. It leaves the daemon Stopped so the caller can join the
+    /// next mesh; only the user-facing `leave_to_solo` bounces back to solo.
     #[tokio::test]
-    async fn direct_leave_does_not_fire_relaunch_signal() {
+    async fn direct_leave_leaves_daemon_stopped() {
         let (daemon, base, _tmp) = spawn_test_router().await;
         let client = reqwest::Client::new();
 
@@ -695,21 +772,43 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 200);
+        assert!(daemon.is_running().await);
 
         // Leave via the library method, exactly as join_mesh's auto-leave does.
         daemon.leave().await.unwrap();
 
-        // The relaunch signal must NOT have fired: awaiting it times out.
-        let fired = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            daemon.leave_relaunch_requested(),
-        )
-        .await
-        .is_ok();
         assert!(
-            !fired,
-            "direct leave() must not fire the relaunch signal (would restart the daemon mid mesh-switch)"
+            !daemon.is_running().await,
+            "direct leave() must leave the daemon Stopped (no auto re-solo — that \
+             would restart the daemon mid mesh-switch)"
         );
+    }
+
+    /// Leaving and re-soloing repeatedly must rebind the SAME address cleanly
+    /// every time. `stop_inner` awaits the old serve task before `create_mesh`
+    /// rebinds, so the in-process rebind never races the just-dropped socket
+    /// into `EADDRINUSE`. Uses a fixed (non-ephemeral) port so each iteration
+    /// genuinely re-binds the same `host:port` — the exact race being guarded.
+    #[tokio::test]
+    async fn leave_to_solo_rebinds_same_port_repeatedly() {
+        let tmp = tempfile::tempdir().unwrap();
+        let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
+        let mut cfg = hermetic_cfg();
+        cfg.daemon.client_port = 39411;
+        cfg.daemon.internal_port = 39412;
+        daemon.set_setup_config(cfg).await;
+
+        daemon.create_mesh("test mesh", "alice").await.unwrap();
+        for i in 0..5 {
+            daemon
+                .leave_to_solo()
+                .await
+                .unwrap_or_else(|e| panic!("re-solo #{i} failed (bind race?): {e}"));
+            assert!(
+                daemon.is_running().await,
+                "daemon should be running after re-solo #{i}"
+            );
+        }
     }
 
     #[tokio::test]

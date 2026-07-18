@@ -59,7 +59,7 @@ svrn workflow run my-pipeline.toml
 
 ## Going deeper
 
-The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it.
+The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it. Building an integration? [docs/INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) says which surfaces are contracts and which are internals.
 
 ## Contributing
 
