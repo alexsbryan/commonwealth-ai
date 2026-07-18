@@ -14,8 +14,11 @@ with a test proving they work are the easiest to merge.
 - **Report a bug.** Use the bug template — it asks for your version and platform
   up front. If the bug involves the running daemon, mesh, or models, the output
   of `sovereign doctor` helps too.
-- **Suggest something.** Feature ideas go through the issue template too.
-  Describe what you're trying to do, not only the fix you have in mind.
+- **Suggest something.** Feature ideas start as an
+  [Ideas discussion](https://github.com/alexsbryan/commonwealth-ai/discussions/new?category=ideas),
+  where others can weigh in and upvote — the ones with legs get promoted to
+  issues and built. Describe what you're trying to do, not only the fix you have
+  in mind. Worth a skim first: [what this project isn't trying to be](./docs/NON-GOALS.md).
 - **Send a change.** Small, focused pull requests are far easier to review than
   large ones. Planning something big? Open an issue first so we can agree on the
   shape before you spend the effort.

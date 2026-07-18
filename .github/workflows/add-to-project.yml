@@ -1,0 +1,26 @@
+# Drop every new issue onto the triage board automatically, so triage is a
+# matter of walking one board instead of scanning the issues list.
+#
+# ONE-TIME SETUP (can't be scripted without a Projects token — see
+# docs/maintainer/PRODUCT_PROCESS.md):
+#   1. Create a user Project board and copy its URL.
+#   2. Make a fine-grained PAT with read/write on "Projects", store it as the
+#      repo secret ADD_TO_PROJECT_PAT.
+#   3. Store the board URL as the repo variable TRIAGE_PROJECT_URL.
+# Until both exist this job no-ops (the `if` guard below), so it never shows a
+# red X on the Actions tab before it's wired up.
+name: Add issues to triage board
+
+on:
+  issues:
+    types: [opened, reopened]
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    if: ${{ vars.TRIAGE_PROJECT_URL != '' }}
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: ${{ vars.TRIAGE_PROJECT_URL }}
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}

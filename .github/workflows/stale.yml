@@ -1,0 +1,38 @@
+# A deliberately narrow stale bot. It ONLY touches issues we've marked
+# `needs-info` — i.e. ones waiting on the reporter to answer a question. It
+# never touches the general backlog, never auto-closes a real report sitting in
+# `accepted`, and leaves anything labelled `blocked` or `help-wanted` alone.
+# Stale bots earn their bad reputation by closing live work; this one can't.
+name: Close abandoned needs-info issues
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays, alongside the weekly triage pass
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          only-labels: "needs-info"
+          days-before-stale: 14
+          days-before-close: 7
+          stale-issue-label: "stale"
+          remove-stale-when-updated: true
+          stale-issue-message: >
+            This one's been waiting on a bit more info for a couple of weeks, so
+            it'll auto-close in 7 days to keep the tracker honest. No worries if
+            you've moved on — but if you can still reproduce it, just drop a
+            reply with the details asked for above and it reopens itself. Thanks
+            for reporting it either way.
+          close-issue-message: >
+            Closing this for now since we didn't hear back — nothing personal,
+            just keeping the list to things we can actually act on. If it's
+            still happening, reply here with the details and we'll pick it right
+            back up.
+          exempt-issue-labels: "accepted,blocked,help wanted"
