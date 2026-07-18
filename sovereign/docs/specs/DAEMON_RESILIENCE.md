@@ -232,41 +232,65 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
 
 ### P3 — prove it and keep it proven
 
-- [ ] **P3.1** Chaos lane in CI: kill -9 mid-stream, RSS-limit trip,
-  slot-wedge injection, join/leave cycles; assert recovery time and no
-  stuck states (extend `mesh-soak.sh` / chaos runner). *Seeded
-  2026-07-18: `scripts/daemon-soak.sh` — isolated-HOME daemon on
-  non-default ports (mDNS off, iroh kill-switched, small soak models),
-  three cases: `attach` (external-daemon topology, kill -9 → supervisor
-  stand-in relaunch, identity-verified via pidfile ownership so an
-  orphan listener can't fake recovery), `child` (the desktop
-  `--daemon-child` self-spawn arm, same cycling), `guards`
-  (flock double-run refusal + SIGTERM-exit-0 + pidfile removal +
-  `SOAK_RSS=1` RSS exit-102 drill). First full run: 17/17 —
-  5+5 kill -9 cycles recovered in ~2s each, both binaries. Two
-  incidental live validations along the way: a harness pid bug orphaned
-  a daemon and the relaunched instance was correctly REFUSED by the run
-  lock while the orphan kept serving (the exact pre-P0.5 double-run
-  scenario, now contained); and the RSS hard-limit drill produced a
-  real exit-102. Not yet covered: mid-stream kill during inference,
-  listener-loss injection (needs in-process fault injection), long
-  cycles. Second lane: `scripts/wizard-verify.sh` — the journey-level
-  drive of the fresh-install wizard → supervised-relaunch chain (real
-  desktop binary, netns-isolated, `complete_setup` through the command
-  bridge's production IPC path; 11 assertions, self-wraps in
-  `unshare -r -n`; needs the debug desktop build + soak models). Its
-  first run caught the `mirror_to_setup_config` first-write bug that
-  unit tests missed — run it before every release alongside the soak.*
-- [ ] **P3.2** 48h+ soak gate before releases — founder-ingress and
-  log-spam were long-uptime bugs no short test catches.
-- [ ] **P3.3** Stack-overflow root cause: chase the now-armed backtraces;
-  bound corpus-engine recursion depth independently of the 8 MiB ceiling.
-- [ ] **P3.4** SQLite: `busy_timeout`; rebuild-from-scratch fallback for
-  derived stores on migration failure (reserve `NeedsUserDecision` for
-  user data).
-- [ ] **P3.5** Retire `scripts/daemon-supervised.sh` once P0.3 makes its
-  env-arming redundant (keep it only as the toolbox/GPU dev runner it was
-  written to be).
+- [x] **P3.1** Chaos lane: `scripts/daemon-soak.sh` *(2026-07-18;
+  self-wraps into `unshare -r -n` — isolated HOME + netns, mDNS off,
+  iroh kill-switched, small soak models)*. Cases, all green on the
+  first full extended run (23/24; the 1 was a harness model-pick bug,
+  fixed and re-run green):
+  - `attach` / `child` — kill -9 → supervisor-stand-in relaunch on both
+    topologies (standalone daemon + the desktop `--daemon-child`
+    self-spawn arm), recovery identity-verified via pidfile ownership.
+  - `guards` — flock double-run refusal (original unharmed),
+    SIGTERM-exit-0 + pidfile removal, `SOAK_RSS=1` exit-102 drill.
+  - `stream` — kill -9 **mid-inference-stream**: client sees the stream
+    die within 15s (no hang), relaunched daemon serves a clean
+    completion (no poisoned state from the mid-decode kill).
+  - `leave` — `POST /v1/mesh/leave` cycles: 204 + in-process re-solo on
+    the SAME pid every time — the `leave_to_solo` regression fence.
+  - `watchdog` (SOAK_WATCHDOG=1) — **listener-loss injection**: an nft
+    rule makes the client port unreachable while the process lives; the
+    listener watchdog fired a real **exit 104 at ~245s** (120s grace +
+    probe window as designed) and the relaunch came back clean. Needs
+    `nftables` in the toolbox (`sudo dnf install -y nftables`;
+    re-install after a toolbox reset).
+  - `chaos` (--chaos-secs N) — random-phase kill loop: 26 kills landing
+    at arbitrary points including mid-model-load; final boot clean —
+    partial-boot state never wedges a later boot.
+  Incidental live validations along the way: the run-lock refusal fired
+  against a real orphan-holds-lock double-run, and the RSS drill
+  produced genuine exit-102s. Second lane: `scripts/wizard-verify.sh` —
+  the journey-level drive of the fresh-install wizard →
+  supervised-relaunch chain (11 assertions; its first run caught the
+  `mirror_to_setup_config` first-write bug unit tests missed). Run both
+  before every release. Still open (needs in-process fault injection):
+  slot-wedge injection, multi-node join/leave churn (that's
+  `mesh-soak.sh`'s territory), long-duration cycles.
+- [x] **P3.2** Long-soak gate tooling *(2026-07-18)*:
+  `scripts/daemon-soak-report.sh` reads a live install's local
+  artifacts (supervisor.log restart/exit-code breakdown, crash records,
+  daemon.err defense markers + rotated baks, pidfile/uptime) and
+  renders PASS/WARN/FAIL. Local-first — reads files, sends nothing.
+  First run against the dev box: PASS (and the historical supervisor
+  log told the before/after story: 68 restarts in the pre-P0 era incl.
+  2× SEGV and 16× SIGKILL; 0 since the P0 deploy). The gate itself is
+  procedural: the release checklist requires a PASS on ≥48h of uptime —
+  the founder-ingress and log-spam bugs were long-uptime-only.
+- [ ] **P3.3** Stack-overflow root cause: diagnostics armed
+  (RUST_BACKTRACE=full + 8 MiB stacks + panic hook + the report
+  surfaces overflow markers across log rotations); no recurrence since
+  2026-05-12 to chase. Bounding corpus-engine recursion depth
+  independently of the stack ceiling stays open until a repro exists.
+- [x] **P3.4** SQLite *(2026-07-18)*: `busy_timeout(5s)` on every
+  production open (sovereign-store state db, notes.db, project_docs.db,
+  lint/test result stores) — a CLI process contending with the daemon
+  now waits briefly instead of erroring; the two DERIVED watcher stores
+  rebuild-from-scratch on open/migration failure (regression test:
+  `corrupt_derived_db_is_rebuilt`) while user-data stores keep the
+  `NeedsUserDecision` posture — never silent deletion.
+- [x] **P3.5** `scripts/daemon-supervised.sh` env-arming retired
+  *(2026-07-18)* — RSS limits are in-daemon RAM-derived defaults; the
+  script survives purely as the toolbox/GPU service-manager stand-in
+  (host systemd can't reach the GPU toolbox).
 
 ---
 
@@ -313,3 +337,11 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   from minute one (P0.1 item (b) closed). Extended soak 57/57 earlier
   the same day. Full workspace re-verified after the fix: lint PASS,
   tests 7,734 / 0 fail.
+- 2026-07-18 (P3 push) — chaos coverage completed: soak gained
+  `stream` / `leave` / `watchdog` / `chaos` cases (all green; the
+  watchdog injection produced a real exit-104 at ~245s; `leave` held
+  5/5 same-pid re-solos; 26 random-phase kills incl. mid-boot ended
+  clean), `daemon-soak-report.sh` landed as the P3.2 gate tool (dev box:
+  PASS), and P3.4's SQLite hardening landed (busy_timeout ×5 opens,
+  derived-store rebuild ×2 + regression test). P3.1/2/4/5 checked;
+  P3.3 stays open pending a stack-overflow recurrence.

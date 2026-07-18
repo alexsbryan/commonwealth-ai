@@ -90,12 +90,33 @@ impl TestResultStore {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::Io)?;
         }
+        // Derived cache — rebuild rather than wedge on corruption, same
+        // contract as `LintResultStore::open` (DAEMON_RESILIENCE.md P3.4).
+        match Self::open_once(db_path) {
+            Ok(store) => Ok(store),
+            Err(first) => {
+                tracing::warn!(
+                    db = %db_path.display(),
+                    error = %first,
+                    "test-results db unopenable — rebuilding the derived cache from scratch"
+                );
+                for suffix in ["", "-wal", "-shm"] {
+                    let _ = std::fs::remove_file(format!("{}{suffix}", db_path.display()));
+                }
+                Self::open_once(db_path)
+            }
+        }
+    }
+
+    fn open_once(db_path: &Path) -> Result<Self> {
         let conn = Connection::open(db_path).map_err(|e| {
             Error::Io(std::io::Error::other(format!(
                 "TestResultStore::open {}: {e}",
                 db_path.display()
             )))
         })?;
+        // Cross-process SQLITE_BUSY retry window (see LintResultStore).
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
         conn.execute_batch(SCHEMA)
             .map_err(|e| Error::Io(std::io::Error::other(format!("schema migration: {e}"))))?;
         Ok(Self {

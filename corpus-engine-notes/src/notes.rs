@@ -866,6 +866,12 @@ impl NoteStore {
             )))
         })?;
 
+        // Cross-process SQLITE_BUSY retry window — the CLI reads notes
+        // while the daemon holds this db (DAEMON_RESILIENCE.md P3.4).
+        // NO auto-rebuild here: notes are user data; corruption needs a
+        // user decision, never silent deletion.
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+
         // WAL mode is always desirable — idempotent, safe to repeat.
         conn.execute_batch("PRAGMA journal_mode=WAL;")
             .map_err(|e| Error::Io(std::io::Error::other(format!("NoteStore WAL: {e}"))))?;

@@ -19,16 +19,44 @@
 #            flock run lock; SIGTERM stop exits 0 and releases pidfile;
 #            optional SOAK_RSS=1 drill asserts the RSS hard limit exits
 #            102 (the supervised-relaunch contract).
+#   stream — kill -9 while an inference STREAM is mid-flight: the client
+#            must see the stream die (never hang), and the relaunched
+#            daemon must serve a fresh completion cleanly.
+#   leave  — `POST /v1/mesh/leave` cycles: the daemon must ACK 204 and
+#            re-solo IN-PROCESS (same pid, :port back within seconds) —
+#            the regression fence for the 2026-07-18 `leave_to_solo`
+#            fix (:9741-down-forever-after-leave).
+#   watchdog (SOAK_WATCHDOG=1, ~5 min) — listener-loss injection: an
+#            nft rule makes the client port unreachable while the
+#            process lives (the phantom-Running shape); the daemon's
+#            listener watchdog must self-SIGTERM with EXIT 104 within
+#            its 120s-grace + 3×60s-probe window. Netns-only.
+#   chaos (--chaos-secs N) — random-phase kill -9 loop: kills land at
+#            random points INCLUDING mid-model-load, then one final
+#            relaunch must come up clean (partial-boot state must never
+#            wedge a later boot).
 #
-# Isolation: fresh HOME under mktemp, client/internal ports 19741/19742,
-# mDNS off, iroh kill-switched — the soak daemon can never gossip with a
-# live mesh. Requires models/bonsai-8b.gguf + models/qwen-embedding-0.6b.gguf
-# checkouts (the two smallest local GGUFs).
+# Isolation: self-wraps into `unshare -r -n` (private netns) when
+# available (SOAK_NETNS=0 to disable) — ports free, firewall rules
+# namespace-local, zero contact with a live daemon or mesh. Fresh HOME
+# under mktemp, mDNS off, iroh kill-switched either way. Requires
+# models/bonsai-8b.gguf + models/qwen-embedding-0.6b.gguf checkouts
+# (the two smallest local GGUFs).
 #
-# Usage: scripts/daemon-soak.sh [--cycles N] [--case attach|child|guards|all]
+# Usage: scripts/daemon-soak.sh [--cycles N] [--chaos-secs N]
+#        [--case attach|child|guards|stream|leave|watchdog|chaos|all]
 #   SOAK_RSS=1        also run the RSS exit-102 drill (adds ~2 min)
+#   SOAK_WATCHDOG=1   also run the exit-104 watchdog injection (~5 min)
 #   SOAK_PORT=19741   override the client port
+#   SOAK_NETNS=0      stay in the host netns (disables watchdog case)
 set -uo pipefail
+
+# ── Self-wrap into a private netns ───────────────────────────────────
+if [[ "${SOAK_NETNS:-1}" == "1" && "${DAEMON_SOAK_NS:-}" != "1" ]] \
+   && command -v unshare >/dev/null 2>&1; then
+  exec unshare -r -n env DAEMON_SOAK_NS=1 "$0" "$@"
+fi
+[[ "${DAEMON_SOAK_NS:-}" == "1" ]] && ip link set lo up
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DAEMON_BIN="${DAEMON_BIN:-$REPO_ROOT/target/debug/sovereign-cli-daemon}"
@@ -38,10 +66,12 @@ EMBED_GGUF="$REPO_ROOT/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0
 
 CYCLES=5
 CASE="all"
+CHAOS_SECS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cycles) CYCLES="$2"; shift 2 ;;
     --case) CASE="$2"; shift 2 ;;
+    --chaos-secs) CHAOS_SECS="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -277,6 +307,202 @@ run_guards() {
   return 0
 }
 
+# First CHAT-capable model id — the embed slot also appears in
+# /v1/models and a chat completion against it errors (observed: data[0]
+# was the embedding model on the first extended run).
+first_model_id() {
+  curl -sf -m 3 "http://127.0.0.1:$CLIENT_PORT/v1/models" \
+    | python3 -c "
+import json, sys
+ids = [m['id'] for m in json.load(sys.stdin)['data']]
+chat = [i for i in ids if 'embed' not in i.lower()]
+print((chat or ids)[0])
+" 2>/dev/null
+}
+
+# ── Case: kill -9 mid-inference-stream ───────────────────────────────
+run_stream() {
+  note "case stream: kill -9 mid-inference-stream"
+  start_daemon "$DAEMON_BIN" daemon run
+  local t
+  if ! { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    bad "stream: boot failed"; stop_daemon_hard; return 1
+  fi
+  local model; model="$(first_model_id)"
+  if [[ -z "$model" ]]; then
+    bad "stream: no model id from /v1/models"; stop_daemon_hard; return 1
+  fi
+  local sout="$SOAK_HOME/stream.out"
+  : > "$sout"
+  curl -sN -m 300 -X POST "http://127.0.0.1:$CLIENT_PORT/v1/chat/completions" \
+    -H 'content-type: application/json' \
+    -d "{\"model\":\"$model\",\"stream\":true,\"max_tokens\":300,\"messages\":[{\"role\":\"user\",\"content\":\"Count slowly from one to one hundred in English words, one number per line.\"}]}" \
+    > "$sout" 2>/dev/null &
+  local curl_pid=$!
+  # First streamed bytes can lag behind prompt processing on a cold slot.
+  local streamed=""
+  local j
+  for (( j=0; j<90; j++ )); do
+    if [[ -s "$sout" ]] && grep -q "data:" "$sout"; then streamed=1; break; fi
+    kill -0 "$curl_pid" 2>/dev/null || break
+    sleep 1
+  done
+  if [[ -n "$streamed" ]]; then
+    ok "stream: tokens flowing (model $model)"
+  else
+    bad "stream: no streamed bytes within 90s (body: $(head -c 160 "$sout" | tr -d '\n'))"
+    kill -9 "$curl_pid" 2>/dev/null
+    stop_daemon_hard; return 1
+  fi
+  kill -9 "$DAEMON_PID" 2>/dev/null
+  wait "$DAEMON_PID" 2>/dev/null
+  # The client must observe the stream DIE — a hang here is the bug the
+  # attach watcher + per-turn error surfaces exist to catch.
+  local closed=""
+  for (( j=0; j<15; j++ )); do
+    kill -0 "$curl_pid" 2>/dev/null || { closed=1; break; }
+    sleep 1
+  done
+  if [[ -n "$closed" ]]; then
+    ok "stream: client stream closed within 15s of daemon death (no hang)"
+  else
+    bad "stream: client STILL waiting 15s after daemon death (hung stream)"
+    kill -9 "$curl_pid" 2>/dev/null
+  fi
+  # Relaunch and prove the fresh daemon serves a clean completion (no
+  # poisoned on-disk state from the mid-decode kill).
+  start_daemon "$DAEMON_BIN" daemon run
+  if { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    ok "stream: daemon recovered in ${t}s"
+  else
+    bad "stream: no recovery after mid-stream kill"; stop_daemon_hard; return 1
+  fi
+  local resp
+  resp="$(curl -sf -m 120 -X POST "http://127.0.0.1:$CLIENT_PORT/v1/chat/completions" \
+    -H 'content-type: application/json' \
+    -d "{\"model\":\"$model\",\"max_tokens\":8,\"messages\":[{\"role\":\"user\",\"content\":\"Say OK.\"}]}" 2>/dev/null)"
+  if [[ -n "$resp" ]] && echo "$resp" | grep -q '"content"'; then
+    ok "stream: post-recovery completion succeeded"
+  else
+    bad "stream: post-recovery completion failed: $(echo "$resp" | head -c 160)"
+  fi
+  stop_daemon_hard
+  sleep 2
+}
+
+# ── Case: mesh leave → in-process re-solo cycles ─────────────────────
+run_leave() {
+  note "case leave: mesh leave → in-process re-solo, $CYCLES cycles"
+  start_daemon "$DAEMON_BIN" daemon run
+  local t
+  if ! { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    bad "leave: boot failed"; stop_daemon_hard; return 1
+  fi
+  local i j code
+  for (( i=1; i<=CYCLES; i++ )); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST \
+      "http://127.0.0.1:$CLIENT_PORT/v1/mesh/leave" 2>/dev/null)"
+    if [[ "$code" != "204" ]]; then
+      bad "leave cycle $i: POST /v1/mesh/leave returned $code (want 204)"
+      break
+    fi
+    # Handler ACKs, then re-solos on a detached task (~300ms grace +
+    # ~1s rebind). Same pid throughout — this is NOT a process restart.
+    local back=""
+    for (( j=0; j<20; j++ )); do
+      if probe && kill -0 "$DAEMON_PID" 2>/dev/null; then back=1; break; fi
+      sleep 1
+    done
+    if [[ -z "$back" ]]; then
+      bad "leave cycle $i: :$CLIENT_PORT not back within 20s (leave_to_solo regression)"
+      break
+    fi
+    if curl -sf -m 3 "http://127.0.0.1:$CLIENT_PORT/v1/mesh/status" 2>/dev/null \
+        | grep -q '"running":true'; then
+      ok "leave cycle $i: re-soloed in-process (same pid $DAEMON_PID)"
+    else
+      bad "leave cycle $i: port back but mesh not running"
+    fi
+  done
+  stop_daemon_hard
+  sleep 2
+}
+
+# ── Case: listener-loss injection → exit 104 ─────────────────────────
+run_watchdog() {
+  note "case watchdog: block :$CLIENT_PORT and expect exit 104 (~5 min)"
+  if [[ "${DAEMON_SOAK_NS:-}" != "1" ]]; then
+    note "case watchdog: SKIPPED — needs the private netns (SOAK_NETNS=1)"
+    return 0
+  fi
+  if ! command -v nft >/dev/null 2>&1 || ! nft add table ip soakwd 2>/dev/null; then
+    note "case watchdog: SKIPPED — nft unavailable (toolbox: sudo dnf install -y nftables; re-install after a toolbox reset)"
+    return 0
+  fi
+  nft delete table ip soakwd 2>/dev/null
+  start_daemon "$DAEMON_BIN" daemon run
+  local t
+  if ! { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    bad "watchdog: boot failed"; stop_daemon_hard; return 1
+  fi
+  # Drop everything to the client port — the daemon's own watchdog
+  # probes now time out while the process lives: the phantom-Running
+  # shape, injected from outside the bind path.
+  nft add table ip soakwd
+  nft add chain ip soakwd input '{ type filter hook input priority 0 ; }'
+  nft add rule ip soakwd input tcp dport "$CLIENT_PORT" drop
+  # listener_watch: 120s startup grace + 3 failed probes at 60s cadence.
+  local exited="" j
+  for (( j=0; j<420; j++ )); do
+    kill -0 "$DAEMON_PID" 2>/dev/null || { exited=1; break; }
+    sleep 1
+  done
+  nft delete table ip soakwd 2>/dev/null
+  if [[ -z "$exited" ]]; then
+    bad "watchdog: daemon still alive 420s after port block (watchdog never fired)"
+    stop_daemon_hard; return 1
+  fi
+  local rc
+  wait "$DAEMON_PID"; rc=$?
+  DAEMON_PID=""
+  if [[ $rc -eq 104 ]]; then
+    ok "watchdog: listener loss → graceful exit 104 in ~${j}s (supervised-relaunch contract)"
+  else
+    bad "watchdog: exited $rc (expected 104)"
+  fi
+  # Supervisor stand-in: relaunch must come back clean post-unblock.
+  start_daemon "$DAEMON_BIN" daemon run
+  if { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    ok "watchdog: relaunched clean after unblock (${t}s)"
+  else
+    bad "watchdog: relaunch failed after unblock"
+  fi
+  stop_daemon_hard
+  sleep 2
+}
+
+# ── Case: random-phase kill loop (incl. mid-boot kills) ──────────────
+run_chaos() { # $1 = seconds
+  note "case chaos: random-phase kill -9 for $1s (kills land mid-boot too)"
+  local endt=$(( $(date +%s) + $1 )) kills=0
+  start_daemon "$DAEMON_BIN" daemon run
+  while (( $(date +%s) < endt )); do
+    sleep $(( 1 + RANDOM % 12 ))
+    kill -9 "$DAEMON_PID" 2>/dev/null
+    wait "$DAEMON_PID" 2>/dev/null
+    kills=$((kills+1))
+    start_daemon "$DAEMON_BIN" daemon run
+  done
+  local t
+  if { t=$(wait_ready "$READY_BUDGET_SECS") && pidfile_matches; }; then
+    ok "chaos: clean boot after $kills random-phase kills (final ready ${t}s)"
+  else
+    bad "chaos: daemon failed to come up clean after $kills random-phase kills"
+  fi
+  stop_daemon_hard
+  sleep 2
+}
+
 # ── Preflight ────────────────────────────────────────────────────────
 [[ -x "$DAEMON_BIN" ]] || { echo "missing $DAEMON_BIN — build sovereign-cli-daemon (debug)"; exit 2; }
 [[ -f "$PRIMARY_GGUF" ]] || { echo "missing $PRIMARY_GGUF"; exit 2; }
@@ -300,6 +526,19 @@ if [[ "$CASE" == "child" || "$CASE" == "all" ]]; then
 fi
 if [[ "$CASE" == "guards" || "$CASE" == "all" ]]; then
   run_guards
+fi
+if [[ "$CASE" == "stream" || "$CASE" == "all" ]]; then
+  run_stream
+fi
+if [[ "$CASE" == "leave" || "$CASE" == "all" ]]; then
+  run_leave
+fi
+if [[ "$CASE" == "watchdog" ]] || [[ "$CASE" == "all" && "${SOAK_WATCHDOG:-0}" == "1" ]]; then
+  run_watchdog
+fi
+if [[ "$CASE" == "chaos" ]] || [[ "$CASE" == "all" && "$CHAOS_SECS" -gt 0 ]]; then
+  (( CHAOS_SECS > 0 )) || CHAOS_SECS=120
+  run_chaos "$CHAOS_SECS"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────
