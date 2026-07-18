@@ -501,6 +501,38 @@ async fn run(rest: &[String]) -> i32 {
     };
     let naked_max: usize = globals.max_tokens.unwrap_or(2048);
 
+    // Resolve the alias this run is tagged with to the CONCRETE model
+    // behind it — once, up front, while the daemon is live (it is NOT
+    // reachable at gate/re-score time, which reads model_id back out of
+    // the transcript). Every transcript row is then stamped with the
+    // concrete GGUF stem instead of the bare alias, so the captured
+    // baseline attributes to the model actually tested rather than to
+    // whatever `primary` happens to point at months later. Best-effort:
+    // on failure we fall back to the alias and the baseline is recorded
+    // unattributed (honest) rather than mislabelled.
+    let requested_alias = globals
+        .chat_model
+        .clone()
+        .unwrap_or_else(|| "primary".to_string());
+    let run_model_id =
+        match super::model_resolve::resolve_model_attribution(&args.base_url, &requested_alias)
+            .await
+        {
+            Some(attr) => {
+                eprintln!(
+                    "[chaos] resolved slot '{}' → concrete model '{}'{}",
+                    requested_alias,
+                    attr.file_stem,
+                    attr.quant
+                        .as_deref()
+                        .map(|q| format!(" [{q}]"))
+                        .unwrap_or_default()
+                );
+                attr.file_stem
+            }
+            None => requested_alias.clone(),
+        };
+
     // Full-transcript sidecar (glassbox): stream-written per probe so a
     // crashed run still leaves partial diagnostics. Creation failure warns
     // and degrades to excerpt-only rather than aborting the battery.
@@ -523,10 +555,10 @@ async fn run(rest: &[String]) -> i32 {
     let take = args.limit.unwrap_or(bank.questions.len());
     let mut rows = Vec::new();
     for (qi, q) in bank.questions.iter().take(take).enumerate() {
-        let model_id = globals
-            .chat_model
-            .clone()
-            .unwrap_or_else(|| "primary".to_string());
+        // Concrete model stem resolved once above, stamped on every row
+        // so the transcript (and every baseline re-scored from it)
+        // carries the model actually tested, not the slot alias.
+        let model_id = run_model_id.clone();
         // Answer source per transport; everything downstream (judges,
         // critic gate, deterministic checks, scorer) is shared verbatim.
         let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session) {

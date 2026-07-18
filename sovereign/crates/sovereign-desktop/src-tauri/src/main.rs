@@ -339,20 +339,26 @@ fn main() -> ExitCode {
 
                 let config = state_clone.config.read().await;
                 let setup_done = config.setup_complete;
-                let model_exists = config.model_path.exists();
                 drop(config);
+                // Model paths live in `SetupConfig` (`config.toml`) now —
+                // resolve the fast slot from there to decide whether a real
+                // GGUF is present.
+                let model_exists = crate::state::ResolvedModelSlots::load()
+                    .map(|s| !s.fast.as_os_str().is_empty() && s.fast.exists())
+                    .unwrap_or(false);
 
                 if !setup_done || !model_exists {
                     if !setup_done {
                         tracing::info!("First launch — waiting for setup wizard");
                     } else {
                         tracing::warn!(
-                            "Model not found — clearing stale path and returning to setup wizard"
+                            "Model not found — returning to setup wizard"
                         );
-                        // Clear the stale model path so the wizard starts fresh.
+                        // Model paths live in SetupConfig now; clear only the
+                        // desktop's setup flag so the wizard re-runs and
+                        // rewrites config.toml's [models].
                         let mut config = state_clone.config.write().await;
                         config.setup_complete = false;
-                        config.model_path = std::path::PathBuf::new();
                         let _ = config.save();
                     }
                     let _ = handle_clone.emit("setup-required", ());
@@ -453,14 +459,12 @@ fn main() -> ExitCode {
                             // setup. Falls back to "fast" only as a
                             // last resort for older configs without a
                             // model_path set.
-                            let cleanup_model = state_clone
-                                .config
-                                .read()
-                                .await
-                                .model_path
+                            let cleanup_model = crate::state::ResolvedModelSlots::load_or_default()
+                                .fast
                                 .file_stem()
                                 .and_then(|s| s.to_str())
                                 .map(|s| s.to_string())
+                                .filter(|s| !s.is_empty())
                                 .unwrap_or_else(|| "fast".to_string());
                             local_corpus_commands::install_ocr_ctx_for_app(
                                 &handle_clone,
@@ -516,6 +520,8 @@ fn main() -> ExitCode {
             commands::set_mobile_access,
             commands::get_setup_context_size,
             commands::set_setup_context_size,
+            commands::get_setup_model_slots,
+            commands::set_setup_model_slots,
             commands::is_setup_complete,
             commands::is_backend_ready,
             commands::complete_setup,

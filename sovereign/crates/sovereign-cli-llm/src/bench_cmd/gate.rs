@@ -316,7 +316,7 @@ pub(crate) fn governance_lane_baseline(
 ) -> LaneBaseline {
     let mut b = LaneBaseline::new("governance", now);
     b.corpus = corpus;
-    b.model = model;
+    b.attribute(model.as_deref());
     b.note = Some(format!(
         "precision {:.2} · recall {:.2} · {} planted found, {} missed · {} flagged pairs",
         rep.overall.precision,
@@ -392,7 +392,11 @@ pub(crate) fn chaos_lane_baseline(
 ) -> LaneBaseline {
     let mut b = LaneBaseline::new("chaos-monkey", now);
     b.corpus = corpus;
-    b.model = model;
+    // `model` is the transcript's model_id — the concrete GGUF stem
+    // when the run resolved it (attributes both `model` and the
+    // structured `model_attribution`), or a legacy alias which
+    // `attribute` refuses, leaving the baseline honestly unattributed.
+    b.attribute(model.as_deref());
     b.note = Some(format!(
         "competence {}/{} answerable correct · honesty {}/{} absent honest · {} fabricated",
         rep.counts.answerable_correct,

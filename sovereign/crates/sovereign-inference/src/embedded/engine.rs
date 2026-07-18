@@ -29,7 +29,7 @@ use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
+use sovereign_core::traits::{InferenceProvider, ResidentSlot};
 use sovereign_core::types::*;
 use sovereign_core::Result;
 
@@ -1538,6 +1538,122 @@ impl EmbeddedLlamaCpp {
             .map(|(model_id, slot_name)| (slot_name.clone(), model_id.clone()))
             .collect();
         out.sort();
+        out
+    }
+
+    /// Report the real in-memory residency of every slot — the ground
+    /// truth behind `/status`'s `loaded` flag (the `ollama ps` analog),
+    /// distinct from what is *configured* or *advertised*.
+    ///
+    /// Non-blocking by construction: the lazy Primary/Code slot is
+    /// inspected via `try_lock` on the lightweight `primary_loaded_path`
+    /// marker — never a blocking lock on the heavy `primary` weights
+    /// mutex — so this NEVER forces a load and NEVER blocks a hot-swap.
+    /// A contended marker yields `transitioning: true` instead of a
+    /// guessed residency.
+    pub fn resident_slots(&self) -> Vec<ResidentSlot> {
+        fn stem(p: &std::path::Path) -> String {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_string()
+        }
+        let mut out: Vec<ResidentSlot> = Vec::new();
+
+        // ── fast (eager, always resident) ──
+        out.push(ResidentSlot {
+            role: "fast".to_string(),
+            model_id: self.fast.model_id.clone(),
+            resident: true,
+            size_bytes: Some(self.fast.size_bytes),
+            transitioning: false,
+        });
+
+        // ── primary / code: ONE lazy hot-swap slot shared between the
+        // Main responder and the Code specialist. Read the lightweight
+        // loaded-path marker (not the weights mutex); at most one of the
+        // two roles is resident at any instant. ──
+        let (loaded_path, contended) = match self.primary_loaded_path.try_lock() {
+            Ok(g) => (g.clone(), false),
+            Err(_) => (None, true),
+        };
+        // Best-effort resident byte size of the current occupant —
+        // non-blocking; `None` when the weights lock is momentarily busy.
+        let occupant_bytes = self
+            .primary
+            .try_lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|s| s.size_bytes));
+        for (role, configured) in [
+            ("primary", self.primary_path.as_deref()),
+            ("code", self.code_path.as_deref()),
+        ] {
+            if let Some(path) = configured {
+                let resident = !contended && loaded_path.as_deref() == Some(path);
+                out.push(ResidentSlot {
+                    role: role.to_string(),
+                    model_id: stem(path),
+                    resident,
+                    size_bytes: if resident { occupant_bytes } else { None },
+                    transitioning: contended,
+                });
+            }
+        }
+
+        // ── embed (eager when configured) ──
+        if let (Some(_), Some(id)) = (&self.embed_slot, &self.embed_model_id) {
+            out.push(ResidentSlot {
+                role: "embed".to_string(),
+                model_id: id.clone(),
+                resident: true,
+                size_bytes: None, // EmbedSlot doesn't surface a byte count today
+                transitioning: false,
+            });
+        }
+
+        // ── rerank (lazily installed; std Mutex) ──
+        if let Ok(guard) = self.rerank_slot.try_lock() {
+            if let Some(slot) = guard.as_ref() {
+                out.push(ResidentSlot {
+                    role: "rerank".to_string(),
+                    model_id: slot.model_id.clone(),
+                    resident: true,
+                    size_bytes: None,
+                    transitioning: false,
+                });
+            }
+        }
+
+        // ── extras (operator-declared, resident until unload/evict) ──
+        if let Ok(guard) = self.extras.read() {
+            let mut extras: Vec<ResidentSlot> = guard
+                .slots
+                .iter()
+                .map(|(slot_name, slot)| ResidentSlot {
+                    role: format!("extra:{slot_name}"),
+                    model_id: slot.model_id.clone(),
+                    resident: true,
+                    size_bytes: Some(slot.size_bytes),
+                    transitioning: false,
+                })
+                .collect();
+            extras.sort_by(|a, b| a.role.cmp(&b.role));
+            out.append(&mut extras);
+        }
+
+        // ── primary sibling pool (eager N copies of the primary) ──
+        if self.primary_pool.is_some() {
+            if let Some(pp) = self.primary_path.as_deref() {
+                out.push(ResidentSlot {
+                    role: "primary_pool".to_string(),
+                    model_id: stem(pp),
+                    resident: true,
+                    size_bytes: None,
+                    transitioning: false,
+                });
+            }
+        }
+
         out
     }
 
@@ -3080,6 +3196,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // call that `EmbeddedLlamaCpp::extras_inventory` would
         // produce if we just wrote `self.extras_inventory()` here.
         Self::extras_inventory(self)
+    }
+
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
+        // Delegate to the inherent method (same disambiguation
+        // rationale as `extras_inventory` above).
+        Self::resident_slots(self)
     }
 
     async fn warmup_primary(&self) -> Result<()> {

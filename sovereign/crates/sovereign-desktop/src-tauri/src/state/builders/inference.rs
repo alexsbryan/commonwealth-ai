@@ -17,7 +17,7 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use tokio::sync::RwLock;
 
-use crate::state::{BootstrapPhase, DesktopConfig};
+use crate::state::{BootstrapPhase, DesktopConfig, ResolvedModelSlots};
 
 /// Returns `(raw_inference, inference)`:
 /// - `raw_inference` — the plain local `EmbeddedLlamaCpp` (handed to the
@@ -32,6 +32,11 @@ use crate::state::{BootstrapPhase, DesktopConfig};
 pub(crate) async fn load_inference(
     inference_slot: &RwLock<Option<Arc<dyn InferenceProvider>>>,
     mesh: Option<&Arc<sovereign_mesh::EmbeddedDaemon>>,
+    // Model-slot PATHS + context come from `SetupConfig` via
+    // `ResolvedModelSlots` (single source of truth, possibly CPU-compat-
+    // mutated). `config` still supplies the family hints + idle timeout,
+    // which stay on `DesktopConfig`.
+    slots: &ResolvedModelSlots,
     config: &DesktopConfig,
     emit: impl Fn(BootstrapPhase),
 ) -> Result<(Arc<dyn InferenceProvider>, Arc<dyn InferenceProvider>), String> {
@@ -51,12 +56,15 @@ pub(crate) async fn load_inference(
             // like `sovereign chat`'s daemon bootstrap. Rebuilds reuse the slot
             // above; the tail's mesh-wrap is a no-op when mesh == None.
             if mesh.is_none() {
-                let raw: Arc<dyn InferenceProvider> = build_attach_provider(config)?;
+                let raw: Arc<dyn InferenceProvider> = build_attach_provider(slots)?;
                 *inference_slot.write().await = Some(Arc::clone(&raw));
                 return Ok((Arc::clone(&raw), raw));
             }
-            tracing::info!("Loading fast model: {}", config.model_path.display());
-            if let Some(ref ep) = config.embed_model_path {
+            tracing::info!("Loading fast model: {}", slots.fast.display());
+            // Embed slot path as an `Option<&Path>` (empty path == unset).
+            let embed_opt: Option<&std::path::Path> =
+                slots.has_embed().then(|| slots.embed.as_path());
+            if let Some(ep) = embed_opt {
                 tracing::info!("Loading embed model: {}", ep.display());
             } else {
                 tracing::warn!(
@@ -66,14 +74,8 @@ pub(crate) async fn load_inference(
             }
 
             // Canonical chat-slot ctx lives in `~/.sovereign/config.toml`'s
-            // `[models].context_size` (single source of truth). Read it so
-            // the desktop-embedded `EmbeddedLlamaCpp` lines up with the
-            // daemon. 16384 matches `setup_config::default_context_size`;
-            // the daemon's `effective_context_size` wins for users who
-            // actually have a SetupConfig file (the common case).
-            let effective_ctx = sovereign_core::setup_config::SetupConfig::load()
-                .map(|c| c.models.effective_context_size())
-                .unwrap_or(16384);
+            // `[models].context_size` — already resolved into `slots`.
+            let effective_ctx = slots.context_size;
 
             // If the GPU probe below forces a CPU fallback AND the configured
             // chat model is a recurrent arch that crashes ggml's CPU prefill,
@@ -100,7 +102,7 @@ pub(crate) async fn load_inference(
                     sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
                 let smoke_ctx = effective_ctx.min(2048);
                 if smoke_gpu_layers > 0
-                    && crate::smoketest::cached_ok(&config.model_path, smoke_gpu_layers, smoke_ctx)
+                    && crate::smoketest::cached_ok(&slots.fast, smoke_gpu_layers, smoke_ctx)
                 {
                     // The child probe fully loads the fast GGUF
                     // (~3-6s on a 9B) to answer a question whose
@@ -110,7 +112,7 @@ pub(crate) async fn load_inference(
                     // misses and re-probes (crash protection intact
                     // for every NEW combo — the case it exists for).
                     tracing::info!(
-                        model = %config.model_path.display(),
+                        model = %slots.fast.display(),
                         gpu_layers = smoke_gpu_layers,
                         "smoketest: skipped — cached pass for unchanged model/config \
                          (SOVEREIGN_SMOKETEST_CACHE=0 to force)"
@@ -118,13 +120,13 @@ pub(crate) async fn load_inference(
                 } else if smoke_gpu_layers > 0 {
                     emit(BootstrapPhase::SmokeTesting);
                     tracing::info!(
-                        model = %config.model_path.display(),
+                        model = %slots.fast.display(),
                         gpu_layers = smoke_gpu_layers,
                         n_ctx = smoke_ctx,
                         "smoketest: probing GPU compatibility before in-process load"
                     );
                     let outcome = crate::smoketest::run_in_subprocess(
-                        &config.model_path,
+                        &slots.fast,
                         smoke_gpu_layers,
                         smoke_ctx,
                         std::time::Duration::from_secs(60),
@@ -133,7 +135,7 @@ pub(crate) async fn load_inference(
                         crate::smoketest::SmokeResult::Ok => {
                             tracing::info!("smoketest: GPU path ok — proceeding");
                             crate::smoketest::record_ok(
-                                &config.model_path,
+                                &slots.fast,
                                 smoke_gpu_layers,
                                 smoke_ctx,
                             );
@@ -152,7 +154,7 @@ pub(crate) async fn load_inference(
                                 _ => None,
                             };
                             let arch = sovereign_inference::gguf_meta::read_architecture(
-                                &config.model_path,
+                                &slots.fast,
                             )
                             .ok()
                             .flatten();
@@ -161,7 +163,7 @@ pub(crate) async fn load_inference(
                                     "a model's GPU probe crashed ({other}); fell back to CPU \
                                      so nothing's blocked"
                                 ),
-                                Some(config.model_path.display().to_string()),
+                                Some(slots.fast.display().to_string()),
                                 arch,
                                 Some(smoke_gpu_layers),
                                 signal,
@@ -182,15 +184,15 @@ pub(crate) async fn load_inference(
                                 unsafe_arch,
                                 safe_arch,
                             } = sovereign_inference::cpu_compat::choose_cpu_safe_chat_model(
-                                &config.model_path,
+                                &slots.fast,
                                 true,
-                                config
-                                    .model_path
+                                slots
+                                    .fast
                                     .parent()
                                     .unwrap_or_else(|| std::path::Path::new(".")),
                             ) {
                                 tracing::warn!(
-                                    requested = %config.model_path.display(),
+                                    requested = %slots.fast.display(),
                                     substitute = %path.display(),
                                     unsafe_arch = %unsafe_arch,
                                     safe_arch = %safe_arch,
@@ -216,24 +218,24 @@ pub(crate) async fn load_inference(
             emit(BootstrapPhase::LoadingModel);
             // Honour any GPU-probe-crash CPU-fallback substitution decided above.
             let chat_path: &std::path::Path =
-                cpu_fallback_chat.as_deref().unwrap_or(&config.model_path);
+                cpu_fallback_chat.as_deref().unwrap_or(&slots.fast);
             // If we substituted for a CPU fallback, a recurrent PRIMARY (Slow)
             // model would crash on the first synthesis turn — drop it (Slow then
             // routes to the fast slot or a mesh peer), mirroring `model_compat`.
             let primary_path: Option<&std::path::Path> = if cpu_fallback_chat.is_some() {
-                config
-                    .primary_model_path
+                slots
+                    .primary
                     .as_deref()
                     .filter(|&p| !path_is_cpu_incompatible(p))
             } else {
-                config.primary_model_path.as_deref()
+                slots.primary.as_deref()
             };
             let loaded = Arc::new(
                 EmbeddedLlamaCpp::load_full_with_families(
                     chat_path,
                     primary_path,
-                    config.embed_model_path.as_deref(),
-                    config.code_model_path.as_deref(),
+                    embed_opt,
+                    slots.code.as_deref(),
                     effective_ctx,
                     None,
                     ModelFamily::Unknown,        // fast slot
@@ -290,23 +292,26 @@ fn path_is_cpu_incompatible(p: &std::path::Path) -> bool {
 /// files), resolved the same way `sovereign chat`'s daemon bootstrap does. The
 /// daemon's own engine still tier-routes Fast/Slow per request, so the chat id
 /// is just the address — reasoning turns still reach the primary slot.
-fn build_attach_provider(config: &DesktopConfig) -> Result<Arc<dyn InferenceProvider>, String> {
+fn build_attach_provider(slots: &ResolvedModelSlots) -> Result<Arc<dyn InferenceProvider>, String> {
+    // `SetupConfig` is still loaded here for the daemon client port; the
+    // model ids come from `slots` (already SetupConfig-derived, same source
+    // the daemon advertises on `/v1/models`).
     let setup = sovereign_core::setup_config::SetupConfig::load()
         .map_err(|e| format!("Attach mode: load SetupConfig for daemon routing: {e}"))?;
     let v1 = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
-    let ctx = setup.models.effective_context_size();
+    let ctx = slots.context_size;
 
     let stem = |p: &std::path::Path| p.file_stem().and_then(|s| s.to_str()).map(str::to_string);
-    let chat_id = config
-        .primary_model_path
+    let chat_id = slots
+        .primary
         .as_deref()
         .and_then(stem)
-        .or_else(|| stem(&config.model_path))
+        .or_else(|| stem(&slots.fast))
         .ok_or_else(|| "Attach mode: no chat model path to derive a daemon model id".to_string())?;
-    let embed_id = config
-        .embed_model_path
-        .as_deref()
-        .and_then(stem)
+    let embed_id = slots
+        .has_embed()
+        .then(|| stem(&slots.embed))
+        .flatten()
         .ok_or_else(|| {
             "Attach mode: no embedding model configured (Settings → Embedding model)".to_string()
         })?;
@@ -348,8 +353,18 @@ mod tests {
         let stub: Arc<dyn InferenceProvider> = Arc::new(StubInference);
         let slot: RwLock<Option<Arc<dyn InferenceProvider>>> = RwLock::new(Some(Arc::clone(&stub)));
         let config = DesktopConfig::default();
+        // Explicit empty slots — NOT `load_or_default()`, which reads the
+        // real ~/.sovereign/config.toml and makes the test host-dependent.
+        // The reuse path must never touch these paths anyway.
+        let slots = ResolvedModelSlots {
+            fast: std::path::PathBuf::new(),
+            primary: None,
+            embed: std::path::PathBuf::new(),
+            code: None,
+            context_size: 16_384,
+        };
 
-        let (raw, inference) = load_inference(&slot, None, &config, |_| {})
+        let (raw, inference) = load_inference(&slot, None, &slots, &config, |_| {})
             .await
             .expect("reuse path must not load a model");
 

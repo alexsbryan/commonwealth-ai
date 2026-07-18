@@ -35,15 +35,10 @@ pub(crate) async fn build_health_monitor(
 ) {
     // Only build the monitor once (it survives Runtime rebuilds).
     if health_slot.read().await.is_none() {
-        let embed_dims = config
-            .embed_model_path
-            .as_ref()
-            .map(|_| {
-                // If we successfully embedded a probe above, use that dimension.
-                // Fall back to a reasonable default — the checker will detect mismatches.
-                0usize
-            })
-            .unwrap_or(0);
+        // Placeholder dimension — the CorpusIndexChecker detects real
+        // mismatches against each index's stored dimension at runtime.
+        // (Model paths moved to SetupConfig; this never read a real dim.)
+        let embed_dims = 0usize;
         let embed_slot = Arc::new(tokio::sync::RwLock::new(EmbedSlotConfig {
             model_id: embed_model_name.to_string(),
             output_dims: embed_dims,

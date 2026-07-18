@@ -72,10 +72,10 @@
   let byomReady = $derived(!useByom || (byomSource !== null && byomHint === null));
 
   async function browseLocal() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "GGUF Models", extensions: ["gguf"] }],
-    });
+    // No extension filter — the native macOS panel's exclusive `gguf`
+    // filter greys out valid symlinked/aliased GGUFs. Validation is
+    // server-side (GGUF magic bytes on load), so let any file through.
+    const selected = await open({ multiple: false });
     if (typeof selected === "string") {
       byomInput = selected;
       useByom = true;

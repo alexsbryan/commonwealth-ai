@@ -355,13 +355,29 @@ pub(crate) async fn tags(State(state): State<AppState>) -> Response {
 /// `GET /api/ps` — currently-loaded models. Reuses `/status`.
 pub(crate) async fn ps(State(state): State<AppState>) -> Response {
     let Json(s) = routes_status::status(State(state)).await;
-    let models: Vec<Value> = s
-        .inference
-        .loaded_models
-        .into_iter()
-        .filter(|m| m.loaded)
-        .map(|m| {
-            json!({
+    // Prefer the engine's real residency (the embedded/desktop path, where
+    // `loaded_models` is plan-derived and empty); fall back to the
+    // orchestrator's `loaded_models`. Dedup by id so a model resident AND in
+    // the plan appears once.
+    let mut seen = std::collections::HashSet::new();
+    let mut models: Vec<Value> = Vec::new();
+    for r in s.inference.resident.into_iter().filter(|r| r.resident) {
+        if seen.insert(r.model_id.clone()) {
+            let sz = r.size_bytes.unwrap_or(0);
+            models.push(json!({
+                "name": r.model_id,
+                "model": r.model_id,
+                "size": sz,
+                "digest": "",
+                "details": { "family": "", "format": "gguf" },
+                "expires_at": "",
+                "size_vram": sz
+            }));
+        }
+    }
+    for m in s.inference.loaded_models.into_iter().filter(|m| m.loaded) {
+        if seen.insert(m.model.clone()) {
+            models.push(json!({
                 "name": m.model,
                 "model": m.model,
                 "size": 0,
@@ -369,9 +385,9 @@ pub(crate) async fn ps(State(state): State<AppState>) -> Response {
                 "details": { "family": "", "format": "gguf" },
                 "expires_at": "",
                 "size_vram": 0
-            })
-        })
-        .collect();
+            }));
+        }
+    }
     Json(json!({ "models": models })).into_response()
 }
 

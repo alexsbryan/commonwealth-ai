@@ -57,14 +57,14 @@ pub async fn save_config(
 ) -> Result<(), String> {
     config.save()?;
     let old = state.config.read().await.clone();
-    let old_embed = old.embed_model_path.clone();
-    let new_embed = config.embed_model_path.clone();
     let rebuild = config_needs_rebuild(&old, &config);
 
-    // Mirror shared fields (model paths + data_dir) into SetupConfig
-    // on disk. Cheap when nothing structural changed (compares fields,
-    // writes only on diff), so we run it unconditionally — a sampling-
-    // only save just no-ops here.
+    // Mirror the non-model shared fields (data_dir + shared_model role)
+    // into SetupConfig on disk. Model *paths* no longer flow through
+    // here — they live solely in `config.toml` and are edited via the
+    // dedicated `set_setup_model_slots` command (single source of
+    // truth). Cheap when nothing changed (compares fields, writes only
+    // on diff).
     //
     // Best-effort: a failure to write SetupConfig must not block the
     // desktop's local save. We log and move on — next desktop save
@@ -88,11 +88,6 @@ pub async fn save_config(
     });
 
     *state.config.write().await = config;
-    // If the embedding model changed, drop the cached inference so bootstrap
-    // reloads it with the new embed model path.
-    if old_embed != new_embed {
-        *state.inference.write().await = None;
-    }
     if rebuild {
         state::rebuild_runtime(&state).await
     } else {
@@ -120,11 +115,12 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
     // changes route through the dedicated `set_setup_context_size`
     // Tauri command, which calls `EmbeddedLlamaCpp::rebuild_chat_contexts`
     // directly without rebuilding the Runtime.
-    old.model_path != new.model_path
-        || old.primary_model_path != new.primary_model_path
-        || old.embed_model_path != new.embed_model_path
-        || old.code_model_path != new.code_model_path
-        || old.embed_family != new.embed_family
+    // Model *paths* are no longer DesktopConfig fields — they live in
+    // `config.toml` and their edits route through `set_setup_model_slots`,
+    // which does its own inference teardown + runtime rebuild. Only the
+    // model *family* hints remain here (embed_family/code_family), and a
+    // family change still warrants a rebuild (tokenizer/template quirks).
+    old.embed_family != new.embed_family
         || old.code_family != new.code_family
         || old.skills_dir != new.skills_dir
         || old.active_skills != new.active_skills
@@ -144,93 +140,40 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
         || old.custom_instructions != new.custom_instructions
 }
 
-/// Mirror the three model paths + data_dir from `DesktopConfig` into
-/// `SetupConfig`. Creates the config file on first write if it didn't
-/// exist (matches `sovereign setup` behaviour). Leaves `daemon`
-/// defaults in place — port changes go through the CLI's `sovereign
-/// setup`, not the desktop Settings panel.
+/// Mirror the **non-model** shared fields (`data_dir` + shared-model
+/// role/id) from `DesktopConfig` into `SetupConfig`. Model *paths* are
+/// NOT mirrored here — they are the sole province of `config.toml` and
+/// are written via [`set_setup_model_slots`] (single source of truth).
+///
+/// Requires an existing `SetupConfig` on disk. The fresh-install
+/// creation of `config.toml` (load-bearing for bootstrap-mode
+/// resolution: without it every boot resolved `DesktopLegacy` and the
+/// supervised-child path, which intercepts only `CliSetup`, never
+/// engaged — DAEMON_RESILIENCE.md P0.1) no longer happens here: both
+/// setup entrypoints (`setup_flow::run` step 5 and `complete_setup`)
+/// create it via `write_model_slots_to_setup` — fatally on error —
+/// BEFORE this mirror runs, and legacy desktop.toml installs get it
+/// from `DesktopConfig::load`'s migration. When it is still absent
+/// (pre-setup), there is nothing to mirror onto — a `ModelsSection`
+/// can't be synthesized without paths, and there are none to take from
+/// `DesktopConfig` any more — so we log and skip.
 pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
-    use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
+    use sovereign_core::setup_config::SetupConfig;
 
-    // Load-bearing for fresh installs: when no config file exists, the
-    // fallback below is seeded FROM the desktop's own values — so the
-    // field-diff underneath finds nothing "changed" and, before
-    // 2026-07-18, skipped the write entirely. A desktop-only install
-    // then NEVER created `config.toml`, every later boot resolved
-    // `DesktopLegacy`, and the supervised-child path (which intercepts
-    // only `CliSetup`) never engaged. Caught by driving the real
-    // wizard flow through the command bridge. First write is
-    // unconditional; the no-op short-circuit applies only to a config
-    // that is actually on disk.
-    let existed = SetupConfig::exists();
-    let mut cli = SetupConfig::load().unwrap_or_else(|_| SetupConfig {
-        models: ModelsSection {
-            primary: desktop
-                .primary_model_path
-                .clone()
-                .unwrap_or_else(|| desktop.model_path.clone()),
-            // Desktop config always carries a model_path (the
-            // wizard requires one). Map it to an explicit fast.
-            fast: Some(desktop.model_path.clone()),
-            embed: desktop
-                .embed_model_path
-                .clone()
-                .unwrap_or_else(|| desktop.model_path.clone()),
-            code: desktop.code_model_path.clone(),
-            context_size: None,
-            extra: std::collections::BTreeMap::new(),
-            max_extras_memory_gb: None,
-            primary_pool: None,
-        },
-        daemon: DaemonSection::default(),
-        data: DataSection {
-            dir: desktop.data_dir.clone(),
-        },
-        watched_folders: Default::default(),
-        memory: Default::default(),
-        iroh: Default::default(),
-        shared_model: Default::default(),
-        discovery: Default::default(),
-        mcp_servers: Vec::new(),
-    });
-
-    let cli_primary_before = cli.models.primary.clone();
-    let cli_fast_before = cli.models.fast.clone();
-    let cli_embed_before = cli.models.embed.clone();
-    let cli_data_before = cli.data.dir.clone();
+    let mut cli = match SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::info!(
+                error = %e,
+                "mirror_to_setup_config: no SetupConfig on disk yet — nothing to \
+                 mirror (model paths land via write_model_slots_to_setup at setup time)"
+            );
+            return Ok(());
+        }
+    };
 
     let mut changed = false;
     let mut changed_fields: Vec<&'static str> = Vec::new();
-    // Desktop's `model_path` is the operator's chosen fast slot; if it
-    // differs from what we have, write it back as an explicit fast.
-    // Comparing against fast_path() handles the subsumed case
-    // naturally — when the desktop set the same path as primary, we
-    // leave `fast` as None so the subsume relationship stays clean
-    // instead of materialising a redundant explicit entry.
-    let desktop_path = desktop.model_path.as_path();
-    if desktop_path != cli.models.fast_path() {
-        cli.models.fast = if desktop_path == cli.models.primary {
-            None
-        } else {
-            Some(desktop.model_path.clone())
-        };
-        changed = true;
-        changed_fields.push("fast");
-    }
-    if let Some(p) = &desktop.primary_model_path {
-        if &cli.models.primary != p {
-            cli.models.primary = p.clone();
-            changed = true;
-            changed_fields.push("primary");
-        }
-    }
-    if let Some(e) = &desktop.embed_model_path {
-        if &cli.models.embed != e {
-            cli.models.embed = e.clone();
-            changed = true;
-            changed_fields.push("embed");
-        }
-    }
     if cli.data.dir != desktop.data_dir {
         cli.data.dir = desktop.data_dir.clone();
         changed = true;
@@ -238,12 +181,10 @@ pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<()
     }
     // Shared-model cluster role + id. Dormant backbone: the desktop ships no
     // shared-model UI in the alpha (the feature lives on the CLI path — see
-    // docs/RUN_GLM_5_2_ON_THE_MESH.md), so these fields stay at their defaults
-    // unless hand-edited. The mirror still writes them to SetupConfig so a
+    // docs/RUN_GLM_5_2_ON_THE_MESH.md). The mirror still writes them so a
     // `sovereign daemon run` started from this config picks them up at startup
-    // (apply_shared_model_role_to_env). The desktop in-process daemon and the
-    // live `/v1/admin/reload` path do NOT apply them — `ConfigDiff` ignores
-    // shared-model. Kept so re-adding the UI later needs no config plumbing.
+    // (apply_shared_model_role_to_env). Kept so re-adding the UI later needs
+    // no config plumbing.
     if cli.shared_model.role != desktop.shared_model_role
         || cli.shared_model.model_id != desktop.shared_model_id
     {
@@ -253,49 +194,21 @@ pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<()
         changed_fields.push("shared_model");
     }
 
-    if changed || !existed {
-        if !existed {
-            changed_fields.push("first_write");
-        }
+    // No `first_write` forcing here any more: config.toml creation is
+    // owned by `write_model_slots_to_setup` (both setup entrypoints,
+    // fatal on failure) and the legacy migration — by the time this
+    // mirror runs on a configured machine the file exists, and on a
+    // pre-setup machine we already returned above.
+    if changed {
         tracing::info!(
             fields = ?changed_fields,
-            new_primary = %cli.models.primary.display(),
-            new_fast = ?cli.models.fast.as_ref().map(|p| p.display().to_string()),
-            new_embed = %cli.models.embed.display(),
             new_data_dir = %cli.data.dir.display(),
-            "save_config: mirroring DesktopConfig → SetupConfig"
+            "save_config: mirroring non-model shared fields → SetupConfig"
         );
-        match cli.save() {
-            Ok(path) => {
-                tracing::info!(
-                    target = %path.display(),
-                    "save_config: SetupConfig written to disk"
-                );
-            }
-            Err(e) => {
-                tracing::error!(
-                    error = %e,
-                    "save_config: SetupConfig write FAILED — the desktop model \
-                     pick will not propagate to the daemon on next start"
-                );
-                return Err(e);
-            }
-        }
-    } else {
-        // Surface the no-op decision too — if the user reports
-        // "setting didn't sync" but mirror logs no-op, the bug is
-        // upstream (Settings UI didn't push the new field).
-        tracing::info!(
-            cli_primary = %cli_primary_before.display(),
-            cli_fast = ?cli_fast_before.as_ref().map(|p| p.display().to_string()),
-            cli_embed = %cli_embed_before.display(),
-            cli_data_dir = %cli_data_before.display(),
-            desktop_primary = ?desktop.primary_model_path.as_ref().map(|p| p.display().to_string()),
-            desktop_fast = %desktop.model_path.display(),
-            desktop_embed = ?desktop.embed_model_path.as_ref().map(|p| p.display().to_string()),
-            desktop_data_dir = %desktop.data_dir.display(),
-            "save_config: mirror no-op — all shared fields already match SetupConfig"
-        );
+        cli.save().map_err(|e| {
+            tracing::error!(error = %e, "save_config: SetupConfig mirror write FAILED");
+            e
+        })?;
     }
     Ok(())
 }
@@ -472,35 +385,38 @@ pub async fn set_setup_context_size(
         ));
     }
 
-    // SetupConfig may not exist on a fresh install — fall back to a
-    // synthesised one populated from the in-memory DesktopConfig's
-    // paths. Mirrors `mirror_to_setup_config`'s construction.
-    let cfg_result = SetupConfig::load();
-    let mut cfg = match cfg_result {
+    // SetupConfig may not exist on a fresh install (the wizard writes it
+    // first via `set_setup_model_slots`). Model paths no longer live on
+    // `DesktopConfig`, so a pre-wizard fallback synthesizes an otherwise-
+    // empty config carrying just the data dir — the wizard fills in the
+    // model slots. The common path is the `Ok(c)` branch.
+    let mut cfg = match SetupConfig::load() {
         Ok(c) => c,
+        // Same guard as `write_model_slots_to_setup`: an existing but
+        // unparseable config.toml must error, not be silently replaced
+        // with a synthesized default (which would wipe its other sections
+        // on the `save()` below).
+        Err(e) if SetupConfig::exists() => {
+            return Err(format!(
+                "config.toml exists but can't be parsed — refusing to overwrite it. \
+                 Fix the file (or delete it to start fresh) and retry: {e}"
+            ));
+        }
         Err(_) => {
-            let desktop = state.config.read().await.clone();
+            let data_dir = state.config.read().await.data_dir.clone();
             SetupConfig {
                 models: sovereign_core::setup_config::ModelsSection {
-                    primary: desktop
-                        .primary_model_path
-                        .clone()
-                        .unwrap_or_else(|| desktop.model_path.clone()),
-                    fast: Some(desktop.model_path.clone()),
-                    embed: desktop
-                        .embed_model_path
-                        .clone()
-                        .unwrap_or_else(|| desktop.model_path.clone()),
-                    code: desktop.code_model_path.clone(),
+                    primary: std::path::PathBuf::new(),
+                    fast: None,
+                    embed: std::path::PathBuf::new(),
+                    code: None,
                     context_size: None,
                     extra: std::collections::BTreeMap::new(),
                     max_extras_memory_gb: None,
                     primary_pool: None,
                 },
                 daemon: Default::default(),
-                data: sovereign_core::setup_config::DataSection {
-                    dir: desktop.data_dir.clone(),
-                },
+                data: sovereign_core::setup_config::DataSection { dir: data_dir },
                 watched_folders: Default::default(),
                 memory: Default::default(),
                 iroh: Default::default(),
@@ -531,6 +447,191 @@ pub async fn set_setup_context_size(
         }
     });
 
+    *state.inference.write().await = None;
+    crate::state::rebuild_runtime(&state).await
+}
+
+/// The four configured model-slot paths, read from / written to
+/// `~/.sovereign/config.toml`'s `[models]` — the single on-disk home for
+/// model paths. The Settings "Model slots" panel binds these (replacing
+/// the removed `DesktopConfig` path fields), so the panel and the daemon
+/// can never disagree about what is configured. `code_family` stays on
+/// `DesktopConfig` (a load-time family hint) and is surfaced here for the
+/// panel's convenience.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SetupModelSlots {
+    /// Quick-responder ("fast") GGUF path. Empty string when it is
+    /// subsumed by the primary (no distinct fast model).
+    pub fast: String,
+    /// Main-responder ("primary") GGUF path, or null.
+    pub primary: Option<String>,
+    /// Embedding GGUF path, or null (library search disabled).
+    pub embed: Option<String>,
+    /// Optional code-specialist GGUF path, or null.
+    pub code: Option<String>,
+    /// Code-slot model family (lives on `DesktopConfig`; surfaced here).
+    #[serde(default)]
+    pub code_family: sovereign_core::model_family::ModelFamily,
+}
+
+/// Write the model-slot paths into the canonical `SetupConfig`
+/// (`~/.sovereign/config.toml`), applying the fast-subsume rule (store
+/// `fast = None` when it equals or is subsumed by `primary`, so peers
+/// aren't advertised a duplicate slot). Preserves every non-model section
+/// of an existing config; synthesizes the surrounding sections when none
+/// exists yet. Returns the saved path. Shared by `set_setup_model_slots`
+/// and the wizard's `complete_setup`.
+pub(crate) fn write_model_slots_to_setup(
+    fast: Option<std::path::PathBuf>,
+    primary: Option<std::path::PathBuf>,
+    embed: std::path::PathBuf,
+    code: Option<std::path::PathBuf>,
+    data_dir: std::path::PathBuf,
+) -> Result<std::path::PathBuf, String> {
+    use sovereign_core::setup_config::{DataSection, ModelsSection, SetupConfig};
+
+    // Primary is the anchor; a missing/empty fast folds into it.
+    let primary_path = primary
+        .clone()
+        .or_else(|| fast.clone())
+        .ok_or_else(|| "at least one chat model (fast or primary) must be set".to_string())?;
+    let fast_field = match fast {
+        Some(f) if !f.as_os_str().is_empty() && f != primary_path => Some(f),
+        _ => None,
+    };
+
+    let mut cli = match SetupConfig::load() {
+        Ok(c) => c,
+        // Synthesize ONLY when the file is genuinely absent (fresh
+        // install). An existing-but-unparseable config.toml (the user
+        // hand-edits it for bench swaps) must surface as an error —
+        // synthesizing + saving here would silently replace the whole
+        // file, wiping every non-model section (daemon ports, iroh,
+        // watched_folders, mcp_servers) that is still recoverable.
+        Err(e) if SetupConfig::exists() => {
+            return Err(format!(
+                "config.toml exists but can't be parsed — refusing to overwrite it. \
+                 Fix the file (or delete it to start fresh) and retry: {e}"
+            ));
+        }
+        Err(_) => SetupConfig {
+            models: ModelsSection {
+                primary: primary_path.clone(),
+                fast: fast_field.clone(),
+                embed: embed.clone(),
+                code: code.clone(),
+                context_size: None,
+                extra: std::collections::BTreeMap::new(),
+                max_extras_memory_gb: None,
+                primary_pool: None,
+            },
+            daemon: Default::default(),
+            data: DataSection { dir: data_dir },
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: Default::default(),
+            shared_model: Default::default(),
+            discovery: Default::default(),
+            mcp_servers: Vec::new(),
+        },
+    };
+    cli.models.primary = primary_path;
+    cli.models.fast = fast_field;
+    cli.models.embed = embed;
+    cli.models.code = code;
+    cli.save()
+}
+
+/// Read the configured model slots from `SetupConfig`. Fresh install (no
+/// `config.toml` yet): all paths empty/null, `code_family` from
+/// `DesktopConfig`. Powers the Settings "Model slots" panel.
+#[tauri::command]
+pub async fn get_setup_model_slots(
+    state: State<'_, Arc<AppState>>,
+) -> Result<SetupModelSlots, String> {
+    let code_family = state.config.read().await.code_family.clone();
+    let show = |p: &std::path::Path| p.display().to_string();
+    match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(cfg) => {
+            let m = &cfg.models;
+            Ok(SetupModelSlots {
+                // EXPLICIT fast only — empty when subsumed by primary.
+                // Returning the resolved `fast_path()` here materializes
+                // the subsumed value: the panel would echo the OLD primary
+                // back through `set_setup_model_slots` after a primary
+                // edit, pinning it as an explicit always-resident fast
+                // slot. The panel renders the subsumed case as "shares
+                // the Main responder model" instead.
+                fast: m.fast.as_deref().map(show).unwrap_or_default(),
+                primary: Some(show(&m.primary)),
+                embed: Some(show(&m.embed)).filter(|s| !s.is_empty()),
+                code: m.code.as_deref().map(show),
+                code_family,
+            })
+        }
+        Err(_) => Ok(SetupModelSlots {
+            fast: String::new(),
+            primary: None,
+            embed: None,
+            code: None,
+            code_family,
+        }),
+    }
+}
+
+/// Persist the configured model slots to `SetupConfig`'s `[models]` (the
+/// single source of truth), stash `code_family` back on `DesktopConfig`,
+/// kick a best-effort background daemon reload, then tear down the
+/// desktop-embedded inference + Runtime so the next bootstrap reads the
+/// fresh slots. Same teardown contract as `set_setup_context_size` — else
+/// the running provider keeps serving the old weights until restart.
+#[tauri::command]
+pub async fn set_setup_model_slots(
+    state: State<'_, Arc<AppState>>,
+    slots: SetupModelSlots,
+) -> Result<(), String> {
+    use std::path::PathBuf;
+    let to_path = |s: Option<String>| -> Option<PathBuf> {
+        s.map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
+
+    let fast = to_path(Some(slots.fast));
+    let primary = to_path(slots.primary);
+    // Empty embed is allowed (library search disabled) — stored as an
+    // empty path, matching the old "not set" affordance.
+    let embed = to_path(slots.embed).unwrap_or_default();
+    let code = to_path(slots.code);
+
+    let data_dir = state.config.read().await.data_dir.clone();
+    let path = write_model_slots_to_setup(fast, primary, embed, code, data_dir)?;
+    tracing::info!(
+        target = %path.display(),
+        "set_setup_model_slots: SetupConfig [models] written"
+    );
+
+    // Persist the code-slot family hint (stays on DesktopConfig).
+    {
+        let mut cfg = state.config.write().await;
+        cfg.code_family = slots.code_family;
+        if let Err(e) = cfg.save() {
+            tracing::warn!(
+                error = %e,
+                "set_setup_model_slots: failed to persist code_family to desktop.toml"
+            );
+        }
+    }
+
+    let reload_base = state.client_base_url();
+    tokio::spawn(async move {
+        if let Err(e) = request_daemon_reload(reload_base).await {
+            tracing::warn!(
+                error = %e,
+                "set_setup_model_slots: daemon admin/reload failed (background)"
+            );
+        }
+    });
     *state.inference.write().await = None;
     crate::state::rebuild_runtime(&state).await
 }
@@ -632,34 +733,37 @@ pub async fn complete_setup(
     state: State<'_, Arc<AppState>>,
     setup: SetupConfig,
 ) -> Result<(), String> {
-    // When the wizard skipped the model picker (because `SetupConfig`
-    // from `sovereign setup` was detected), the incoming `setup` has
-    // empty model paths. Fall back to what the CLI already wrote on
-    // disk rather than clobbering the desktop config with empties.
+    // Resolve the model picks: the wizard DTO when present, else what the
+    // CLI (`sovereign setup`) already wrote to config.toml. Model PATHS go
+    // straight to SetupConfig (the single source of truth) below — they are
+    // no longer DesktopConfig fields.
     let cli_cfg = sovereign_core::setup_config::SetupConfig::load().ok();
-    let mut config = state.config.write().await;
-    if !setup.model_path.is_empty() {
-        config.model_path = setup.model_path.into();
-    } else if let Some(c) = cli_cfg.as_ref() {
-        // Desktop tracks one model_path that surfaces in the UI as
-        // "the model loaded in the fast role". fast_path() returns
-        // primary when fast is subsumed, so the same field is right
-        // in either case — no separate branch needed.
-        config.model_path = c.models.fast_path().to_path_buf();
-    }
-    config.primary_model_path = setup
+    let fast: Option<std::path::PathBuf> = if !setup.model_path.is_empty() {
+        Some(setup.model_path.clone().into())
+    } else {
+        cli_cfg.as_ref().map(|c| c.models.fast_path().to_path_buf())
+    };
+    let primary: Option<std::path::PathBuf> = setup
         .primary_model_path
+        .clone()
         .map(std::path::PathBuf::from)
         .or_else(|| cli_cfg.as_ref().map(|c| c.models.primary.clone()));
-    config.embed_model_path = setup
+    let embed: std::path::PathBuf = setup
         .embed_model_path
+        .clone()
         .map(std::path::PathBuf::from)
-        .or_else(|| cli_cfg.as_ref().map(|c| c.models.embed.clone()));
-    if let Some(dir) = setup.data_dir {
+        .or_else(|| cli_cfg.as_ref().map(|c| c.models.embed.clone()))
+        .unwrap_or_default();
+    // The DTO carries no code slot — preserve any existing one.
+    let code: Option<std::path::PathBuf> = cli_cfg.as_ref().and_then(|c| c.models.code.clone());
+
+    let mut config = state.config.write().await;
+    if let Some(dir) = setup.data_dir.clone() {
         config.data_dir = dir.into();
     } else if let Some(c) = cli_cfg.as_ref() {
         config.data_dir = c.data.dir.clone();
     }
+    let data_dir = config.data_dir.clone();
     config.active_skills = setup.active_skills;
     if !setup.enabled_tools.is_empty() {
         config.enabled_tools = setup.enabled_tools;
@@ -677,16 +781,20 @@ pub async fn complete_setup(
     }
     config.setup_complete = true;
 
+    // Write the model slots to config.toml FIRST — before setup_complete
+    // persists below and before `state::bootstrap` reads them via
+    // `ResolvedModelSlots`. Fatal, matching `setup_flow::run`'s treatment
+    // of the same write, and ordered so a failed write never leaves
+    // setup_complete=true on disk with no models configured (a confusing
+    // setup→fail→setup loop instead of a clear error in the wizard).
+    write_model_slots_to_setup(fast, primary, embed, code, data_dir)
+        .map_err(|e| format!("write model slots to config.toml: {e}"))?;
+
     config.save()?;
-    // Mirror into `~/.sovereign/config.toml` so the CLI-side daemon
-    // sees the wizard's model picks. Without this, the wizard could
-    // complete but the daemon at next start would read stale paths
-    // (or the bare defaults `sovereign setup` last wrote). Same
-    // best-effort + warn-log pattern as `save_config`.
     let config_for_mirror = config.clone();
     drop(config);
     if let Err(e) = mirror_to_setup_config(&config_for_mirror).await {
-        tracing::warn!("complete_setup: could not mirror to SetupConfig: {e}");
+        tracing::warn!("complete_setup: could not mirror shared fields to SetupConfig: {e}");
     }
     if let Err(e) = request_daemon_reload(state.client_base_url()).await {
         tracing::warn!("complete_setup: admin/reload failed: {e}");

@@ -112,15 +112,11 @@ export type ModelFamily =
   | "Unknown";
 
 export interface DesktopConfig {
-  model_path: string;
-  primary_model_path: string | null;
-  /** Optional GGUF embedding model. Required for corpus install / RAG. */
-  embed_model_path: string | null;
-  /** Optional GGUF Code specialist. When set, `code`-hinted requests
-   *  hot-swap into the lazy chat slot (shared with Main responder)
-   *  instead of dispatching to primary. Null = no code slot; all
-   *  substantive work goes to Main responder (pre-PR-E2 behaviour). */
-  code_model_path: string | null;
+  // NOTE: model-slot *paths* (fast/primary/embed/code) + context_size were
+  // removed from DesktopConfig — they live in ~/.sovereign/config.toml
+  // (SetupConfig), the single source of truth the daemon reads. Read/write
+  // them via `getSetupModelSlots` / `setSetupModelSlots` (and the
+  // context-size pair). Only the code-slot *family* hint stays here.
   /** Model family for the code slot. Drives chat-template / tokenizer
    *  quirks. `"Qwen35"` for Qwen-Coder lineage, `"Unknown"` (default)
    *  for BYOM coders. */
@@ -129,14 +125,6 @@ export interface DesktopConfig {
   skills_dir: string;
   active_skills: string[];
   enabled_tools: string[];
-  /** **Deprecated.** Kept for backwards compat with desktop.toml files
-   *  written before the SetupConfig merge. The canonical home is now
-   *  `~/.svrnmesh/config.toml`'s `[models].context_size`, surfaced via
-   *  the `get_setup_context_size` / `set_setup_context_size` Tauri
-   *  commands. Settings UI reads/writes through those; this field
-   *  exists only so existing TOMLs deserialise without losing the
-   *  pre-merge value during one-shot migration. */
-  context_size?: number | null;
   search_backend: SearchBackendConfig;
   setup_complete: boolean;
   selected_tier: string | null;

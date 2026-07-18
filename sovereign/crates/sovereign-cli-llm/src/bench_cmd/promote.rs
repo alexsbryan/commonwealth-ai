@@ -240,10 +240,20 @@ async fn run(args_in: &[String]) -> i32 {
         &args.judge_model,
         PROVIDER_CTX,
     ));
-    let model_id = globals
+    // Resolve the alias to the concrete GGUF stem so both the provider
+    // handle and the captured baseline's attribution name the model
+    // actually tested — the daemon accepts a concrete stem as a valid
+    // model id, and a baseline tagged `primary` is worthless once the
+    // alias is repointed. Falls back to the alias if the daemon can't
+    // resolve it (baseline then records unattributed, not mislabelled).
+    let requested_alias = globals
         .chat_model
         .clone()
         .unwrap_or_else(|| "primary".to_string());
+    let model_id = super::model_resolve::resolve_model_attribution(&args.base_url, &requested_alias)
+        .await
+        .map(|a| a.file_stem)
+        .unwrap_or(requested_alias);
 
     // ── Seed-only mode: capture the current-settings Dev baseline + exit ──
     if args.update_baseline {

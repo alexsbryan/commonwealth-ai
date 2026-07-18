@@ -434,19 +434,22 @@ fn model_scan_roots() -> Vec<PathBuf> {
 /// confirm. Returns a human-readable error (surfaced to the user) on any
 /// guard failure.
 #[tauri::command]
-pub async fn delete_model(state: State<'_, Arc<AppState>>, path: String) -> Result<(), String> {
+pub async fn delete_model(_state: State<'_, Arc<AppState>>, path: String) -> Result<(), String> {
     let target = PathBuf::from(path.trim());
-    // Snapshot the assigned slot paths for the in-use guard (cheap clone).
+    // Snapshot the assigned slot paths for the in-use guard. Model paths
+    // live in `SetupConfig` now (the single source of truth), so read them
+    // from there via `ResolvedModelSlots` rather than `DesktopConfig`.
     let assigned: Vec<PathBuf> = {
-        let cfg = state.config.read().await;
+        let slots = crate::state::ResolvedModelSlots::load_or_default();
         [
-            Some(cfg.model_path.clone()),
-            cfg.primary_model_path.clone(),
-            cfg.embed_model_path.clone(),
-            cfg.code_model_path.clone(),
+            Some(slots.fast.clone()),
+            slots.primary.clone(),
+            Some(slots.embed.clone()),
+            slots.code.clone(),
         ]
         .into_iter()
         .flatten()
+        .filter(|p| !p.as_os_str().is_empty())
         .collect()
     };
     let roots = model_scan_roots();

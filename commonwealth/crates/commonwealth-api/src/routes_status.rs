@@ -34,18 +34,39 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         .map(|m| m.capabilities.available.free_storage_gb)
         .sum();
 
+    // Ground-truth residency from the embedded engine (the `ollama ps`
+    // analog). `None` on the orchestrator daemon — which keeps reporting
+    // residency via the `llama_addr:` store keys below, so this only
+    // ADDS truth for the embedded/desktop path, never removes it.
+    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
+        Some(svc) => svc.resident_slots(),
+        None => Vec::new(),
+    };
+
     let loaded_models: Vec<LoadedModelStatus> = plan
         .model_plans
         .iter()
-        .map(|p| LoadedModelStatus {
-            model: format!("{}", p.model),
-            nodes: p.assignments.len(),
-            tps: p.estimated_tokens_per_sec,
-            loaded: state
+        .map(|p| {
+            let model = format!("{}", p.model);
+            // OR-fix: the orchestrator `llama_addr:` key is never written
+            // on the embedded path, so fall back to real engine residency.
+            // The engine reports GGUF stems, not ModelIds, so the join key
+            // is the registered model NAME (`ModelInfo.name`) — comparing
+            // against the ModelId's `model-<hex>` Display can never match.
+            let name = state
                 .inner
                 .inference_store
-                .get_llama_address(p.model)
-                .is_some(),
+                .get_model_info(p.model)
+                .map(|m| m.name);
+            LoadedModelStatus {
+                loaded: state.inner.inference_store.get_llama_address(p.model).is_some()
+                    || resident
+                        .iter()
+                        .any(|r| r.resident && Some(&r.model_id) == name.as_ref()),
+                nodes: p.assignments.len(),
+                tps: p.estimated_tokens_per_sec,
+                model,
+            }
         })
         .collect();
 
@@ -85,7 +106,10 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             pooled_vram_gb,
             pooled_storage_gb,
         },
-        inference: InferenceStatus { loaded_models },
+        inference: InferenceStatus {
+            loaded_models,
+            resident,
+        },
         knowledge: KnowledgeStatus {
             hosted_corpora,
             total_chunks_searchable,
@@ -251,6 +275,11 @@ pub struct MeshStatus {
 #[derive(Debug, Serialize)]
 pub struct InferenceStatus {
     pub loaded_models: Vec<LoadedModelStatus>,
+    /// Ground-truth in-memory residency of each engine slot — the
+    /// `ollama ps` analog. Empty on the orchestrator daemon (no
+    /// embedded engine); populated on the desktop/embedded daemon.
+    #[serde(default)]
+    pub resident: Vec<crate::state::ResidentSlot>,
 }
 
 #[derive(Debug, Serialize)]

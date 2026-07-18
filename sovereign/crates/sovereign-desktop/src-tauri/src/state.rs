@@ -327,12 +327,19 @@ pub async fn bootstrap_with_progress(
         );
     };
 
-    let mut config = state.config.read().await.clone();
+    let config = state.config.read().await.clone();
 
-    if !config.model_path.exists() {
+    // Model-slot paths live in `SetupConfig` (`~/.sovereign/config.toml`) —
+    // the single source of truth, shared with the daemon. Resolve them once
+    // here; the CPU-compat policy may mutate this in memory, and the
+    // inference builder loads from it.
+    let mut slots = ResolvedModelSlots::load()
+        .map_err(|e| format!("No model configuration found ({e}). Complete setup first."))?;
+
+    if slots.fast.as_os_str().is_empty() || !slots.fast.exists() {
         return Err(format!(
             "Model not found: {}. Place a GGUF model file at this path.",
-            config.model_path.display()
+            slots.fast.display()
         ));
     }
 
@@ -340,9 +347,10 @@ pub async fn bootstrap_with_progress(
     // model (or fail with a clear, in-app explanation) when the configured chat
     // model is a recurrent architecture that SIGSEGVs in ggml's CPU prefill —
     // so a model the machine can't run degrades gracefully instead of crashing
-    // the app on the first message. No-op on GPU machines. See
+    // the app on the first message. No-op on GPU machines. The swap is
+    // IN-MEMORY only (mutates `slots`, never rewrites `config.toml`). See
     // `builders::model_compat`.
-    builders::model_compat::apply_cpu_compat_policy(&mut config, &state.approval.app_handle())?;
+    builders::model_compat::apply_cpu_compat_policy(&mut slots, &state.approval.app_handle())?;
 
     // Load inference. We end up with two distinct provider Arcs:
     //
@@ -361,9 +369,14 @@ pub async fn bootstrap_with_progress(
     //
     // Both share the same underlying weights — there's no double-
     // load. The wrapper is a thin router over an Arc clone.
-    let (raw_inference, inference) =
-        builders::inference::load_inference(&state.inference, state.mesh.as_ref(), &config, &emit)
-            .await?;
+    let (raw_inference, inference) = builders::inference::load_inference(
+        &state.inference,
+        state.mesh.as_ref(),
+        &slots,
+        &config,
+        &emit,
+    )
+    .await?;
 
     // Open database.
     let store: Arc<dyn StateStore> = builders::store::open_store(
@@ -660,11 +673,11 @@ pub async fn bootstrap_with_progress(
     // so `_corpus_meta.json` records the actual model rather than the
     // hardcoded `"qwen3-embedding-0.6b"` default. We use the filename
     // stem (without .gguf) as a stable, human-readable identifier.
-    let embed_model_name = config
-        .embed_model_path
-        .as_ref()
-        .and_then(|p| p.file_stem())
+    let embed_model_name = slots
+        .embed
+        .file_stem()
         .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("unknown-embed-model")
         .to_string();
     // Resolve the persistent node_id so partition_path() returns a
@@ -772,16 +785,16 @@ pub async fn bootstrap_with_progress(
                         .unwrap_or("")
                         .to_string()
                 }
-                let chat_model = config
-                    .primary_model_path
+                let chat_model = slots
+                    .primary
                     .as_deref()
                     .map(id_from_path)
-                    .unwrap_or_else(|| id_from_path(&config.model_path));
-                let embed_model = config
-                    .embed_model_path
-                    .as_deref()
-                    .map(id_from_path)
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| id_from_path(&slots.fast));
+                let embed_model = if slots.has_embed() {
+                    id_from_path(&slots.embed)
+                } else {
+                    String::new()
+                };
                 if !chat_model.is_empty() && !embed_model.is_empty() {
                     // Loopback URL — resolved from the bootstrap mode
                     // so a non-default client port works. Local mode
@@ -1157,7 +1170,7 @@ pub async fn bootstrap_with_progress(
     // The probe also gives us the real dimension count for `EmbedModelInfo`,
     // which the collaborative ingestion planner uses to validate that peers
     // are embedding with the same model before assigning them a partition.
-    if config.embed_model_path.is_some() {
+    if slots.has_embed() {
         // Err => embed not configured or failed — skip validation.
         let t_embed_probe = std::time::Instant::now();
         if let Ok(probe_vec) = inference.embed("probe").await {
