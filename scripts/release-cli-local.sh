@@ -117,13 +117,23 @@ if ! (( SKIP_LINUX )); then
     podman image exists "$IMAGE" \
         || die "container image missing — run scripts/build-desktop-linux.sh once (or its image-build step) first"
     podman machine start >/dev/null 2>&1 || true
+    # qemu-x86 glslc-deadlock guard — MUST match build-desktop-linux.sh. This leg
+    # runs --platform linux/amd64 = qemu-x86 emulation on the arm64 host, where
+    # llama-cpp-sys-4's ggml-vulkan build script parallel-spawns glslc sized to the
+    # visible CPU count and deadlocks at "Compiling llama-cpp-sys-4" (v0.3.0 release
+    # stalled HERE 2026-07-17 — the desktop leg had this guard, the CLI leg did not,
+    # and the CLI leg runs first with a COLD shader cache). taskset caps the visible
+    # CPUs so hardware_concurrency — which sizes the glslc pool — sees them serial.
+    # Override with SOVEREIGN_LINUX_BUILD_CPUS (>= host nproc disables it; warm caches only).
+    LINUX_BUILD_CPUS="${SOVEREIGN_LINUX_BUILD_CPUS:-1}"
+    log "[linux x86_64] shader-compile concurrency capped to ${LINUX_BUILD_CPUS} CPU(s) via taskset (qemu glslc deadlock guard)"
     # Same mounts as the desktop build → same warm caches. The image's env
     # already points CARGO_TARGET_DIR/CARGO_HOME at the /work-side caches.
     podman run --rm --platform linux/amd64 \
         -v "$REPO_ROOT:/work:Z" \
         --entrypoint /bin/bash "$IMAGE" -c \
-        'cd /work && cargo build --release --locked --target x86_64-unknown-linux-gnu \
-             -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm'
+        "cd /work && taskset -c 0-$((LINUX_BUILD_CPUS - 1)) cargo build --release --locked --target x86_64-unknown-linux-gnu \
+             -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm"
     package x86_64-unknown-linux-gnu "target-container-linux/x86_64-unknown-linux-gnu/release"
 fi
 

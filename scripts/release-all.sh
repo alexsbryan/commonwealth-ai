@@ -214,6 +214,28 @@ run_watched() {  # run_watched <label> <log> <cmd...>
             quiet=$(( quiet + 60 ))
             if (( quiet >= STALL_SECS )); then
                 warn "STALL: '$label' produced no output for ${quiet}s with no active compile (host cargo/rustc absent, VM load=${load:-?}) — treating as hung."
+                # Glassbox on stall: capture what the hung build was doing so a
+                # human can diagnose WITHOUT re-running the whole release. The
+                # v0.3.0 CLI-linux stall (2026-07-17) was a qemu glslc deadlock,
+                # invisible from "last log line" alone — this dumps the VM process
+                # tree (glslc/cc1plus zombies are the signature), the in-flight
+                # crate, and memory (OOM check) to a sidecar file.
+                local diag="${log%.log}.stall.txt"
+                {
+                    echo "=== STALL: $label @ $(date -u +%FT%TZ) — quiet=${quiet}s VM_load=${load:-?} ==="
+                    echo "--- in-flight compile unit (last Compiling/Building/build-script in log) ---"
+                    grep -aE 'Compiling |Building |Running .*build script|build-entrypoint' "$log" 2>/dev/null | tail -4
+                    echo; echo "--- last 25 log lines ---"; tail -25 "$log" 2>/dev/null
+                    echo; echo "--- host build procs ---"; pgrep -al 'cargo|rustc|cargo-tauri|podman' 2>/dev/null | head
+                    echo; echo "--- VM procs (glslc/cc1plus/rustc/cargo + zombies = deadlock signature) ---"
+                    podman machine ssh "ps -eo stat,pid,ppid,etime,rss,comm 2>/dev/null | grep -E 'glslc|cc1plus|clang|rustc|cargo|[[:space:]]Z' | head -40" 2>/dev/null
+                    echo; echo "--- VM load + memory (OOM check) ---"
+                    podman machine ssh 'cat /proc/loadavg; free -m' 2>/dev/null
+                    echo; echo "--- our build containers ---"
+                    podman ps --format '{{.ID}} {{.Image}} {{.Status}}' 2>/dev/null | grep -E 'sovereign-desktop-(linux|windows)-build' || true
+                } >"$diag" 2>&1
+                warn "  STALL DIAGNOSTICS → $diag"
+                warn "  in-flight: $(grep -aE 'Compiling |Building ' "$log" 2>/dev/null | tail -1 | cut -c1-120)"
                 warn "  last log line: $(tail -1 "$log" 2>/dev/null | cut -c1-140)"
                 kill -TERM "$pid" 2>/dev/null || true
                 pkill -TERM -f "$KILL_PATTERN" 2>/dev/null || true
