@@ -246,7 +246,52 @@ enum DaemonState {
         /// also stops accepting dial-by-key traffic, same pattern as
         /// `_browse_handle`.
         iroh_access: Option<crate::iroh_access::MeshIrohAccess>,
+        /// Founder reachability watchdog (Track W hardening): polls relay-home +
+        /// self-discovery health and self-heals (nudge → relay bounce → endpoint
+        /// rebuild) with no daemon restart. `None` when iroh is disabled. Aborts
+        /// its task on Drop (tied to the Running variant, like `_gossip_handle`);
+        /// also read by `founder_reachability()` for the status surface.
+        reachability_watchdog: Option<crate::iroh_watchdog::WatchdogHandle>,
     },
+}
+
+/// (Re)install a built `MeshIrohAccess` into `app_state`: publish this node's
+/// dial info for the gossip self-stamp (W2), and — when any traffic class routes
+/// over iroh — (re)install the `RoutedTransport` that dials from this endpoint
+/// (W3). Both installs are RwLock-based and re-runnable at runtime, which is what
+/// lets the reachability watchdog swap in a fresh endpoint without a daemon
+/// restart. Called by `start_daemon` and by the watchdog's rebuild closure.
+pub(crate) fn install_iroh_access(
+    app_state: &AppState,
+    access: &crate::iroh_access::MeshIrohAccess,
+    iroh_routed_classes: &[commonwealth_transport::TrafficClass],
+    iroh_required_classes: &std::collections::HashSet<commonwealth_transport::TrafficClass>,
+    ip_transport: &Arc<dyn commonwealth_transport::PeerTransport>,
+    require_encryption: bool,
+) {
+    app_state.install_self_iroh_dialinfo(access.dial_info_provider());
+    if !iroh_routed_classes.is_empty() {
+        let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
+            Arc::new(access.client_transport());
+        let mut per_class = std::collections::HashMap::new();
+        for class in iroh_routed_classes {
+            per_class.insert(*class, iroh_t.clone());
+        }
+        app_state.install_peer_transport(Arc::new(
+            commonwealth_transport::RoutedTransport::with_required(
+                per_class,
+                ip_transport.clone(),
+                iroh_required_classes.clone(),
+            ),
+        ));
+        info!(
+            routed = ?iroh_routed_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
+            required = ?iroh_required_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
+            require_encryption,
+            "iroh(mesh): routing classes over iroh (required classes have NO \
+             plaintext fallback; dial fails closed if a peer has no encrypted path)"
+        );
+    }
 }
 
 /// Distinguishes "user wants to leave the mesh" from "process is
@@ -279,6 +324,23 @@ pub struct IrohPeerPath {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub path: Option<crate::iroh_access::PeerTransportPath>,
+}
+
+/// The founder's OWN iroh reachability (Track W hardening), for
+/// `/v1/mesh/status.founder_reachability` and the desktop "Reachable /
+/// Reconnecting" indicator. Flattens the reachability watchdog's live health
+/// snapshot so the wire object is one flat record.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FounderReachability {
+    /// This node's current dial-by-key string (all relays + direct addrs), or
+    /// `None` before any reachable address is known.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub dial: Option<String>,
+    /// iroh endpoint id (hex).
+    pub endpoint_id: String,
+    /// Live watchdog health: relay-homed, discovery probe, recovery history.
+    #[serde(flatten)]
+    pub health: crate::iroh_watchdog::ReachabilityStatus,
 }
 
 /// Result of joining an existing mesh.
@@ -1549,6 +1611,38 @@ impl EmbeddedDaemon {
         out
     }
 
+    /// The founder's OWN iroh reachability (Track W): is this node relay-homed +
+    /// discoverable, and what has the self-heal watchdog done? `None` when iroh
+    /// isn't running (mesh on the IP path). Clones the endpoint id / dial and the
+    /// watchdog status handle out of the state lock BEFORE awaiting, per the
+    /// codebase's clone-out-then-await rule.
+    pub async fn founder_reachability(&self) -> Option<FounderReachability> {
+        let (dial, endpoint_id, status_arc) = {
+            let state = self.state.read().await;
+            match &*state {
+                DaemonState::Running {
+                    iroh_access: Some(access),
+                    reachability_watchdog,
+                    ..
+                } => (
+                    access.dial_string(),
+                    access.endpoint_id(),
+                    reachability_watchdog.as_ref().map(|w| w.status_arc()),
+                ),
+                _ => return None,
+            }
+        };
+        let health = match status_arc {
+            Some(arc) => arc.read().await.clone(),
+            None => crate::iroh_watchdog::ReachabilityStatus::default(),
+        };
+        Some(FounderReachability {
+            dial,
+            endpoint_id,
+            health,
+        })
+    }
+
     /// Replace the in-memory cached plaintext join key. Called by
     /// the rotate HTTP handler after `persist::rotate_join_key` so
     /// the next status poll surfaces the new link without needing
@@ -2629,35 +2723,14 @@ impl EmbeddedDaemon {
         // "membership = dialability" collapse. RwLock-based install, so
         // it's exempt from the `Arc::get_mut` ordering constraint above.
         if let Some(access) = &iroh_access {
-            app_state.install_self_iroh_dialinfo(access.dial_info_provider());
-
-            // W3: when `[iroh.transport]` flips one or more classes to
-            // iroh, re-install a `RoutedTransport` that routes those
-            // classes over iroh (dialing from THIS endpoint) and falls
-            // back to the `ip_transport` above per dial. No flip => the
-            // plain `IpTransport` install above stands, unchanged.
-            if !iroh_routed_classes.is_empty() {
-                let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
-                    Arc::new(access.client_transport());
-                let mut per_class = std::collections::HashMap::new();
-                for class in &iroh_routed_classes {
-                    per_class.insert(*class, iroh_t.clone());
-                }
-                app_state.install_peer_transport(Arc::new(
-                    commonwealth_transport::RoutedTransport::with_required(
-                        per_class,
-                        ip_transport.clone(),
-                        iroh_required_classes.clone(),
-                    ),
-                ));
-                info!(
-                    routed = ?iroh_routed_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
-                    required = ?iroh_required_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
-                    require_encryption,
-                    "iroh(mesh): routing classes over iroh (required classes have NO \
-                     plaintext fallback; dial fails closed if a peer has no encrypted path)"
-                );
-            }
+            install_iroh_access(
+                &app_state,
+                access,
+                &iroh_routed_classes,
+                &iroh_required_classes,
+                &ip_transport,
+                require_encryption,
+            );
         } else if require_encryption {
             // The mesh-wide policy demands encryption but the iroh
             // endpoint failed to bind — we cannot enforce no-plaintext,
@@ -2679,6 +2752,80 @@ impl EmbeddedDaemon {
             );
         }
 
+        // Founder reachability watchdog (Track W hardening): spawn only when the
+        // iroh endpoint is up. It self-heals a wedged relay/discovery layer
+        // (nudge → relay bounce → in-process endpoint rebuild) so an idle founder
+        // never silently becomes undialable — no daemon restart required. The
+        // rebuild closure lives here (not in the watchdog) so all DaemonState
+        // mutation stays in this module; it re-runs `install_iroh_access` against
+        // the fresh endpoint, exactly as start does.
+        let reachability_watchdog = iroh_access.as_ref().map(|access| {
+            let endpoint = access.endpoint_handle();
+            let state = self.state.clone();
+            let data_dir = self.data_dir.clone();
+            let relay_cfg = iroh_relay_cfg.clone();
+            let ip_tx = ip_transport.clone();
+            let routed = iroh_routed_classes.clone();
+            let required = iroh_required_classes.clone();
+            let rebuild: crate::iroh_watchdog::RebuildFn = Arc::new(move || {
+                let state = state.clone();
+                let data_dir = data_dir.clone();
+                let relay_cfg = relay_cfg.clone();
+                let ip_tx = ip_tx.clone();
+                let routed = routed.clone();
+                let required = required.clone();
+                Box::pin(async move {
+                    let new = crate::iroh_access::MeshIrohAccess::start(
+                        &data_dir,
+                        internal_port,
+                        client_port,
+                        iroh_enabled,
+                        &relay_cfg,
+                    )
+                    .await
+                    .ok_or_else(|| {
+                        "endpoint rebuild: start() returned None (bind failed or disabled)"
+                            .to_string()
+                    })?;
+                    let new_ep = new.endpoint_handle();
+                    // Swap the endpoint + re-run the installs under the write lock.
+                    // No `.await` is held across the lock (start() already ran).
+                    let mut guard = state.write().await;
+                    if let DaemonState::Running {
+                        iroh_access,
+                        app_state,
+                        ..
+                    } = &mut *guard
+                    {
+                        install_iroh_access(
+                            app_state,
+                            &new,
+                            &routed,
+                            &required,
+                            &ip_tx,
+                            require_encryption,
+                        );
+                        *iroh_access = Some(new);
+                        Ok(new_ep)
+                    } else {
+                        Err("endpoint rebuild: daemon no longer Running".to_string())
+                    }
+                })
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<
+                                    Output = Result<commonwealth_transport::iroh::Endpoint, String>,
+                                > + Send,
+                        >,
+                    >
+            });
+            let cfg = crate::iroh_watchdog::WatchdogConfig {
+                self_probe: iroh_relay_cfg.n0_services,
+                ..Default::default()
+            };
+            crate::iroh_watchdog::spawn(endpoint, rebuild, cfg)
+        });
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,
@@ -2690,6 +2837,7 @@ impl EmbeddedDaemon {
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
+            reachability_watchdog,
         };
 
         Ok(())

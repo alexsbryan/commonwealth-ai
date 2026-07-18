@@ -418,7 +418,10 @@ impl SovereignInferenceAdapter {
         // so downstream tooling (chat-template selection,
         // tools-on-fast-slot guard, telemetry) sees what the caller
         // actually sent.
-        tracing::info!(
+        // debug!, not info!: per-request internal detail. Fired once per
+        // request; the request is summarised at INFO by `inference.complete:
+        // done`. `RUST_LOG=sovereign_mesh=debug` to see it.
+        tracing::debug!(
             structured_output_pre = req.structured_output.is_some(),
             assistant_prefix = request.assistant_prefix.is_some(),
             tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
@@ -1205,7 +1208,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             resp.text
         };
 
-        tracing::info!(
+        // debug!, not info!: redundant with the INFO breadcrumb
+        // `inference.complete: done` (sovereign-inference engine.rs), which
+        // already carries model + latency + tokens per served request.
+        tracing::debug!(
             latency_ms = started.elapsed().as_millis() as u64,
             model = %resp.model_id,
             tokens = resp.tokens_used,

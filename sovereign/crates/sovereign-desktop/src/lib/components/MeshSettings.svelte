@@ -637,6 +637,20 @@
             {#if meshState.status.model_name}
               · Model: {meshState.status.model_name}
             {/if}
+            {#if meshState.status.founder_reachability}
+              {@const fr = meshState.status.founder_reachability}
+              · <span
+                  class="reach"
+                  class:reach-degraded={fr.degraded}
+                  title={fr.degraded
+                    ? `Reconnecting to the mesh network${fr.last_error ? ` — ${fr.last_error}` : ""}${fr.last_recovery ? ` (last self-heal: ${fr.last_recovery.action})` : ""}`
+                    : `Reachable — peers can dial you${fr.relay_urls.length ? ` via ${fr.relay_urls.length} relay(s)` : ""}`}
+                >
+                  <span class="reach-dot"></span>{fr.degraded
+                    ? "Reconnecting"
+                    : "Reachable"}
+                </span>
+            {/if}
           </div>
         </div>
         {#if !isSolo}
@@ -1619,6 +1633,31 @@
 
   .dot.offline {
     background: var(--border);
+  }
+
+  /* Track W: founder reachability chip — green "Reachable" / amber
+     "Reconnecting" while the self-heal watchdog is recovering. */
+  .reach {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--success);
+  }
+
+  .reach-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+
+  .reach.reach-degraded {
+    color: var(--warning);
+  }
+
+  .reach.reach-degraded .reach-dot {
+    background: var(--warning);
   }
 
   .corpora-row {

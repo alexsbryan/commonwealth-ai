@@ -959,6 +959,31 @@ export interface MeshStatus {
    *  bare key" details so users can paste into a chat client that
    *  mangles deep-link URLs. Same caveat as join_link. */
   join_key?: string | null;
+  /** Track W: this founder's own iroh reachability (relay-home + discovery
+   *  health + self-heal history). Absent when iroh isn't running. Drives the
+   *  "Reachable / Reconnecting" indicator. */
+  founder_reachability?: FounderReachability | null;
+}
+
+/** A self-heal action the reachability watchdog took. */
+export interface RecoveryEvent {
+  action: string;
+  at_unix: number;
+  ok: boolean;
+}
+
+/** The founder's own iroh reachability — mirrors the Rust `FounderReachability`
+ *  (a `ReachabilityStatus` flattened alongside `dial` + `endpoint_id`). */
+export interface FounderReachability {
+  dial?: string | null;
+  endpoint_id: string;
+  relay_homed: boolean;
+  relay_urls: string[];
+  discovery_ok?: boolean | null;
+  last_error?: string | null;
+  last_recovery?: RecoveryEvent | null;
+  rebuilds: number;
+  degraded: boolean;
 }
 
 export interface MeshMember {

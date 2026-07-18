@@ -206,7 +206,12 @@ pub async fn chat_completions(
         // fabricating sibling ids during synthesis. Idempotent.
         crate::frontdoor::apply_evidence_id_allowlist_from_tool_results(&mut request);
         let want_stream = request.stream.unwrap_or(false);
-        info!(
+        // debug!, not info!: per-request entry breadcrumb. The served
+        // request is still summarised once at INFO by `inference.complete:
+        // done` (sovereign-inference engine.rs) — keeping both at INFO put
+        // 8 lines per request in the log, and a ~37s synthetic keepalive
+        // probe turned that into thousands of lines/day (2026-07-18).
+        debug!(
             want_stream,
             has_oicp = request.oicp.is_some(),
             "chat_completions: serving via local_inference"

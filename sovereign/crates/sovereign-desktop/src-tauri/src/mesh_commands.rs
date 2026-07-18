@@ -268,6 +268,9 @@ pub async fn mesh_get_state(
     // Surface the client-API token beside the invite (None on a
     // loopback-only solo daemon).
     resp.client_token = mesh.running_client_token().await;
+    // Track W: the founder's own reachability, for the "Reachable /
+    // Reconnecting" indicator (MeshState doesn't carry it).
+    resp.status.founder_reachability = mesh.founder_reachability().await;
     Ok(Some(resp))
 }
 
@@ -539,6 +542,7 @@ impl MeshStateResponse {
                 is_connected: remote.running,
                 join_link: remote.join_link,
                 join_key: remote.join_key,
+                founder_reachability: remote.founder_reachability,
             },
             members,
             corpora: Vec::new(),

@@ -53,6 +53,18 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      synth.citation=info,\
      synth.budget=info";
 
+/// The daemon tracing filter plus the always-on iroh observability layer:
+/// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
+/// `iroh_relay` at `warn` — so relay/discovery ERRORS are always visible in a
+/// deployed daemon — cranked to `debug` when `iroh_debug` (env
+/// `SOVEREIGN_IROH_LOG`, mirroring the `SOVEREIGN_IROH` kill-switch) for
+/// diagnosing a reachability wedge. Built as one `iroh=<level>` directive so
+/// there is no override ambiguity. `RUST_LOG`, if set, still overrides all.
+fn daemon_tracing_filter(iroh_debug: bool) -> String {
+    let lvl = if iroh_debug { "debug" } else { "warn" };
+    format!("{DAEMON_TRACING_FILTER},commonwealth_transport=info,iroh={lvl},iroh_relay={lvl}")
+}
+
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
@@ -87,7 +99,11 @@ async fn async_main() {
     // operators tailing logs. Match the filter sovereign-cli used
     // pre-split.
     if cmd == "daemon" {
-        init_tracing(DAEMON_TRACING_FILTER);
+        // Track W: `SOVEREIGN_IROH_LOG` cranks iroh/relay/transport internals to
+        // debug for diagnosing a reachability wedge; off, they stay at warn
+        // (errors still visible) so the log isn't flooded.
+        let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
+        init_tracing(&daemon_tracing_filter(iroh_debug));
     } else if cmd == "setup" {
         init_tracing("sovereign_cli_daemon=info");
     }
@@ -213,5 +229,25 @@ mod tests {
             "filter leaked an UNLISTED target — allowlist is not actually restricting. \
              seen={seen:?}"
         );
+    }
+
+    /// Track W: the iroh observability layer must parse in both postures and
+    /// flip iroh/relay warn↔debug with the `SOVEREIGN_IROH_LOG` toggle, without
+    /// disturbing the base allowlist.
+    #[test]
+    fn daemon_filter_iroh_toggle() {
+        for f in [
+            super::daemon_tracing_filter(false),
+            super::daemon_tracing_filter(true),
+        ] {
+            tracing_subscriber::EnvFilter::builder()
+                .parse(&f)
+                .expect("daemon tracing filter (with iroh layer) must parse");
+        }
+        let off = super::daemon_tracing_filter(false);
+        let on = super::daemon_tracing_filter(true);
+        assert!(off.contains("commonwealth_transport=info"));
+        assert!(off.contains("iroh=warn") && off.contains("iroh_relay=warn"));
+        assert!(on.contains("iroh=debug") && on.contains("iroh_relay=debug"));
     }
 }

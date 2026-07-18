@@ -1544,17 +1544,42 @@ impl CorpusEngine {
                             }
                         }
                     };
-                    tracing::warn!(
-                        corpus_id = %kept.corpus_id,
-                        kept = %kept.path.display(),
-                        dropped = %dropped.path.display(),
-                        "installed_indexes: corpus_id collision — multiple physical indexes \
-                         advertise the same corpus_id. The dropped one is invisible to search \
-                         until you rename it out-of-band (any name containing '.', e.g. \
-                         '<name>.retired') or remove it. Without dedup, retrieval and the \
-                         reading desk could disagree on which chunk a (corpus_id, chunk_id) \
-                         pair resolves to."
-                    );
+                    // Latch: this dedup runs on a hot path (recomputed on
+                    // every capability / storage-advertise tick, ~15s), so a
+                    // *persistent* collision would re-emit this WARN forever and
+                    // bury the log — measured 4214 identical lines in 21h
+                    // (2026-07-18). The collision is a steady state, not an
+                    // event: warn once per unique (corpus_id, kept, dropped)
+                    // triple per process. A genuinely new collision still warns;
+                    // an operator who already saw this one is not re-spammed.
+                    static WARNED_COLLISIONS: std::sync::OnceLock<
+                        std::sync::Mutex<std::collections::HashSet<(String, String, String)>>,
+                    > = std::sync::OnceLock::new();
+                    let first_seen = WARNED_COLLISIONS
+                        .get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+                        .lock()
+                        .map(|mut seen| {
+                            seen.insert((
+                                kept.corpus_id.clone(),
+                                kept.path.display().to_string(),
+                                dropped.path.display().to_string(),
+                            ))
+                        })
+                        // Poisoned mutex → fail open (warn) rather than swallow.
+                        .unwrap_or(true);
+                    if first_seen {
+                        tracing::warn!(
+                            corpus_id = %kept.corpus_id,
+                            kept = %kept.path.display(),
+                            dropped = %dropped.path.display(),
+                            "installed_indexes: corpus_id collision — multiple physical indexes \
+                             advertise the same corpus_id. The dropped one is invisible to search \
+                             until you rename it out-of-band (any name containing '.', e.g. \
+                             '<name>.retired') or remove it. Without dedup, retrieval and the \
+                             reading desk could disagree on which chunk a (corpus_id, chunk_id) \
+                             pair resolves to. (Logged once per unique collision per process.)"
+                        );
+                    }
                     by_id.insert(kept.corpus_id.clone(), kept);
                 }
             }

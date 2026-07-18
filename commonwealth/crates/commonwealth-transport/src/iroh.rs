@@ -62,7 +62,11 @@ pub use iroh::endpoint::presets;
 pub use iroh::endpoint::Builder as EndpointBuilder;
 // Per-peer connection observability (H2): `remote_info` returns these.
 pub use iroh::endpoint::TransportAddrUsage;
-pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey, TransportAddr};
+// Founder-reachability watchdog: `Endpoint::home_relay_status()` returns a
+// `Watcher<Vec<RelayStatus>>`. Re-exported here so the mesh crate consumes them
+// without declaring its own `iroh` dependency.
+pub use iroh::endpoint::RelayStatus;
+pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey, TransportAddr, Watcher};
 
 /// The rustls crypto provider for `EndpointBuilder::crypto_provider`.
 /// iroh's `Builder::empty()` deliberately sets no provider (only

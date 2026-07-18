@@ -257,7 +257,9 @@ fn pick_slot_v03(provider: &dyn InferenceProvider, req: &InferenceRequirements) 
         _ => None,
     };
     if let Some(s) = resolved {
-        tracing::info!(
+        // debug!, not info!: per-request routing detail. Fired once per
+        // request; `RUST_LOG=sovereign_mesh=debug` to see slot selection.
+        tracing::debug!(
             hint = %hint,
             latency_class = ?class,
             picked = ?s,

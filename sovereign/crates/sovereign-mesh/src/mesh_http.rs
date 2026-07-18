@@ -169,6 +169,11 @@ pub struct StatusResponse {
     /// Serde default keeps older consumers wire-compatible.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iroh_transport: Vec<crate::daemon::IrohPeerPath>,
+    /// This founder's OWN iroh reachability (Track W): relay-homed?,
+    /// discoverable?, plus the self-heal watchdog's recovery history. `None`
+    /// when iroh isn't running. Answers "am I actually dialable right now?".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub founder_reachability: Option<crate::daemon::FounderReachability>,
 }
 
 /// Cluster-health snapshot of a shared-model fleet, surfaced on
@@ -302,6 +307,7 @@ async fn mesh_status(
                     fanout_inflight_current,
                     active_corpus_ingests,
                     iroh_transport: vec![], // no mesh → no peers
+                    founder_reachability: None, // no mesh → no founder endpoint
                 })
                 .unwrap(),
             ),
@@ -311,6 +317,8 @@ async fn mesh_status(
 
     // H2: per-peer iroh path (empty when iroh isn't running).
     let iroh_transport = daemon.iroh_transport_snapshot().await;
+    // Track W: this founder's own reachability (relay-home + discovery health).
+    let founder_reachability = daemon.founder_reachability().await;
 
     // Map MemberStatus to its serde-renamed variant. `MeshMember`
     // already owns its `node_id` as a String (set by `mesh_state`), so
@@ -358,6 +366,7 @@ async fn mesh_status(
                 fanout_inflight_current,
                 active_corpus_ingests,
                 iroh_transport,
+                founder_reachability,
             })
             .unwrap(),
         ),
