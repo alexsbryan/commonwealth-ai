@@ -3,11 +3,13 @@
 # can't reach (the daemon must run INSIDE the vulkan toolbox for GPU access;
 # a host systemd user unit would relaunch it GPU-broken).
 #
-# Arms the memory-watch HARD limit (memory_watch.rs): on RSS breach the
-# daemon self-SIGTERMs with a NON-ZERO exit — a graceful drain instead of
-# the kernel OOM killer's SIGKILL (two dirty deaths on 2026-07-10/11 at
-# ~39.5GB) — and this loop relaunches it clean. Soft limit tuned to this
-# box's real envelope so warnings mean something.
+# Relaunches the daemon on the memory-watch exit-102 (RSS hard limit)
+# and listener-watch exit-104 (lost client listener) paths — plus any
+# crash. Since DAEMON_RESILIENCE.md P0.3 the RSS limits are DERIVED
+# IN-DAEMON from total RAM (Linux 85%/70%) and default ON — this script
+# no longer hardcodes them (the old 36 GB ceiling on a 128 GB box also
+# blocked legitimate 122B loads). Set SOVEREIGN_RSS_{SOFT,HARD}_LIMIT_MB
+# in the environment to override; they pass through untouched.
 #
 # Usage:  scripts/daemon-supervised.sh            # foreground loop (setsid it)
 # Stop:   touch ~/.sovereign/supervised.stop      # loop exits after daemon stops
@@ -20,10 +22,7 @@ STOP_SENTINEL="$HOME/.sovereign/supervised.stop"
 mkdir -p "$LOG_DIR"
 rm -f "$STOP_SENTINEL"
 
-export SOVEREIGN_RSS_SOFT_LIMIT_MB="${SOVEREIGN_RSS_SOFT_LIMIT_MB:-28000}"
-export SOVEREIGN_RSS_HARD_LIMIT_MB="${SOVEREIGN_RSS_HARD_LIMIT_MB:-36000}"
-
-echo "$(date -Is) supervisor: armed soft=${SOVEREIGN_RSS_SOFT_LIMIT_MB}MB hard=${SOVEREIGN_RSS_HARD_LIMIT_MB}MB" >> "$LOG_DIR/supervisor.log"
+echo "$(date -Is) supervisor: armed (RSS limits: in-daemon RAM-derived defaults${SOVEREIGN_RSS_HARD_LIMIT_MB:+, env hard=${SOVEREIGN_RSS_HARD_LIMIT_MB}MB}${SOVEREIGN_RSS_SOFT_LIMIT_MB:+, env soft=${SOVEREIGN_RSS_SOFT_LIMIT_MB}MB})" >> "$LOG_DIR/supervisor.log"
 while :; do
   "$DAEMON" daemon run >> "$LOG_DIR/daemon.err" 2>&1
   code=$?

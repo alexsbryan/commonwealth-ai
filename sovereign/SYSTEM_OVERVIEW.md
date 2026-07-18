@@ -1787,9 +1787,12 @@ work pins the GPU while the user is chatting. Components:
   the banner's Reconnect button. The child-process boundary makes
   "daemon crashed → click Reconnect" a recoverable UI state instead
   of a dead window. Motivated by ggml/llama.cpp SIGSEGVs an
-  in-process supervisor can't catch. Known softening: the first
-  session right after the wizard still bootstraps in-process;
-  isolation engages from the next launch.
+  in-process supervisor can't catch. First-session coverage: both
+  wizard completion paths finish by mirroring the config and
+  relaunching the app (`maybe_restart_into_supervised` — the wizard
+  session never binds `:9741`), so a fresh install is supervised from
+  its first post-wizard minute; `SOVEREIGN_FORCE_LOCAL=1` and the
+  kill-switch keep the legacy in-process completion for harnesses.
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port
   `/v1/chat/completions` + internal-port
@@ -1930,9 +1933,8 @@ Control routes (loopback-only, on the internal port :9742):
 Open polish: tray icon tint, HintCues nudge to Sharing tab, removing
 the in-process `EmbeddedDaemon` fallback entirely (the default-flip
 itself landed 2026-07-18 — the fallback remains as a surfaced degraded
-mode), graceful SIGTERM-with-grace on daemon shutdown, and
-supervised-child engagement in the first post-wizard session (today it
-starts at the second launch). Daemon-side resilience roadmap:
+mode), and graceful SIGTERM-with-grace on daemon shutdown. Daemon-side
+resilience roadmap:
 [`docs/specs/DAEMON_RESILIENCE.md`](./docs/specs/DAEMON_RESILIENCE.md).
 
 **W7 — live-turn re-attach (streaming survives a conversation switch).**
