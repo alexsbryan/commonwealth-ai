@@ -675,6 +675,15 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
+    // Ground-truth residency from the embedded engine (empty on the
+    // orchestrator daemon). Used only to OR-correct the `loaded` flag,
+    // which the `llama_addr:` store key can't answer on the embedded
+    // path — never removes the orchestrator signal.
+    let resident: Vec<crate::state::ResidentSlot> = match &state.inner.local_inference {
+        Some(svc) => svc.resident_slots(),
+        None => Vec::new(),
+    };
+
     let mut data: Vec<ModelObject> = state
         .inner
         .inference_store
@@ -694,7 +703,10 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                 .inner
                 .inference_store
                 .get_llama_address(model.id)
-                .is_some();
+                .is_some()
+                || resident
+                    .iter()
+                    .any(|r| r.resident && r.model_id == model.name);
 
             ModelObject {
                 id: model.name.clone(),
@@ -704,11 +716,24 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                 capabilities: Some(
                     serde_json::to_value(&model.oicp_capabilities).unwrap_or_default(),
                 ),
-                performance: shard_plan.map(|p| ModelPerformance {
-                    estimated_tokens_per_sec: p.estimated_tokens_per_sec,
-                    estimated_ttft_ms: p.estimated_ttft_ms,
-                    loaded,
-                }),
+                performance: match shard_plan {
+                    Some(p) => Some(ModelPerformance {
+                        estimated_tokens_per_sec: p.estimated_tokens_per_sec,
+                        estimated_ttft_ms: p.estimated_ttft_ms,
+                        loaded,
+                    }),
+                    // The embedded topology has no shard plan, so without this
+                    // a resident model would carry no `performance` block and
+                    // its `loaded` truth (plus Ollama's `/api/ps`, which filters
+                    // on it) would be invisible. Surface residency with
+                    // zeroed estimates when the plan can't provide them.
+                    None if loaded => Some(ModelPerformance {
+                        estimated_tokens_per_sec: 0.0,
+                        estimated_ttft_ms: 0,
+                        loaded: true,
+                    }),
+                    None => None,
+                },
             }
         })
         .collect();

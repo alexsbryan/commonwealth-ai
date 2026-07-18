@@ -136,6 +136,9 @@ pub async fn run(
         "Preparing your storage.",
     );
     let existing_config = state.config.read().await.clone();
+    // Prior model picks now live in SetupConfig (config.toml). Resolve them
+    // so `pick_path` can reuse a valid existing GGUF instead of re-fetching.
+    let existing_slots = crate::state::ResolvedModelSlots::load_or_default();
     let data_dir = existing_config.data_dir.clone();
     let models_dir = data_dir.join("models");
     if let Err(e) = std::fs::create_dir_all(&models_dir) {
@@ -243,7 +246,7 @@ pub async fn run(
                         )
                     })?;
                 let path = pick_path(
-                    existing_config.primary_model_path.as_deref(),
+                    existing_slots.primary.as_deref(),
                     models_dir.join(&primary_slot.file),
                     primary_slot.size_gb,
                 );
@@ -257,12 +260,12 @@ pub async fn run(
             }
         };
     let fast_path = pick_path(
-        Some(&existing_config.model_path),
+        (!existing_slots.fast.as_os_str().is_empty()).then(|| existing_slots.fast.as_path()),
         models_dir.join(&fast_slot.file),
         fast_slot.size_gb,
     );
     let embed_path = pick_path(
-        existing_config.embed_model_path.as_deref(),
+        existing_slots.has_embed().then(|| existing_slots.embed.as_path()),
         models_dir.join(&embed_slot.file),
         embed_slot.size_gb,
     );
@@ -310,15 +313,29 @@ pub async fn run(
         .await?;
     }
 
-    // ── 5. Persist DesktopConfig ────────────────────────────────
+    // ── 5. Persist the model slots to SetupConfig (config.toml), then
+    //       the non-model DesktopConfig fields. ──
+    //
+    // Model PATHS are the sole province of `~/.sovereign/config.toml` (the
+    // single source of truth the daemon reads). Write them FIRST — step 6's
+    // bootstrap resolves them via `ResolvedModelSlots::load()`, so a missing
+    // write here would leave the wizard "complete" but the daemon reading
+    // stale/absent paths (the original desktop.toml-vs-config.toml divergence).
+    // fast/primary are distinct GGUFs here, so the subsume rule keeps both.
+    crate::commands::write_model_slots_to_setup(
+        Some(fast_path.clone()),
+        Some(primary_path.clone()),
+        embed_path.clone(),
+        // The auto-setup flow configures no code slot of its own, but a
+        // wizard RE-run (e.g. after a stale fast model reset setup_complete)
+        // must not wipe one the user configured via Settings or the CLI.
+        existing_slots.code.clone(),
+        data_dir.clone(),
+    )
+    .map_err(|e| failed(&app, false, format!("write model slots to config.toml: {e}")))?;
+
     {
         let mut config = state.config.write().await;
-        // The "fast" slot is what the desktop loads as model_path
-        // (the always-resident chat model); primary is the lazy-
-        // loaded thoughtful slot.
-        config.model_path = fast_path.clone();
-        config.primary_model_path = Some(primary_path.clone());
-        config.embed_model_path = Some(embed_path.clone());
         config.setup_complete = true;
         // The default tools (`shell`, `search`, `web_fetch`,
         // `document`) are already populated via `default_enabled_tools`

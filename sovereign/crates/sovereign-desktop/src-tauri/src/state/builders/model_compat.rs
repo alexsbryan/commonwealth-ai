@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter};
 use sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model, ChatModelChoice};
 use sovereign_inference::hardware::HardwareProfile;
 
-use crate::state::DesktopConfig;
+use crate::state::ResolvedModelSlots;
 
 /// Event the frontend listens on to show a non-fatal "we swapped your model"
 /// banner. Payload is [`ModelNoticePayload`].
@@ -74,14 +74,14 @@ fn parent_dir(p: &std::path::Path) -> std::path::PathBuf {
 ///   `backend-error` instead of crashing.
 /// - Primary (lazy Slow slot): same, but a missing substitute is non-fatal
 ///   (Slow degrades to the fast slot / a mesh peer) — we unset it and log.
-pub fn apply_cpu_compat_policy(config: &mut DesktopConfig, app: &AppHandle) -> Result<(), String> {
+pub fn apply_cpu_compat_policy(slots: &mut ResolvedModelSlots, app: &AppHandle) -> Result<(), String> {
     if !computes_on_cpu() {
         return Ok(()); // GPU backend is unaffected.
     }
 
     // ── Fast slot (eager at boot; the reported first-message crash path) ──
-    let fast_dir = parent_dir(&config.model_path);
-    match choose_cpu_safe_chat_model(&config.model_path, true, &fast_dir) {
+    let fast_dir = parent_dir(&slots.fast);
+    match choose_cpu_safe_chat_model(&slots.fast, true, &fast_dir) {
         ChatModelChoice::Keep => {}
         ChatModelChoice::Substitute {
             path,
@@ -94,23 +94,23 @@ pub fn apply_cpu_compat_policy(config: &mut DesktopConfig, app: &AppHandle) -> R
                      math on CPU, an upstream bug we don't paper over. You're running {running} \
                      instead, so nothing's blocked. To run {requested} itself, add a supported \
                      GPU, or pool a machine you trust on the mesh.",
-                    requested = file_name(&config.model_path),
+                    requested = file_name(&slots.fast),
                     unsafe_arch = unsafe_arch,
                     running = file_name(&path),
                 ),
-                requested_model: file_name(&config.model_path),
+                requested_model: file_name(&slots.fast),
                 requested_arch: unsafe_arch,
                 running_model: file_name(&path),
                 running_arch: safe_arch,
             };
             tracing::warn!(
-                requested = %config.model_path.display(),
+                requested = %slots.fast.display(),
                 running = %path.display(),
                 "cpu-compat: substituted a dense chat model for a CPU-incompatible one"
             );
             // Best-effort: a missing frontend listener must not fail boot.
             let _ = app.emit(MODEL_NOTICE_EVENT, payload);
-            config.model_path = path;
+            slots.fast = path;
         }
         ChatModelChoice::NoSafeModel { unsafe_arch } => {
             return Err(format!(
@@ -118,20 +118,20 @@ pub fn apply_cpu_compat_policy(config: &mut DesktopConfig, app: &AppHandle) -> R
                  crashes there, an upstream bug — and there's no CPU-friendly model alongside it \
                  to fall back on. Point Settings at a dense model (a Qwen3 or Llama GGUF), add a \
                  supported GPU, or pool a machine you trust on the mesh. Then it'll run.",
-                requested = file_name(&config.model_path),
+                requested = file_name(&slots.fast),
                 unsafe_arch = unsafe_arch,
             ));
         }
     }
 
     // ── Primary slot (lazy; Slow synthesis). Missing dense = non-fatal ──
-    if let Some(primary) = config.primary_model_path.clone() {
+    if let Some(primary) = slots.primary.clone() {
         let primary_dir = parent_dir(&primary);
         match choose_cpu_safe_chat_model(&primary, true, &primary_dir) {
             ChatModelChoice::Keep => {}
             ChatModelChoice::Substitute { path, .. } => {
                 // Don't double-load the same file the fast slot now uses.
-                config.primary_model_path = if path == config.model_path {
+                slots.primary = if path == slots.fast {
                     None
                 } else {
                     Some(path)
@@ -144,7 +144,7 @@ pub fn apply_cpu_compat_policy(config: &mut DesktopConfig, app: &AppHandle) -> R
                     "cpu-compat: primary (Slow) model is CPU-incompatible and no dense substitute \
                      found — unsetting it; Slow work routes to the fast slot or a mesh peer"
                 );
-                config.primary_model_path = None;
+                slots.primary = None;
             }
         }
     }

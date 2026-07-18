@@ -262,6 +262,25 @@ orchestrators in `sovereign-cli-llm/src/bench_cmd/`; pure scorers in
 `knowledge-gym`) still exist; only their fixtures moved. Five harnesses
 deserve a map entry:
 
+**Model attribution + reliability reports** (cross-cutting). Lane
+baselines (`<group>/baselines/<id>/latest.json`, the `LaneBaseline`
+schema) historically recorded only the slot alias (`primary`) the run
+hit — worthless once the alias is repointed. Capture now resolves the
+alias to the **concrete GGUF** at run time
+(`bench_cmd/model_resolve.rs` reads the daemon's `/v1/models`
+`owned_by: "alias→<stem>"`), stamps the concrete stem into every
+transcript row, and records structured `model_attribution`
+(`file_stem`/`base_name`/`family`/`quant`, derived in
+`sovereign-core::models_manifest::attribution_for_file`). `svrn bench
+report` (`bench_cmd/report.rs`) inverts the suite-keyed baselines into a
+durable, git-tracked, per-model tree at `sovereign/bench/reports/`
+(`index.json` + `<model>/{reliability.json,REPORT.md}`), grouping
+quantisations under one model heading but keeping each quant on its own
+row, and surfacing any still-unattributed (legacy) baselines rather than
+folding them in. The `REPORT.md` renderer is pure + deterministic; the
+`reliability.json` is the shape the desktop model-picker card will read.
+See `sovereign/bench/reports/README.md`.
+
 **Reasoning-fidelity** (`sovereign bench mechanism-fidelity`) — a
 *metamorphic* audit of whether a frozen model reasons from a causal
 mechanism or a memorized label. A registry of `ReasoningClass`es

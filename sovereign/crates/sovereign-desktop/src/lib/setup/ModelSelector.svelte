@@ -264,10 +264,15 @@
   }
 
   async function handleBrowse() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "GGUF Models", extensions: ["gguf"] }],
-    });
+    // No extension filter: the native macOS open panel treats a
+    // `{extensions:["gguf"]}` filter as EXCLUSIVE and greys out anything it
+    // can't type-match — which disables perfectly valid GGUFs that are
+    // symlinks (or aliases), e.g. the ones in `sovereign/models`. The real
+    // guard is server-side (GGUF magic-byte + size validation on load via
+    // `validate_gguf`/`is_valid_gguf_at`), so a too-strict picker only
+    // costs us false negatives. Let the user pick any file; a non-GGUF
+    // surfaces a clear error at load time.
+    const selected = await open({ multiple: false });
     if (selected) {
       onSelect(selected as string);
     }

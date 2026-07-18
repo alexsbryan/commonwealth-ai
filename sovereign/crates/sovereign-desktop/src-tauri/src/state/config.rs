@@ -11,27 +11,29 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DesktopConfig {
-    pub model_path: PathBuf,
-    #[serde(default)]
-    pub primary_model_path: Option<PathBuf>,
-    /// Optional dedicated embedding model. Required for any feature
-    /// that needs vector search: corpus install, RAG, knowledge tools.
-    /// When unset, those features return a clear "configure an
-    /// embedding model" error rather than producing garbage vectors.
-    #[serde(default)]
-    pub embed_model_path: Option<PathBuf>,
-    /// PR-E2: Optional Code specialist GGUF. When set, `code`-
-    /// hinted inference requests route to this slot instead of the
-    /// Main responder (primary). Lazy-loaded on first use; idle-
-    /// unloads after `primary_idle_secs` (default 300s), same as
-    /// primary. `None` (the common case) means the Main responder
-    /// handles code too — a well-rounded general model does this
-    /// adequately per v0.3 §4.4 guidance.
-    #[serde(default)]
-    pub code_model_path: Option<PathBuf>,
+    // ── NOTE: model-slot *paths* deliberately do NOT live here. ──
+    // `model_path` / `primary_model_path` / `embed_model_path` /
+    // `code_model_path` were moved to `SetupConfig`
+    // (`~/.sovereign/config.toml`, the daemon's config), making it the
+    // single on-disk source of truth for what each slot loads. The
+    // desktop reads/writes them via the `get_setup_model_slots` /
+    // `set_setup_model_slots` Tauri commands and the `ResolvedModelSlots`
+    // carrier. Keeping paths in one file is what stops the Settings panel
+    // and the daemon from ever disagreeing. Old `desktop.toml` files that
+    // still carry these keys are migrated once in `DesktopConfig::load`
+    // (serde ignores the now-unknown keys thereafter).
+    //
     /// Model family of the code slot — drives tokenizer / chat
     /// template quirks. Typically `Qwen35` for Qwen Coder lineage,
     /// `Unknown` for BYOM coders.
+    ///
+    /// ASYMMETRY (intentional): the code/embed slot *paths* live in
+    /// `SetupConfig`, but their *family* hints (`code_family` /
+    /// `embed_family`) stay here — they are desktop-side load-time hints
+    /// the daemon auto-detects from the GGUF, so they don't participate
+    /// in the path single-source-of-truth. Do NOT "consolidate" them into
+    /// `ModelsSection`: `sovereign-contracts` can't reference
+    /// `sovereign_core::model_family::ModelFamily`.
     #[serde(default)]
     pub code_family: ModelFamily,
     #[serde(default = "default_data_dir")]
@@ -42,17 +44,11 @@ pub struct DesktopConfig {
     pub active_skills: Vec<String>,
     #[serde(default = "default_enabled_tools")]
     pub enabled_tools: Vec<String>,
-    /// **Deprecated** — kept on disk only so existing `desktop.toml`
-    /// files deserialize without losing the value during one-shot
-    /// migration into `SetupConfig`. The canonical home for the
-    /// chat-slot context window is now `~/.sovereign/config.toml`'s
-    /// `[models].context_size` (see `sovereign-core::setup_config`).
-    /// `DesktopConfig::load` migrates this field into `SetupConfig` if
-    /// daemon config doesn't yet carry an explicit value, then leaves
-    /// the desktop field in place to avoid surprising the user with
-    /// a config rewrite. The bootstrap path no longer reads from here.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_size: Option<u32>,
+    // NOTE: `context_size` was removed from this struct — its canonical
+    // home is `~/.sovereign/config.toml`'s `[models].context_size`
+    // (edited via `set_setup_context_size`). Existing `desktop.toml`
+    // files that still carry it are migrated once in `DesktopConfig::load`
+    // and the now-unknown key is thereafter ignored by serde.
     #[serde(default)]
     pub search_backend: SearchBackendConfig,
     #[serde(default)]
@@ -354,19 +350,11 @@ fn default_search_provider() -> String {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
-            model_path: PathBuf::from("models/fast.gguf"),
-            primary_model_path: None,
-            embed_model_path: None,
-            code_model_path: None,
             code_family: ModelFamily::Unknown,
             data_dir: default_data_dir(),
             skills_dir: default_skills_dir(),
             active_skills: Vec::new(),
             enabled_tools: default_enabled_tools(),
-            // Deprecated — see field doc comment. Default to `None`
-            // so a freshly-saved desktop.toml doesn't materialise a
-            // stale ctx hint; bootstrap reads `SetupConfig` instead.
-            context_size: None,
             search_backend: SearchBackendConfig::default(),
             setup_complete: false,
             selected_tier: None,
@@ -414,22 +402,26 @@ impl DesktopConfig {
 
     pub fn load() -> Self {
         let path = Self::config_path();
-        let mut config: DesktopConfig = if path.exists() {
+        let raw: Option<String> = if path.exists() {
             match std::fs::read_to_string(&path) {
-                Ok(content) => match toml::from_str(&content) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::warn!("Failed to parse config: {e}");
-                        Self::default()
-                    }
-                },
+                Ok(content) => Some(content),
                 Err(e) => {
                     tracing::warn!("Failed to read config: {e}");
-                    Self::default()
+                    None
                 }
             }
         } else {
-            Self::default()
+            None
+        };
+        let mut config: DesktopConfig = match raw.as_deref() {
+            Some(content) => match toml::from_str(content) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Failed to parse config: {e}");
+                    Self::default()
+                }
+            },
+            None => Self::default(),
         };
 
         // Migration: copy any pre-merge `context_size` from
@@ -451,57 +443,13 @@ impl DesktopConfig {
         // and avoiding a config rewrite keeps the migration a pure
         // one-way write into SetupConfig (the worse error mode is
         // surfacing a stale value, not losing one).
-        if let Some(desktop_ctx) = config.context_size {
-            use sovereign_core::setup_config::SetupConfig;
-            let mut cli = SetupConfig::load().ok();
-            let needs_write = match cli.as_ref() {
-                Some(c) => c.models.context_size.is_none(),
-                None => true,
-            };
-            if needs_write {
-                let mut setup = cli.take().unwrap_or_else(|| SetupConfig {
-                    models: sovereign_core::setup_config::ModelsSection {
-                        primary: config
-                            .primary_model_path
-                            .clone()
-                            .unwrap_or_else(|| config.model_path.clone()),
-                        fast: Some(config.model_path.clone()),
-                        embed: config
-                            .embed_model_path
-                            .clone()
-                            .unwrap_or_else(|| config.model_path.clone()),
-                        code: config.code_model_path.clone(),
-                        context_size: None,
-                        extra: std::collections::BTreeMap::new(),
-                        max_extras_memory_gb: None,
-                        primary_pool: None,
-                    },
-                    daemon: Default::default(),
-                    data: sovereign_core::setup_config::DataSection {
-                        dir: config.data_dir.clone(),
-                    },
-                    watched_folders: Default::default(),
-                    memory: Default::default(),
-                    iroh: Default::default(),
-                    shared_model: Default::default(),
-                    discovery: Default::default(),
-                    mcp_servers: Vec::new(),
-                });
-                setup.models.context_size = Some(desktop_ctx);
-                match setup.save() {
-                    Ok(path) => tracing::info!(
-                        desktop_ctx,
-                        target = %path.display(),
-                        "config migration: copied desktop.toml context_size into SetupConfig"
-                    ),
-                    Err(e) => tracing::warn!(
-                        error = %e,
-                        "config migration: failed to persist context_size into SetupConfig \
-                         (in-memory value still applied via SetupConfig::load fallback)"
-                    ),
-                }
-            }
-        }
+        // One-time migration of legacy `desktop.toml` MODEL PATHS +
+        // `context_size` into `SetupConfig`. The struct no longer has these
+        // fields, so we re-parse the raw TOML through a deserialize-only
+        // shim and, when the daemon config doesn't already carry them, copy
+        // them over. Guarantees no existing user loses their configured
+        // models when they upgrade to the single-source-of-truth build.
+        Self::migrate_legacy_model_fields(raw.as_deref());
 
         // Friendly first-launch node name. Without this, anyone who
         // never opened the node-name input ends up identified by their
@@ -536,6 +484,149 @@ impl DesktopConfig {
         config
     }
 
+    /// One-time migration of legacy `desktop.toml` model-slot paths +
+    /// `context_size` into `SetupConfig` (`~/.sovereign/config.toml`). The
+    /// struct no longer carries these fields, so the values are recovered
+    /// from the raw TOML via a deserialize-only shim. Runs only when the
+    /// legacy file actually carries them AND `SetupConfig` doesn't already
+    /// have models/ctx of its own — so an already-migrated (or CLI-
+    /// configured) user is never clobbered. Does NOT rewrite `desktop.toml`
+    /// (serde drops the now-unknown keys on the next save).
+    fn migrate_legacy_model_fields(raw: Option<&str>) {
+        use sovereign_core::setup_config::{DataSection, ModelsSection, SetupConfig};
+
+        /// Deserialize-only view of the removed model fields, read straight
+        /// from the raw `desktop.toml` so the migration can recover values
+        /// the live `DesktopConfig` no longer deserializes.
+        #[derive(Deserialize, Default)]
+        struct LegacyModelPaths {
+            #[serde(default)]
+            model_path: Option<PathBuf>,
+            #[serde(default)]
+            primary_model_path: Option<PathBuf>,
+            #[serde(default)]
+            embed_model_path: Option<PathBuf>,
+            #[serde(default)]
+            code_model_path: Option<PathBuf>,
+            #[serde(default)]
+            context_size: Option<u32>,
+        }
+
+        let Some(content) = raw else { return };
+        let legacy: LegacyModelPaths = match toml::from_str(content) {
+            Ok(l) => l,
+            Err(_) => return,
+        };
+        let has_any_path = legacy.model_path.is_some()
+            || legacy.primary_model_path.is_some()
+            || legacy.embed_model_path.is_some()
+            || legacy.code_model_path.is_some();
+        if !has_any_path && legacy.context_size.is_none() {
+            return; // nothing legacy to migrate
+        }
+
+        let existing = match SetupConfig::load() {
+            Ok(c) => Some(c),
+            // Absent file → synthesize below. An EXISTING but unparseable
+            // config.toml must NOT be treated as absent: synthesizing +
+            // saving would silently replace the whole file (daemon ports,
+            // iroh, watched_folders, …) with defaults. Skip the migration
+            // and let the user fix the file instead.
+            Err(e) => {
+                if SetupConfig::exists() {
+                    tracing::warn!(
+                        error = %e,
+                        "config migration: config.toml exists but is unparseable — \
+                         skipping legacy model-path migration rather than overwriting it"
+                    );
+                    return;
+                }
+                None
+            }
+        };
+        // Primary alone decides path authority. Requiring embed too would
+        // let a stale desktop.toml clobber a CLI-configured config.toml
+        // that simply has no embed model — repeatedly, since desktop.toml
+        // is never rewritten here (the exact divergence bug this
+        // single-source-of-truth work exists to kill).
+        let setup_has_models = existing
+            .as_ref()
+            .is_some_and(|c| !c.models.primary.as_os_str().is_empty());
+        let setup_has_ctx = existing
+            .as_ref()
+            .is_some_and(|c| c.models.context_size.is_some());
+        // Nothing to do if SetupConfig is already authoritative for
+        // whatever the legacy file could contribute.
+        let need_paths = has_any_path && !setup_has_models;
+        let need_ctx = legacy.context_size.is_some() && !setup_has_ctx;
+        if !need_paths && !need_ctx {
+            return;
+        }
+
+        let mut setup = existing.unwrap_or_else(|| SetupConfig {
+            models: ModelsSection {
+                primary: PathBuf::new(),
+                fast: None,
+                embed: PathBuf::new(),
+                code: None,
+                context_size: None,
+                extra: std::collections::BTreeMap::new(),
+                max_extras_memory_gb: None,
+                primary_pool: None,
+            },
+            daemon: Default::default(),
+            data: DataSection {
+                dir: default_data_dir(),
+            },
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: Default::default(),
+            shared_model: Default::default(),
+            discovery: Default::default(),
+            mcp_servers: Vec::new(),
+        });
+
+        if need_paths {
+            // Same subsume mapping the old desktop code used: primary is the
+            // anchor (primary_model_path, or model_path when only one was
+            // set); fast is the distinct model_path, else subsumed (None).
+            let primary = legacy
+                .primary_model_path
+                .clone()
+                .or_else(|| legacy.model_path.clone())
+                .unwrap_or_default();
+            setup.models.fast = match legacy.model_path.clone() {
+                Some(f) if !f.as_os_str().is_empty() && f != primary => Some(f),
+                _ => None,
+            };
+            setup.models.primary = primary;
+            if let Some(e) = legacy.embed_model_path.clone() {
+                setup.models.embed = e;
+            }
+            // Only carry a code slot the legacy file actually has —
+            // a legacy None must not wipe one already in SetupConfig.
+            if let Some(c) = legacy.code_model_path.clone() {
+                setup.models.code = Some(c);
+            }
+        }
+        if need_ctx {
+            setup.models.context_size = legacy.context_size;
+        }
+
+        match setup.save() {
+            Ok(path) => tracing::info!(
+                target = %path.display(),
+                migrated_paths = need_paths,
+                migrated_ctx = need_ctx,
+                "config migration: copied legacy desktop.toml model paths / context_size into SetupConfig"
+            ),
+            Err(e) => tracing::warn!(
+                error = %e,
+                "config migration: failed to write migrated SetupConfig"
+            ),
+        }
+    }
+
     pub fn save(&self) -> Result<(), String> {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
@@ -546,5 +637,78 @@ impl DesktopConfig {
             toml::to_string_pretty(self).map_err(|e| format!("Failed to serialize config: {e}"))?;
         std::fs::write(&path, content).map_err(|e| format!("Failed to write config: {e}"))?;
         Ok(())
+    }
+}
+
+/// The model-slot paths resolved from `SetupConfig`
+/// (`~/.sovereign/config.toml`) — the single on-disk source of truth for
+/// which GGUFs each slot loads. Bootstrap builds one of these; the
+/// CPU-compat policy may mutate it **in memory only** (never persisted);
+/// the inference builder loads from it.
+///
+/// Deliberately distinct from [`DesktopConfig`]: model *paths* live here
+/// (in `config.toml`, shared with the daemon), while model *family* hints
+/// (`code_family` / `embed_family`) stay on `DesktopConfig` — see those
+/// field docs for the split. Keeping paths in exactly one file is what
+/// stops the Settings panel and the daemon from ever disagreeing.
+#[derive(Debug, Clone)]
+pub struct ResolvedModelSlots {
+    /// Always-resident quick-responder ("fast") slot. Falls back to the
+    /// primary GGUF when no distinct fast model is configured
+    /// (`ModelsSection::fast_path` subsume rule).
+    pub fast: PathBuf,
+    /// Lazy thoughtful ("primary") slot. `Some` whenever a primary is
+    /// configured (the common case); the CPU-compat policy may set it to
+    /// `None` at runtime when the configured primary can't run here and
+    /// no dense substitute exists.
+    pub primary: Option<PathBuf>,
+    /// Embedding model. Empty path when none is configured yet (fresh
+    /// install before setup) — test with [`Self::has_embed`].
+    pub embed: PathBuf,
+    /// Optional code specialist, hot-swapped into the primary slot.
+    pub code: Option<PathBuf>,
+    /// Effective chat context window (configured value or safe default).
+    pub context_size: u32,
+}
+
+impl ResolvedModelSlots {
+    /// Read from the canonical `SetupConfig`. Errors when `config.toml` is
+    /// absent or unparseable — callers that must tolerate a pre-setup
+    /// machine use [`Self::load_or_default`].
+    pub fn load() -> Result<Self, String> {
+        let setup = sovereign_core::setup_config::SetupConfig::load()?;
+        Ok(Self::from_setup(&setup))
+    }
+
+    /// Read from `SetupConfig`, or an all-empty placeholder when
+    /// `config.toml` doesn't exist yet (fresh install, pre-wizard). Never
+    /// errors.
+    pub fn load_or_default() -> Self {
+        match sovereign_core::setup_config::SetupConfig::load() {
+            Ok(setup) => Self::from_setup(&setup),
+            Err(_) => Self {
+                fast: PathBuf::new(),
+                primary: None,
+                embed: PathBuf::new(),
+                code: None,
+                context_size: 16_384,
+            },
+        }
+    }
+
+    fn from_setup(setup: &sovereign_core::setup_config::SetupConfig) -> Self {
+        let m = &setup.models;
+        Self {
+            fast: m.fast_path().to_path_buf(),
+            primary: Some(m.primary.clone()),
+            embed: m.embed.clone(),
+            code: m.code.clone(),
+            context_size: m.effective_context_size(),
+        }
+    }
+
+    /// True when an embedding model is actually configured (non-empty path).
+    pub fn has_embed(&self) -> bool {
+        !self.embed.as_os_str().is_empty()
     }
 }

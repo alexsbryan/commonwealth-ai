@@ -9,6 +9,9 @@
     saveConfig,
     getSetupContextSize,
     setSetupContextSize,
+    getSetupModelSlots,
+    setSetupModelSlots,
+    getRuntimeStatus,
     getIngestBudget,
     setIngestBudget,
     getMeshQuiesced,
@@ -17,7 +20,11 @@
     setStorageBudget,
     modelFileSize,
   } from "../api";
-  import type { StorageBudgetState } from "../api";
+  import type {
+    StorageBudgetState,
+    SetupModelSlots,
+    ResidentSlotDto,
+  } from "../api";
   import {
     effectiveMemoryBytes,
     memorySourceLabel,
@@ -288,13 +295,23 @@
   let budgetRatio = $derived(effectiveBytes > 0 ? peakBytes / effectiveBytes : 0);
   let budgetState = $derived(budgetStateFor(budgetRatio));
 
-  async function refreshSlotSizes(cfg: DesktopConfig | null) {
-    if (!cfg) return;
+  // Model-slot PATHS live in SetupConfig (config.toml) — the single source
+  // of truth the daemon reads — not in DesktopConfig. Load/edit/save them
+  // via the dedicated commands so this panel can never diverge from what
+  // the daemon actually runs. `code_family` still rides on `config`.
+  let slots = $state<SetupModelSlots | null>(null);
+  let slotsDirty = $state(false);
+  // Live per-slot residency ("what's actually loaded right now"), keyed by
+  // role, from the daemon's `/status.inference.resident`.
+  let residentByRole = $state<Record<string, ResidentSlotDto>>({});
+
+  async function refreshSlotSizes(s: SetupModelSlots | null) {
+    if (!s) return;
     const [fast, primary, embed, code] = await Promise.all([
-      modelFileSize(cfg.model_path),
-      modelFileSize(cfg.primary_model_path),
-      modelFileSize(cfg.embed_model_path),
-      modelFileSize(cfg.code_model_path),
+      modelFileSize(s.fast),
+      modelFileSize(s.primary ?? ""),
+      modelFileSize(s.embed ?? ""),
+      modelFileSize(s.code ?? ""),
     ]);
     slotSizes = { fast, primary, embed, code };
   }
@@ -303,13 +320,42 @@
   // the model-path mutation so the new size is fetched before the
   // user has a chance to read the budget meter.
   $effect(() => {
-    if (!config) return;
+    if (!slots) return;
     // Touch every path so Svelte tracks them as dependencies.
-    void config.model_path;
-    void config.primary_model_path;
-    void config.embed_model_path;
-    void config.code_model_path;
-    refreshSlotSizes(config);
+    void slots.fast;
+    void slots.primary;
+    void slots.embed;
+    void slots.code;
+    refreshSlotSizes(slots);
+  });
+
+  async function refreshResidency() {
+    try {
+      const rs = await getRuntimeStatus();
+      const map: Record<string, ResidentSlotDto> = {};
+      for (const r of rs.resident ?? []) map[r.role] = r;
+      residentByRole = map;
+    } catch {
+      // Daemon offline / older /status — leave badges hidden.
+      residentByRole = {};
+    }
+  }
+
+  /** Residency badge label for a slot role, or null when unknown. */
+  function residencyLabel(role: string): string | null {
+    const r = residentByRole[role];
+    if (!r) return null;
+    if (r.transitioning) return "loading…";
+    return r.resident ? "resident" : "idle";
+  }
+
+  // Residency is dynamic (primary lazy-loads on the first reasoning
+  // turn and idle-unloads ~5 min later) — a one-shot fetch would show
+  // a stale badge for the whole session. Poll while the panel is
+  // mounted; /status is cheap (non-blocking try_lock enumeration).
+  $effect(() => {
+    const id = setInterval(() => void refreshResidency(), 5000);
+    return () => clearInterval(id);
   });
 
   onMount(async () => {
@@ -318,6 +364,13 @@
     } catch (e) {
       console.error("Failed to load config:", e);
     }
+    try {
+      slots = await getSetupModelSlots();
+    } catch (e) {
+      console.error("Failed to load model slots:", e);
+    }
+    // Best-effort live residency for the per-slot badge.
+    void refreshResidency();
     try {
       bootstrap = await detectBootstrap();
     } catch {
@@ -446,6 +499,15 @@
     saving = true;
     saveMessage = "";
     try {
+      // Model-slot paths persist to config.toml via their own command
+      // (the single source of truth); it also tears down + rebuilds
+      // inference, so do it before the DesktopConfig save. `code_family`
+      // still rides on `config`.
+      if (slotsDirty && slots) {
+        await setSetupModelSlots({ ...slots, code_family: config.code_family });
+        slotsDirty = false;
+        await refreshResidency();
+      }
       await saveConfig(config);
       saveMessage = "Saved.";
       dirty = false;
@@ -508,19 +570,23 @@
     return path.split(/[\\/]/).pop() ?? path;
   }
   let slotSelectedPath = $derived.by((): string => {
-    if (!config || !activeSlot) return "";
-    if (activeSlot === "fast")      return config.model_path ?? "";
-    if (activeSlot === "reasoning") return config.primary_model_path ?? "";
-    if (activeSlot === "code")      return config.code_model_path ?? "";
-    return config.embed_model_path ?? "";
+    if (!slots || !activeSlot) return "";
+    if (activeSlot === "fast")      return slots.fast ?? "";
+    if (activeSlot === "reasoning") return slots.primary ?? "";
+    if (activeSlot === "code")      return slots.code ?? "";
+    return slots.embed ?? "";
   });
+  function markSlotsDirty(key?: string) {
+    slotsDirty = true;
+    markDirty(key);
+  }
   function handleSlotSelect(path: string) {
-    if (!config || !activeSlot) return;
-    if (activeSlot === "fast")           config.model_path = path;
-    else if (activeSlot === "reasoning") config.primary_model_path = path || null;
-    else if (activeSlot === "code")      config.code_model_path = path || null;
-    else                                 config.embed_model_path = path || null;
-    markDirty(`model-${activeSlot}`);
+    if (!slots || !activeSlot) return;
+    if (activeSlot === "fast")           slots.fast = path;
+    else if (activeSlot === "reasoning") slots.primary = path || null;
+    else if (activeSlot === "code")      slots.code = path || null;
+    else                                 slots.embed = path || null;
+    markSlotsDirty(`model-${activeSlot}`);
   }
 
   // Two clusters (D7): plain configuration plumbing, and an operator
@@ -694,9 +760,17 @@
                   <span class="slot-item-sub">Short turns, instant replies</span>
                 </span>
                 <span class="slot-item-file">
-                  {#if config.model_path}
-                    {modelFileName(config.model_path)}
+                  {#if slots?.fast}
+                    {modelFileName(slots.fast)}
                     {#if slotSizes.fast !== null}<span class="slot-item-size">{fmtGiB(slotSizes.fast)}</span>{/if}
+                    {#if residencyLabel("fast")}<span class="slot-item-residency" data-state={residentByRole["fast"]?.resident ? "on" : "off"}>{residencyLabel("fast")}</span>{/if}
+                  {:else if slots?.primary}
+                    <!-- Subsumed: no distinct fast GGUF configured — the
+                         primary serves the fast role (one loaded copy).
+                         `slots.fast` stays empty so saving a primary edit
+                         can't pin the old primary as an explicit fast. -->
+                    <span class="slot-item-unset">shares the Main responder model</span>
+                    {#if residencyLabel("fast")}<span class="slot-item-residency" data-state={residentByRole["fast"]?.resident ? "on" : "off"}>{residencyLabel("fast")}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -709,8 +783,8 @@
                   <p class="slot-item-desc">Handles the short turns — quick replies, drafts, follow-ups. Stays loaded so there's no wait when you hit send.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
-                    {#if config.model_path}
-                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.model_path = ""; markDirty('model-fast'); activeSlot = null; }}>
+                    {#if slots?.fast}
+                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { slots!.fast = ""; markSlotsDirty('model-fast'); activeSlot = null; }}>
                         Clear
                       </button>
                     {/if}
@@ -727,9 +801,10 @@
                   <span class="slot-item-sub">Research, long writing, deep analysis</span>
                 </span>
                 <span class="slot-item-file">
-                  {#if config.primary_model_path}
-                    {modelFileName(config.primary_model_path)}
+                  {#if slots?.primary}
+                    {modelFileName(slots.primary)}
                     {#if slotSizes.primary !== null}<span class="slot-item-size">{fmtGiB(slotSizes.primary)}</span>{/if}
+                    {#if residencyLabel("primary")}<span class="slot-item-residency" data-state={residentByRole["primary"]?.resident ? "on" : "off"}>{residencyLabel("primary")}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -742,8 +817,8 @@
                   <p class="slot-item-desc">Your heaviest model. Comes out for research, long writing, and careful analysis, then steps back five minutes after the last question to free memory.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
-                    {#if config.primary_model_path}
-                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.primary_model_path = null; markDirty('model-reasoning'); activeSlot = null; }}>
+                    {#if slots?.primary}
+                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { slots!.primary = null; markSlotsDirty('model-reasoning'); activeSlot = null; }}>
                         Clear
                       </button>
                     {/if}
@@ -760,9 +835,10 @@
                   <span class="slot-item-sub">Makes your library searchable</span>
                 </span>
                 <span class="slot-item-file">
-                  {#if config.embed_model_path}
-                    {modelFileName(config.embed_model_path)}
+                  {#if slots?.embed}
+                    {modelFileName(slots.embed)}
                     {#if slotSizes.embed !== null}<span class="slot-item-size">{fmtGiB(slotSizes.embed)}</span>{/if}
+                    {#if residencyLabel("embed")}<span class="slot-item-residency" data-state={residentByRole["embed"]?.resident ? "on" : "off"}>{residencyLabel("embed")}</span>{/if}
                   {:else}
                     <span class="slot-item-unset slot-item-unset--warn">not set — library unsearchable</span>
                   {/if}
@@ -775,8 +851,8 @@
                   <p class="slot-item-desc">Indexes every document you add so the assistant can find passages by meaning, not just keywords. Runs in the background while ingest is going.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={true} allowManage={true} />
-                    {#if config.embed_model_path}
-                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.embed_model_path = null; markDirty('model-embed'); activeSlot = null; }}>
+                    {#if slots?.embed}
+                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { slots!.embed = null; markSlotsDirty('model-embed'); activeSlot = null; }}>
                         Clear
                       </button>
                     {/if}
@@ -812,9 +888,10 @@
                   <span class="slot-item-sub">Optional — routes programming turns</span>
                 </span>
                 <span class="slot-item-file">
-                  {#if config.code_model_path}
-                    {modelFileName(config.code_model_path)}
+                  {#if slots?.code}
+                    {modelFileName(slots.code)}
                     {#if slotSizes.code !== null}<span class="slot-item-size">{fmtGiB(slotSizes.code)}</span>{/if}
+                    {#if residencyLabel("code")}<span class="slot-item-residency" data-state={residentByRole["code"]?.resident ? "on" : "off"}>{residencyLabel("code")}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -827,8 +904,8 @@
                   <p class="slot-item-desc">A second model trained on code (Qwen-Coder, DeepSeek-Coder, etc.). When set, programming questions go here instead of the Main responder. The two share a memory slot — whichever you need loads on demand.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
-                    {#if config.code_model_path}
-                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.code_model_path = null; markDirty('model-code'); activeSlot = null; }}>
+                    {#if slots?.code}
+                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { slots!.code = null; markSlotsDirty('model-code'); activeSlot = null; }}>
                         Clear
                       </button>
                     {/if}
@@ -2007,6 +2084,25 @@
     background: var(--bg-input);
     border-radius: 4px;
     white-space: nowrap;
+  }
+
+  /* Live residency badge: whether the slot's weights are in memory now. */
+  .slot-item-residency {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 0.68rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    text-transform: lowercase;
+  }
+  .slot-item-residency[data-state="on"] {
+    color: var(--accent-success, #2e7d32);
+    background: color-mix(in srgb, var(--accent-success, #2e7d32) 15%, transparent);
+  }
+  .slot-item-residency[data-state="off"] {
+    color: var(--text-muted);
+    background: var(--bg-input);
   }
 
   .slot-item-meta {

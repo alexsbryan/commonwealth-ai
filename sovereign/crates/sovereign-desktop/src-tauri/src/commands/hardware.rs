@@ -250,12 +250,30 @@ pub async fn list_daemon_models(state: State<'_, Arc<AppState>>) -> Result<Vec<S
 /// (the `ollama ps` analog) is a tracked follow-up requiring a small
 /// `InferenceProvider` introspection method — not surfaced here rather
 /// than shown as a fabricated zero.
+/// One engine slot's real in-memory residency, parsed from `/status`'s
+/// `inference.resident` array (the `ollama ps` analog). Lets the
+/// Settings "Model slots" panel show a live resident / idle / loading
+/// badge next to each configured slot.
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct ResidentSlotDto {
+    pub role: String,
+    pub model_id: String,
+    pub resident: bool,
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub transitioning: bool,
+}
+
 #[derive(Serialize, Default)]
 pub struct RuntimeStatus {
     pub members_online: u32,
     pub members_total: u32,
     pub pooled_vram_gb: f32,
     pub pooled_storage_gb: f32,
+    /// Real per-slot residency from the daemon's embedded engine.
+    /// Empty when the daemon is the orchestrator (no embedded engine)
+    /// or `/status` predates this field.
+    pub resident: Vec<ResidentSlotDto>,
 }
 
 #[tauri::command]
@@ -284,11 +302,17 @@ pub async fn get_runtime_status(state: State<'_, Arc<AppState>>) -> Result<Runti
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0)
     };
+    let resident: Vec<ResidentSlotDto> = body
+        .get("inference")
+        .and_then(|i| i.get("resident"))
+        .and_then(|r| serde_json::from_value(r.clone()).ok())
+        .unwrap_or_default();
     Ok(RuntimeStatus {
         members_online: num("members_online") as u32,
         members_total: num("members_total") as u32,
         pooled_vram_gb: num("pooled_vram_gb") as f32,
         pooled_storage_gb: num("pooled_storage_gb") as f32,
+        resident,
     })
 }
 

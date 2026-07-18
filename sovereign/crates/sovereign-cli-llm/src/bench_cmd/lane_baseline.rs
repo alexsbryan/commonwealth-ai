@@ -23,6 +23,14 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// A slot alias, not a concrete model — the historical placeholder a
+/// baseline recorded before resolution existed. We refuse to attribute
+/// a baseline to one of these: an alias is not a model.
+pub(crate) fn is_alias_marker(s: &str) -> bool {
+    let s = s.trim().trim_start_matches("commonwealth/");
+    matches!(s, "primary" | "fast" | "embed" | "code" | "reasoning")
+}
+
 /// Which direction of movement counts as a **regression** for a metric.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -85,8 +93,18 @@ pub struct LaneBaseline {
     pub captured_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corpus: Option<String>,
+    /// Legacy / legible model field — the concrete GGUF stem when
+    /// known (was historically the slot alias `"primary"`, which is
+    /// why `model_attribution` now carries the real provenance).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Structured, human-readable model provenance: the concrete stem
+    /// plus manifest-derived `base_name`/`family`/`quant`. Populated by
+    /// [`Self::attribute`] from the resolved model stem. `None` on
+    /// legacy baselines and when slot resolution failed at capture
+    /// time — the report rollup buckets those as "unattributed".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_attribution: Option<sovereign_core::models_manifest::ModelAttribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub metrics: BTreeMap<String, LaneMetric>,
@@ -99,9 +117,31 @@ impl LaneBaseline {
             captured_at: captured_at.into(),
             corpus: None,
             model: None,
+            model_attribution: None,
             note: None,
             metrics: BTreeMap::new(),
         }
+    }
+
+    /// Attribute this baseline to the concrete model that produced it,
+    /// given the model stem recorded on the run's transcript rows (or
+    /// any concrete GGUF stem). Sets both the legible `model` field
+    /// (the stem) and the structured `model_attribution`, enriched
+    /// deterministically from the bundled manifest — no daemon needed,
+    /// so the gate re-score path attributes correctly from the
+    /// transcript alone.
+    ///
+    /// A `None` or alias-shaped stem (`"primary"`/`"fast"` — the legacy
+    /// unresolved marker) leaves attribution empty rather than
+    /// recording the alias as if it were a model.
+    pub fn attribute(&mut self, model_stem: Option<&str>) {
+        let Some(stem) = model_stem.filter(|s| !s.is_empty() && !is_alias_marker(s)) else {
+            return;
+        };
+        self.model = Some(stem.to_string());
+        self.model_attribution = Some(
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.attribution_for_file(stem),
+        );
     }
     pub fn with(mut self, name: impl Into<String>, metric: LaneMetric) -> Self {
         self.metrics.insert(name.into(), metric);
@@ -424,5 +464,33 @@ mod tests {
         let d = diff(Some(&prev), &cur);
         assert_eq!(d.n_regressed(), 0);
         assert!(d.missing.contains(&"honesty".to_string()));
+    }
+
+    #[test]
+    fn attribute_refuses_alias_and_accepts_concrete_stem() {
+        // The alias placeholder must never become an attribution.
+        let mut b = LaneBaseline::new("chaos-monkey", "now");
+        b.attribute(Some("primary"));
+        assert!(b.model.is_none(), "'primary' is a slot alias, not a model");
+        assert!(b.model_attribution.is_none());
+
+        b.attribute(Some("commonwealth/primary"));
+        assert!(b.model_attribution.is_none(), "namespaced alias also refused");
+
+        // A concrete stem sets both the legible field and the structured
+        // attribution, enriched from the bundled manifest.
+        b.attribute(Some("Qwen3.5-4B-Q4_K_M"));
+        assert_eq!(b.model.as_deref(), Some("Qwen3.5-4B-Q4_K_M"));
+        let a = b.model_attribution.expect("concrete stem attributes");
+        assert_eq!(a.base_name.as_deref(), Some("Qwen3.5-4B"));
+        assert_eq!(a.quant.as_deref(), Some("Q4_K_M"));
+    }
+
+    #[test]
+    fn is_alias_marker_matches_canonical_slots() {
+        for a in ["primary", "fast", "embed", "code", "commonwealth/primary"] {
+            assert!(is_alias_marker(a), "{a} is an alias");
+        }
+        assert!(!is_alias_marker("Qwen3.5-4B-Q4_K_M"), "a real stem is not an alias");
     }
 }

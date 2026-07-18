@@ -38,9 +38,11 @@ mod governance;
 mod lane_baseline;
 mod live_runner;
 mod mechanism_fidelity;
+mod model_resolve;
 mod obsidian;
 mod parity_compare;
 mod promote;
+mod report;
 mod proxy_bench;
 mod redteam;
 mod render;
@@ -64,6 +66,10 @@ const HELP: Help = Help {
             (
                 "gate",
                 "Baseline-relative CI gate for the absolute-verdict lanes (chaos-monkey / mechanism-fidelity / multiturn): re-score a lane's artifact, diff vs a committed baseline, exit 0/1.",
+            ),
+            (
+                "report",
+                "Roll the per-lane baselines up into durable, model-attributed reliability reports (reports/<model>/{reliability.json,REPORT.md} + index.json).",
             ),
             (
                 "atlas",
@@ -132,6 +138,9 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "all" => all::cmd_all(&args[1..]).await,
         // `gate` is synchronous — pure file IO + arithmetic, no daemon calls.
         "gate" => gate::cmd_gate(&args[1..]),
+        // `report` is synchronous — rolls the on-disk baselines up into
+        // per-model reliability reports; no daemon calls.
+        "report" => report::cmd_report(&args[1..]),
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,

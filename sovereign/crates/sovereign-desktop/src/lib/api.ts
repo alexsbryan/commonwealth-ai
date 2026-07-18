@@ -14,6 +14,7 @@ import type {
   SearchResult,
   SkillEntry,
   DesktopConfig,
+  ModelFamily,
   SetupConfig,
   SetupContextWindow,
   DiscoveredModel,
@@ -504,6 +505,37 @@ export async function setSetupContextSize(newCtx: number): Promise<void> {
   return invoke("set_setup_context_size", { newCtx });
 }
 
+/** The configured model slots, read from / written to
+ *  `~/.sovereign/config.toml`'s `[models]` — the single source of truth
+ *  the daemon reads. The Settings "Model slots" panel binds these instead
+ *  of the removed `DesktopConfig` path fields, so the panel and the daemon
+ *  can never disagree. `code_family` stays on `DesktopConfig` and is
+ *  surfaced here for the panel's convenience. */
+export interface SetupModelSlots {
+  /** Quick-responder ("fast") GGUF path. Empty when subsumed by primary. */
+  fast: string;
+  /** Main-responder ("primary") GGUF path, or null. */
+  primary: string | null;
+  /** Embedding GGUF path, or null (library search disabled). */
+  embed: string | null;
+  /** Optional code-specialist GGUF path, or null. */
+  code: string | null;
+  /** Code-slot model family (lives on DesktopConfig; surfaced here). */
+  code_family: ModelFamily;
+}
+
+/** Read the configured model slots from `config.toml`. */
+export async function getSetupModelSlots(): Promise<SetupModelSlots> {
+  return invoke("get_setup_model_slots");
+}
+
+/** Persist the model slots to `config.toml`'s `[models]`, kick a daemon
+ *  reload (background), then tear down + rebuild the desktop-embedded
+ *  inference so the next turn loads the new weights. */
+export async function setSetupModelSlots(slots: SetupModelSlots): Promise<void> {
+  return invoke("set_setup_model_slots", { slots });
+}
+
 export async function isSetupComplete(): Promise<boolean> {
   return invoke("is_setup_complete");
 }
@@ -632,11 +664,24 @@ export async function listDaemonModels(): Promise<string[]> {
   return invoke("list_daemon_models");
 }
 
+/** One engine slot's real in-memory residency, from `/status`'s
+ *  `inference.resident` array (the `ollama ps` analog). */
+export interface ResidentSlotDto {
+  role: string;
+  model_id: string;
+  resident: boolean;
+  size_bytes: number | null;
+  transitioning: boolean;
+}
+
 export interface RuntimeStatus {
   members_online: number;
   members_total: number;
   pooled_vram_gb: number;
   pooled_storage_gb: number;
+  /** Real per-slot residency from the daemon's embedded engine. Empty
+   *  on the orchestrator daemon or an older `/status`. */
+  resident: ResidentSlotDto[];
 }
 
 /** Pooled mesh capacity from the daemon's `/status` summary — the

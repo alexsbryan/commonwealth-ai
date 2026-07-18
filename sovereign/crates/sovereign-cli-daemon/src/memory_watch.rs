@@ -87,9 +87,12 @@ pub fn soft_limit_mb() -> u64 {
     .unwrap_or(default)
 }
 
-/// Hard restart threshold. Default ON at 85% (Linux) / 65% (macOS) of
-/// total RAM; `SOVEREIGN_RSS_HARD_LIMIT_MB` overrides; `0`/`off` is the
-/// explicit kill-switch; RAM undetectable → disabled (legacy posture).
+/// Hard restart threshold. **Default OFF** — a self-SIGTERM hard limit is
+/// only useful under a supervisor that relaunches the daemon, so it must be
+/// opted into. Enable with `SOVEREIGN_RSS_HARD_LIMIT_MB=<mb>` (explicit) or
+/// `=auto` (RAM-derived: 85% Linux / 65% macOS); `0`/`off`/unset/garbage all
+/// leave it disabled. `scripts/daemon-supervised.sh` sets it; bare
+/// `sovereign daemon run` leaves it off (soft-warn still fires).
 pub fn hard_limit_mb() -> Option<u64> {
     hard_limit_policy(
         std::env::var("SOVEREIGN_RSS_HARD_LIMIT_MB").ok().as_deref(),
@@ -105,18 +108,28 @@ fn derived_hard_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
     total_ram_mb.map(|ram| ram * HARD_PCT / 100)
 }
 
-/// Pure policy for the hard limit so the precedence (explicit disable >
-/// explicit value > RAM-derived default > disabled) is unit-testable.
+/// Pure policy for the hard limit so the precedence (disabled by default >
+/// explicit disable > `auto` RAM-derived > explicit value) is unit-testable.
+///
+/// **Disabled unless explicitly enabled.** A hard limit self-SIGTERMs the
+/// daemon, which only makes sense under a supervisor that relaunches it
+/// (`scripts/daemon-supervised.sh`, or a launchd/systemd unit that sets the
+/// env); on an unsupervised `sovereign daemon run` it is pure downtime with
+/// no recovery. So the default is OFF and supervisors opt in — matching
+/// DAEMON_RESILIENCE.md ("hard limit disabled unless env set"). The soft
+/// limit (warn-only, non-fatal) stays on as the observability signal.
 fn hard_limit_policy(raw: Option<&str>, total_ram_mb: Option<u64>) -> Option<u64> {
     match raw.map(str::trim) {
-        // Explicit kill-switch — the ONLY way to run without the defense.
+        // Unset → DISABLED. This is the change: no accidental self-kill on
+        // an unsupervised daemon.
+        None => None,
+        // Explicit kill-switch (redundant with the default, kept explicit).
         Some("0") | Some("off") | Some("OFF") => None,
-        Some(v) => v
-            .parse::<u64>()
-            .ok()
-            .filter(|&n| n > 0)
-            .or_else(|| derived_hard_limit_mb(total_ram_mb)),
-        None => derived_hard_limit_mb(total_ram_mb),
+        // Opt in at the RAM-derived default (65% macOS / 85% Linux).
+        Some(v) if v.eq_ignore_ascii_case("auto") => derived_hard_limit_mb(total_ram_mb),
+        // Explicit MB value. Non-numeric/garbage is treated as OFF rather
+        // than silently deriving a limit — no accidental enable.
+        Some(v) => v.parse::<u64>().ok().filter(|&n| n > 0),
     }
 }
 
@@ -241,10 +254,15 @@ pub async fn watch_loop(interval: Duration) {
     );
     if hard.is_none() {
         // Grep-stable breadcrumb: a daemon running WITHOUT the OOM
-        // defense should say so once at boot, loudly.
-        tracing::warn!(
-            "memory-watch: hard limit DISABLED — kernel OOM/jetsam will SIGKILL with no drain \
-             (explicit SOVEREIGN_RSS_HARD_LIMIT_MB=0, or total RAM undetectable)"
+        // defense should say so once at boot. This is the DEFAULT for an
+        // unsupervised daemon (the self-SIGTERM only helps when something
+        // relaunches). Soft-warn still fires; kernel OOM/jetsam would
+        // SIGKILL with no drain. Enable under a supervisor with
+        // SOVEREIGN_RSS_HARD_LIMIT_MB=<mb> or =auto.
+        tracing::info!(
+            "memory-watch: hard limit disabled (default; unsupervised daemon). \
+             Set SOVEREIGN_RSS_HARD_LIMIT_MB=<mb>|auto to enable under a supervisor \
+             that relaunches on exit."
         );
     }
     if let Some(hard_mb) = hard {
@@ -396,24 +414,32 @@ mod tests {
     }
 
     #[test]
-    fn hard_limit_defaults_on_from_ram() {
-        // Default ON: unset env + detectable RAM derives HARD_PCT of total.
+    fn hard_limit_defaults_off_unless_opted_in() {
         let ram = Some(100_000);
-        assert_eq!(hard_limit_policy(None, ram), Some(100_000 * HARD_PCT / 100));
-        // Garbage env falls back to the derived default, not disabled.
+        // Default OFF: unset env leaves the hard limit disabled, even with
+        // detectable RAM — a self-SIGTERM only helps under a supervisor.
+        assert_eq!(hard_limit_policy(None, ram), None);
+        // Garbage env is OFF too — no accidental enable via derivation.
+        assert_eq!(hard_limit_policy(Some("nope"), ram), None);
+        // Opt in at the RAM-derived default via `auto`.
         assert_eq!(
-            hard_limit_policy(Some("nope"), ram),
+            hard_limit_policy(Some("auto"), ram),
             Some(100_000 * HARD_PCT / 100)
         );
-        // Explicit value wins over derivation.
+        assert_eq!(
+            hard_limit_policy(Some("AUTO"), ram),
+            Some(100_000 * HARD_PCT / 100)
+        );
+        // Explicit MB value opts in at that value.
         assert_eq!(hard_limit_policy(Some("30000"), ram), Some(30_000));
-        // Explicit kill-switch: 0 / off disable even with detectable RAM.
+        // Explicit kill-switch stays disabled.
         assert_eq!(hard_limit_policy(Some("0"), ram), None);
         assert_eq!(hard_limit_policy(Some("off"), ram), None);
         assert_eq!(hard_limit_policy(Some(" OFF "), ram), None);
-        // RAM undetectable + no env → legacy posture (disabled).
+        // RAM undetectable: `auto` can't derive → disabled; explicit still works.
+        assert_eq!(hard_limit_policy(Some("auto"), None), None);
+        assert_eq!(hard_limit_policy(Some("30000"), None), Some(30_000));
         assert_eq!(hard_limit_policy(None, None), None);
-        assert_eq!(hard_limit_policy(Some("nope"), None), None);
     }
 
     #[test]

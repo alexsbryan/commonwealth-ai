@@ -288,12 +288,14 @@ async fn run_daemon(args: &[String]) -> i32 {
     });
 
     // ── Memory watch ──────────────────────────────────────────────
-    // 60s RSS sampler: publishes the latest sample, warns above the
-    // soft limit, and (RAM-derived hard limit, default ON) self-
-    // SIGTERMs with a non-zero exit so the service manager relaunches
-    // a clean process before jetsam can SIGKILL mid-write. See
-    // `crate::memory_watch`. Supervised: a panicked sampler used to
-    // silently disarm the OOM defense (DAEMON_RESILIENCE.md P0.4).
+    // 60s RSS sampler: publishes the latest sample and warns above the
+    // soft limit. The hard limit (self-SIGTERM with a non-zero exit so a
+    // service manager relaunches a clean process before jetsam SIGKILLs
+    // mid-write) is OFF by default — it only helps under a supervisor, so
+    // it must be opted into via `SOVEREIGN_RSS_HARD_LIMIT_MB=<mb>|auto`
+    // (`scripts/daemon-supervised.sh` sets it). See `crate::memory_watch`.
+    // Supervised: a panicked sampler used to silently disarm the OOM
+    // defense (DAEMON_RESILIENCE.md P0.4).
     let _memory_watch_handle = crate::supervise::spawn_supervised("memory_watch", || {
         crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
     });

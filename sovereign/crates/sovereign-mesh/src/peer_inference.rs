@@ -2265,6 +2265,15 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.code_model_id()
     }
 
+    fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        // Residency is about THIS node's locally-loaded weights, so
+        // delegate to the underlying local engine. Without this forward
+        // the mesh wrapper (the provider the daemon actually installs)
+        // would report the empty default and `/status.inference.resident`
+        // would always be blank.
+        self.local.resident_slots()
+    }
+
     fn effective_context_size(&self) -> Option<u32> {
         self.local.effective_context_size()
     }

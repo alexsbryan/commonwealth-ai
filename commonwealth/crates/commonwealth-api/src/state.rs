@@ -25,6 +25,29 @@ use futures::Stream;
 
 use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 
+/// One inference slot's *actual* in-memory residency, as reported by
+/// the embedded engine — the daemon-facing mirror of
+/// `sovereign_core::traits::ResidentSlot`. Kept as its own type here
+/// because `commonwealth-api` depends on `sovereign-core` but not
+/// `sovereign-contracts`; the [`LocalInferenceService`] adapter maps
+/// across the seam. This is the ground truth behind `/status`'s
+/// `loaded` flag (the `ollama ps` analog).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ResidentSlot {
+    /// Role stem: `fast` | `primary` | `embed` | `code` | `rerank` |
+    /// `extra:<name>` | `primary_pool`.
+    pub role: String,
+    /// The gguf file stem currently occupying the slot.
+    pub model_id: String,
+    /// `true` when the weights are resident in memory this instant.
+    pub resident: bool,
+    /// Resident byte footprint when the engine knows it, else `None`.
+    pub size_bytes: Option<u64>,
+    /// `true` when the slot is mid load/unload (residency momentarily
+    /// indeterminate). Never forces a load to resolve it.
+    pub transitioning: bool,
+}
+
 /// In-process inference service that fulfils chat-completions
 /// requests without spawning separate `llama-server` processes.
 /// The Sovereign desktop embeds its local `EmbeddedLlamaCpp` as
@@ -107,6 +130,16 @@ pub trait LocalInferenceService: Send + Sync {
     /// List currently-loaded extras as `(slot_name, model_id)` pairs.
     /// Empty by default. Routes: `GET /internal/models/inventory`.
     async fn extras_inventory(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
+    /// Report the real in-memory residency of every slot the embedded
+    /// engine owns — the ground truth behind `/status`'s `loaded` flag
+    /// and the `ollama ps` analog. Empty by default (the orchestrator
+    /// path has no embedded engine to introspect; it keeps reporting
+    /// residency via the `llama_addr:` store keys). Backed by
+    /// `InferenceProvider::resident_slots`.
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
         Vec::new()
     }
 

@@ -25,7 +25,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::oicp::CapabilityProfile;
 
@@ -255,6 +255,126 @@ impl ModelsManifest {
         })
     }
 
+    /// Human-readable attribution for a loaded GGUF, keyed by its
+    /// concrete file stem (as returned by `/v1/models` /
+    /// [`InferenceProvider::model_id_for`]).
+    ///
+    /// Unlike [`info_for_file`](Self::info_for_file) — which projects
+    /// only `capabilities` + `size_gb` for the routing hot path — this
+    /// surfaces the *identity* fields the manifest rows carry but that
+    /// lookup drops on the floor: `base_name` (the cross-quantisation
+    /// model identity), `family`, `quant`, and `size_gb`. Those are
+    /// what a benchmark report or a desktop card needs to attribute a
+    /// result to a model a human recognises, and to cluster different
+    /// quantisations of the same weights under one heading.
+    ///
+    /// Matching mirrors `info_for_file`: exact file-stem match wins
+    /// instantly, otherwise the longest `base_name` substring wins.
+    /// Unlike that method it considers rows even when `capabilities`
+    /// is empty — attribution is orthogonal to whether the author
+    /// annotated OICP caps, and BYOM models routinely have neither.
+    ///
+    /// Always returns a value: `file_stem` is always known (it is the
+    /// input). When no manifest row matches (an unrecognised BYOM
+    /// GGUF), `base_name`/`family` are `None` and `quant` falls back
+    /// to [`parse_quant`] on the stem. `alias` is always `None` here —
+    /// only the slot-resolution path (which knows *which* alias was
+    /// hit) can fill it; callers set it afterwards.
+    pub fn attribution_for_file(&self, filename: &str) -> ModelAttribution {
+        let file_stem = strip_gguf(filename).to_string();
+        let target = file_stem.to_ascii_lowercase();
+
+        // One candidate per (annotated-or-not) manifest row, carrying
+        // the identity fields. user_slots outrank profile slots, and a
+        // row's `base_name` outranks its bare `file` (same priority as
+        // the caps walk).
+        struct Cand<'a> {
+            pattern: &'a str,
+            base_name: &'a str,
+            family: &'a str,
+            quant: &'a str,
+            size_gb: f64,
+        }
+        // Flatten user_slots + every profile slot into one identity
+        // list (file + optional base_name), user_slots first so a BYOM
+        // declaration outranks the bundled defaults.
+        let mut rows: Vec<(&str, &str, &str, &str, f64)> = Vec::new();
+        for u in &self.user_slots {
+            rows.push((&u.file, &u.base_name, &u.family, &u.quant, u.size_gb));
+        }
+        for profile in self.profiles.values() {
+            for slot in [
+                profile.fast.as_ref(),
+                profile.thoughtful.as_ref(),
+                profile.embed.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                rows.push((
+                    &slot.file,
+                    &slot.base_name,
+                    &slot.family,
+                    &slot.quant,
+                    slot.size_gb,
+                ));
+            }
+        }
+        let mut candidates: Vec<Cand<'_>> = Vec::new();
+        for &(file, base_name, family, quant, size_gb) in &rows {
+            if !base_name.is_empty() {
+                candidates.push(Cand {
+                    pattern: base_name,
+                    base_name,
+                    family,
+                    quant,
+                    size_gb,
+                });
+            }
+            candidates.push(Cand {
+                pattern: file,
+                base_name,
+                family,
+                quant,
+                size_gb,
+            });
+        }
+
+        // exact stem match wins instantly; else longest substring.
+        let mut best: Option<(usize, &Cand<'_>)> = None;
+        let mut exact: Option<&Cand<'_>> = None;
+        for c in &candidates {
+            let pat = strip_gguf(&c.pattern.to_ascii_lowercase()).to_string();
+            if pat.is_empty() {
+                continue;
+            }
+            if pat == target {
+                exact = Some(c);
+                break;
+            }
+            if target.contains(&pat) {
+                let len = pat.len();
+                match best {
+                    Some((best_len, _)) if len <= best_len => {}
+                    _ => best = Some((len, c)),
+                }
+            }
+        }
+        let matched = exact.or(best.map(|(_, c)| c));
+
+        let non_empty = |s: &str| (!s.is_empty()).then(|| s.to_string());
+        ModelAttribution {
+            file_stem: file_stem.clone(),
+            base_name: matched.and_then(|c| non_empty(c.base_name)),
+            family: matched.and_then(|c| non_empty(c.family)),
+            quant: matched
+                .and_then(|c| non_empty(c.quant))
+                .or_else(|| parse_quant(&file_stem)),
+            size_gb: matched.and_then(|c| normalise_size(c.size_gb)),
+            alias: None,
+        }
+    }
+
     /// Resolve a loaded embed GGUF to its declared
     /// [`ModelFamily`] so the caller can drive
     /// [`ModelFamily::default_quirks`]`().embed` — the only way to
@@ -446,6 +566,79 @@ fn parse_family(s: &str) -> crate::model_family::ModelFamily {
 pub struct SlotInfo {
     pub capabilities: CapabilityProfile,
     pub size_gb: Option<f32>,
+}
+
+/// Human-readable identity of a concrete loaded model — what a
+/// benchmark report or desktop card shows so a result can be
+/// attributed to a model a human recognises.
+///
+/// Distinct from [`SlotInfo`] (a routing-hot-path projection of
+/// capabilities + size): this is the *provenance* view. `file_stem`
+/// is the exact on-disk binary; `base_name` is the cross-quant model
+/// identity (so `IQ4_NL` and `Q6_K_XL` of the same weights cluster
+/// under one heading while `quant` keeps them honestly distinct);
+/// `alias` records which slot alias (`primary` / `fast` / …) was hit
+/// when this was resolved, for capture provenance.
+///
+/// Serialisable both ways: written into benchmark baselines and read
+/// back by the report rollup and (eventually) the desktop card.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelAttribution {
+    /// Concrete GGUF file stem (no `.gguf`), e.g.
+    /// `Qwen3.6-35B-A3B-MTP-UD-Q6_K_XL`. Always present.
+    pub file_stem: String,
+    /// Cross-quantisation model identity from the manifest, e.g.
+    /// `Qwen3.6-35B-A3B`. `None` for an unrecognised BYOM model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_name: Option<String>,
+    /// Model family string from the manifest (e.g. `qwen3`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
+    /// Quantisation, e.g. `Q6_K_XL` / `IQ4_NL`. Taken from the
+    /// manifest row when annotated, else parsed from the stem.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quant: Option<String>,
+    /// Declared on-disk size in GB, when the manifest carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_gb: Option<f32>,
+    /// The slot alias this model was resolved from (`primary`,
+    /// `fast`, …). Provenance only; `None` until the resolver sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+}
+
+impl ModelAttribution {
+    /// The heading a report/card groups this result under: the
+    /// cross-quant `base_name` when known, else the concrete stem.
+    /// Guarantees a stable, non-empty key even for BYOM models.
+    pub fn grouping_key(&self) -> &str {
+        self.base_name.as_deref().unwrap_or(&self.file_stem)
+    }
+}
+
+/// Heuristically extract the quantisation token from a GGUF file
+/// stem, for models the manifest doesn't annotate. GGUF names put
+/// the quant in its own `-` or `.`-delimited segment near the end
+/// (`…-A3B-UD-Q6_K_XL`, `…-27B.Q8_0`, `…-IQ4_NL`). We return the
+/// **last** segment shaped like a quant (`Q<digit>…`, `IQ<digit>…`,
+/// or `F16`/`BF16`/`F32`), upper-cased. `None` when nothing matches.
+pub fn parse_quant(stem: &str) -> Option<String> {
+    fn is_quant(seg: &str) -> bool {
+        if matches!(seg, "F16" | "BF16" | "F32") {
+            return true;
+        }
+        let Some(rest) = seg.strip_prefix("IQ").or_else(|| seg.strip_prefix('Q')) else {
+            return false;
+        };
+        rest.chars().next().is_some_and(|c| c.is_ascii_digit())
+    }
+    // Split on segment delimiters only — NOT `_`, which lives inside
+    // quant tokens (`Q6_K_XL`, `IQ4_NL` must survive intact).
+    stem.to_ascii_uppercase()
+        .split(['-', '.', ' '].as_ref())
+        .filter(|s| is_quant(s))
+        .last()
+        .map(str::to_string)
 }
 
 fn normalise_size(v: f64) -> Option<f32> {
@@ -786,5 +979,81 @@ general = 4
             Some(4),
             "user_slot should outrank profile slot on same filename"
         );
+    }
+
+    #[test]
+    fn parse_quant_covers_common_gguf_shapes() {
+        // Trailing quant in its own `-` segment (underscores preserved).
+        assert_eq!(
+            parse_quant("Qwen3.6-35B-A3B-MTP-UD-Q6_K_XL"),
+            Some("Q6_K_XL".to_string())
+        );
+        // `.`-delimited quant.
+        assert_eq!(parse_quant("Qwen3.5-27B.Q8_0"), Some("Q8_0".to_string()));
+        // i-quant.
+        assert_eq!(
+            parse_quant("Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"),
+            Some("IQ4_NL".to_string())
+        );
+        // Full-precision tokens.
+        assert_eq!(parse_quant("some-model-F16"), Some("F16".to_string()));
+        assert_eq!(parse_quant("some-model-BF16"), Some("BF16".to_string()));
+        // No quant at all → None (not a false positive on `A3B`/`35B`).
+        assert_eq!(parse_quant("Qwen3.6-35B-A3B-MTP-UD"), None);
+    }
+
+    #[test]
+    fn attribution_from_manifest_row_projects_identity_fields() {
+        // A stem carrying a declared base_name resolves family + quant
+        // from the manifest row, not just the heuristic.
+        let m = &*DEFAULT_MANIFEST;
+        let a = m.attribution_for_file("Qwen3.5-4B-Q4_K_M.gguf");
+        assert_eq!(a.file_stem, "Qwen3.5-4B-Q4_K_M");
+        assert_eq!(a.base_name.as_deref(), Some("Qwen3.5-4B"));
+        assert_eq!(a.family.as_deref(), Some("Qwen35"));
+        assert_eq!(a.quant.as_deref(), Some("Q4_K_M"));
+        assert_eq!(a.alias, None, "resolver fills alias, not the manifest");
+    }
+
+    #[test]
+    fn attribution_longest_base_name_wins() {
+        // `Qwen3.5-35B-A3B` must outrank a hypothetical `Qwen3.5-35B`
+        // when both substring-match the loaded stem.
+        let src = r#"
+[profiles.default.thoughtful]
+file      = "a.gguf"
+base_name = "Qwen3.5-35B"
+family    = "Qwen35"
+quant     = "Q4_K_M"
+[profiles.default.thoughtful.capabilities]
+general = 3
+
+[[user_slots]]
+slot      = "thoughtful"
+file      = "b.gguf"
+base_name = "Qwen3.5-35B-A3B"
+family    = "Qwen35Moe"
+quant     = "Q6_K_XL"
+[user_slots.capabilities]
+general = 4
+"#;
+        let m = ModelsManifest::from_toml_str(src).unwrap();
+        let a = m.attribution_for_file("Qwen3.5-35B-A3B-UD-Q6_K_XL.gguf");
+        assert_eq!(a.base_name.as_deref(), Some("Qwen3.5-35B-A3B"));
+        assert_eq!(a.family.as_deref(), Some("Qwen35Moe"));
+        // manifest quant annotation wins over the heuristic
+        assert_eq!(a.quant.as_deref(), Some("Q6_K_XL"));
+    }
+
+    #[test]
+    fn attribution_byom_falls_back_to_heuristic() {
+        // A model with no manifest row still gets a stem + parsed quant.
+        let m = ModelsManifest::default();
+        let a = m.attribution_for_file("MysteryModel-13B-IQ4_NL.gguf");
+        assert_eq!(a.file_stem, "MysteryModel-13B-IQ4_NL");
+        assert_eq!(a.base_name, None);
+        assert_eq!(a.family, None);
+        assert_eq!(a.quant.as_deref(), Some("IQ4_NL"));
+        assert_eq!(a.grouping_key(), "MysteryModel-13B-IQ4_NL");
     }
 }

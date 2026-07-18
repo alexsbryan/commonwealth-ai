@@ -1368,6 +1368,24 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         self.provider.extras_inventory()
     }
 
+    fn resident_slots(&self) -> Vec<commonwealth_api::state::ResidentSlot> {
+        // Map the sovereign engine's residency report across the
+        // api-crate seam (commonwealth-api can't depend on
+        // sovereign-contracts, so the two ResidentSlot types are
+        // distinct-but-identical and copied field-for-field here).
+        self.provider
+            .resident_slots()
+            .into_iter()
+            .map(|s| commonwealth_api::state::ResidentSlot {
+                role: s.role,
+                model_id: s.model_id,
+                resident: s.resident,
+                size_bytes: s.size_bytes,
+                transitioning: s.transitioning,
+            })
+            .collect()
+    }
+
     async fn warmup_primary(&self) -> Result<(), String> {
         self.provider
             .warmup_primary()

@@ -246,6 +246,33 @@ pub struct InstallOutcome {
 
 // ─── 1. Inference ──────────────────────────────────────────────
 
+/// A single inference slot's *actual* in-memory residency, as reported
+/// by the engine that owns the weights — the `ollama ps` analog.
+///
+/// This is the ground truth for "what is loaded right now", distinct
+/// from what is *configured* (`SetupConfig.models.*`) and from what is
+/// *advertised* on `/v1/models` (config-derived). Only the embedded
+/// engine can answer it; every other provider inherits the empty
+/// default of [`InferenceProvider::resident_slots`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ResidentSlot {
+    /// Role stem: `fast` | `primary` | `embed` | `code` | `rerank` |
+    /// `extra:<name>` | `pool:<i>`. Stable across the config workstream
+    /// so a UI can join residency to the configured slot by role.
+    pub role: String,
+    /// The model id (gguf file stem) currently occupying the slot.
+    pub model_id: String,
+    /// `true` when the weights are resident in memory this instant.
+    /// A lazy slot (primary/code) reports `false` while idle-unloaded.
+    pub resident: bool,
+    /// Resident byte footprint when the engine knows it, else `None`.
+    pub size_bytes: Option<u64>,
+    /// `true` when the slot is mid load/unload (its lock was contended
+    /// at read time) — residency is momentarily indeterminate. Never
+    /// forces a load to resolve it.
+    pub transitioning: bool,
+}
+
 /// The inference backend contract: completions (one-shot, streaming, batch),
 /// embeddings, optional rerank, plus slot/model introspection. Implemented by
 /// the embedded llama.cpp engine, remote HTTP forwarders, mesh-peer wrappers,
@@ -589,6 +616,19 @@ pub trait InferenceProvider: Send + Sync {
     /// in deterministic order. Default empty list — non-embedded
     /// providers have no extras concept.
     fn extras_inventory(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
+    /// Report the *actual* in-memory residency of every slot this
+    /// provider owns — the ground truth behind `/status`'s `loaded`
+    /// flag and the `ollama ps` analog. Enumeration MUST be
+    /// non-blocking and MUST NOT force-load a lazy slot just to report
+    /// it (a contended slot reports `transitioning: true` instead).
+    ///
+    /// Default empty: only the embedded engine holds resident weights
+    /// it can introspect. Remote/mesh forwarders return `[]` — the
+    /// daemon they forward to answers for its own residency.
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
         Vec::new()
     }
 }
