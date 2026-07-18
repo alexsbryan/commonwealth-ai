@@ -46,7 +46,7 @@ pub(super) fn split_sentences(text: &str) -> Vec<String> {
     for (i, &c) in chars.iter().enumerate() {
         cur.push(c);
         let next = chars.get(i + 1).copied();
-        let sentence_end = matches!(c, '.' | '!' | '?') && next.map_or(true, |n| n.is_whitespace());
+        let sentence_end = matches!(c, '.' | '!' | '?') && next.is_none_or(|n| n.is_whitespace());
         let para_break = c == '\n' && next == Some('\n');
         if sentence_end || para_break {
             out.push(std::mem::take(&mut cur));
@@ -107,7 +107,7 @@ fn best_match(claim: &str, sentences: &[String]) -> Option<(usize, f64)> {
             dc.intersection(&distinctive(s)).count() as f64 / dc.len() as f64
         };
         let score = cover + 0.5 * dov;
-        if best.map_or(true, |(_, b)| score > b) {
+        if best.is_none_or(|(_, b)| score > b) {
             best = Some((i, score));
         }
     }

@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Pure-Rust GLiNER per-chunk entity extraction, extracted out of
+# `sovereign-tools` (2026-07-17). Rationale: GLiNER pulls the ONNX stack
+# (`gline-rs` → `orp` → `ort` pinned to =2.0.0-rc.9, a fragile pin). Living
+# behind an OPTIONAL `gliner-ner` feature on the widely-shared sovereign-tools
+# crate meant Cargo feature-unification compiled sovereign-tools two different
+# ways depending on who built it — the split that repeatedly broke `-p` builds
+# and the daemon/desktop/server/cli-llm consumers. As its own crate, the ONNX
+# surface is a MANDATORY dep of exactly the four binaries that need it and is
+# absent everywhere else — no feature, no unification split.
+[package]
+name = "sovereign-gliner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-store = { workspace = true }
+corpus-engine = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+regex = { workspace = true }
+# Resolves `~/.sovereign/models/gliner/…` in `gliner_ner::models_root`.
+dirs = "5"
+# Pure-Rust GLiNER inference (the crate is imported as `gliner`; the package
+# is `gline-rs`). Uses `ort` under the hood — orp pins it to =2.0.0-rc.9.
+# Non-optional here: this crate exists precisely to carry that stack.
+gline-rs = { version = "1" }
+# gline-rs re-exports `orp` (its ONNX runtime params layer) through `gliner::*`
+# for most uses, but `RuntimeParameters` lives in `orp::params`.
+orp = { version = "0.9" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+anyhow = { workspace = true }

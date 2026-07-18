@@ -700,7 +700,7 @@ pub async fn bootstrap_with_progress(
     // extractor both daemons use. `gliner_raw` (the NoteStore T2 handle) is
     // unused here — desktop notes wiring is separate.
     let (_gliner_raw, chunk_entity_extractor) =
-        sovereign_tools::enrichment_bootstrap::load_gliner_extractor(&config.data_dir);
+        sovereign_gliner::load_gliner_extractor(&config.data_dir);
     let folder_tiered_provider =
         sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
             &config.data_dir,
@@ -1551,15 +1551,15 @@ pub async fn bootstrap_with_progress(
     // `Runtime::maybe_retrieve_relevant_history`.
     {
         let t_gliner = std::time::Instant::now();
-        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+        let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
             // Deferred load: the ~950ms model load runs on a background
             // thread (it was ~half the warm boot). The extractor installs
             // immediately and soft-falls-through to cosine+MMR until warm —
             // the same behaviour as an uninstalled model, and it's warm
             // within ~1s, before the first query. See `LazyGlinerExtractor`.
             let arc: Arc<dyn sovereign_core::traits::EntityExtractor> =
-                Arc::new(sovereign_tools::gliner_ner::LazyGlinerExtractor::new_default_deferred());
+                Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred());
             runtime = runtime.with_gliner(arc);
             tracing::info!(model = model_id, "desktop: GLiNER entity extractor installed (background warm)");
         } else {

@@ -31,7 +31,8 @@ sovereign-inference = { workspace = true }
 # discovery-driven StructuredOutputMode negotiation — see enrich_cmd/providers.rs.
 oicp-types = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }

@@ -972,10 +972,16 @@ pub async fn launch_tier2_extraction_with_advice(
                 stamp_tier2_workspace_failed(&ws_index_dir, &workspace_id, &reason);
                 return Tier2LaunchOutcome::SpawnFailed { reason };
             }
-            // Exited 0 within the grace (already resumed to completion) OR
-            // still running — both are healthy launches. On `Err` we can't
-            // determine liveness, so don't raise a false alarm.
-            Ok(_) | Err(_) => break,
+            // Exited 0 within the grace (already resumed to completion) — a
+            // healthy fast finish; stop watching early.
+            Ok(Some(_)) => break,
+            // Still running — keep polling for the rest of the grace window.
+            // (This is the whole point of the `0..4` loop: a `break` here
+            // collapsed the intended 1.6s validation to a single 400ms check,
+            // so a child that died a beat later was falsely reported Spawned.)
+            Ok(None) => {}
+            // Can't determine liveness — don't raise a false alarm.
+            Err(_) => break,
         }
     }
     // Detach: dropping a std `Child` neither waits nor kills, so the

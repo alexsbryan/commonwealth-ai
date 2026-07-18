@@ -5,7 +5,6 @@
 //! low to commit silently. Cost is one saved message + one event.
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 

@@ -45,7 +45,7 @@ use crate::recipe::Recipe;
 pub type TieredProviderHandle = Arc<dyn TieredEnrichmentProvider>;
 
 /// Shared handle for the per-chunk NER extractor (GliNER today, via
-/// `sovereign-tools::gliner_ner`). Optional second hook fired by the
+/// `sovereign-gliner`). Optional second hook fired by the
 /// tiered runner ahead of the heavy `TieredEnrichmentProvider` call
 /// — runs the cheap CPU-only NER pass first so the chunk_entities
 /// table populates even when the LLM-side enrichment fails or is

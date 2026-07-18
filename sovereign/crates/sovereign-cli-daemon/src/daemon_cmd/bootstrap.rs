@@ -47,12 +47,12 @@ pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
 pub(super) fn load_gliner_extractor(
     data_dir: &Path,
 ) -> (
-    Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>>,
+    Option<Arc<sovereign_gliner::gliner_ner::GlinerExtractor>>,
     Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 ) {
     // Delegated to the shared builder so the desktop's embedded daemon wires
     // an identical stack. See `sovereign_tools::enrichment_bootstrap`.
-    sovereign_tools::enrichment_bootstrap::load_gliner_extractor(data_dir)
+    sovereign_gliner::load_gliner_extractor(data_dir)
 }
 
 /// Build the single shared `CorpusEngine` (powers `/mcp` tools AND
@@ -64,7 +64,7 @@ pub(super) fn build_corpus_engine(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     notes_store: Arc<NoteStore>,
-    gliner_raw: &Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>>,
+    gliner_raw: &Option<Arc<sovereign_gliner::gliner_ner::GlinerExtractor>>,
     config: &SetupConfig,
     self_node_id: NodeId,
     chunk_entity_extractor: &Option<

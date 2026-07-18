@@ -209,7 +209,7 @@ mod tests {
         b.extend_from_slice(&T_STRING.to_le_bytes());
         b.extend_from_slice(&(arch.len() as u64).to_le_bytes());
         b.extend_from_slice(arch.as_bytes());
-        b.extend(std::iter::repeat(0u8).take(pad_bytes)); // size differentiator
+        b.extend(std::iter::repeat_n(0u8, pad_bytes)); // size differentiator
         let p = dir.join(name);
         std::fs::File::create(&p).unwrap().write_all(&b).unwrap();
         p

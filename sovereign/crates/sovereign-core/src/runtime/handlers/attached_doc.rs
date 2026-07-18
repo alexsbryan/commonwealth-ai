@@ -5,7 +5,6 @@
 //! the iteration cap.
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 

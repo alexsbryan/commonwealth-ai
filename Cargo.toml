@@ -37,6 +37,11 @@ members = [
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
+    # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
+    # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
+    # four binaries that need it, not an optional feature on a shared crate
+    # (which Cargo unification compiled two ways, breaking -p builds).
+    "sovereign/crates/sovereign-gliner",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
@@ -169,6 +174,7 @@ sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }

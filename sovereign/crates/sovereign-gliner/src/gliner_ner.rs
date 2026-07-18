@@ -31,8 +31,6 @@
 //!   word "assistant" as a Person (live false positive observed in
 //!   all 10 validation convs).
 
-#![cfg(feature = "gliner-ner")]
-
 use std::path::PathBuf;
 use std::sync::Mutex;
 

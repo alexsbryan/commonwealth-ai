@@ -26,8 +26,6 @@ pub mod entity_graph;
 pub mod epistemic;
 pub mod extract;
 pub mod file;
-#[cfg(feature = "gliner-ner")]
-pub mod gliner_ner;
 pub mod index_validator;
 pub mod knowledge;
 pub mod knowledge_lookup;

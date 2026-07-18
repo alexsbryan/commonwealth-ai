@@ -177,7 +177,7 @@ impl FolderMetadataOracle for NoFolderMetadata {
 }
 
 /// Entity extractor for entity-aware retrieval-over-history.
-/// `sovereign-tools::gliner_ner::GlinerExtractor` is the canonical
+/// `sovereign-gliner::GlinerExtractor` is the canonical
 /// production impl (GLiNER ONNX, 5-label tag set). Defined here as a
 /// trait so `sovereign-core` can hold an `Option<Arc<dyn EntityExtractor>>`
 /// on Runtime without depending on sovereign-tools (cycle: tools →

@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 

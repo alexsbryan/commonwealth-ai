@@ -5,11 +5,10 @@
 //! preprocess strip works).
 //!
 //! Run with:
-//!   cargo run --example gliner_smoke --features gliner-ner -p sovereign-tools
+//!   cargo run --example gliner_smoke -p sovereign-gliner
 
-#[cfg(feature = "gliner-ner")]
 fn main() -> sovereign_core::error::Result<()> {
-    use sovereign_tools::gliner_ner::GlinerExtractor;
+    use sovereign_gliner::gliner_ner::GlinerExtractor;
     eprintln!("Loading GliNER (this is the first-call cost)…");
     let start = std::time::Instant::now();
     let extractor = GlinerExtractor::new_default()?;
@@ -65,10 +64,4 @@ failed regulatory attempts to control the cartel.
     eprintln!("  NO 'user' as Person:         {}", none("user"));
 
     Ok(())
-}
-
-#[cfg(not(feature = "gliner-ner"))]
-fn main() {
-    eprintln!("gliner_smoke requires `--features gliner-ner`");
-    std::process::exit(2);
 }
