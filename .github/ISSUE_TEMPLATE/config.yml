@@ -1,15 +1,24 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Questions and discussion
-    url: https://github.com/alexsbryan/commonwealth-ai/discussions
+  - name: Have an idea? Start a discussion
+    url: https://github.com/alexsbryan/commonwealth-ai/discussions/new?category=ideas
     about: >
-      How-to questions, ideas, and general discussion. Please start here rather
-      than opening an issue.
+      Feature ideas and "what if it could…" live here first, where other people
+      can weigh in and upvote. The ones with legs get promoted to issues and
+      built. You don't have to have the fix figured out — just what you're
+      trying to do.
+  - name: Question or need a hand?
+    url: https://github.com/alexsbryan/commonwealth-ai/discussions/new?category=q-a
+    about: >
+      How-to questions and "is it supposed to do this?" go to Q&A. Someone
+      (often not us) can answer, and the next person with the same question
+      finds it.
   - name: Security or privacy report
     url: https://github.com/alexsbryan/commonwealth-ai/security/advisories/new
     about: >
       Found a vulnerability, or a way data could leave a machine unexpectedly?
-      Report it privately here — see SECURITY.md. Do not open a public issue.
+      Report it privately here — see SECURITY.md. Please don't open a public
+      issue for this one.
   - name: Documentation
     url: https://github.com/alexsbryan/commonwealth-ai#readme
-    about: The README, the Sovereign guide, and the docs/ folder.
+    about: The README, the svrnmesh guide, and the docs/ folder.

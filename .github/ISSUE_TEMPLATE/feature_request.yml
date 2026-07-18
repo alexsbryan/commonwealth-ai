@@ -1,7 +1,15 @@
 name: Feature request or idea
 description: Suggest something new, or a change to how something works.
-labels: ["enhancement"]
+labels: ["enhancement", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Not sure yet, or want to see if others feel the same? A
+        [discussion under Ideas](https://github.com/alexsbryan/commonwealth-ai/discussions/new?category=ideas)
+        is the better first stop — people can chime in and upvote, and the ones
+        with legs get promoted to an issue and built. If you already know the
+        shape of what you want, here's the place.
   - type: textarea
     id: problem
     attributes:
