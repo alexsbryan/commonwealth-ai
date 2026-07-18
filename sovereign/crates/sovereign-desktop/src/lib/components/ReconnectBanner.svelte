@@ -20,8 +20,19 @@
       }
     | { kind: "failed"; reason: string; last_crash_log: string | null };
 
+  // Mirrors `crate::attach_watch::AttachDaemonState` — health of an
+  // EXTERNALLY-owned daemon in Attach mode (no supervisor).
+  type AttachDaemonState =
+    | { kind: "healthy"; client_port: number }
+    | { kind: "down"; client_port: number; consecutive_failures: number };
+
   let current: SupervisorState | null = $state(null);
+  let attach: AttachDaemonState | null = $state(null);
+  let attachDismissed = $state(false);
+  let restartBusy = $state(false);
+  let restartError: string | null = $state(null);
   let unlisten: UnlistenFn | null = null;
+  let unlistenAttach: UnlistenFn | null = null;
   let unlistenFallback: UnlistenFn | null = null;
   let sendBusy = $state(false);
   let reconnectBusy = $state(false);
@@ -69,10 +80,24 @@
         fallbackReason = event.payload.reason;
       },
     );
+    unlistenAttach = await listen<AttachDaemonState>(
+      "attach-daemon-state",
+      (event) => {
+        if (event.payload.kind === "healthy") {
+          // Recovery is automatic in attach mode — clear everything.
+          attach = null;
+          attachDismissed = false;
+          restartError = null;
+        } else {
+          attach = event.payload;
+        }
+      },
+    );
   });
 
   onDestroy(() => {
     if (unlisten) unlisten();
+    if (unlistenAttach) unlistenAttach();
     if (unlistenFallback) unlistenFallback();
   });
 
@@ -118,6 +143,26 @@
   function handleDismiss() {
     current = null;
   }
+
+  async function handleAttachRestart() {
+    // Best-effort service-manager restart of the external daemon.
+    // The banner clears on the attach watcher's healthy transition,
+    // not here — restart success is judged by the daemon answering.
+    if (restartBusy) return;
+    restartBusy = true;
+    restartError = null;
+    try {
+      await invoke("attach_restart_daemon");
+    } catch (e) {
+      restartError = e instanceof Error ? e.message : String(e);
+    } finally {
+      restartBusy = false;
+    }
+  }
+
+  let attachVisible: boolean = $derived.by(
+    () => attach?.kind === "down" && !attachDismissed,
+  );
 </script>
 
 {#if visible}
@@ -159,7 +204,35 @@
   {/if}
 {/if}
 
-{#if fallbackReason && !visible}
+{#if attachVisible && !visible}
+  <div class="banner banner-failed" role="status">
+    <span class="banner-text">
+      Lost the connection to your daemon (port {attach?.kind === "down"
+        ? attach.client_port
+        : ""}). If it's restarting, this clears by itself; otherwise
+      restart it — or run <code>svrn daemon restart</code>.
+    </span>
+    <div class="banner-actions">
+      <button
+        class="action action-primary"
+        onclick={handleAttachRestart}
+        disabled={restartBusy}
+      >
+        {restartBusy ? "Restarting…" : "Restart daemon"}
+      </button>
+      <button class="action" onclick={() => (attachDismissed = true)}>
+        Dismiss
+      </button>
+    </div>
+  </div>
+  {#if restartError}
+    <div class="report-info report-error">
+      Couldn't restart via the service manager: {restartError}
+    </div>
+  {/if}
+{/if}
+
+{#if fallbackReason && !visible && !attachVisible}
   <div class="banner" role="status">
     <span class="banner-text">
       Running without crash protection this session ({fallbackReason}) — a

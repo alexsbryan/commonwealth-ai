@@ -336,6 +336,53 @@ pub async fn run(
             .map_err(|e| failed(&app, false, format!("save config: {e}")))?;
     }
 
+    // ── 5b. First-session supervision (DAEMON_RESILIENCE.md P0.1) ──
+    // Mirror the wizard's picks into the shared `SetupConfig` (this
+    // flow historically relied on a later `save_config` to do it — but
+    // the relaunched instance needs it NOW to take the supervised
+    // path), write the first-run marker + setup report (they must
+    // survive the relaunch), then restart the app so it boots straight
+    // into the supervised child daemon. This session has never bound
+    // :9741, so the fresh instance finds a free port and a complete
+    // config. Falls through to the legacy in-process bootstrap when
+    // supervision is disabled (FORCE_LOCAL harnesses / kill-switch).
+    {
+        let desktop_cfg = state.config.read().await.clone();
+        if let Err(e) = crate::commands::mirror_to_setup_config(&desktop_cfg).await {
+            tracing::warn!("setup_flow: could not mirror to SetupConfig: {e}");
+        }
+    }
+    if crate::supervisor_setup::is_enabled() {
+        if let Err(e) = write_first_run_marker() {
+            tracing::warn!(error = %e, "could not write first_run_complete marker");
+        }
+        write_setup_report(
+            &hw,
+            &profile,
+            &[
+                ("primary", &primary_slot, &primary_path),
+                ("fast", &fast_slot, &fast_path),
+                ("embed", &embed_slot, &embed_path),
+            ],
+            preferred_primary_file.is_some(),
+        );
+        let _ = app.emit(
+            EVENT,
+            SetupProgress {
+                phase: SetupPhase::Ready,
+                message: "Restarting Sovereign to finish setup…".into(),
+                fraction: Some(1.0),
+                eta_seconds: None,
+                indeterminate: false,
+            },
+        );
+        if crate::supervisor_setup::maybe_restart_into_supervised(&app).await {
+            return Ok(());
+        }
+        // Restart didn't take (spawn failure) — continue in-process;
+        // the duplicate marker/report writes below are idempotent.
+    }
+
     // ── 6. Bootstrap with progress narration ────────────────────
     let app_for_cb = app.clone();
     let cb: state::BootstrapProgressCb = Box::new(move |phase: BootstrapPhase| {

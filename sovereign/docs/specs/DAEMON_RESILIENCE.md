@@ -112,11 +112,29 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   `supervisor_active` commands; ReconnectBanner's Reconnect button is
   real and the fallback notice renders. **Remaining before checking
   this box:** (a) packaged-build verification on macOS + Linux incl.
-  the kill -SEGV drill; (b) known softening — the first session right
-  after the wizard runs in-process (`complete_setup` →
-  `state::bootstrap` doesn't re-run mode detection); isolation engages
-  from the second launch. The first session's riskiest moment (initial
-  model load) is already covered by the subprocess smoke test; (c) UX
+  the kill -SEGV drill; (b) first-session softening **CLOSED
+  2026-07-18**: both wizard completion paths (`complete_setup` and
+  `setup_flow::run`) now finish by mirroring the config and relaunching
+  the app (`supervisor_setup::maybe_restart_into_supervised`) — the
+  wizard session never binds `:9741`, so the fresh instance boots
+  straight into the supervised child; isolation from minute one. The
+  auto flow also gained the previously-missing `SetupConfig` mirror
+  (it relied on a later `save_config`) and writes the first-run marker
+  + setup report before relaunching. Harnesses unaffected
+  (`SOVEREIGN_FORCE_LOCAL=1` / kill-switch skip the relaunch and keep
+  the legacy in-process completion; spawn failure also falls through).
+  **Drive-verified 2026-07-18** — the real desktop binary, fresh HOME,
+  isolated netns, `complete_setup` invoked through the production
+  bridge path: relaunch logged → old instance exited → new instance
+  resolved `CliSetup` → spawned `--daemon-child` → child owned `:9741`
+  + pidfile + flock → "supervisor: child daemon healthy; switching to
+  Attach mode". The drive also caught a REAL pre-existing bug: the
+  `mirror_to_setup_config` no-op short-circuit compared against a
+  fallback seeded from the desktop's own values, so a fresh
+  desktop-only install NEVER created `config.toml` (every later boot
+  resolved `DesktopLegacy`; the supervised path would never have
+  engaged for pure-desktop users). Fixed: first write is unconditional
+  (`changed || !existed`); (c) UX
   edge — `svrn daemon stop` against a desktop-supervised child kills it
   and the supervisor restarts it ~1s later ("I stopped it but it came
   back"); the child should advertise it is desktop-supervised so the
@@ -129,7 +147,19 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   `ReconnectBanner` is dead code in release); Attach mode gets post-attach
   monitoring + auto-reattach (today explicitly fire-and-forget,
   `App.svelte:174-177`). Done when: killing an attached daemon shows a
-  banner within ~5s and recovery is one click (or automatic).
+  banner within ~15s (3 failed 5s probes — anti-flap) and recovery is one
+  click (or automatic).
+
+  *Code landed 2026-07-18:* `attach_watch.rs` polls `/v1/models` every 5s
+  for an externally-owned daemon (never for the supervised child — it has
+  the 2s heartbeat — or in-process), raising `attach-daemon-state` after
+  3 consecutive failures and auto-clearing on recovery (attach calls are
+  stateless HTTP, so re-attach IS the daemon answering again).
+  ReconnectBanner renders it with a "Restart daemon" button backed by
+  `attach_restart_daemon` (service-manager kickstart, reusing
+  `config_setup::kickstart_daemon`). **Remaining before checking this
+  box:** a mocked-Tauri Playwright spec for the banner states, and a live
+  desktop-session drill.
 - [x] **P0.3 — Arm the OOM defense by default, in-daemon.** *(Landed
   2026-07-18.)* `memory_watch.rs` derives defaults from total system RAM
   — hard 85% / soft 70% on Linux (cgroup-v2 `memory.max`-aware), 65% /
@@ -204,7 +234,29 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
 
 - [ ] **P3.1** Chaos lane in CI: kill -9 mid-stream, RSS-limit trip,
   slot-wedge injection, join/leave cycles; assert recovery time and no
-  stuck states (extend `mesh-soak.sh` / chaos runner).
+  stuck states (extend `mesh-soak.sh` / chaos runner). *Seeded
+  2026-07-18: `scripts/daemon-soak.sh` — isolated-HOME daemon on
+  non-default ports (mDNS off, iroh kill-switched, small soak models),
+  three cases: `attach` (external-daemon topology, kill -9 → supervisor
+  stand-in relaunch, identity-verified via pidfile ownership so an
+  orphan listener can't fake recovery), `child` (the desktop
+  `--daemon-child` self-spawn arm, same cycling), `guards`
+  (flock double-run refusal + SIGTERM-exit-0 + pidfile removal +
+  `SOAK_RSS=1` RSS exit-102 drill). First full run: 17/17 —
+  5+5 kill -9 cycles recovered in ~2s each, both binaries. Two
+  incidental live validations along the way: a harness pid bug orphaned
+  a daemon and the relaunched instance was correctly REFUSED by the run
+  lock while the orphan kept serving (the exact pre-P0.5 double-run
+  scenario, now contained); and the RSS hard-limit drill produced a
+  real exit-102. Not yet covered: mid-stream kill during inference,
+  listener-loss injection (needs in-process fault injection), long
+  cycles. Second lane: `scripts/wizard-verify.sh` — the journey-level
+  drive of the fresh-install wizard → supervised-relaunch chain (real
+  desktop binary, netns-isolated, `complete_setup` through the command
+  bridge's production IPC path; 11 assertions, self-wraps in
+  `unshare -r -n`; needs the debug desktop build + soak models). Its
+  first run caught the `mirror_to_setup_config` first-write bug that
+  unit tests missed — run it before every release alongside the soak.*
 - [ ] **P3.2** 48h+ soak gate before releases — founder-ingress and
   log-spam were long-uptime bugs no short test catches.
 - [ ] **P3.3** Stack-overflow root cause: chase the now-armed backtraces;
@@ -238,3 +290,26 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   for the P0.1/P0.2 checkboxes: packaged-build kill -SEGV drill
   (macOS + Linux), first-post-wizard-session engagement, attach-mode
   health poll / auto-reattach.
+- 2026-07-18 (later still) — attach-mode health poll landed
+  (`attach_watch.rs` + `attach_restart_daemon` + banner states) and
+  `scripts/daemon-soak.sh` written and run: **17/17** across attach,
+  `--daemon-child`, and guards cases (see P3.1 note). The run-lock
+  refusal and RSS exit-102 were validated against live processes.
+- 2026-07-18 (deploy) — the dev box's live daemon redeployed on the
+  post-P0 binary UNDER `daemon-supervised.sh` (it previously ran bare —
+  nothing relaunched a crash). Verified live: derived RSS limits armed
+  (soft 89,653 / hard 108,864 of 128,076 MB, no env), listener watchdog
+  armed, run lock held, mesh resumed with the same node identity, env
+  (57 vars) preserved across the restart. `daemon-supervised.sh` no
+  longer hardcodes RSS limits (P3.5 partial) — the old 36 GB ceiling
+  also blocked 122B loads. Extended soak: **57/57** (25 kill -9 cycles
+  × both topologies, ~2s identity-verified recovery each, guards + RSS
+  drill), with the live daemon serving undisturbed alongside.
+  Deliberate stop on this box is now
+  `touch ~/.sovereign/supervised.stop && svrn daemon stop`.
+- 2026-07-18 (first-session fix) — the post-wizard relaunch landed:
+  both completion paths mirror `SetupConfig` and call
+  `maybe_restart_into_supervised`, so fresh installs are supervised
+  from minute one (P0.1 item (b) closed). Extended soak 57/57 earlier
+  the same day. Full workspace re-verified after the fix: lint PASS,
+  tests 7,734 / 0 fail.

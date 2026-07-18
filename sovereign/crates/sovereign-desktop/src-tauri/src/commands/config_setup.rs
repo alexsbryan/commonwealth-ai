@@ -149,9 +149,20 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
 /// exist (matches `sovereign setup` behaviour). Leaves `daemon`
 /// defaults in place — port changes go through the CLI's `sovereign
 /// setup`, not the desktop Settings panel.
-async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
+pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
     use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 
+    // Load-bearing for fresh installs: when no config file exists, the
+    // fallback below is seeded FROM the desktop's own values — so the
+    // field-diff underneath finds nothing "changed" and, before
+    // 2026-07-18, skipped the write entirely. A desktop-only install
+    // then NEVER created `config.toml`, every later boot resolved
+    // `DesktopLegacy`, and the supervised-child path (which intercepts
+    // only `CliSetup`) never engaged. Caught by driving the real
+    // wizard flow through the command bridge. First write is
+    // unconditional; the no-op short-circuit applies only to a config
+    // that is actually on disk.
+    let existed = SetupConfig::exists();
     let mut cli = SetupConfig::load().unwrap_or_else(|_| SetupConfig {
         models: ModelsSection {
             primary: desktop
@@ -242,7 +253,10 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         changed_fields.push("shared_model");
     }
 
-    if changed {
+    if changed || !existed {
+        if !existed {
+            changed_fields.push("first_write");
+        }
         tracing::info!(
             fields = ?changed_fields,
             new_primary = %cli.models.primary.display(),
@@ -333,7 +347,7 @@ async fn request_daemon_reload(base_url: String) -> Result<(), String> {
 /// Best-effort restart of the `sovereign-daemon` service. Used only
 /// when the admin/reload handler reported `restart_required` (port
 /// or data_dir change) — hot reload can't rebind listeners.
-fn kickstart_daemon() -> Result<(), String> {
+pub(crate) fn kickstart_daemon() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
@@ -676,6 +690,15 @@ pub async fn complete_setup(
     }
     if let Err(e) = request_daemon_reload(state.client_base_url()).await {
         tracing::warn!("complete_setup: admin/reload failed: {e}");
+    }
+
+    // First-session supervision (DAEMON_RESILIENCE.md P0.1): relaunch
+    // so the fresh instance boots straight into the supervised child —
+    // this session never bound :9741, so there is nothing to hand
+    // over. On `false` (harnesses / kill-switch / spawn failure) keep
+    // the legacy in-process completion below.
+    if crate::supervisor_setup::maybe_restart_into_supervised(&app_handle).await {
+        return Ok(());
     }
 
     state::bootstrap(&state).await?;

@@ -225,6 +225,56 @@ pub async fn maybe_start(
     }
 }
 
+/// First-post-wizard-session fix (DAEMON_RESILIENCE.md P0.1).
+///
+/// The supervisor decision happens exactly once, at app startup — so
+/// the session that RAN the wizard would otherwise finish its life
+/// in-process (no crash isolation) and only pick up the supervised
+/// child on the NEXT launch. Instead of hot-switching a live AppState
+/// into attach mode (the mode is baked at construction), relaunch the
+/// app: the wizard session has never bound `:9741` (the embedded
+/// daemon only starts at `state::bootstrap`, which the caller skips
+/// when this returns true), so the fresh instance's `detect()` finds
+/// the just-written `SetupConfig`, spawns the supervised child, and
+/// attaches — isolation from minute one.
+///
+/// Returns `true` when the relaunch was initiated — the process is on
+/// its way out and the caller must NOT bootstrap in-process. Returns
+/// `false` when supervision is disabled (`SOVEREIGN_FORCE_LOCAL=1`
+/// harnesses, the kill-switch) or the spawn failed — the caller keeps
+/// the legacy in-process completion, which is exactly the pre-flip
+/// behavior.
+pub async fn maybe_restart_into_supervised(app_handle: &AppHandle) -> bool {
+    if !is_enabled() {
+        return false;
+    }
+    let exe = match std::env::current_exe() {
+        Ok(e) => e,
+        Err(e) => {
+            warn!(error = %e, "setup-restart: current_exe failed — finishing in-process");
+            return false;
+        }
+    };
+    // Let the wizard UI say why the window is about to close, and give
+    // the webview a beat to paint it.
+    let _ = app_handle.emit(
+        "setup-restarting",
+        serde_json::json!({ "reason": "enabling crash protection" }),
+    );
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    match std::process::Command::new(&exe).spawn() {
+        Ok(_) => {
+            info!("setup complete — relaunching into the supervised topology");
+            app_handle.exit(0);
+            true
+        }
+        Err(e) => {
+            warn!(error = %e, "setup-restart: relaunch spawn failed — finishing in-process");
+            false
+        }
+    }
+}
+
 /// Falling back to the in-process daemon must be VISIBLE, not silent
 /// (DAEMON_RESILIENCE.md P0.1): the user keeps a working app, but
 /// crash isolation is off — a ggml crash would take the window down —

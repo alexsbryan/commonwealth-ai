@@ -326,6 +326,10 @@ pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
 pub use supervisor_ctl::*;
+// Named re-export (the glob only propagates fully-public items):
+// setup_flow's first-session-supervision step mirrors the wizard's
+// picks into the shared SetupConfig before relaunching.
+pub(crate) use config_setup::mirror_to_setup_config;
 
 // ─── Tests ───────────────────────────────────────────────────
 

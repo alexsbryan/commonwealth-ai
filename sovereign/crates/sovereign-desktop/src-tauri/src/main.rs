@@ -24,6 +24,7 @@ mod routing_events;
 mod setup_flow;
 mod smoketest;
 mod state;
+mod attach_watch;
 mod supervisor;
 mod supervisor_setup;
 mod tray;
@@ -262,6 +263,16 @@ fn main() -> ExitCode {
                     ?bootstrap_mode,
                     "supervisor: bootstrap mode after supervision"
                 );
+            }
+
+            // Attach-mode daemon health watch (DAEMON_RESILIENCE.md
+            // P0.2): only for an EXTERNALLY-owned daemon — true Attach
+            // with no supervisor. The supervised child has its own 2s
+            // heartbeat; in-process Local has nothing to poll.
+            if supervisor.is_none() {
+                if let bootstrap::BootstrapMode::Attach { client_port, .. } = &bootstrap_mode {
+                    attach_watch::spawn(handle.clone(), *client_port);
+                }
             }
 
             // Create app state (loads config, no Runtime yet).
@@ -525,6 +536,7 @@ fn main() -> ExitCode {
             commands::get_runtime_status,
             commands::supervisor_reconnect,
             commands::supervisor_active,
+            commands::attach_restart_daemon,
             commands::download_model,
             commands::list_corpora,
             commands::notebook_list,

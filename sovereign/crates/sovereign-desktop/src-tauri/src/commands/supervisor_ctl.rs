@@ -34,3 +34,16 @@ pub async fn supervisor_reconnect(state: State<'_, Arc<AppState>>) -> Result<boo
 pub async fn supervisor_active(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
     Ok(state.supervisor.read().await.is_some())
 }
+
+/// Attach-mode recovery: best-effort restart of the EXTERNALLY-owned
+/// daemon via the OS service manager (`launchctl kickstart` /
+/// `systemctl --user restart`). Errors when no service is registered —
+/// the banner then tells the user to run `svrn daemon restart`
+/// themselves. Backs the attach-down banner raised by
+/// `crate::attach_watch` (DAEMON_RESILIENCE.md P0.2).
+#[tauri::command]
+pub async fn attach_restart_daemon() -> Result<(), String> {
+    tokio::task::spawn_blocking(super::config_setup::kickstart_daemon)
+        .await
+        .map_err(|e| format!("restart task failed: {e}"))?
+}
