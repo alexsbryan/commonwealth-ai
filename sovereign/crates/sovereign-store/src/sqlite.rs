@@ -64,6 +64,12 @@ impl SqliteStateStore {
         let conn = Connection::open(path)
             .map_err(|e| Error::Storage(format!("Failed to open database: {e}")))?;
 
+        // Cross-process SQLITE_BUSY retry window: a CLI/tool process can
+        // open this db while the daemon holds it — retry briefly instead
+        // of erroring the caller outright (DAEMON_RESILIENCE.md P3.4).
+        // In-process access is serialized by the store's own Mutex.
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+
         migrations::run_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Migration failed: {e}")))?;
         migrations::run_column_migrations(&conn)

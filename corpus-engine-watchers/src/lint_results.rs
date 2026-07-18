@@ -92,16 +92,43 @@ pub struct LintResultStore {
 
 impl LintResultStore {
     /// Open or create the database at `db_path`.
+    ///
+    /// This store is a DERIVED cache — the watcher fully re-populates
+    /// it on every run — so an unopenable/corrupt database is rebuilt
+    /// from scratch instead of wedging the watcher at daemon boot
+    /// (DAEMON_RESILIENCE.md P3.4). User-data stores must NOT copy
+    /// this pattern: corruption there needs a user decision.
     pub fn open(db_path: &Path) -> Result<Self> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::Io)?;
         }
+        match Self::open_once(db_path) {
+            Ok(store) => Ok(store),
+            Err(first) => {
+                tracing::warn!(
+                    db = %db_path.display(),
+                    error = %first,
+                    "lint-results db unopenable — rebuilding the derived cache from scratch"
+                );
+                for suffix in ["", "-wal", "-shm"] {
+                    let _ = std::fs::remove_file(format!("{}{suffix}", db_path.display()));
+                }
+                Self::open_once(db_path)
+            }
+        }
+    }
+
+    fn open_once(db_path: &Path) -> Result<Self> {
         let conn = Connection::open(db_path).map_err(|e| {
             Error::Io(std::io::Error::other(format!(
                 "LintResultStore::open {}: {e}",
                 db_path.display()
             )))
         })?;
+        // A CLI process reads this db while the daemon's watcher holds
+        // it — retry briefly on cross-process SQLITE_BUSY instead of
+        // erroring the caller outright (DAEMON_RESILIENCE.md P3.4).
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
         conn.execute_batch(SCHEMA)
             .map_err(|e| Error::Io(std::io::Error::other(format!("schema migration: {e}"))))?;
         Ok(Self {
@@ -438,6 +465,19 @@ mod tests {
     async fn make_store() -> LintResultStore {
         let dir = tempfile::tempdir().unwrap();
         LintResultStore::open(&dir.path().join("lint.db")).unwrap()
+    }
+
+    /// DAEMON_RESILIENCE.md P3.4: this store is a derived cache — a
+    /// corrupt db must be rebuilt from scratch, never wedge the open.
+    #[test]
+    fn corrupt_derived_db_is_rebuilt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lint_results.db");
+        std::fs::write(&path, b"this is definitely not a sqlite database").unwrap();
+        LintResultStore::open(&path).expect("open must rebuild a corrupt derived db");
+        // The rebuilt file must be a real database now — a second open
+        // takes the healthy path.
+        LintResultStore::open(&path).expect("rebuilt db reopens cleanly");
     }
 
     #[tokio::test]

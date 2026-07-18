@@ -66,6 +66,9 @@ impl ProjectDocsStore {
                 db_path.display()
             )))
         })?;
+        // Cross-process SQLITE_BUSY retry window (DAEMON_RESILIENCE.md
+        // P3.4) — CLI tools read this index while the daemon holds it.
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
         conn.execute_batch(SCHEMA).map_err(|e| {
             Error::Io(std::io::Error::other(format!(
                 "ProjectDocsStore schema: {e}"
