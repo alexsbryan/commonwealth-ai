@@ -102,6 +102,17 @@ pub struct WatchdogConfig {
     pub discovery_bad_streak: u32,
     /// Whether the self-discovery probe runs (only when n0 DNS is configured).
     pub self_probe: bool,
+    /// Whether this node is EXPECTED to be relay-homed. False for relay-less
+    /// deployments (LAN-only / air-gapped / netns soak — Minimal preset, no n0)
+    /// where peers dial direct addrs and having no home relay is NORMAL, not a
+    /// wedge. When false, relay-home is NOT a health signal (else a healthy
+    /// relay-less founder would look permanently unhealthy and rebuild-loop).
+    pub relays_expected: bool,
+    /// CHAOS/soak only: when set, the watchdog periodically injects a
+    /// reachability wedge to exercise the self-heal path end-to-end (detect →
+    /// escalate → recover). `None` in production. Enabled via
+    /// `SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS`.
+    pub chaos_drop_interval: Option<Duration>,
 }
 
 impl Default for WatchdogConfig {
@@ -114,7 +125,37 @@ impl Default for WatchdogConfig {
             max_consecutive_rebuilds: 3,
             discovery_bad_streak: 2,
             self_probe: true,
+            relays_expected: true,
+            chaos_drop_interval: None,
         }
+    }
+}
+
+impl WatchdogConfig {
+    /// Load overrides from the environment (defaults otherwise), so soaks and a
+    /// live demo can speed the watchdog up and inject relay-drop faults WITHOUT
+    /// a rebuild. `self_probe` is set by the caller (it depends on whether n0
+    /// discovery is configured), not by env.
+    ///   `SOVEREIGN_MESH_WATCHDOG_POLL_SECS`
+    ///   `SOVEREIGN_MESH_WATCHDOG_GRACE_SECS`
+    ///   `SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS`
+    ///   `SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS` (chaos: drop home relay every N s)
+    pub fn from_env() -> Self {
+        let mut c = Self::default();
+        let secs = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<u64>().ok());
+        if let Some(s) = secs("SOVEREIGN_MESH_WATCHDOG_POLL_SECS") {
+            c.health_poll = Duration::from_secs(s.max(1));
+        }
+        if let Some(s) = secs("SOVEREIGN_MESH_WATCHDOG_GRACE_SECS") {
+            c.unhealthy_grace = Duration::from_secs(s);
+        }
+        if let Some(s) = secs("SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS") {
+            c.rebuild_cooldown = Duration::from_secs(s);
+        }
+        if let Some(s) = secs("SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS") {
+            c.chaos_drop_interval = Some(Duration::from_secs(s.max(1)));
+        }
+        c
     }
 }
 
@@ -229,9 +270,29 @@ async fn run(
     let mut discovery_bad_run: u32 = 0;
     let mut next_probe = Instant::now() + cfg.health_poll; // first probe shortly after start
     let mut cached_discovery_ok: Option<bool> = None;
+    let mut next_chaos = cfg.chaos_drop_interval.map(|d| Instant::now() + d);
+    // CHAOS/soak only: a simulated discovery-side wedge (see below).
+    let mut chaos_unhealthy = false;
 
     loop {
         tokio::time::sleep(cfg.health_poll).await;
+
+        // ── 0. CHAOS (soak/demo only): inject a reachability wedge. Off in
+        // production (chaos_drop_interval is None). NOTE: iroh's relay layer is
+        // self-healing — removing relays just makes it re-home on another n0
+        // relay, so relay-home CANNOT be wedged from here. The real ~1.5-day
+        // outage was the DISCOVERY (pkarr) side, which relay resilience doesn't
+        // cover and which ONLY an endpoint rebuild recovers (a dead pkarr
+        // publisher task). So chaos faithfully simulates THAT: force unhealthy
+        // until a rebuild — nudge + relay-bounce won't clear it; only the
+        // rebuild does (it clears the flag below), exactly like the real bug.
+        if let (Some(iv), Some(due)) = (cfg.chaos_drop_interval, next_chaos) {
+            if Instant::now() >= due {
+                next_chaos = Some(Instant::now() + iv);
+                chaos_unhealthy = true;
+                warn!("iroh(mesh) watchdog: CHAOS — injected reachability wedge (simulated discovery/pkarr failure; only an endpoint rebuild recovers)");
+            }
+        }
 
         // ── 1. relay-home health ───────────────────────────────────
         let relays = relay_watch.get();
@@ -261,7 +322,12 @@ async fn run(
         }
         // Discovery counts as wedged only after a sustained streak.
         let discovery_wedged = discovery_bad_run >= cfg.discovery_bad_streak;
-        let healthy = relay_homed && !discovery_wedged;
+        // Relay-home is only a health requirement when relays are expected; a
+        // relay-less node (LAN/air-gapped) is reachable via direct addrs.
+        let relay_ok = !cfg.relays_expected || relay_homed;
+        // `chaos_unhealthy` (soak/demo) simulates the discovery-side wedge that
+        // relay-home can't see; cleared only by a rebuild (below).
+        let healthy = relay_ok && !discovery_wedged && !chaos_unhealthy;
 
         // ── 3. publish snapshot for the status API ─────────────────
         {
@@ -343,6 +409,7 @@ async fn run(
                         last_rebuild = Some(Instant::now());
                         consecutive_rebuilds += 1;
                         total_rebuilds += 1;
+                        chaos_unhealthy = false; // the rebuild resolves the simulated wedge
                         record_recovery(&status, "endpoint_rebuild", true).await;
                         info!(
                             total_rebuilds,
@@ -424,12 +491,13 @@ mod tests {
 
         let cfg = WatchdogConfig {
             health_poll: Duration::from_millis(40),
-            probe_interval: Duration::from_secs(3600),
             unhealthy_grace: Duration::from_millis(80),
             rebuild_cooldown: Duration::from_millis(80),
             max_consecutive_rebuilds: 5,
-            discovery_bad_streak: 2,
             self_probe: false,
+            // relays_expected defaults true → the Minimal endpoint (never
+            // relay-homed) reads unhealthy and must escalate to a rebuild.
+            ..Default::default()
         };
         let handle = spawn(endpoint, rebuild, cfg);
         tokio::time::sleep(Duration::from_secs(2)).await;

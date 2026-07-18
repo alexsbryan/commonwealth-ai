@@ -2819,10 +2819,13 @@ impl EmbeddedDaemon {
                         >,
                     >
             });
-            let cfg = crate::iroh_watchdog::WatchdogConfig {
-                self_probe: iroh_relay_cfg.n0_services,
-                ..Default::default()
-            };
+            let mut cfg = crate::iroh_watchdog::WatchdogConfig::from_env();
+            cfg.self_probe = iroh_relay_cfg.n0_services;
+            // Relay-home is a health signal only when this node actually uses a
+            // relay (n0 or a configured one). A relay-less LAN/air-gapped node
+            // (netns soak) is reachable by direct addrs — don't rebuild-loop it.
+            cfg.relays_expected =
+                iroh_relay_cfg.n0_services || !iroh_relay_cfg.relay_urls.is_empty();
             crate::iroh_watchdog::spawn(endpoint, rebuild, cfg)
         });
 
