@@ -23,6 +23,13 @@ pub struct MeshStatus {
     /// Same `None` semantics as `join_link`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub join_key: Option<String>,
+    /// Track W: this founder's own iroh reachability (relay-homed?,
+    /// discoverable?, plus the self-heal watchdog's recovery history). `None`
+    /// when iroh isn't running. Populated from the running daemon (local mode)
+    /// or `/v1/mesh/status` (attach mode); drives the desktop's
+    /// "Reachable / Reconnecting" indicator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub founder_reachability: Option<crate::daemon::FounderReachability>,
 }
 
 /// A member of the mesh, as shown in the UI.

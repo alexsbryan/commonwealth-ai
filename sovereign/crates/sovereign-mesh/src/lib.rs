@@ -29,6 +29,7 @@ pub mod inference_adapter;
 /// the daemon's identity endpoint and routes by ALPN to the local
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.
 pub mod iroh_access;
+pub mod iroh_watchdog;
 pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;

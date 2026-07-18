@@ -2305,7 +2305,11 @@ impl ModelSlot {
         } else {
             0.0
         };
-        tracing::info!(
+        // debug!, not info!: mirrors the MTP `end-of-generation` line above
+        // (kept at the same level so one log analyzer sees both paths
+        // identically). Fired once per generation; summarised at INFO by
+        // `inference.complete: done`. `RUST_LOG=sovereign_inference=debug`.
+        tracing::debug!(
             model = %model_id,
             prompt_tokens = tokens.len(),
             n_generated,
@@ -2989,7 +2993,11 @@ impl ModelSlot {
         } else {
             0.0
         };
-        tracing::info!(
+        // debug!, not info!: rich per-request MTP acceptance telemetry.
+        // Fired once per generation; the request is summarised at INFO by
+        // `inference.complete: done`. `RUST_LOG=sovereign_inference=debug`
+        // to decompose MTP accept-rate / jump-forward per request.
+        tracing::debug!(
             model = %model_id,
             n_draft_calls,
             drafts_proposed = n_drafts_total,

@@ -118,12 +118,13 @@ impl PromptSizeReport {
             + self.tools_schema_chars
     }
 
-    /// Emit a tracing::info line with every component count.
+    /// Emit a tracing::debug line with every component count.
     /// Designed so the line is greppable (`prompt_size:`) and every
     /// field is a discrete `key=value` pair that downstream log
-    /// pipelines can parse without regex.
+    /// pipelines can parse without regex. At debug! (not info!) because
+    /// it fires once per request — `RUST_LOG=sovereign_mesh=debug` to see it.
     pub fn log(&self, phase: &'static str) {
-        tracing::info!(
+        tracing::debug!(
             phase = phase,
             messages = self.message_count,
             tools = self.tool_count,

@@ -284,21 +284,18 @@ impl MeshIrohAccess {
         Self::dial_for(endpoint)
     }
 
-    /// The pairing string a peer/phone would dial: `id@relay` once a
-    /// relay is connected, else the full `id@addr,...` (relay-less
-    /// LANs / hermetic setups). `None` before any address is known.
+    /// The pairing string a peer would dial: `id@relay1,relay2,addr…`
+    /// carrying ALL current relays + direct addrs (via [`format_dial_string`]).
+    /// `None` before any reachable address is known.
+    ///
+    /// Emitting every relay (not just `relay_urls().next()`) is deliberate: per
+    /// iroh's `connect` contract a *present-but-stale* pinned relay suppresses
+    /// the pkarr discovery fallback, so a single dead relay baked into an invite
+    /// would wedge the dial (the founder-unreachable bug this hardening targets).
+    /// Listing all relays + direct addrs means no one stale target is fatal — the
+    /// joiner races them and n0 discovery still corrects the address by node-id.
     fn dial_for(endpoint: &Endpoint) -> Option<String> {
-        let addr = endpoint.addr();
-        let id_hex = hex::encode(addr.id.as_bytes());
-        // Bind to a local (not a tail expression) so the transient
-        // `relay_urls()` iterator borrow of `addr` is dropped at the
-        // `;`, while `addr` itself lives to the end of the fn.
-        let dial = addr
-            .relay_urls()
-            .next()
-            .map(|relay| format!("{id_hex}@{relay}"))
-            .or_else(|| format_dial_string(&addr));
-        dial
+        format_dial_string(&endpoint.addr())
     }
 
     /// This node's current dial-by-key string (`<hex-id>@<relay-or-addr>[,…]`)
@@ -314,6 +311,11 @@ impl MeshIrohAccess {
     /// lock across an await — e.g. [`Self::wait_for_relay`].
     pub fn endpoint_handle(&self) -> Endpoint {
         self.endpoint.clone()
+    }
+
+    /// This node's iroh endpoint id (hex) — for the reachability status surface.
+    pub fn endpoint_id(&self) -> String {
+        self.endpoint.id().to_string()
     }
 
     /// The live connection path to `peer_pubkey` over iroh, from the

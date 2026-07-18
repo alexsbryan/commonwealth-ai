@@ -114,7 +114,12 @@ pub async fn build_local_capabilities(
     if let Some(remaining) = budget_remaining {
         let remaining_gb = (remaining / 1_073_741_824) as u32;
         if remaining_gb < hardware.free_storage_gb {
-            tracing::info!(
+            // debug!, not info!: the clamp is a steady state (the budget
+            // is simply smaller than actual free), so this fired every
+            // capability-advertise tick (~13s) — 2897 lines in 21h
+            // (2026-07-18). The clamp still happens; only the per-tick
+            // narration is quiet. `RUST_LOG=sovereign_mesh=debug` to see it.
+            tracing::debug!(
                 actual_free_gb,
                 budget_remaining_gb = remaining_gb,
                 used_gb = (storage_used_bytes / 1_073_741_824),
