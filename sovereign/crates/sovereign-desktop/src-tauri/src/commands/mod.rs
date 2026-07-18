@@ -308,6 +308,7 @@ mod meshapp;
 mod models;
 mod reading;
 mod recipe_testing;
+mod supervisor_ctl;
 
 pub use budget::*;
 pub use chat::*;
@@ -324,6 +325,7 @@ pub use meshapp::*;
 pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
+pub use supervisor_ctl::*;
 
 // ─── Tests ───────────────────────────────────────────────────
 

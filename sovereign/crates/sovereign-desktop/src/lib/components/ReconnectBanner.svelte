@@ -22,9 +22,15 @@
 
   let current: SupervisorState | null = $state(null);
   let unlisten: UnlistenFn | null = null;
+  let unlistenFallback: UnlistenFn | null = null;
   let sendBusy = $state(false);
+  let reconnectBusy = $state(false);
+  let reconnectError: string | null = $state(null);
   let lastReportPath: string | null = $state(null);
   let lastReportError: string | null = $state(null);
+  // Set when the backend fell back to the in-process daemon (crash
+  // isolation off) — surfaced instead of the old silent revert.
+  let fallbackReason: string | null = $state(null);
 
   // Visible only for non-healthy states. Starting + Healthy stay
   // silent — banners that pop up for normal operations train users
@@ -55,11 +61,19 @@
   onMount(async () => {
     unlisten = await listen<SupervisorState>("supervisor-state", (event) => {
       current = event.payload;
+      if (event.payload.kind === "healthy") reconnectError = null;
     });
+    unlistenFallback = await listen<{ reason: string }>(
+      "supervisor-fallback",
+      (event) => {
+        fallbackReason = event.payload.reason;
+      },
+    );
   });
 
   onDestroy(() => {
     if (unlisten) unlisten();
+    if (unlistenFallback) unlistenFallback();
   });
 
   async function handleReportProblem() {
@@ -86,12 +100,22 @@
   }
 
   async function handleReconnect() {
-    // Reconnect is a manual signal the supervisor exposes via
-    // request_reconnect(); there's no Tauri command for it yet
-    // (the supervisor handle lives in AppState but no command
-    // surfaces request_reconnect). For now this button just clears
-    // the banner; the supervisor's auto-relaunch will pick the
-    // daemon back up. If it doesn't, the user can restart the app.
+    // Wake the crash-loop-latched supervisor for another spawn
+    // attempt. The banner stays up until the supervisor emits a
+    // healthy state (which hides it via `visible`).
+    if (reconnectBusy) return;
+    reconnectBusy = true;
+    reconnectError = null;
+    try {
+      await invoke("supervisor_reconnect");
+    } catch (e) {
+      reconnectError = e instanceof Error ? e.message : String(e);
+    } finally {
+      reconnectBusy = false;
+    }
+  }
+
+  function handleDismiss() {
     current = null;
   }
 </script>
@@ -103,15 +127,24 @@
       {#if isFailed}
         <button
           class="action action-primary"
-          onclick={handleReportProblem}
-          disabled={sendBusy}
+          onclick={handleReconnect}
+          disabled={reconnectBusy}
         >
+          {reconnectBusy ? "Reconnecting…" : "Reconnect"}
+        </button>
+        <button class="action" onclick={handleReportProblem} disabled={sendBusy}>
           {sendBusy ? "Preparing…" : "Report problem"}
         </button>
-        <button class="action" onclick={handleReconnect}>Dismiss</button>
+        <button class="action" onclick={handleDismiss}>Dismiss</button>
       {/if}
     </div>
   </div>
+
+  {#if reconnectError}
+    <div class="report-info report-error">
+      Reconnect failed: {reconnectError}
+    </div>
+  {/if}
 
   {#if lastReportPath}
     <div class="report-info">
@@ -124,6 +157,20 @@
       Couldn't prepare report: {lastReportError}
     </div>
   {/if}
+{/if}
+
+{#if fallbackReason && !visible}
+  <div class="banner" role="status">
+    <span class="banner-text">
+      Running without crash protection this session ({fallbackReason}) — a
+      model crash would close the app. Restarting the app retries.
+    </span>
+    <div class="banner-actions">
+      <button class="action" onclick={() => (fallbackReason = null)}>
+        Dismiss
+      </button>
+    </div>
+  </div>
 {/if}
 
 <style>

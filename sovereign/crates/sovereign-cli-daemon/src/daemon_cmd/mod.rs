@@ -238,6 +238,18 @@ async fn run_daemon(args: &[String]) -> i32 {
         return 0;
     }
 
+    // ── Single-instance guard (DAEMON_RESILIENCE.md P0.5) ─────────
+    // Taken before anything heavy: a refused second instance must not
+    // have already loaded models. Held for the process lifetime; the
+    // kernel releases it on any exit, including SIGKILL.
+    let _run_lock = match lifecycle::acquire_run_lock() {
+        Ok(lock) => lock,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return 1;
+        }
+    };
+
     // ── Log rotation ──────────────────────────────────────────────
     //
     // launchd holds the FDs on `daemon.log` / `daemon.err` (set via
@@ -261,20 +273,30 @@ async fn run_daemon(args: &[String]) -> i32 {
     // for days stays bounded between launchd restarts. The interval is
     // a knob — shorter cadence catches bursts faster but adds I/O
     // wakeups; 30 min is comfortably long for a stat() + size check.
-    let _rotation_handle = crate::log_rotation::spawn_rotation_loop(
-        log_dir.clone(),
-        crate::log_rotation::DEFAULT_SIZE_CAP_BYTES,
-        crate::log_rotation::DEFAULT_KEEP_N_BAKS,
-        std::time::Duration::from_secs(30 * 60),
-    );
+    // Supervised: a panic must not silently stop rotation for the rest
+    // of the process's life (DAEMON_RESILIENCE.md P0.4).
+    let _rotation_handle = crate::supervise::spawn_supervised("log_rotation", {
+        let log_dir = log_dir.clone();
+        move || {
+            crate::log_rotation::rotation_loop(
+                log_dir.clone(),
+                crate::log_rotation::DEFAULT_SIZE_CAP_BYTES,
+                crate::log_rotation::DEFAULT_KEEP_N_BAKS,
+                std::time::Duration::from_secs(30 * 60),
+            )
+        }
+    });
 
     // ── Memory watch ──────────────────────────────────────────────
     // 60s RSS sampler: publishes the latest sample, warns above the
-    // soft limit, and (opt-in hard limit) self-SIGTERMs with a
-    // non-zero exit so the service manager relaunches a clean process
-    // before jetsam can SIGKILL mid-write. See `crate::memory_watch`.
-    let _memory_watch_handle =
-        crate::memory_watch::spawn_memory_watch(std::time::Duration::from_secs(60));
+    // soft limit, and (RAM-derived hard limit, default ON) self-
+    // SIGTERMs with a non-zero exit so the service manager relaunches
+    // a clean process before jetsam can SIGKILL mid-write. See
+    // `crate::memory_watch`. Supervised: a panicked sampler used to
+    // silently disarm the OOM defense (DAEMON_RESILIENCE.md P0.4).
+    let _memory_watch_handle = crate::supervise::spawn_supervised("memory_watch", || {
+        crate::memory_watch::watch_loop(std::time::Duration::from_secs(60))
+    });
 
     // ── Load config ───────────────────────────────────────────────
     let config = match config_override.as_ref() {
@@ -798,6 +820,18 @@ async fn run_daemon(args: &[String]) -> i32 {
         "svrn daemon is running"
     );
 
+    // ── Listener watchdog (DAEMON_RESILIENCE.md P0.5) ─────────────
+    // Closes the phantom-Running hole (process alive, no client
+    // listener) from OUTSIDE the deliberately best-effort bind path.
+    // Exit-code contract: 104 (see `shutdown_daemon`).
+    let _listener_watch_handle = {
+        let bind = config.daemon.client_bind.clone();
+        let port = config.daemon.client_port;
+        crate::supervise::spawn_supervised("listener_watch", move || {
+            crate::listener_watch::watch_loop(bind.clone(), port)
+        })
+    };
+
     let _work_atlas_gc_handle = bootstrap::finalize_work_atlas(
         Arc::clone(&daemon),
         Arc::clone(&work_atlas_broadcaster),
@@ -896,6 +930,11 @@ async fn shutdown_daemon(
     let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
         eprintln!("svrn daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
         102
+    } else if crate::listener_watch::exit_requested() {
+        eprintln!(
+            "svrn daemon exiting non-zero: client listener lost (service manager will relaunch)"
+        );
+        104
     } else {
         0
     };

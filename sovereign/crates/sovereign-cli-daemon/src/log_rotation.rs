@@ -181,34 +181,33 @@ fn trim_bak_files(base_path: &Path, keep_n: usize) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Spawn a background task that calls `rotate_daemon_logs` every
-/// `interval`. Returns the JoinHandle so the daemon can abort it on
-/// shutdown if it cares to (most code paths just leak it — Tokio
-/// reaps tasks on runtime drop).
-pub fn spawn_rotation_loop(
+/// The periodic-rotation loop body, exposed so the daemon can run it
+/// under `supervise::spawn_supervised` (a panic here used to silently
+/// stop rotation until the next daemon restart — DAEMON_RESILIENCE.md
+/// P0.4). Stateless per iteration, so a supervised restart is safe.
+pub async fn rotation_loop(
     log_dir: PathBuf,
     size_cap: u64,
     keep_n_baks: usize,
     interval: std::time::Duration,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(interval);
-        // Skip the immediate first tick — the daemon's startup-time
-        // call already covered "rotate now if past cap"; this loop
-        // only handles drift while running.
+) {
+    let mut ticker = tokio::time::interval(interval);
+    // Skip the immediate first tick — the daemon's startup-time
+    // call already covered "rotate now if past cap"; this loop
+    // only handles drift while running.
+    ticker.tick().await;
+    loop {
         ticker.tick().await;
-        loop {
-            ticker.tick().await;
-            // Rotation is filesystem I/O; wrap in spawn_blocking so
-            // it never starves the runtime.
-            let log_dir = log_dir.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                rotate_daemon_logs(&log_dir, size_cap, keep_n_baks);
-            })
-            .await;
-        }
-    })
+        // Rotation is filesystem I/O; wrap in spawn_blocking so
+        // it never starves the runtime.
+        let log_dir = log_dir.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            rotate_daemon_logs(&log_dir, size_cap, keep_n_baks);
+        })
+        .await;
+    }
 }
+
 
 // ---------------------------------------------------------------------------
 // Tests

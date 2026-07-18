@@ -102,12 +102,14 @@ pub struct AppState {
     /// or when those DBs failed to open.
     pub notes: RwLock<Option<Arc<NoteStore>>>,
     pub features: RwLock<Option<Arc<RecipeProjectStore>>>,
-    /// Child-process daemon supervisor. Populated only when
-    /// `SOVEREIGN_USE_SUPERVISOR=1` and `supervisor_setup::maybe_start`
-    /// successfully spawned a daemon. `None` for the in-process Local
-    /// path and for Attach mode (where the CLI owns the daemon
-    /// lifecycle separately). Tauri commands subscribe to its state
-    /// channel and call `request_reconnect()` on it.
+    /// Child-process daemon supervisor. Populated when
+    /// `supervisor_setup::maybe_start` spawned a daemon child — the
+    /// DEFAULT Local-mode boot since the W1 flip (DAEMON_RESILIENCE.md
+    /// P0.1; opt-outs: `SOVEREIGN_USE_SUPERVISOR=0`,
+    /// `SOVEREIGN_FORCE_LOCAL=1`). `None` for the in-process fallback
+    /// and for Attach mode (an externally-owned daemon). The
+    /// `supervisor_reconnect` / `supervisor_active` commands
+    /// (`commands/supervisor_ctl.rs`) surface it to the frontend.
     pub supervisor: RwLock<Option<Arc<Supervisor>>>,
     /// Supervise-task handle for the opt-in **Mobile access**
     /// `sovereign-server` child (the phone-facing host). `Some` while the host

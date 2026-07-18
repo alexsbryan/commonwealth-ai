@@ -3,6 +3,15 @@ Description=svrnmesh daemon — single-node inference + code intelligence
 After=network-online.target
 Wants=network-online.target
 
+# A daemon that crashes instantly on every start (bad config, missing
+# model, held port) must not burn CPU in a 10s relaunch loop forever:
+# stop after 5 failures inside 10 minutes and stay down until the
+# operator intervenes (`systemctl --user reset-failed svrnmesh`).
+# Transient failures (port briefly held, OOM restart) stay well under
+# this budget. DAEMON_RESILIENCE.md P0.3.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
 # Installed as a user unit (not system): matches the spirit of a local
 # developer tool that owns ~/.svrnmesh/ rather than a shared service.
 # service_install.rs substitutes {BINARY} with the absolute path to the
@@ -13,6 +22,15 @@ Type=simple
 ExecStart={BINARY} daemon run
 Restart=on-failure
 RestartSec=10
+
+# Graceful drain (axum drain + mesh.json persist) takes well under 30s;
+# past that the daemon is wedged and SIGKILL is correct.
+TimeoutStopSec=30
+
+# NOTE: no MemoryMax here on purpose — cgroup limits SIGKILL with no
+# drain. The daemon's own memory watch (RAM-derived defaults, default
+# ON since P0.3; SOVEREIGN_RSS_{SOFT,HARD}_LIMIT_MB to override) does a
+# graceful self-SIGTERM → exit 102 → Restart=on-failure relaunch instead.
 
 # Logging goes to the systemd journal; `journalctl --user -u svrnmesh` to tail.
 StandardOutput=journal

@@ -22,6 +22,11 @@ sovereign-workflow-host = { workspace = true }
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }
+# The daemon entry as a library (DAEMON_RESILIENCE.md P0.1): the
+# `--daemon-child` argv arm runs the REAL daemon (`daemon_child_main`)
+# so the supervisor can spawn `current_exe() --daemon-child` — one
+# daemon bootstrap, two entry points, no sidecar binary in the bundle.
+sovereign-cli-daemon = { path = "../../sovereign-cli-daemon" }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # Mesh Health surfaces (peer preferences, dimensional contributions) —
 # Tauri commands access the in-process AppState's accessors. The

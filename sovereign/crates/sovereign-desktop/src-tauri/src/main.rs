@@ -68,6 +68,18 @@ fn main() -> ExitCode {
         return code;
     }
 
+    // Supervised child-daemon mode (DAEMON_RESILIENCE.md P0.1): when
+    // relaunched as `--daemon-child`, this process IS the daemon — the
+    // identical entry `sovereign-cli-daemon daemon run` uses (panic
+    // hook, run lock, RAM-derived OOM limits, listener watchdog and
+    // all) — and never initializes Tauri. The parent desktop spawns +
+    // supervises it (see `supervisor_setup.rs`); a ggml SEGV kills only
+    // this child, and the supervisor restarts it behind the reconnect
+    // surface instead of the whole window dying.
+    if argv.iter().any(|a| a == "--daemon-child") {
+        std::process::exit(sovereign_cli_daemon::daemon_child_main());
+    }
+
     // The grounding gate's verification note (the failed-claim caveat) rides
     // `metadata.grounding_gate.failed_claims` on THIS surface, rendered as a
     // collapsible disclosure by AssistantMessage.svelte — not appended to the
@@ -511,6 +523,8 @@ fn main() -> ExitCode {
             commands::slot_recommendation,
             commands::list_daemon_models,
             commands::get_runtime_status,
+            commands::supervisor_reconnect,
+            commands::supervisor_active,
             commands::download_model,
             commands::list_corpora,
             commands::notebook_list,
