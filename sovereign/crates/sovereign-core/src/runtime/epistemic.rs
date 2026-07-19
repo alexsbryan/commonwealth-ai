@@ -274,38 +274,56 @@ pub(crate) fn derive_verdict(
 /// computed — zero model calls (EPISTEMIC_STATE.md, P1a). Facets:
 /// the query itself (always), the entity-boost entities, and the
 /// heuristic sub-question decomposition (env-gate-free inner form).
-pub(crate) fn build_demands(message: &str, intent: &Intent, entities: &[String]) -> Vec<Demand> {
+pub(crate) fn build_demands(
+    message: &str,
+    intent: &Intent,
+    entities: &[String],
+    plan: Option<&crate::runtime::retrieval_pipeline::DemandPlan>,
+) -> Vec<Demand> {
     let mut demands = vec![Demand {
         facet: DemandFacet::Query,
         text: message.to_string(),
         covered: CoverageLevel::Absent,
     }];
-    for e in entities {
-        let e = e.trim();
-        if e.is_empty() || e.eq_ignore_ascii_case(message) {
-            continue;
+    let mut push_unique = |demands: &mut Vec<Demand>, facet: DemandFacet, text: &str| {
+        let text = text.trim();
+        if text.is_empty() || text.eq_ignore_ascii_case(message) {
+            return;
         }
-        if demands.iter().any(|d| d.text.eq_ignore_ascii_case(e)) {
-            continue;
+        if demands.iter().any(|d| d.text.eq_ignore_ascii_case(text)) {
+            return;
         }
         demands.push(Demand {
-            facet: DemandFacet::Entity,
-            text: e.to_string(),
+            facet,
+            text: text.to_string(),
             covered: CoverageLevel::Absent,
         });
+    };
+    for e in entities {
+        push_unique(&mut demands, DemandFacet::Entity, e);
     }
     if let Some(subs) =
         crate::runtime::retrieval::query_expansion::decompose_question_inner(message, intent)
     {
         for s in subs {
-            if demands.iter().any(|d| d.text.eq_ignore_ascii_case(&s)) {
-                continue;
+            push_unique(&mut demands, DemandFacet::SubQuestion, &s);
+        }
+    }
+    // I4: fold in the LLM demand plan's facets when present — one demand
+    // model, two producers. Sub-queries become SubQuestion demands; stance
+    // poles (both sides of a contested axis) become Stance demands; section
+    // terms become Section demands.
+    if let Some(plan) = plan {
+        for s in &plan.sub_queries {
+            push_unique(&mut demands, DemandFacet::SubQuestion, s);
+        }
+        if let Some(stance) = &plan.stance_contrast {
+            for pole in &stance.poles {
+                push_unique(&mut demands, DemandFacet::Stance, pole);
             }
-            demands.push(Demand {
-                facet: DemandFacet::SubQuestion,
-                text: s,
-                covered: CoverageLevel::Absent,
-            });
+        }
+        for term in &plan.section_terms {
+            push_unique(&mut demands, DemandFacet::Section, term);
         }
     }
     demands
@@ -330,7 +348,9 @@ pub(crate) fn stamp_coverage(demands: &mut [Demand], chunks: &[corpus_engine::Sc
     for d in demands.iter_mut() {
         let covered = match d.facet {
             DemandFacet::Query => !chunks.is_empty(),
-            DemandFacet::Entity => {
+            // Stance poles + section labels cover like an entity: the
+            // pole/section surface form appears in some chunk (I4).
+            DemandFacet::Entity | DemandFacet::Stance | DemandFacet::Section => {
                 let needle = d.text.to_lowercase();
                 lowered
                     .iter()
@@ -408,6 +428,12 @@ pub(crate) fn finish_demands(
             DemandFacet::Entity => format!("No source material found on \"{}\"", d.text),
             DemandFacet::SubQuestion => {
                 format!("The sub-question \"{}\" went unanswered", d.text)
+            }
+            DemandFacet::Stance => {
+                format!("Your sources don't cover the \"{}\" position", d.text)
+            }
+            DemandFacet::Section => {
+                format!("No \"{}\" section found in your sources", d.text)
             }
         };
         gaps.push(Gap {
@@ -809,6 +835,7 @@ mod tests {
             "How did Newton and Einstein differ on gravity?",
             &Intent::KnowledgeQuery,
             &entities,
+            None,
         );
         assert_eq!(demands[0].facet, DemandFacet::Query);
         assert!(demands
@@ -831,6 +858,71 @@ mod tests {
             .find(|d| d.text == "Einstein")
             .expect("einstein demand");
         assert_eq!(einstein.covered, CoverageLevel::Absent);
+    }
+
+    #[test]
+    fn build_demands_folds_in_the_llm_plan() {
+        use crate::runtime::retrieval_pipeline::{DemandPlan, StanceContrast};
+        let plan = DemandPlan {
+            sub_queries: vec!["general relativity gravity".into()],
+            entities: vec![],
+            stance_contrast: Some(StanceContrast {
+                axis: "the nature of gravity".into(),
+                poles: vec!["action at a distance".into(), "spacetime curvature".into()],
+            }),
+            section_terms: vec!["reception".into()],
+        };
+        let demands = build_demands(
+            "How did Newton and Einstein differ on gravity?",
+            &Intent::KnowledgeQuery,
+            &[],
+            Some(&plan),
+        );
+        // Stance poles → both sides demanded.
+        assert!(demands
+            .iter()
+            .any(|d| d.facet == DemandFacet::Stance && d.text == "action at a distance"));
+        assert!(demands
+            .iter()
+            .any(|d| d.facet == DemandFacet::Stance && d.text == "spacetime curvature"));
+        // Section term.
+        assert!(demands
+            .iter()
+            .any(|d| d.facet == DemandFacet::Section && d.text == "reception"));
+        // Plan sub-query.
+        assert!(demands
+            .iter()
+            .any(|d| d.facet == DemandFacet::SubQuestion && d.text == "general relativity gravity"));
+    }
+
+    #[test]
+    fn stance_and_section_facets_stamp_and_gap() {
+        let mut demands = vec![
+            Demand {
+                facet: DemandFacet::Stance,
+                text: "spacetime curvature".into(),
+                covered: CoverageLevel::Absent,
+            },
+            Demand {
+                facet: DemandFacet::Section,
+                text: "reception".into(),
+                covered: CoverageLevel::Absent,
+            },
+        ];
+        // A chunk covering the stance pole (surface-form containment).
+        let chunks = vec![chunk(
+            "General relativity",
+            "gravity as spacetime curvature, per Einstein",
+            "wikipedia",
+        )];
+        stamp_coverage(&mut demands, &chunks);
+        assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // stance pole present
+        assert_eq!(demands[1].covered, CoverageLevel::Absent); // no "reception" text
+        // The uncovered Section facet emits a gap with its own statement.
+        let gaps = finish_demands(&mut demands, None, false, Some(GapCoverage::TopicUncovered));
+        assert!(gaps
+            .iter()
+            .any(|g| g.statement.contains("reception") && g.statement.contains("section")));
     }
 
     #[test]

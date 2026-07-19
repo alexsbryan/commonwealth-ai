@@ -171,6 +171,11 @@ const FLAG_QUERY_DECOMP: EnvFlag = EnvFlag {
     purpose:
         "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass.",
 };
+const FLAG_DEMAND_PLAN: EnvFlag = EnvFlag {
+    name: "SOVEREIGN_DEMAND_PLAN",
+    default: "off",
+    purpose: "One Housekeep fast-slot structured-output call plans the turn's demands (sub_queries, entities, optional stance contrast + section terms). Sub-queries fan out; entities merge into entity_boost; the plan feeds the epistemic demand set (EPISTEMIC_STATE.md P1b / RETRIEVAL_REDESIGN S2). One model, two producers with the deterministic facets.",
+};
 const FLAG_TITLE_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_TITLE_EXPAND",
     default: "off",
@@ -211,6 +216,7 @@ const FLAG_PPR_EXPAND: EnvFlag = EnvFlag {
 pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
     vec![
         ("atlas_grounding", FLAG_ATLAS_GROUNDING),
+        ("demand_plan", FLAG_DEMAND_PLAN),
         ("query_decomp", FLAG_QUERY_DECOMP),
         ("query_decomp", EnvFlag { name: "SOVEREIGN_DECOMP_DECAY", default: "1.0", purpose: "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)." }),
         ("title_expand", FLAG_TITLE_EXPAND),
@@ -272,6 +278,31 @@ pub fn step(name: &'static str, flag: Option<EnvFlag>, run: StepFn) -> Retrieval
     RetrievalStep { name, flag, run }
 }
 
+/// A stance contrast the demand planner detected — the axis two
+/// positions disagree on plus the two poles. Retrieval groundwork for
+/// contested/synthesis questions (RETRIEVAL_REDESIGN S2); reuses the
+/// `comparison_axis` vocabulary in the planner prompt hint.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StanceContrast {
+    pub axis: String,
+    /// Exactly two poles when present.
+    pub poles: Vec<String>,
+}
+
+/// The demand planner's structured output (EPISTEMIC_STATE.md P1b /
+/// RETRIEVAL_REDESIGN S2). One Housekeep fast-slot call fills this; the
+/// pipeline fans out `sub_queries`, merges `entities` into
+/// `entity_boost`, and the epistemic assembler turns the whole plan into
+/// the turn's demand set — one demand model, two producers with the
+/// deterministic facets.
+#[derive(Debug, Clone, Default)]
+pub struct DemandPlan {
+    pub sub_queries: Vec<String>,
+    pub entities: Vec<String>,
+    pub stance_contrast: Option<StanceContrast>,
+    pub section_terms: Vec<String>,
+}
+
 /// Everything the steps read and write. Inputs are borrows from the
 /// handler's scope; working/threaded fields are owned so the handler
 /// can move them out after the run.
@@ -307,6 +338,12 @@ pub struct PipelineState<'ctx> {
     pub hot_corpora: HashMap<String, usize>,
     pub entities: Vec<String>,
     pub is_comparison: bool,
+    /// The demand planner's output (I4-A, `SOVEREIGN_DEMAND_PLAN`). `None`
+    /// when the planner is off or the turn skipped it (simple/factual).
+    /// The `title_expand_titles` precedent: a step product retained on the
+    /// state for downstream consumers (entity_boost merge + the epistemic
+    /// demand set).
+    pub demand_plan: Option<DemandPlan>,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
@@ -351,6 +388,7 @@ impl<'ctx> PipelineState<'ctx> {
             hot_corpora: HashMap::new(),
             entities: Vec::new(),
             is_comparison: matches!(intent, Intent::ComparisonQuery),
+            demand_plan: None,
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
@@ -713,6 +751,11 @@ fn step_readiness_disclosure<'a, 'ctx>(
 
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
+        // I4-A: the demand planner runs FIRST in the core so its
+        // sub-queries fan out into the pool and its entities are on the
+        // state before `entity_boost` merges them. Dark until
+        // `SOVEREIGN_DEMAND_PLAN=1`; skips simple/factual turns.
+        step("demand_plan", Some(FLAG_DEMAND_PLAN), step_demand_plan),
         // Spawned FIRST in the core (the lane extracts its own
         // entities from the message and seeds from head-pool titles —
         // it does not need `entity_boost`'s products) and joined at
@@ -817,6 +860,9 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
                 // weight on attached-doc turns.
                 && s.name != "ppr_struct_spawn"
                 && s.name != "ppr_struct_expand"
+                // I4-A: the demand planner fans sub-queries into corpus
+                // indexes — inert on attached-doc turns (no corpus pool).
+                && s.name != "demand_plan"
         });
     }
     steps.extend(core);
@@ -880,6 +926,59 @@ fn step_meta_atlas_boost<'a, 'ctx>(
             );
         }
         StepOutcome::default()
+    })
+}
+
+/// `SOVEREIGN_DEMAND_PLAN=1` opts into the LLM demand planner (I4-A).
+/// Default OFF — dark until the A/B swing promotes it (RETRIEVAL_REDESIGN
+/// §7 measurement discipline).
+pub(crate) fn demand_plan_enabled() -> bool {
+    std::env::var("SOVEREIGN_DEMAND_PLAN").ok().as_deref() == Some("1")
+}
+
+fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
+    Box::pin(async move {
+        // Dark-first: no work unless explicitly enabled. Simple/factual
+        // turns skip the ~0.3–0.8s planner call — the router already sends
+        // them elsewhere, but the deep pipeline also carries SimpleQuery,
+        // so gate it here too (synthesis-shaped turns only).
+        if !demand_plan_enabled() || matches!(st.intent, Intent::SimpleQuery) {
+            return StepOutcome::default();
+        }
+        let Some(plan) = rt
+            .formulate_demand_plan(st.message, &st.chunks, st.context)
+            .await
+        else {
+            return StepOutcome::default();
+        };
+        // Sub-queries fan out through the shared decomposition helper (the
+        // same search-and-merge shape query_decomp / title_expand use).
+        let added = if plan.sub_queries.is_empty() {
+            0
+        } else {
+            rt.fan_out_decomposed_queries(
+                &plan.sub_queries,
+                &mut st.chunks,
+                "DemandPlan",
+                st.enabled_corpora,
+                st.corpus_ceiling,
+            )
+            .await
+        };
+        tracing::info!(
+            sub_queries = plan.sub_queries.len(),
+            entities = plan.entities.len(),
+            has_stance = plan.stance_contrast.is_some(),
+            section_terms = plan.section_terms.len(),
+            chunks_added = added,
+            "{}: demand-plan retrieval",
+            st.label
+        );
+        // Retained for entity_boost's merge + the epistemic demand set.
+        st.demand_plan = Some(plan);
+        StepOutcome {
+            note: Some(format!("demand plan → +{added} chunks")),
+        }
     })
 }
 
@@ -1334,6 +1433,18 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
         } else {
             extract_question_entities(st.message)
         };
+        // I4-A: merge the demand planner's entities (LLM producer) with the
+        // deterministic extractor's (one demand model, two producers). The
+        // combined set feeds both these per-entity searches and the later
+        // merge selector's demand slots.
+        if let Some(plan) = &st.demand_plan {
+            for e in &plan.entities {
+                let e = e.trim();
+                if !e.is_empty() && !st.entities.iter().any(|x| x.eq_ignore_ascii_case(e)) {
+                    st.entities.push(e.to_string());
+                }
+            }
+        }
         let entity_query_limit = if st.is_comparison {
             COMPARISON_ENTITY_QUERY_LIMIT
         } else {
@@ -1888,6 +1999,15 @@ mod tests {
     /// the shared 14-step core (incl. the FR-9 governance active-set
     /// filter), deep grounding at the KQ (post-floor) position, and
     /// dedupe on both paths.
+    /// I4-A dark-first: the demand planner must be OFF unless explicitly
+    /// enabled — every existing surface + bench changes behaviour only by
+    /// opt-in (RETRIEVAL_REDESIGN §7).
+    #[test]
+    fn demand_plan_default_off() {
+        std::env::remove_var("SOVEREIGN_DEMAND_PLAN");
+        assert!(!super::demand_plan_enabled());
+    }
+
     #[test]
     fn kq_step_sequence_is_pinned() {
         assert_eq!(
@@ -1896,6 +2016,7 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
+                "demand_plan",
                 "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
@@ -1926,6 +2047,7 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
+                "demand_plan",
                 "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
@@ -1956,16 +2078,16 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 17-step core (the 17th is
-        // `readiness_disclosure` (was `dim_mismatch_disclosure`) — the last core step, inert
-        // when retrieval found anything); the pipelines differ ONLY in their tails
-        // (KQ: audited truncate; deep: plain truncate + strategy-driven
-        // top-sources expansion).
-        assert_eq!(&kq[..20], &deep[..20]);
-        assert_eq!(kq.len(), 21);
-        assert_eq!(deep.len(), 22);
-        assert_eq!(kq[20], "truncate_merged");
-        assert_eq!(&deep[20..], &["truncate_merged", "top_sources_expand"]);
+        // Shared 3-step head + shared 18-step core (the last core step is
+        // `readiness_disclosure` — inert when retrieval found anything;
+        // `demand_plan` is the new first core step, I4-A); the pipelines
+        // differ ONLY in their tails (KQ: audited truncate; deep: plain
+        // truncate + strategy-driven top-sources expansion).
+        assert_eq!(&kq[..21], &deep[..21]);
+        assert_eq!(kq.len(), 22);
+        assert_eq!(deep.len(), 23);
+        assert_eq!(kq[21], "truncate_merged");
+        assert_eq!(&deep[21..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but
@@ -1982,7 +2104,10 @@ mod tests {
         assert!(!names.contains(&"raptor_grounding_early"));
         assert!(!names.contains(&"ppr_struct_spawn"));
         assert!(!names.contains(&"ppr_struct_expand"));
-        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 7);
+        // I4-A: the demand planner is inert without a corpus pool.
+        assert!(!names.contains(&"demand_plan"));
+        // Head (3) + demand_plan + the 4 corpus-only core steps = 8 fewer.
+        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 8);
     }
 
     /// The personal-scope retain predicate: metadata stamp first,

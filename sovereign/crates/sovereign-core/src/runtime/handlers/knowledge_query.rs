@@ -401,6 +401,7 @@ impl Runtime {
             hot_corpora,
             entities,
             meta_atlas_hits,
+            demand_plan,
             ..
         } = pipeline_state;
 
@@ -409,7 +410,12 @@ impl Runtime {
         // decomposition), coverage-stamped against the composed pool.
         // Zero model calls; retained on the plan for ledger assembly.
         let demands = {
-            let mut d = crate::runtime::epistemic::build_demands(message, intent, &entities);
+            let mut d = crate::runtime::epistemic::build_demands(
+                message,
+                intent,
+                &entities,
+                demand_plan.as_ref(),
+            );
             crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
             d
         };

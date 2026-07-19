@@ -25,24 +25,25 @@ dated convergence/divergence log.
 | 1 | `main_retrieval_mesh` | — |
 | 2 | `scope_personal_filter` | — |
 | 3 | `store_search` | — |
-| 4 | `ppr_struct_spawn` | `SOVEREIGN_PPR_EXPAND` |
-| 5 | `entity_boost` | — |
-| 6 | `meta_atlas_boost` | — |
-| 7 | `bridge_boost` | `SOVEREIGN_META_BRIDGE` |
-| 8 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
-| 9 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
-| 10 | `noise_floor` | — |
-| 11 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
-| 12 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
-| 13 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
-| 14 | `reweight_and_sort` | — |
-| 15 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 16 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
-| 17 | `dedupe_merged` | — |
-| 18 | `cap_and_reserve` | — |
-| 19 | `governance_active_set` | — |
-| 20 | `readiness_disclosure` | — |
-| 21 | `truncate_merged` | — |
+| 4 | `demand_plan` | `SOVEREIGN_DEMAND_PLAN` |
+| 5 | `ppr_struct_spawn` | `SOVEREIGN_PPR_EXPAND` |
+| 6 | `entity_boost` | — |
+| 7 | `meta_atlas_boost` | — |
+| 8 | `bridge_boost` | `SOVEREIGN_META_BRIDGE` |
+| 9 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
+| 10 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
+| 11 | `noise_floor` | — |
+| 12 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 13 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
+| 14 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 15 | `reweight_and_sort` | — |
+| 16 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 17 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 18 | `dedupe_merged` | — |
+| 19 | `cap_and_reserve` | — |
+| 20 | `governance_active_set` | — |
+| 21 | `readiness_disclosure` | — |
+| 22 | `truncate_merged` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -51,25 +52,26 @@ dated convergence/divergence log.
 | 1 | `main_retrieval_mesh` | — |
 | 2 | `scope_personal_filter` | — |
 | 3 | `store_search` | — |
-| 4 | `ppr_struct_spawn` | `SOVEREIGN_PPR_EXPAND` |
-| 5 | `entity_boost` | — |
-| 6 | `meta_atlas_boost` | — |
-| 7 | `bridge_boost` | `SOVEREIGN_META_BRIDGE` |
-| 8 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
-| 9 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
-| 10 | `noise_floor` | — |
-| 11 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
-| 12 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
-| 13 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
-| 14 | `reweight_and_sort` | — |
-| 15 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 16 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
-| 17 | `dedupe_merged` | — |
-| 18 | `cap_and_reserve` | — |
-| 19 | `governance_active_set` | — |
-| 20 | `readiness_disclosure` | — |
-| 21 | `truncate_merged` | — |
-| 22 | `top_sources_expand` | — |
+| 4 | `demand_plan` | `SOVEREIGN_DEMAND_PLAN` |
+| 5 | `ppr_struct_spawn` | `SOVEREIGN_PPR_EXPAND` |
+| 6 | `entity_boost` | — |
+| 7 | `meta_atlas_boost` | — |
+| 8 | `bridge_boost` | `SOVEREIGN_META_BRIDGE` |
+| 9 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
+| 10 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
+| 11 | `noise_floor` | — |
+| 12 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 13 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
+| 14 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 15 | `reweight_and_sort` | — |
+| 16 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 17 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 18 | `dedupe_merged` | — |
+| 19 | `cap_and_reserve` | — |
+| 20 | `governance_active_set` | — |
+| 21 | `readiness_disclosure` | — |
+| 22 | `truncate_merged` | — |
+| 23 | `top_sources_expand` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -101,6 +103,7 @@ asserts every step-level gate appears here.
 | step | flag | default | purpose |
 |---|---|---|---|
 | atlas_grounding | `SOVEREIGN_ATLAS_GROUNDING` | on | Atlas graph-walk grounding (cosine seeds → BFS over typed edges → FTS-fetch evidence chunks). =0/false/off/no disables. |
+| demand_plan | `SOVEREIGN_DEMAND_PLAN` | off | One Housekeep fast-slot structured-output call plans the turn's demands (sub_queries, entities, optional stance contrast + section terms). Sub-queries fan out; entities merge into entity_boost; the plan feeds the epistemic demand set (EPISTEMIC_STATE.md P1b / RETRIEVAL_REDESIGN S2). One model, two producers with the deterministic facets. |
 | query_decomp | `SOVEREIGN_QUERY_DECOMP` | off | Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass. |
 | query_decomp | `SOVEREIGN_DECOMP_DECAY` | 1.0 | Score decay applied to fanned-out sub-query hits (<1 = augment, never displace). |
 | title_expand | `SOVEREIGN_TITLE_EXPAND` | off | Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge. |
