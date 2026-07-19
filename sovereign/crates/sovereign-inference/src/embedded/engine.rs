@@ -1567,6 +1567,7 @@ impl EmbeddedLlamaCpp {
             resident: true,
             size_bytes: Some(self.fast.size_bytes),
             transitioning: false,
+            placement: None,
         });
 
         // ── primary / code: ONE lazy hot-swap slot shared between the
@@ -1596,6 +1597,14 @@ impl EmbeddedLlamaCpp {
                     resident,
                     size_bytes: if resident { occupant_bytes } else { None },
                     transitioning: contended,
+                    // The primary is the only distributable slot — surface its
+                    // live placement (distributed vs local + the split) so
+                    // `/status` states it outright.
+                    placement: if role == "primary" && resident {
+                        crate::embedded::rpc_distribution::last_primary_placement()
+                    } else {
+                        None
+                    },
                 });
             }
         }
@@ -1608,6 +1617,7 @@ impl EmbeddedLlamaCpp {
                 resident: true,
                 size_bytes: None, // EmbedSlot doesn't surface a byte count today
                 transitioning: false,
+                placement: None,
             });
         }
 
@@ -1620,6 +1630,7 @@ impl EmbeddedLlamaCpp {
                     resident: true,
                     size_bytes: None,
                     transitioning: false,
+                    placement: None,
                 });
             }
         }
@@ -1635,6 +1646,7 @@ impl EmbeddedLlamaCpp {
                     resident: true,
                     size_bytes: Some(slot.size_bytes),
                     transitioning: false,
+                    placement: None,
                 })
                 .collect();
             extras.sort_by(|a, b| a.role.cmp(&b.role));
@@ -1650,6 +1662,7 @@ impl EmbeddedLlamaCpp {
                     resident: true,
                     size_bytes: None,
                     transitioning: false,
+                    placement: None,
                 });
             }
         }

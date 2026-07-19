@@ -61,7 +61,8 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      synth.continue=info,\
      synth.refusal_retry=info,\
      synth.citation=info,\
-     synth.budget=info";
+     synth.budget=info,\
+     placement=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -189,6 +190,10 @@ mod tests {
             "gate.lifecycle",
             "agentic_kq",
             "retrieval_audit",
+            // Distributed-inference placement: distributed-vs-local + the
+            // per-device split. An operator must see this in the deployed
+            // daemon, never infer it from `free`.
+            "placement",
             "synth.lifecycle",
             "synth.truncation",
             "synth.continue",

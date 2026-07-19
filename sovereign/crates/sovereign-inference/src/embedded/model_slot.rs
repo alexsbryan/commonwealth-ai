@@ -36,6 +36,52 @@ use sovereign_core::Result;
 
 use crate::hardware::HardwareProfile;
 
+/// Total on-disk size of the model, summing ALL shards when `model_path` is one
+/// shard of a split GGUF (`…-00001-of-00003.gguf`). llama.cpp is pointed at
+/// shard `00001` but loads every shard, so the PLACEMENT decision must see the
+/// whole model's size — not the (often tiny, header-only) first shard. Getting
+/// this wrong is a real deadlock: an 86 GB model whose `00001` shard is ~10 MB
+/// reads as "safe to bulk-stream" (< `SOVEREIGN_RPC_SAFE_STREAM_MB`), so a
+/// distributed load takes the StreamSplit path and wedges in ggml's RPC
+/// `set_tensor` send() instead of the warm-cache `OwnedOverrides` path that
+/// avoids the bulk transfer entirely. Falls back to the single-file size for a
+/// non-sharded model or if any sibling shard is missing (never guess).
+fn total_model_bytes(model_path: &Path) -> u64 {
+    let single = std::fs::metadata(model_path)
+        .map(|m| m.len())
+        .unwrap_or(u64::MAX);
+    let Some(name) = model_path.file_name().and_then(|n| n.to_str()) else {
+        return single;
+    };
+    let Some(dir) = model_path.parent() else {
+        return single;
+    };
+    // Parse `<stem>-<idx>-of-<count>.gguf`.
+    let parsed = name.rfind("-of-").and_then(|of| {
+        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
+        let before = name.get(..of)?; // "<stem>-<idx>"
+        let dash = before.rfind('-')?;
+        let idx = before.get(dash + 1..)?;
+        idx.parse::<u32>().ok()?; // validate numeric
+        Some((before.get(..dash)?.to_string(), count, idx.len()))
+    });
+    let Some((stem, count, width)) = parsed else {
+        return single;
+    };
+    if count <= 1 {
+        return single;
+    }
+    let mut total = 0u64;
+    for i in 1..=count {
+        let shard = dir.join(format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"));
+        match std::fs::metadata(&shard) {
+            Ok(m) => total += m.len(),
+            Err(_) => return single, // a shard missing → don't guess
+        }
+    }
+    total
+}
+
 // ─── ModelSlot ─────────────────────────────────────────────────
 
 /// Per-slot inference mode. A sum type so the illegal hybrid state
@@ -747,9 +793,9 @@ impl ModelSlot {
         // `resolve_placement` decides the strategy (and, for the auto-warm path,
         // seeds the workers' caches first); we then just apply it. The default in
         // every uncertain case is LocalOnly — the load NEVER wedges.
-        let model_bytes = std::fs::metadata(model_path)
-            .map(|m| m.len())
-            .unwrap_or(u64::MAX);
+        // Total across ALL shards — not the first-shard file size — so a split
+        // GGUF is classified by its real weight, not its ~10 MB header shard.
+        let model_bytes = total_model_bytes(model_path);
         let placement = resolve_placement(model_path, model_bytes, distributable);
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
@@ -3711,5 +3757,73 @@ impl ModelSlot {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod total_model_bytes_tests {
+    use super::total_model_bytes;
+    use std::path::PathBuf;
+
+    /// Write a file of `len` bytes and return its path.
+    fn shard(dir: &std::path::Path, name: &str, len: usize) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, vec![0u8; len]).unwrap();
+        p
+    }
+
+    #[test]
+    fn split_gguf_sums_all_shards() {
+        // The fix-#2 regression fence: a split GGUF must be classified by the
+        // TOTAL across shards, not the (tiny, header-only) first shard —
+        // getting this wrong re-opens the StreamSplit bulk-stream deadlock.
+        let dir = tempfile::tempdir().unwrap();
+        let first = shard(dir.path(), "m-00001-of-00003.gguf", 10);
+        shard(dir.path(), "m-00002-of-00003.gguf", 500);
+        shard(dir.path(), "m-00003-of-00003.gguf", 300);
+        assert_eq!(total_model_bytes(&first), 810);
+    }
+
+    #[test]
+    fn stem_with_dashes_and_last_of_marker_win() {
+        // Real-world names carry dashes and could even contain "-of-" in the
+        // stem; the LAST "-of-" must be the shard marker.
+        let dir = tempfile::tempdir().unwrap();
+        let first = shard(dir.path(), "best-of-Q5-K-XL-00001-of-00002.gguf", 7);
+        shard(dir.path(), "best-of-Q5-K-XL-00002-of-00002.gguf", 11);
+        assert_eq!(total_model_bytes(&first), 18);
+    }
+
+    #[test]
+    fn non_sharded_model_is_its_own_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let single = shard(dir.path(), "plain-model.gguf", 42);
+        assert_eq!(total_model_bytes(&single), 42);
+    }
+
+    #[test]
+    fn missing_sibling_shard_falls_back_to_single() {
+        // A missing sibling means the load itself will fail at open time; the
+        // placement answer just must not be an invented sum.
+        let dir = tempfile::tempdir().unwrap();
+        let first = shard(dir.path(), "m-00001-of-00003.gguf", 10);
+        shard(dir.path(), "m-00002-of-00003.gguf", 500);
+        // 00003 never written.
+        assert_eq!(total_model_bytes(&first), 10);
+    }
+
+    #[test]
+    fn count_of_one_is_treated_as_single() {
+        let dir = tempfile::tempdir().unwrap();
+        let only = shard(dir.path(), "m-00001-of-00001.gguf", 9);
+        assert_eq!(total_model_bytes(&only), 9);
+    }
+
+    #[test]
+    fn unparseable_index_is_single() {
+        // "-of-" present but the index isn't numeric → not a shard pattern.
+        let dir = tempfile::tempdir().unwrap();
+        let odd = shard(dir.path(), "m-final-of-00002.gguf", 5);
+        assert_eq!(total_model_bytes(&odd), 5);
     }
 }
