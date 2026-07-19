@@ -281,6 +281,10 @@ pub struct TensorManifestEntry {
     /// cacheable tensors get a cache file / can be a hash-hit; smaller ones are
     /// always sent inline and never approach the upload deadlock.
     pub cacheable: bool,
+    /// File NAME (not path) of the shard holding this tensor's bytes;
+    /// `gguf_offset` is relative to this file. For a single-file model this
+    /// is the model's own file name for every entry.
+    pub file: String,
 }
 
 /// Stream `nbytes` from `start` and return the FNV-1a hash — byte-for-byte the
@@ -305,35 +309,88 @@ fn hash_tensor_at(
     Ok(hash.finish())
 }
 
+/// All files holding this model's tensor data: `[path]` for a single-file
+/// model, or every `-NNNNN-of-NNNNN.gguf` sibling (in shard order) for a
+/// split. Split shards are each standalone GGUFs with their own header +
+/// tensor-info + data section, so every downstream reader parses them
+/// per-file. Returns `[path]` (never guesses) when any sibling is missing.
+pub(crate) fn shard_files(model_path: &Path) -> Vec<std::path::PathBuf> {
+    let single = vec![model_path.to_path_buf()];
+    let Some(name) = model_path.file_name().and_then(|n| n.to_str()) else {
+        return single;
+    };
+    let Some(dir) = model_path.parent() else {
+        return single;
+    };
+    // Parse `<stem>-<idx>-of-<count>.gguf` (same shape total_model_bytes uses).
+    let parsed = name.rfind("-of-").and_then(|of| {
+        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
+        let before = name.get(..of)?;
+        let dash = before.rfind('-')?;
+        let idx = before.get(dash + 1..)?;
+        idx.parse::<u32>().ok()?;
+        Some((before.get(..dash)?.to_string(), count, idx.len()))
+    });
+    let Some((stem, count, width)) = parsed else {
+        return single;
+    };
+    if count <= 1 {
+        return single;
+    }
+    let mut files = Vec::with_capacity(count as usize);
+    for i in 1..=count {
+        let shard = dir.join(format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"));
+        if !shard.is_file() {
+            return single; // a shard missing → don't guess
+        }
+        files.push(shard);
+    }
+    files
+}
+
 /// Build the full tensor manifest from a local GGUF — name, layer, content hash,
-/// size, and GGUF offset for every tensor. Streams each cacheable tensor once to
-/// hash it (no model load, no GPU). This is the shard planner's input: it maps a
-/// per-node layer assignment to the exact set of cache blobs (by hash) / byte
-/// ranges each node must hold, so workers fetch + warm only their shard.
+/// size, and per-file offset for every tensor. **Split-aware:** a
+/// `-NNNNN-of-NNNNN` model is walked shard by shard, and each entry records the
+/// shard file its bytes live in (`file`) with `gguf_offset` relative to THAT
+/// file — a manifest built from only the header shard silently empty-warms
+/// every worker and resurrects the upload deadlock (found live 2026-07-19).
+/// Streams each cacheable tensor once to hash it (no model load, no GPU). This
+/// is the shard planner's input: it maps a per-node layer assignment to the
+/// exact set of cache blobs (by hash) / byte ranges each node must hold.
 pub fn build_manifest(gguf_path: &Path) -> std::io::Result<Vec<TensorManifestEntry>> {
-    let (tensors, data_offset) = parse_gguf(gguf_path)?;
-    let mut file = fs::File::open(gguf_path)?;
+    let mut out = Vec::new();
     let mut buf = vec![0u8; CHUNK];
-    let mut out = Vec::with_capacity(tensors.len());
-    for t in &tensors {
-        let nbytes = tensor_nbytes(t);
-        let cacheable = nbytes > HASH_THRESHOLD;
-        let start = data_offset + t.offset;
-        // Only cacheable tensors are ever hash-matched; a non-cacheable tensor's
-        // hash is never looked up, so leave it 0 rather than pay to stream it.
-        let hash = if cacheable {
-            hash_tensor_at(&mut file, start, nbytes, &mut buf)?
-        } else {
-            0
-        };
-        out.push(TensorManifestEntry {
-            name: t.name.clone(),
-            layer: tensor_layer(&t.name),
-            hash,
-            nbytes,
-            gguf_offset: start,
-            cacheable,
-        });
+    for shard in shard_files(gguf_path) {
+        let (tensors, data_offset) = parse_gguf(&shard)?;
+        let mut file = fs::File::open(&shard)?;
+        let shard_name = shard
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        out.reserve(tensors.len());
+        for t in &tensors {
+            let nbytes = tensor_nbytes(t);
+            let cacheable = nbytes > HASH_THRESHOLD;
+            let start = data_offset + t.offset;
+            // Only cacheable tensors are ever hash-matched; a non-cacheable
+            // tensor's hash is never looked up, so leave it 0 rather than pay
+            // to stream it.
+            let hash = if cacheable {
+                hash_tensor_at(&mut file, start, nbytes, &mut buf)?
+            } else {
+                0
+            };
+            out.push(TensorManifestEntry {
+                name: t.name.clone(),
+                layer: tensor_layer(&t.name),
+                hash,
+                nbytes,
+                gguf_offset: start,
+                cacheable,
+                file: shard_name.clone(),
+            });
+        }
     }
     Ok(out)
 }
@@ -349,14 +406,28 @@ pub fn warm_cache_slice(
     cache_dir: &Path,
     want: impl Fn(&str, Option<u32>) -> bool,
 ) -> std::io::Result<WarmCacheStats> {
-    let (tensors, data_offset) = parse_gguf(gguf_path)?;
     fs::create_dir_all(cache_dir)?;
-
     let mut stats = WarmCacheStats {
-        tensors_total: tensors.len(),
+        tensors_total: 0,
         cache_dir: cache_dir.to_path_buf(),
         ..Default::default()
     };
+    // Split-aware: walk every shard file; each is a standalone GGUF whose
+    // offsets are file-relative. A single-file model is the one-shard case.
+    for shard in shard_files(gguf_path) {
+        warm_slice_one_file(&shard, cache_dir, &want, &mut stats)?;
+    }
+    Ok(stats)
+}
+
+fn warm_slice_one_file(
+    gguf_path: &Path,
+    cache_dir: &Path,
+    want: &impl Fn(&str, Option<u32>) -> bool,
+    stats: &mut WarmCacheStats,
+) -> std::io::Result<()> {
+    let (tensors, data_offset) = parse_gguf(gguf_path)?;
+    stats.tensors_total += tensors.len();
 
     let mut file = fs::File::open(gguf_path)?;
     let mut buf = vec![0u8; CHUNK];
@@ -406,7 +477,7 @@ pub fn warm_cache_slice(
         tracing::debug!(tensor = %t.name, hash = %hash_str, bytes = nbytes, "warmed RPC cache entry");
     }
 
-    Ok(stats)
+    Ok(())
 }
 
 /// Pre-warm `cache_dir` from `gguf_path` for EVERY cacheable tensor — the
@@ -589,6 +660,28 @@ pub fn gguf_block_count(path: &Path) -> std::io::Result<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shard_files_enumerates_siblings_and_never_guesses() {
+        let dir = tempfile::tempdir().unwrap();
+        let mk = |name: &str| {
+            let p = dir.path().join(name);
+            std::fs::write(&p, b"x").unwrap();
+            p
+        };
+        // Non-split: itself.
+        let single = mk("model.gguf");
+        assert_eq!(shard_files(&single), vec![single.clone()]);
+        // Split with all siblings present: full ordered list.
+        let s1 = mk("m-00001-of-00003.gguf");
+        let s2 = mk("m-00002-of-00003.gguf");
+        let s3 = mk("m-00003-of-00003.gguf");
+        assert_eq!(shard_files(&s1), vec![s1.clone(), s2, s3]);
+        // A missing sibling → fall back to the named file alone (never guess);
+        // downstream the empty-warm guard turns that into a loud refusal.
+        let t1 = mk("t-00001-of-00002.gguf");
+        assert_eq!(shard_files(&t1), vec![t1.clone()]);
+    }
 
     #[test]
     fn plan_shards_apportions_contiguously_and_sums() {

@@ -46,7 +46,7 @@ use crate::hardware::HardwareProfile;
 /// `set_tensor` send() instead of the warm-cache `OwnedOverrides` path that
 /// avoids the bulk transfer entirely. Falls back to the single-file size for a
 /// non-sharded model or if any sibling shard is missing (never guess).
-fn total_model_bytes(model_path: &Path) -> u64 {
+pub(crate) fn total_model_bytes(model_path: &Path) -> u64 {
     let single = std::fs::metadata(model_path)
         .map(|m| m.len())
         .unwrap_or(u64::MAX);

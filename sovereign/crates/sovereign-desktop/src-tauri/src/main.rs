@@ -638,6 +638,7 @@ fn main() -> ExitCode {
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,
             mesh_commands::mesh_get_state,
+            mesh_commands::mesh_get_placement,
             mesh_commands::mesh_is_running,
             mesh_commands::mesh_leave,
             mesh_commands::mesh_rotate_invite,

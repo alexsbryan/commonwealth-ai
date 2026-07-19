@@ -736,6 +736,28 @@ impl EmbeddedLlamaCpp {
         // is populated now that LlamaBackend is initialized.
         super::rpc_distribution::serve_rpc_worker_if_configured();
 
+        // ─── P0.2 boot guard: refuse an aliased HUGE primary ─────────
+        // With no distinct `fast`, fast_path == primary_path and the fast
+        // slot below eagerly loads the FULL model 100% local — for a
+        // can't-fit-one-box model that is a silent OOM at boot (observed:
+        // 123GB peak on a 125GB box), and because fast holds the weights
+        // `Arc`, the later distributed reload cannot free them. Refuse
+        // with the fix in the message instead of OOMing.
+        if matches!(primary_model_path, Some(p) if p == fast_model_path) {
+            let model_bytes = super::model_slot::total_model_bytes(fast_model_path);
+            if fast_alias_too_large(model_bytes, hardware.system_ram_bytes, alias_ceiling_env()) {
+                return Err(Error::Inference(format!(
+                    "models.primary ({}, {:.1} GB) is too large to double-load: with no \
+                     distinct `models.fast` configured, the fast slot would eagerly load \
+                     the full model locally at boot. Set `models.fast` to a small model \
+                     (e.g. a 4B GGUF) — the primary then loads lazily and can distribute \
+                     across the mesh. (Override ceiling: SOVEREIGN_FAST_ALIAS_MAX_MB.)",
+                    fast_model_path.display(),
+                    model_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                )));
+            }
+        }
+
         tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
         let fast = Arc::new(ModelSlot::load(
             &backend,
@@ -1989,6 +2011,51 @@ impl EmbeddedLlamaCpp {
         })
         .await
         .map_err(|e| Error::Inference(format!("reload join failed: {e}")))?
+    }
+}
+
+/// P0.2 boot-guard policy, pure for testability: an aliased fast+primary
+/// model above the ceiling would double-book RAM at boot. Default ceiling
+/// is 40% of system RAM — a model larger than that cannot afford to be
+/// resident twice (eager fast copy + the distributed reload's local share).
+/// `override_mb` (SOVEREIGN_FAST_ALIAS_MAX_MB) replaces the default when set.
+fn fast_alias_too_large(model_bytes: u64, system_ram_bytes: u64, override_mb: Option<u64>) -> bool {
+    let ceiling = match override_mb {
+        Some(mb) => mb.saturating_mul(1024 * 1024),
+        None => system_ram_bytes / 10 * 4,
+    };
+    model_bytes > ceiling
+}
+
+fn alias_ceiling_env() -> Option<u64> {
+    std::env::var("SOVEREIGN_FAST_ALIAS_MAX_MB")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+}
+
+#[cfg(test)]
+mod fast_alias_guard_tests {
+    use super::fast_alias_too_large;
+
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    #[test]
+    fn ceiling_is_forty_percent_of_ram() {
+        // 125GB box: 88GB model (the live 122B OOM case) refused, 35GB allowed.
+        assert!(fast_alias_too_large(88 * GB, 125 * GB, None));
+        assert!(!fast_alias_too_large(35 * GB, 125 * GB, None));
+        // Boundary: exactly at the ceiling is allowed; just over is not.
+        let ram = 100 * GB;
+        assert!(!fast_alias_too_large(ram / 10 * 4, ram, None));
+        assert!(fast_alias_too_large(ram / 10 * 4 + 1, ram, None));
+    }
+
+    #[test]
+    fn override_replaces_the_default() {
+        // Operator raises the ceiling: 88GB passes under a 100_000MB override.
+        assert!(!fast_alias_too_large(88 * GB, 125 * GB, Some(100_000)));
+        // Or tightens it: a 10GB model refused under a 4096MB override.
+        assert!(fast_alias_too_large(10 * GB, 125 * GB, Some(4096)));
     }
 }
 

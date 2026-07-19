@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { meshDiagnostics } from "../api";
+  import { meshDiagnostics, meshPlacement } from "../api";
   import type { MeshDiagnostics } from "../types";
 
   // Polls the mesh_diagnostics Tauri command every 3 seconds and
@@ -15,12 +15,39 @@
   let error = $state("");
   let pollHandle: ReturnType<typeof setInterval> | null = null;
 
+  // Shared-model placement (P0.6): the user-visible answer to "is my
+  // big model actually distributed right now, and across whom?" —
+  // silent local-only fallback otherwise reads as a mysteriously slow
+  // model. Opaque JSON from the daemon's /status; render what's there.
+  let placement: Record<string, unknown> | null = $state(null);
+
+  function placementMode(): string | null {
+    const p = placement?.placement as Record<string, unknown> | undefined;
+    return (p?.mode as string) ?? null;
+  }
+  function placementWorkers(): { endpoint: string; blocks: number }[] {
+    const p = placement?.placement as Record<string, unknown> | undefined;
+    return (p?.workers as { endpoint: string; blocks: number }[]) ?? [];
+  }
+  function placementBlocks(): { local: number; total: number } {
+    const p = placement?.placement as Record<string, unknown> | undefined;
+    return {
+      local: (p?.local_blocks as number) ?? 0,
+      total: (p?.total_blocks as number) ?? 0,
+    };
+  }
+
   async function tick() {
     try {
       data = await meshDiagnostics();
       error = "";
     } catch (e) {
       error = String(e);
+    }
+    try {
+      placement = await meshPlacement();
+    } catch {
+      placement = null; // never let placement break the diagnostics panel
     }
   }
 
@@ -46,6 +73,31 @@
 
   {#if error}
     <div class="diag-error">{error}</div>
+  {/if}
+
+  {#if placement?.placement}
+    <div class="placement">
+      <span class="placement-model mono">{placement.model_id}</span>
+      {#if placementMode() === "distributed"}
+        <span class="placement-chip distributed" title="blocks split across machines">
+          ⇄ distributed · {placementBlocks().local}/{placementBlocks().total} blocks local
+        </span>
+        {#each placementWorkers() as w (w.endpoint)}
+          <span class="placement-worker mono" title="worker endpoint">
+            {w.endpoint} · {w.blocks} blocks
+          </span>
+        {/each}
+      {:else if placement.transitioning}
+        <span class="placement-chip transitioning">… redistributing</span>
+      {:else}
+        <span
+          class="placement-chip local"
+          title="Model is running on this machine only. If workers are expected, check that their daemons are up — the mesh recovers automatically once they return."
+        >
+          ● local only
+        </span>
+      {/if}
+    </div>
   {/if}
 
   <div class="peers-header">
@@ -113,6 +165,49 @@
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .placement {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.78rem;
+  }
+
+  .placement-model {
+    color: var(--text-muted);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .placement-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .placement-chip.distributed {
+    background: color-mix(in srgb, var(--accent, #4a9eff) 18%, transparent);
+    color: var(--accent, #4a9eff);
+  }
+
+  .placement-chip.local {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    color: var(--text-muted);
+  }
+
+  .placement-chip.transitioning {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .placement-worker {
+    font-size: 0.72rem;
     color: var(--text-muted);
   }
 

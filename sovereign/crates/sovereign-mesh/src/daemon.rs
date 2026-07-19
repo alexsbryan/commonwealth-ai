@@ -216,6 +216,15 @@ pub struct EmbeddedDaemon {
     /// re-reads the live membership, so a mapping for a vanished worker is
     /// inert. `std::sync` lock — never held across an await.
     rpc_endpoint_nodes: std::sync::RwLock<std::collections::HashMap<String, NodeId>>,
+    /// Per-node sticky endpoint choice for RPC-worker discovery — the hysteresis
+    /// state that stops a single transient direct-ip probe miss from flipping a
+    /// worker's transport identity (direct-ip ↔ iroh-bridge loopback). Both the
+    /// eligibility tracker and the reload loop key on the endpoint the discovery
+    /// tick returns, so an unheld flip reads as a flap + full re-settle and
+    /// collapses a live distribution to local-only (observed 2026-07-19, 122B
+    /// e2e). Keyed by the worker's stable mesh node_id. `std::sync` lock — never
+    /// held across an await (read to a clone, decide, write the result).
+    rpc_worker_sticky: std::sync::RwLock<std::collections::HashMap<NodeId, StickyEndpoint>>,
 }
 
 enum DaemonState {
@@ -389,6 +398,7 @@ impl EmbeddedDaemon {
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -425,6 +435,7 @@ impl EmbeddedDaemon {
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -1839,7 +1850,7 @@ impl EmbeddedDaemon {
             .collect()
     }
 
-    pub async fn discover_rpc_workers(&self) -> Vec<String> {
+    pub async fn discover_rpc_workers(&self) -> Vec<crate::worker_eligibility::DiscoveredWorker> {
         // The raw-TCP rpc-server needs the peer's DIRECT IP. The `/status` probe
         // URL host is unreliable for this: when `status_probe` is routed over iroh,
         // the probe authority is a loopback proxy (`127.0.0.1:<ephemeral>`), which
@@ -1920,93 +1931,176 @@ impl EmbeddedDaemon {
             Err(_) => return Vec::new(),
         };
 
+        // Node ids of the currently gossip-Online members — used to prune sticky
+        // endpoints for peers that have since gone offline, so a peer that changed
+        // address while away is re-probed fresh on its return rather than
+        // re-affirmed from stale cache.
+        let online_ids: std::collections::HashSet<NodeId> =
+            members.iter().map(|m| m.node_id).collect();
         let mut out = Vec::new();
         for m in members {
             let name = m.name.clone();
-            let probes = transport
-                .endpoints(
-                    &commonwealth_transport::peer_contact(&m),
-                    commonwealth_transport::TrafficClass::StatusProbe,
-                )
-                .await;
-            for probe in &probes {
-                let status_url = format!("{}/status", probe.base_url);
-                // Fallback host only: the RPC worker speaks raw TCP and needs an
-                // IP-overlay address, but when `status_probe` is routed over iroh
-                // this probe authority is a loopback proxy (`127.0.0.1`). We prefer
-                // a direct member IP below (`reachable_rpc_endpoint`) and use this
-                // parsed probe host only when no advertised IP is reachable.
-                let Some(host) = probe
-                    .base_url
-                    .strip_prefix("http://")
-                    .and_then(|a| a.rsplit_once(':'))
-                    .map(|(host, _)| host.to_string())
-                else {
-                    continue;
-                };
-                if let Ok(resp) = client.get(&status_url).send().await {
-                    if resp.status().is_success() {
-                        if let Ok(json) = resp.json::<serde_json::Value>().await {
-                            if let Some(port) = json
-                                .get("rpc_worker")
-                                .and_then(|w| w.get("port"))
-                                .and_then(|p| p.as_u64())
-                            {
-                                let rpc_port = port as u16;
-                                let iroh_advertised = json
-                                    .get("rpc_worker")
-                                    .and_then(|w| w.get("iroh"))
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false);
-                                let mode = rpc_tunnel_mode();
-                                let allow_bridge =
-                                    iroh_advertised && mode != RpcTunnelMode::Never;
+            let node_id = m.node_id;
+            // Stickiness identity + hold budget, read once up front — it decides
+            // whether we even need the heavy `/status` re-probe this tick.
+            let prev = self
+                .rpc_worker_sticky
+                .read()
+                .ok()
+                .and_then(|sticky| sticky.get(&node_id).cloned());
+            let flip_threshold = rpc_endpoint_flip_threshold();
 
-                                // Choose the endpoint ggml will dial. Direct raw
-                                // TCP to a member IP is the LAN fast path; the
-                                // iroh bridge is the cross-network path (task 6);
-                                // the parsed probe host stays the last resort it
-                                // always was. `SOVEREIGN_RPC_TUNNEL=always`
-                                // prefers the bridge (E2E testing / known-cross-
-                                // network meshes) and skips the raw probe budget
-                                // when it lands; `never` opts out of bridging.
-                                let mut ep_via: Option<(String, String)> = None;
-                                if allow_bridge && mode == RpcTunnelMode::Always {
-                                    ep_via = bridge_rpc_endpoint(&transport, &m).await;
-                                }
-                                if ep_via.is_none() {
-                                    ep_via = reachable_rpc_endpoint(&m.addresses, rpc_port)
-                                        .await
-                                        .map(|d| (d, "direct-ip".to_string()));
-                                }
-                                if ep_via.is_none() && allow_bridge {
-                                    ep_via = bridge_rpc_endpoint(&transport, &m).await;
-                                }
-                                let ep = match ep_via {
-                                    Some((ep, via)) => {
-                                        tracing::info!(peer = %name, endpoint = %ep, via = %via, "discovered mesh RPC worker");
-                                        ep
-                                    }
-                                    None => {
-                                        let fb = format!("{host}:{rpc_port}");
-                                        tracing::warn!(peer = %name, endpoint = %fb, "no reachable direct IP and no iroh bridge for RPC worker; falling back to probe host (may be an iroh loopback proxy — distribution likely to fail)");
-                                        fb
-                                    }
-                                };
-                                // Record which member owns this endpoint BEFORE
-                                // identity is dropped into the bare-string RPC
-                                // layer — the warm orchestrator resolves the
-                                // worker's mesh transport through this.
-                                if let Ok(mut dir) = self.rpc_endpoint_nodes.write() {
-                                    dir.insert(ep.clone(), m.node_id);
-                                }
-                                out.push(ep);
-                                break; // one reachable address per peer suffices
-                            }
-                        }
+            // Fresh discovery for THIS tick — the endpoint ggml should dial, if we
+            // can confirm it now. Stays `None` when the probe fails; because `m`
+            // already passed the gossip-Online + dialable filter above, a `None`
+            // means a transient probe blip on a LIVE peer, not a death, and the
+            // stickiness guard below holds the last-good direct-ip rather than
+            // dropping the worker and collapsing a live distribution. Two flap
+            // sources feed this, both observed mid-decode 2026-07-19: a 600ms
+            // direct-ip miss, and a starved `/status` probe (3 straight misses at
+            // ~774ms gossip RTT under decode load) that dropped the peer entirely.
+            let mut fresh: Option<(String, String)> = None;
+            if let Some(p) = prev.as_ref().filter(|p| p.is_direct()) {
+                // KNOWN direct-ip worker still gossip-Online (it passed the Online +
+                // dialable membership filter above): re-affirm its cached endpoint
+                // WITHOUT any network probe. Measured 2026-07-19: under active decode
+                // the RPC tensor traffic saturates the shared Wi-Fi link, so EVERY
+                // probe to the worker — /status HTTP *and* a raw TCP connect — times
+                // out for the whole inference and, after `flip_threshold` misses,
+                // drops a worker that is in fact alive and serving (tensors flowed at
+                // ~8.7 tok/s while both probe types failed 3× straight, yet gossip
+                // reach to the same peer stayed 58–143ms throughout). Gossip rides a
+                // separate path + a looser budget and survives that load, so
+                // gossip-Online membership IS the liveness signal for a known worker.
+                // A moved endpoint is re-learned on the next Offline→Online cycle
+                // (sticky is pruned for offline nodes after the loop); a dead
+                // rpc-server with live gossip surfaces via the ggml RPC connection
+                // failing → supervised reload (P0.4), not a discovery probe.
+                fresh = Some((p.endpoint.clone(), p.via.clone()));
+            } else {
+                // UNKNOWN worker (initial discovery), or a known non-direct (bridge/
+                // probe-host) worker whose liveness can't be cheaply TCP-probed: run
+                // the full `/status` probe + endpoint selection.
+                let probes = transport
+                    .endpoints(
+                        &commonwealth_transport::peer_contact(&m),
+                        commonwealth_transport::TrafficClass::StatusProbe,
+                    )
+                    .await;
+                for probe in &probes {
+                    let status_url = format!("{}/status", probe.base_url);
+                    // Fallback host only: the RPC worker speaks raw TCP and needs an
+                    // IP-overlay address, but when `status_probe` is routed over iroh
+                    // this probe authority is a loopback proxy (`127.0.0.1`). We
+                    // prefer a direct member IP below (`reachable_rpc_endpoint`) and
+                    // use this parsed probe host only when no advertised IP is reachable.
+                    let Some(host) = probe
+                        .base_url
+                        .strip_prefix("http://")
+                        .and_then(|a| a.rsplit_once(':'))
+                        .map(|(host, _)| host.to_string())
+                    else {
+                        continue;
+                    };
+                    let Ok(resp) = client.get(&status_url).send().await else {
+                        continue; // /status timed out — leave `fresh` None (blip guard below)
+                    };
+                    if !resp.status().is_success() {
+                        continue;
                     }
+                    let Ok(json) = resp.json::<serde_json::Value>().await else {
+                        continue;
+                    };
+                    let Some(port) = json
+                        .get("rpc_worker")
+                        .and_then(|w| w.get("port"))
+                        .and_then(|p| p.as_u64())
+                    else {
+                        continue;
+                    };
+                    let rpc_port = port as u16;
+                    let iroh_advertised = json
+                        .get("rpc_worker")
+                        .and_then(|w| w.get("iroh"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let mode = rpc_tunnel_mode();
+                    let allow_bridge = iroh_advertised && mode != RpcTunnelMode::Never;
+
+                    // Choose the endpoint ggml will dial. Direct raw TCP to a member
+                    // IP is the LAN fast path; the iroh bridge is the cross-network
+                    // path; the parsed probe host is the last resort. `SOVEREIGN_RPC_TUNNEL`
+                    // = `always` prefers the bridge; `never` opts out of bridging.
+                    let mut sel: Option<(String, String)> = None;
+                    if allow_bridge && mode == RpcTunnelMode::Always {
+                        sel = bridge_rpc_endpoint(&transport, &m).await;
+                    }
+                    if sel.is_none() {
+                        sel = reachable_rpc_endpoint(&m.addresses, rpc_port)
+                            .await
+                            .map(|d| (d, "direct-ip".to_string()));
+                    }
+                    if sel.is_none() && allow_bridge {
+                        sel = bridge_rpc_endpoint(&transport, &m).await;
+                    }
+                    if sel.is_none() {
+                        sel = Some((format!("{host}:{rpc_port}"), "probe-host".to_string()));
+                    }
+                    fresh = sel;
+                    break; // one reachable address per peer suffices
                 }
             }
+            let Some(choice) = sticky_endpoint(prev.as_ref(), fresh, flip_threshold) else {
+                // Nothing to hold (no prior direct-ip, or the hold budget is spent)
+                // — the worker is genuinely absent this tick.
+                if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
+                    sticky.remove(&node_id);
+                }
+                continue;
+            };
+
+            if choice.direct_misses > 0 {
+                tracing::info!(
+                    peer = %name,
+                    endpoint = %choice.endpoint,
+                    via = %choice.via,
+                    miss = choice.direct_misses,
+                    flip_threshold,
+                    "rpc-discovery: probe miss on a gossip-Online worker — holding last-good endpoint (transient-blip guard)"
+                );
+            } else if choice.via == "probe-host" {
+                tracing::warn!(
+                    peer = %name,
+                    endpoint = %choice.endpoint,
+                    "no reachable direct IP and no iroh bridge for RPC worker; falling back to probe host (may be an iroh loopback proxy — distribution likely to fail)"
+                );
+            } else {
+                tracing::info!(
+                    peer = %name,
+                    endpoint = %choice.endpoint,
+                    via = %choice.via,
+                    "discovered mesh RPC worker"
+                );
+            }
+
+            // Record which member owns this endpoint BEFORE identity is dropped
+            // into the bare-string RPC layer — the warm orchestrator resolves the
+            // worker's mesh transport through this.
+            if let Ok(mut dir) = self.rpc_endpoint_nodes.write() {
+                dir.insert(choice.endpoint.clone(), node_id);
+            }
+            if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
+                sticky.insert(node_id, choice.clone());
+            }
+            out.push(crate::worker_eligibility::DiscoveredWorker {
+                node_id,
+                endpoint: choice.endpoint,
+            });
+        }
+        // Prune sticky endpoints for peers that are no longer gossip-Online, so a
+        // returning peer with a changed address is re-probed fresh (see `online_ids`).
+        if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
+            sticky.retain(|nid, _| online_ids.contains(nid));
         }
         out
     }
@@ -3391,6 +3485,92 @@ fn rpc_tunnel_mode() -> RpcTunnelMode {
     rpc_tunnel_mode_from(std::env::var("SOVEREIGN_RPC_TUNNEL").ok().as_deref())
 }
 
+/// A worker endpoint choice carried across discovery ticks so a single transient
+/// probe miss can't flip a healthy worker's transport identity. `direct_misses`
+/// counts consecutive ticks a *proven* direct-ip endpoint was unreachable while
+/// we held it (reset the moment direct-ip answers again).
+#[derive(Debug, Clone, PartialEq)]
+struct StickyEndpoint {
+    endpoint: String,
+    via: String,
+    direct_misses: u32,
+}
+
+impl StickyEndpoint {
+    /// A direct raw-TCP endpoint to a member IP — the only transport we hold
+    /// through a blip. The `via` label is the source of truth (set at selection).
+    fn is_direct(&self) -> bool {
+        self.via == "direct-ip"
+    }
+}
+
+/// Consecutive direct-ip probe misses tolerated before a worker's endpoint is
+/// allowed to flip to a fallback transport (iroh-bridge / probe-host) or be
+/// dropped. Default 3 — roughly three ~15s discovery ticks (~45s) of a proven
+/// direct-ip being unreachable before we treat the address as durably changed.
+/// Env-overridable for pathological links; clamped to ≥1 (0 would disable the
+/// guard and re-introduce the flip-on-one-miss bug).
+fn rpc_endpoint_flip_threshold() -> u32 {
+    std::env::var("SOVEREIGN_RPC_ENDPOINT_FLIP_THRESHOLD")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|&n| n >= 1)
+        .unwrap_or(3)
+}
+
+/// Hysteresis over the per-tick endpoint selection: a proven **direct-ip**
+/// endpoint is not demoted to a fallback — nor dropped — on a transient miss.
+/// We hold it for up to `flip_threshold` consecutive misses so a single
+/// congested-Wi-Fi probe timeout can't flip the endpoint STRING that the
+/// eligibility tracker and the reload loop key on (which reads as a flap +
+/// full re-settle → live distribution collapses to local-only, 2026-07-19
+/// 122B e2e).
+///
+/// - `prev`: last tick's held choice for this node (`None` on first sight).
+/// - `fresh`: what raw probing selected THIS tick — `(endpoint, via)` — or
+///   `None` when nothing was reachable at all.
+///
+/// Returns the choice to advertise this tick, or `None` to drop the worker.
+/// A bridge/probe-host worker (no proven direct-ip to protect) is dropped the
+/// moment it's unreachable — only direct-ip gets the hold.
+fn sticky_endpoint(
+    prev: Option<&StickyEndpoint>,
+    fresh: Option<(String, String)>,
+    flip_threshold: u32,
+) -> Option<StickyEndpoint> {
+    // Would holding `prev` for one more miss stay within budget?
+    let can_hold = |p: &StickyEndpoint| p.is_direct() && p.direct_misses + 1 < flip_threshold;
+    let held = |p: &StickyEndpoint| StickyEndpoint {
+        endpoint: p.endpoint.clone(),
+        via: p.via.clone(),
+        direct_misses: p.direct_misses + 1,
+    };
+    match fresh {
+        // Direct-ip verified reachable this tick — always take it, reset misses.
+        Some((endpoint, via)) if via == "direct-ip" => Some(StickyEndpoint {
+            endpoint,
+            via,
+            direct_misses: 0,
+        }),
+        // A fallback was selected → direct-ip missed. Hold the proven direct-ip
+        // through the blip if we can; otherwise accept the fallback.
+        Some((endpoint, via)) => match prev {
+            Some(p) if can_hold(p) => Some(held(p)),
+            _ => Some(StickyEndpoint {
+                endpoint,
+                via,
+                direct_misses: 0,
+            }),
+        },
+        // Nothing reachable at all. Hold a proven direct-ip through a transient
+        // total miss; otherwise the worker is gone this tick.
+        None => match prev {
+            Some(p) if can_hold(p) => Some(held(p)),
+            _ => None,
+        },
+    }
+}
+
 /// Mint (or reuse — the transport caches one bridge per peer per ALPN) a
 /// bridge-local endpoint for `member`'s ggml rpc-server via the
 /// `RpcTensor` traffic class. Returns `("127.0.0.1:<port>", via_label)` —
@@ -3435,6 +3615,77 @@ mod tests {
     use super::*;
     use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
     use std::path::PathBuf;
+
+    fn direct(ep: &str) -> Option<(String, String)> {
+        Some((ep.to_string(), "direct-ip".to_string()))
+    }
+    fn bridge(ep: &str) -> Option<(String, String)> {
+        Some((ep.to_string(), "iroh-bridge:x".to_string()))
+    }
+
+    #[test]
+    fn sticky_takes_fresh_direct_ip_immediately() {
+        // First-ever sight of a verified direct-ip: no prior, take it, misses=0.
+        let s = sticky_endpoint(None, direct("10.0.0.9:50052"), 3).unwrap();
+        assert_eq!(s.endpoint, "10.0.0.9:50052");
+        assert!(s.is_direct());
+        assert_eq!(s.direct_misses, 0);
+    }
+
+    #[test]
+    fn sticky_holds_direct_ip_through_transient_misses_then_flips() {
+        // The 2026-07-19 flap in miniature: a proven direct-ip must NOT flip to
+        // the bridge on one miss — hold it until the threshold, THEN flip.
+        let flip = 3;
+        let s0 = sticky_endpoint(None, direct("10.0.0.5:50052"), flip).unwrap();
+        // Miss 1: bridge offered, but hold direct-ip.
+        let s1 = sticky_endpoint(Some(&s0), bridge("127.0.0.1:40001"), flip).unwrap();
+        assert_eq!(s1.endpoint, "10.0.0.5:50052", "must not flip on one miss");
+        assert!(s1.is_direct());
+        assert_eq!(s1.direct_misses, 1);
+        // Miss 2: still holding (2 < 3).
+        let s2 = sticky_endpoint(Some(&s1), bridge("127.0.0.1:40001"), flip).unwrap();
+        assert_eq!(s2.endpoint, "10.0.0.5:50052");
+        assert_eq!(s2.direct_misses, 2);
+        // Miss 3 reaches the threshold — NOW accept the bridge (durable change).
+        let s3 = sticky_endpoint(Some(&s2), bridge("127.0.0.1:40001"), flip).unwrap();
+        assert_eq!(s3.endpoint, "127.0.0.1:40001");
+        assert_eq!(s3.via, "iroh-bridge:x");
+        assert_eq!(s3.direct_misses, 0);
+    }
+
+    #[test]
+    fn sticky_direct_ip_recovery_resets_miss_count() {
+        let flip = 3;
+        let s0 = sticky_endpoint(None, direct("10.0.0.5:50052"), flip).unwrap();
+        let s1 = sticky_endpoint(Some(&s0), None, flip).unwrap(); // total miss → hold
+        assert_eq!(s1.direct_misses, 1);
+        // Direct-ip answers again → back to a clean slate.
+        let s2 = sticky_endpoint(Some(&s1), direct("10.0.0.5:50052"), flip).unwrap();
+        assert!(s2.is_direct());
+        assert_eq!(s2.direct_misses, 0);
+    }
+
+    #[test]
+    fn sticky_drops_a_non_direct_worker_when_unreachable() {
+        // A bridge-only worker (no proven direct-ip to protect) is dropped the
+        // moment it's unreachable — nothing to hold.
+        let bridge_only = StickyEndpoint {
+            endpoint: "127.0.0.1:1".to_string(),
+            via: "iroh-bridge:x".to_string(),
+            direct_misses: 0,
+        };
+        assert!(sticky_endpoint(Some(&bridge_only), None, 3).is_none());
+    }
+
+    #[test]
+    fn sticky_flip_threshold_one_disables_the_hold() {
+        // threshold 1 = flip on the first miss (the pre-guard behaviour), so the
+        // env knob's floor is a conscious opt-out, not a silent no-op.
+        let s0 = sticky_endpoint(None, direct("10.0.0.5:50052"), 1).unwrap();
+        let s1 = sticky_endpoint(Some(&s0), bridge("127.0.0.1:2"), 1).unwrap();
+        assert_eq!(s1.endpoint, "127.0.0.1:2", "threshold 1 flips immediately");
+    }
 
     #[test]
     fn rpc_tunnel_mode_parses_the_documented_values() {

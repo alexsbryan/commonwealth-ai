@@ -41,6 +41,30 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use commonwealth_core::ids::NodeId;
+
+/// One RPC worker as seen by a single discovery tick: a stable mesh identity
+/// (`node_id`) plus the address the host should dial it at THIS tick.
+///
+/// The identity is what the eligibility tracker keys on; the endpoint is a
+/// *mutable attribute* of that identity. So a worker whose address flips
+/// (direct-ip ↔ iroh-bridge loopback) for the SAME node is NOT treated as a
+/// departed-then-reappeared worker — which would read as a flap and force a full
+/// re-settle, collapsing a live distribution to local-only (observed 2026-07-19
+/// in the 122B e2e: one transient direct-ip probe miss flipped BeefyMac's
+/// endpoint string and emptied the eligible set mid-inference).
+///
+/// Env-configured workers (`SOVEREIGN_RPC_WORKERS`) never reach this layer —
+/// they're unioned in at the provider (`rpc_distribution`), so every worker the
+/// tracker observes has a real mesh node_id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveredWorker {
+    /// Stable mesh identity — the eligibility map key.
+    pub node_id: NodeId,
+    /// Address to dial this tick (`ip:port`); a mutable attribute of `node_id`.
+    pub endpoint: String,
+}
+
 /// Robust, operator-overridable defaults. Read once at construction. Mirrors the
 /// `SOVEREIGN_RPC_*` env-knob convention used elsewhere in the RPC path.
 #[derive(Debug, Clone)]
@@ -136,6 +160,11 @@ pub enum WorkerStatus {
 
 #[derive(Debug, Default, Clone)]
 struct WorkerState {
+    /// The address dialed for this node as of the most recent observation. The
+    /// node_id is the map key (stable identity); this tracks the mutable
+    /// address, so an address change updates in place and never disturbs
+    /// presence/flap/settle state.
+    endpoint: String,
     /// Present in the most recent observation.
     present: bool,
     /// When the current continuous-presence run began (reset when it disappears).
@@ -200,6 +229,11 @@ impl WorkerState {
 /// One worker's eligibility view — for `/status` and `sovereign mesh status`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkerStatusView {
+    /// Stable mesh identity (full hex) — so an operator can tell WHICH peer a
+    /// row is, independent of whichever address it's currently dialed at.
+    /// `serde(default)` keeps older `/v1/mesh/status` payloads deserializable.
+    #[serde(default)]
+    pub node_id: String,
     pub endpoint: String,
     pub status: WorkerStatus,
     pub flaps_in_window: u32,
@@ -210,7 +244,7 @@ pub struct WorkerStatusView {
 #[derive(Debug)]
 pub struct WorkerEligibility {
     config: EligibilityConfig,
-    workers: Mutex<HashMap<String, WorkerState>>,
+    workers: Mutex<HashMap<NodeId, WorkerState>>,
 }
 
 impl Default for WorkerEligibility {
@@ -230,19 +264,29 @@ impl WorkerEligibility {
     /// Fold one discovery observation (`present` = workers advertised this tick)
     /// into per-worker state, logging every status transition at INFO. Pure given
     /// `(state, present, now)`.
-    pub fn observe(&self, present: &[String], now: Instant) {
-        let present_set: HashSet<&str> = present.iter().map(String::as_str).collect();
+    pub fn observe(&self, present: &[DiscoveredWorker], now: Instant) {
+        let present_ids: HashSet<NodeId> = present.iter().map(|w| w.node_id).collect();
+        let addresses: HashMap<NodeId, &str> =
+            present.iter().map(|w| (w.node_id, w.endpoint.as_str())).collect();
         let mut map = self.workers.lock().unwrap_or_else(|e| e.into_inner());
 
         // Ensure every currently-present worker has an entry to update.
-        for ep in present {
-            map.entry(ep.clone()).or_default();
+        for w in present {
+            map.entry(w.node_id).or_default();
         }
 
-        for (ep, st) in map.iter_mut() {
+        for (id, st) in map.iter_mut() {
             let before = st.status(now, &self.config);
-            let now_present = present_set.contains(ep.as_str());
+            let now_present = present_ids.contains(id);
             let was_present = st.present;
+
+            // An address change for a present node is NOT a flap — update the
+            // endpoint in place and leave presence/settle state untouched.
+            if now_present {
+                if let Some(ep) = addresses.get(id) {
+                    st.endpoint = (*ep).to_string();
+                }
+            }
 
             match (was_present, now_present) {
                 (false, true) => {
@@ -284,7 +328,8 @@ impl WorkerEligibility {
             let after = st.status(now, &self.config);
             if before != after {
                 tracing::info!(
-                    worker = %ep,
+                    worker = %id,
+                    endpoint = %st.endpoint,
                     from = ?before,
                     to = ?after,
                     flaps = st.flaps.len(),
@@ -303,9 +348,10 @@ impl WorkerEligibility {
         let mut out: Vec<String> = map
             .iter()
             .filter(|(_, st)| st.status(now, &self.config) == WorkerStatus::Eligible)
-            .map(|(ep, _)| ep.clone())
+            .map(|(_, st)| st.endpoint.clone())
             .collect();
         out.sort();
+        out.dedup();
         out
     }
 
@@ -314,14 +360,15 @@ impl WorkerEligibility {
         let map = self.workers.lock().unwrap_or_else(|e| e.into_inner());
         let mut out: Vec<WorkerStatusView> = map
             .iter()
-            .map(|(ep, st)| WorkerStatusView {
-                endpoint: ep.clone(),
+            .map(|(id, st)| WorkerStatusView {
+                node_id: id.to_hex(),
+                endpoint: st.endpoint.clone(),
                 status: st.status(now, &self.config),
                 flaps_in_window: st.flaps.len() as u32,
                 quarantine_remaining_secs: st.quarantine_remaining(now),
             })
             .collect();
-        out.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+        out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
         out
     }
 }
@@ -357,11 +404,20 @@ mod tests {
             max_cooldown: Duration::from_secs(600),
         }
     }
-    fn w(s: &str) -> Vec<String> {
+    /// One discovered worker with a caller-chosen node identity + address.
+    fn dw(node: u128, ep: &str) -> DiscoveredWorker {
+        DiscoveredWorker {
+            node_id: NodeId::from_u128(node),
+            endpoint: ep.to_string(),
+        }
+    }
+    /// Single-worker observation helper: endpoint `s` under a fixed node id, so
+    /// the same logical worker keeps its identity across ticks. `""` = absent.
+    fn w(s: &str) -> Vec<DiscoveredWorker> {
         if s.is_empty() {
             vec![]
         } else {
-            vec![s.to_string()]
+            vec![dw(1, s)]
         }
     }
 
@@ -485,5 +541,43 @@ mod tests {
             eligible_sets.iter().all(|s| s.is_empty()),
             "a flapping worker never enters the eligible set, so the loop never reloads"
         );
+    }
+
+    #[test]
+    fn address_change_for_same_node_is_not_a_flap() {
+        // Regression (2026-07-19, 122B distributed e2e): a worker's endpoint
+        // flipping (direct-ip → iroh-bridge loopback) for the SAME mesh node was
+        // read as "old worker gone (flap), new worker appeared (re-settle from
+        // zero)" because identity was the endpoint STRING. The eligible set
+        // collapsed to empty and the host reloaded to local-only mid-inference.
+        // Identity is the node; the address is a mutable attribute.
+        let e = WorkerEligibility::new(cfg());
+        let node = NodeId::from_u128(7);
+        let direct = "100.104.36.28:50052";
+        let bridge = "127.0.0.1:39119";
+        let t0 = Instant::now();
+
+        // Settle at the direct-ip address.
+        e.observe(&[dw(7, direct)], t0);
+        let settled = t0 + Duration::from_secs(95);
+        e.observe(&[dw(7, direct)], settled);
+        assert_eq!(e.eligible(settled), vec![direct.to_string()]);
+
+        // The address flips to the bridge loopback — SAME node id.
+        let t1 = settled + Duration::from_secs(15);
+        e.observe(&[dw(7, bridge)], t1);
+
+        // Still eligible (no flap, no re-settle) and now reports the NEW address,
+        // so a genuine address change still triggers exactly one reload downstream.
+        assert_eq!(
+            e.eligible(t1),
+            vec![bridge.to_string()],
+            "same node under a new address stays eligible; endpoint tracks the address"
+        );
+        let views = e.status_views(t1);
+        assert_eq!(views.len(), 1, "one worker tracked, not two");
+        assert_eq!(views[0].node_id, node.to_hex());
+        assert_eq!(views[0].status, WorkerStatus::Eligible);
+        assert_eq!(views[0].flaps_in_window, 0, "an address change is not a flap");
     }
 }
