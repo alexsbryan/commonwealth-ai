@@ -10,7 +10,7 @@ use sovereign_core::runtime::Runtime;
 use crate::approval::ServerApprovalChannel;
 use crate::auth::TenantId;
 use crate::busy::busy_response_hint;
-use crate::projection::{project_message_metadata, Citation, Provenance};
+use crate::projection::{project_epistemic_state, project_message_metadata, Citation, Provenance};
 use crate::reciprocity::{user_key, ReciprocityTable};
 use crate::scheduler::FairScheduler;
 use crate::tenant::TenantRuntime;
@@ -56,6 +56,11 @@ pub struct MessageResponse {
     /// grounded in an installed corpus.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub citations: Vec<Citation>,
+    /// The typed epistemic ledger (EPISTEMIC_STATE.md), when the turn
+    /// stamped one. `None` on old messages / kill switch off. I2-C
+    /// closes the wire gap; mobile rendering stays deferred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epistemic_state: Option<sovereign_core::types::EpistemicState>,
 }
 
 #[derive(serde::Serialize)]
@@ -85,6 +90,10 @@ pub struct MessageEntry {
     pub provenance: Option<Provenance>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub citations: Vec<Citation>,
+    /// The typed epistemic ledger (EPISTEMIC_STATE.md); see
+    /// [`MessageResponse::epistemic_state`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epistemic_state: Option<sovereign_core::types::EpistemicState>,
 }
 
 #[derive(serde::Serialize)]
@@ -258,6 +267,7 @@ pub async fn send_message(
 
             let role = response.message.role_str().to_string();
             let (provenance, citations) = project_message_metadata(&response.message.metadata);
+            let epistemic_state = project_epistemic_state(&response.message.metadata);
             Json(MessageResponse {
                 message_id: response.message.id,
                 role,
@@ -265,6 +275,7 @@ pub async fn send_message(
                 task: task_summary,
                 provenance,
                 citations,
+                epistemic_state,
             })
             .into_response()
         }
@@ -290,6 +301,7 @@ pub async fn get_conversation(
                 .map(|m| {
                     let role = m.role_str().to_string();
                     let (provenance, citations) = project_message_metadata(&m.metadata);
+                    let epistemic_state = project_epistemic_state(&m.metadata);
                     MessageEntry {
                         id: m.id,
                         role,
@@ -297,6 +309,7 @@ pub async fn get_conversation(
                         created_at: m.created_at,
                         provenance,
                         citations,
+                        epistemic_state,
                     }
                 })
                 .collect(),

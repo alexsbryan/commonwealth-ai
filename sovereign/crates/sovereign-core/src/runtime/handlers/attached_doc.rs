@@ -447,7 +447,7 @@ impl Runtime {
             // Grounding gate first (may rewrite the answer), quote
             // verification on the released text — same order as the
             // streaming KQ path.
-            let (gated_text, grounding_gate_meta) = self
+            let (gated_text, grounding_gate_meta, gate_claims) = self
                 .gate_attached_doc_answer(
                     conversation_id,
                     &session_id,
@@ -482,6 +482,7 @@ impl Runtime {
                     iterations,
                     &search_method_parts,
                     grounding_gate_meta,
+                    gate_claims,
                 )
                 .await;
         }
@@ -515,7 +516,7 @@ impl Runtime {
         // Grounding gate first (skips itself when no passages were
         // retrieved — the structural refusal above owns that case),
         // quote verification on the released text.
-        let (gated_text, grounding_gate_meta) = self
+        let (gated_text, grounding_gate_meta, gate_claims) = self
             .gate_attached_doc_answer(
                 conversation_id,
                 &session_id,
@@ -549,6 +550,7 @@ impl Runtime {
             iterations,
             &search_method_parts,
             grounding_gate_meta,
+            gate_claims,
         )
         .await
     }
@@ -571,10 +573,14 @@ impl Runtime {
         base_request: &CompletionRequest,
         entity_anchored: bool,
         turn_start: std::time::Instant,
-    ) -> (String, Option<serde_json::Value>) {
+    ) -> (
+        String,
+        Option<serde_json::Value>,
+        Option<Vec<crate::runtime::grounding::GateClaim>>,
+    ) {
         let surface = crate::runtime::grounding::GateSurface::AttachedDoc;
         if !surface.enabled() || retrieved_tool_results.is_empty() {
-            return (draft, None);
+            return (draft, None, None);
         }
         // Hold-phase chip: the gate withholds the answer during
         // verification, which reads as a stall without this.
@@ -649,7 +655,9 @@ impl Runtime {
         )
         .await;
         drop(progress_tx); // close the channel → the reader task ends
-        (outcome.text, Some(outcome.meta))
+        // I2-A: retain the gate's per-claim records so the finalize step
+        // can assemble the epistemic ledger (previously dropped here).
+        (outcome.text, Some(outcome.meta), Some(outcome.claims))
     }
 
     /// Build a "Document briefing" block for the system prompt: the
@@ -1289,6 +1297,7 @@ impl Runtime {
     /// because the loop has two exit points (model wrote a final
     /// answer, or we hit the iteration cap and forced one) and
     /// duplicating the bookkeeping at each invited drift.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn package_attached_doc_response(
         &self,
         conversation_id: &str,
@@ -1299,6 +1308,7 @@ impl Runtime {
         iterations: usize,
         search_method_parts: &[String],
         grounding_gate_meta: Option<serde_json::Value>,
+        gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>>,
     ) -> Result<Response> {
         let search_method = if search_method_parts.is_empty() {
             Some(format!("AttachedDoc ({iterations} iterations, no tools)"))
@@ -1332,6 +1342,36 @@ impl Runtime {
             "retrieved_chunks_total": total_chunks,
             "provenance": provenance,
         });
+        // I2-A: assemble the epistemic ledger for the attached-doc surface.
+        // The sealed universe is the attached asset itself, not a corpus —
+        // chunks here are `DocumentChunk`, so `pool_corpora()` (a `ScoredChunk`
+        // reader) can't derive it; we set the pool to the asset's source_key
+        // manually. When `SOVEREIGN_EPISTEMIC_STATE` is off the key is absent
+        // (I1/I6). With the gate off (`gate_claims: None`) and evidence present
+        // this yields an honest `Unverified` verdict.
+        if crate::runtime::epistemic::epistemic_state_enabled() {
+            let pool_corpora = match self
+                .store
+                .get_document_session_by_conversation(conversation_id)
+                .await
+            {
+                Ok(Some(session)) => match self.store.get_document_asset(&session.source).await {
+                    Ok(Some(asset)) => vec![asset.source_key()],
+                    _ => Vec::new(),
+                },
+                _ => Vec::new(),
+            };
+            let state = crate::runtime::epistemic::assemble_epistemic_state(
+                crate::runtime::epistemic::EpistemicInputs {
+                    gate_meta: grounding_gate_meta.as_ref(),
+                    gate_claims: gate_claims.as_deref(),
+                    pool_corpora,
+                    ..Default::default()
+                },
+            );
+            metadata["epistemic_state"] =
+                serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
+        }
         if let Some(gate) = grounding_gate_meta {
             metadata["grounding_gate"] = gate;
         }

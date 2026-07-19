@@ -1305,6 +1305,27 @@ async fn runtime_complex_task_end_to_end() {
     let task = response.task.unwrap();
     assert!(matches!(task.status, TaskStatus::Completed));
     assert!(!task.completed_steps.is_empty());
+
+    // I2-A invariant (I1): the complex-task surface persists the epistemic
+    // ledger on the assistant message when the flag is on (default). Before
+    // I2-A this surface discarded its gate claims and wrote no ledger.
+    let meta = response
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("complex-task must persist epistemic_state");
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
+    );
+    assert_eq!(
+        ledger.get("version").and_then(|v| v.as_u64()),
+        Some(1),
+        "ledger schema version stamped"
+    );
 }
 
 // ─── Executor Tool Step Tests ──────────────────────────────────

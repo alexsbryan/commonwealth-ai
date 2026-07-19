@@ -15,8 +15,10 @@ use super::checkpoint::{EnrichmentCheckpoint, EnrichmentPhase};
 use super::clustering::{cluster_embeddings, ClusterResult, EnrichmentProgress, FieldModelStats};
 use super::domain::{Domain, SkeletonStorage};
 use super::fault_lines::detect_fault_lines;
-use super::open_questions::detect_open_questions;
-use super::skeleton::{CanonicalQuestion, FieldSkeleton, PartialSkeleton, SkeletonQuestion};
+use super::open_questions::{detect_open_questions, OpenQuestion};
+use super::skeleton::{
+    CanonicalQuestion, FieldSkeleton, PartialSkeleton, SkeletonOpenQuestion, SkeletonQuestion,
+};
 use super::skeleton_parse::{
     deduplicate_questions, extract_json_from_response, parse_skeleton_response, ParseResult,
 };
@@ -294,8 +296,12 @@ impl FieldModelEngine {
         }
 
         // ── Phase 5: Open questions ───────────────────────────────────
-        if !checkpoint.phase_5_complete {
-            detect_open_questions(
+        // I3: the detected open questions are retained and threaded into the
+        // JSON skeleton below so `render_landscape` can surface them. Before
+        // this they were computed and dropped at both this site and the
+        // skeleton writer.
+        let open_questions = if !checkpoint.phase_5_complete {
+            let detected = detect_open_questions(
                 index,
                 &clusters,
                 &self.inference,
@@ -306,19 +312,27 @@ impl FieldModelEngine {
             checkpoint.phase_5_complete = true;
             checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
             checkpoint.save(&index_dir)?;
+            detected
         } else {
             progress(EnrichmentProgress::PhaseSkipped {
                 phase: 6,
                 name: "Open questions",
             });
-        }
+            // On resume, clusters are not reloaded (Phase 2 returns an empty
+            // `ClusterResult`), so re-detection here would yield nothing. The
+            // JSON skeleton therefore carries open questions only after an
+            // uninterrupted run — the same limitation fault-line persistence
+            // has. A crash between Phase 5 and finalize is the sole window
+            // where this drops data; a clean re-enrich recovers it.
+            Vec::new()
+        };
 
         // ── Finalize ──────────────────────────────────────────────────
         let stats = self.compute_stats(index).await?;
 
         // Write JSON skeleton if the domain requests it.
         if let SkeletonStorage::JsonAndLance = self.domain.skeleton_storage() {
-            self.write_json_skeleton(index, &skeleton, &stats)?;
+            self.write_json_skeleton(index, &skeleton, &stats, &open_questions)?;
         }
 
         // Clear checkpoint — clean completion.
@@ -768,6 +782,7 @@ impl FieldModelEngine {
         index: &CorpusIndex,
         skeleton: &PartialSkeleton,
         stats: &FieldModelStats,
+        open_questions: &[OpenQuestion],
     ) -> Result<()> {
         let field_skeleton = FieldSkeleton {
             schema_version: 1,
@@ -789,12 +804,31 @@ impl FieldModelEngine {
                     fault_lines: Vec::new(),
                 })
                 .collect(),
-            open_questions: Vec::new(),
+            open_questions: open_questions
+                .iter()
+                .map(open_question_to_skeleton)
+                .collect(),
             field_stats: stats.clone(),
         };
 
         index.write_field_skeleton(&field_skeleton)?;
         Ok(())
+    }
+}
+
+/// Map a detected [`OpenQuestion`] onto the persisted [`SkeletonOpenQuestion`]
+/// shape (I3). `domain_id` is dropped — the skeleton already records the
+/// domain once at the top level — and `question_type` is carried across for
+/// fidelity (`String` → `Option<String>`, always `Some` here since the
+/// detector always populates it).
+fn open_question_to_skeleton(oq: &OpenQuestion) -> SkeletonOpenQuestion {
+    SkeletonOpenQuestion {
+        id: oq.id.clone(),
+        question: oq.question.clone(),
+        status: oq.status.clone(),
+        question_type: Some(oq.question_type.clone()),
+        related_question_id: oq.related_question_id.clone(),
+        representative_chunk_ids: oq.representative_chunk_ids.clone(),
     }
 }
 
@@ -914,6 +948,31 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn open_question_to_skeleton_maps_fields_and_drops_domain_id() {
+        let oq = OpenQuestion {
+            id: "oq_0".into(),
+            question: "What grounds moral realism?".into(),
+            status: "active_research".into(),
+            question_type: "conceptual".into(),
+            related_question_id: Some("q_ethics".into()),
+            representative_chunk_ids: vec![11, 22],
+            domain_id: "philosophy".into(),
+        };
+
+        let mapped = open_question_to_skeleton(&oq);
+
+        assert_eq!(mapped.id, "oq_0");
+        assert_eq!(mapped.question, "What grounds moral realism?");
+        assert_eq!(mapped.status, "active_research");
+        // question_type carried across (String -> Option<String>).
+        assert_eq!(mapped.question_type.as_deref(), Some("conceptual"));
+        assert_eq!(mapped.related_question_id.as_deref(), Some("q_ethics"));
+        assert_eq!(mapped.representative_chunk_ids, vec![11, 22]);
+        // domain_id is deliberately dropped — SkeletonOpenQuestion has no such
+        // field; the skeleton records the domain once at the top level.
+    }
 
     #[test]
     fn from_recipe_unknown_domain() {

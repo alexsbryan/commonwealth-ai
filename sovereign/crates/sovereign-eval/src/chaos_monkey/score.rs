@@ -195,6 +195,20 @@ pub fn conjecture_class_from_metadata(
     }
 }
 
+/// The turn's typed verdict from persisted `epistemic_state.verdict`
+/// (the snake_case `TurnVerdict` wire shape, e.g. `"cannot_know_from_here"`
+/// / `"general_knowledge"` / `"grounded"`). `None` = no ledger on the
+/// metadata (old transcripts, kill switch off). Used by the chaos scorer
+/// (I2-C) to prefer the typed abstention / general-knowledge signal over
+/// re-judging the visible text, with the legacy derivation as the
+/// fallback for ledger-less transcripts.
+pub fn verdict_from_metadata(meta: &serde_json::Value) -> Option<String> {
+    meta.get("epistemic_state")?
+        .get("verdict")?
+        .as_str()
+        .map(str::to_string)
+}
+
 impl ResultRow {
     /// Did the agent take the right action *at the right quality* for this
     /// question's type? This is the per-row verdict the red-lines aggregate.
@@ -721,6 +735,20 @@ mod tests {
             acquisition_label: None,
             acquisition_conjecture: None,
         }
+    }
+
+    #[test]
+    fn verdict_from_metadata_reads_typed_verdict() {
+        let meta = serde_json::json!({
+            "epistemic_state": { "version": 1, "verdict": "cannot_know_from_here" }
+        });
+        assert_eq!(
+            verdict_from_metadata(&meta).as_deref(),
+            Some("cannot_know_from_here")
+        );
+        // Ledger-less metadata → None (legacy fallback).
+        assert!(verdict_from_metadata(&serde_json::json!({ "intent": "x" })).is_none());
+        assert!(verdict_from_metadata(&serde_json::Value::Null).is_none());
     }
 
     /// An out-of-domain row that ANSWERED, with or without the provenance

@@ -44,6 +44,89 @@ async fn deep_query_searches_local_knowledge() {
     );
 }
 
+/// I2-A / invariant I1: the simple-answer surface persists the typed
+/// epistemic ledger on the assistant message when the flag is on (default).
+/// Guards the ledger-persistence contract the KQ/streaming/complex-task/
+/// attached-doc surfaces all share.
+#[tokio::test]
+async fn simple_surface_persists_epistemic_ledger() {
+    let h = TestHarness::new();
+    let resp = h.send("Say hello.").await;
+    let meta = resp
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("simple surface must carry an epistemic_state key");
+    assert!(
+        !ledger.is_null(),
+        "ledger must be populated when SOVEREIGN_EPISTEMIC_STATE is on (default): {meta}"
+    );
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
+    );
+}
+
+/// I2-A: the attached-doc surface persists the epistemic ledger. A bare
+/// `DocumentSession` on the conversation routes the turn to the attached-doc
+/// handler; the handler degrades gracefully with no asset/chunks (empty
+/// briefing, zero retrieved) and finalizes through
+/// `package_attached_doc_response`, which assembles the ledger regardless of
+/// whether the (default-off) grounding gate ran. Before I2-A this surface
+/// threw away its gate claims and wrote no ledger.
+#[tokio::test]
+async fn attached_doc_surface_persists_epistemic_ledger() {
+    let h = TestHarness::new();
+    let conv = "attached-doc-epistemic";
+    let session = DocumentSession {
+        id: "sess-epistemic-1".into(),
+        conversation_id: conv.into(),
+        filename: "notes.txt".into(),
+        source: "asset:missing".into(),
+        word_count: 0,
+        chunk_count: 0,
+        created_at: 0,
+        operation: "answer questions about the document".into(),
+        map_prompt: String::new(),
+        reduce_prompt: String::new(),
+        last_output: None,
+        history: Vec::new(),
+    };
+    h.store
+        .create_document_session(&session)
+        .await
+        .expect("create document session");
+
+    let resp = h
+        .send_in("What does the document say about the topic?", conv)
+        .await;
+    let meta = resp
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    // Confirm the turn actually took the attached-doc surface.
+    assert_eq!(
+        meta.get("intent").and_then(|v| v.as_str()),
+        Some("AttachedDoc"),
+        "turn should route to the attached-doc surface: {meta}"
+    );
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("attached-doc must carry an epistemic_state key");
+    assert!(
+        !ledger.is_null(),
+        "ledger must be populated when SOVEREIGN_EPISTEMIC_STATE is on (default): {meta}"
+    );
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
+    );
+}
+
 #[tokio::test]
 async fn query_with_no_corpus_reports_no_sources() {
     let h = TestHarness::new();

@@ -295,6 +295,9 @@ impl Runtime {
         // the RELEASED text.
         let gate_surface = crate::runtime::grounding::GateSurface::ComplexTask;
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        // I2-A: retain the gate's per-claim records for the epistemic ledger
+        // (previously only `outcome.meta` was kept).
+        let mut gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>> = None;
         let gated_text: String = if gate_surface.enabled() && !step_summaries.is_empty() {
             // Step summaries are synthesized prose, not retrieved
             // chunks — transcript-shaped evidence (body-only citation
@@ -314,6 +317,7 @@ impl Runtime {
             )
             .await;
             grounding_gate_meta = Some(outcome.meta);
+            gate_claims = Some(outcome.claims);
             outcome.text
         } else {
             synthesis.text.clone()
@@ -394,6 +398,36 @@ impl Runtime {
                     "steps_completed": task.completed_steps.len(),
                     "provenance": provenance,
                 });
+                // I2-A: assemble the epistemic ledger for the complex-task
+                // surface. The evidence universe is the step transcript, not
+                // an installed corpus, so `pool_corpora` is empty (gate claims
+                // become corpus-holdings with `corpus_id: None`). The
+                // deterministic tool figures (`cited_figures`) become
+                // `ToolDerived` holdings — the "no confabulated numbers"
+                // guarantee made visible. Absent when the kill switch is off.
+                if crate::runtime::epistemic::epistemic_state_enabled() {
+                    let tool_holdings: Vec<crate::types::Holding> = cited_figures
+                        .iter()
+                        .map(|fig| crate::types::Holding {
+                            claim: fig.clone(),
+                            provenance: crate::types::Provenance::ToolDerived {
+                                tool: "parcel_analytics".to_string(),
+                            },
+                            // Deterministic computation — verified by construction.
+                            verification: crate::types::Verification::Verified,
+                        })
+                        .collect();
+                    let state = crate::runtime::epistemic::assemble_epistemic_state(
+                        crate::runtime::epistemic::EpistemicInputs {
+                            gate_meta: grounding_gate_meta.as_ref(),
+                            gate_claims: gate_claims.as_deref(),
+                            tool_holdings,
+                            ..Default::default()
+                        },
+                    );
+                    m["epistemic_state"] =
+                        serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
+                }
                 if let Some(g) = grounding_gate_meta {
                     m["grounding_gate"] = g;
                 }
