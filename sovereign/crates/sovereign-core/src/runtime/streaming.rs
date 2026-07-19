@@ -1669,10 +1669,18 @@ impl Runtime {
                             engine: engine_for_ledger.clone(),
                             coverage: Some(g.coverage),
                         };
+                        // Resolve on the demand's RAW text (the
+                        // question / entity), not the display
+                        // statement — cleaner embedding match and
+                        // web-search queries.
+                        let gap_query = demands_for_ledger
+                            .get(g.demand_idx)
+                            .map(|d| d.text.clone())
+                            .unwrap_or_else(|| g.statement.clone());
                         g.routes = crate::runtime::acquisition::routes_for_gap(
                             inference.as_ref(),
                             &ctx,
-                            &g.statement,
+                            &gap_query,
                         )
                         .await;
                     }

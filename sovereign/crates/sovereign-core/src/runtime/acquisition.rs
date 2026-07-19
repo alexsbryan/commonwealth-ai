@@ -128,14 +128,19 @@ pub(crate) fn resolve_routes(
         }
     }
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    // On ClaimUncovered the synthesized web-search conjecture is
+    // guaranteed a slot — the topic exists locally, so "check a
+    // fresher/deeper source" must never be squeezed out by two
+    // mediocre catalog matches (caught by the unit test 2026-07-18).
+    let catalog_cap = match coverage {
+        GapCoverage::ClaimUncovered => MAX_ROUTES - 1,
+        GapCoverage::TopicUncovered => MAX_ROUTES,
+    };
     let mut routes: Vec<AcquisitionRoute> = scored
         .into_iter()
-        .take(MAX_ROUTES)
+        .take(catalog_cap)
         .map(|(_, e)| e.route.clone())
         .collect();
-    // The two synthesized routes: web search always makes sense as a
-    // fallback conjecture on ClaimUncovered; provide-document when
-    // nothing topical matched at all.
     if matches!(coverage, GapCoverage::ClaimUncovered)
         && !routes
             .iter()
@@ -145,6 +150,7 @@ pub(crate) fn resolve_routes(
             queries: vec![gap_statement.chars().take(120).collect()],
         });
     }
+    // Nothing ranked at all → web search is the honest fallback.
     if routes.is_empty() {
         routes.push(AcquisitionRoute::WebSearch {
             queries: vec![gap_statement.chars().take(120).collect()],
@@ -213,7 +219,7 @@ pub(crate) fn acquisition_routes_enabled() -> bool {
 }
 
 /// Everything route resolution needs beyond the inference handle.
-pub(crate) struct RouteContext {
+pub struct RouteContext {
     /// Engine handle for the recipe catalog + installed-corpus diff.
     /// `None` = connectors-only catalog (still useful).
     pub engine: Option<Arc<corpus_engine::CorpusEngine>>,
@@ -226,7 +232,7 @@ pub(crate) struct RouteContext {
 /// minus installed, plus connectors), embed lazily, rank against the
 /// gap text. Every failure path returns `[]` — the card ships without
 /// routes rather than the turn paying for the resolver (invariant I5).
-pub(crate) async fn routes_for_gap(
+pub async fn routes_for_gap(
     inference: &dyn InferenceProvider,
     ctx: &RouteContext,
     gap_text: &str,
@@ -409,20 +415,37 @@ mod tests {
     }
 
     #[test]
-    fn claim_uncovered_biases_toward_web() {
+    fn claim_uncovered_always_carries_web_search() {
         let c = catalog();
-        let dims = c.entries.len();
-        let entry_embs: Vec<Vec<f32>> = (0..dims)
-            .map(|i| (0..dims).map(|j| if i == j { 0.5 } else { 0.0 }).collect())
+        let dims = c.entries.len() + 1;
+        // Entries live on axes 0..n; the gap on the extra axis —
+        // truly orthogonal (cosine is scale-invariant, so "small
+        // values" are NOT weak alignment; orthogonality is).
+        let entry_embs: Vec<Vec<f32>> = (0..c.entries.len())
+            .map(|i| (0..dims).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
             .collect();
-        // Weak alignment everywhere → floor filters catalog entries →
-        // web-search fallback.
-        let gap = vec![0.01; dims];
+        let mut gap = vec![0.0; dims];
+        gap[dims - 1] = 1.0;
         let routes = resolve_routes(
             "what did the filing say",
             GapCoverage::ClaimUncovered,
             &c,
             &gap,
+            &entry_embs,
+        );
+        assert!(routes
+            .iter()
+            .any(|r| matches!(r, AcquisitionRoute::WebSearch { .. })));
+
+        // And even when catalog entries DO rank (gap aligned with one),
+        // ClaimUncovered still reserves the web-search slot.
+        let mut aligned = vec![0.0; dims];
+        aligned[0] = 1.0;
+        let routes = resolve_routes(
+            "what did the filing say",
+            GapCoverage::ClaimUncovered,
+            &c,
+            &aligned,
             &entry_embs,
         );
         assert!(routes
