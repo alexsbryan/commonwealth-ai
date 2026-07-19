@@ -698,12 +698,101 @@ fn classify_placement(
     PlacementDecision::LocalOnly
 }
 
+/// The most-recent PRIMARY placement decision — the glassbox surface behind
+/// `/status`. Set on every distributable (primary) load by `resolve_placement`,
+/// so an operator can query placement outright instead of inferring it from
+/// `free` deltas or decode-latency signatures.
+static LAST_PRIMARY_PLACEMENT: std::sync::Mutex<Option<sovereign_core::traits::SlotPlacement>> =
+    std::sync::Mutex::new(None);
+
+/// Read the last primary placement (for `/status`). `None` before the first
+/// primary load.
+pub(crate) fn last_primary_placement() -> Option<sovereign_core::traits::SlotPlacement> {
+    LAST_PRIMARY_PLACEMENT
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+/// Summarize a load decision into the queryable placement report — mode plus,
+/// for a distributed load, the per-device block split and which worker holds
+/// what. The block count comes straight from the plan the load ENFORCES via
+/// `-ot`, so it is ground truth, not an estimate.
+fn summarize_placement(placement: &LoadPlacement) -> sovereign_core::traits::SlotPlacement {
+    use sovereign_core::traits::{SlotPlacement, WorkerPlacement};
+    let bare = |mode: &str| SlotPlacement {
+        mode: mode.to_string(),
+        total_blocks: 0,
+        local_blocks: 0,
+        workers: Vec::new(),
+    };
+    match placement {
+        LoadPlacement::LocalOnly => bare("local"),
+        LoadPlacement::StreamSplit => bare("stream-split"),
+        LoadPlacement::InsufficientCluster { .. } => bare("forming"),
+        LoadPlacement::OwnedOverrides(dist) => {
+            let ep: std::collections::HashMap<usize, String> = dist
+                .assignments
+                .iter()
+                .map(|a| (a.device_index, a.endpoint.clone()))
+                .collect();
+            let (mut total, mut local) = (0u32, 0u32);
+            let mut workers = Vec::new();
+            for shard in &dist.plan {
+                let n = shard.blocks.map(|(f, l)| l.saturating_sub(f) + 1).unwrap_or(0);
+                total += n;
+                match ep.get(&shard.device_index) {
+                    Some(e) => workers.push(WorkerPlacement {
+                        endpoint: e.clone(),
+                        blocks: n,
+                        holds_output: shard.holds_output,
+                    }),
+                    None => local += n,
+                }
+            }
+            SlotPlacement {
+                mode: "distributed".to_string(),
+                total_blocks: total,
+                local_blocks: local,
+                workers,
+            }
+        }
+    }
+}
+
+/// Resolve placement and, for the PRIMARY (distributable) slot, publish the
+/// decision to the glassbox surface: a `target: "placement"` INFO log (always
+/// worth surfacing) plus the `/status`-queryable global. Distributed-vs-local
+/// and the split are STATED here — never left to inference.
+pub(crate) fn resolve_placement(
+    model_path: &Path,
+    model_bytes: u64,
+    distributable: bool,
+) -> LoadPlacement {
+    let placement = resolve_placement_inner(model_path, model_bytes, distributable);
+    if distributable {
+        let summary = summarize_placement(&placement);
+        tracing::info!(
+            target: "placement",
+            mode = %summary.mode,
+            total_blocks = summary.total_blocks,
+            local_blocks = summary.local_blocks,
+            workers = ?summary.workers,
+            "primary slot placement decided"
+        );
+        *LAST_PRIMARY_PLACEMENT
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(summary);
+    }
+    placement
+}
+
 /// Resolve how to place `model_path` across the local GPU and any mesh RPC
 /// workers. NOT pure: when it intends to distribute it registers the workers (so
 /// the plan can enumerate their devices), and for the auto-warm path it DRIVES
 /// the orchestrator to seed every worker's shard before returning the override
 /// plan. Glassbox: every branch logs the decision and its reason.
-pub(crate) fn resolve_placement(
+fn resolve_placement_inner(
     model_path: &Path,
     model_bytes: u64,
     distributable: bool,

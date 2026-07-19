@@ -32,6 +32,30 @@ use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamF
 /// `sovereign-contracts`; the [`LocalInferenceService`] adapter maps
 /// across the seam. This is the ground truth behind `/status`'s
 /// `loaded` flag (the `ollama ps` analog).
+/// Where a slot's weights physically live — the `/status` mirror of
+/// `sovereign_core::traits::SlotPlacement`. The glassbox answer to "is this
+/// model distributed across the mesh, and how is it split?", so an operator
+/// never has to infer distribution from `free` deltas.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SlotPlacement {
+    /// `local` | `distributed` | `stream-split` | `forming`.
+    pub mode: String,
+    /// Total transformer blocks the plan apportions (`0` when local).
+    pub total_blocks: u32,
+    /// Blocks resident on THIS node's local GPU.
+    pub local_blocks: u32,
+    /// Per remote RPC worker: endpoint + the block count pinned onto it.
+    pub workers: Vec<WorkerPlacement>,
+}
+
+/// One remote worker's share of a distributed slot (`/status` mirror).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WorkerPlacement {
+    pub endpoint: String,
+    pub blocks: u32,
+    pub holds_output: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ResidentSlot {
     /// Role stem: `fast` | `primary` | `embed` | `code` | `rerank` |
@@ -46,6 +70,10 @@ pub struct ResidentSlot {
     /// `true` when the slot is mid load/unload (residency momentarily
     /// indeterminate). Never forces a load to resolve it.
     pub transitioning: bool,
+    /// Physical placement (distributed vs local + the split). `None` for
+    /// non-distributable slots. Stated, never inferred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<SlotPlacement>,
 }
 
 /// In-process inference service that fulfils chat-completions

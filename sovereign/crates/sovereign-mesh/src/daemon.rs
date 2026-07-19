@@ -1826,6 +1826,45 @@ impl EmbeddedDaemon {
     }
 
     pub async fn discover_rpc_workers(&self) -> Vec<String> {
+        // The raw-TCP rpc-server needs the peer's DIRECT IP. The `/status` probe
+        // URL host is unreliable for this: when `status_probe` is routed over iroh,
+        // the probe authority is a loopback proxy (`127.0.0.1:<ephemeral>`), which
+        // is NOT where the peer's rpc-server listens. Derive the endpoint from the
+        // member's advertised IPs instead — prefer private-LAN (lowest latency for
+        // per-layer activation traffic), then CGNAT/Tailscale, then anything else —
+        // and reachability-probe each so we only return an openable socket.
+        async fn reachable_rpc_endpoint(addresses: &[SocketAddr], rpc_port: u16) -> Option<String> {
+            fn rank(ip: &std::net::IpAddr) -> u8 {
+                match ip {
+                    std::net::IpAddr::V4(v) if v.is_private() => 0,
+                    std::net::IpAddr::V4(v)
+                        if v.octets()[0] == 100 && (v.octets()[1] & 0xC0) == 0x40 =>
+                    {
+                        1
+                    }
+                    std::net::IpAddr::V4(_) => 2,
+                    std::net::IpAddr::V6(_) => 3,
+                }
+            }
+            let mut cands: Vec<std::net::IpAddr> = addresses.iter().map(|a| a.ip()).collect();
+            cands.sort_by_key(rank);
+            cands.dedup();
+            for ip in cands {
+                let ep = SocketAddr::new(ip, rpc_port);
+                if tokio::time::timeout(
+                    std::time::Duration::from_millis(600),
+                    tokio::net::TcpStream::connect(ep),
+                )
+                .await
+                .ok()
+                .and_then(|r| r.ok())
+                .is_some()
+                {
+                    return Some(ep.to_string());
+                }
+            }
+            None
+        }
         let app_state = {
             let state = self.state.read().await;
             match &*state {
@@ -1878,12 +1917,11 @@ impl EmbeddedDaemon {
                 .await;
             for probe in &probes {
                 let status_url = format!("{}/status", probe.base_url);
-                // The RPC worker speaks raw TCP at `host:port` — an
-                // IP-overlay address by construction, so derive the
-                // host from the probe URL's authority. A future
-                // identity-keyed transport must keep rpc-server
-                // traffic on the IP overlay (or a tunnel proxy);
-                // see the commonwealth-transport docs.
+                // Fallback host only: the RPC worker speaks raw TCP and needs an
+                // IP-overlay address, but when `status_probe` is routed over iroh
+                // this probe authority is a loopback proxy (`127.0.0.1`). We prefer
+                // a direct member IP below (`reachable_rpc_endpoint`) and use this
+                // parsed probe host only when no advertised IP is reachable.
                 let Some(host) = probe
                     .base_url
                     .strip_prefix("http://")
@@ -1900,8 +1938,21 @@ impl EmbeddedDaemon {
                                 .and_then(|w| w.get("port"))
                                 .and_then(|p| p.as_u64())
                             {
-                                let ep = format!("{host}:{port}");
-                                tracing::debug!(peer = %name, endpoint = %ep, "discovered mesh RPC worker");
+                                let rpc_port = port as u16;
+                                // Prefer a direct member IP for the raw-TCP endpoint;
+                                // the probe `host` may be an iroh loopback proxy.
+                                let ep = match reachable_rpc_endpoint(&m.addresses, rpc_port).await
+                                {
+                                    Some(direct) => {
+                                        tracing::debug!(peer = %name, endpoint = %direct, probe_host = %host, "discovered mesh RPC worker (direct IP)");
+                                        direct
+                                    }
+                                    None => {
+                                        let fb = format!("{host}:{rpc_port}");
+                                        tracing::warn!(peer = %name, endpoint = %fb, "no reachable direct IP for RPC worker; falling back to probe host (may be an iroh loopback proxy — distribution likely to fail)");
+                                        fb
+                                    }
+                                };
                                 out.push(ep);
                                 break; // one reachable address per peer suffices
                             }

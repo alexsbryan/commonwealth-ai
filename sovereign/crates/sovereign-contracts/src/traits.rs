@@ -246,6 +246,37 @@ pub struct InstallOutcome {
 
 // ─── 1. Inference ──────────────────────────────────────────────
 
+/// Where a slot's weights physically live — the glassbox answer to
+/// "is this model distributed across the mesh, and how is it split?".
+/// Populated for the primary (the only distributable slot); `None` for
+/// slots loaded purely locally, or before the placement is known. This
+/// exists so an operator NEVER has to infer distribution from `free`
+/// deltas or decode-latency signatures — the daemon states it outright.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SlotPlacement {
+    /// `local` | `distributed` | `stream-split` | `forming`.
+    pub mode: String,
+    /// Total transformer blocks (layers) the plan apportions. `0` when
+    /// unknown (a local load computes no block plan).
+    pub total_blocks: u32,
+    /// Blocks resident on THIS node's local GPU.
+    pub local_blocks: u32,
+    /// Per remote RPC worker (anchor) lending memory: endpoint + the
+    /// block count pinned onto it. Empty for a local load.
+    pub workers: Vec<WorkerPlacement>,
+}
+
+/// One remote worker's share of a distributed slot.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WorkerPlacement {
+    /// Raw-TCP rpc-server endpoint, `host:port`.
+    pub endpoint: String,
+    /// Transformer blocks pinned onto this worker.
+    pub blocks: u32,
+    /// Whether this worker holds the output head (`output.weight`).
+    pub holds_output: bool,
+}
+
 /// A single inference slot's *actual* in-memory residency, as reported
 /// by the engine that owns the weights — the `ollama ps` analog.
 ///
@@ -271,6 +302,11 @@ pub struct ResidentSlot {
     /// at read time) — residency is momentarily indeterminate. Never
     /// forces a load to resolve it.
     pub transitioning: bool,
+    /// Physical placement of the weights (distributed vs local + the
+    /// per-device split). `None` for non-distributable slots. The
+    /// glassbox answer that must never require guessing.
+    #[serde(default)]
+    pub placement: Option<SlotPlacement>,
 }
 
 /// The inference backend contract: completions (one-shot, streaming, batch),

@@ -33,5 +33,12 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 
+# Path-characterization bench for the distributed-inference tunnel work
+# (QWEN122B_DISTRIBUTED_HANDOFF §7). Run on two machines: `serve` on the
+# worker, `dial --tcp/--iroh` on the host.
+[[example]]
+name = "tunnel_bench"
+required-features = ["iroh"]
+
 [lints]
 workspace = true

@@ -1382,6 +1382,20 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 resident: s.resident,
                 size_bytes: s.size_bytes,
                 transitioning: s.transitioning,
+                placement: s.placement.map(|p| commonwealth_api::state::SlotPlacement {
+                    mode: p.mode,
+                    total_blocks: p.total_blocks,
+                    local_blocks: p.local_blocks,
+                    workers: p
+                        .workers
+                        .into_iter()
+                        .map(|w| commonwealth_api::state::WorkerPlacement {
+                            endpoint: w.endpoint,
+                            blocks: w.blocks,
+                            holds_output: w.holds_output,
+                        })
+                        .collect(),
+                }),
             })
             .collect()
     }

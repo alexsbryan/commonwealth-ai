@@ -313,6 +313,11 @@ impl HttpBridge {
                 let Ok((tcp, _)) = listener.accept().await else {
                     break;
                 };
+                // Nagle on this loopback hop stacks with the peer's delayed
+                // ACK into ~40 ms stalls per direction on request/response
+                // traffic (measured: 82 ms added to a 16 KB round-trip).
+                // The tunnel must be latency-transparent — disable it.
+                tcp.set_nodelay(true).ok();
                 let endpoint = endpoint.clone();
                 let target = target.clone();
                 let peer_label = peer_label.clone();
@@ -666,7 +671,12 @@ impl IrohAcceptor {
                             Ok((send, recv)) => {
                                 tokio::spawn(async move {
                                     match tokio::net::TcpStream::connect(forward_to).await {
-                                        Ok(tcp) => pump(tcp, send, recv).await,
+                                        Ok(tcp) => {
+                                            // Same Nagle × delayed-ACK stall as the
+                                            // bridge side — see HttpBridge::spawn.
+                                            tcp.set_nodelay(true).ok();
+                                            pump(tcp, send, recv).await
+                                        }
                                         Err(e) => tracing::warn!(
                                             target: "transport",
                                             error = %e,
