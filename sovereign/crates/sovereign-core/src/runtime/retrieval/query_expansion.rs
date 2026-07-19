@@ -1144,6 +1144,192 @@ impl Runtime {
         added
     }
 
+    /// The LLM demand planner (I4-A, EPISTEMIC_STATE.md P1b /
+    /// RETRIEVAL_REDESIGN S2). ONE Housekeep fast-slot structured-output
+    /// call names the turn's retrieval demands: focused sub-queries, the
+    /// named entities the answer needs, an optional stance contrast (for
+    /// contested questions), and optional section terms. Mirrors
+    /// `formulate_evidence_queries`'s fast-slot template — a JSON-schema
+    /// structured output (NOT a lark grammar, NOT the forced-choice
+    /// sentinel the fast slot doesn't honor), temp 0, ~160-token budget,
+    /// and the same nested-JSON sanitize pass. Returns `None` when the
+    /// call fails or yields nothing usable (the step then no-ops).
+    pub(crate) async fn formulate_demand_plan(
+        &self,
+        message: &str,
+        round0: &[corpus_engine::ScoredChunk],
+        context: &ConversationContext,
+    ) -> Option<crate::runtime::retrieval_pipeline::DemandPlan> {
+        use crate::runtime::retrieval_pipeline::{DemandPlan, StanceContrast};
+
+        // World grounding: source titles seen so far + the enabled corpora,
+        // so the planner names entities from THIS knowledge base only.
+        let mut titles: Vec<String> = Vec::new();
+        for c in round0 {
+            if let Some(t) = c.title.as_deref() {
+                let t = t.trim();
+                if !t.is_empty() && !titles.iter().any(|x| x == t) {
+                    titles.push(t.to_string());
+                }
+            }
+            if titles.len() >= 6 {
+                break;
+            }
+        }
+        let corpora: Vec<String> = context
+            .conversation
+            .enabled_corpora
+            .clone()
+            .unwrap_or_default();
+        // Stance groundwork: seed the prompt hint from the deterministic
+        // comparison analyzer (comparison_axis / extract_comparison_entities).
+        let cmp_entities = crate::runtime::question_analysis::extract_comparison_entities(message);
+        let axis_hint = crate::runtime::question_analysis::comparison_axis(message, &cmp_entities);
+
+        let mut world = String::new();
+        if !corpora.is_empty() {
+            world.push_str(&format!("Knowledge base being searched: {}.\n", corpora.join(", ")));
+        }
+        if !titles.is_empty() {
+            world.push_str(&format!("Source documents seen so far: {}.\n", titles.join("; ")));
+        }
+        if let Some(axis) = &axis_hint {
+            world.push_str(&format!(
+                "The question appears to weigh opposing positions on: {axis}.\n"
+            ));
+        }
+        let prompt = format!(
+            "{world}\nPlan the retrieval demands for answering this question FROM THIS \
+             KNOWLEDGE BASE ONLY:\n\n{}\n\n\
+             Return JSON with: `sub_queries` (up to 5 focused search queries — plain \
+             words, names and concrete nouns only, no punctuation); `entities` (the \
+             named people, places, things, or events whose details the answer needs); \
+             `stance_contrast` (ONLY when the question weighs two opposing positions: \
+             the `axis` they disagree on plus exactly two `poles` naming the sides); \
+             `section_terms` (document section labels likely to hold the answer, e.g. \
+             \"criticism\", \"legacy\" — omit when none is obvious). Stay inside the \
+             world named above; never introduce names from other topics.",
+            message.chars().take(400).collect::<String>(),
+        );
+        // SLOT_POLICY §3 Housekeep: schema-constrained planning consumed by
+        // the pipeline. Structured output, not forced-choice.
+        let mut req =
+            CompletionRequest::for_workload(crate::slot_policy::Workload::Housekeep, prompt)
+                .with_system("You plan precise retrieval demands.")
+                .with_output_budget(160);
+        req.temperature = Some(0.0);
+        req.enable_thinking = Some(false);
+        req.structured_output = Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "sub_queries": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 80 },
+                    "maxItems": 5
+                },
+                "entities": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 80 },
+                    "maxItems": 8
+                },
+                "stance_contrast": {
+                    "type": "object",
+                    "properties": {
+                        "axis": { "type": "string", "maxLength": 80 },
+                        "poles": {
+                            "type": "array",
+                            "items": { "type": "string", "maxLength": 60 },
+                            "minItems": 2, "maxItems": 2
+                        }
+                    },
+                    "required": ["axis", "poles"],
+                    "additionalProperties": false
+                },
+                "section_terms": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 40 },
+                    "maxItems": 5
+                }
+            },
+            "additionalProperties": false
+        }));
+        let resp = self.inference.complete(&req).await.ok()?;
+
+        #[derive(serde::Deserialize, Default)]
+        struct RawStance {
+            #[serde(default)]
+            axis: String,
+            #[serde(default)]
+            poles: Vec<String>,
+        }
+        #[derive(serde::Deserialize, Default)]
+        struct Raw {
+            #[serde(default)]
+            sub_queries: Vec<String>,
+            #[serde(default)]
+            entities: Vec<String>,
+            #[serde(default)]
+            stance_contrast: Option<RawStance>,
+            #[serde(default)]
+            section_terms: Vec<String>,
+        }
+        let text = resp.text.trim();
+        let raw: Raw = serde_json::from_str(text)
+            .or_else(|_| {
+                let start = text.find('{').unwrap_or(0);
+                serde_json::from_str(&text[start..])
+            })
+            .ok()?;
+
+        // Same sanitize pass as formulate_evidence_queries: the fast model
+        // sometimes nests JSON-looking text inside string items (the schema
+        // constrains the envelope, not the contents). Strip structural
+        // characters, collapse whitespace, drop empties/over-long items.
+        let sanitize = |v: Vec<String>, max: usize| -> Vec<String> {
+            v.into_iter()
+                .map(|q| {
+                    q.chars()
+                        .map(|c| if "{}\"\\:".contains(c) { ' ' } else { c })
+                        .collect::<String>()
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .filter(|q| !q.is_empty() && q.len() <= max)
+                .collect()
+        };
+        let mut sub_queries = sanitize(raw.sub_queries, 80);
+        sub_queries.truncate(5);
+        let mut entities = sanitize(raw.entities, 80);
+        entities.truncate(8);
+        let mut section_terms = sanitize(raw.section_terms, 40);
+        section_terms.truncate(5);
+        let stance_contrast = raw.stance_contrast.and_then(|rs| {
+            let axis = rs.axis.trim().to_string();
+            let poles = sanitize(rs.poles, 60);
+            // A stance needs a named axis AND exactly two poles, else drop it.
+            if axis.is_empty() || poles.len() != 2 {
+                None
+            } else {
+                Some(StanceContrast { axis, poles })
+            }
+        });
+
+        if sub_queries.is_empty()
+            && entities.is_empty()
+            && stance_contrast.is_none()
+            && section_terms.is_empty()
+        {
+            return None;
+        }
+        Some(DemandPlan {
+            sub_queries,
+            entities,
+            stance_contrast,
+            section_terms,
+        })
+    }
+
     /// Abstract-question → concrete article-title expansion.
     ///
     /// Targets the failure mode `decompose_question` doesn't reach:

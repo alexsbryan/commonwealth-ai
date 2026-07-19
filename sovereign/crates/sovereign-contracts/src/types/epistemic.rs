@@ -51,8 +51,9 @@ pub struct Demand {
     pub covered: CoverageLevel,
 }
 
-/// The kind of demand facet. Deterministic v1 facets only; stance and
-/// section facets arrive with the LLM demand plan (initiative I4).
+/// The kind of demand facet. The deterministic v1 producer emits
+/// Query/SubQuestion/Entity; the LLM demand plan (initiative I4) adds
+/// Stance and Section — additive serde, so old ledgers still parse.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DemandFacet {
@@ -62,6 +63,12 @@ pub enum DemandFacet {
     SubQuestion,
     /// A named entity the question mentions.
     Entity,
+    /// A pole of a stance contrast the demand planner detected — the
+    /// answer should cover BOTH sides of a contested axis (I4).
+    Stance,
+    /// A document section the answer likely lives in (e.g. "criticism",
+    /// "legacy") — from the demand planner's section terms (I4).
+    Section,
 }
 
 /// How far the evidence pool got toward covering a demand.
