@@ -693,6 +693,20 @@ async fn orchestrate_warm(
                         hash: e.hash,
                     })
                     .collect();
+                // A placed worker with ZERO cacheable tensors is a manifest
+                // gap, not a warm — e.g. a split GGUF where build_manifest
+                // read only the header shard (found live 2026-07-19: the
+                // "warm" reported success with written=0 already=0 and the
+                // load bulk-streamed 22GB into the upload deadlock). Fail
+                // the warm so the caller falls back local-only. Never wedge.
+                if tensors.is_empty() {
+                    return Err(format!(
+                        "worker {} (device {}) has 0 cacheable tensors in the manifest \
+                         but is assigned blocks — manifest gap (split GGUF?); refusing \
+                         an empty warm that would bulk-stream at load time",
+                        assignment.endpoint, assignment.device_index
+                    ));
+                }
                 let source_urls = ordered_bases
                     .iter()
                     .map(|b| format!("{b}/internal/v1/models/file/{model_id}"))
