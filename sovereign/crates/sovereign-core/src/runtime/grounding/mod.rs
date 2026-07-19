@@ -308,6 +308,29 @@ pub(crate) struct GateOutcome {
     /// `grounding_gate` metadata for the message (action, retried,
     /// violation_prob / failed_claims, threshold).
     pub meta: serde_json::Value,
+    /// Per-claim audit records retained for the epistemic ledger
+    /// (EPISTEMIC_STATE.md §4.2): the claims the ladder actually
+    /// judged, with their FINAL verdicts. Empty when no claim was
+    /// audited (NO_CLAIM release, judge fail-open, extraction
+    /// failure). Purely additive — `meta` stays byte-identical.
+    pub claims: Vec<GateClaim>,
+}
+
+/// One audited claim's retained record (see `GateOutcome::claims`).
+#[derive(Debug, Clone)]
+pub(crate) struct GateClaim {
+    /// The claim text as extracted/judged.
+    pub text: String,
+    /// Whether the FINAL released text's version of this claim
+    /// verified against the sealed evidence.
+    pub supported: bool,
+    /// True when the first check failed and the claim went through a
+    /// retry / rewrite / annotation before release.
+    pub failed_once: bool,
+    /// The judge's violation probability, when a forced-choice verdict
+    /// produced one (single-claim path only; long-form and citation
+    /// records carry `None`).
+    pub violation_prob: Option<f64>,
 }
 
 /// Live claim-check progress out of the gate ladder — the frames the
@@ -482,6 +505,12 @@ pub(crate) async fn gate_answer_with_progress(
                     "quote_chars": quote.len(),
                     "draft": draft_for_meta,
                 }),
+                claims: vec![GateClaim {
+                    text: answer,
+                    supported: true,
+                    failed_once: false,
+                    violation_prob: None,
+                }],
             };
         }
         // Not tightly grounded (no quote, quote not verbatim, or answer not
@@ -500,6 +529,10 @@ pub(crate) async fn gate_answer_with_progress(
     // gates the ClaimCheckComplete frame (a NO_CLAIM release audited
     // nothing, so reporting "1 claim confirmed" would be a lie).
     let mut claim_audited = false;
+    // Retained per-claim record for the epistemic ledger (at most one
+    // on the single-claim path). Mirrors the narration frames but
+    // SURVIVES the return — the frames are transient by design.
+    let mut gate_claims: Vec<GateClaim> = Vec::new();
     dbg(&format!(
         "gate_answer entity_anchored={entity_anchored} chunks={} draft={:?}",
         chunks.len(),
@@ -550,6 +583,12 @@ pub(crate) async fn gate_answer_with_progress(
             // one verify call here, so the frames land together).
             if let Some(c) = v.claim.as_deref() {
                 claim_audited = true;
+                gate_claims.push(GateClaim {
+                    text: c.to_string(),
+                    supported: v.violation_prob < tau,
+                    failed_once: v.violation_prob >= tau,
+                    violation_prob: Some(v.violation_prob),
+                });
                 emit_gate_progress(
                     progress,
                     NarrationPhase::ClaimCheckStart {
@@ -592,6 +631,7 @@ pub(crate) async fn gate_answer_with_progress(
                                 "mode": "single_claim",
                                 "draft": draft_for_meta,
                             }),
+                            claims: gate_claims,
                         };
                     }
                     // Env-gated retry floor: the retry below is a SECOND full
@@ -636,6 +676,7 @@ pub(crate) async fn gate_answer_with_progress(
                                     "mode": "single_claim",
                                     "draft": draft_for_meta,
                                 }),
+                                claims: gate_claims,
                             };
                         }
                     }
@@ -698,6 +739,10 @@ pub(crate) async fn gate_answer_with_progress(
                                     final_vp = Some(v2.violation_prob);
                                     text = second;
                                     action = "retry_released";
+                                    if let Some(rec) = gate_claims.first_mut() {
+                                        rec.supported = true;
+                                        rec.violation_prob = Some(v2.violation_prob);
+                                    }
                                     emit_gate_progress(
                                         progress,
                                         NarrationPhase::ClaimVerdict {
@@ -710,6 +755,9 @@ pub(crate) async fn gate_answer_with_progress(
                                     final_vp = Some(v2.violation_prob);
                                     text = grounded_abstention(&claim, chunks.len().min(12));
                                     action = "abstained";
+                                    if let Some(rec) = gate_claims.first_mut() {
+                                        rec.violation_prob = Some(v2.violation_prob);
+                                    }
                                     emit_gate_progress(
                                         progress,
                                         NarrationPhase::ClaimVerdict {
@@ -725,6 +773,9 @@ pub(crate) async fn gate_answer_with_progress(
                                     // draft 1).
                                     text = second;
                                     action = "retry_released_unverified";
+                                    if let Some(rec) = gate_claims.first_mut() {
+                                        rec.violation_prob = None;
+                                    }
                                 }
                             }
                         }
@@ -802,6 +853,7 @@ pub(crate) async fn gate_answer_with_progress(
                 "mode": "single_claim",
                 "draft": draft_for_meta,
             }),
+            claims: gate_claims,
         };
     }
     // Second-opinion fabrication guard on a RELEASED single-claim answer — the
@@ -835,6 +887,7 @@ pub(crate) async fn gate_answer_with_progress(
             "mode": "single_claim",
             "draft": draft_for_meta,
         }),
+        claims: gate_claims,
     }
 }
 
@@ -1202,6 +1255,15 @@ async fn short_specifics_guard(
                 flagged = specifics.len(),
                 "short specifics guard: rewrite still fabricates — abstaining"
             );
+            let claims = specifics
+                .iter()
+                .map(|s| GateClaim {
+                    text: s.clone(),
+                    supported: false,
+                    failed_once: true,
+                    violation_prob: None,
+                })
+                .collect();
             Some(GateOutcome {
                 text: grounded_abstention("", chunks.len().min(12)),
                 meta: serde_json::json!({
@@ -1211,6 +1273,7 @@ async fn short_specifics_guard(
                     "flagged_specifics": specifics,
                     "mode": "short_specifics",
                 }),
+                claims,
             })
         }
         _ => {
@@ -1220,6 +1283,15 @@ async fn short_specifics_guard(
                 flagged = specifics.len(),
                 "short specifics guard: corrective rewrite released"
             );
+            let claims = specifics
+                .iter()
+                .map(|s| GateClaim {
+                    text: s.clone(),
+                    supported: true,
+                    failed_once: true,
+                    violation_prob: None,
+                })
+                .collect();
             Some(GateOutcome {
                 text: second,
                 meta: serde_json::json!({
@@ -1229,9 +1301,40 @@ async fn short_specifics_guard(
                     "flagged_specifics": specifics,
                     "mode": "short_specifics",
                 }),
+                claims,
             })
         }
     }
+}
+
+/// Fold a long-form audit's outcome into retained per-claim records
+/// for the epistemic ledger: audited claims get their final verdict;
+/// synthetic failures (specifics scan, sentence sweep) that never
+/// appeared in the extracted list are appended as unsupported records.
+fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim> {
+    let mut out: Vec<GateClaim> = audited
+        .iter()
+        .map(|c| {
+            let is_failed = failed.iter().any(|f| &f.claim == c);
+            GateClaim {
+                text: c.clone(),
+                supported: !is_failed,
+                failed_once: is_failed,
+                violation_prob: None,
+            }
+        })
+        .collect();
+    for f in failed {
+        if !audited.iter().any(|c| c == &f.claim) {
+            out.push(GateClaim {
+                text: f.claim.clone(),
+                supported: false,
+                failed_once: true,
+                violation_prob: None,
+            });
+        }
+    }
+    out
 }
 
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
@@ -1486,12 +1589,13 @@ async fn gate_longform(
                     });
                 }
             }
-            Some((text, claims.len(), failed))
+            let audited: Vec<String> = claims.into_iter().take(budget).collect();
+            Some((text, audited, failed))
         }
     };
 
     let draft_backup = draft.clone();
-    let Some((text, n_claims, failed)) = audit(draft, false).await else {
+    let Some((text, audited, failed)) = audit(draft, false).await else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             text: draft_backup,
@@ -1500,8 +1604,10 @@ async fn gate_longform(
                 "action": "judge_failed_open", "retried": false,
                 "threshold": tau, "mode": "per_claim",
             }),
+            claims: Vec::new(),
         };
     };
+    let n_claims = audited.len();
     if failed.is_empty() {
         dbg(&format!("longform released claims={n_claims} failed=0"));
         emit_gate_progress(
@@ -1519,6 +1625,7 @@ async fn gate_longform(
                 "claims_checked": n_claims, "failed_claims": [],
                 "threshold": tau, "mode": "per_claim",
             }),
+            claims: longform_claims(&audited, &failed),
         };
     }
     if !profile.retry {
@@ -1533,6 +1640,7 @@ async fn gate_longform(
                 flagged: failed.len(),
             },
         );
+        let claim_records = longform_claims(&audited, &failed);
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
@@ -1543,6 +1651,7 @@ async fn gate_longform(
                 "claims_checked": n_claims, "failed_claims": failed_claims,
                 "threshold": tau, "mode": "per_claim",
             }),
+            claims: claim_records,
         };
     }
     dbg(&format!(
@@ -1639,6 +1748,7 @@ async fn gate_longform(
                         flagged: failed.len(),
                     },
                 );
+                let claim_records = longform_claims(&audited, &failed);
                 let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
                 let note = verification_note(&failed_claims);
                 return GateOutcome {
@@ -1649,6 +1759,7 @@ async fn gate_longform(
                         "claims_checked": n_claims, "failed_claims": failed_claims,
                         "threshold": tau, "mode": "per_claim",
                     }),
+                    claims: claim_records,
                 };
             }
         }
@@ -1656,7 +1767,8 @@ async fn gate_longform(
 
     let second_backup = second.clone();
     match audit(second, true).await {
-        Some((text2, n2, failed2)) if failed2.is_empty() => {
+        Some((text2, audited2, failed2)) if failed2.is_empty() => {
+            let n2 = audited2.len();
             emit_gate_progress(
                 progress,
                 NarrationPhase::ClaimCheckComplete {
@@ -1672,9 +1784,11 @@ async fn gate_longform(
                     "claims_checked": n2, "failed_claims": [],
                     "threshold": tau, "mode": "per_claim",
                 }),
+                claims: longform_claims(&audited2, &failed2),
             }
         }
-        Some((text2, n2, failed2)) => {
+        Some((text2, audited2, failed2)) => {
+            let n2 = audited2.len();
             emit_gate_progress(
                 progress,
                 NarrationPhase::ClaimCheckComplete {
@@ -1682,6 +1796,7 @@ async fn gate_longform(
                     flagged: failed2.len(),
                 },
             );
+            let claim_records = longform_claims(&audited2, &failed2);
             let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
@@ -1691,6 +1806,7 @@ async fn gate_longform(
                     "claims_checked": n2, "failed_claims": failed_claims,
                     "threshold": tau, "mode": "per_claim",
                 }),
+                claims: claim_records,
             }
         }
         None => GateOutcome {
@@ -1700,6 +1816,7 @@ async fn gate_longform(
                 "action": "rewrite_released_unverified", "retried": true,
                 "threshold": tau, "mode": "per_claim",
             }),
+            claims: Vec::new(),
         },
     }
 }

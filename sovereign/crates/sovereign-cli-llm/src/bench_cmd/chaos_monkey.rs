@@ -686,8 +686,13 @@ async fn score_question(
         retrieved_chunk_texts: chunk_texts,
         gate_action,
         draft,
-        metadata: _,
+        metadata,
     } = live;
+    // Third lane (tracked): the turn's top acquisition conjecture from
+    // the persisted epistemic ledger, scored against the bank label in
+    // aggregation. Advisory only — never part of the two red lines.
+    let acquisition_conjecture =
+        sovereign_eval::chaos_monkey::score::conjecture_class_from_metadata(&metadata);
 
     // External grounding-verifier (--grounding-verify gates, --gv-shadow only
     // records). The Critic returns a continuous violation probability which is
@@ -897,6 +902,8 @@ async fn score_question(
         retrieval_present,
         draft_correct,
         partition: None,
+        acquisition_label: q.acquisition_class,
+        acquisition_conjecture,
     };
     // Stamp the glassbox partition cell from the row's own signals (the histogram
     // recomputes it via `partition_cell()`; this stored copy is for JSONL readers).
@@ -1395,6 +1402,18 @@ fn print_summary(
         c.answerable + c.absent,
         c.value_assessed,
     );
+    // Third lane (TRACKED, advisory — EPISTEMIC_STATE.md §8): on labeled
+    // absent probes, did the epistemic ledger's top acquisition
+    // conjecture name the class that would actually satisfy the gap?
+    // Never part of the verdict; silent when the bank carries no labels.
+    if report.n_acquisition_labeled > 0 {
+        eprintln!(
+            "  TRACKED     acquisition-conjecture  : {:.2}          [matched {}/{} labeled absent probes ]",
+            report.acquisition_matched as f64 / report.n_acquisition_labeled as f64,
+            report.acquisition_matched,
+            report.n_acquisition_labeled,
+        );
+    }
     // Causal attribution — the partition histogram. The diagnostic that says
     // WHERE the misses are (gate vs model vs retrieval), so a gate fix shows up
     // even when the aggregate is noisy. See docs/CHAOS_MEASUREMENT_REDESIGN.md.

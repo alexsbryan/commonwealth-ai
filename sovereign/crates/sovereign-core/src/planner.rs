@@ -558,6 +558,7 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                         // construction site.
                         kind: crate::types::InformationRequestKind::StepBlock,
                         task_title: String::new(),
+                        routes: Vec::new(),
                     });
                 StepKind::AwaitUserInfo { request }
             }

@@ -193,6 +193,31 @@ pub(crate) struct KnowledgeQueryPlan {
     /// TEACHABLE P0 — active-lesson snapshot taken when the plan was
     /// built. See [`TurnLessons`].
     pub(crate) lessons: TurnLessons,
+    /// Why this plan answers from parametric general knowledge rather
+    /// than retrieved evidence, when it does. Carried as DATA so the
+    /// epistemic ledger reads the decision instead of re-deriving it
+    /// from the `GK_CAVEAT_PREFIX` string (EPISTEMIC_STATE.md §4.2).
+    /// `None` on evidence-grounded plans. The decode-committed prefix
+    /// behavior itself is unchanged.
+    pub(crate) general_knowledge: Option<GkReason>,
+    /// The turn's demand set with coverage stamps (EPISTEMIC_STATE.md
+    /// P1a) — retained through the turn so ledger assembly reads the
+    /// same structure retrieval used, instead of re-deriving it from
+    /// a string post-hoc (the gap.rs failure mode).
+    pub(crate) demands: Vec<crate::types::Demand>,
+    /// The pipeline's query embedding, retained for the gap-turn
+    /// coverage probe (reuse, never re-embed).
+    pub(crate) query_embedding: Vec<f32>,
+}
+
+/// Why a turn fell back to parametric general knowledge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GkReason {
+    /// Retrieval returned zero chunks — nothing to ground on.
+    ZeroChunk,
+    /// The agentic evidence loop ran and still judged the pool
+    /// insufficient, and the question anchors to no enabled corpus.
+    AgenticInsufficient,
 }
 
 /// Retrieve-only projection of a [`KnowledgeQueryPlan`] — the evidence
@@ -265,6 +290,28 @@ pub struct TurnProvenance {
     pub max_tokens: Option<usize>,
     pub enable_thinking: Option<bool>,
     pub pass_a_ms: Option<u64>,
+    /// Outcome of the witness recall-grounding verifier for this turn
+    /// (`runtime/memory_grounding.rs`). Previously computed and
+    /// discarded after pinning; retained so the epistemic ledger can
+    /// distinguish a verified recall from a fail-open one. `None` when
+    /// the verifier didn't run (non-witness turns, older frames).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recall_verification: Option<RecallVerificationProv>,
+}
+
+/// Persisted outcome of the witness recall-grounding verifier.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RecallVerificationProv {
+    /// Whether the final reply's past-claims were confirmed contained
+    /// in retrieved entries.
+    pub grounded: bool,
+    /// True when the verifier errored/declined and the reply shipped
+    /// unchecked (the deliberate availability posture, made visible).
+    pub fail_open: bool,
+    /// 1-based index of the recalled entry the reply spoke about, when
+    /// the verifier attributed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referenced: Option<usize>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -282,6 +329,12 @@ pub struct RecalledMemoryProv {
     /// folded. Empty (or absent) on raw memories.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_memory_ids: Vec<String>,
+    /// Stored confidence at recall time — the input the epistemic
+    /// band derivation (`memory::band_for_confidence`) reads, retained
+    /// so the ledger and the prompt agree on the band. Absent on
+    /// provenance frames persisted before this field (2026-07-18).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

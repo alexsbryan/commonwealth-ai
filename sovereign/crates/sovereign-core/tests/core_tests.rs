@@ -1578,6 +1578,7 @@ fn await_user_info_plan() -> (Plan, Task) {
         step_id: 0,
         kind: sovereign_core::types::InformationRequestKind::default(),
         task_title: String::new(),
+        routes: Vec::new(),
     };
     let plan = Plan {
         id: "info-test".to_string(),

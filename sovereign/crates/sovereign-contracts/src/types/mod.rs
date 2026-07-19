@@ -135,6 +135,11 @@ pub use conversation::{
     LandscapeDigest, Message, Role, SearchedSourceEntry, TemporalTension, ToolDossier,
     ToolDossierEntry, ToolDossierOutcome, WorkingMemory,
 };
+mod epistemic;
+pub use epistemic::{
+    AcquisitionRoute, CoverageLevel, Demand, DemandFacet, EpistemicState, Gap, GapCoverage,
+    Holding, MemoryBand, Provenance, TurnVerdict, Verification, EPISTEMIC_STATE_VERSION,
+};
 mod narration;
 pub use narration::{
     build_next_step_offers, decide_policy, ClarificationOption, ClarificationRequest,
@@ -373,6 +378,14 @@ pub struct InformationRequest {
     /// card header. Empty for `Refinement` cards.
     #[serde(default)]
     pub task_title: String,
+    /// Catalog-grounded acquisition conjectures for this gap —
+    /// concrete places the user could fetch what would fill it
+    /// (install a recipe, connect a source, search the web). Resolved
+    /// by the runtime's acquisition resolver (EPISTEMIC_STATE.md
+    /// §4.3); structurally never model-invented. Empty when the
+    /// resolver is disabled or couldn't rank a route.
+    #[serde(default)]
+    pub routes: Vec<AcquisitionRoute>,
 }
 
 /// Emitted after an already-streamed assistant message has been
