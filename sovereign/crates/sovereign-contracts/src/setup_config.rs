@@ -188,6 +188,10 @@ pub struct TransportSection {
     /// Transport for status probes; `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_probe: Option<String>,
+    /// Transport for the ggml tensor-split RPC stream (distributed
+    /// inference activation traffic); `None` = default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_tensor: Option<String>,
 }
 
 /// `[shared_model]` — opt-in participation in a mesh-hosted shared

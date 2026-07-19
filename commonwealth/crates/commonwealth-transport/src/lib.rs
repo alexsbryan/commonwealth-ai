@@ -75,19 +75,28 @@ pub enum TrafficClass {
     Inference,
     /// Client-port `/status` and `/oicp/v1/capabilities` probes.
     StatusProbe,
+    /// ggml tensor-split RPC byte stream to a worker's rpc-server
+    /// (`worker:50052`) — raw TCP tunneled whole, NOT HTTP. Candidates
+    /// for this class are bridge-local `127.0.0.1:<port>` authorities
+    /// the caller strips the scheme from and hands to ggml verbatim.
+    /// The IP transport returns NO candidates for it: RPC ports are
+    /// per-worker (advertised via `/status`), not the uniform mesh
+    /// ports, so the raw-TCP path stays with discovery's own probing.
+    RpcTensor,
 }
 
 impl TrafficClass {
     /// Every traffic class, in flip order. Callers that must apply a
     /// policy to all peer traffic — e.g. routing every class over iroh
     /// when the mesh-wide encryption policy is on — enumerate this.
-    pub const ALL: [TrafficClass; 6] = [
+    pub const ALL: [TrafficClass; 7] = [
         TrafficClass::Gossip,
         TrafficClass::ControlPlane,
         TrafficClass::KnowledgeSearch,
         TrafficClass::ModelTransfer,
         TrafficClass::Inference,
         TrafficClass::StatusProbe,
+        TrafficClass::RpcTensor,
     ];
 
     /// Stable lowercase name for tracing fields.
@@ -99,6 +108,7 @@ impl TrafficClass {
             TrafficClass::ModelTransfer => "model_transfer",
             TrafficClass::Inference => "inference",
             TrafficClass::StatusProbe => "status_probe",
+            TrafficClass::RpcTensor => "rpc_tensor",
         }
     }
 }

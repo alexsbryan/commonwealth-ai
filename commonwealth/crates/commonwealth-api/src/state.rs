@@ -199,10 +199,15 @@ pub trait LocalInferenceService: Send + Sync {
 /// holds without re-fetching. Route: `POST /internal/rpc-warm`.
 #[async_trait]
 pub trait RpcShardWarmer: Send + Sync {
+    /// `state` is this worker node's own `AppState`: the warmer resolves the
+    /// HOST's fetch bases through this node's `PeerTransport` (the request may
+    /// carry a `host_node_id`), so a cross-network host is reached over the
+    /// mesh transport (iroh bridge) instead of a raw IP it may not route to.
     async fn warm_shard(
         &self,
         request: serde_json::Value,
         local_model_path: Option<std::path::PathBuf>,
+        state: AppState,
     ) -> Result<serde_json::Value, String>;
 }
 
@@ -409,6 +414,14 @@ pub struct AppStateInner {
     /// (an uptime reset is the cheap witness that a supervised restart
     /// actually produced a fresh process).
     pub started_at: std::time::Instant,
+    /// True when this node's iroh acceptor routes the RPC ALPN to a local
+    /// ggml rpc-server — i.e. a cross-network host can genuinely reach our
+    /// RPC worker through the mesh tunnel. Drives the additive
+    /// `rpc_worker.iroh` flag on `/status`. Set by the daemon when it
+    /// installs iroh access; stays false on plaintext meshes or when the
+    /// iroh kill-switch is on, so we never advertise a path that isn't
+    /// actually accepting.
+    pub rpc_iroh_accept: std::sync::atomic::AtomicBool,
     /// Distributed KV store for mesh apps.
     pub mesh_store: Arc<MeshStore>,
     /// Registry of known mesh apps (gossiped).
@@ -813,6 +826,22 @@ impl AppState {
             .clone()
     }
 
+    /// Record whether the iroh acceptor routes the RPC ALPN to a local
+    /// ggml rpc-server (see `AppStateInner::rpc_iroh_accept`). Called by
+    /// the daemon's iroh install; re-runnable (watchdog endpoint swaps).
+    pub fn set_rpc_iroh_accept(&self, on: bool) {
+        self.inner
+            .rpc_iroh_accept
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether `/status` may honestly advertise `rpc_worker.iroh: true`.
+    pub fn rpc_iroh_accept(&self) -> bool {
+        self.inner
+            .rpc_iroh_accept
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Snapshot of the active [`PeerTransport`]. Cheap (one RwLock
     /// read + Arc clone); call per dial, don't cache across awaits —
     /// the daemon may re-install at startup.
@@ -980,6 +1009,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 started_at: std::time::Instant::now(),
+                rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
                 inference_store,

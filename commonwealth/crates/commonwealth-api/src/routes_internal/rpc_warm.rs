@@ -83,7 +83,7 @@ pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) ->
         .and_then(Value::as_str)
         .and_then(|id| resolve_local_model(&state, id));
 
-    match warmer.warm_shard(body, local_model_path).await {
+    match warmer.warm_shard(body, local_model_path, state).await {
         Ok(stats) => (StatusCode::OK, Json(stats)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

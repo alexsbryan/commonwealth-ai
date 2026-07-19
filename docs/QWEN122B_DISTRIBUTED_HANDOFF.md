@@ -4,6 +4,25 @@
 **Status:** 2 of 3 blockers fixed (uncommitted, working tree). 1 open blocker that opens a real
 architecture question. **Nothing committed — all changes are in the working tree.**
 
+> **UPDATE (later 2026-07-18, post-characterization):** the §6 questions were answered by
+> measurement (`commonwealth-transport/examples/tunnel_bench.rs`, see the transport-characterization
+> memory/notes: iroh direct ≈ +2.4 ms per 16 KB round-trip — green light; relay floor 5.5–7.1 tok/s
+> network ceiling — single-digit, measured two-machine both-relay-pinned), and **blocker #3's warm
+> half is FIXED (task 5, uncommitted)**: the warm plane now rides `PeerTransport` — an
+> endpoint→NodeId directory recorded at discovery (`EmbeddedDaemon.rpc_endpoint_nodes`), host-side
+> warm POSTs resolved via `transport.endpoints(contact, TrafficClass::ModelTransfer)` (iroh bridge
+> first, raw IP fallback, per-attempt `via=` logging), `host_node_id` in the warm request so the
+> worker resolves its fetch bases through **its own** transport (`host_transport_bases` /
+> `merge_bases` in `rpc_warm_http.rs`). Wire back-compat: old bodies parse (`#[serde(default)]`).
+> **Task 6 also landed (same day, uncommitted):** ggml RPC activation traffic can now ride iroh —
+> `RPC_ALPN cwth/rpc/0` + `TrafficClass::RpcTensor`; the worker's acceptor routes the ALPN to its
+> local rpc-server and advertises `rpc_worker.iroh: true` on `/status` (additive); host discovery
+> falls back to a bridge-local `127.0.0.1:<port>` endpoint when no direct IP answers
+> (`SOVEREIGN_RPC_TUNNEL={auto|always|never}`, `always` forces the tunnel for E2E). The task-5×6
+> loopback self-warm hazard is guarded (`raw_warm_fallback_allowed`). **E2E pending**: LAN
+> forced-tunnel with the Mac (4B, expect ~40 tok/s), then a relay-grade pass. Path-quality gating
+> at placement (refuse/warn on relay) remains future work — observability first.
+
 > **Second-set-of-eyes ask:** the RPC-distribution path is **LAN-only** — it reaches peers by raw
 > TCP/HTTP to their direct IPs. The use case that matters is **machines on different networks**,
 > which forces everything over **iroh**. The good news is a generic TCP-over-iroh tunnel already

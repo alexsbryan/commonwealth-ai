@@ -119,7 +119,10 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
         },
-        rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus { port }),
+        rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus {
+            port,
+            iroh: state.rpc_iroh_accept(),
+        }),
     })
 }
 
@@ -261,6 +264,12 @@ pub struct ProcessStatus {
 #[derive(Debug, Serialize)]
 pub struct RpcWorkerStatus {
     pub port: u16,
+    /// True when this worker's iroh acceptor also routes the RPC ALPN —
+    /// a cross-network host may reach the rpc-server through a mesh
+    /// tunnel instead of the raw `ip:port`. Omitted when false, so the
+    /// JSON is byte-identical for non-iroh workers (additive wire).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub iroh: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -353,5 +362,25 @@ mod process_status_tests {
         }
         let json = serde_json::to_value(&p).unwrap();
         assert_eq!(json["uptime_seconds"], 42);
+    }
+
+    #[test]
+    fn rpc_worker_iroh_flag_is_additive_on_the_wire() {
+        // false → key omitted entirely: byte-identical JSON to pre-task-6
+        // workers, so old hosts parse it unchanged.
+        let off = serde_json::to_value(RpcWorkerStatus {
+            port: 50052,
+            iroh: false,
+        })
+        .unwrap();
+        assert_eq!(off, serde_json::json!({ "port": 50052 }));
+        // true → advertised; hosts read it with `.get("iroh")` off the
+        // opaque JSON, absent-means-false.
+        let on = serde_json::to_value(RpcWorkerStatus {
+            port: 50052,
+            iroh: true,
+        })
+        .unwrap();
+        assert_eq!(on, serde_json::json!({ "port": 50052, "iroh": true }));
     }
 }
