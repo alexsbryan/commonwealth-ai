@@ -61,6 +61,41 @@ mod real_main {
 
     const DEFAULT_TCP_PORT: u16 = 9799;
 
+    /// Build the bench's iroh endpoint; `--relay-only` (feature
+    /// `iroh-relay-only`, BOTH peers) pins data to the relay for the
+    /// deterministic relay-floor measurement.
+    async fn bench_endpoint(
+        key_bytes: [u8; 32],
+        alpns: Vec<Vec<u8>>,
+        cfg: &RelayConfig,
+        relay_only: bool,
+    ) -> Endpoint {
+        if !relay_only {
+            return build_relayed_endpoint(SecretKey::from_bytes(&key_bytes), alpns, cfg)
+                .await
+                .expect("iroh endpoint bind");
+        }
+        #[cfg(feature = "iroh-relay-only")]
+        {
+            println!("relay-only: path selection pinned to the relay (both peers must run this)");
+            commonwealth_transport::iroh::build_relay_only_endpoint(
+                SecretKey::from_bytes(&key_bytes),
+                alpns,
+                cfg,
+            )
+            .await
+            .expect("iroh endpoint bind (relay-only)")
+        }
+        #[cfg(not(feature = "iroh-relay-only"))]
+        {
+            eprintln!(
+                "--relay-only needs a build with --features iroh,iroh-relay-only \
+                 (iroh's unstable path-selector API)"
+            );
+            std::process::exit(2);
+        }
+    }
+
     pub async fn run() {
         let args: Vec<String> = std::env::args().skip(1).collect();
         match args.first().map(String::as_str) {
@@ -68,8 +103,8 @@ mod real_main {
             Some("dial") => dial(&args[1..]).await,
             _ => {
                 eprintln!(
-                    "usage:\n  tunnel_bench serve [--tcp-port N] [--no-n0]\n  \
-                     tunnel_bench dial (--tcp host:port | --iroh <dial-string>) [--quick]"
+                    "usage:\n  tunnel_bench serve [--tcp-port N] [--no-n0] [--relay-only]\n  \
+                     tunnel_bench dial (--tcp host:port | --iroh <dial-string>) [--quick] [--relay-only]"
                 );
                 std::process::exit(2);
             }
@@ -121,13 +156,9 @@ mod real_main {
         // Fresh identity per run — a bench peer, not a mesh member.
         let mut key_bytes = [0u8; 32];
         getrandom::fill(&mut key_bytes).expect("getrandom");
-        let endpoint = build_relayed_endpoint(
-            SecretKey::from_bytes(&key_bytes),
-            vec![BENCH_ALPN.to_vec()],
-            &relay_cfg,
-        )
-        .await
-        .expect("iroh endpoint bind");
+        let relay_only = args.iter().any(|a| a == "--relay-only");
+        let endpoint =
+            bench_endpoint(key_bytes, vec![BENCH_ALPN.to_vec()], &relay_cfg, relay_only).await;
 
         let forward: SocketAddr = ([127, 0, 0, 1], tcp_port).into();
         let _acceptor = IrohAcceptor::spawn(endpoint.clone(), forward);
@@ -202,13 +233,14 @@ mod real_main {
 
         let mut key_bytes = [0u8; 32];
         getrandom::fill(&mut key_bytes).expect("getrandom");
-        let endpoint = build_relayed_endpoint(
-            SecretKey::from_bytes(&key_bytes),
+        let relay_only = args.iter().any(|a| a == "--relay-only");
+        let endpoint = bench_endpoint(
+            key_bytes,
             Vec::new(), // dial-only: no served ALPNs
             &RelayConfig::default(),
+            relay_only,
         )
-        .await
-        .expect("iroh endpoint bind");
+        .await;
 
         let bridge = HttpBridge::spawn(endpoint.clone(), target, BENCH_ALPN)
             .await
