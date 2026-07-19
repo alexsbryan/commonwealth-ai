@@ -101,6 +101,48 @@ fn class_entries(
     ]
 }
 
+/// Build the mesh endpoint, honoring the bench-only relay pin.
+/// `SOVEREIGN_IROH_RELAY_ONLY=1` + the `iroh-relay-only` feature pins ALL
+/// of this node's iroh traffic (accept + dial — one endpoint serves both)
+/// to the relay path: the deterministic relay-floor posture for
+/// distributed-inference measurement. Both peers must run it, or the
+/// unpinned side answers over the direct path and halves the measured
+/// tax. If the env is set but the feature wasn't compiled in, we log at
+/// ERROR and continue unpinned — the daemon must not die, but the run's
+/// measurements are invalid and the log says so.
+async fn build_mesh_endpoint(
+    secret: commonwealth_transport::iroh::SecretKey,
+    alpns: Vec<Vec<u8>>,
+    relay_cfg: &RelayConfig,
+) -> Result<Endpoint, String> {
+    let want_relay_only = std::env::var("SOVEREIGN_IROH_RELAY_ONLY")
+        .map(|v| matches!(v.trim(), "1" | "true" | "yes"))
+        .unwrap_or(false);
+    if !want_relay_only {
+        return build_relayed_endpoint(secret, alpns, relay_cfg).await;
+    }
+    #[cfg(feature = "iroh-relay-only")]
+    {
+        tracing::warn!(
+            target: "transport",
+            "iroh(mesh): SOVEREIGN_IROH_RELAY_ONLY=1 — endpoint pinned to the \
+             relay path (bench posture, both peers must run this)"
+        );
+        commonwealth_transport::iroh::build_relay_only_endpoint(secret, alpns, relay_cfg).await
+    }
+    #[cfg(not(feature = "iroh-relay-only"))]
+    {
+        tracing::error!(
+            target: "transport",
+            "SOVEREIGN_IROH_RELAY_ONLY=1 set but this build lacks the \
+             `iroh-relay-only` feature — running UNPINNED; relay-floor \
+             measurements from this run are INVALID. Rebuild with \
+             --features iroh-relay-only."
+        );
+        build_relayed_endpoint(secret, alpns, relay_cfg).await
+    }
+}
+
 /// The local ggml rpc-server port when this node is configured to serve
 /// one (`SOVEREIGN_RPC_SERVE`, e.g. `0.0.0.0:50052` — same parse shape as
 /// `routes_status::rpc_worker_port`). `None` = not an RPC worker; the
@@ -230,7 +272,7 @@ impl MeshIrohAccess {
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
         }
-        let endpoint = match build_relayed_endpoint(secret, alpns, relay_cfg).await
+        let endpoint = match build_mesh_endpoint(secret, alpns, relay_cfg).await
         {
             Ok(ep) => ep,
             Err(e) => {

@@ -74,5 +74,8 @@ libc = "0.2"
 # `sovereign-cli-dev` workbench (`sovereign atos …`).
 atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
 
+# Bench/measurement-only: see sovereign-mesh's feature of the same name.
+iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
+
 [lints]
 workspace = true
