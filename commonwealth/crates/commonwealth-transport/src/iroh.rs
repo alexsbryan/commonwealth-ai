@@ -49,6 +49,25 @@ use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 /// a future class-aware protocol can coexist during migration.
 pub const ALPN: &[u8] = b"cwth/http/0";
 
+/// Whether this process runs in the bench-only relay-pinned posture
+/// (`SOVEREIGN_IROH_RELAY_ONLY=1` + the `iroh-relay-only` feature). Read
+/// per dial — cheap, and keeps the posture decision in one place for both
+/// the endpoint builder (path selector) and dial-time addr seeding.
+/// Always false without the feature, so production builds compile this
+/// to a constant.
+pub fn relay_pin_active() -> bool {
+    #[cfg(feature = "iroh-relay-only")]
+    {
+        std::env::var("SOVEREIGN_IROH_RELAY_ONLY")
+            .map(|v| matches!(v.trim(), "1" | "true" | "yes"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(feature = "iroh-relay-only"))]
+    {
+        false
+    }
+}
+
 /// ALPN for the ggml tensor-split RPC byte stream (task 6): a worker's
 /// acceptor forwards this to its local rpc-server (`127.0.0.1:50052`);
 /// the host reaches it through a bridge-local endpoint minted for
@@ -551,6 +570,18 @@ impl IrohTransport {
                     "iroh: peer relay_url did not parse — ignoring"
                 ),
             }
+        }
+        // Relay-pin (bench posture): when this process is relay-pinned and
+        // the peer has a relay, seed ONLY the relay. Seeding direct addrs
+        // makes the pin a RACE the selector cannot win — a direct path that
+        // validates first (same box ~1ms, warmed LAN) becomes the current
+        // path, and the selector's no-relay-open fallback keeps it: the run
+        // silently measures the direct path at full speed (observed
+        // 2026-07-19: hairpin "relay" run at 0.9ms/16KB). With only the
+        // relay seeded, relay is current from the first packet and
+        // later-discovered directs stay unselected.
+        if relay_pin_active() && has_path {
+            return Some(ea);
         }
         let seeded = self
             .known_addrs
