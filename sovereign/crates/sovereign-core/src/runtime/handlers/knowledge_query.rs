@@ -1567,10 +1567,17 @@ impl Runtime {
                         engine: self.corpus_engine.clone(),
                         coverage: Some(g.coverage),
                     };
+                    // Resolve on the demand's RAW text (the question /
+                    // entity), not the display statement — cleaner
+                    // embedding match and web-search queries.
+                    let gap_query = demands
+                        .get(g.demand_idx)
+                        .map(|d| d.text.clone())
+                        .unwrap_or_else(|| g.statement.clone());
                     g.routes = crate::runtime::acquisition::routes_for_gap(
                         self.inference.as_ref(),
                         &ctx,
-                        &g.statement,
+                        &gap_query,
                     )
                     .await;
                 }

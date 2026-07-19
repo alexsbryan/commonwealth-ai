@@ -391,7 +391,7 @@ pub(crate) fn finish_demands(
 
 /// Result of the cross-corpus coverage probe.
 #[derive(Debug, Clone)]
-pub(crate) struct CoverageProbeResult {
+pub struct CoverageProbeResult {
     /// Best (highest) nearest-chunk cosine similarity across corpora.
     pub best_similarity: f32,
     /// Corpus that produced it.
@@ -432,7 +432,7 @@ const COVERAGE_PROBE_MAX_CORPORA: usize = 12;
 /// reuses the pipeline's query embedding — zero extra embeds, one
 /// bounded ANN probe per corpus. Free function so streaming spawns
 /// (which hold an engine clone, not the Runtime) can call it.
-pub(crate) async fn coverage_probe(
+pub async fn coverage_probe(
     engine: Option<&std::sync::Arc<corpus_engine::CorpusEngine>>,
     embedding: &[f32],
 ) -> Option<CoverageProbeResult> {

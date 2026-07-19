@@ -370,6 +370,16 @@ this plan, each recorded at the code site:
   {n_acquisition_labeled, acquisition_matched}` + a TRACKED line in
   the runner summary. Red lines untouched.
 
+**Live before/after demo** (real embed slot + real installed corpora,
+no mocks): `cargo run -p sovereign-cli-llm --features
+corpus-engine/treesitter --example epistemic_demo` (daemon must be
+up). Prints the predecessor's dead-end abstention next to the
+ledger's coverage verdict + acquisition conjecture per question —
+the resource-pitch artifact. Verified 2026-07-18 on 33 installed
+corpora: chaos "Heat's first name" → ClaimUncovered (0.80 similarity
+in chaos-secret-agent) → web search; "EU AI Act foundation-model
+rules" → TopicUncovered (0.50) → Install federal-register recipe.
+
 Outcome: every KQ/Deep/Simple turn carries a ledger; gap/abstain
 turns show what's missing plus 1–2 catalog-grounded acquisition
 routes on the *existing* InformationRequestCard; the third chaos lane
