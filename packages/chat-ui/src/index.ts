@@ -28,3 +28,13 @@ export { default as SourceAttribution } from "./components/SourceAttribution.sve
 export { default as SourcePopover } from "./components/SourcePopover.svelte";
 export { default as ThinkBlock } from "./components/ThinkBlock.svelte";
 export { default as NextStepButtons } from "./components/NextStepButtons.svelte";
+export { default as EpistemicFooter } from "./components/EpistemicFooter.svelte";
+// Ledger-derivation helpers (pure, unit-tested) exported for reuse + tests.
+export {
+  provKind,
+  bandLabel,
+  isUnverifiedRecall,
+  routeLabel,
+  verdictReceipt,
+} from "./components/EpistemicFooter.svelte";
+export type { ProvKind, VerdictReceipt } from "./components/EpistemicFooter.svelte";

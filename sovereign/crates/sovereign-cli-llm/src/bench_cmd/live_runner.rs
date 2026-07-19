@@ -526,6 +526,22 @@ pub fn extraction_scorer_enabled() -> bool {
         .unwrap_or(true)
 }
 
+/// Prefer the turn's TYPED epistemic verdict (`epistemic_state.verdict`)
+/// over the gate-action string-prefix (answer-vs-abstain) and the
+/// `classify_caveat` judge (general-knowledge caveat) when a ledger is
+/// present on the transcript (I2-C). **Default OFF** — the doc §8 parity
+/// gate requires a `chaos-monkey rescore` on a frozen transcript set with
+/// this flag off vs on to prove the typed and legacy derivations agree
+/// before the typed path becomes primary. Set
+/// `SOVEREIGN_CHAOS_TYPED_VERDICT=1` to run the typed derivation (or the
+/// parity comparison). Ledger-less transcripts always fall back to the
+/// legacy derivation regardless of this flag.
+pub fn typed_verdict_enabled() -> bool {
+    std::env::var("SOVEREIGN_CHAOS_TYPED_VERDICT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 /// Forced-choice provenance-caveat classifier for out-of-domain answers.
 /// `Some(true)` = the reply explicitly flags the answer is general knowledge /
 /// NOT drawn from the provided passages.

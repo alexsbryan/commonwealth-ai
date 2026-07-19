@@ -55,6 +55,11 @@ pub enum ServerEvent {
         provenance: Option<Provenance>,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         citations: Vec<Citation>,
+        /// The typed epistemic ledger (EPISTEMIC_STATE.md), when the turn
+        /// stamped one. `None` on old messages / kill switch off. I2-C
+        /// closes the wire gap; mobile rendering stays deferred.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        epistemic_state: Option<sovereign_core::types::EpistemicState>,
     },
     /// A streaming turn failed, or the host was busy. `retry_after_secs`
     /// is set on the busy case so the client mirrors REST `503` behaviour

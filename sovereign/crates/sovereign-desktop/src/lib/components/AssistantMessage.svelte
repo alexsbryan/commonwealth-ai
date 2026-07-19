@@ -7,7 +7,9 @@
     SourceAttribution,
     SourcePopover,
     NextStepButtons,
+    EpistemicFooter,
   } from "@sovereign/chat-ui";
+  import type { EpistemicState } from "@sovereign/chat-ui";
   import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight, exportAnswer } from "../api";
@@ -40,6 +42,9 @@
      *  prior reply ended mid-thought. ChatView resends as a fresh
      *  turn instructing the model to pick up from the cutoff. */
     onContinue?: () => void;
+    /** Navigate to the Library — threaded to the EpistemicFooter's
+     *  abstention-panel route chips (I2-B). Unset = no route chips. */
+    onOpenLibrary?: () => void;
   }
 
   let {
@@ -52,7 +57,25 @@
     searchAugmentation,
     onNextStep,
     onContinue,
+    onOpenLibrary,
   }: Props = $props();
+
+  // The typed epistemic ledger (EPISTEMIC_STATE.md), when the runtime
+  // stamped one on this message. Present on ledger-bearing turns; absent
+  // on old messages and when the `SOVEREIGN_EPISTEMIC_STATE` kill switch
+  // is off (the value is then `null`). When present, `EpistemicFooter`
+  // replaces the legacy receipt / verification-notes / SourceAttribution
+  // blocks (I6 is scoped to ledger-bearing messages); when absent, the
+  // legacy rendering is unchanged.
+  let ledger = $derived(
+    metadata?.epistemic_state as EpistemicState | null | undefined,
+  );
+  let hasLedger = $derived(
+    !!ledger &&
+      typeof ledger === "object" &&
+      Array.isArray((ledger as EpistemicState).holdings) &&
+      typeof (ledger as EpistemicState).verdict === "string",
+  );
 
   // rAF-coalesce parse work. `parseAssistantContent` is O(n) over
   // the full growing message string and is read transitively by
@@ -576,9 +599,10 @@
     </div>
   {/if}
 
-  {#if !isStreaming && verificationReceipt}
-    <!-- The verification receipt — the counter card's trust artifact,
-         persisted on the bubble. Quiet, affirmative, factual. -->
+  {#if !isStreaming && !hasLedger && verificationReceipt}
+    <!-- Legacy verification receipt (ledger-less messages only). The
+         EpistemicFooter's typed receipt supersedes this on ledger-
+         bearing turns. Quiet, affirmative, factual. -->
     <div class="verification-receipt" role="note" data-testid="verification-receipt">
       <span class="vr-mark" aria-hidden="true">✓</span>
       {#if verificationReceipt.quoted}
@@ -593,7 +617,7 @@
     </div>
   {/if}
 
-  {#if verificationNotes.length > 0}
+  {#if !hasLedger && verificationNotes.length > 0}
     <details class="verification-notes" role="note">
       <summary>
         <span class="vn-mark" aria-hidden="true">⚠</span>
@@ -650,7 +674,21 @@
     </div>
   {/if}
 
-  <SourceAttribution {content} {retrievedChunks} />
+  {#if hasLedger && !isStreaming}
+    <!-- I2-B: the typed epistemic ledger, rendered. Replaces the legacy
+         receipt / notes / SourceAttribution blocks on ledger-bearing
+         messages — provenance-grouped holdings (memory distinctly), a
+         verdict-derived receipt, and the abstention panel with catalog-
+         grounded route chips. Prose contradicting the ledger loses: the
+         footer reads the typed object, not the model's words. -->
+    <EpistemicFooter
+      ledger={ledger as EpistemicState}
+      {retrievedChunks}
+      {onOpenLibrary}
+    />
+  {:else}
+    <SourceAttribution {content} {retrievedChunks} />
+  {/if}
 
   {#if cutoffInfo && !isStreaming}
     <div class="cutoff-chip" role="note">

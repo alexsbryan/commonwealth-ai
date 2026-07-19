@@ -57,6 +57,12 @@ pub(crate) struct EpistemicInputs<'a> {
     pub demands: Vec<Demand>,
     /// Gap rows (Milestone B; empty in P0).
     pub gaps: Vec<Gap>,
+    /// Deterministic tool-derived holdings the caller already computed
+    /// (I2-A: the complex-task surface passes the `parcel_analytics`
+    /// cited figures here — the "no confabulated numbers" guarantee made
+    /// visible on the ledger). Each is emitted as a
+    /// [`Provenance::ToolDerived`] holding; skipped on abstained turns.
+    pub tool_holdings: Vec<Holding>,
 }
 
 /// Actions whose release shipped WITHOUT a completed verification
@@ -109,6 +115,12 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
                 verification,
             });
         }
+    }
+    // Tool-derived holdings: deterministic figures the system (not the
+    // model) originated. An abstained turn asserts nothing, so they are
+    // dropped there like gate claims.
+    if !abstained {
+        holdings.extend(inputs.tool_holdings.iter().cloned());
     }
     // Memory holdings: only the entry the recall verifier ATTRIBUTED
     // the reply to. Recalled-but-unreferenced memories are context,
@@ -205,8 +217,27 @@ pub(crate) fn derive_verdict(
         .iter()
         .filter(|h| matches!(h.provenance, Provenance::Memory { .. }))
         .count();
-    if general_knowledge && n_corpus == 0 {
+    let n_tool = holdings
+        .iter()
+        .filter(|h| matches!(h.provenance, Provenance::ToolDerived { .. }))
+        .count();
+    if general_knowledge && n_corpus == 0 && n_tool == 0 {
         return TurnVerdict::GeneralKnowledge;
+    }
+    // Any turn that mixes distinct bases (corpus + memory/tool) is Mixed
+    // — the answer no longer rests on a single, uniform kind of support.
+    let bases = [n_corpus > 0, n_memory > 0, n_tool > 0]
+        .iter()
+        .filter(|present| **present)
+        .count();
+    if bases >= 2 {
+        return TurnVerdict::Mixed;
+    }
+    // Tool-only holdings (deterministic figures, no corpus/memory): honest
+    // as Mixed — the figures are system-originated, so the turn is neither
+    // corpus-Grounded nor a memory/GK recall. It never overclaims Grounded.
+    if n_tool > 0 && n_corpus == 0 && n_memory == 0 {
+        return TurnVerdict::Mixed;
     }
     match (n_corpus, n_memory) {
         (0, 0) => {
@@ -598,6 +629,70 @@ mod tests {
             derive_verdict(&[], false, false, true, true),
             TurnVerdict::Unverified
         );
+    }
+
+    fn tool_holding() -> Holding {
+        Holding {
+            claim: "Total assessed value = $1.2B".into(),
+            provenance: Provenance::ToolDerived {
+                tool: "parcel_analytics".into(),
+            },
+            verification: Verification::Verified,
+        }
+    }
+
+    #[test]
+    fn tool_derived_verdicts() {
+        // Tool-only → Mixed (never overclaims Grounded; the figures are
+        // system-originated, not corpus-backed).
+        assert_eq!(
+            derive_verdict(&[tool_holding()], false, false, false, false),
+            TurnVerdict::Mixed
+        );
+        // Corpus + tool → Mixed (bases mix).
+        assert_eq!(
+            derive_verdict(
+                &[corpus_holding(Verification::Verified), tool_holding()],
+                false,
+                false,
+                true,
+                false
+            ),
+            TurnVerdict::Mixed
+        );
+        // GK signal but tool holdings present → NOT GeneralKnowledge.
+        assert_eq!(
+            derive_verdict(&[tool_holding()], false, true, false, false),
+            TurnVerdict::Mixed
+        );
+    }
+
+    #[test]
+    fn tool_holdings_flow_through_assembler() {
+        let meta = serde_json::json!({"action": "released"});
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            tool_holdings: vec![tool_holding()],
+            ..Default::default()
+        });
+        assert_eq!(state.holdings.len(), 1);
+        assert!(matches!(
+            &state.holdings[0].provenance,
+            Provenance::ToolDerived { tool } if tool == "parcel_analytics"
+        ));
+        assert_eq!(state.verdict, TurnVerdict::Mixed);
+    }
+
+    #[test]
+    fn abstained_turn_drops_tool_holdings() {
+        let meta = serde_json::json!({"action": "abstained"});
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            tool_holdings: vec![tool_holding()],
+            ..Default::default()
+        });
+        assert!(state.holdings.is_empty());
+        assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
     }
 
     #[test]

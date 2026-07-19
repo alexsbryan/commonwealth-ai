@@ -1701,6 +1701,7 @@
           searchAugmentation={msg.searchAugmentation}
           onNextStep={handleNextStep}
           onContinue={handleContinueFromCutoff}
+          {onOpenLibrary}
         />
       {/each}
 
