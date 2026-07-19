@@ -156,6 +156,19 @@ pub async fn build_relayed_endpoint(
     alpns: Vec<Vec<u8>>,
     cfg: &RelayConfig,
 ) -> Result<Endpoint, String> {
+    relayed_endpoint_builder(secret_key, alpns, cfg)
+        .bind()
+        .await
+        .map_err(|e| format!("iroh endpoint bind failed: {e}"))
+}
+
+/// The shared builder behind [`build_relayed_endpoint`] (and the bench-only
+/// relay-pinned variant) — preset/relay/proxy policy lives exactly once.
+fn relayed_endpoint_builder(
+    secret_key: SecretKey,
+    alpns: Vec<Vec<u8>>,
+    cfg: &RelayConfig,
+) -> EndpointBuilder {
     let preset_builder = if cfg.n0_services {
         EndpointBuilder::new(presets::N0)
     } else {
@@ -186,6 +199,48 @@ pub async fn build_relayed_endpoint(
         None => {} // n0_services + no custom relays → n0's default relays.
     }
     builder
+}
+
+/// Bench/measurement-only (feature `iroh-relay-only`): like
+/// [`build_relayed_endpoint`] but with a [`PathSelector`] that ONLY ever
+/// selects relay paths — application data stays on the relay even after
+/// hole-punching discovers a direct path. This is the deterministic "relay
+/// floor" for path characterization, replacing root-only UDP firewalling.
+/// Both peers must use it: path selection is per-side, so a normal peer
+/// would answer over the direct path and halve the measured relay tax.
+///
+/// [`PathSelector`]: iroh::endpoint::transports::PathSelector
+#[cfg(feature = "iroh-relay-only")]
+pub async fn build_relay_only_endpoint(
+    secret_key: SecretKey,
+    alpns: Vec<Vec<u8>>,
+    cfg: &RelayConfig,
+) -> Result<Endpoint, String> {
+    use iroh::endpoint::transports::{PathSelection, PathSelectionContext, PathSelector};
+
+    /// Selects the relay path when one is open; otherwise leaves the
+    /// selection unchanged (an empty selection keeps the current path).
+    #[derive(Debug)]
+    struct RelayOnlySelector;
+    impl PathSelector for RelayOnlySelector {
+        fn select(&self, ctx: &PathSelectionContext<'_>) -> PathSelection {
+            let mut selection = PathSelection::none();
+            for psd in ctx.paths() {
+                if psd.network_path().is_relay() {
+                    selection.set(&psd);
+                    break;
+                }
+            }
+            selection
+        }
+    }
+
+    tracing::warn!(
+        target: "transport",
+        "iroh: RELAY-ONLY path selection active — bench posture, never production"
+    );
+    relayed_endpoint_builder(secret_key, alpns, cfg)
+        .path_selector(Arc::new(RelayOnlySelector))
         .bind()
         .await
         .map_err(|e| format!("iroh endpoint bind failed: {e}"))

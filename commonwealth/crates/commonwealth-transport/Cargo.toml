@@ -22,6 +22,11 @@ rustls = { version = "0.23", default-features = false, features = ["ring"], opti
 
 [features]
 iroh = ["dep:iroh", "dep:tokio", "dep:rustls"]
+# Bench/measurement-only: a PathSelector that pins traffic to the relay even
+# when hole-punching would succeed — the deterministic "relay floor" for the
+# distributed-inference path characterization (tunnel_bench --relay-only).
+# Rides iroh's unstable-custom-transports API; never enable in production.
+iroh-relay-only = ["iroh", "iroh/unstable-custom-transports"]
 # Enables iroh's in-process relay test server for the UDP-blocked
 # relay-carried-connectivity test (H-plan item c). Test-only; pulls in
 # `iroh/test-utils`. Run: cargo test -p commonwealth-transport
