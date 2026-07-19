@@ -49,6 +49,13 @@ use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 /// a future class-aware protocol can coexist during migration.
 pub const ALPN: &[u8] = b"cwth/http/0";
 
+/// ALPN for the ggml tensor-split RPC byte stream (task 6): a worker's
+/// acceptor forwards this to its local rpc-server (`127.0.0.1:50052`);
+/// the host reaches it through a bridge-local endpoint minted for
+/// [`TrafficClass::RpcTensor`]. Raw bytes, not HTTP — the pump is
+/// byte-generic. Version-suffixed like its siblings.
+pub const RPC_ALPN: &[u8] = b"cwth/rpc/0";
+
 /// ALPN for client-API traffic (Track M: phone → `sovereign-server`).
 /// Distinct from [`ALPN`] so one daemon can later accept both and
 /// route by protocol instead of by port.
@@ -512,6 +519,7 @@ impl IrohTransport {
     fn alpn_for_class(class: TrafficClass) -> &'static [u8] {
         match class {
             TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
+            TrafficClass::RpcTensor => RPC_ALPN,
             _ => ALPN,
         }
     }

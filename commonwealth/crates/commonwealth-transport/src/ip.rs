@@ -71,7 +71,8 @@ impl IpTransport {
             TrafficClass::Gossip
             | TrafficClass::ControlPlane
             | TrafficClass::KnowledgeSearch
-            | TrafficClass::ModelTransfer => None,
+            | TrafficClass::ModelTransfer
+            | TrafficClass::RpcTensor => None,
         }
     }
 }
@@ -83,6 +84,14 @@ impl PeerTransport for IpTransport {
     }
 
     async fn endpoints(&self, peer: &PeerContact, class: TrafficClass) -> Vec<PeerEndpoint> {
+        // RpcTensor rides per-worker RPC ports advertised via `/status`,
+        // not the uniform mesh ports this transport knows. Returning a
+        // wrong-port guess would burn the caller's connect budget on an
+        // address that can never answer — no candidates is the honest
+        // response; discovery's own probing owns the raw-TCP path.
+        if class == TrafficClass::RpcTensor {
+            return Vec::new();
+        }
         let mut addrs = commonwealth_core::peer_addr::sorted_addresses(&peer.addresses);
 
         // Promote the last-working address to the front, preserving

@@ -30,7 +30,7 @@ use std::path::Path;
 
 use commonwealth_transport::iroh::{
     build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, RelayConfig,
-    ALPN, CLIENT_ALPN,
+    ALPN, CLIENT_ALPN, RPC_ALPN,
 };
 use commonwealth_transport::TrafficClass;
 
@@ -89,7 +89,7 @@ pub fn has_explicit_iroh_routes(t: &sovereign_core::setup_config::TransportSecti
 
 fn class_entries(
     t: &sovereign_core::setup_config::TransportSection,
-) -> [(TrafficClass, &Option<String>); 6] {
+) -> [(TrafficClass, &Option<String>); 7] {
     [
         (TrafficClass::Gossip, &t.gossip),
         (TrafficClass::ControlPlane, &t.control_plane),
@@ -97,7 +97,21 @@ fn class_entries(
         (TrafficClass::ModelTransfer, &t.model_transfer),
         (TrafficClass::Inference, &t.inference),
         (TrafficClass::StatusProbe, &t.status_probe),
+        (TrafficClass::RpcTensor, &t.rpc_tensor),
     ]
+}
+
+/// The local ggml rpc-server port when this node is configured to serve
+/// one (`SOVEREIGN_RPC_SERVE`, e.g. `0.0.0.0:50052` — same parse shape as
+/// `routes_status::rpc_worker_port`). `None` = not an RPC worker; the
+/// acceptor then neither advertises nor routes [`RPC_ALPN`].
+fn rpc_serve_port() -> Option<u16> {
+    let bind = std::env::var("SOVEREIGN_RPC_SERVE").ok()?;
+    let bind = bind.trim();
+    if bind.is_empty() {
+        return None;
+    }
+    bind.rsplit(':').next()?.parse().ok()
 }
 
 /// Resolve whether this daemon's iroh endpoint turns on. Explicit
@@ -166,6 +180,9 @@ fn classify_path(direct_active: bool, relay_active: bool, any_addr: bool) -> &'s
 pub struct MeshIrohAccess {
     endpoint: Endpoint,
     _acceptor: IrohAcceptor,
+    /// Whether this acceptor routes [`RPC_ALPN`] to a local ggml
+    /// rpc-server — the truth behind `/status`'s `rpc_worker.iroh` flag.
+    rpc_route_active: bool,
 }
 
 impl MeshIrohAccess {
@@ -203,12 +220,17 @@ impl MeshIrohAccess {
         let identity = commonwealth_transport::identity::load_or_generate_node_key(data_dir);
         let secret = commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
-        let endpoint = match build_relayed_endpoint(
-            secret,
-            vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()],
-            relay_cfg,
-        )
-        .await
+        // A node serving a ggml rpc-server additionally accepts RPC_ALPN
+        // so cross-network hosts reach the raw-TCP rpc-server through the
+        // mesh tunnel (task 6). Gated on the env so consumer nodes never
+        // advertise an ALPN they can't forward.
+        let rpc_forward: Option<SocketAddr> =
+            rpc_serve_port().map(|p| ([127, 0, 0, 1], p).into());
+        let mut alpns = vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()];
+        if rpc_forward.is_some() {
+            alpns.push(RPC_ALPN.to_vec());
+        }
+        let endpoint = match build_relayed_endpoint(secret, alpns, relay_cfg).await
         {
             Ok(ep) => ep,
             Err(e) => {
@@ -226,6 +248,14 @@ impl MeshIrohAccess {
         let mut routes: HashMap<Vec<u8>, SocketAddr> = HashMap::new();
         routes.insert(ALPN.to_vec(), internal_addr);
         routes.insert(CLIENT_ALPN.to_vec(), client_addr);
+        if let Some(rpc_addr) = rpc_forward {
+            routes.insert(RPC_ALPN.to_vec(), rpc_addr);
+            tracing::info!(
+                target: "transport",
+                rpc_forward = %rpc_addr,
+                "iroh(mesh): accepting RPC_ALPN → local ggml rpc-server"
+            );
+        }
         let acceptor = IrohAcceptor::spawn_routed(endpoint.clone(), routes);
 
         tracing::info!(
@@ -239,7 +269,15 @@ impl MeshIrohAccess {
         Some(MeshIrohAccess {
             endpoint,
             _acceptor: acceptor,
+            rpc_route_active: rpc_forward.is_some(),
         })
+    }
+
+    /// Whether this acceptor routes [`RPC_ALPN`] to a local ggml
+    /// rpc-server. The daemon copies this into `AppState` so `/status`
+    /// advertises `rpc_worker.iroh` only when it is genuinely true.
+    pub fn rpc_route_active(&self) -> bool {
+        self.rpc_route_active
     }
 
     /// An `IrohTransport` that dials peers FROM this node's endpoint —
@@ -428,6 +466,7 @@ mod tests {
             t.model_transfer = Some("ip".into());
             t.inference = Some("ip".into());
             t.status_probe = Some("ip".into());
+            t.rpc_tensor = Some("ip".into());
         }));
         assert!(out.is_empty());
     }

@@ -205,6 +205,17 @@ pub struct EmbeddedDaemon {
     /// set during bootstrap before `start_daemon`. When `None`,
     /// `start_daemon` falls back to the legacy in-memory MeshStore.
     mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
+    /// Endpoint→NodeId directory for discovered RPC workers: which mesh
+    /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
+    /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
+    /// derived — the one place identity and endpoint meet before identity
+    /// is dropped into the bare-string RPC layer. Read by the warm
+    /// orchestrator (`rpc_warm_http`) to resolve a worker's mesh transport
+    /// (iroh bridge on an encrypted mesh) instead of reverse-parsing an IP
+    /// from the endpoint string. Entries are never pruned: resolution
+    /// re-reads the live membership, so a mapping for a vanished worker is
+    /// inert. `std::sync` lock — never held across an await.
+    rpc_endpoint_nodes: std::sync::RwLock<std::collections::HashMap<String, NodeId>>,
 }
 
 enum DaemonState {
@@ -270,6 +281,7 @@ pub(crate) fn install_iroh_access(
     require_encryption: bool,
 ) {
     app_state.install_self_iroh_dialinfo(access.dial_info_provider());
+    app_state.set_rpc_iroh_accept(access.rpc_route_active());
     if !iroh_routed_classes.is_empty() {
         let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
             Arc::new(access.client_transport());
@@ -376,6 +388,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -411,6 +424,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -1939,20 +1953,53 @@ impl EmbeddedDaemon {
                                 .and_then(|p| p.as_u64())
                             {
                                 let rpc_port = port as u16;
-                                // Prefer a direct member IP for the raw-TCP endpoint;
-                                // the probe `host` may be an iroh loopback proxy.
-                                let ep = match reachable_rpc_endpoint(&m.addresses, rpc_port).await
-                                {
-                                    Some(direct) => {
-                                        tracing::debug!(peer = %name, endpoint = %direct, probe_host = %host, "discovered mesh RPC worker (direct IP)");
-                                        direct
+                                let iroh_advertised = json
+                                    .get("rpc_worker")
+                                    .and_then(|w| w.get("iroh"))
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                let mode = rpc_tunnel_mode();
+                                let allow_bridge =
+                                    iroh_advertised && mode != RpcTunnelMode::Never;
+
+                                // Choose the endpoint ggml will dial. Direct raw
+                                // TCP to a member IP is the LAN fast path; the
+                                // iroh bridge is the cross-network path (task 6);
+                                // the parsed probe host stays the last resort it
+                                // always was. `SOVEREIGN_RPC_TUNNEL=always`
+                                // prefers the bridge (E2E testing / known-cross-
+                                // network meshes) and skips the raw probe budget
+                                // when it lands; `never` opts out of bridging.
+                                let mut ep_via: Option<(String, String)> = None;
+                                if allow_bridge && mode == RpcTunnelMode::Always {
+                                    ep_via = bridge_rpc_endpoint(&transport, &m).await;
+                                }
+                                if ep_via.is_none() {
+                                    ep_via = reachable_rpc_endpoint(&m.addresses, rpc_port)
+                                        .await
+                                        .map(|d| (d, "direct-ip".to_string()));
+                                }
+                                if ep_via.is_none() && allow_bridge {
+                                    ep_via = bridge_rpc_endpoint(&transport, &m).await;
+                                }
+                                let ep = match ep_via {
+                                    Some((ep, via)) => {
+                                        tracing::info!(peer = %name, endpoint = %ep, via = %via, "discovered mesh RPC worker");
+                                        ep
                                     }
                                     None => {
                                         let fb = format!("{host}:{rpc_port}");
-                                        tracing::warn!(peer = %name, endpoint = %fb, "no reachable direct IP for RPC worker; falling back to probe host (may be an iroh loopback proxy — distribution likely to fail)");
+                                        tracing::warn!(peer = %name, endpoint = %fb, "no reachable direct IP and no iroh bridge for RPC worker; falling back to probe host (may be an iroh loopback proxy — distribution likely to fail)");
                                         fb
                                     }
                                 };
+                                // Record which member owns this endpoint BEFORE
+                                // identity is dropped into the bare-string RPC
+                                // layer — the warm orchestrator resolves the
+                                // worker's mesh transport through this.
+                                if let Ok(mut dir) = self.rpc_endpoint_nodes.write() {
+                                    dir.insert(ep.clone(), m.node_id);
+                                }
                                 out.push(ep);
                                 break; // one reachable address per peer suffices
                             }
@@ -1962,6 +2009,68 @@ impl EmbeddedDaemon {
             }
         }
         out
+    }
+
+    /// Which mesh member owns `endpoint` (a discovered `ip:port` ggml-RPC
+    /// worker endpoint), if discovery recorded one. Env-configured workers
+    /// (`SOVEREIGN_RPC_WORKERS`) have no entry — callers fall back to raw-IP
+    /// addressing for those.
+    pub fn rpc_endpoint_node(&self, endpoint: &str) -> Option<NodeId> {
+        self.rpc_endpoint_nodes
+            .read()
+            .ok()
+            .and_then(|dir| dir.get(endpoint).copied())
+    }
+
+    /// Ordered dial candidates for `node`'s internal HTTP surface under the
+    /// `ModelTransfer` traffic class (rpc-warm pushes, GGUF/shard pulls) —
+    /// the mesh transport's view: on an iroh-routed mesh the first candidate
+    /// is a loopback bridge that tunnels to the peer, with raw-IP fallback
+    /// candidates after. Empty when the daemon isn't Running or the node has
+    /// left the membership.
+    pub async fn model_transfer_endpoints(
+        &self,
+        node: NodeId,
+    ) -> Vec<commonwealth_transport::PeerEndpoint> {
+        let app_state = {
+            let state = self.state.read().await;
+            match &*state {
+                DaemonState::Running { app_state, .. } => app_state.clone(),
+                DaemonState::Stopped => return Vec::new(),
+            }
+        };
+        let member = {
+            let mesh = app_state.inner.mesh.read().await;
+            mesh.members.get(&node).cloned()
+        };
+        let Some(member) = member else {
+            return Vec::new();
+        };
+        app_state
+            .peer_transport()
+            .endpoints(
+                &commonwealth_transport::peer_contact(&member),
+                commonwealth_transport::TrafficClass::ModelTransfer,
+            )
+            .await
+    }
+
+    /// Feedback that `endpoint` carried a successful ModelTransfer call to
+    /// `node` — lets the transport promote it for future dials (the same
+    /// last-working cache gossip benefits from).
+    pub async fn note_model_transfer_success(
+        &self,
+        node: NodeId,
+        endpoint: &commonwealth_transport::PeerEndpoint,
+    ) {
+        let state = self.state.read().await;
+        if let DaemonState::Running { app_state, .. } = &*state {
+            app_state.peer_transport().note_success(
+                node,
+                commonwealth_transport::TrafficClass::ModelTransfer,
+                endpoint,
+            );
+        }
     }
 
     // ── Private ─────────────────────────────────────────
@@ -3251,11 +3360,121 @@ impl Default for EmbeddedDaemon {
     }
 }
 
+/// How RPC-worker discovery uses the iroh bridge for ggml's raw-TCP
+/// endpoint (`SOVEREIGN_RPC_TUNNEL`): `auto` (default) bridges only when
+/// no direct member IP answers; `always` prefers the bridge (E2E forcing,
+/// known-cross-network meshes); `never` disables bridging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RpcTunnelMode {
+    Auto,
+    Always,
+    Never,
+}
+
+/// Pure parse — unit-testable without touching the process environment.
+fn rpc_tunnel_mode_from(v: Option<&str>) -> RpcTunnelMode {
+    match v.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("always") => RpcTunnelMode::Always,
+        Some("never") | Some("off") | Some("0") => RpcTunnelMode::Never,
+        None | Some("") | Some("auto") => RpcTunnelMode::Auto,
+        Some(other) => {
+            tracing::warn!(
+                value = %other,
+                "SOVEREIGN_RPC_TUNNEL: unknown value, using `auto` (accepted: auto|always|never)"
+            );
+            RpcTunnelMode::Auto
+        }
+    }
+}
+
+fn rpc_tunnel_mode() -> RpcTunnelMode {
+    rpc_tunnel_mode_from(std::env::var("SOVEREIGN_RPC_TUNNEL").ok().as_deref())
+}
+
+/// Mint (or reuse — the transport caches one bridge per peer per ALPN) a
+/// bridge-local endpoint for `member`'s ggml rpc-server via the
+/// `RpcTensor` traffic class. Returns `("127.0.0.1:<port>", via_label)` —
+/// the scheme is stripped because ggml dials the authority verbatim.
+/// `None` when the transport has no iroh path to the peer (plaintext
+/// mesh, no pubkey, class pinned to ip).
+///
+/// Deliberately NOT TCP-probed: a loopback bridge accepts instantly
+/// regardless of whether the peer is dialable, so a connect probe is a
+/// false positive by construction. The peer's gossip-Online status (a
+/// prerequisite for reaching this code) plus the eligibility settle gate
+/// is the liveness evidence — the same ≤1-discovery-tick exposure window
+/// raw-TCP workers already have.
+async fn bridge_rpc_endpoint(
+    transport: &Arc<dyn commonwealth_transport::PeerTransport>,
+    member: &commonwealth_core::mesh::MemberRecord,
+) -> Option<(String, String)> {
+    let candidates = transport
+        .endpoints(
+            &commonwealth_transport::peer_contact(member),
+            commonwealth_transport::TrafficClass::RpcTensor,
+        )
+        .await;
+    let ep = candidates.into_iter().next()?;
+    let authority = ep.base_url.strip_prefix("http://")?.to_string();
+    // The bridge hands back a loopback authority; anything else means a
+    // transport misroute — refuse rather than hand ggml a bad endpoint.
+    let addr: std::net::SocketAddr = authority.parse().ok()?;
+    if !addr.ip().is_loopback() {
+        tracing::warn!(
+            endpoint = %authority,
+            label = %ep.label,
+            "rpc bridge endpoint is not loopback — refusing (transport misroute?)"
+        );
+        return None;
+    }
+    Some((authority, format!("iroh-bridge:{}", ep.label)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
     use std::path::PathBuf;
+
+    #[test]
+    fn rpc_tunnel_mode_parses_the_documented_values() {
+        use RpcTunnelMode::*;
+        assert_eq!(rpc_tunnel_mode_from(None), Auto);
+        assert_eq!(rpc_tunnel_mode_from(Some("")), Auto);
+        assert_eq!(rpc_tunnel_mode_from(Some("auto")), Auto);
+        assert_eq!(rpc_tunnel_mode_from(Some("ALWAYS")), Always);
+        assert_eq!(rpc_tunnel_mode_from(Some(" always ")), Always);
+        assert_eq!(rpc_tunnel_mode_from(Some("never")), Never);
+        assert_eq!(rpc_tunnel_mode_from(Some("off")), Never);
+        assert_eq!(rpc_tunnel_mode_from(Some("0")), Never);
+        // Unknown values degrade to the safe default, never panic.
+        assert_eq!(rpc_tunnel_mode_from(Some("banana")), Auto);
+    }
+
+    #[test]
+    fn rpc_endpoint_directory_records_and_resolves() {
+        // The warm orchestrator resolves worker identity through this
+        // directory; an unknown endpoint (env-configured worker) is None so
+        // callers fall back to raw-IP addressing.
+        let daemon = EmbeddedDaemon::new_in_memory();
+        assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), None);
+
+        let node = NodeId::from_u128(42);
+        daemon
+            .rpc_endpoint_nodes
+            .write()
+            .unwrap()
+            .insert("10.0.0.7:50052".to_string(), node);
+        assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), Some(node));
+        // Re-discovery overwrites in place — same endpoint, later owner wins.
+        let other = NodeId::from_u128(43);
+        daemon
+            .rpc_endpoint_nodes
+            .write()
+            .unwrap()
+            .insert("10.0.0.7:50052".to_string(), other);
+        assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), Some(other));
+    }
 
     #[test]
     fn internal_bind_is_loopback_only_under_encryption() {

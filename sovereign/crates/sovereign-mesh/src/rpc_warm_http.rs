@@ -26,7 +26,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_api::state::RpcShardWarmer;
+use commonwealth_api::state::{AppState, RpcShardWarmer};
 use sovereign_inference::embedded::{
     build_manifest, cache_file_name, tensor_device, warm_cache_for_device, Fnv1a, NodeShard,
     RpcWarmPlan,
@@ -86,6 +86,21 @@ fn order_host_bases(bases: &[String], worker_ip: Option<std::net::IpAddr>) -> Ve
         .collect();
     ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     ranked.into_iter().map(|(_, _, b)| b.clone()).collect()
+}
+
+/// Whether `worker_ip` (parsed from an RPC endpoint string) may be used to
+/// hand-build a raw warm-URL fallback. A loopback `worker_ip` means the
+/// endpoint is a bridge-local iroh tunnel (task 6) — the hand-built
+/// `http://127.0.0.1:{internal_port}/internal/rpc-warm` would be THIS
+/// host's own internal router, and the resulting self-warm reports success
+/// while the real worker stays cold, resurrecting the upload deadlock the
+/// warm exists to prevent. Never raw-fall-back to loopback. Unparseable
+/// hosts (e.g. a hostname) keep the legacy raw fallback.
+fn raw_warm_fallback_allowed(worker_ip: &str) -> bool {
+    worker_ip
+        .parse::<std::net::IpAddr>()
+        .map(|ip| !ip.is_loopback())
+        .unwrap_or(true)
 }
 
 /// Render an error plus its `source()` chain — reqwest's top-level Display is just
@@ -172,6 +187,13 @@ pub struct RpcWarmShardRequest {
     pub device_index: usize,
     pub plan: Vec<NodeShard>,
     pub source: RpcWarmSource,
+    /// Hex `NodeId` (`NodeId::to_hex`) of the HOST — the node about to
+    /// distribute. Lets the worker resolve its fetch bases back to the host
+    /// through its OWN mesh transport (an iroh bridge on an encrypted mesh),
+    /// with the raw-IP bases in `source` retained as LAN fallback. `None`
+    /// from older hosts — wire back-compat, raw bases only.
+    #[serde(default)]
+    pub host_node_id: Option<String>,
 }
 
 /// `POST /internal/rpc-warm` success body — what this worker warmed.
@@ -392,22 +414,68 @@ impl Default for MeshRpcShardWarmer {
     }
 }
 
+/// Resolve the HOST's fetch bases through THIS node's own transport, given the
+/// `host_node_id` hex the warm request carried. On an iroh-routed mesh the
+/// raw-IP bases in the request may be unroutable from here (host on a
+/// different network) — but the mesh transport already reaches the member as a
+/// loopback bridge. Empty when the id is absent/unparseable (legacy host) or
+/// the host isn't in our membership; the caller then uses raw bases alone.
+async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> Vec<String> {
+    let Some(id) = host_node_id.and_then(|h| commonwealth_core::ids::NodeId::from_hex(h)) else {
+        return Vec::new();
+    };
+    let member = { state.inner.mesh.read().await.members.get(&id).cloned() };
+    let Some(member) = member else {
+        tracing::debug!(
+            host = %id,
+            "rpc-warm: host_node_id not in local membership; using raw bases only"
+        );
+        return Vec::new();
+    };
+    state
+        .peer_transport()
+        .endpoints(
+            &commonwealth_transport::peer_contact(&member),
+            commonwealth_transport::TrafficClass::ModelTransfer,
+        )
+        .await
+        .into_iter()
+        .map(|e| e.base_url)
+        .collect()
+}
+
+/// Preferred-first merge without duplicates, order-preserving — transport
+/// bases go ahead of the request's raw-IP bases, which stay as LAN fallback.
+fn merge_bases(preferred: impl IntoIterator<Item = String>, rest: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for b in preferred.into_iter().chain(rest.iter().cloned()) {
+        if !out.contains(&b) {
+            out.push(b);
+        }
+    }
+    out
+}
+
 #[async_trait]
 impl RpcShardWarmer for MeshRpcShardWarmer {
     async fn warm_shard(
         &self,
         request: serde_json::Value,
         local_model_path: Option<PathBuf>,
+        state: AppState,
     ) -> Result<serde_json::Value, String> {
         let req: RpcWarmShardRequest =
             serde_json::from_value(request).map_err(|e| format!("malformed rpc-warm body: {e}"))?;
         let cache_dir = worker_cache_dir()?;
         std::fs::create_dir_all(&cache_dir).map_err(|e| format!("create cache dir: {e}"))?;
 
+        let transport_bases = host_transport_bases(&state, req.host_node_id.as_deref()).await;
+
         tracing::info!(
             model_id = %req.model_id,
             device_index = req.device_index,
             mode = match &req.source { RpcWarmSource::WholeGguf { .. } => "whole_gguf", RpcWarmSource::ByteRanges { .. } => "byte_ranges" },
+            transport_bases = transport_bases.len(),
             "rpc-warm: seeding this node's shard"
         );
 
@@ -416,8 +484,13 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                 source_urls,
                 tensors,
             } => {
-                let stats =
-                    warm_cache_from_ranges(&self.http, source_urls, tensors, &cache_dir).await?;
+                let urls = merge_bases(
+                    transport_bases
+                        .iter()
+                        .map(|b| format!("{b}/internal/v1/models/file/{}", req.model_id)),
+                    source_urls,
+                );
+                let stats = warm_cache_from_ranges(&self.http, &urls, tensors, &cache_dir).await?;
                 RpcWarmShardResponse {
                     model_id: req.model_id.clone(),
                     device_index: req.device_index,
@@ -427,8 +500,9 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                 }
             }
             RpcWarmSource::WholeGguf { peer_bases } => {
+                let bases = merge_bases(transport_bases.iter().cloned(), peer_bases);
                 let gguf = self
-                    .resolve_whole_gguf(&req.model_id, local_model_path, peer_bases)
+                    .resolve_whole_gguf(&req.model_id, local_model_path, &bases)
                     .await?;
                 // `warm_cache_for_device` is synchronous file I/O — run it off the
                 // reactor. It warms exactly this device's shard (its blocks + any
@@ -552,6 +626,11 @@ async fn orchestrate_warm(
         "rpc-warm orchestrator: seeding worker shards before distributed load"
     );
 
+    // Host identity for the request: a worker that knows WHO we are resolves
+    // its fetch bases back to us through ITS transport (iroh bridge), instead
+    // of trusting the raw-IP bases alone.
+    let host_node_id = daemon.self_node_id().await.map(|id| id.to_hex());
+
     let mut tasks = Vec::with_capacity(plan.assignments.len());
     for assignment in &plan.assignments {
         // Worker IP from its RPC endpoint (`ip:rpc_port`); its internal HTTP port
@@ -562,7 +641,36 @@ async fn orchestrate_warm(
             .rsplit_once(':')
             .map(|(host, _)| host.to_string())
             .unwrap_or_else(|| assignment.endpoint.clone());
-        let warm_url = format!("http://{worker_ip}:{internal_port}/internal/rpc-warm");
+
+        // Warm-POST candidates, best first. When discovery recorded which mesh
+        // member owns this endpoint, ask the transport for `ModelTransfer`
+        // candidates — on an iroh-routed mesh the first is a loopback bridge
+        // that tunnels to the peer (raw `:9742` is NOT reachable there; this
+        // was the `auto-warm failed … Connection refused` blocker). The
+        // hand-built raw URL stays as the final fallback and is the only
+        // candidate for env-configured workers (no directory entry).
+        let worker_node = daemon.rpc_endpoint_node(&assignment.endpoint);
+        let mut candidates: Vec<(String, String, Option<commonwealth_transport::PeerEndpoint>)> =
+            Vec::new();
+        if let Some(node) = worker_node {
+            for ep in daemon.model_transfer_endpoints(node).await {
+                candidates.push((
+                    format!("{}/internal/rpc-warm", ep.base_url),
+                    ep.label.clone(),
+                    Some(ep),
+                ));
+            }
+        }
+        if raw_warm_fallback_allowed(&worker_ip) {
+            let raw_url = format!("http://{worker_ip}:{internal_port}/internal/rpc-warm");
+            if !candidates.iter().any(|(u, _, _)| *u == raw_url) {
+                candidates.push((
+                    raw_url,
+                    format!("raw:{worker_ip}:{internal_port}"),
+                    None,
+                ));
+            }
+        }
 
         // Hand THIS worker the bases it's most likely to reach first — its own
         // network before a shared-but-unroutable LAN (see order_host_bases). The
@@ -604,29 +712,46 @@ async fn orchestrate_warm(
             device_index: assignment.device_index,
             plan: plan.plan.clone(),
             source,
+            host_node_id: host_node_id.clone(),
         };
         let http = http.clone();
         let endpoint = assignment.endpoint.clone();
         tasks.push(async move {
             let label = format!("{endpoint} (device {})", body.device_index);
-            match http.post(&warm_url).json(&body).send().await {
-                Ok(r) if r.status().is_success() => {
-                    let stats = r.json::<RpcWarmShardResponse>().await.unwrap_or_default();
-                    tracing::info!(
-                        worker = %label,
-                        written = stats.tensors_written,
-                        already = stats.tensors_already_present,
-                        "rpc-warm: worker shard warm"
-                    );
-                    Ok(())
+            // Try candidates in order; first success wins. Glassbox: every
+            // attempt logs WHICH path (`via`) carried or failed it, so "which
+            // transport actually warmed this worker?" is answerable from logs.
+            let mut last_err = format!("{label}: no warm-POST candidate");
+            for (url, via, ep) in &candidates {
+                match http.post(url).json(&body).send().await {
+                    Ok(r) if r.status().is_success() => {
+                        let stats = r.json::<RpcWarmShardResponse>().await.unwrap_or_default();
+                        tracing::info!(
+                            worker = %label,
+                            via = %via,
+                            written = stats.tensors_written,
+                            already = stats.tensors_already_present,
+                            "rpc-warm: worker shard warm"
+                        );
+                        if let (Some(node), Some(ep)) = (worker_node, ep.as_ref()) {
+                            daemon.note_model_transfer_success(node, ep).await;
+                        }
+                        return Ok(());
+                    }
+                    Ok(r) => {
+                        let status = r.status();
+                        let detail = r.text().await.unwrap_or_default();
+                        last_err = format!("{label} via {via}: warm returned {status}: {detail}");
+                        tracing::warn!(worker = %label, via = %via, status = %status, "rpc-warm: candidate answered with an error; trying next");
+                    }
+                    Err(e) => {
+                        last_err =
+                            format!("{label} via {via}: warm request failed: {}", error_chain(&e));
+                        tracing::warn!(worker = %label, via = %via, "rpc-warm: candidate unreachable; trying next");
+                    }
                 }
-                Ok(r) => {
-                    let status = r.status();
-                    let detail = r.text().await.unwrap_or_default();
-                    Err(format!("{label}: warm returned {status}: {detail}"))
-                }
-                Err(e) => Err(format!("{label}: warm request failed: {}", error_chain(&e))),
             }
+            Err(last_err)
         });
     }
 
@@ -785,6 +910,7 @@ mod tests {
                     hash: 30,
                 }],
             },
+            host_node_id: Some("0123456789abcdef0123456789abcdef".into()),
         };
         let v = serde_json::to_value(&req).unwrap();
         // The opaque-JSON seam in commonwealth-api reads `model_id` for path
@@ -792,6 +918,55 @@ mod tests {
         assert_eq!(v.get("model_id").and_then(|x| x.as_str()), Some("m.gguf"));
         let back: RpcWarmShardRequest = serde_json::from_value(v).unwrap();
         assert_eq!(back.device_index, 1);
+        assert_eq!(
+            back.host_node_id.as_deref(),
+            Some("0123456789abcdef0123456789abcdef")
+        );
         matches!(back.source, RpcWarmSource::ByteRanges { .. });
+    }
+
+    #[test]
+    fn old_wire_body_without_host_node_id_still_parses() {
+        // A pre-identity host omits the field entirely — a rolling-upgrade
+        // worker must not reject the body.
+        let v = serde_json::json!({
+            "model_id": "m.gguf",
+            "device_index": 0,
+            "plan": [],
+            "source": { "mode": "whole_gguf", "peer_bases": ["http://10.0.0.1:9742"] }
+        });
+        let req: RpcWarmShardRequest = serde_json::from_value(v).unwrap();
+        assert_eq!(req.host_node_id, None);
+    }
+
+    #[test]
+    fn raw_fallback_refused_for_loopback_worker() {
+        // A loopback worker_ip means a bridge-local endpoint (task 6): the
+        // hand-built raw URL would target OURSELF, and a self-warm reports
+        // success while the real worker stays cold → upload deadlock.
+        assert!(!raw_warm_fallback_allowed("127.0.0.1"));
+        assert!(!raw_warm_fallback_allowed("::1"));
+        // Real remote IPs and unparseable hostnames keep the legacy fallback.
+        assert!(raw_warm_fallback_allowed("192.168.1.2"));
+        assert!(raw_warm_fallback_allowed("100.104.36.28"));
+        assert!(raw_warm_fallback_allowed("beefymac.local"));
+    }
+
+    #[test]
+    fn merge_bases_prefers_transport_and_dedups() {
+        let raw = vec![
+            "http://192.168.1.19:9742".to_string(),
+            "http://127.0.0.1:60001".to_string(),
+        ];
+        // The transport bridge duplicates one raw entry — it must lead the
+        // merged order, appearing exactly once, with the rest behind it.
+        let merged = merge_bases(["http://127.0.0.1:60001".to_string()], &raw);
+        assert_eq!(
+            merged,
+            vec![
+                "http://127.0.0.1:60001".to_string(),
+                "http://192.168.1.19:9742".to_string(),
+            ]
+        );
     }
 }
