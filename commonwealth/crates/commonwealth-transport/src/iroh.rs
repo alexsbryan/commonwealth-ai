@@ -509,8 +509,30 @@ pub struct IrohTransport {
     known_addrs: std::sync::Mutex<HashMap<[u8; 32], Vec<SocketAddr>>>,
     /// One localhost bridge per (peer, ALPN): a peer is reached on the
     /// internal ALPN for most classes and the client ALPN for
-    /// inference/status, so the two ride separate tunnels.
-    bridges: tokio::sync::Mutex<HashMap<([u8; 32], &'static [u8]), Arc<HttpBridge>>>,
+    /// inference/status, so the two ride separate tunnels. Each entry
+    /// remembers the dial info it was built with (`dial_key`) so a
+    /// gossiped dial-info change REBUILDS the bridge — a frozen target
+    /// kept dialing a restarted peer's dead ephemeral port forever
+    /// (the 2026-07-19 dual-restart heal deadlock's transport half).
+    bridges: tokio::sync::Mutex<HashMap<([u8; 32], &'static [u8]), CachedBridge>>,
+}
+
+/// A cached bridge plus the normalized contact dial-info it targets.
+#[derive(Debug)]
+struct CachedBridge {
+    bridge: Arc<HttpBridge>,
+    dial_key: DialKey,
+}
+
+/// Normalized (relay_url, sorted direct addrs) — the parts of a
+/// `PeerContact` that determine where a bridge's iroh dials go.
+type DialKey = (Option<String>, Vec<SocketAddr>);
+
+fn dial_key_for(peer: &PeerContact) -> DialKey {
+    let mut addrs = peer.iroh_direct_addrs.clone();
+    addrs.sort();
+    addrs.dedup();
+    (peer.relay_url.clone(), addrs)
 }
 
 impl IrohTransport {
@@ -608,16 +630,37 @@ impl IrohTransport {
         alpn: &'static [u8],
     ) -> Option<SocketAddr> {
         let key = (*pubkey.as_bytes(), alpn);
+        let dial_key = dial_key_for(peer);
         let mut bridges = self.bridges.lock().await;
-        if let Some(b) = bridges.get(&key) {
-            return Some(b.local_addr());
+        if let Some(cached) = bridges.get(&key) {
+            if cached.dial_key == dial_key {
+                return Some(cached.bridge.local_addr());
+            }
+            // The peer's gossiped dial info changed (typical: it
+            // restarted and its ephemeral iroh port moved). A frozen
+            // bridge would keep dialing the dead target forever —
+            // rebuild against the fresh contact. Dropping the old
+            // bridge aborts its accept loop; in-flight tunnels to a
+            // stale target were doomed anyway.
+            tracing::info!(
+                target: "transport",
+                peer = %hex::encode(&key.0[..4]),
+                "iroh bridge: peer dial info changed — rebuilding bridge"
+            );
+            bridges.remove(&key);
         }
         let target = self.endpoint_addr_for(pubkey, peer)?;
         let bridge = HttpBridge::spawn(self.endpoint.clone(), target, alpn)
             .await
             .ok()?;
         let local_addr = bridge.local_addr();
-        bridges.insert(key, Arc::new(bridge));
+        bridges.insert(
+            key,
+            CachedBridge {
+                bridge: Arc::new(bridge),
+                dial_key,
+            },
+        );
         Some(local_addr)
     }
 }
@@ -1055,6 +1098,33 @@ mod tests {
         assert!(
             !ep.bound_sockets().is_empty(),
             "endpoint must bind a socket"
+        );
+    }
+
+    #[test]
+    fn dial_key_normalizes_addr_order_and_dupes() {
+        use crate::PeerContact;
+        use commonwealth_core::ids::NodeId;
+        let a: SocketAddr = "10.0.0.1:1000".parse().unwrap();
+        let b: SocketAddr = "10.0.0.2:2000".parse().unwrap();
+        let mk = |addrs: Vec<SocketAddr>| PeerContact {
+            node_id: NodeId::from_u128(1),
+            addresses: vec![],
+            node_pubkey: None,
+            relay_url: Some("https://r.example/".into()),
+            iroh_direct_addrs: addrs,
+        };
+        // Same set, different order / dup → SAME key: a reordered gossip
+        // record must NOT churn the bridge.
+        assert_eq!(
+            super::dial_key_for(&mk(vec![a, b])),
+            super::dial_key_for(&mk(vec![b, a, b]))
+        );
+        // A changed port (peer restarted) → DIFFERENT key → rebuild.
+        let b2: SocketAddr = "10.0.0.2:2001".parse().unwrap();
+        assert_ne!(
+            super::dial_key_for(&mk(vec![a, b])),
+            super::dial_key_for(&mk(vec![a, b2]))
         );
     }
 }

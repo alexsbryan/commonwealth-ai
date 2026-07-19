@@ -180,6 +180,62 @@ pub async fn mesh_join(
     })
 }
 
+/// Shared-model placement for UI display (P0.6): the primary slot's
+/// placement object from the daemon's `/status` — `mode`
+/// (distributed/local), block split, per-worker endpoints — plus the
+/// model id and whether this node serves an RPC worker. Opaque JSON on
+/// purpose: the daemon's `/status` owns the schema; the panel renders
+/// what's there so a daemon upgrade never breaks a stale desktop.
+/// `null` when the daemon is unreachable or nothing is resident yet —
+/// the panel then shows nothing rather than a broken chip.
+#[tauri::command]
+pub async fn mesh_get_placement(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Option<serde_json::Value>, String> {
+    // Both modes read over HTTP: the local (embedded) daemon serves the
+    // same `/status` on its client port, so one path covers both.
+    let port = attached_port(&state).unwrap_or(9741);
+    let client = http_client()?;
+    let resp = match client
+        .get(format!("http://localhost:{port}/status"))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) => {
+            tracing::debug!(target: "mesh_state", port, status = %r.status(), "mesh_get_placement: /status non-2xx");
+            return Ok(None);
+        }
+        Err(e) => {
+            tracing::debug!(target: "mesh_state", port, error = %e, "mesh_get_placement: /status unreachable");
+            return Ok(None);
+        }
+    };
+    let status: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse /status: {e}"))?;
+    let primary = status
+        .get("inference")
+        .and_then(|i| i.get("resident"))
+        .and_then(|r| r.as_array())
+        .and_then(|slots| {
+            slots
+                .iter()
+                .find(|s| s.get("role").and_then(|v| v.as_str()) == Some("primary"))
+        });
+    let Some(primary) = primary else {
+        return Ok(None);
+    };
+    Ok(Some(serde_json::json!({
+        "model_id": primary.get("model_id"),
+        "resident": primary.get("resident"),
+        "transitioning": primary.get("transitioning"),
+        "placement": primary.get("placement"),
+        "rpc_worker": status.get("rpc_worker"),
+    })))
+}
+
 /// Get the current mesh state for UI display (members, knowledge, contribution).
 /// Returns `null` if no mesh is active.
 #[tauri::command]

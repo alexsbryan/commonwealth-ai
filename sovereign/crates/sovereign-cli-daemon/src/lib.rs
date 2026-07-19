@@ -73,7 +73,13 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
 /// there is no override ambiguity. `RUST_LOG`, if set, still overrides all.
 fn daemon_tracing_filter(iroh_debug: bool) -> String {
     let lvl = if iroh_debug { "debug" } else { "warn" };
-    format!("{DAEMON_TRACING_FILTER},commonwealth_transport=info,iroh={lvl},iroh_relay={lvl}")
+    // `transport=info`: the bridge/tunnel layer logs under the LITERAL target
+    // "transport" (not the crate path), so without this token every bridge
+    // dial failure is invisible — the 2026-07-19 mesh-heal investigation was
+    // blind for exactly this reason. P0.5 observability requirement.
+    format!(
+        "{DAEMON_TRACING_FILTER},commonwealth_transport=info,transport=info,iroh={lvl},iroh_relay={lvl}"
+    )
 }
 
 /// Process-level entry shared by the `sovereign-cli-daemon` binary and

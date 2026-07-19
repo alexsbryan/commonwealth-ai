@@ -103,6 +103,27 @@ fn raw_warm_fallback_allowed(worker_ip: &str) -> bool {
         .unwrap_or(true)
 }
 
+/// All sibling file names of a split GGUF (`<stem>-<idx>-of-<count>.gguf`),
+/// including `name` itself, in shard order; `[name]` for a non-split name.
+/// Pure name arithmetic — mirrors `sovereign-inference`'s shard enumeration
+/// so host and worker agree on what "the whole model" means.
+fn split_sibling_names(name: &str) -> Vec<String> {
+    let parsed = name.rfind("-of-").and_then(|of| {
+        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
+        let before = name.get(..of)?;
+        let dash = before.rfind('-')?;
+        let idx = before.get(dash + 1..)?;
+        idx.parse::<u32>().ok()?;
+        Some((before.get(..dash)?.to_string(), count, idx.len()))
+    });
+    match parsed {
+        Some((stem, count, width)) if count > 1 => (1..=count)
+            .map(|i| format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"))
+            .collect(),
+        _ => vec![name.to_string()],
+    }
+}
+
 /// Render an error plus its `source()` chain — reqwest's top-level Display is just
 /// "error sending request for url (…)"; the actual cause (connection refused /
 /// timed out / DNS) lives in the source chain. Glassbox: a warm failure must say
@@ -155,6 +176,14 @@ pub struct TensorRange {
     pub gguf_offset: u64,
     pub nbytes: u64,
     pub hash: u64,
+    /// Index into `ByteRanges.file_urls` naming the shard file this range is
+    /// relative to (split GGUFs ship per-file offsets). `0` — the serde
+    /// default, and what pre-split hosts send — means the first/only file.
+    /// An OLD worker ignores this and fetches every range from
+    /// `source_urls`; wrong-file bytes then fail the FNV verification and
+    /// the warm errs loudly (→ local-only) instead of poisoning the cache.
+    #[serde(default)]
+    pub file_idx: u32,
 }
 
 /// How the worker obtains the bytes it warms.
@@ -172,9 +201,15 @@ pub enum RpcWarmSource {
     /// `#5b` — range-fetch only this shard's tensors. `source_urls` are full
     /// `/internal/v1/models/file/{name}` URLs (one per host base); the worker
     /// `Range`-GETs each tensor and verifies its hash. Never holds the whole GGUF.
+    /// For split GGUFs, `file_urls[i]` is the ordered URL candidate list for
+    /// shard file `i` and each tensor's `file_idx` selects its file; when
+    /// `file_urls` is empty (single-file model / pre-split host) every tensor
+    /// uses `source_urls`.
     ByteRanges {
         source_urls: Vec<String>,
         tensors: Vec<TensorRange>,
+        #[serde(default)]
+        file_urls: Vec<Vec<String>>,
     },
 }
 
@@ -231,19 +266,35 @@ pub async fn warm_cache_from_ranges(
     source_urls: &[String],
     tensors: &[TensorRange],
     cache_dir: &Path,
+    file_urls: &[Vec<String>],
 ) -> Result<WarmRangeStats, String> {
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
 
-    if source_urls.is_empty() {
+    if source_urls.is_empty() && file_urls.iter().all(|f| f.is_empty()) {
         return Err("no source URL for byte-range warm".to_string());
     }
     std::fs::create_dir_all(cache_dir).map_err(|e| format!("create cache dir: {e}"))?;
     let mut stats = WarmRangeStats::default();
     // Sticky preferred source: once one serves a range, keep using it.
+    // Index is positional within whichever URL list a tensor's file uses —
+    // the base ordering is identical across files, so stickiness carries.
     let mut url_idx = 0usize;
 
     for t in tensors {
+        // Split-aware: a tensor's offsets are relative to ITS shard file.
+        // `file_urls[file_idx]` is that file's candidate list; empty/absent
+        // (single-file model, pre-split host) falls back to `source_urls`.
+        let source_urls: &[String] = match file_urls.get(t.file_idx as usize) {
+            Some(urls) if !urls.is_empty() => urls,
+            _ => source_urls,
+        };
+        if source_urls.is_empty() {
+            return Err(format!(
+                "no source URL for file_idx {} of a byte-range warm",
+                t.file_idx
+            ));
+        }
         let name = cache_file_name(t.hash);
         let cache_file = cache_dir.join(&name);
         // Idempotent: skip a present, correctly-sized entry.
@@ -371,16 +422,41 @@ impl MeshRpcShardWarmer {
         local_model_path: Option<PathBuf>,
         peer_bases: &[String],
     ) -> Result<PathBuf, String> {
-        if let Some(p) = local_model_path {
-            return Ok(p);
+        // Split GGUFs: the warm reader walks every `-NNNNN-of-NNNNN` sibling,
+        // so ALL shard files must be local, not just the named one.
+        let needed = split_sibling_names(model_id);
+        let primary = match local_model_path {
+            Some(p) => p,
+            None => {
+                let already = self.fetch_dir.join(model_id);
+                if already.is_file() {
+                    already
+                } else {
+                    self.fetch_one(model_id, peer_bases).await?
+                }
+            }
+        };
+        let dir = primary.parent().map(Path::to_path_buf).unwrap_or_default();
+        for sibling in &needed {
+            if sibling == model_id {
+                continue;
+            }
+            if dir.join(sibling).is_file() || self.fetch_dir.join(sibling).is_file() {
+                continue;
+            }
+            // Missing sibling shard — fetch it beside the others. The warm
+            // reader falls back to single-file (→ empty-warm guard on the
+            // host) if any sibling is absent, so failing here is loud anyway.
+            self.fetch_one(sibling, peer_bases).await?;
         }
-        let already = self.fetch_dir.join(model_id);
-        if already.is_file() {
-            return Ok(already);
-        }
+        Ok(primary)
+    }
+
+    /// Fetch one named model file from the first reachable host base.
+    async fn fetch_one(&self, name: &str, peer_bases: &[String]) -> Result<PathBuf, String> {
         if peer_bases.is_empty() {
             return Err(format!(
-                "node does not hold '{model_id}' and the warm request carried no host base to fetch from"
+                "node does not hold '{name}' and the warm request carried no host base to fetch from"
             ));
         }
         let mut last_err = "no host base reachable".to_string();
@@ -388,23 +464,23 @@ impl MeshRpcShardWarmer {
             match crate::model_fetch::fetch_named_model_from_peer(
                 &self.http,
                 base,
-                model_id,
+                name,
                 &self.fetch_dir,
                 |_, _| {},
             )
             .await
             {
                 Ok(p) => {
-                    tracing::info!(model_id, base, "rpc-warm: fetched whole GGUF for warming");
+                    tracing::info!(model_id = name, base, "rpc-warm: fetched GGUF file for warming");
                     return Ok(p);
                 }
                 Err(e) => {
                     last_err = format!("{base}: {e}");
-                    tracing::warn!(base, error = %last_err, "rpc-warm: whole-GGUF fetch failed, trying next host base");
+                    tracing::warn!(base, error = %last_err, "rpc-warm: GGUF fetch failed, trying next host base");
                 }
             }
         }
-        Err(format!("could not fetch '{model_id}': {last_err}"))
+        Err(format!("could not fetch '{name}': {last_err}"))
     }
 }
 
@@ -483,6 +559,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
             RpcWarmSource::ByteRanges {
                 source_urls,
                 tensors,
+                file_urls,
             } => {
                 let urls = merge_bases(
                     transport_bases
@@ -490,7 +567,37 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                         .map(|b| format!("{b}/internal/v1/models/file/{}", req.model_id)),
                     source_urls,
                 );
-                let stats = warm_cache_from_ranges(&self.http, &urls, tensors, &cache_dir).await?;
+                // Per-file lists get the same transport-first merge. The file
+                // NAME rides inside the URLs the host built — recover it from
+                // the last path segment so the transport candidates target the
+                // same shard file.
+                let merged_file_urls: Vec<Vec<String>> = file_urls
+                    .iter()
+                    .map(|urls_for_file| {
+                        let name = urls_for_file
+                            .first()
+                            .and_then(|u| u.rsplit('/').next())
+                            .unwrap_or_default()
+                            .to_string();
+                        if name.is_empty() {
+                            return urls_for_file.clone();
+                        }
+                        merge_bases(
+                            transport_bases
+                                .iter()
+                                .map(|b| format!("{b}/internal/v1/models/file/{name}")),
+                            urls_for_file,
+                        )
+                    })
+                    .collect();
+                let stats = warm_cache_from_ranges(
+                    &self.http,
+                    &urls,
+                    tensors,
+                    &cache_dir,
+                    &merged_file_urls,
+                )
+                .await?;
                 RpcWarmShardResponse {
                     model_id: req.model_id.clone(),
                     device_index: req.device_index,
@@ -680,19 +787,30 @@ async fn orchestrate_warm(
 
         let source = match &manifest {
             Some(m) => {
-                let tensors: Vec<TensorRange> = m
-                    .iter()
-                    .filter(|e| {
-                        e.cacheable
-                            && tensor_device(&e.name, e.layer, &plan.plan)
-                                == Some(assignment.device_index)
-                    })
-                    .map(|e| TensorRange {
+                // Split-aware: each tensor's offsets are relative to its own
+                // shard file; assign a stable file index (order of first
+                // appearance) and ship per-file URL candidate lists.
+                let mut files: Vec<String> = Vec::new();
+                let mut tensors: Vec<TensorRange> = Vec::new();
+                for e in m.iter().filter(|e| {
+                    e.cacheable
+                        && tensor_device(&e.name, e.layer, &plan.plan)
+                            == Some(assignment.device_index)
+                }) {
+                    let file_idx = match files.iter().position(|f| *f == e.file) {
+                        Some(i) => i,
+                        None => {
+                            files.push(e.file.clone());
+                            files.len() - 1
+                        }
+                    } as u32;
+                    tensors.push(TensorRange {
                         gguf_offset: e.gguf_offset,
                         nbytes: e.nbytes,
                         hash: e.hash,
-                    })
-                    .collect();
+                        file_idx,
+                    });
+                }
                 // A placed worker with ZERO cacheable tensors is a manifest
                 // gap, not a warm — e.g. a split GGUF where build_manifest
                 // read only the header shard (found live 2026-07-19: the
@@ -707,13 +825,24 @@ async fn orchestrate_warm(
                         assignment.endpoint, assignment.device_index
                     ));
                 }
-                let source_urls = ordered_bases
+                let file_urls: Vec<Vec<String>> = files
                     .iter()
-                    .map(|b| format!("{b}/internal/v1/models/file/{model_id}"))
+                    .map(|f| {
+                        ordered_bases
+                            .iter()
+                            .map(|b| format!("{b}/internal/v1/models/file/{f}"))
+                            .collect()
+                    })
                     .collect();
+                // Legacy `source_urls` = the first file's candidates, so an
+                // old worker still functions for single-file models; on a
+                // split it fetches wrong-file bytes → FNV mismatch → loud
+                // warm failure → local-only, never a poisoned cache.
+                let source_urls = file_urls.first().cloned().unwrap_or_default();
                 RpcWarmSource::ByteRanges {
                     source_urls,
                     tensors,
+                    file_urls,
                 }
             }
             None => RpcWarmSource::WholeGguf {
@@ -855,13 +984,14 @@ mod tests {
                 gguf_offset: off as u64,
                 nbytes: len as u64,
                 hash: h.finish(),
+                file_idx: 0,
             }
         };
         let tensors = vec![mk(0, 1000), mk(1000, 2000)];
 
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let stats = warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path())
+        let stats = warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path(), &[])
             .await
             .expect("warm");
         assert_eq!(stats.written, 2);
@@ -879,7 +1009,7 @@ mod tests {
         }
 
         // Idempotent: a second run writes nothing new.
-        let again = warm_cache_from_ranges(&http, &[url], &tensors, cache.path())
+        let again = warm_cache_from_ranges(&http, &[url], &tensors, cache.path(), &[])
             .await
             .unwrap();
         assert_eq!(again.written, 0);
@@ -898,10 +1028,11 @@ mod tests {
             gguf_offset: 0,
             nbytes: 1000,
             hash: 0xdead_beef_dead_beef,
+            file_idx: 0,
         }];
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let err = warm_cache_from_ranges(&http, &[url], &bad, cache.path())
+        let err = warm_cache_from_ranges(&http, &[url], &bad, cache.path(), &[])
             .await
             .unwrap_err();
         assert!(err.contains("hash mismatch"), "got: {err}");
@@ -922,7 +1053,9 @@ mod tests {
                     gguf_offset: 10,
                     nbytes: 20,
                     hash: 30,
+                    file_idx: 0,
                 }],
+                file_urls: vec![],
             },
             host_node_id: Some("0123456789abcdef0123456789abcdef".into()),
         };
@@ -951,6 +1084,69 @@ mod tests {
         });
         let req: RpcWarmShardRequest = serde_json::from_value(v).unwrap();
         assert_eq!(req.host_node_id, None);
+    }
+
+    #[test]
+    fn split_sibling_names_generates_the_full_set() {
+        assert_eq!(
+            split_sibling_names("m-00001-of-00003.gguf"),
+            vec![
+                "m-00001-of-00003.gguf",
+                "m-00002-of-00003.gguf",
+                "m-00003-of-00003.gguf"
+            ]
+        );
+        // Non-split and degenerate names pass through untouched.
+        assert_eq!(split_sibling_names("model.gguf"), vec!["model.gguf"]);
+        assert_eq!(
+            split_sibling_names("m-00001-of-00001.gguf"),
+            vec!["m-00001-of-00001.gguf"]
+        );
+    }
+
+    #[tokio::test]
+    async fn warm_from_ranges_routes_tensors_to_their_own_file() {
+        // Two "shard files" with distinct contents on separate servers; a
+        // tensor from each. Per-file routing must fetch each range from ITS
+        // file — the split-GGUF fix (fetching both from file 0 would
+        // hash-mismatch tensor 1).
+        let data0 = vec![11u8; 2048];
+        let mut data1 = vec![0u8; 2048];
+        for (i, b) in data1.iter_mut().enumerate() {
+            *b = (i % 97) as u8;
+        }
+        let (url0, s0) = spawn_range_server(data0.clone()).await;
+        let (url1, s1) = spawn_range_server(data1.clone()).await;
+
+        let mk = |data: &[u8], off: usize, len: usize, file_idx: u32| {
+            let mut h = Fnv1a::new();
+            h.update(&data[off..off + len]);
+            TensorRange {
+                gguf_offset: off as u64,
+                nbytes: len as u64,
+                hash: h.finish(),
+                file_idx,
+            }
+        };
+        let tensors = vec![mk(&data0, 0, 1000, 0), mk(&data1, 500, 1200, 1)];
+        let file_urls = vec![vec![url0.clone()], vec![url1.clone()]];
+
+        let cache = tempfile::tempdir().unwrap();
+        let http = reqwest::Client::new();
+        let stats = warm_cache_from_ranges(&http, &[], &tensors, cache.path(), &file_urls)
+            .await
+            .expect("split warm");
+        assert_eq!(stats.written, 2);
+        // Each cache entry holds the bytes of ITS OWN file's range.
+        for (t, data) in [(&tensors[0], &data0), (&tensors[1], &data1)] {
+            let got = std::fs::read(cache.path().join(cache_file_name(t.hash))).unwrap();
+            assert_eq!(
+                &got[..],
+                &data[t.gguf_offset as usize..(t.gguf_offset + t.nbytes) as usize]
+            );
+        }
+        s0.abort();
+        s1.abort();
     }
 
     #[test]
