@@ -149,6 +149,50 @@ pub struct ResultRow {
     /// the histogram recomputes — this stored copy is for JSONL readers).
     #[serde(default)]
     pub partition: Option<Partition>,
+    /// EPISTEMIC_STATE.md third lane (tracked, advisory): the bank's
+    /// acquisition-class label for this absent question. `None` =
+    /// unlabeled / answerable.
+    #[serde(default)]
+    pub acquisition_label: Option<super::question::AcquisitionClass>,
+    /// The class of the turn's top acquisition conjecture, read from
+    /// the persisted `epistemic_state.gaps[0].routes[0]` metadata.
+    /// `None` = no conjecture (which MATCHES an `Unknowable` label).
+    #[serde(default)]
+    pub acquisition_conjecture: Option<super::question::AcquisitionClass>,
+}
+
+/// Classify the turn's top acquisition conjecture from persisted
+/// message metadata (`epistemic_state.gaps[0].routes[0]`, the
+/// externally-tagged snake_case `AcquisitionRoute` wire shape).
+/// `None` = no ledger / no gaps / no routes — i.e. no conjecture.
+pub fn conjecture_class_from_metadata(
+    meta: &serde_json::Value,
+) -> Option<super::question::AcquisitionClass> {
+    use super::question::AcquisitionClass as C;
+    let route = meta
+        .get("epistemic_state")?
+        .get("gaps")?
+        .as_array()?
+        .first()?
+        .get("routes")?
+        .as_array()?
+        .first()?;
+    if let Some(tag) = route.as_str() {
+        return match tag {
+            "connect_folder" | "connect_vault" | "import_conversations" => Some(C::ConnectSource),
+            _ => None,
+        };
+    }
+    let obj = route.as_object()?;
+    if obj.contains_key("install_recipe") {
+        Some(C::InstallRecipe)
+    } else if obj.contains_key("web_search") {
+        Some(C::WebSearch)
+    } else if obj.contains_key("provide_document") {
+        Some(C::ProvideDocument)
+    } else {
+        None
+    }
 }
 
 impl ResultRow {
@@ -437,6 +481,15 @@ pub struct CalibrationReport {
     /// written before the partition existed.
     #[serde(default)]
     pub partition: PartitionCounts,
+    // ── Third lane (tracked, advisory — EPISTEMIC_STATE.md §8): ──
+    /// Absent rows carrying an acquisition-class label.
+    #[serde(default)]
+    pub n_acquisition_labeled: usize,
+    /// Labeled rows whose top conjecture matched the label
+    /// (`Unknowable` matches a no-conjecture row). Advisory — never
+    /// part of the verdict.
+    #[serde(default)]
+    pub acquisition_matched: usize,
 }
 
 fn ratio(num: usize, den: usize) -> f64 {
@@ -465,6 +518,7 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
     let mut parts = PartitionCounts::default();
     let (mut cite_checked, mut cite_faithful) = (0usize, 0usize);
     let (mut n_distractor, mut distractor_ok) = (0usize, 0usize);
+    let (mut acq_labeled, mut acq_matched) = (0usize, 0usize);
 
     for r in rows {
         if r.qtype.is_answerable() {
@@ -516,6 +570,19 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
             if r.is_hallucination() {
                 c.absent_hallucinated += 1;
             }
+            // Third lane (tracked): conjecture accuracy on labeled rows.
+            if let Some(label) = r.acquisition_label {
+                acq_labeled += 1;
+                let matched = match label {
+                    super::question::AcquisitionClass::Unknowable => {
+                        r.acquisition_conjecture.is_none()
+                    }
+                    l => r.acquisition_conjecture == Some(l),
+                };
+                if matched {
+                    acq_matched += 1;
+                }
+            }
         }
 
         // Gold-free, spans both axes: count any answer that presents a specific
@@ -551,6 +618,8 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
         dead_law_rate: ratio(c.dead_law_cited, c.superseded_trap),
         counts: c,
         partition: parts,
+        n_acquisition_labeled: acq_labeled,
+        acquisition_matched: acq_matched,
     }
 }
 
@@ -649,6 +718,8 @@ mod tests {
             retrieval_present: None,
             draft_correct: None,
             partition: None,
+            acquisition_label: None,
+            acquisition_conjecture: None,
         }
     }
 

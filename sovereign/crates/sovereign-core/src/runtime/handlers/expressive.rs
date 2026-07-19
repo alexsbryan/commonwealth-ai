@@ -262,6 +262,7 @@ impl Runtime {
         // top-K). Measured: the single correction pass cut confab
         // ~50%→~30%; the binding re-verify + claim-free floor is the
         // lever for the residual (2026-07-08 recall bench).
+        let mut recall_verification: Option<crate::runtime::types::RecallVerificationProv> = None;
         if register == SkillRegister::Relational && !context.memories.is_empty() {
             use super::super::memory_grounding as mg;
             const VERIFY_CAP: usize = 3; // matches PROMPT_RENDER_CAP
@@ -282,6 +283,10 @@ impl Runtime {
                 mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen)
                     .await;
             let mut final_referenced = None;
+            // Tracks the verdict that describes the FINAL response_text
+            // (v1, or v2 after a correction retry) for the retained
+            // provenance record below.
+            let mut recall_verdict_state = (v1.grounded, v1.fail_open);
             if v1.grounded {
                 final_referenced = v1.referenced;
                 // False-denial correction: the draft is grounded but
@@ -329,6 +334,7 @@ impl Runtime {
                     seen,
                 )
                 .await;
+                recall_verdict_state = (v2.grounded, v2.fail_open);
                 if v2.grounded {
                     final_referenced = v2.referenced;
                 } else {
@@ -365,6 +371,11 @@ impl Runtime {
                     self.pin_referenced_memory(conversation_id, &m.id);
                 }
             }
+            recall_verification = Some(crate::runtime::types::RecallVerificationProv {
+                grounded: recall_verdict_state.0,
+                fail_open: recall_verdict_state.1,
+                referenced: final_referenced,
+            });
         }
 
         // Glassbox parity with the streaming variant: capture
@@ -390,6 +401,7 @@ impl Runtime {
                         .to_string(),
                     ),
                     source_memory_ids: m.source_memory_ids.clone(),
+                    confidence: Some(m.confidence),
                 })
                 .collect();
             let history_summary = HistorySummaryProv {
@@ -433,6 +445,7 @@ impl Runtime {
                 max_tokens: request.max_tokens,
                 enable_thinking: request.enable_thinking,
                 pass_a_ms: metrics.pass_a_ms,
+                recall_verification,
             };
             if let Ok(mut guard) = self.turn_provenance.write() {
                 guard.insert(conversation_id.to_string(), provenance);
@@ -701,6 +714,7 @@ impl Runtime {
                         .to_string(),
                     ),
                     source_memory_ids: m.source_memory_ids.clone(),
+                    confidence: Some(m.confidence),
                 })
                 .collect();
 
@@ -735,6 +749,10 @@ impl Runtime {
                 max_tokens: request.max_tokens,
                 enable_thinking: request.enable_thinking,
                 pass_a_ms,
+                // The recall verifier runs only on the NON-streaming
+                // witness path today; `None` here is accurate, not a
+                // gap — the ledger records these recalls Unverified.
+                recall_verification: None,
             };
             if let Ok(mut guard) = self.turn_provenance.write() {
                 guard.insert(conversation_id.to_string(), provenance);

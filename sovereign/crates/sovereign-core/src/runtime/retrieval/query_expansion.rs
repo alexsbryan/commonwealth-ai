@@ -1082,41 +1082,9 @@ impl Runtime {
         if std::env::var("SOVEREIGN_QUERY_DECOMP").ok().as_deref() != Some("1") {
             return None;
         }
-
-        // Only fire on shapes where per-entity decomposition is
-        // structurally meaningful. KnowledgeQuery is included
-        // because the classifier sometimes routes "How do X and Y
-        // differ on Z?" to KnowledgeQuery rather than
-        // ComparisonQuery.
-        if !matches!(
-            intent,
-            Intent::ComparisonQuery | Intent::KnowledgeQuery | Intent::DeepQuery
-        ) {
-            return None;
-        }
-
-        let entities = extract_comparison_entities(message);
-        if entities.len() < 2 {
-            return None;
-        }
-
-        let axis = comparison_axis(message, &entities)?;
-
-        let queries: Vec<String> = entities
-            .iter()
-            .take(DECOMP_MAX_QUERIES)
-            .map(|e| format!("{e} {axis}"))
-            .collect();
-        if queries.is_empty() {
-            return None;
-        }
-        eprintln!(
-            "[query_decomp] entities={:?} axis={axis:?} queries={queries:?}",
-            entities,
-        );
+        let queries = decompose_question_inner(message, intent)?;
+        eprintln!("[query_decomp] queries={queries:?}");
         tracing::info!(
-            entities = ?entities,
-            axis = %axis,
             queries = ?queries,
             "query_decomp: heuristic decomposition"
         );
@@ -1360,4 +1328,44 @@ impl Runtime {
         );
         Some(titles)
     }
+}
+
+/// Pure heuristic question decomposition — the body of
+/// [`Runtime::decompose_question`] WITHOUT the `SOVEREIGN_QUERY_DECOMP`
+/// env gate. Split out (2026-07-18) so the epistemic demand builder can
+/// derive sub-question facets from the SAME decomposition without
+/// enabling retrieval fan-out — the env gate stays on the fan-out
+/// caller only (EPISTEMIC_STATE.md, Milestone B).
+///
+/// Comparison shape only: ≥2 extractable entities plus a detectable
+/// axis term → one `"{entity} {axis}"` sub-query per entity. `None`
+/// when the shape doesn't match.
+pub(crate) fn decompose_question_inner(message: &str, intent: &Intent) -> Option<Vec<String>> {
+    // Only fire on shapes where per-entity decomposition is
+    // structurally meaningful. KnowledgeQuery is included because the
+    // classifier sometimes routes "How do X and Y differ on Z?" to
+    // KnowledgeQuery rather than ComparisonQuery.
+    if !matches!(
+        intent,
+        Intent::ComparisonQuery | Intent::KnowledgeQuery | Intent::DeepQuery
+    ) {
+        return None;
+    }
+
+    let entities = extract_comparison_entities(message);
+    if entities.len() < 2 {
+        return None;
+    }
+
+    let axis = comparison_axis(message, &entities)?;
+
+    let queries: Vec<String> = entities
+        .iter()
+        .take(DECOMP_MAX_QUERIES)
+        .map(|e| format!("{e} {axis}"))
+        .collect();
+    if queries.is_empty() {
+        return None;
+    }
+    Some(queries)
 }

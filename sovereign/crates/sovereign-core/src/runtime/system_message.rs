@@ -753,6 +753,12 @@ impl Runtime {
             // no preemption (synchronous caller awaits the result).
             None,
             None,
+            // Acquisition routes: engine for the catalog; no probe
+            // verdict on this path (defaults ClaimUncovered).
+            Some(crate::runtime::acquisition::RouteContext {
+                engine: self.corpus_engine.clone(),
+                coverage: None,
+            }),
         )
         .await
         {
@@ -804,6 +810,10 @@ impl Runtime {
             None,
             None,
             None,
+            Some(crate::runtime::acquisition::RouteContext {
+                engine: self.corpus_engine.clone(),
+                coverage: None,
+            }),
         )
         .await
     }

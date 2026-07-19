@@ -880,6 +880,19 @@ const RELATIONAL_DIRECT_THRESHOLD: f64 = 0.85;
 /// Memories below this threshold land in the "tentative" band.
 const RELATIONAL_INFER_THRESHOLD: f64 = 0.5;
 
+/// Derive the epistemic band for a memory's stored confidence — the
+/// SAME thresholds `format_relational` uses to band the prompt, so the
+/// ledger and the prompt can never disagree about a recall's register.
+pub(crate) fn band_for_confidence(confidence: f64) -> crate::types::MemoryBand {
+    if confidence >= RELATIONAL_DIRECT_THRESHOLD {
+        crate::types::MemoryBand::ToldDirectly
+    } else if confidence >= RELATIONAL_INFER_THRESHOLD {
+        crate::types::MemoryBand::Inferred
+    } else {
+        crate::types::MemoryBand::Tentative
+    }
+}
+
 /// Format memories for injection into system prompts. The `register`
 /// argument determines the surface shape:
 ///

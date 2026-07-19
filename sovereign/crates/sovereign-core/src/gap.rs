@@ -228,6 +228,9 @@ fn parse_gap_response(raw: &str) -> Option<InformationRequest> {
         // are stamped by the executor instead.
         kind: InformationRequestKind::Refinement,
         task_title: String::new(),
+        // Routes are stamped by run_collaboration's resolver, not here
+        // (the gap checker has no engine handle).
+        routes: Vec::new(),
     })
 }
 

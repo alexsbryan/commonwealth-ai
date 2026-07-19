@@ -148,6 +148,8 @@ impl DeterministicVerifier {
             retrieval_present: None,
             draft_correct: None,
             partition: None,
+            acquisition_label: None,
+            acquisition_conjecture: None,
         };
 
         let failure = if row.is_pass() {

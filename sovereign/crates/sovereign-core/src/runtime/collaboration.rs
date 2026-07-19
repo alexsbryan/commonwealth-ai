@@ -135,6 +135,11 @@ pub(crate) async fn run_collaboration(
     // 150s dispatch AbortError queued behind turn 2's refinement on
     // the fast slot. `None` = legacy callers, never preempted.
     preempt: Option<CancellationToken>,
+    // Acquisition-route resolution context (EPISTEMIC_STATE.md §4.3):
+    // an engine handle for the recipe catalog + installed diff, plus
+    // the turn's coverage verdict when a probe ran. `None` = no route
+    // resolution (legacy callers) — the card renders as before.
+    route_ctx: Option<crate::runtime::acquisition::RouteContext>,
 ) -> RefinementOutcome {
     if !inference_config.auto_collaborate {
         return RefinementOutcome::NotAttempted;
@@ -212,8 +217,18 @@ pub(crate) async fn run_collaboration(
     req.kind = InformationRequestKind::Refinement;
     req.task_title.clear();
 
+    // Acquisition conjecture (EPISTEMIC_STATE.md §4.3): rank concrete
+    // catalog-grounded routes for THIS gap. One embed call for the gap
+    // text; catalog embeddings are disk-cached. Any failure ships the
+    // card without routes — never blocks the request.
+    if let Some(ctx) = route_ctx {
+        req.routes =
+            crate::runtime::acquisition::routes_for_gap(inference, &ctx, &req.gap).await;
+    }
+
     tracing::info!(
         gap_chars = req.gap.len(),
+        routes = req.routes.len(),
         "maybe_collaborate: surfacing information request"
     );
 
@@ -436,6 +451,8 @@ pub(crate) async fn run_post_stream_refinement(
     // Post-stream preemption — forwarded; see `run_collaboration`.
     preempt: Option<CancellationToken>,
     grounding_guard: Option<RefinementGuard>,
+    // Acquisition-route context — forwarded; see `run_collaboration`.
+    route_ctx: Option<crate::runtime::acquisition::RouteContext>,
 ) -> Option<String> {
     let outcome = run_collaboration(
         inference,
@@ -449,6 +466,7 @@ pub(crate) async fn run_post_stream_refinement(
         session_id,
         lesson_prompt,
         preempt,
+        route_ctx,
     )
     .await;
 

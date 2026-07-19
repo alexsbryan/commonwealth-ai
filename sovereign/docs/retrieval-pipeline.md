@@ -126,6 +126,9 @@ asserts every step-level gate appears here.
 | - | `SOVEREIGN_HISTORY_RETRIEVAL` | on | History layer: retrieval over prior conversation turns (=0 disables). |
 | - | `SOVEREIGN_COMPACTION_DISABLE` | off | History layer: =1 disables dropped-history compaction. |
 | - | `SOVEREIGN_FORENSIC` | off | =1 enables audit_pipeline_stage composition snapshots between steps. |
+| - | `SOVEREIGN_EPISTEMIC_STATE` | on | Post-pipeline: assemble the per-turn epistemic ledger (EPISTEMIC_STATE.md) into message metadata. Pure collation, no model calls; =0 disables. |
+| - | `SOVEREIGN_COVERAGE_PROBE` | on | Post-pipeline, gap/abstain turns only: cross-corpus nearest-chunk-cosine probe classifying a gap as TopicUncovered vs ClaimUncovered. =0 disables. |
+| - | `SOVEREIGN_COVERAGE_NEAR_SIM` | 0.55 | Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrate against the chaos absent banks). |
 
 ## Verdict buckets (2026-06-10 flag audit)
 

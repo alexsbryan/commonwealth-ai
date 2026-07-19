@@ -174,6 +174,7 @@ impl Runtime {
         // scope. Claim search is sealed to the conversation's corpora.
         let gate_surface = crate::runtime::grounding::GateSurface::SimpleQuery;
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let mut gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>> = None;
         let response_text = if gate_surface.enabled() && !want_witness_path && !kc.chunks.is_empty()
         {
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
@@ -199,6 +200,7 @@ impl Runtime {
             )
             .await;
             grounding_gate_meta = Some(outcome.meta);
+            gate_claims = Some(outcome.claims);
             outcome.text
         } else {
             response_text
@@ -249,6 +251,22 @@ impl Runtime {
                 None
             };
 
+        // Epistemic ledger (EPISTEMIC_STATE.md) — dark collation. The
+        // simple surface's gate runs only on non-witness turns; witness
+        // turns carry recalled memories with no verifier here, which
+        // the assembler records honestly (no memory holdings without
+        // an attributed reference).
+        let epistemic_state = crate::runtime::epistemic::epistemic_state_enabled().then(|| {
+            crate::runtime::epistemic::assemble_epistemic_state(
+                crate::runtime::epistemic::EpistemicInputs {
+                    gate_meta: grounding_gate_meta.as_ref(),
+                    gate_claims: gate_claims.as_deref(),
+                    pool_corpora: crate::runtime::epistemic::pool_corpora(&kc.chunks),
+                    ..Default::default()
+                },
+            )
+        });
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -263,6 +281,7 @@ impl Runtime {
                     "provenance": provenance,
                     "retrieved_chunks": kc.retrieved_chunks,
                     "recalled_memories": recalled_memories_metadata,
+                    "epistemic_state": epistemic_state,
                 });
                 if let Some(g) = grounding_gate_meta {
                     m["grounding_gate"] = g;

@@ -44,6 +44,7 @@
     submitInformationSearch,
   } from "../api";
   import type {
+    AcquisitionRoute,
     InformationRequestPayload,
     SearchAugmentation,
   } from "../types";
@@ -70,6 +71,12 @@
      *  message. The post-refine bubble then renders the
      *  "Augmented via web search" footer. */
     onSearchAugmented?: (augmentation: SearchAugmentation) => void;
+    /** Navigate to the Library (shelf view). Acquisition-route buttons
+     *  (install a recipe / connect a source) are NAVIGATIONS: they do
+     *  NOT resolve the pending request — the card stays live so the
+     *  user can still Skip (or paste) after connecting a source.
+     *  Unset = route buttons render nothing (CLI/test hosts). */
+    onOpenLibrary?: () => void;
   }
 
   let {
@@ -78,7 +85,31 @@
     conversationId = null,
     onRefiningStarted,
     onSearchAugmented,
+    onOpenLibrary,
   }: Props = $props();
+
+  /** Acquisition routes that render as buttons in the routes strip.
+   *  `web_search` is excluded — the standing "Search the web" action
+   *  below already covers it; `provide_document` is covered by the
+   *  paste box. What remains are the Library navigations. */
+  let libraryRoutes = $derived(
+    (request?.routes ?? []).filter(
+      (r) =>
+        r === "connect_folder" ||
+        r === "connect_vault" ||
+        r === "import_conversations" ||
+        (typeof r === "object" && "install_recipe" in r),
+    ),
+  );
+
+  function routeLabel(route: AcquisitionRoute): string {
+    if (route === "connect_folder") return "Connect a folder";
+    if (route === "connect_vault") return "Connect an Obsidian vault";
+    if (route === "import_conversations") return "Import conversations";
+    if (typeof route === "object" && "install_recipe" in route)
+      return `Install ${route.install_recipe.name}`;
+    return "";
+  }
 
   let pasteValue = $state("");
   let submitting = $state(false);
@@ -236,6 +267,27 @@
         <p class="focal-text">{request.gap}</p>
       </div>
     </section>
+
+    {#if onOpenLibrary && libraryRoutes.length > 0}
+      <!-- Acquisition routes (EPISTEMIC_STATE.md §4.3): concrete,
+           catalog-grounded places to get what's missing. These are
+           navigations — the pending request stays live (the user can
+           come back and Skip, or let a future turn use the newly
+           connected source). -->
+      <section class="routes" data-cascade="2">
+        <span class="routes-label">Where you could get this</span>
+        {#each libraryRoutes as route}
+          <button
+            class="btn route"
+            onclick={() => onOpenLibrary?.()}
+            disabled={submitting || searching}
+            title="Opens the Library — the request stays open while you add the source"
+          >
+            {routeLabel(route)}
+          </button>
+        {/each}
+      </section>
+    {/if}
 
     {#if hasContext}
       <details
@@ -660,6 +712,40 @@
     color: var(--text-secondary);
     border-color: var(--border-bright);
     background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+  }
+
+  /* ─── Acquisition routes strip ────────────────────────────────
+     Between the focal question and the context disclosure: a quiet
+     row of navigation chips naming concrete acquisition targets.
+     Visually subordinate to the focal block (the question) and the
+     actions (the decisions) — these are suggestions, not demands. */
+  .routes {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 18px 12px;
+  }
+  .routes-label {
+    font-family: var(--font-sans);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+  .route {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--lavender) 40%, transparent);
+    color: var(--lavender-light);
+    font-size: 0.8rem;
+    padding: 5px 12px;
+    border-radius: 999px;
+  }
+  .route:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--lavender) 10%, transparent);
+    border-color: var(--lavender);
   }
 
   .search {

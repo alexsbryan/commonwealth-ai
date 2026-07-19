@@ -142,6 +142,7 @@ mod tests {
             rationale: "in ch.1".into(),
             obsolete_quote: None,
             active_successor_quote: None,
+            acquisition_class: None,
         };
         let p = chaos_to_probe(&q);
         assert_eq!(p.id, "chaos:p1");
@@ -162,6 +163,7 @@ mod tests {
             rationale: "out of corpus".into(),
             obsolete_quote: None,
             active_successor_quote: None,
+            acquisition_class: None,
         };
         let p = chaos_to_probe(&q);
         assert!(matches!(
