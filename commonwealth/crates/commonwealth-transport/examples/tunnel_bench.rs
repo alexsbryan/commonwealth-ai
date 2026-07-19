@@ -228,12 +228,34 @@ mod real_main {
             eprintln!("dial needs --tcp host:port or --iroh <dial-string>");
             std::process::exit(2);
         };
+        let relay_only = args.iter().any(|a| a == "--relay-only");
+        // Relay-only: seed ONLY relay targets. Seeding direct addrs makes the
+        // pin a race — a direct path that validates first (same box ~1ms)
+        // becomes current and the selector's no-relay fallback keeps it, so
+        // the run silently measures the direct path (observed 2026-07-19).
+        let dial_str = if relay_only {
+            let (id, targets) = dial_str
+                .split_once('@')
+                .unwrap_or_else(|| panic!("bad dial string: missing '@'"));
+            let relays: Vec<&str> = targets
+                .split(',')
+                .map(str::trim)
+                .filter(|t| !t.is_empty() && t.parse::<std::net::SocketAddr>().is_err())
+                .collect();
+            if relays.is_empty() {
+                eprintln!("--relay-only: dial string has no relay URL target");
+                std::process::exit(2);
+            }
+            println!("relay-only: seeding relay target(s) only ({})", relays.join(","));
+            format!("{id}@{}", relays.join(","))
+        } else {
+            dial_str
+        };
         let target = parse_dial_string(&dial_str).unwrap_or_else(|e| panic!("bad dial string: {e}"));
         let target_id = target.id;
 
         let mut key_bytes = [0u8; 32];
         getrandom::fill(&mut key_bytes).expect("getrandom");
-        let relay_only = args.iter().any(|a| a == "--relay-only");
         let endpoint = bench_endpoint(
             key_bytes,
             Vec::new(), // dial-only: no served ALPNs
