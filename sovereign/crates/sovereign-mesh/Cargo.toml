@@ -181,6 +181,11 @@ treesitter = ["corpus-engine/treesitter"]
 #   cargo test -p sovereign-mesh --features iroh-experimental --test iroh_transport_e2e
 iroh-experimental = ["commonwealth-transport/iroh"]
 
+# Bench/measurement-only: lets `SOVEREIGN_IROH_RELAY_ONLY=1` pin the daemon's
+# iroh endpoint to the relay path (deterministic relay-floor E2E for
+# distributed inference). Both peers must run it. Never in production builds.
+iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
+
 [dev-dependencies]
 tempfile = "3"
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch
