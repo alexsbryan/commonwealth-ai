@@ -1551,6 +1551,7 @@ impl Runtime {
                 crate::runtime::epistemic::coverage_probe(
                     self.corpus_engine.as_ref(),
                     &plan.query_embedding,
+                    context.conversation.enabled_corpora.as_deref(),
                 )
                 .await
                 .map(|p| p.verdict)

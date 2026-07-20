@@ -457,6 +457,18 @@ pub struct CoverageProbeResult {
     pub verdict: GapCoverage,
 }
 
+/// Whether a corpus is in the coverage probe's scope for this turn.
+/// `enabled_corpora = Some(non-empty)` (a sealed/notebook turn) scopes the
+/// probe to exactly those corpora — D4's "your corpus" is the ENABLED
+/// corpus, not every corpus installed on the box. `None`/empty (an
+/// all-corpora turn) admits every installed corpus.
+fn corpus_in_probe_scope(corpus_id: &str, enabled_corpora: Option<&[String]>) -> bool {
+    match enabled_corpora {
+        Some(ids) if !ids.is_empty() => ids.iter().any(|e| e == corpus_id),
+        _ => true,
+    }
+}
+
 /// `SOVEREIGN_COVERAGE_PROBE=0|false|off|no` disables the probe.
 pub(crate) fn coverage_probe_enabled() -> bool {
     !matches!(
@@ -492,6 +504,7 @@ const COVERAGE_PROBE_MAX_CORPORA: usize = 12;
 pub async fn coverage_probe(
     engine: Option<&std::sync::Arc<corpus_engine::CorpusEngine>>,
     embedding: &[f32],
+    enabled_corpora: Option<&[String]>,
 ) -> Option<CoverageProbeResult> {
     {
         if !coverage_probe_enabled() || embedding.is_empty() {
@@ -506,8 +519,21 @@ pub async fn coverage_probe(
                 return None;
             }
         };
+        // Scope to the turn's enabled corpora (D4: "your corpus" is the
+        // ENABLED/sealed corpus, not every corpus installed on the box). On a
+        // sealed notebook turn this stops the probe finding "Australia" in an
+        // unrelated installed wikipedia and calling a genuine knowledge gap
+        // `ClaimUncovered`. It also makes the verdict DETERMINISTIC: the prior
+        // `take(12)` over `installed_indexes()` probed an arbitrary first-12
+        // subset (order-dependent), so the topic/claim verdict depended on
+        // which corpora happened to sort first. `None` (no scope) keeps the
+        // all-installed behavior for un-scoped turns.
+        let scoped: Vec<&corpus_engine::IndexInfo> = infos
+            .iter()
+            .filter(|i| corpus_in_probe_scope(&i.corpus_id, enabled_corpora))
+            .collect();
         let mut best: Option<(f32, String)> = None;
-        for info in infos.iter().take(COVERAGE_PROBE_MAX_CORPORA) {
+        for info in scoped.iter().take(COVERAGE_PROBE_MAX_CORPORA) {
             let idx = match engine.open_index(&info.path).await {
                 Ok(i) => i,
                 Err(_) => continue,
@@ -545,7 +571,8 @@ pub async fn coverage_probe(
             verdict = ?result.verdict,
             floor,
             probe_ms = started.elapsed().as_millis() as u64,
-            corpora = infos.len().min(COVERAGE_PROBE_MAX_CORPORA),
+            corpora = scoped.len().min(COVERAGE_PROBE_MAX_CORPORA),
+            scoped = enabled_corpora.map(|e| e.len()).unwrap_or(0),
             "coverage probe"
         );
         Some(result)
@@ -665,6 +692,19 @@ mod tests {
             },
             verification: Verification::Verified,
         }
+    }
+
+    #[test]
+    fn coverage_probe_scope_respects_enabled_corpora() {
+        let enabled = vec!["chaos-secret-agent".to_string()];
+        // Sealed turn: only the enabled corpus is in scope; an unrelated
+        // installed corpus (wikipedia) is excluded — so a sealed-novel query
+        // for "Australia" can't be called ClaimUncovered off a wikipedia hit.
+        assert!(corpus_in_probe_scope("chaos-secret-agent", Some(&enabled)));
+        assert!(!corpus_in_probe_scope("wikipedia", Some(&enabled)));
+        // No scope (None) or empty → every installed corpus is admitted.
+        assert!(corpus_in_probe_scope("wikipedia", None));
+        assert!(corpus_in_probe_scope("wikipedia", Some(&[])));
     }
 
     #[test]

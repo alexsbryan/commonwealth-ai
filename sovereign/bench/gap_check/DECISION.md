@@ -59,6 +59,22 @@ for MULTI-corpus installs. On a dense single corpus every query finds
 "an installed corpus is near this topic." It cannot distinguish a
 retrieval gap from a knowledge gap here.
 
+> **CORRECTION (measured 2026-07-19, `coverage_probe_scope_fix`).** The
+> above root cause was WRONG. Instrumenting the probe (best_corpus +
+> best_similarity per turn) showed the **floor is well-calibrated**: OOD
+> queries land at 0.17–0.49 cosine, in-topic gaps at 0.71 — a clean split
+> at 0.55. Two *different* bugs caused the misclassification: (1) the probe
+> fanned across an arbitrary first-12 of `installed_indexes()` — on a
+> sealed novel turn OOD queries matched *unrelated* installed corpora
+> (python→a code corpus, margarita→a conversations corpus), so the verdict
+> was non-deterministic; (2) `unverified` turns (a released decline over
+> distractors, e.g. australia/berlin) have `gap_turn=false`, so the probe
+> never runs and coverage *defaults* to `ClaimUncovered`. **Bug 1 is fixed**
+> by scoping the probe to `enabled_corpora` (deterministic; sims now reflect
+> the sealed corpus; ~10× faster). **Bug 2 remains** — its clean fix is
+> upstream (the gate should abstain, not release, a 0-holding decline), not
+> a coverage change.
+
 ## Decision
 
 - **Retire gap DETECTION → the deterministic verdict.** Parity-strong
