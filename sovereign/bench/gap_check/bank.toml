@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Gap-check fixture bank (I4-C). Curated from a real chaos-monkey run
+# (secret_agent bank / chaos-secret-agent corpus, 2026-07-19). Each triple
+# is (question, answer, evidence) + the human has_gap label and gap_kind
+# (retrieval = answer is in the corpus but was not retrieved; knowledge =
+# genuinely absent, an external source is needed). `det_verdict`/`det_gaps`
+# record what the deterministic epistemic residue produced on the live run,
+# so the loader can score the deterministic detector without re-running.
+
+[bank]
+name = "gap-check-secret-agent-v1"
+corpus = "chaos-secret-agent"
+
+[[triples]]
+id = "present-wife"
+question = "In the novel, who is the wife of Adolf Verloc?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  string by an injudicious jerk, and muttered several swear words  confidentially to himself.  Then raising his tone to the usual husky  mutter, he announced his willingness to take Stevie into the country  himself, and leave him all safe with Michaelis.  He carried out this scheme on the very next day.  Stevie offered no  objection.  He seemed rather eager, in a bewildered sort of way.  He  turned his candid gaze inquisitively to Mr Verloc’s heavy countenance at  frequent intervals, especially when his sister was not looking at him.  His expression was proud, apprehensive, and concentrated, like that of a  small child entrusted for the first time with a box of matches and the  permission to strike a light.  But Mrs Verloc, gratified by her brother’s  docility, recommended him not to dirty his clothes unduly in the country.  At this Stevie gave his sister, guardian and protector a look, which for  the first time in his life seemed to lack the quality of perfect  childlike trustfulness.  It was haughtily gloomy.  Mrs Verloc smiled.  “Goodness me!  You needn’t be offended.  You know you do get yourself  very untidy when you get a chance, Stevie.”  Mr Verloc was already gone some way down the street.  Thus in consequence of her mother’s heroic proceedings, and of her  brother’s absence on this villegiature, Mrs Verloc found herself oftener  than usua"
+expected_has_gap = true
+gap_kind = "retrieval"
+rationale = "The answer exists in the novel (Winnie is Verloc's wife) but was not in the retrieved passages — a retrieval gap, not a knowledge gap."
+det_verdict = "cannot_know_from_here"
+det_gaps = 2
+
+[[triples]]
+id = "present-ossipon-abandons"
+question = "Which anarchist takes Winnie's money and abandons her near the end of the novel?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  hat and stick in hand.  The door closed.  The footman in trousers, appearing suddenly in the corridor, let Mr  Verloc another way out and through a small door in the corner of the  courtyard.  The porter standing at the gate ignored his exit completely;  and Mr Verloc retraced the path of his morning’s pilgrimage as if in a  dream—an angry dream.  This detachment from the material world was so  complete that, though the mortal envelope of Mr Verloc had not hastened  unduly along the streets, that part of him to which it would be  unwarrantably rude to refuse immortality, found itself at the shop door  all at once, as if borne from west to east on the wings of a great wind.  He walked straight behind the counter, and sat down on a wooden chair  that stood there.  No one appeared to disturb his solitude.  Stevie, put  into a green baize apron, was now sweeping and dusting upstairs, intent  and conscientious, as though he were playing at it; and Mrs Verloc,  warned in the kitchen by the clatter of the cracked bell, had merely come  to the glazed door of the parlour, and putting the curtain aside a  little, had peered into the dim shop.  Seeing her husband sitting there  shadowy and bulky, with his hat tilted far back on his head, she had at  once returned to her stove.  An hour or more later she took the green  baize apron off her brother Stevie, a"
+expected_has_gap = true
+gap_kind = "retrieval"
+rationale = "Ossipon is in the novel; retrieval missed the passage."
+det_verdict = "cannot_know_from_here"
+det_gaps = 2
+
+[[triples]]
+id = "present-asst-commissioner"
+question = "Who is Chief Inspector Heat's superior, overseeing the bombing investigation?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  the depths of poverty to positions of  authority and affluence.  The extreme, almost ascetic purity of his  thought, combined with an astounding ignorance of worldly conditions, had  set before him a goal of power and prestige to be attained without the  medium of arts, graces, tact, wealth—by sheer weight of merit alone.  On  that view he considered himself entitled to undisputed success.  His  father, a delicate dark enthusiast with a sloping forehead, had been an  itinerant and rousing preacher of some obscure but rigid Christian sect—a  man supremely confident in the privileges of his righteousness.  In the  son, individualist by temperament, once the science of colleges had  replaced thoroughly the faith of conventicles, this moral attitude  translated itself into a frenzied puritanism of ambition.  He nursed it  as something secularly holy.  To see it thwarted opened his eyes to the  true nature of the world, whose morality was artificial, corrupt, and  blasphemous.  The way of even the most justifiable revolutions is  prepared by personal impulses disguised into creeds.  The Professor’s  indignation found in itself a final cause that absolved him from the sin  of turning to destruction as the agent of his ambition.  To destroy  public faith in legality was the imperfect formula of his pedantic  fanaticism; but the subconscious conviction"
+expected_has_gap = true
+gap_kind = "retrieval"
+rationale = "The Assistant Commissioner is in the novel; retrieval missed it."
+det_verdict = "cannot_know_from_here"
+det_gaps = 2
+
+[[triples]]
+id = "absent-professor-realname"
+question = "What is the Professor's real, legal name?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  a—”  Ossipon’s attention had wandered.  “What do you think has happened?” he interrupted.  “Can’t tell.  Screwed the top on tight, which would make the connection,  and then forgot the time.  It was set for twenty minutes.  On the other  hand, the time contact being made, a sharp shock would bring about the  explosion at once.  He either ran the time too close, or simply let the  thing fall.  The contact was made all right—that’s clear to me at any  rate.  The system’s worked perfectly.  And yet you would think that a  common fool in a hurry would be much more likely to forget to make the  contact altogether.  I was worrying myself about that sort of failure  mostly.  But there are more kinds of fools than one can guard against.  You can’t expect a detonator to be absolutely fool-proof.”  He beckoned to a waiter.  Ossipon sat rigid, with the abstracted gaze of  mental travail.  After the man had gone away with the money he roused  himself, with an air of profound dissatisfaction.  “It’s extremely unpleasant for me,” he mused.  “Karl has been in bed with  bronchitis for a week.  There’s an even chance that he will never get up  again.  Michaelis’s luxuriating in the country somewhere.  A fashionable  publisher has offered him five hundred pounds for a book.  It will be a  ghastly failure.  He has lost the habit of consecutive thinking in  prison,"
+expected_has_gap = true
+gap_kind = "knowledge"
+rationale = "The Professor's legal name is never given in the novel — genuinely absent; an external source would be needed."
+det_verdict = "cannot_know_from_here"
+det_gaps = 2
+
+[[triples]]
+id = "ood-python-linkedlist"
+question = "How do I reverse a linked list in Python?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  the class you are attacking are  soon blunted.  Property seems to them an indestructible thing.  You can’t  count upon their emotions either of pity or fear for very long.  A bomb  outrage to have any influence on public opinion now must go beyond the  intention of vengeance or terrorism.  It must be purely destructive.  It  must be that, and only that, beyond the faintest suspicion of any other  object.  You anarchists should make it clear that you are perfectly  determined to make a clean sweep of the whole social creation.  But how  to get that appallingly absurd notion into the heads of the middle  classes so that there should be no mistake?  That’s the question.  By  directing your blows at something outside the ordinary passions of  humanity is the answer.  Of course, there is art.  A bomb in the National  Gallery would make some noise.  But it would not be serious enough.  Art  has never been their fetish.  It’s like breaking a few back windows in a  man’s house; whereas, if you want to make him really sit up, you must try  at least to raise the roof.  There would be some screaming of course, but  from whom?  Artists—art critics and such like—people of no account.  Nobody minds what they say.  But there is learning—science.  Any imbecile  that has got an income believes in that.  He does not know why, but he  believes it matters somehow."
+expected_has_gap = true
+gap_kind = "knowledge"
+rationale = "Not in a novel corpus at all — needs an external programming reference."
+det_verdict = "cannot_know_from_here"
+det_gaps = 3
+
+[[triples]]
+id = "distract-money-keeper"
+question = "Which anarchist ends the novel 'flush of safe banknotes', having taken the dead woman's money?"
+answer = "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look."
+evidence = "The Secret Agent: A Simple Tale  That must be dropped.  But there was the rest.  These  savings.  The money!  “You must hide me till the morning somewhere,” she said in a dismayed  voice.  “Fact is, my dear, I can’t take you where I live.  I share the room with  a friend.”  He was somewhat dismayed himself.  In the morning the blessed ’tecs will  be out in all the stations, no doubt.  And if they once got hold of her,  for one reason or another she would be lost to him indeed.  “But you must.  Don’t you care for me at all—at all?  What are you  thinking of?”  She said this violently, but she let her clasped hands fall in  discouragement.  There was a silence, while the mist fell, and darkness  reigned undisturbed over Brett Place.  Not a soul, not even the vagabond,  lawless, and amorous soul of a cat, came near the man and the woman  facing each other.  “It would be possible perhaps to find a safe lodging somewhere,” Ossipon  spoke at last.  “But the truth is, my dear, I have not enough money to go  and try with—only a few pence.  We revolutionists are not rich.”  He had fifteen shillings in his pocket.  He added:  “And there’s the journey before us, too—first thing in the morning at  that.”  She did not move, made no sound, and Comrade Ossipon’s heart sank a  little.  Apparently she had no suggestion to offer.  Suddenly she  clutched at her breast, as if she had felt a sharp"
+expected_has_gap = true
+gap_kind = "retrieval"
+rationale = "Abstained correctly, but the deterministic residue emitted ZERO gap rows — the discriminating case for gaps-non-empty detection."
+det_verdict = "cannot_know_from_here"
+det_gaps = 0
+
+[[triples]]
+id = "present-stevie-relation"
+question = "What is Stevie's family relationship to Winnie Verloc?"
+answer = "Stevie is Winnie Verloc's brother [Web: the-secret-agent-a-simple-tale].  The passages indicate that Stevie was a delicate boy whom Winnie felt she could protect in \"this rough world\" due to Mr. Verloc’s kind and generous disposition, although Winnie herself sometimes viewed him as an encumbrance [Source: The Secret Agent: A Simple Tale; Web: the-secret-agent-a simple tale]. He remained docile and deeply respectful toward his sister's husband, often retreating into silence or despair when facing social pressures [Web: the-secret-agent-a simples tale]."
+evidence = "The Secret Agent: A Simple Tale  drop stealthily into the gutter.  The evening visitors—the men with collars turned up and soft hats rammed  down—nodded familiarly to Mrs Verloc, and with a muttered greeting,  lifted up the flap at the end of the counter in order to pass into the  back parlour, which gave access to a passage and to a steep flight of  stairs.  The door of the shop was the only means of entrance to the house  in which Mr Verloc carried on his business of a seller of shady wares,  exercised his vocation of a protector of society, and cultivated his  domestic virtues.  These last were pronounced.  He was thoroughly  domesticated.  Neither his spiritual, nor his mental, nor his physical  needs were of the kind to take him much abroad.  He found at home the  ease of his body and the peace of his conscience, together with Mrs  Verloc’s wifely attentions and Mrs Verloc’s mother’s deferential regard.  Winnie’s mother was a stout, wheezy woman, with a large brown face.  She  wore a black wig under a white cap.  Her swollen legs rendered her  inactive.  She considered herself to be of French descent, which might  have been true; and after a good many years of married life with a  licensed victualler of the more common sort, she provided for the years  of widowhood by letting furnished apartments for gentlemen near Vauxhall  Bridge Road in a square once of some splendour a"
+expected_has_gap = false
+gap_kind = ""
+rationale = "Complete grounded answer (brother)."
+det_verdict = "grounded"
+det_gaps = 0
+
+[[triples]]
+id = "present-michaelis"
+question = "Which anarchist character is a paroled ex-convict, the so-called 'ticket-of-leave apostle'?"
+answer = "Michaelis  Grounded in the source: \"Michaelis, the ticket-of-leave apostle, was speaking in an even voice, a voice that wheezed as if deadened and oppressed by the layer of fat on his chest.\""
+evidence = "The Secret Agent: A Simple Tale  table, offered for her approval with an  air of self-assurance hiding a perpetual residue of anxiety.  Formerly  the anger of the father was the supremely effective sanction of these  rites, but Mr Verloc’s placidity in domestic life would have made all  mention of anger incredible even to poor Stevie’s nervousness.  The  theory was that Mr Verloc would have been inexpressibly pained and  shocked by any deficiency of cleanliness at meal times.  Winnie after the  death of her father found considerable consolation in the feeling that  she need no longer tremble for poor Stevie.  She could not bear to see  the boy hurt.  It maddened her.  As a little girl she had often faced  with blazing eyes the irascible licensed victualler in defence of her  brother.  Nothing now in Mrs Verloc’s appearance could lead one to  suppose that she was capable of a passionate demonstration.  She finished her dishing-up.  The table was laid in the parlour.  Going  to the foot of the stairs, she screamed out “Mother!”  Then opening the  glazed door leading to the shop, she said quietly “Adolf!”  Mr Verloc had  not changed his position; he had not apparently stirred a limb for an  hour and a half.  He got up heavily, and came to his dinner in his  overcoat and with his hat on, without uttering a word.  His silence in  itself had nothing startlingly unusual in this househ"
+expected_has_gap = false
+gap_kind = ""
+rationale = "Complete grounded answer."
+det_verdict = "grounded"
+det_gaps = 0
+
+[[triples]]
+id = "distract-bomb-maker"
+question = "Which member of the anarchist circle is the bomb-maker who supplies the explosives and prides himself on the 'perfect detonator'?"
+answer = "Verloc  Grounded in the source: \"“I will describe him to you in one word—Verloc.”\""
+evidence = "The Secret Agent: A Simple Tale  and took the key away with him.  Ossipon had a vision of these round black-rimmed spectacles progressing  along the streets on the top of an omnibus, their self-confident glitter  falling here and there on the walls of houses or lowered upon the heads  of the unconscious stream of people on the pavements.  The ghost of a  sickly smile altered the set of Ossipon’s thick lips at the thought of  the walls nodding, of people running for life at the sight of those  spectacles.  If they had only known!  What a panic!  He murmured  interrogatively: “Been sitting long here?”  “An hour or more,” answered the other negligently, and took a pull at the  dark beer.  All his movements—the way he grasped the mug, the act of  drinking, the way he set the heavy glass down and folded his arms—had a  firmness, an assured precision which made the big and muscular Ossipon,  leaning forward with staring eyes and protruding lips, look the picture  of eager indecision.  “An hour,” he said.  “Then it may be you haven’t heard yet the news I’ve  heard just now—in the street.  Have you?”  The little man shook his head negatively the least bit.  But as he gave  no indication of curiosity Ossipon ventured to add that he had heard it  just outside the place.  A newspaper boy had yelled the thing under his  very nose, and not being prepared for anything of that sort, he was ve"
+expected_has_gap = false
+gap_kind = ""
+rationale = "Complete; resisted the distractor."
+det_verdict = "grounded"
+det_gaps = 0
+
+[[triples]]
+id = "absent-heat-firstname"
+question = "What is Chief Inspector Heat's first name?"
+answer = "The provided passages do not state Chief Inspector Heat's first name.  Not in your sources, but from general knowledge: The character is often referred to simply as \"Chief Inspector Heat\" or by his surname if it were given elsewhere in the text. You could ask about other characters mentioned in relation to him, such as Mr. Verloc or Ossipon."
+evidence = "The Secret Agent: A Simple Tale  Chief Inspector Heat got  out of the train in a state of thoughtfulness entirely untainted with  disloyalty, but not quite free of that jealous mistrust which so often  springs on the ground of perfect devotion, whether to women or to  institutions.  It was in this mental disposition, physically very empty, but still  nauseated by what he had seen, that he had come upon the Professor.  Under these conditions which make for irascibility in a sound, normal  man, this meeting was specially unwelcome to Chief Inspector Heat.  He  had not been thinking of the Professor; he had not been thinking of any  individual anarchist at all.  The complexion of that case had somehow  forced upon him the general idea of the absurdity of things human, which  in the abstract is sufficiently annoying to an unphilosophical  temperament, and in concrete instances becomes exasperating beyond  endurance.  At the beginning of his career Chief Inspector Heat had been  concerned with the more energetic forms of thieving.  He had gained his  spurs in that sphere, and naturally enough had kept for it, after his  promotion to another department, a feeling not very far removed from  affection.  Thieving was not a sheer absurdity.  It was a form of human  industry, perverse indeed, but still an industry exercised in an  industrious world; it was work undertaken for the same rea"
+expected_has_gap = false
+gap_kind = ""
+rationale = "The honest \"not stated in the passages\" IS the complete answer; surfacing a request would be noise."
+det_verdict = "grounded"
+det_gaps = 0
+
+[[triples]]
+id = "prov-professor-detonator"
+question = "What does the Professor carry in his trouser pocket as the detonator for the explosives strapped to his body?"
+answer = "The Professor carries an india-rubber ball in the left pocket of his trousers, which serves as the supreme guarantee of his sinister freedom [Source: The Secret Agent: A Simple Tale].  This detail is consistent with a description where Ossipon confronts a calm man who reveals he has a concealed detonator activated by squeezing a rubber ball [Web: the-secret-agent-a-simple-tale]. Thin spot: The passages do not explicitly state that this specific india-rubber ball *is* the detonator mechanism for explosives strapped to his body; rather, one passage mentions him grasping it while another describes the detonation being triggered by squeezing such a ball."
+evidence = "The Secret Agent: A Simple Tale  to copy this detachment.  “If the police here knew their business they would shoot you full of  holes with revolvers, or else try to sand-bag you from behind in broad  daylight.”  The little man seemed already to have considered that point of view in  his dispassionate self-confident manner.  “Yes,” he assented with the utmost readiness.  “But for that they would  have to face their own institutions.  Do you see?  That requires uncommon  grit.  Grit of a special kind.”  Ossipon blinked.  “I fancy that’s exactly what would happen to you if you were to set up  your laboratory in the States.  They don’t stand on ceremony with their  institutions there.”  “I am not likely to go and see.  Otherwise your remark is just,” admitted  the other.  “They have more character over there, and their character is  essentially anarchistic.  Fertile ground for us, the States—very good  ground.  The great Republic has the root of the destructive matter in  her.  The collective temperament is lawless.  Excellent.  They may shoot  us down, but—”  “You are too transcendental for me,” growled Ossipon, with moody concern.  “Logical,” protested the other.  “There are several kinds of logic.  This  is the enlightened kind.  America is all right.  It is this country that  is dangerous, with her idealistic conception of legality.  The social  spirit of this people is wrappe"
+expected_has_gap = false
+gap_kind = ""
+rationale = "Complete grounded answer with provenance."
+det_verdict = "grounded"
+det_gaps = 0
+
+[[triples]]
+id = "present-verloc-secret-job"
+question = "What is Verloc secretly employed as by the foreign embassy, behind his shop?"
+answer = "Mr. Verloc is secretly employed as a secret agent for the Embassy [Source: The Secret Agent: A Simple Tale]. He maintains this cover while running his shop in Brett Street, where he makes personal purchases from Paris and Brussels [Source: The Secret Agent: A Simple Tale].  His role involves being tasked by Russian agents, such as Mr. Vladimir, to orchestrate significant anarchist outrages in London intended to provoke public reaction [Web: the-secret-agent-a-simple-tale]. In one instance, Mr. Vladimir demands that Verloc organize an anarchist bombing [Web: the-secret-agent-a simple tale]. During discussions about these activities, Mr. Vladimir questions Verloc's authenticity as an anarchist"
+evidence = "The Secret Agent: A Simple Tale  me to observe that I have no means of action  upon the police here.”  “What is desired,” said the man of papers, “is the occurrence of  something definite which should stimulate their vigilance.  That is  within your province—is it not so?”  Mr Verloc made no answer except by a sigh, which escaped him  involuntarily, for instantly he tried to give his face a cheerful  expression.  The official blinked doubtfully, as if affected by the dim  light of the room.  He repeated vaguely.  “The vigilance of the police—and the severity of the magistrates.  The  general leniency of the judicial procedure here, and the utter absence of  all repressive measures, are a scandal to Europe.  What is wished for  just now is the accentuation of the unrest—of the fermentation which  undoubtedly exists—”  “Undoubtedly, undoubtedly,” broke in Mr Verloc in a deep deferential bass  of an oratorical quality, so utterly different from the tone in which he  had spoken before that his interlocutor remained profoundly surprised.  “It exists to a dangerous degree.  My reports for the last twelve months  make it sufficiently clear.”  “Your reports for the last twelve months,” State Councillor Wurmt began  in his gentle and dispassionate tone, “have been read by me.  I failed to  discover why you wrote them at all.”  A sad silence reigned for a time.  Mr Verloc seemed to have"
+expected_has_gap = false
+gap_kind = ""
+rationale = "Complete grounded answer."
+det_verdict = "grounded"
+det_gaps = 0
