@@ -174,7 +174,12 @@ const FLAG_QUERY_DECOMP: EnvFlag = EnvFlag {
 const FLAG_DEMAND_PLAN: EnvFlag = EnvFlag {
     name: "SOVEREIGN_DEMAND_PLAN",
     default: "off",
-    purpose: "One Housekeep fast-slot structured-output call plans the turn's demands (sub_queries, entities, optional stance contrast + section terms). Sub-queries fan out; entities merge into entity_boost; the plan feeds the epistemic demand set (EPISTEMIC_STATE.md P1b / RETRIEVAL_REDESIGN S2). One model, two producers with the deterministic facets.",
+    purpose: "One Housekeep fast-slot structured-output call plans the turn's demands (sub_queries, entities, optional stance contrast + section terms). Entities merge into entity_boost; the plan feeds the epistemic demand set (EPISTEMIC_STATE.md P1b / RETRIEVAL_REDESIGN S2) — the cheap ledger effect. The sub_query fan-out is a SEPARATE knob (SOVEREIGN_DEMAND_PLAN_FANOUT), default off, after the 2026-07-19 A/B found it net-neutral-to-negative and 2-3x slower (it displaced load-bearing chunks under the merge limit).",
+};
+const FLAG_DEMAND_PLAN_FANOUT: EnvFlag = EnvFlag {
+    name: "SOVEREIGN_DEMAND_PLAN_FANOUT",
+    default: "off",
+    purpose: "When the demand planner is on, ALSO fan the plan's sub_queries out into corpus search. Default off: the 2026-07-19 A/B showed the fan-out costs 2-3x retrieval latency for flat recall (displacement). Pair with SOVEREIGN_DECOMP_DECAY<1 so fanned hits augment rather than displace. Kept as an independently-tunable lever.",
 };
 const FLAG_TITLE_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_TITLE_EXPAND",
@@ -217,6 +222,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
     vec![
         ("atlas_grounding", FLAG_ATLAS_GROUNDING),
         ("demand_plan", FLAG_DEMAND_PLAN),
+        ("demand_plan", FLAG_DEMAND_PLAN_FANOUT),
         ("query_decomp", FLAG_QUERY_DECOMP),
         ("query_decomp", EnvFlag { name: "SOVEREIGN_DECOMP_DECAY", default: "1.0", purpose: "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)." }),
         ("title_expand", FLAG_TITLE_EXPAND),
@@ -936,6 +942,15 @@ pub(crate) fn demand_plan_enabled() -> bool {
     std::env::var("SOVEREIGN_DEMAND_PLAN").ok().as_deref() == Some("1")
 }
 
+/// `SOVEREIGN_DEMAND_PLAN_FANOUT=1` additionally fans the plan's
+/// sub-queries out into corpus search. Default OFF (round 2, 2026-07-19):
+/// the A/B found the fan-out net-neutral-to-negative and 2-3x slower, so
+/// the planner's default effect is ledger-only (plan → epistemic demand
+/// set + entity merge), with the expensive fan-out an opt-in lever.
+pub(crate) fn demand_plan_fanout_enabled() -> bool {
+    std::env::var("SOVEREIGN_DEMAND_PLAN_FANOUT").ok().as_deref() == Some("1")
+}
+
 fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Dark-first: no work unless explicitly enabled. Simple/factual
@@ -951,11 +966,13 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
         else {
             return StepOutcome::default();
         };
-        // Sub-queries fan out through the shared decomposition helper (the
-        // same search-and-merge shape query_decomp / title_expand use).
-        let added = if plan.sub_queries.is_empty() {
-            0
-        } else {
+        // Sub-query fan-out is the expensive, opt-in effect (round 2). By
+        // default the planner is ledger-only: the plan feeds the epistemic
+        // demand set + the entity merge (entity_boost), at just the planner
+        // call's cost — no per-sub-query corpus searches. The fan-out (5×
+        // full corpus search) only runs under SOVEREIGN_DEMAND_PLAN_FANOUT.
+        let fanout = demand_plan_fanout_enabled();
+        let added = if fanout && !plan.sub_queries.is_empty() {
             rt.fan_out_decomposed_queries(
                 &plan.sub_queries,
                 &mut st.chunks,
@@ -964,20 +981,28 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
                 st.corpus_ceiling,
             )
             .await
+        } else {
+            0
         };
         tracing::info!(
             sub_queries = plan.sub_queries.len(),
             entities = plan.entities.len(),
             has_stance = plan.stance_contrast.is_some(),
             section_terms = plan.section_terms.len(),
+            fanout,
             chunks_added = added,
-            "{}: demand-plan retrieval",
-            st.label
+            "{}: demand-plan ({})",
+            st.label,
+            if fanout { "fan-out" } else { "ledger-only" }
         );
         // Retained for entity_boost's merge + the epistemic demand set.
         st.demand_plan = Some(plan);
         StepOutcome {
-            note: Some(format!("demand plan → +{added} chunks")),
+            note: Some(if fanout {
+                format!("demand plan (fan-out) → +{added} chunks")
+            } else {
+                "demand plan (ledger-only)".to_string()
+            }),
         }
     })
 }
@@ -2006,6 +2031,15 @@ mod tests {
     fn demand_plan_default_off() {
         std::env::remove_var("SOVEREIGN_DEMAND_PLAN");
         assert!(!super::demand_plan_enabled());
+    }
+
+    /// Round 2: the expensive sub-query fan-out is a SEPARATE opt-in from
+    /// the planner itself — default OFF so the planner's default effect is
+    /// the cheap ledger path (no per-sub-query corpus searches).
+    #[test]
+    fn demand_plan_fanout_default_off() {
+        std::env::remove_var("SOVEREIGN_DEMAND_PLAN_FANOUT");
+        assert!(!super::demand_plan_fanout_enabled());
     }
 
     #[test]
