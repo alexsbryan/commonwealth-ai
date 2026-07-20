@@ -526,19 +526,25 @@ pub fn extraction_scorer_enabled() -> bool {
         .unwrap_or(true)
 }
 
-/// Prefer the turn's TYPED epistemic verdict (`epistemic_state.verdict`)
-/// over the gate-action string-prefix (answer-vs-abstain) and the
-/// `classify_caveat` judge (general-knowledge caveat) when a ledger is
-/// present on the transcript (I2-C). **Default OFF** — the doc §8 parity
-/// gate requires a `chaos-monkey rescore` on a frozen transcript set with
-/// this flag off vs on to prove the typed and legacy derivations agree
-/// before the typed path becomes primary. Set
-/// `SOVEREIGN_CHAOS_TYPED_VERDICT=1` to run the typed derivation (or the
-/// parity comparison). Ledger-less transcripts always fall back to the
-/// legacy derivation regardless of this flag.
+/// Derive the **answer-vs-abstain** decision from the turn's TYPED
+/// epistemic verdict (`epistemic_state.verdict == cannot_know_from_here`)
+/// rather than the gate-action string-prefix (I2-C). **Default ON** as of
+/// the 2026-07-19 parity gate (doc §8): a `chaos-monkey rescore` on 43
+/// frozen chaos transcripts showed 43/43 agreement between the typed and
+/// legacy answer-vs-abstain derivations — structural, since
+/// `cannot_know_from_here` is assembled from the same gate action the
+/// legacy prefix reads. `SOVEREIGN_CHAOS_TYPED_VERDICT=0/false` forces the
+/// legacy gate-action derivation. Ledger-less transcripts always fall back
+/// to legacy regardless.
+///
+/// NOTE: this governs ONLY answer-vs-abstain. The SAME parity run found the
+/// typed `general_knowledge` verdict is NOT a faithful proxy for the
+/// prose-level `caveat_present` judge (the verdict classifies the ledger's
+/// basis; the judge reads the answer's provenance-flag) — so caveat stays
+/// on `classify_caveat`, unconditionally.
 pub fn typed_verdict_enabled() -> bool {
-    std::env::var("SOVEREIGN_CHAOS_TYPED_VERDICT")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    !std::env::var("SOVEREIGN_CHAOS_TYPED_VERDICT")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
         .unwrap_or(false)
 }
 
