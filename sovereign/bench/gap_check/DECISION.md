@@ -102,3 +102,37 @@ deleting gap.rs entirely.
   (daemon-backed) on the bank, to confirm the LLM detector does not beat
   12/12 (confirmatory — the deterministic case already stands).
 - The `coverage_probe` sealed-corpus recalibration + its own A/B.
+
+## EXECUTED (2026-07-20) — gap.rs deleted
+
+Both retirement steps landed:
+
+1. **Detection → the verdict's signal.** `run_collaboration` now takes
+   `abstained: bool` — the gate signal `TurnVerdict::CannotKnowFromHere`
+   derives from (D3) — as its ENTIRE detection. Answered turns pass
+   through instantly (no more 15-55s grammar-constrained fast-slot audit
+   per answered turn). The card's ask is a phrasing-only fast-slot pass
+   (`phrase_gap_question`, D4: may phrase, never invent; hard fallback =
+   the user's question verbatim). Post-stream callers derive the signal
+   from the persisted `grounding_gate.action`; non-streaming handlers
+   thread it from their gate outcome. The doc-op attached-doc path runs
+   no gate → carries no signal → never fires the card (its short-answer
+   cases already fall through to the gated runtime pipeline).
+
+2. **Routing blocker closed.** The CORRECTION above stands: bug 1
+   (arbitrary fan-out) was fixed by scoping the probe to
+   `enabled_corpora`; bug 2 (released declines never probe) is fixed
+   UPSTREAM by the gate's decline guard (`released_pure_decline` in
+   `grounding/mod.rs`, 2026-07-20): a NO_CLAIM release whose text is a
+   pure provenance-flagged decline is reclassified `abstained_decline`,
+   so the turn derives `CannotKnowFromHere`, the probe runs, and
+   topic-vs-claim routes correctly. Caveated parametric ANSWERS
+   ("Not in your sources — from general knowledge: …") are structurally
+   excluded and keep releasing.
+
+`gap.rs` (LLM judge, windowed inputs, saturation guard) is deleted; the
+`InformationRequest` DTO survives as the card's view-model per plan §6.
+The "Rust loader + bench gap-check scorer for identify_gap" follow-up
+dies with the judge (nothing left to confirm). The bank stays as the
+regression fixture for the deterministic detector's recorded
+`det_verdict` outcomes.

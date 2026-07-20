@@ -49,41 +49,93 @@ field_model corpora re-enriched after this carry the data.
   (floor was actually fine; the bug was arbitrary first-12 fan-out) —
   deterministic + ~10× faster. gap.rs itself **not yet deleted**.
 
+## Landed 2026-07-20 (the close-out session)
+
+### P0 — gate abstains a 0-holding decline — ✅ SHIPPED
+`released_pure_decline` guard in `grounding/mod.rs` (`gate_answer`
+fall-through): a NO_CLAIM release whose text is a pure provenance-flagged
+decline is reclassified **`abstained_decline`** (the model's own decline
+prose ships unchanged). Verdict now derives `cannot_know_from_here`, the
+coverage probe runs, and the gap routes on real coverage instead of
+defaulting `ClaimUncovered`. Caveated parametric ANSWERS ("Not in your
+sources — from general knowledge: …") are structurally excluded and keep
+releasing — reclassifying those would make the typed verdict an
+unfaithful answer-vs-abstain proxy. Both chaos scorer paths (typed +
+legacy) read the same gate action, so their parity is structural.
+Unit-pinned (both directions); red-line live re-run recorded below.
+
+### P1 — gap.rs retirement EXECUTED + invariants pinned
+- **`gap.rs` is deleted.** `run_collaboration` takes `abstained: bool`
+  (the signal the verdict derives from, D3) as its entire detection;
+  the card's ask is a phrasing-only fast-slot pass
+  (`phrase_gap_question`, D4 — hard fallback: the raw question).
+  Answered turns pass through instantly (removes the 15-55s
+  grammar-constrained audit from every answered turn). Post-stream
+  callers derive the signal from persisted `grounding_gate.action`;
+  handlers thread it from their gate outcome; the doc-op attached-doc
+  path runs no gate → never fires the card (its short-answer cases
+  already fall through to the gated runtime). Full execution record:
+  `bench/gap_check/DECISION.md` §EXECUTED.
+- **Invariant pins:** I1 closed-surface pin (`epistemic.rs` —
+  exhaustive `GateSurface` match; new variants fail compilation until
+  their ledger story is recorded) + runtime witness
+  (`functional.rs::simple_turn_persists_epistemic_ledger_with_verdict`).
+  I2 truth-table, I3/I6 (`EpistemicFooter.test`), I4 resolver pin
+  (`acquisition.rs::routes_come_only_from_the_catalog`) audited, present.
+
+### P2 — partially landed
+- **Witness surface now emits Memory holdings.** Audit found NO
+  production path passed `recalled`/`recall_verification` into the
+  assembler — the §5 memory-distinction UI could never fire from a real
+  turn. The non-streaming witness (expressive.rs, Relational) now
+  persists `epistemic_state` when the recall verifier attributed the
+  reply to an entry (verdict `memory_recall`, banded holding, FailOpen
+  visible). Un-attributed witness turns stay ledger-less by design.
+- **Acquisition lane hard-gate wired** (`min_acquisition_conjecture` in
+  `Gates`/`Verdict`/manifest loader; disarmed at 0.0 until a manifest
+  baseline is set — see below).
+
 ## Outstanding — prioritized
 
-### P0 — honesty correctness (root-cause, vision-central)
-- **Gate should ABSTAIN, not release-as-`unverified`, a 0-holding
-  provenance-flagged decline.** Discovered while measuring coverage:
-  turns like "capital of Australia" where the model says "I don't have
-  reliable information" get gate action `released` → verdict `unverified`
-  (not `cannot_know_from_here`) → the coverage probe never runs → gap
-  coverage defaults to `ClaimUncovered` (mis-routes a genuine knowledge
-  gap). Fix is upstream in `runtime/grounding` (a 0-holding decline is an
-  abstention). Has chaos-parity implications — must re-run the red-line
-  parity after. This is the biggest single honesty gap left.
+### Live validation (two 43-question runs, 2026-07-20, gemma-4-E4B)
+Run 1 (P0 + retirement) exposed two last-mile defects, both fixed +
+unit-pinned before run 2: (1) `finish_demands`' `Retrieved if abstained`
+arm swallowed the probe verdict (OOD gaps mis-routed ClaimUncovered);
+(2) a NO_CLAIM retry-decline marked the original claim supported —
+`ood-table-salt` shipped ledger verdict `grounded` on "I don't have
+reliable information on this." Run 2 (fixes live): OOD gaps
+`topic_uncovered` with `install_recipe` routes present; table-salt
+abstains. **RL-1 0.69 PASS · RL-2 (rubric below) 1.00 PASS ·
+hallucination 0.00 · zero absent-side fabrications both runs.**
 
-### P1 — finish the decided retirement + pin the invariants
-- **Execute gap.rs retirement.** Route the `maybe_collaborate` hook
-  (`runtime/collaboration.rs:190`) off `identify_gap` detection onto the
-  ledger's `gaps` + a **phrasing-only** fast-slot pass (D4: may phrase,
-  never invent). Re-run the fixture bank + the card's live behavior; then
-  delete `gap.rs`. Decision is made (I4-C); this is execution.
-- **Pin invariants I1–I6 as structural tests (§7).** Partly done (I2
-  verdict truth-table; I6 ledger-wins in `EpistemicFooter.test`; I3
-  memory-distinct render). Audit + complete — esp. **I1** "every answer
-  surface produces a ledger" as a closed-surface test (KQ + streaming +
-  simple + attached-doc + complex-task) and **I4** "no non-catalog route
-  survives to the DTO."
+**RL-2 rubric edit (owner-approved scientific event, recorded in the
+manifest):** an abstained OOD probe counts honest — the old
+answered-with-caveat-only rubric conflated honesty with the hybrid
+helpfulness bar, and its historical pass rode on released declines
+being credited as caveated answers (unmasked by the P0 guard). OOD
+timidity now lives in the TRACKED `ood-caveated-answer` lane
+(this model: 1/5; June opus runs: 5/5 — model-behavior target).
 
-### P2 — validate the rendering (measurement gates §8 not yet run)
-- **Memory-provenance probe** — labeled set through the witness + factual
-  paths asserting the rendered distinction (memory chip present, band
-  correct, `FailOpen` marked). Extends the inner-chaos fixture pattern.
+### P2 remainder
+- **Acquisition resolver top-1 ranking.** Lane baseline 0.45 (5/11)
+  post-fixes — do NOT arm the gate on it. The misses are precise:
+  `import_conversations` ranks top-1 on **6/6 gap turns across
+  unrelated topics** (a generic-description embedding attractor);
+  the right `install_recipe` route now appears but in slot 2. Next
+  loop: measure catalog sims, then bias/floor connectors vs recipes —
+  its own A/B. (Also: `unknowable`-labeled abstained turns emit
+  routes, which the lane counts as misses — decide whether the lane's
+  `unknowable ⇒ no conjecture` contract should apply to gap turns.)
+- **OOD caveated-answer rate** — prompt/model work to restore the
+  caveat-answer behavior on the small slot (tracked lane target).
+- **Streaming-witness recall verifier.** The streaming witness runs no
+  verifier (`recall_verification: None`), so desktop *streaming* witness
+  turns still can't carry memory holdings. Extending the verifier there
+  is the remaining memory-provenance wiring; the live labeled probe
+  (§8) then belongs with the inner-chaos harness (`bench/inner_work`,
+  recall fixtures already exist).
 - **Ledger fidelity** — sampled turns, judge checks holdings ↔ prose
   correspondence (grounding-bench style).
-- **Hard-gate the chaos acquisition_conjecture lane** — currently
-  tracked; capture a baseline (now that coverage routing is scoped) and
-  hard-gate per §8.
 
 ### P3 — cleanup + explicitly deferred
 - **§6 deletions completion** — the GK caveat-prefix *protocol* role
@@ -95,8 +147,9 @@ field_model corpora re-enriched after this carry the data.
   until the mobile toolchain pass.
 
 ## One-line take
-The honesty machinery (I1–I3, the I2-C typed verdict) is shipped and
-proven; the retrieval optimization (I4 demand_plan) is measured and
-correctly kept dark. The highest-value remaining work is the **P0 gate
-abstain-vs-release fix** — it's the one honesty defect the measurements
-surfaced that still ships to users.
+The honesty machinery is shipped end to end: the P0 abstain-vs-release
+defect is fixed at the gate, gap detection is structural (gap.rs
+deleted), the invariants are pinned, and the witness surface finally
+emits the memory holdings the §5 rendering was built for. Remaining:
+streaming-witness verifier, ledger-fidelity sampling, and arming the
+acquisition gate from the fresh baseline.

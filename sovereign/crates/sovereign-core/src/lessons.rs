@@ -593,7 +593,7 @@ pub(crate) async fn draft_prompt_lesson(
         "required": ["display", "prompt_form"]
     });
 
-    // SLOT_POLICY §3 Housekeep: post-turn drafting, same as identify_gap.
+    // SLOT_POLICY §3 Housekeep: post-turn drafting.
     let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
         .with_system(
             "You turn user coaching into terse standing rules. Output only \

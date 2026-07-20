@@ -1420,23 +1420,19 @@ impl Runtime {
         };
 
         let final_content = if plan.gap_check_enabled {
-            // Humility principle: always run the gap check on KQ
-            // paths. The retrieval-shape route is a synthesis-
-            // routing decision, not an answer-quality signal. See
-            // the matching block in the streaming KQ path + the
-            // long-form note at `prepare_knowledge_query_plan`.
-            tracing::debug!(
-                route = ?plan.route,
-                top_source = %plan.shape.top_source_label,
-                "KnowledgeQuery: running gap check"
-            );
-            self.maybe_collaborate(
-                conversation_id,
-                message,
-                &completion_text,
-                &plan.doc_context,
-            )
-            .await
+            // Humility hook: detection is the turn's gate abstention
+            // (I4-C — see run_collaboration; answered turns pass
+            // through instantly). See the matching block in the
+            // streaming KQ path + the long-form note at
+            // `prepare_knowledge_query_plan`.
+            let abstained = grounding_gate_meta
+                .as_ref()
+                .and_then(|m| m.get("action"))
+                .and_then(|a| a.as_str())
+                .map(|a| a.starts_with("abstained"))
+                .unwrap_or(false);
+            self.maybe_collaborate(conversation_id, message, &completion_text, abstained)
+                .await
         } else {
             completion_text.clone()
         };

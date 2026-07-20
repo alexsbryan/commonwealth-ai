@@ -1369,6 +1369,11 @@ fn load_gates(path: Option<&Path>) -> Gates {
         // omit it and keep the strict default (vacuous when no superseded
         // traps, since the dead-law rate is NaN over an empty population).
         g.max_dead_law_rate = get("max_dead_law_rate", g.max_dead_law_rate);
+        // Third lane (EPISTEMIC_STATE §8): absent from the manifest =
+        // 0.0 = disarmed (tracked-advisory). Armed once a measured
+        // baseline is pre-registered.
+        g.min_acquisition_conjecture =
+            get("min_acquisition_conjecture", g.min_acquisition_conjecture);
     }
     g
 }
@@ -1445,16 +1450,39 @@ fn print_summary(
         c.answerable + c.absent,
         c.value_assessed,
     );
-    // Third lane (TRACKED, advisory — EPISTEMIC_STATE.md §8): on labeled
-    // absent probes, did the epistemic ledger's top acquisition
-    // conjecture name the class that would actually satisfy the gap?
-    // Never part of the verdict; silent when the bank carries no labels.
+    // Third lane (EPISTEMIC_STATE.md §8): on labeled absent probes, did
+    // the epistemic ledger's top acquisition conjecture name the class
+    // that would actually satisfy the gap? TRACKED (advisory) until a
+    // manifest sets `min_acquisition_conjecture`; gated after. Silent
+    // when the bank carries no labels.
     if report.n_acquisition_labeled > 0 {
+        let rate = report.acquisition_matched as f64 / report.n_acquisition_labeled as f64;
+        if gates.min_acquisition_conjecture > 0.0 {
+            eprintln!(
+                "  RED-LINE 4  acquisition-conjecture  : {rate:.2}  (≥{:.2}) {}   [matched {}/{} labeled absent probes ]",
+                gates.min_acquisition_conjecture,
+                badge(verdict.acquisition_pass),
+                report.acquisition_matched,
+                report.n_acquisition_labeled,
+            );
+        } else {
+            eprintln!(
+                "  TRACKED     acquisition-conjecture  : {rate:.2}          [matched {}/{} labeled absent probes ]",
+                report.acquisition_matched,
+                report.n_acquisition_labeled,
+            );
+        }
+    }
+    // OOD helpfulness lane (rubric edit 2026-07-20): abstaining on an
+    // out-of-domain probe is honest but timid — the hybrid ideal is a
+    // caveated parametric answer. Tracked here so the timidity signal
+    // stays visible without failing the honesty red line.
+    if report.n_ood > 0 {
         eprintln!(
-            "  TRACKED     acquisition-conjecture  : {:.2}          [matched {}/{} labeled absent probes ]",
-            report.acquisition_matched as f64 / report.n_acquisition_labeled as f64,
-            report.acquisition_matched,
-            report.n_acquisition_labeled,
+            "  TRACKED     ood-caveated-answer     : {:.2}          [caveated answer {}/{} out-of-domain probes ]",
+            report.ood_caveated_answers as f64 / report.n_ood as f64,
+            report.ood_caveated_answers,
+            report.n_ood,
         );
     }
     // Causal attribution — the partition histogram. The diagnostic that says

@@ -360,11 +360,16 @@ impl Runtime {
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
-        // Evidence is the same `step_summaries` the synthesis prompt saw
-        // — keeps the gap check grounded in exactly what the model had.
-        let evidence = step_summaries.join("\n\n");
+        // Detection is the turn's gate abstention (I4-C); un-gated
+        // turns never fire the card.
+        let collab_abstained = grounding_gate_meta
+            .as_ref()
+            .and_then(|m| m.get("action"))
+            .and_then(|a| a.as_str())
+            .map(|a| a.starts_with("abstained"))
+            .unwrap_or(false);
         let mut final_content = self
-            .maybe_collaborate(conversation_id, message, &gated_text, &evidence)
+            .maybe_collaborate(conversation_id, message, &gated_text, collab_abstained)
             .await;
         // Append the tool's exact derivation VERBATIM. The model narrated
         // with compact figures it can copy faithfully; this block — rendered
