@@ -103,7 +103,9 @@ async fn demo_one(
             return;
         }
     };
-    let probe = epistemic::coverage_probe(Some(engine), &embedding).await;
+    // `None` scope: probe all installed corpora (the demo has no sealed
+    // notebook scope). Sealed turns pass the enabled corpora here.
+    let probe = epistemic::coverage_probe(Some(engine), &embedding, None).await;
     println!("\n── AFTER (I1 epistemic ledger — live signals, this machine) ──");
     let coverage = match &probe {
         Some(p) => {

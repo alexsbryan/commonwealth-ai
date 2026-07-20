@@ -1205,6 +1205,11 @@ impl Runtime {
         let mut demands_for_ledger = demands;
         let query_embedding_for_ledger = query_embedding;
         let engine_for_ledger = self.corpus_engine.clone();
+        // The turn's enabled-corpus scope for the coverage probe (D4: probe
+        // "your corpus", not every corpus on the box). Cloned before the
+        // spawn since `context` stays on the main task.
+        let enabled_corpora_for_ledger: Option<Vec<String>> =
+            context.conversation.enabled_corpora.clone();
         // Answerable-context gate for the refusal-retry (KQ path), mirroring
         // the DeepQuery spawn: only retry a refusal when evidence WAS
         // retrieved — a genuine "no sources" stays an honest abstention.
@@ -1647,6 +1652,7 @@ impl Runtime {
                     crate::runtime::epistemic::coverage_probe(
                         engine_for_ledger.as_ref(),
                         &query_embedding_for_ledger,
+                        enabled_corpora_for_ledger.as_deref(),
                     )
                     .await
                     .map(|p| p.verdict)
