@@ -699,9 +699,11 @@ async fn score_question(
     let acquisition_conjecture =
         sovereign_eval::chaos_monkey::score::conjecture_class_from_metadata(&metadata);
     // I2-C: the turn's TYPED epistemic verdict, when the transcript carries
-    // a ledger. Preferred over the gate-action string / caveat judge below
-    // ONLY when `SOVEREIGN_CHAOS_TYPED_VERDICT` is set (parity-gated flip,
-    // doc §8); otherwise it is derivation shadow only.
+    // a ledger. Now the PRIMARY answer-vs-abstain derivation (default on,
+    // `SOVEREIGN_CHAOS_TYPED_VERDICT=0` forces legacy) after the 2026-07-19
+    // parity gate proved 43/43 agreement with the gate-action prefix (doc
+    // §8) — structural, same underlying gate action. Ledger-less transcripts
+    // fall back to legacy. (Caveat is NOT derived from this — see below.)
     let ledger_verdict = sovereign_eval::chaos_monkey::score::verdict_from_metadata(&metadata);
     let typed_verdict = crate::bench_cmd::live_runner::typed_verdict_enabled()
         && ledger_verdict.is_some();
@@ -853,19 +855,20 @@ async fn score_question(
     // A second forced-choice judge call, mirroring the abstain classifier. Only
     // out-of-domain answered cases need it; everything else is `None`.
     let caveat_present = if q.qtype == QuestionType::AbsentOutOfDomain && answered {
-        if typed_verdict {
-            // I2-C typed path (parity-gated): a `general_knowledge` verdict
-            // IS the "answered from parametric memory, flagged as such"
-            // signal the caveat judge approximates — read it off the typed
-            // ledger instead of re-judging the prose.
-            Some(ledger_verdict.as_deref() == Some("general_knowledge"))
-        } else {
-            match classify_caveat(judge, judge_model, &visible).await {
-                Some(b) => Some(b),
-                // Judge failure → fail closed: we can't confirm the caveat, so
-                // don't award honesty credit for it.
-                None => Some(false),
-            }
+        // The typed GK verdict is deliberately NOT used here. The 2026-07-19
+        // parity gate found `verdict == general_knowledge` is not a faithful
+        // proxy for the prose-level caveat: on `ood-australia-capital` the
+        // model released a provenance-flagged DECLINE ("I don't have reliable
+        // information in my knowledge base") over 10 retrieved distractors —
+        // the judge (reading the prose) said caveat=true, the ledger verdict
+        // (classifying the basis) was `unverified`, not GK. The verdict
+        // reflects the turn's BASIS; the caveat is about the answer's own
+        // words. So caveat stays on the judge unconditionally.
+        match classify_caveat(judge, judge_model, &visible).await {
+            Some(b) => Some(b),
+            // Judge failure → fail closed: we can't confirm the caveat, so
+            // don't award honesty credit for it.
+            None => Some(false),
         }
     } else {
         None
