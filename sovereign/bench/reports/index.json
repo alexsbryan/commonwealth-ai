@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-07-20T07:01:11.429314353+00:00",
+  "models": [
+    {
+      "model_key": "Qwen3.5-9B",
+      "base_name": "Qwen3.5-9B",
+      "family": "Qwen35",
+      "quants": [
+        "Q4_K_M"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "Qwen3.5-9B"
+    },
+    {
+      "model_key": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+      "quants": [
+        "Q6_K"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+    },
+    {
+      "model_key": "Qwen3.6-35B-A3B-Opus-abl-ggml-model-Q6_K",
+      "quants": [
+        "Q6_K"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "Qwen3.6-35B-A3B-Opus-abl-ggml-model-Q6_K"
+    },
+    {
+      "model_key": "Qwopus3.5-27B-v3.5-Q6_K",
+      "quants": [
+        "Q6_K"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "Qwopus3.5-27B-v3.5-Q6_K"
+    },
+    {
+      "model_key": "Qwopus3.5-4B-v3-MTP-Q6_K",
+      "quants": [
+        "Q6_K"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "Qwopus3.5-4B-v3-MTP-Q6_K"
+    },
+    {
+      "model_key": "gemma-4-E4B-it-Q4_K_M",
+      "quants": [
+        "Q4_K_M"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "gemma-4-E4B-it-Q4_K_M"
+    },
+    {
+      "model_key": "google_gemma-4-26B-A4B-it-Q6_K_L",
+      "quants": [
+        "Q6_K_L"
+      ],
+      "suites": [
+        "chaos-monkey"
+      ],
+      "dir": "google_gemma-4-26B-A4B-it-Q6_K_L"
+    }
+  ],
+  "unattributed_suites": [
+    "agent-coding",
+    "chaos-monkey/chaos-secret-agent",
+    "governance",
+    "governance-qa/maple-house",
+    "knowledge-gym",
+    "mechanism-fidelity",
+    "multiturn/wikipedia",
+    "proxy-qa/proxy-cik0000034088",
+    "search-gym"
+  ]
+}

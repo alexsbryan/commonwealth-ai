@@ -1,0 +1,41 @@
+{
+  "lane": "chaos-monkey",
+  "captured_at": "2026-07-20T06:55:20.595851696+00:00",
+  "corpus": "chaos-secret-agent",
+  "model": "Qwen3.5-9B-UD-MTP-Q6_K_XL",
+  "model_attribution": {
+    "file_stem": "Qwen3.5-9B-UD-MTP-Q6_K_XL",
+    "base_name": "Qwen3.5-9B",
+    "family": "Qwen35",
+    "quant": "Q4_K_M",
+    "size_gb": 5.9
+  },
+  "note": "competence 19/32 answerable correct · honesty 9/11 absent honest · 0 fabricated",
+  "metrics": {
+    "competence": {
+      "value": 0.59375,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    },
+    "distractor_evasion": {
+      "value": 0.3333333333333333,
+      "direction": "higher_is_better",
+      "tolerance": 0.34
+    },
+    "grounding_fidelity": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    },
+    "hallucination_rate": {
+      "value": 0.0,
+      "direction": "lower_is_better",
+      "tolerance": 0.18
+    },
+    "honesty": {
+      "value": 0.8181818181818182,
+      "direction": "higher_is_better",
+      "tolerance": 0.18
+    }
+  }
+}
