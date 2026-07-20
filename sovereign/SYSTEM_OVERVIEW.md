@@ -1582,28 +1582,50 @@ quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
 local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
 multi-box-only to validate (run `scripts/mesh-soak.sh`).
 
+**Byte-mass-aware split (`plan_shards_weighted`).** The placement policy apportions
+each device a CONTIGUOUS block range whose *bytes* — not block *count* — are
+proportional to its VRAM. This is the split the live load runs (`rpc_distribution`
+overlays the model's real per-block byte mass from `rpc_warm_cache::tensor_sizes` on a
+cache-miss, falling back to the count split only if the header read fails) AND the one
+`mesh plan` previews — one function, so preview and reality can't diverge. It exists
+because the big open-weight models are MoE, and MoE mass is deeply non-uniform: routed
+experts (`blk.N.ffn_*_exps`, `is_routed_expert_tensor`) are **~88–93 % of the bytes**
+but COLD (only the router's top-k run per token), and a hybrid SSM+MoE stack alternates
+a ~20 MB attention/SSM block with a ~1.3 GB MoE block — a measured **62× per-block
+spread**. Count-proportional apportionment (the old `plan_shards`, now the
+`block_bytes == []` special-case) hands a small node a heavy contiguous run and OOMs it;
+byte-proportional keeps each node ∝ its VRAM (e.g. 24 GB + 16 GB nodes → 18.6 GB + 12.3
+GB of a 62×-spread hybrid). The output head is folded onto the host's budget. Ranges
+stay contiguous, so single-stream decode keeps its **`D-1` hops per token** and a
+layer's experts are never scattered across nodes (cross-node expert-parallelism would
+add per-layer hops — wrong for single-stream; cold-expert→CPU offload buys nothing on
+unified-memory APUs). See [[project_moe_byte_aware_split]].
+
 **Pre-flight planning — `svrn mesh plan`** (`sovereign-cli-llm::mesh_cmd::cmd_plan`).
-An offline dry-run of the tensor split, so you can see whether a model fits a mesh
-*before* loading it. It reuses the daemon's own `plan_shards` + `quantize_vram` (the
-preview uses the identical apportionment the live load will), then overlays the real
-per-block byte mass from `rpc_warm_cache::tensor_sizes` — a GGUF header-table parse,
-no model load and no GPU, instant even on a 400 GB split — to show the *bytes* each
-device would hold and whether each one *individually* fits. That per-device check is
-the gap it closes: the live host gates only on aggregate pooled memory
+An offline dry-run of that split — a GGUF header-table parse, no model load and no GPU,
+instant even on a 400 GB split — so you can see whether a model fits a mesh *before*
+loading it. It shows the *bytes* each device holds and whether each one *individually*
+fits: the gap it closes is that the live host gates only on aggregate pooled memory
 (`resolve_placement_inner`: `pooled >= model_bytes × headroom`), so a cluster that
-clears the aggregate gate can still OOM a small node whose contiguous block range
-exceeds its VRAM. `--from-mesh` plans across the running mesh — each member now
-advertises `vram_gb` + `can_anchor` on `GET /v1/mesh/status` (`MemberDto`), the VRAM
-sourced from `rpc_distribution::local_gpu_total_vram_gb` (the ggml device total, which
-unlike sysfs sees the full unified-memory pool on AMD APUs — ~124 GB on Strix Halo vs
-sysfs's ~0.5 GB dedicated carveout); `--devices 64,32,32` plans a hypothetical mesh.
-The headroom factor is now operator-set — `[shared_model] headroom` → (bootstrap
-bridge) `SOVEREIGN_RPC_HEADROOM` → `rpc_headroom_factor()`, default 1.2, replacing the
-hardcoded ×1.2 — and `mesh plan` defaults its `--headroom` to that same resolution
-order, so the preview's headroom is the one the load executes with. The report also
-flags whether per-block mass is uniform (heterogeneous VRAM is safe: proportional
-block count ≈ proportional bytes) or skewed (a small node's range can overflow — needs
-mass-aware apportionment, roadmap). Exit codes: `0` fits, `1` won't fit, `2` bad args.
+clears the aggregate gate can still OOM a small node. It also reports the MoE hot/cold
+mass breakdown, whether per-block mass is uniform or skewed, and a **node/hop advisor**
+— the minimum nodes that hold the model (fewest of the largest devices whose pooled
+VRAM covers `model × headroom`) and the resulting hops, flagging when the mesh is spread
+across more nodes than the mass needs. It frames this as a tradeoff, not a win button:
+fewer nodes cut per-token hop *latency*, but net tok/s depends on the host — on a
+memory-bandwidth-bound host (a unified-memory APU) offloading layers frees host
+weight-read bandwidth and can raise *throughput* despite the extra hop (the measured
+122B ran ~20% faster distributed 36/12 at 17.3–17.9 tok/s than solo at 14.8). So the
+advisor reports the hop cost without claiming fewer nodes is always faster. `--from-mesh` plans across the
+running mesh — each member advertises `vram_gb` + `can_anchor` on `GET /v1/mesh/status`
+(`MemberDto`), the VRAM sourced from `rpc_distribution::local_gpu_total_vram_gb` (the
+ggml device total, which unlike sysfs sees the full unified-memory pool on AMD APUs —
+~124 GB on Strix Halo vs sysfs's ~0.5 GB dedicated carveout); `--devices 64,32,32` plans
+a hypothetical mesh. The headroom factor is operator-set — `[shared_model] headroom` →
+(bootstrap bridge) `SOVEREIGN_RPC_HEADROOM` → `rpc_headroom_factor()`, default 1.2,
+replacing the hardcoded ×1.2 — and `mesh plan` defaults its `--headroom` to that same
+resolution order, so the preview's headroom is the one the load executes with. Exit
+codes: `0` fits, `1` won't fit, `2` bad args.
 See [`docs/RUN_A_BIGGER_MODEL.md`](./docs/RUN_A_BIGGER_MODEL.md).
 
 The strong-peer-topology roadmap (latency-class hierarchy: cascade

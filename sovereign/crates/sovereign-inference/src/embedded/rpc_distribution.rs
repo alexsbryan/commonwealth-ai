@@ -617,8 +617,55 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
                     quantize_vram((if free > 0 { free } else { total }) as u64) as f32
                 })
                 .collect();
-            let computed = plan_shards(n_layer, &weights);
-            tracing::info!(model = %key.0, devices = devs.len(), "plan_distribution: computed new shard plan");
+            // Byte-mass-aware split: overlay the model's REAL per-block byte mass
+            // so a non-uniform (MoE / hybrid) model apportions by BYTES, not block
+            // count — a count split can hand a small node a heavy contiguous run
+            // and OOM it. This is a GGUF header-table parse only (no weight load);
+            // on any read failure we fall back to the count split (empty
+            // block_bytes) rather than wedge the load.
+            let (block_bytes, head_bytes) = match tensor_sizes(model_path) {
+                Ok(sizes) => {
+                    let mut bb = vec![0u64; n_layer as usize];
+                    let mut head = 0u64;
+                    for (name, layer, nbytes) in &sizes {
+                        match layer {
+                            Some(l) if (*l as usize) < bb.len() => bb[*l as usize] += *nbytes,
+                            None if is_output_tensor(name) => head += *nbytes,
+                            _ => {}
+                        }
+                    }
+                    (bb, head)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, model = %key.0, "plan_distribution: tensor_sizes failed — falling back to count-based split");
+                    (Vec::new(), 0)
+                }
+            };
+            let byte_aware = !block_bytes.is_empty();
+            let computed = plan_shards_weighted(n_layer, &weights, &block_bytes, head_bytes);
+
+            // Glassbox: log the resulting per-device byte balance so an operator
+            // can see WHY each node got its range — and spot a residual overflow a
+            // contiguous split can't avoid on a very skewed model.
+            if byte_aware {
+                let total_mass = block_bytes.iter().sum::<u64>() + head_bytes;
+                for s in &computed {
+                    let held = s
+                        .blocks
+                        .map(|(a, b)| (a..=b).map(|i| block_bytes[i as usize]).sum::<u64>())
+                        .unwrap_or(0)
+                        + if s.holds_output { head_bytes } else { 0 };
+                    tracing::info!(
+                        device = s.device_index,
+                        blocks = ?s.blocks,
+                        held_gb = held as f64 / 1.073_741_824e9,
+                        share_pct = if total_mass > 0 { 100.0 * held as f64 / total_mass as f64 } else { 0.0 },
+                        vram_weight = weights[s.device_index],
+                        "plan_distribution: byte-mass shard"
+                    );
+                }
+            }
+            tracing::info!(model = %key.0, devices = devs.len(), byte_aware, "plan_distribution: computed new shard plan");
             cache.insert(key.clone(), computed.clone());
             computed
         }

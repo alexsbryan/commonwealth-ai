@@ -634,7 +634,14 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // token_embd → host system RAM; other globals lumped as host overhead).
     let mut block_bytes = vec![0u64; n_layer as usize];
     let (mut output_bytes, mut embd_bytes, mut other_global) = (0u64, 0u64, 0u64);
+    // Routed-expert (`_exps`) mass is the COLD part of an MoE model — only the
+    // router's top-k experts are read per token, so it can be ~90% of the bytes
+    // yet a small fraction of the per-token work. Tallied for the hot/cold report.
+    let mut routed_expert_bytes = 0u64;
     for (name, layer, nbytes) in &sizes {
+        if inf::is_routed_expert_tensor(name) {
+            routed_expert_bytes += *nbytes;
+        }
         match layer {
             Some(l) if (*l as usize) < block_bytes.len() => block_bytes[*l as usize] += *nbytes,
             Some(_) => other_global += *nbytes,
@@ -660,7 +667,10 @@ async fn cmd_plan(args: &[String]) -> i32 {
     let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
     order.push(host);
     let weights: Vec<f32> = order.iter().map(|&d| inf::quantize_vram(vram[d]) as f32).collect();
-    let plan = inf::plan_shards(n_layer, &weights);
+    // Byte-mass-aware split — apportion each device a contiguous block range whose
+    // BYTES (not count) are proportional to its VRAM, folding the output head onto
+    // the host. The IDENTICAL call the live load makes, so the preview matches it.
+    let plan = inf::plan_shards_weighted(n_layer, &weights, &block_bytes, output_bytes);
 
     let gb = |b: u64| b as f64 / gib;
     struct Row {
@@ -711,6 +721,31 @@ async fn cmd_plan(args: &[String]) -> i32 {
     let spread = if bmin > 0 { bmax as f64 / bmin as f64 } else { 1.0 };
     let uniform = spread <= 1.15;
 
+    // MoE hot/cold split + node-count/hop advisor.
+    let is_moe = routed_expert_bytes > 0;
+    // Hot = resident mass touched every token: all block bytes minus the cold
+    // routed experts, plus the output head (token_embd lives in host RAM).
+    let hot_bytes =
+        block_bytes.iter().sum::<u64>().saturating_sub(routed_expert_bytes) + output_bytes;
+    // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
+    // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
+    // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
+    // skewed model may need one more node for per-device fit.
+    let mut vram_desc: Vec<u64> = vram.clone();
+    vram_desc.sort_unstable_by(|a, b| b.cmp(a));
+    let (mut min_nodes, mut acc) = (0usize, 0u64);
+    for v in &vram_desc {
+        if acc >= gate_need {
+            break;
+        }
+        acc += *v;
+        min_nodes += 1;
+    }
+    min_nodes = min_nodes.max(1);
+    let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
+    let hops_now = active_nodes - 1;
+    let hops_min = min_nodes.saturating_sub(1);
+
     if json {
         let devices_json: Vec<serde_json::Value> = rows
             .iter()
@@ -744,6 +779,20 @@ async fn cmd_plan(args: &[String]) -> i32 {
             "aggregate_gate_need_gb": gb(gate_need),
             "aggregate_gate_pass": gate_pass,
             "per_device_overflow_devices": overflows.iter().map(|r| r.dev).collect::<Vec<_>>(),
+            "moe": if is_moe {
+                serde_json::json!({
+                    "routed_expert_gb": gb(routed_expert_bytes),
+                    "routed_expert_pct": 100.0 * routed_expert_bytes as f64 / total_weight as f64,
+                    "hot_gb": gb(hot_bytes),
+                    "hot_pct": 100.0 * hot_bytes as f64 / total_weight as f64,
+                })
+            } else {
+                serde_json::Value::Null
+            },
+            "nodes_used": active_nodes,
+            "hops": hops_now,
+            "min_nodes": min_nodes,
+            "min_hops": hops_min,
             "devices": devices_json,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
@@ -775,7 +824,17 @@ async fn cmd_plan(args: &[String]) -> i32 {
             gb(bmax),
             gb(bmean)
         );
-        println!("        Block COUNT != byte mass — a small node's contiguous range can exceed its VRAM. Watch per-device fit.");
+        println!("        Split apportions by byte MASS (not count), so heterogeneous VRAM stays balanced — but a single block heavier than a small node's whole share still can't be split contiguously. Watch per-device fit.");
+    }
+    if is_moe {
+        println!(
+            "MoE:    {:.1} GB routed experts ({:.0}% — COLD, only top-k read per token) · {:.1} GB hot skeleton ({:.0}% — every token)",
+            gb(routed_expert_bytes),
+            100.0 * routed_expert_bytes as f64 / total_weight as f64,
+            gb(hot_bytes),
+            100.0 * hot_bytes as f64 / total_weight as f64,
+        );
+        println!("        Whole blocks (experts included) stay on one node, so decode keeps its {hops_now}-hop path — a layer's experts are never scattered across nodes.");
     }
     let hr_note = if headroom_from_flag {
         "--headroom override — WHAT-IF; the load executes with the [shared_model] headroom"
@@ -838,8 +897,29 @@ async fn cmd_plan(args: &[String]) -> i32 {
         println!("   • move the host role to your largest node (--host <idx>) — the host also holds the output head");
         println!("   • lower --headroom for a tighter pack (less KV room), or give the overflowing node more free VRAM");
         if !uniform {
-            println!("   • this model is NON-uniform — a safe manual split needs mass-aware apportionment (roadmap P5)");
+            println!("   • this model is skewed enough that one block's mass exceeds a small node's share — the split is already mass-aware, so the fix is more VRAM on that node or a different --host, not a smarter split");
         }
+    }
+
+    // Nodes & hops advisor — single-stream pipeline decode costs (nodes-1) hops
+    // per token, so fewer nodes = fewer hops = lower hop LATENCY. That is a
+    // tradeoff, NOT a win button: on a memory-bandwidth-bound host (e.g. a
+    // unified-memory APU) offloading layers frees host weight-read bandwidth and
+    // can raise THROUGHPUT despite the extra hop — the measured 122B ran ~20%
+    // faster distributed (36/12) than solo. So report the hop cost; don't claim
+    // fewer nodes is always faster.
+    println!(
+        "Nodes:          {active_nodes} holding blocks → {hops_now} network hop{} per token",
+        if hops_now == 1 { "" } else { "s" }
+    );
+    if min_nodes < active_nodes {
+        println!(
+            "                mass alone fits {min_nodes} node{} ({hops_min} hop{}) — {} fewer node(s) would cut {} per-token hop(s) of latency. Net tok/s depends on the host: if it's memory-bandwidth-bound, keeping layers offloaded can still win. Measure both.",
+            if min_nodes == 1 { "" } else { "s" },
+            if hops_min == 1 { "" } else { "s" },
+            active_nodes - min_nodes,
+            hops_now - hops_min,
+        );
     }
 
     if gate_pass && overflows.is_empty() {

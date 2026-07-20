@@ -541,39 +541,146 @@ pub fn quantize_vram(bytes: u64) -> u64 {
 }
 
 /// Our OWN contiguous placement policy: apportion `n_layer` transformer blocks
-/// across devices proportional to `weights` (RPC-first order), with exact integer
-/// counts via largest-remainder so they sum to `n_layer`. The output head goes on
-/// the last block-holding device. We do NOT predict llama.cpp's split — we ENFORCE
-/// this assignment via `tensor_buft_overrides` at load and warm the same
-/// assignment, so there is nothing to diverge from. Pure + deterministic.
+/// across devices proportional to `weights` (RPC-first order) BY COUNT, with
+/// exact integer counts via largest-remainder so they sum to `n_layer`. The
+/// output head goes on the last block-holding device. We do NOT predict
+/// llama.cpp's split — we ENFORCE this assignment via `tensor_buft_overrides` at
+/// load and warm the same assignment, so there is nothing to diverge from.
+///
+/// Count-proportional is only byte-balanced when every block has ~equal mass (a
+/// dense model, or a uniform all-MoE stack). For NON-UNIFORM models — a hybrid
+/// SSM+MoE (a light attention/SSM block next to a 60x heavier MoE block) or a
+/// DeepSeek-style leading-dense stack — block COUNT is a poor proxy for bytes,
+/// so a count split can hand a small node a heavy contiguous run and OOM it.
+/// [`plan_shards_weighted`] apportions by real byte mass instead; this is its
+/// `block_bytes == []` case. Pure + deterministic.
 pub fn plan_shards(n_layer: u32, weights: &[f32]) -> Vec<NodeShard> {
+    plan_shards_weighted(n_layer, weights, &[], 0)
+}
+
+/// Byte-mass-aware contiguous placement — the split the live load needs on
+/// NON-UNIFORM (MoE / hybrid) models. `block_bytes[i]` is block `i`'s resident
+/// weight in bytes (len must equal `n_layer`); `head_bytes` is the output-head
+/// mass, which rides on the last block-holding device. Each device's resident
+/// bytes come out proportional to its `weights` entry — so a 64 GB node and a
+/// 32 GB node hold ~2:1 of the *mass*, not of the block *count*. The head is
+/// folded in: the head-holder is handed a smaller block budget (its share minus
+/// the head it already carries) so it doesn't run ~`head_bytes` heavy.
+///
+/// Ranges stay CONTIGUOUS, so hops stay `D-1` and `tensor_device` /
+/// `override_patterns` are unchanged — only the cut points move. Falls back to
+/// the count-based apportionment of [`plan_shards`] when `block_bytes` is empty
+/// or all-zero (a uniform model, or a caller with no size table). Note that when
+/// a single block's mass exceeds a small node's whole share, no CONTIGUOUS split
+/// can keep that node within budget — the caller (`mesh plan`) surfaces the
+/// residual per-device overflow; splitting a block's experts off is a separate,
+/// heavier lever we deliberately don't take here. Pure + deterministic.
+pub fn plan_shards_weighted(
+    n_layer: u32,
+    weights: &[f32],
+    block_bytes: &[u64],
+    head_bytes: u64,
+) -> Vec<NodeShard> {
     let n = weights.len();
     if n == 0 {
         return Vec::new();
     }
-    let total: f32 = weights.iter().sum();
-    let eff: Vec<f32> = if total > 0.0 {
-        weights.to_vec()
+    // Effective device weights (all-zero → equal share).
+    let wsum_f32: f32 = weights.iter().sum();
+    let w: Vec<f64> = if wsum_f32 > 0.0 {
+        weights.iter().map(|&x| x as f64).collect()
     } else {
         vec![1.0; n]
     };
-    let sum: f32 = eff.iter().sum();
-    // Largest-remainder apportionment of `n_layer` blocks.
-    let ideal: Vec<f32> = eff.iter().map(|&w| w / sum * n_layer as f32).collect();
-    let mut counts: Vec<u32> = ideal.iter().map(|x| x.floor() as u32).collect();
-    let mut remainder = n_layer.saturating_sub(counts.iter().sum());
-    let mut by_frac: Vec<usize> = (0..n).collect();
-    by_frac.sort_by(|&a, &b| {
-        let (fa, fb) = (ideal[a] - ideal[a].floor(), ideal[b] - ideal[b].floor());
-        fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal)
-    });
-    for &d in &by_frac {
-        if remainder == 0 {
-            break;
+    let wsum: f64 = w.iter().sum::<f64>().max(f64::MIN_POSITIVE);
+
+    let have_mass =
+        block_bytes.len() == n_layer as usize && block_bytes.iter().any(|&b| b > 0);
+
+    let counts: Vec<u32> = if !have_mass {
+        // ── Count-based (largest-remainder) apportionment ──
+        let ideal: Vec<f64> = w.iter().map(|&wd| wd / wsum * n_layer as f64).collect();
+        let mut counts: Vec<u32> = ideal.iter().map(|x| x.floor() as u32).collect();
+        let mut remainder = n_layer.saturating_sub(counts.iter().sum());
+        let mut by_frac: Vec<usize> = (0..n).collect();
+        by_frac.sort_by(|&a, &b| {
+            let (fa, fb) = (ideal[a] - ideal[a].floor(), ideal[b] - ideal[b].floor());
+            fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for &d in &by_frac {
+            if remainder == 0 {
+                break;
+            }
+            counts[d] += 1;
+            remainder -= 1;
         }
-        counts[d] += 1;
-        remainder -= 1;
+        counts
+    } else {
+        // ── Byte-mass-aware apportionment: contiguous cuts by cumulative bytes ──
+        let total_block: u64 = block_bytes.iter().sum();
+        let total_mass = total_block as f64 + head_bytes as f64;
+        // The head lands on the last device with weight > 0 (device order is
+        // RPC-workers-first, host last; the host holds the head).
+        let head_dev = (0..n).rev().find(|&d| w[d] > 0.0);
+        let mut tgt_block: Vec<f64> = w.iter().map(|&wd| wd / wsum * total_mass).collect();
+        if let Some(hd) = head_dev {
+            tgt_block[hd] = (tgt_block[hd] - head_bytes as f64).max(0.0);
+        }
+        // prefix[i] = Σ block_bytes[0..i]; prefix[n_layer] = total_block.
+        let mut prefix = vec![0u64; n_layer as usize + 1];
+        for i in 0..n_layer as usize {
+            prefix[i + 1] = prefix[i] + block_bytes[i];
+        }
+        let mut counts = vec![0u32; n];
+        let mut cum_tgt = 0.0f64;
+        let mut prev_cut = 0u32;
+        for d in 0..n {
+            cum_tgt += tgt_block[d];
+            // Last device takes the remainder so the cuts always tile [0, n_layer)
+            // with no rounding gap.
+            let cut = if d == n - 1 {
+                n_layer
+            } else {
+                closest_boundary(&prefix, cum_tgt, prev_cut, n_layer).max(prev_cut)
+            };
+            counts[d] = cut - prev_cut;
+            prev_cut = cut;
+        }
+        counts
+    };
+
+    build_shards_from_counts(&counts, &w)
+}
+
+/// Smallest boundary `b` in `[lo, hi]` whose `prefix[b]` is closest to `target`.
+/// `prefix` is non-decreasing, so we advance while it improves and stop once we
+/// pass the target without improving. Deterministic; ties resolve to the smaller
+/// `b` (the earlier cut). Used only by the byte-aware apportionment.
+fn closest_boundary(prefix: &[u64], target: f64, lo: u32, hi: u32) -> u32 {
+    let mut best = lo;
+    let mut best_d = (prefix[lo as usize] as f64 - target).abs();
+    let mut b = lo + 1;
+    while b <= hi {
+        let cur = prefix[b as usize] as f64;
+        let d = (cur - target).abs();
+        if d < best_d {
+            best_d = d;
+            best = b;
+        } else if cur >= target {
+            break; // past the target and not improving → monotonic, stop
+        }
+        b += 1;
     }
+    best
+}
+
+/// Turn per-device contiguous block `counts` into the [`NodeShard`] plan: assign
+/// each device its next contiguous range, put the output head on the last device
+/// that got any blocks, and record its normalized weight fraction. Shared by both
+/// apportionment paths so they can't diverge on shard shape.
+fn build_shards_from_counts(counts: &[u32], eff_weights: &[f64]) -> Vec<NodeShard> {
+    let n = counts.len();
+    let wsum: f64 = eff_weights.iter().sum::<f64>().max(f64::MIN_POSITIVE);
     let last_with_blocks = (0..n).rev().find(|&d| counts[d] > 0);
     let mut cur = 0u32;
     (0..n)
@@ -589,7 +696,7 @@ pub fn plan_shards(n_layer: u32, weights: &[f32]) -> Vec<NodeShard> {
                 device_index: d,
                 blocks,
                 holds_output: Some(d) == last_with_blocks,
-                fraction: eff[d] / sum,
+                fraction: (eff_weights[d] / wsum) as f32,
             }
         })
         .collect()
@@ -599,6 +706,18 @@ pub fn plan_shards(n_layer: u32, weights: &[f32]) -> Vec<NodeShard> {
 /// device, distinct from `token_embd` (input) which stays on the host CPU.
 pub fn is_output_tensor(name: &str) -> bool {
     name == "output.weight"
+}
+
+/// A routed-expert weight tensor — `blk.N.ffn_{gate,up,down}_exps.weight`, the
+/// `_exps` fused-expert stack. This is the COLD mass of an MoE model: only the
+/// router's top-k experts are read per token, so it can be ~90% of the bytes yet
+/// a small fraction of the per-token work. Distinct from the SHARED expert
+/// (`_shexp`, run every token → hot) and the router (`ffn_gate_inp` → hot). Used
+/// by `mesh plan` to report hot/cold mass; the split itself stays per-block
+/// (a whole block, experts included, on one device) so single-stream decode
+/// keeps its `D-1` hops rather than scattering a layer's experts across nodes.
+pub fn is_routed_expert_tensor(name: &str) -> bool {
+    name.contains("_exps.weight")
 }
 
 /// Which device a tensor lands on under `plan`, or `None` if it stays on the host
@@ -792,5 +911,130 @@ mod tests {
         assert_eq!(split.finish(), whole.finish());
         // Cache filename is the zero-padded 16-hex of the hash.
         assert_eq!(cache_file_name(0xaf63_dc4c_8601_ec8c), "af63dc4c8601ec8c");
+    }
+
+    // ── byte-mass-aware split (plan_shards_weighted) ──
+
+    fn assigned_blocks(plan: &[NodeShard]) -> u32 {
+        plan.iter().filter_map(|s| s.blocks).map(|(a, b)| b - a + 1).sum()
+    }
+    fn held_bytes(s: &NodeShard, block_bytes: &[u64]) -> u64 {
+        s.blocks
+            .map(|(a, b)| (a..=b).map(|i| block_bytes[i as usize]).sum::<u64>())
+            .unwrap_or(0)
+    }
+    fn count(s: &NodeShard) -> u32 {
+        s.blocks.map(|(a, b)| b - a + 1).unwrap_or(0)
+    }
+
+    #[test]
+    fn weighted_empty_bytes_is_the_count_split() {
+        // No size table (or a wrong-length one) → byte-aware degrades to the exact
+        // count-based plan, so `plan_shards` stays a pure special-case of it.
+        let w = [0.5, 0.5];
+        assert_eq!(plan_shards_weighted(4, &w, &[], 0), plan_shards(4, &w));
+        assert_eq!(plan_shards_weighted(4, &w, &[1, 2, 3], 0), plan_shards(4, &w));
+    }
+
+    #[test]
+    fn weighted_uniform_mass_matches_count_split() {
+        // When every block has equal mass, byte-proportional == count-proportional,
+        // so the byte-aware split reproduces the count split (no regression on dense
+        // or uniform all-MoE models).
+        let bb = vec![500u64; 12];
+        let w = [0.5, 0.25, 0.25];
+        let byte: Vec<_> = plan_shards_weighted(12, &w, &bb, 0).iter().map(|s| s.blocks).collect();
+        let cnt: Vec<_> = plan_shards(12, &w).iter().map(|s| s.blocks).collect();
+        assert_eq!(byte, cnt, "uniform mass → byte-aware ranges == count ranges");
+    }
+
+    #[test]
+    fn weighted_balances_clustered_mass_better_than_count() {
+        // A DeepSeek-shaped model: 3 tiny leading dense blocks, then 9 heavy MoE
+        // blocks. Two EQUAL devices should each end with ~half the BYTE mass — but
+        // a count split (6 blocks each) gives dev0 only 3 of the 9 heavy blocks.
+        let n = 12u32;
+        let mut bb = vec![100u64; 3];
+        bb.extend(std::iter::repeat(1000u64).take(9)); // total = 300 + 9000 = 9300
+        let total: u64 = bb.iter().sum();
+
+        let byte = plan_shards_weighted(n, &[1.0, 1.0], &bb, 0);
+        assert_eq!(assigned_blocks(&byte), n, "tiles every block exactly once");
+
+        let (b0, b1) = (held_bytes(&byte[0], &bb), held_bytes(&byte[1], &bb));
+        let target = total / 2;
+        assert!(
+            (b0 as i64 - target as i64).unsigned_abs() <= total / 8,
+            "dev0 byte mass {b0} within 12.5% of {target}"
+        );
+
+        // The win, made explicit: byte-aware is strictly more balanced than count.
+        let cnt = plan_shards(n, &[1.0, 1.0]);
+        let (c0, c1) = (held_bytes(&cnt[0], &bb), held_bytes(&cnt[1], &bb));
+        let byte_ratio = b0.max(b1) as f64 / b0.min(b1) as f64;
+        let count_ratio = c0.max(c1) as f64 / c0.min(c1) as f64;
+        assert!(
+            byte_ratio < count_ratio,
+            "byte-aware imbalance {byte_ratio:.2}x < count imbalance {count_ratio:.2}x"
+        );
+    }
+
+    #[test]
+    fn weighted_folds_output_head_onto_last_device() {
+        // The head rides on the last (host) device, so it should be handed a
+        // smaller BLOCK budget to compensate — else it runs ~head_bytes heavy.
+        let bb = vec![100u64; 10]; // block mass 1000
+        let head = 300u64; // ~3 blocks of head mass on the host (dev1)
+        let plan = plan_shards_weighted(10, &[1.0, 1.0], &bb, head);
+        assert_eq!(assigned_blocks(&plan), 10);
+        assert!(plan[1].holds_output, "last device holds the output head");
+        assert!(
+            count(&plan[0]) > count(&plan[1]),
+            "head-holder gets fewer blocks: dev0={} dev1={}",
+            count(&plan[0]),
+            count(&plan[1])
+        );
+    }
+
+    #[test]
+    fn weighted_zero_weight_device_gets_no_blocks() {
+        // A member advertising 0 VRAM must not be handed a shard.
+        let bb = vec![100u64; 6];
+        let plan = plan_shards_weighted(6, &[1.0, 0.0, 1.0], &bb, 0);
+        assert!(plan[1].blocks.is_none(), "zero-VRAM device holds no blocks");
+        assert_eq!(assigned_blocks(&plan), 6, "the other two still tile all blocks");
+    }
+
+    #[test]
+    fn weighted_contiguous_and_gapless_on_heterogeneous_vram() {
+        // Contiguity is load-bearing (hops stay D-1; override_patterns/tensor_device
+        // assume it). Heterogeneous VRAM + skewed mass must still tile [0, n) with no
+        // gap or overlap and ranges in ascending device order.
+        let mut bb: Vec<u64> = (0..40).map(|i| if i % 2 == 0 { 20 } else { 1200 }).collect();
+        bb[0] = 5; // a lighter leading block for good measure
+        let plan = plan_shards_weighted(40, &[4.0, 2.0, 2.0], &bb, 800);
+        assert_eq!(assigned_blocks(&plan), 40);
+        let mut next = 0u32;
+        for s in &plan {
+            if let Some((a, b)) = s.blocks {
+                assert_eq!(a, next, "no gap/overlap between contiguous shards");
+                assert!(b >= a);
+                next = b + 1;
+            }
+        }
+        assert_eq!(next, 40, "shards cover the whole block range");
+    }
+
+    #[test]
+    fn routed_expert_classifier_splits_hot_from_cold() {
+        // Cold routed experts (`_exps`) vs hot shared expert (`_shexp`) / router
+        // (`ffn_gate_inp`) / attention — the distinction the hot/cold report rests on.
+        assert!(is_routed_expert_tensor("blk.3.ffn_down_exps.weight"));
+        assert!(is_routed_expert_tensor("blk.0.ffn_gate_exps.weight"));
+        assert!(is_routed_expert_tensor("blk.7.ffn_up_exps.weight"));
+        assert!(!is_routed_expert_tensor("blk.3.ffn_down_shexp.weight")); // shared = hot
+        assert!(!is_routed_expert_tensor("blk.3.ffn_gate_inp.weight")); // router = hot
+        assert!(!is_routed_expert_tensor("blk.3.attn_q.weight"));
+        assert!(!is_routed_expert_tensor("output.weight"));
     }
 }
