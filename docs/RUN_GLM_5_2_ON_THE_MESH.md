@@ -41,6 +41,12 @@ use — sharing one host's model, knowledge search, gossip — needs no VPN at a
 see [getting-started](../commonwealth/docs/getting-started.md). It's specifically
 the cross-box tensor split here that wants shared IP locality.)
 
+And **the same version on every machine.** The split has the GPUs talking in a
+shared low-level format, so a box running a different build can crash the host in
+the middle of an answer. Everyone installs the same release for their operating
+system — matched versions, no exceptions. (Different OSes are fine; different
+*versions* are not.)
+
 ## Set it up
 
 **1. Get the model onto the host.**
@@ -62,21 +68,21 @@ primary = "/home/you/.sovereign/models/GLM-5.2/UD-Q4_K_S/GLM-5.2-UD-Q4_K_S-00001
 **3. Put everyone on one mesh.** On the host:
 
 ```bash
-sovereign mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
+svrn mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
 ```
 
 On every other machine:
 
 ```bash
-sovereign mesh join cwth-a1b2-c3d4-e5f6
+svrn mesh join cwth-a1b2-c3d4-e5f6
 ```
 
-`sovereign mesh status` should list them all.
+`svrn mesh status` should list them all.
 
 **4. Start each lending machine as a worker.**
 
 ```bash
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 sovereign daemon run
+SOVEREIGN_RPC_SERVE=0.0.0.0:50052 svrn daemon run
 ```
 
 **5. Start the host.**
@@ -84,7 +90,7 @@ SOVEREIGN_RPC_SERVE=0.0.0.0:50052 sovereign daemon run
 ```bash
 SOVEREIGN_RPC_DISCOVER=1 \
 SOVEREIGN_RPC_SHARD_FETCH=ranges \
-  sovereign daemon run
+  svrn daemon run
 ```
 
 The host finds the workers, splits the model across everyone's memory by how much
@@ -97,7 +103,7 @@ you always do.
 offline, so nothing crosses their internet link when the cluster starts:
 
 ```bash
-sovereign mesh warm-cache <model-file>
+svrn mesh warm-cache <model-file>
 ```
 
 ## What to expect
@@ -136,7 +142,7 @@ comes right back and the group re-forms on its own — but only if it's running 
 service, so set that up on the host:
 
 ```bash
-sovereign install-service
+svrn install-service
 ```
 
 That's the difference between a machine rebooting being a non-event and being a

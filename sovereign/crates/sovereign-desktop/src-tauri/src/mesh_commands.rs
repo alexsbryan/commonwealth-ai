@@ -583,6 +583,8 @@ impl MeshStateResponse {
                     "away" => MemberStatus::Away,
                     _ => MemberStatus::Offline,
                 },
+                vram_gb: m.vram_gb,
+                can_anchor: m.can_anchor,
                 contribution_level: 0,
                 contribution_label: String::new(),
                 addresses: m.addresses,

@@ -69,6 +69,28 @@ pub async fn build_local_capabilities(
     app_state: Option<&AppState>,
 ) -> NodeCapabilities {
     let mut hardware = hardware::detect_hardware();
+    // Advertise the ggml device total VRAM (authoritative, backend-agnostic)
+    // when it exceeds what sysfs detected — the sysfs path under-reports
+    // unified-memory AMD APUs (it sees only the dedicated carveout, e.g. 0.5 GB
+    // on Strix Halo, while ggml reports the real ~128 GB pool). This is the
+    // figure `svrn mesh plan --from-mesh` reads, so the number peers see must be
+    // real. Add the shortfall to the first GPU so the advertised sum matches;
+    // synthesize an entry if sysfs found no GPU at all (the APU-under-sysfs case).
+    if let Some(ggml_total) = sovereign_inference::embedded::local_gpu_total_vram_gb() {
+        let detected: u32 = hardware.gpus.iter().map(|g| g.vram_gb).sum();
+        if ggml_total > detected {
+            if let Some(g0) = hardware.gpus.first_mut() {
+                g0.vram_gb += ggml_total - detected;
+            } else {
+                hardware.gpus.push(commonwealth_core::capabilities::GpuInfo {
+                    name: "GPU".to_string(),
+                    vram_gb: ggml_total,
+                    compute_type: commonwealth_core::capabilities::ComputeType::Vulkan,
+                    estimated_tflops: 0.0,
+                });
+            }
+        }
+    }
     // Walk the engine once, share the result between
     // `build_hosted_corpora` (CorpusShardInfo set) and the storage-
     // usage calc (sum of `index_size_bytes`). Walking the index

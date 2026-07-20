@@ -227,6 +227,14 @@ pub struct SharedModelSection {
     /// only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_pooled_gb: Option<f64>,
+    /// Memory headroom FACTOR the host gates and places against: it requires
+    /// `pooled >= model_size × headroom`. Default 1.2 (20% for KV + compute
+    /// buffers). `svrn mesh plan` reads this SAME value as its default headroom,
+    /// so the plan you preview uses the headroom the load executes with. Lower
+    /// packs tighter (more aggressive); higher is safer. Env `SOVEREIGN_RPC_HEADROOM`
+    /// wins if pre-set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headroom: Option<f64>,
     /// How anchors fetch their shard of the model — the host emits this as
     /// `SOVEREIGN_RPC_SHARD_FETCH`. Defaults to [`ShardFetch::Ranges`] (each
     /// node pulls only its slice), which is required whenever no single node

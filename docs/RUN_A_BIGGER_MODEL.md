@@ -6,11 +6,11 @@ layers spread across the machines, and you talk to it as if it were running
 locally. Three 64 GB machines can hold a model no one of them could.
 
 This is built in. There's no extra software and no separate server to babysit —
-the same `sovereign` daemon you already run takes on a role from a single setting.
+the same `svrn` daemon you already run takes on a role from a single setting.
 
 ## What you'll need
 
-- **Two or more machines**, each running `sovereign`.
+- **Two or more machines**, each running `svrn`.
 - **A network path between them.** On a LAN you already have it; across locations,
   [Tailscale](https://tailscale.com) is the simplest way to give them a private
   address space. The mesh rides on top. If discovery doesn't cross the network —
@@ -18,6 +18,10 @@ the same `sovereign` daemon you already run takes on a role from a single settin
   has the relay workflow.
 - **The model file on one machine** — the one that will host. The others don't
   need it on disk; they're handed their slice automatically.
+- **The same `svrn` version on each machine.** The split has the machines
+  talking in a shared low-level format, so a box on a different build can crash the
+  host in the middle of an answer. Match versions across the mesh — different
+  operating systems are fine, different *versions* aren't.
 
 ## The shape of it
 
@@ -28,7 +32,7 @@ There are two roles:
 - A **worker** lends its memory and GPU. It doesn't need the model on disk — the
   host seeds it the slice it's responsible for.
 
-A machine can be both. Set nothing, and `sovereign` runs exactly as it always
+A machine can be both. Set nothing, and `svrn` runs exactly as it always
 has, on one box.
 
 ## Set it up
@@ -38,28 +42,43 @@ has, on one box.
 On the host, create an invite:
 
 ```bash
-sovereign mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
+svrn mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
                              # (says "a mesh already exists"? setup founded a
-                             #  solo mesh — read its key with `sovereign mesh
-                             #  status`, or `sovereign mesh rotate` for a new one)
+                             #  solo mesh — read its key with `svrn mesh
+                             #  status`, or `svrn mesh rotate` for a new one)
 ```
 
 On each other machine, join with it:
 
 ```bash
-sovereign mesh join cwth-a1b2-c3d4-e5f6
+svrn mesh join cwth-a1b2-c3d4-e5f6
 ```
 
-`sovereign mesh status` now lists them all.
+`svrn mesh status` now lists them all.
 
 **2. Start the lending machine as a worker.**
 
 ```bash
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 sovereign daemon run
+SOVEREIGN_RPC_SERVE=0.0.0.0:50052 svrn daemon run
 ```
 
 That's the whole change — the daemon now offers its GPU to the mesh. Leave it
 running.
+
+**Check the fit before you commit.** You don't have to load the model to find out
+whether it lands. From the host, once the workers are up:
+
+```bash
+svrn mesh plan /path/to/the-big-one.gguf --from-mesh
+```
+
+It reads the live mesh, lays the model's blocks across each machine's memory, and
+tells you — per machine — whether that machine's share fits, without loading anything
+or touching a GPU. The host itself only checks the *total* pooled memory when it
+loads; this checks each machine individually, so it catches the case where the mesh
+has room overall but one small box would overflow. If a machine comes up short it
+says so and names the fix. To size a cluster you haven't built yet, pass its memory
+directly instead: `--devices 64,32,32` (host last).
 
 **3. On the host, point at the big model and turn on discovery.**
 
@@ -74,7 +93,7 @@ Then start the host with discovery on (restart the daemon if it's already
 running):
 
 ```bash
-SOVEREIGN_RPC_DISCOVER=1 sovereign daemon run
+SOVEREIGN_RPC_DISCOVER=1 svrn daemon run
 ```
 
 The host finds the worker, splits the model across both machines, and seeds the
@@ -109,7 +128,7 @@ straight back in.
 For a setup you'd rather not watch, run the daemon as a service:
 
 ```bash
-sovereign install-service
+svrn install-service
 ```
 
 A worker crashing in the middle of an answer can take the host process down with

@@ -359,6 +359,11 @@ pub(super) fn apply_shared_model_role_to_env(
                 std::env::set_var("SOVEREIGN_RPC_MIN_POOLED_GB", gb.to_string());
             }
         }
+        if let Some(h) = cfg.headroom {
+            if std::env::var_os("SOVEREIGN_RPC_HEADROOM").is_none() {
+                std::env::set_var("SOVEREIGN_RPC_HEADROOM", h.to_string());
+            }
+        }
         // Shard-fetch mode (host-side orchestrator reads this). The fleet
         // default is `ranges` — each anchor pulls only its slice, the only way
         // a model bigger than one node's disk distributes. Set for any serving

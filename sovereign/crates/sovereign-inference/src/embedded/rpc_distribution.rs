@@ -376,6 +376,47 @@ fn rpc_distribution_safe_decision(model_bytes: u64, safe_bytes: u64, assume_warm
     assume_warmed || model_bytes <= safe_bytes
 }
 
+/// Total physical device memory (GB) of the LOCAL GPU/IGPU backends, summed via
+/// `ggml_backend_dev_memory` — the authoritative, backend-agnostic VRAM figure.
+/// This is the number the mesh advertises for `svrn mesh plan --from-mesh`:
+/// sysfs under-reports unified-memory AMD APUs (it sees only the tiny dedicated
+/// VRAM carveout, e.g. 0.5 GB on Strix Halo, while ggml reports the real ~128 GB
+/// usable pool). `None` when there is no local GPU/IGPU device (CPU-only node)
+/// or ggml isn't initialized yet. Remote RPC devices are excluded. Cheap FFI.
+pub fn local_gpu_total_vram_gb() -> Option<u32> {
+    let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+    let mut total_bytes: u64 = 0;
+    let mut found_local_gpu = false;
+    for i in 0..n {
+        let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+        let dtype = unsafe { crate::llama::sys::ggml_backend_dev_type(dev) };
+        if dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_ACCEL
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_META
+        {
+            continue;
+        }
+        let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+        let reg_name =
+            unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                .to_string_lossy();
+        if reg_name == "RPC" {
+            continue; // a remote worker's device, not this node's
+        }
+        let (mut free, mut total): (usize, usize) = (0, 0);
+        unsafe { crate::llama::sys::ggml_backend_dev_memory(dev, &mut free, &mut total) };
+        if total > 0 {
+            total_bytes += total as u64;
+            found_local_gpu = true;
+        }
+    }
+    if found_local_gpu {
+        Some((total_bytes / (1024 * 1024 * 1024)) as u32)
+    } else {
+        None
+    }
+}
+
 /// The local (non-RPC) GPU devices, in registry order. Used to force a load onto
 /// the local GPU only — robust even when an RPC worker was registered by a prior
 /// (smaller) load and still sits in ggml's global device registry.
@@ -651,9 +692,21 @@ fn rpc_quorum_anchors() -> u32 {
         .unwrap_or(1)
 }
 
+/// Memory headroom FACTOR the host gates on: `pooled >= model_size × factor`.
+/// From `SOVEREIGN_RPC_HEADROOM` (set from `[shared_model] headroom`); default
+/// 1.2, clamped to >= 1.0. `svrn mesh plan` defaults its `--headroom` to this
+/// same value, so a previewed plan uses the headroom the load executes with.
+pub(crate) fn rpc_headroom_factor() -> f64 {
+    std::env::var("SOVEREIGN_RPC_HEADROOM")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|&f| f >= 1.0)
+        .unwrap_or(1.2)
+}
+
 /// Optional explicit floor (bytes) on pooled cluster memory, from
 /// `SOVEREIGN_RPC_MIN_POOLED_GB` (set from `[shared_model] min_pooled_gb`). `0`
-/// when unset — the computed `model_size × 1.2` floor then governs alone.
+/// when unset — the computed `model_size × headroom` floor then governs alone.
 fn rpc_min_pooled_bytes() -> u64 {
     std::env::var("SOVEREIGN_RPC_MIN_POOLED_GB")
         .ok()
@@ -832,7 +885,7 @@ fn resolve_placement_inner(
     // cluster can't hold. A too-big primary loaded locally would OOM; instead stay
     // unavailable and let the next worker-set-change reload retry as anchors join.
     let quorum = rpc_quorum_anchors();
-    let needed = (model_bytes.saturating_mul(6) / 5).max(rpc_min_pooled_bytes()); // ×1.2 headroom
+    let needed = ((model_bytes as f64 * rpc_headroom_factor()) as u64).max(rpc_min_pooled_bytes());
     if (dist.eligible_workers as u32) < quorum || dist.pooled_vram_bytes < needed {
         tracing::warn!(
             eligible_anchors = dist.eligible_workers,
