@@ -1582,6 +1582,30 @@ quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
 local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
 multi-box-only to validate (run `scripts/mesh-soak.sh`).
 
+**Pre-flight planning — `svrn mesh plan`** (`sovereign-cli-llm::mesh_cmd::cmd_plan`).
+An offline dry-run of the tensor split, so you can see whether a model fits a mesh
+*before* loading it. It reuses the daemon's own `plan_shards` + `quantize_vram` (the
+preview uses the identical apportionment the live load will), then overlays the real
+per-block byte mass from `rpc_warm_cache::tensor_sizes` — a GGUF header-table parse,
+no model load and no GPU, instant even on a 400 GB split — to show the *bytes* each
+device would hold and whether each one *individually* fits. That per-device check is
+the gap it closes: the live host gates only on aggregate pooled memory
+(`resolve_placement_inner`: `pooled >= model_bytes × headroom`), so a cluster that
+clears the aggregate gate can still OOM a small node whose contiguous block range
+exceeds its VRAM. `--from-mesh` plans across the running mesh — each member now
+advertises `vram_gb` + `can_anchor` on `GET /v1/mesh/status` (`MemberDto`), the VRAM
+sourced from `rpc_distribution::local_gpu_total_vram_gb` (the ggml device total, which
+unlike sysfs sees the full unified-memory pool on AMD APUs — ~124 GB on Strix Halo vs
+sysfs's ~0.5 GB dedicated carveout); `--devices 64,32,32` plans a hypothetical mesh.
+The headroom factor is now operator-set — `[shared_model] headroom` → (bootstrap
+bridge) `SOVEREIGN_RPC_HEADROOM` → `rpc_headroom_factor()`, default 1.2, replacing the
+hardcoded ×1.2 — and `mesh plan` defaults its `--headroom` to that same resolution
+order, so the preview's headroom is the one the load executes with. The report also
+flags whether per-block mass is uniform (heterogeneous VRAM is safe: proportional
+block count ≈ proportional bytes) or skewed (a small node's range can overflow — needs
+mass-aware apportionment, roadmap). Exit codes: `0` fits, `1` won't fit, `2` bad args.
+See [`docs/RUN_A_BIGGER_MODEL.md`](./docs/RUN_A_BIGGER_MODEL.md).
+
 The strong-peer-topology roadmap (latency-class hierarchy: cascade
 routing, draft-on-spoke/verify-on-hub speculation, hub queue
 discipline — each reality-checked against this codebase) is

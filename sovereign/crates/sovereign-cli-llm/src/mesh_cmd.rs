@@ -33,6 +33,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "logs" => cmd_logs().await,
         "fetch-model" => cmd_fetch_model(&args[1..]).await,
         "warm-cache" => cmd_warm_cache(&args[1..]).await,
+        "plan" => cmd_plan(&args[1..]).await,
         "check-invariants" => cmd_check_invariants(&args[1..]).await,
         "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {
@@ -410,6 +411,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "Pre-seed the RPC tensor cache from a local GGUF (offline; later serves with zero weight transfer)",
             ),
             (
+                "plan <gguf> --devices <gb,..>",
+                "Dry-run the tensor split across a mesh — per-device fit + headroom, offline (no load)",
+            ),
+            (
                 "check-invariants --nodes <a,b,..>",
                 "Poll /v1/mesh/status across nodes and assert convergence/no-ghost/liveness (soak harness)",
             ),
@@ -421,6 +426,476 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
         sovereign_cli_shared::help::HelpSection::Notes(
             "Run `svrn mesh <subcommand> --help` for subcommand-specific flags.",
         ),
+    ],
+};
+
+/// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
+/// per-device VRAM vector for `mesh plan --from-mesh`: online anchor workers first,
+/// this host (`is_self`) last so the output head lands on it. Returns
+/// `(vram_gb per device, host index)`. Prints the resolved mesh to stderr (so
+/// `--json` stays clean on stdout).
+async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+    let resp = client.get(&url).send().await.map_err(|e| {
+        format!("daemon at {url} not reachable: {e}\n  hint: start it (`svrn daemon start`) or pass --devices manually")
+    })?;
+    if !resp.status().is_success() {
+        return Err(format!("daemon returned HTTP {} from {url}", resp.status()));
+    }
+    let body: serde_json::Value = resp.json().await.map_err(|e| format!("bad status JSON: {e}"))?;
+    let members = body
+        .get("members")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut workers: Vec<(String, f64)> = Vec::new();
+    let mut host: Option<(String, f64)> = None;
+    for m in &members {
+        let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("?").to_string();
+        let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
+        let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
+        let can_anchor = m.get("can_anchor").and_then(|b| b.as_bool()).unwrap_or(false);
+        let vram = m.get("vram_gb").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        if is_self {
+            host = Some((name, vram));
+        } else if online && can_anchor {
+            workers.push((name, vram));
+        }
+    }
+    let (host_name, host_vram) =
+        host.ok_or_else(|| "could not find this node (is_self) in the mesh status".to_string())?;
+
+    eprintln!(
+        "Resolved live mesh: {} online anchor worker(s) + this host",
+        workers.len()
+    );
+    for (n, v) in &workers {
+        eprintln!("  worker  {n}: {v:.0} GB VRAM");
+    }
+    eprintln!("  host    {host_name}: {host_vram:.0} GB VRAM  (holds the output head)");
+    if workers.is_empty() {
+        eprintln!("  note: no online anchor workers — the plan will show a single-node (local) load.");
+    }
+    eprintln!();
+
+    let mut devices: Vec<f64> = workers.iter().map(|(_, v)| *v).collect();
+    devices.push(host_vram);
+    let host_idx = devices.len() - 1;
+    Ok((devices, host_idx))
+}
+
+/// `svrn mesh plan` — dry-run a model's tensor split across a mesh, offline. Reuses
+/// the daemon's own `plan_shards` + `quantize_vram` (so the dry run matches the live
+/// load), then overlays the REAL per-block byte mass — which the live planner ignores
+/// — to show the bytes each device holds and whether they fit. Surfaces the
+/// per-device check the live load lacks (it gates only on aggregate pooled memory),
+/// with operator-set `--headroom` instead of the hardcoded 1.2×.
+async fn cmd_plan(args: &[String]) -> i32 {
+    use sovereign_inference::embedded as inf;
+    let mut model: Option<PathBuf> = None;
+    let mut devices_gb: Vec<f64> = Vec::new();
+    let mut host_idx: Option<usize> = None;
+    // Default headroom mirrors the daemon's OWN resolution order exactly, so a
+    // previewed plan uses the SAME factor the load executes with: an explicit
+    // `SOVEREIGN_RPC_HEADROOM` env wins (the daemon reads it directly), else the
+    // `[shared_model] headroom` config (bootstrap bridges config→env), else 1.2.
+    // `--headroom` overrides this for what-if planning.
+    let mut headroom: f64 = std::env::var("SOVEREIGN_RPC_HEADROOM")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .or_else(|| {
+            sovereign_core::setup_config::SetupConfig::load()
+                .ok()
+                .and_then(|c| c.shared_model.headroom)
+        })
+        .filter(|&h| h >= 1.0)
+        .unwrap_or(1.2);
+    let mut headroom_from_flag = false;
+    let mut json = false;
+    let mut from_mesh = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--devices" => {
+                i += 1;
+                let Some(v) = args.get(i) else {
+                    eprintln!("--devices needs a value (per-node usable VRAM in GB, e.g. 64,32,32)");
+                    return 2;
+                };
+                match v
+                    .split(',')
+                    .map(|s| s.trim().parse::<f64>())
+                    .collect::<Result<Vec<_>, _>>()
+                {
+                    Ok(d) => devices_gb = d,
+                    Err(_) => {
+                        eprintln!("--devices: comma-separated GB numbers, e.g. 64,32,32");
+                        return 2;
+                    }
+                }
+            }
+            "--host" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                    Some(h) => host_idx = Some(h),
+                    None => {
+                        eprintln!("--host: a 0-based device index");
+                        return 2;
+                    }
+                }
+            }
+            "--headroom" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<f64>().ok()) {
+                    Some(h) if h >= 1.0 => {
+                        headroom = h;
+                        headroom_from_flag = true;
+                    }
+                    _ => {
+                        eprintln!("--headroom: a number >= 1.0 (1.15 aggressive · 1.2 default · 1.4 safe)");
+                        return 2;
+                    }
+                }
+            }
+            "--json" => json = true,
+            "--from-mesh" => from_mesh = true,
+            "--help" | "-h" => {
+                sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
+                return 0;
+            }
+            s if model.is_none() && !s.starts_with('-') => model = Some(PathBuf::from(s)),
+            other => {
+                eprintln!("Unknown arg: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let Some(model) = model else {
+        sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
+        return 2;
+    };
+    if from_mesh {
+        if !devices_gb.is_empty() {
+            eprintln!("--from-mesh and --devices are mutually exclusive");
+            return 2;
+        }
+        match devices_from_live_mesh().await {
+            Ok((gb, h)) => {
+                devices_gb = gb;
+                host_idx = Some(h);
+            }
+            Err(e) => {
+                eprintln!("--from-mesh: {e}");
+                return 1;
+            }
+        }
+    }
+    if devices_gb.is_empty() {
+        eprintln!("provide the mesh: --devices <gb,gb,..> (per-node VRAM) or --from-mesh (read the live mesh)");
+        return 2;
+    }
+    if devices_gb.iter().any(|&g| g <= 0.0) {
+        eprintln!("device VRAM must be > 0 (a member may advertise 0 GB — pass --devices manually)");
+        return 2;
+    }
+
+    let n_layer = match inf::gguf_block_count(&model) {
+        Ok(Some(n)) if n > 0 => n,
+        Ok(_) => {
+            eprintln!(
+                "could not read a positive block_count from {} (not a GGUF, or missing <arch>.block_count)",
+                model.display()
+            );
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("reading {}: {e}", model.display());
+            return 1;
+        }
+    };
+    let sizes = match inf::tensor_sizes(&model) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("reading tensor table from {}: {e}", model.display());
+            return 1;
+        }
+    };
+
+    // Per-block byte mass + global tensors (output head → last block-holder;
+    // token_embd → host system RAM; other globals lumped as host overhead).
+    let mut block_bytes = vec![0u64; n_layer as usize];
+    let (mut output_bytes, mut embd_bytes, mut other_global) = (0u64, 0u64, 0u64);
+    for (name, layer, nbytes) in &sizes {
+        match layer {
+            Some(l) if (*l as usize) < block_bytes.len() => block_bytes[*l as usize] += *nbytes,
+            Some(_) => other_global += *nbytes,
+            None if inf::is_output_tensor(name) => output_bytes += *nbytes,
+            None if name.contains("token_embd") => embd_bytes += *nbytes,
+            None => other_global += *nbytes,
+        }
+    }
+    let total_weight: u64 =
+        block_bytes.iter().sum::<u64>() + output_bytes + embd_bytes + other_global;
+
+    let gib = 1024.0_f64 * 1024.0 * 1024.0;
+    let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * gib) as u64).collect();
+    let host = host_idx.unwrap_or(vram.len() - 1);
+    if host >= vram.len() {
+        eprintln!("--host {host} out of range (valid 0..{})", vram.len() - 1);
+        return 2;
+    }
+
+    // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
+    // plan_shards places the output head on the host — the SAME functions the live
+    // load uses, so the dry run matches reality.
+    let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
+    order.push(host);
+    let weights: Vec<f32> = order.iter().map(|&d| inf::quantize_vram(vram[d]) as f32).collect();
+    let plan = inf::plan_shards(n_layer, &weights);
+
+    let gb = |b: u64| b as f64 / gib;
+    struct Row {
+        dev: usize,
+        is_host: bool,
+        vram: u64,
+        blocks: Option<(u32, u32)>,
+        holds_output: bool,
+        weight: u64,
+    }
+    let mut rows: Vec<Row> = Vec::with_capacity(vram.len());
+    for (pos, &d) in order.iter().enumerate() {
+        let shard = &plan[pos];
+        let mut w = 0u64;
+        if let Some((a, b)) = shard.blocks {
+            for blk in a..=b {
+                w += block_bytes[blk as usize];
+            }
+        }
+        if shard.holds_output {
+            w += output_bytes;
+        }
+        rows.push(Row {
+            dev: d,
+            is_host: d == host,
+            vram: vram[d],
+            blocks: shard.blocks,
+            holds_output: shard.holds_output,
+            weight: w,
+        });
+    }
+    rows.sort_by_key(|r| r.dev);
+
+    // Aggregate gate (the live daemon's model×1.2, with YOUR headroom) + per-device fit.
+    let pooled: u64 = vram.iter().sum();
+    let gate_need = (total_weight as f64 * headroom) as u64;
+    let gate_pass = pooled >= gate_need;
+    let overflows: Vec<&Row> = rows
+        .iter()
+        .filter(|r| (r.weight as f64 * headroom) as u64 > r.vram)
+        .collect();
+
+    // Block-mass uniformity → the "does heterogeneity stay safe" verdict.
+    let nz: Vec<u64> = block_bytes.iter().copied().filter(|&b| b > 0).collect();
+    let bmin = nz.iter().copied().min().unwrap_or(0);
+    let bmax = nz.iter().copied().max().unwrap_or(0);
+    let bmean = if nz.is_empty() { 0 } else { nz.iter().sum::<u64>() / nz.len() as u64 };
+    let spread = if bmin > 0 { bmax as f64 / bmin as f64 } else { 1.0 };
+    let uniform = spread <= 1.15;
+
+    if json {
+        let devices_json: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "device": r.dev,
+                    "role": if r.is_host { "host" } else { "worker" },
+                    "vram_gb": gb(r.vram),
+                    "blocks": r.blocks.map(|(a, b)| [a, b]),
+                    "block_count": r.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
+                    "holds_output": r.holds_output,
+                    "weight_gb": gb(r.weight),
+                    "need_gb": gb((r.weight as f64 * headroom) as u64),
+                    "fits": (r.weight as f64 * headroom) as u64 <= r.vram,
+                })
+            })
+            .collect();
+        let out = serde_json::json!({
+            "model": model.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+            "blocks": n_layer,
+            "weights_gb": gb(total_weight),
+            "output_head_gb": gb(output_bytes),
+            "token_embd_host_ram_gb": gb(embd_bytes),
+            "block_mass_gb": {
+                "min": gb(bmin), "max": gb(bmax), "mean": gb(bmean),
+                "spread": spread, "uniform": uniform
+            },
+            "headroom": headroom,
+            "headroom_source": if headroom_from_flag { "flag" } else { "config" },
+            "pooled_gb": gb(pooled),
+            "aggregate_gate_need_gb": gb(gate_need),
+            "aggregate_gate_pass": gate_pass,
+            "per_device_overflow_devices": overflows.iter().map(|r| r.dev).collect::<Vec<_>>(),
+            "devices": devices_json,
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        return if gate_pass && overflows.is_empty() { 0 } else { 1 };
+    }
+
+    // Human report.
+    let name = model.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+    println!("svrn mesh plan — dry run (no load, no GPU)\n");
+    println!("Model:  {name}");
+    println!(
+        "        {n_layer} blocks · {:.1} GB weights  (output head {:.1} GB · token_embd {:.1} GB on host RAM)",
+        gb(total_weight),
+        gb(output_bytes),
+        gb(embd_bytes)
+    );
+    if uniform {
+        println!(
+            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {spread:.2}× spread → UNIFORM mass",
+            gb(bmin),
+            gb(bmax),
+            gb(bmean)
+        );
+        println!("        VRAM-proportional block count ≈ byte-proportional, so heterogeneous VRAM is safe.");
+    } else {
+        println!(
+            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {spread:.2}× spread → NON-UNIFORM mass  (!)",
+            gb(bmin),
+            gb(bmax),
+            gb(bmean)
+        );
+        println!("        Block COUNT != byte mass — a small node's contiguous range can exceed its VRAM. Watch per-device fit.");
+    }
+    let hr_note = if headroom_from_flag {
+        "--headroom override — WHAT-IF; the load executes with the [shared_model] headroom"
+    } else {
+        "matches the load's configured headroom"
+    };
+    println!("Headroom: {headroom:.2}× ({hr_note}) — weight × {headroom:.2} must fit each device (covers KV + buffers)\n");
+
+    println!("  dev  role    VRAM       blocks     n   weight     need       fit");
+    for r in &rows {
+        let (blocks_s, n_s) = match r.blocks {
+            Some((a, b)) => (format!("{a}-{b}"), format!("{}", b - a + 1)),
+            None => ("—".to_string(), "0".to_string()),
+        };
+        let need = (r.weight as f64 * headroom) as u64;
+        let fit = if need <= r.vram {
+            format!("ok  +{:.1} GB", gb(r.vram - need))
+        } else {
+            format!("OVERFLOW -{:.1} GB", gb(need - r.vram))
+        };
+        let star = if r.is_host { "*" } else { " " };
+        let role = if r.is_host { "host" } else { "worker" };
+        println!(
+            "{star} {:>3}  {:<6} {:>6.1} GB  {:<8}  {:>2}  {:>6.1} GB  {:>6.1} GB  {fit}",
+            r.dev,
+            role,
+            gb(r.vram),
+            blocks_s,
+            n_s,
+            gb(r.weight),
+            gb(need)
+        );
+        if r.is_host && embd_bytes > 0 {
+            println!("       (+ token_embd {:.1} GB in host system RAM, not VRAM)", gb(embd_bytes));
+        }
+    }
+
+    println!();
+    println!(
+        "Aggregate gate: pooled {:.1} GB {} model×{headroom:.2} ({:.1} GB) → {}",
+        gb(pooled),
+        if gate_pass { ">=" } else { "<" },
+        gb(gate_need),
+        if gate_pass {
+            "PASS".to_string()
+        } else {
+            "FAIL — cluster too small; the host reports \"forming\" and does not load".to_string()
+        }
+    );
+    if overflows.is_empty() {
+        println!("Per-device:     all devices fit ok");
+    } else {
+        let ids: Vec<String> = overflows.iter().map(|r| r.dev.to_string()).collect();
+        println!(
+            "Per-device:     {} device(s) OVERFLOW [{}] -> the LIVE load would OOM here (it gates only on the aggregate, not per-device).",
+            overflows.len(),
+            ids.join(", ")
+        );
+        println!("\nOptions:");
+        println!("   • move the host role to your largest node (--host <idx>) — the host also holds the output head");
+        println!("   • lower --headroom for a tighter pack (less KV room), or give the overflowing node more free VRAM");
+        if !uniform {
+            println!("   • this model is NON-uniform — a safe manual split needs mass-aware apportionment (roadmap P5)");
+        }
+    }
+
+    if gate_pass && overflows.is_empty() {
+        0
+    } else {
+        1
+    }
+}
+
+const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+    command: "svrn mesh plan",
+    summary: "Dry-run a model's tensor split across a mesh — per-device fit, offline, no load.",
+    sections: &[
+        sovereign_cli_shared::help::HelpSection::Usage(
+            "svrn mesh plan <model.gguf> (--from-mesh | --devices <gb,..>) [--host <idx>] [--headroom <f>] [--json]",
+        ),
+        sovereign_cli_shared::help::HelpSection::Flags(&[
+            (
+                "--from-mesh",
+                "Read the live mesh from the running daemon (online anchor workers + this host). Exclusive with --devices.",
+            ),
+            (
+                "--devices <gb,...>",
+                "Per-node usable VRAM in GB, in mesh order (e.g. 64,32,32). Plan a hypothetical mesh instead of --from-mesh.",
+            ),
+            (
+                "--host <idx>",
+                "0-based index of the host node (holds the output head). Default: last.",
+            ),
+            (
+                "--headroom <f>",
+                "Override the headroom factor (weight × f must fit each device). Defaults to `[shared_model] headroom` (else 1.2) — the value the load itself uses.",
+            ),
+            ("--json", "Emit the plan as a machine-readable JSON split manifest."),
+        ]),
+        sovereign_cli_shared::help::HelpSection::Notes(
+            "Reuses the daemon's own plan_shards + quantize_vram, then overlays the real per-block\n\
+             byte mass to show the BYTES each node holds and whether they fit — the per-device check\n\
+             the live load does NOT do (it gates only on aggregate pooled memory). Reads only the GGUF\n\
+             header table: no model load, no GPU, instant even on a 400 GB split. Also reports whether\n\
+             the model's per-block mass is uniform (heterogeneous VRAM safe) or skewed (OOM risk).",
+        ),
+        sovereign_cli_shared::help::HelpSection::Examples(&[
+            (
+                "svrn mesh plan GLM-5.2.gguf --from-mesh",
+                "Plan across your actual running mesh (reads each node's advertised VRAM)",
+            ),
+            (
+                "svrn mesh plan Qwen3.5-122B.gguf --devices 64,32,32",
+                "A hypothetical 64 GB host + two 32 GB workers",
+            ),
+            (
+                "svrn mesh plan model.gguf --devices 128,128,128,128 --headroom 1.35",
+                "Four nodes, conservative headroom",
+            ),
+        ]),
     ],
 };
 

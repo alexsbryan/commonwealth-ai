@@ -395,6 +395,24 @@ pub fn build_manifest(gguf_path: &Path) -> std::io::Result<Vec<TensorManifestEnt
     Ok(out)
 }
 
+/// Light per-tensor size table for PLANNING — `(name, block index, nbytes)` for
+/// every tensor across all shards, WITHOUT hashing or reading tensor data (a
+/// header-table parse only, so it's instant even on a 400 GB split). This is the
+/// byte-mass input `svrn mesh plan` overlays onto [`plan_shards`] to compute the
+/// per-device *bytes* each node would hold — the mass-awareness the live planner
+/// (which apportions by uniform block count) does not have. Split-aware.
+pub fn tensor_sizes(gguf_path: &Path) -> std::io::Result<Vec<(String, Option<u32>, u64)>> {
+    let mut out = Vec::new();
+    for shard in shard_files(gguf_path) {
+        let (tensors, _data_offset) = parse_gguf(&shard)?;
+        out.reserve(tensors.len());
+        for t in &tensors {
+            out.push((t.name.clone(), tensor_layer(&t.name), tensor_nbytes(t)));
+        }
+    }
+    Ok(out)
+}
+
 /// Warm `cache_dir` with only the cacheable tensors whose layer is accepted by
 /// `want` — the per-node ("sharded") form of [`warm_cache_from_gguf`]. A worker
 /// assigned layers `L..M` calls this with a filter for `L..M` (plus its assigned

@@ -238,6 +238,16 @@ pub struct MemberDto {
     /// `"online"` | `"busy"` | `"away"` | `"offline"` — matches the
     /// `MemberStatus` serde rename in `crate::types`.
     pub status: String,
+    /// Advertised total GPU VRAM (GB) summed across this member's GPUs — the
+    /// live input for `svrn mesh plan --from-mesh`. `0` if the member advertises
+    /// no GPU (or gossip from an older daemon that didn't carry it).
+    #[serde(default)]
+    pub vram_gb: u32,
+    /// This member advertises itself as a shared-model anchor (an eligible
+    /// tensor-split worker). `svrn mesh plan --from-mesh` places the model
+    /// across the anchors + self.
+    #[serde(default)]
+    pub can_anchor: bool,
     /// Routable addresses (typically tailnet `host:port`) advertised
     /// by this member. Empty until the first gossip round populates
     /// them. Consumed by `sovereign mesh status` to render the per-
@@ -337,6 +347,8 @@ async fn mesh_status(
                 crate::types::MemberStatus::Offline => "offline",
             }
             .to_string(),
+            vram_gb: m.vram_gb,
+            can_anchor: m.can_anchor,
             addresses: m.addresses.clone(),
         })
         .collect();

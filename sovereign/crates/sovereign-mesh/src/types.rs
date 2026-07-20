@@ -39,6 +39,13 @@ pub struct MeshMember {
     pub node_id: String,
     pub is_self: bool,
     pub status: MemberStatus,
+    /// Advertised total GPU VRAM (GB) summed across the member's GPUs — the
+    /// planning input for `svrn mesh plan --from-mesh`.
+    #[serde(default)]
+    pub vram_gb: u32,
+    /// Advertises itself as a shared-model anchor (an eligible tensor-split worker).
+    #[serde(default)]
+    pub can_anchor: bool,
     pub contribution_level: u8,     // 0-5 bar chart
     pub contribution_label: String, // "Top contributor", "Mostly uses, that's ok!"
     /// Tailnet (or other reachable) addresses for this member, as
