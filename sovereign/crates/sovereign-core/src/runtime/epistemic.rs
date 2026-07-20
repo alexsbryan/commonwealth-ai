@@ -415,9 +415,20 @@ pub(crate) fn finish_demands(
     for (idx, d) in demands.iter().enumerate() {
         let coverage = match d.covered {
             CoverageLevel::Absent => probe.unwrap_or(GapCoverage::ClaimUncovered),
-            // A retrieved-but-unsupported facet on an abstained turn:
-            // the topic is in the sources, the claim is not.
-            CoverageLevel::Retrieved if abstained => GapCoverage::ClaimUncovered,
+            // A retrieved-but-unsupported facet on an abstained turn.
+            // `Retrieved` is WEAK evidence of topic coverage — top-k
+            // retrieval returns something for any query, so an OOD
+            // question over distractors still stamps Retrieved. When the
+            // probe ran, its calibrated nearest-sim verdict (0.55 floor,
+            // measured clean split 2026-07-19) outranks the affinity
+            // stamp: an in-topic claim gap reads ~0.71 → ClaimUncovered,
+            // an off-topic query reads 0.17-0.49 → TopicUncovered
+            // (observed mis-route: ood-australia-capital gapped
+            // ClaimUncovered over 10 distractor chunks, 2026-07-20).
+            // No probe → the topic-in-sources default stands.
+            CoverageLevel::Retrieved if abstained => {
+                probe.unwrap_or(GapCoverage::ClaimUncovered)
+            }
             _ => continue,
         };
         let statement = match d.facet {
@@ -594,6 +605,46 @@ pub(crate) fn pool_corpora(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Invariant I1 (EPISTEMIC_STATE §7) — every ANSWER surface persists
+    /// an `epistemic_state`. This is the closed-set pin on the
+    /// `GateSurface` precedent: the match below is exhaustive, so adding
+    /// a surface variant FAILS COMPILATION here until its ledger story
+    /// is decided and recorded. The strings name the persistence sites
+    /// (grep for `"epistemic_state"` to verify them).
+    #[test]
+    fn every_answer_surface_has_a_ledger_story() {
+        use crate::runtime::grounding::GateSurface;
+        fn ledger_site(s: GateSurface) -> Option<&'static str> {
+            match s {
+                GateSurface::KnowledgeQuery => {
+                    Some("handlers/knowledge_query.rs (sync) + streaming.rs (KQ spawn)")
+                }
+                GateSurface::DeepQuery => Some("streaming.rs (deep spawn)"),
+                GateSurface::AttachedDoc => Some("handlers/attached_doc.rs"),
+                GateSurface::ComplexTask => Some("handlers/complex_task.rs"),
+                GateSurface::SimpleQuery => Some("handlers/simple.rs"),
+                // Not standalone answer surfaces: Refinement re-verifies
+                // an existing answer inside its owning surface's turn;
+                // Governance/ProxyArgument are gate-calibration profiles
+                // that fire inside the KQ handler and inherit its
+                // persistence site.
+                GateSurface::Refinement => None,
+                GateSurface::Governance => None,
+                GateSurface::ProxyArgument => None,
+            }
+        }
+        // Every answer surface must name a persistence site.
+        for s in [
+            GateSurface::KnowledgeQuery,
+            GateSurface::DeepQuery,
+            GateSurface::AttachedDoc,
+            GateSurface::ComplexTask,
+            GateSurface::SimpleQuery,
+        ] {
+            assert!(ledger_site(s).is_some(), "answer surface {s:?} has no ledger site");
+        }
+    }
 
     fn corpus_holding(verification: Verification) -> Holding {
         Holding {
@@ -1007,6 +1058,32 @@ mod tests {
         let gaps = finish_demands(&mut demands, None, true, None);
         assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // never upgraded on abstain
         assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].coverage, GapCoverage::ClaimUncovered);
+    }
+
+    /// The probe's calibrated verdict outranks the weak `Retrieved`
+    /// affinity stamp on abstained turns: top-k retrieval returns
+    /// SOMETHING for any query, so an OOD question over distractors
+    /// still stamps Retrieved — but the probe read the sealed corpus at
+    /// 0.17-0.49 and its TopicUncovered must reach the gap (observed
+    /// mis-route: ood-australia-capital, 2026-07-20).
+    #[test]
+    fn probe_verdict_outranks_retrieved_stamp_on_abstained_turns() {
+        let mut demands = vec![Demand {
+            facet: DemandFacet::Query,
+            text: "what is the capital of Australia".into(),
+            covered: CoverageLevel::Retrieved,
+        }];
+        let gaps = finish_demands(&mut demands, None, true, Some(GapCoverage::TopicUncovered));
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].coverage, GapCoverage::TopicUncovered);
+        // And an in-topic probe verdict keeps the claim-level routing.
+        let mut demands = vec![Demand {
+            facet: DemandFacet::Query,
+            text: "who is Verloc's wife".into(),
+            covered: CoverageLevel::Retrieved,
+        }];
+        let gaps = finish_demands(&mut demands, None, true, Some(GapCoverage::ClaimUncovered));
         assert_eq!(gaps[0].coverage, GapCoverage::ClaimUncovered);
     }
 

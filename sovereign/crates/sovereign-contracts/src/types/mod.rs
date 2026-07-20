@@ -346,8 +346,10 @@ pub enum InformationRequestKind {
 /// nameable gap that the local corpus can't fill. Rendered in the UI as a
 /// dedicated card (not a chat bubble) with the four fields spelled out.
 ///
-/// See `sovereign-core/src/gap.rs::identify_gap` for how these are produced
-/// and `StepKind::AwaitUserInfo` for how they're surfaced.
+/// Produced by `sovereign-core`'s `run_collaboration` on abstained turns
+/// (detection is the gate's abstention signal — I4-C retired the LLM
+/// gap judge; see bench/gap_check/DECISION.md) and by
+/// `StepKind::AwaitUserInfo` for planned task steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InformationRequest {
     /// What the agent currently believes, with appropriate uncertainty.

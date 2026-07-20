@@ -1691,7 +1691,7 @@ async fn await_user_info_stamps_step_block_kind_and_task_title() {
     // surfaces to the UI as a `StepBlock` card with `task_title`
     // populated from the task goal. The UI uses this to render the
     // "task paused" chrome distinct from the post-answer refinement
-    // card produced by `gap::identify_gap`.
+    // card produced by `run_collaboration` on abstained turns.
     let inference = Arc::new(MockInference::new("unused"));
     let store = Arc::new(MockStore::new());
     let (plan, task) = await_user_info_plan();

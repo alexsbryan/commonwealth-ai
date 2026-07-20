@@ -737,19 +737,42 @@ pub(crate) async fn gate_answer_with_progress(
                             {
                                 Some(v2) if v2.violation_prob < tau => {
                                     final_vp = Some(v2.violation_prob);
-                                    text = second;
-                                    action = "retry_released";
-                                    if let Some(rec) = gate_claims.first_mut() {
-                                        rec.supported = true;
-                                        rec.violation_prob = Some(v2.violation_prob);
+                                    if v2.claim.is_none() && released_pure_decline(&second) {
+                                        // The retry asserted NOTHING — a pure
+                                        // decline extracted as NO_CLAIM (vp=0).
+                                        // Releasing it "supported" forges a
+                                        // Verified holding for a claim the
+                                        // final text no longer asserts
+                                        // (observed: ood-table-salt shipped
+                                        // verdict `grounded` on "I don't have
+                                        // reliable information on this.",
+                                        // 2026-07-20). A 0-assertion decline
+                                        // is an abstention — same contract as
+                                        // the NO_CLAIM decline guard below.
+                                        text = second;
+                                        action = "abstained_decline";
+                                        emit_gate_progress(
+                                            progress,
+                                            NarrationPhase::ClaimVerdict {
+                                                index: 0,
+                                                supported: false,
+                                            },
+                                        );
+                                    } else {
+                                        text = second;
+                                        action = "retry_released";
+                                        if let Some(rec) = gate_claims.first_mut() {
+                                            rec.supported = true;
+                                            rec.violation_prob = Some(v2.violation_prob);
+                                        }
+                                        emit_gate_progress(
+                                            progress,
+                                            NarrationPhase::ClaimVerdict {
+                                                index: 0,
+                                                supported: true,
+                                            },
+                                        );
                                     }
-                                    emit_gate_progress(
-                                        progress,
-                                        NarrationPhase::ClaimVerdict {
-                                            index: 0,
-                                            supported: true,
-                                        },
-                                    );
                                 }
                                 Some(v2) => {
                                     final_vp = Some(v2.violation_prob);
@@ -770,9 +793,16 @@ pub(crate) async fn gate_answer_with_progress(
                                     // Retry verdict unavailable — fail open
                                     // on the retry (written under the
                                     // grounding constraint; safer than
-                                    // draft 1).
+                                    // draft 1). Unless the retry is a pure
+                                    // decline: nothing is asserted, so there
+                                    // is nothing to fail open ON — it's an
+                                    // abstention (same contract as above).
                                     text = second;
-                                    action = "retry_released_unverified";
+                                    if released_pure_decline(&text) {
+                                        action = "abstained_decline";
+                                    } else {
+                                        action = "retry_released_unverified";
+                                    }
                                     if let Some(rec) = gate_claims.first_mut() {
                                         rec.violation_prob = None;
                                     }
@@ -847,6 +877,36 @@ pub(crate) async fn gate_answer_with_progress(
             meta: serde_json::json!({
                 "surface": profile.surface.id(),
                 "action": "abstained_fragment",
+                "retried": retried,
+                "violation_prob": final_vp,
+                "threshold": tau,
+                "mode": "single_claim",
+                "draft": draft_for_meta,
+            }),
+            claims: gate_claims,
+        };
+    }
+    // Decline guard (EPISTEMIC_STATE P0, 2026-07-20): a NO_CLAIM release whose
+    // text is a pure provenance-flagged decline asserts nothing — it IS an
+    // abstention, and releasing it ships the wrong epistemic standing
+    // downstream (verdict `Unverified` instead of `CannotKnowFromHere`; the
+    // coverage probe never fires; the gap mis-routes as ClaimUncovered —
+    // observed on `ood-australia-capital` over 10 retrieved distractors).
+    // Reclassify the ACTION only: the model's own decline prose is already the
+    // honest user-facing abstention, so the text ships unchanged. Caveated
+    // parametric answers are excluded by `released_pure_decline`; audited
+    // claims (`claim_audited`) exclude every turn that asserted something.
+    if action == "released" && !claim_audited && released_pure_decline(&text) {
+        dbg("decline guard: NO_CLAIM release is a pure decline — reclassifying as abstention");
+        tracing::info!(
+            target: "grounding_gate",
+            "grounding gate: released text is a 0-holding decline — action reclassified to abstained_decline"
+        );
+        return GateOutcome {
+            text,
+            meta: serde_json::json!({
+                "surface": profile.surface.id(),
+                "action": "abstained_decline",
                 "retried": retried,
                 "violation_prob": final_vp,
                 "threshold": tau,
@@ -1109,6 +1169,29 @@ fn answer_declines(text: &str) -> bool {
         "not in your sources",
     ];
     DECLINES.iter().any(|d| h.contains(d))
+}
+
+/// True when a NO_CLAIM release is a pure provenance-flagged decline — the
+/// model saying "I don't have reliable information in my knowledge base"
+/// over retrieved-but-useless evidence. Such a turn asserts nothing, so
+/// releasing it as an answer mis-states the turn's epistemic standing: the
+/// ledger derives `Unverified` (evidence present, nothing audited), the
+/// coverage probe never runs (`gap_turn=false`), and a genuine knowledge
+/// gap defaults to `ClaimUncovered` (bench/gap_check/DECISION.md, bug 2).
+/// A 0-holding decline IS an abstention — reclassify the ACTION, keep the
+/// model's own (honest, already provenance-flagged) prose.
+///
+/// Deliberately narrower than [`answer_declines`]: a caveated parametric
+/// answer ("Not in your sources — from general knowledge: Canberra…")
+/// declines-then-ANSWERS, and must keep releasing — so the caveat is
+/// stripped first and any remaining "from general knowledge" pivot vetoes
+/// the reclassification.
+fn released_pure_decline(text: &str) -> bool {
+    let stripped = strip_gk_caveat(text);
+    if stripped.to_lowercase().contains("from general knowledge") {
+        return false;
+    }
+    answer_declines(&stripped)
 }
 
 /// Second-opinion fabrication guard for the SHORT gate path (single-claim +
@@ -1919,6 +2002,119 @@ mod tests {
         }
     }
 
+    /// Mock for the retry-decline path: the first verify extracts a claim
+    /// and judges it unsupported (forcing the retry), the retry synthesis
+    /// returns a pure decline, and the re-verify extracts NO_CLAIM from it.
+    struct RetryDeclineMock;
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for RetryDeclineMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            let p = &request.prompt;
+            let text = if request
+                .structured_output
+                .as_ref()
+                .map(|s| s.to_string().contains("x_forced_choice"))
+                .unwrap_or(false)
+            {
+                // Forced-choice support judge: unsupported.
+                r#"{"A": 0.02, "B": 0.98}"#.to_string()
+            } else if p.contains("single central factual claim") {
+                if p.contains("I don't have reliable information") {
+                    // Re-extraction over the retry's decline text.
+                    "NO_CLAIM".to_string()
+                } else {
+                    "The shop is located on Crescent Lane.".to_string()
+                }
+            } else {
+                // The retry synthesis itself → a pure decline.
+                "I don't have reliable information on this.".to_string()
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "gate-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("RetryDeclineMock: no streaming".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// Mock for the NO_CLAIM extraction path: the claim extractor finds
+    /// nothing to audit (a decline or an unextractable reply), so the verify
+    /// ladder waves the text through as a NO_CLAIM release.
+    struct NoClaimGateMock;
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for NoClaimGateMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            assert!(
+                request.model_id.is_none(),
+                "P4-D: judge request must not pin model_id; got {:?}",
+                request.model_id
+            );
+            Ok(CompletionResponse {
+                text: "NO_CLAIM".to_string(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "gate-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("NoClaimGateMock: no streaming".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
     fn refinement_evidence() -> EvidenceContext {
         EvidenceContext {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
@@ -1980,6 +2176,122 @@ mod tests {
         ] {
             assert!(!answer_declines(assert_ans), "should scan assertion: {assert_ans:?}");
         }
+    }
+
+    #[test]
+    fn released_pure_decline_separates_declines_from_caveated_answers() {
+        // The P0 target shape: a provenance-flagged decline that asserts
+        // nothing (observed on `ood-australia-capital` over 10 distractors).
+        for decline in [
+            "I don't have reliable information in my knowledge base about the capital of Australia.",
+            "I do not have reliable information on that in your sources.",
+            grounded_abstention("x", 12).as_str(),
+        ] {
+            assert!(
+                released_pure_decline(decline),
+                "pure decline must reclassify: {decline:?}"
+            );
+        }
+        // Caveated PARAMETRIC ANSWERS — the decline-then-answer shapes that
+        // must keep releasing (chaos hybrid honesty: OOD questions are meant
+        // to be answered from general knowledge with the caveat).
+        for answer in [
+            "Not in your sources — from general knowledge: The capital of Australia is Canberra.",
+            "I don't have reliable information in my knowledge base, but from general knowledge: Canberra is the capital of Australia.",
+            "The capital of Australia is Canberra.",
+        ] {
+            assert!(
+                !released_pure_decline(answer),
+                "caveated/substantive answer must release: {answer:?}"
+            );
+        }
+    }
+
+    /// EPISTEMIC_STATE P0: a NO_CLAIM release whose text is a pure decline is
+    /// reclassified `abstained_decline` — the ledger then derives
+    /// `CannotKnowFromHere` and the coverage probe runs. The model's own
+    /// decline prose ships unchanged.
+    #[tokio::test]
+    async fn no_claim_pure_decline_release_becomes_abstention() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(NoClaimGateMock);
+        let profile = GateSurface::Refinement.profile();
+        let draft =
+            "I don't have reliable information in my knowledge base about the capital of Australia."
+                .to_string();
+        let outcome = gate_answer(
+            &inference,
+            "What is the capital of Australia?",
+            draft.clone(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("abstained_decline")
+        );
+        assert_eq!(outcome.text, draft, "the model's own decline prose ships");
+        assert!(outcome.claims.is_empty(), "a decline asserts nothing");
+    }
+
+    /// A retry that produces a pure decline (re-extracted as NO_CLAIM,
+    /// vp=0) must NOT release as `retry_released` with the original claim
+    /// marked supported — that forges a Verified holding for a claim the
+    /// final text no longer asserts (observed: ood-table-salt shipped
+    /// ledger verdict `grounded` on "I don't have reliable information on
+    /// this.", 2026-07-20). It is an abstention.
+    #[tokio::test]
+    async fn retry_decline_is_abstention_not_supported_release() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(RetryDeclineMock);
+        let profile = GateSurface::KnowledgeQuery.profile();
+        assert!(profile.retry, "this path needs a retry-capable surface");
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Crescent Lane.".to_string(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("abstained_decline")
+        );
+        assert_eq!(outcome.text, "I don't have reliable information on this.");
+        assert!(
+            !outcome.claims.iter().any(|c| c.supported),
+            "no claim may be marked supported by a NO_CLAIM decline retry: {:?}",
+            outcome.claims
+        );
+    }
+
+    /// The exclusion half: a caveated general-knowledge ANSWER that extracts
+    /// NO_CLAIM must keep releasing — reclassifying it would score an
+    /// answered turn as an abstention (the unfaithful-proxy failure the
+    /// I2-C parity gate exists to catch).
+    #[tokio::test]
+    async fn no_claim_caveated_gk_answer_still_releases() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(NoClaimGateMock);
+        let profile = GateSurface::Refinement.profile();
+        let draft =
+            "Not in your sources — from general knowledge: The capital of Australia is Canberra."
+                .to_string();
+        let outcome = gate_answer(
+            &inference,
+            "What is the capital of Australia?",
+            draft.clone(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released")
+        );
+        assert_eq!(outcome.text, draft);
     }
 
     /// The Phase-6 invariant's gate half: verify-only (retry: false)

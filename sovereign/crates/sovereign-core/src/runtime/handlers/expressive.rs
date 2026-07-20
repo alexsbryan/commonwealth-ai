@@ -385,6 +385,16 @@ impl Runtime {
         // once-per-thread replica — v9 receipts, 2026-07-10) both read
         // this via `get_last_turn_provenance`.
         let message_id = uuid::Uuid::new_v4().to_string();
+        // Epistemic ledger for the witness surface (EPISTEMIC_STATE §4.2/§5):
+        // attached ONLY when the recall verifier attributed the reply to a
+        // recalled entry — that turn genuinely asserts a memory, and the
+        // footer renders the band chip ("From what you've told me", with
+        // "remembered, not verified" on FailOpen). Un-attributed witness
+        // turns assert no memory and stay ledger-less: deriving `Unverified`
+        // there would render "used your sources" prose on a turn that used
+        // none. Streaming witness runs no verifier (records None) and so
+        // never attaches — extending the verifier there is the follow-up.
+        let mut witness_epistemic_state: Option<crate::types::EpistemicState> = None;
         if register == SkillRegister::Relational {
             let recalled_memories: Vec<RecalledMemoryProv> = context
                 .memories
@@ -425,6 +435,20 @@ impl Runtime {
             } else {
                 vec![render_temporal_tensions(&context.temporal_tensions)]
             };
+            if crate::runtime::epistemic::epistemic_state_enabled()
+                && recall_verification
+                    .as_ref()
+                    .is_some_and(|rv| rv.referenced.is_some())
+            {
+                witness_epistemic_state =
+                    Some(crate::runtime::epistemic::assemble_epistemic_state(
+                        crate::runtime::epistemic::EpistemicInputs {
+                            recalled: &recalled_memories,
+                            recall_verification: recall_verification.as_ref(),
+                            ..Default::default()
+                        },
+                    ));
+            }
             let prov_system = request.system_message.clone().unwrap_or_default();
             let provenance = TurnProvenance {
                 conversation_id: conversation_id.to_string(),
@@ -460,11 +484,21 @@ impl Runtime {
             role: Role::Assistant,
             content: response_text,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "intent": "ExpressiveQuery",
-                "current_goal": current_goal,
-                "had_prior_assistant": last_assistant.is_some(),
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "intent": "ExpressiveQuery",
+                    "current_goal": current_goal,
+                    "had_prior_assistant": last_assistant.is_some(),
+                });
+                // Memory-attributed witness turns carry the ledger so the
+                // footer renders the memory chip + band (I3) — see the
+                // gating note above `witness_epistemic_state`.
+                if let Some(state) = &witness_epistemic_state {
+                    m["epistemic_state"] =
+                        serde_json::to_value(state).unwrap_or(serde_json::Value::Null);
+                }
+                m
+            }),
             version: 0,
         };
         Ok(Response {

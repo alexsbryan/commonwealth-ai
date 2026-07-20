@@ -713,15 +713,16 @@ impl Runtime {
     /// by `InferenceConfig::auto_collaborate` (default on) so the
     /// whole path is a no-op when disabled.
     ///
-    /// Callers pass `evidence` as a plain-text summary of whatever
-    /// corpus material grounded the original answer. Empty string is
-    /// acceptable (e.g. when corpus retrieval returned nothing).
+    /// Callers pass `abstained` — the turn's gate-abstention signal
+    /// (the same one the ledger's `CannotKnowFromHere` verdict derives
+    /// from). It is the card's ENTIRE detection: `false` means no gap
+    /// card, instantly (I4-C retirement of `gap.rs`'s LLM judge).
     pub async fn maybe_collaborate(
         &self,
         conversation_id: &str,
         question: &str,
         response: &str,
-        evidence: &str,
+        abstained: bool,
     ) -> String {
         // Synchronous (non-streaming) path: the routing-events
         // sink is wired but no live streaming session_id exists
@@ -745,7 +746,7 @@ impl Runtime {
             conversation_id,
             question,
             response,
-            evidence,
+            abstained,
             None,
             None,
             // Legacy non-streaming caller — no lesson threading (the
