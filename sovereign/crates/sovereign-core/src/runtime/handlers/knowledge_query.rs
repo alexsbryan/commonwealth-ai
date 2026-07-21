@@ -510,6 +510,7 @@ impl Runtime {
                 evidence_id_allowlist: None,
                 lark_grammar: None,
                 prompt_shape: None,
+                stable_prefix_len: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -1037,6 +1038,7 @@ impl Runtime {
                     evidence_id_allowlist: None,
                     lark_grammar: None,
                     prompt_shape: None,
+                    stable_prefix_len: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -1087,6 +1089,7 @@ impl Runtime {
                     evidence_id_allowlist: None,
                     lark_grammar: None,
                     prompt_shape: None,
+                    stable_prefix_len: None,
                 }
             }
         };

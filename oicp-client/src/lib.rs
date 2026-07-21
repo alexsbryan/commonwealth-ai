@@ -278,6 +278,20 @@ impl RemoteApiProvider {
             body["lark_grammar"] = serde_json::json!(grammar);
         }
 
+        // Commonwealth extension: forward the caller-directed
+        // stable-prefix declaration (bytes of the user prompt shared
+        // byte-identically across sibling requests). The daemon's
+        // inference_adapter carries it onto
+        // `CompletionRequest.stable_prefix_len`; the engine uses it to
+        // checkpoint/restore decode state at that boundary
+        // (prefix_state.rs). Advisory — dropping it costs prefill
+        // time, never correctness — but without this forward the
+        // per-claim grounding gate loses its evidence-prefix reuse on
+        // every daemon-routed (CLI `chat ask`) path.
+        if let Some(n) = request.stable_prefix_len {
+            body["stable_prefix_len"] = serde_json::json!(n);
+        }
+
         // Forward the tool catalog + `tool_choice` so the daemon presents the
         // tools to the model in its chat template. Without this, a daemon-routed
         // agent/authoring loop sends `lark_grammar` (the call SHAPE) but the model
@@ -1029,6 +1043,7 @@ mod tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         };
 
         let body = provider.build_request(&request);
@@ -1073,6 +1088,7 @@ mod tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         };
 
         let body = provider.build_request(&request);

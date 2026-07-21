@@ -2782,6 +2782,7 @@ pub(crate) async fn apply_distiller(
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        stable_prefix_len: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -3292,6 +3293,7 @@ async fn summarise_block(
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        stable_prefix_len: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -4164,6 +4166,7 @@ mod tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         }
     }
 
@@ -5629,6 +5632,7 @@ That's my answer."#;
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         }
     }
 

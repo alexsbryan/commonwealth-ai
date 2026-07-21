@@ -30,6 +30,21 @@ pub struct CompletionRequest {
     /// compiled-in `THINK_BUDGET` constant if unavailable).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub think_budget: Option<usize>,
+    /// Caller-directed stable-prefix declaration: the first N BYTES of
+    /// `prompt` are byte-identical across sibling requests (e.g. the
+    /// grounding gate's shared evidence window across per-claim
+    /// verifications). The engine may checkpoint decode state at a
+    /// conservative token boundary inside that prefix and restore it
+    /// for siblings instead of re-prefilling — the only prefix-reuse
+    /// path that is recurrent-state-safe on hybrid architectures
+    /// (whole-state restore, not partial KV keep; see
+    /// `prefix_state.rs`). Purely advisory: engines without the
+    /// pinned-prefix cache (or with it disabled) ignore it, and a
+    /// declaration that doesn't match observed tokens degrades to a
+    /// full prefill, never a wrong result. Must lie on a `char`
+    /// boundary of `prompt`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_prefix_len: Option<usize>,
     /// Override the family-default top-k sampling parameter.
     /// `None` falls back to `ModelQuirks::default_top_k`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -291,6 +306,7 @@ impl CompletionRequest {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         }
     }
 
@@ -450,6 +466,7 @@ impl CompletionRequest {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         }
     }
 }

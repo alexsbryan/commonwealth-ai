@@ -228,3 +228,51 @@ this path — there is no cross-claim contamination and no recalibration.
    gate default-on, plus stale-pid state-dir sweep.
 3. Align the **specifics-scan** PASSAGES scaffold with the claim judge's so it restores
    off the same pin (§5 correction: it is one pass, so the win is one prefill).
+
+---
+
+## 9. Update 2026-07-21 (later) — caller-directed pin + 180-min treatment soak
+
+**Caller-directed pin SHIPPED.** `CompletionRequest.stable_prefix_len` (BYTES of the raw
+user prompt shared byte-identically across siblings; advisory) → oicp-client forwards the
+wire field `stable_prefix_len` → `inference_adapter` unwraps → `directed_pin_tokens`
+(model_slot.rs) maps bytes→tokens by tokenizing the rendered prefix and taking its LCP
+with the full stream minus a 2-token BPE back-off → `prefix_state.plan_directed` learns
+IMMEDIATELY on first sighting, restores on entry match, falls back to the sighting-based
+plan on any malformed directive. The gate declares ONE uniform boundary per turn — the
+shared evidence window (`judge::stable_passages_prefix_len`, ordering invariant pinned by
+`stable_prefix_is_shared_across_sibling_prompts`) — so extras-bearing claims restore too.
+
+Validated live: learn-on-first-call with bit-identical vp; extras sibling HIT (0.6s vs
+full prefill); the §8 relearn-churn case now restores; real gate turn = **1 LEARNED +
+12 HIT + 0 WARN**, exactly one evidence prefill per turn. Gates: lint 0-fail, suite
+7829/2→both isolated-pass (one over-strict new-test assertion, fixed; one known
+env-race flake in `frontdoor` untouched by this diff).
+
+**180-min dual soak, treatment arm only** (`soak-prefixpin-180`, flag + pin + reorder;
+baseline = 2026-07-20 dual150):
+
+- **Stability/correctness: PASS.** rc 0/0; 0 raw errors, 0 broke turns, 0 confirmed
+  fabrication (chaos), 0 persona hallucinations — identical to baseline. Mechanism at
+  scale: **76 LEARNED / 253 HIT / 0 WARN**; restore median 19ms, p90 29ms, max 177ms;
+  save median 388ms, p90 594ms.
+- **Latency: soak axes are question-mix-confounded; class-level + persona signals agree
+  with the controlled A/B.** Chaos invents its mix: grounded chats 6→1, decline-ish
+  verdicts way up, and declines run 4.6× slower than grounded on a path this change does
+  not touch — so overall median 34.1→66.8s says nothing about the gate. Where the mix is
+  fixed (personas): **TTFT p50 173s→66s, time-to-value median never→99s**, turns/session
+  2.0→2.7. Grounded-class chaos latency 66.5s→27.1s (right direction, n=1 — indicative
+  only). The §8 controlled A/B (1.35× e2e, bit-exact parity) remains the latency
+  evidence of record.
+- **Cost:** steady-state state dir ≈ **3.9GB for one slot** (6-entry LRU × ~650MB
+  10K-token pins). Stale-`<pid>` dirs from restarts accumulate on top (manually swept
+  this session).
+
+**Default-on recommendation:** flip `SOVEREIGN_PREFIX_STATE` default ON after two small
+hardenings: (1) startup sweep of stale-pid state dirs; (2) byte-capped LRU (or in-RAM
+store) so the on-disk footprint is a config knob, not an emergent ~4GB/slot. Nothing in
+3.5h of adversarial soak argues against the flip on correctness or stability grounds.
+
+**Next latency target (from this soak's own data):** the DECLINE path — slow abstention
+(declines 4.6× slower than grounded; 25 true stalls concentrated there). That is the
+gap-check / coverage / refine ladder, untouched by this work.

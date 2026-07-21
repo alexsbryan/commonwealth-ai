@@ -394,6 +394,14 @@ impl SovereignInferenceAdapter {
         if let Some(grammar) = request.lark_grammar.as_ref() {
             req.lark_grammar = Some(grammar.clone());
         }
+        // Commonwealth extension: carry the caller-directed
+        // stable-prefix declaration through to the engine's
+        // pinned-prefix cache (`prefix_state.rs`). NOTE the wire field
+        // is bytes into the FLATTENED user prompt; `flatten` above
+        // concatenates user turns verbatim with the first turn first,
+        // so a single-user-turn request (the grounding gate's shape)
+        // maps 1:1. Advisory — see CompletionRequest.stable_prefix_len.
+        req.stable_prefix_len = request.stable_prefix_len;
         // Tool-call grammar: when the caller sets `tool_choice =
         // "required"` (OpenAI semantics: model MUST call a tool) and
         // tools are present, install a JSON-Schema grammar over the
@@ -1557,6 +1565,7 @@ mod adapter_translation_tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1595,6 +1604,7 @@ mod adapter_translation_tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1631,6 +1641,7 @@ mod adapter_translation_tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1689,6 +1700,7 @@ mod adapter_translation_tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         }
     }
 
@@ -1753,6 +1765,7 @@ mod adapter_translation_tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         }
     }
 

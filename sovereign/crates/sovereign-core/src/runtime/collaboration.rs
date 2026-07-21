@@ -350,6 +350,7 @@ pub(crate) async fn run_collaboration(
         evidence_id_allowlist: None,
         lark_grammar: None,
         prompt_shape: None,
+        stable_prefix_len: None,
     };
 
     match inference.complete(&refine_req).await {

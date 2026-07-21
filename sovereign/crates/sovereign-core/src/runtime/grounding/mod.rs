@@ -1584,6 +1584,11 @@ async fn gate_longform(
                     .iter()
                     .map(|c| c.chars().take(120).collect::<String>())
                     .collect();
+                // Every sibling claim-check declares this same shared-window
+                // boundary (judge::stable_passages_prefix_len), so the engine
+                // pins the evidence state once per turn and restores it for
+                // claims 2..N — including claims that append extra hits.
+                let n_shared = shared.len();
                 let mut judged = shared;
                 judged.extend(
                     extra
@@ -1603,7 +1608,9 @@ async fn gate_longform(
                     // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
                     // the batched verdict alongside so batch-vs-calibrated agreement
                     // can be scored without changing any answer.
-                    let cal = claim_violation_joint(&inference, claim, &judged, cap, posture).await;
+                    let cal =
+                        claim_violation_joint(&inference, claim, &judged, cap, n_shared, posture)
+                            .await;
                     dbg(&format!(
                         "shadow claim {claim_idx}: batch={batch_v:?} cal_vp={cal:?} cal_supported={:?}",
                         cal.map(|vp| vp < tau)
@@ -1614,7 +1621,8 @@ async fn gate_longform(
                         Some(true) => Some(0.0),  // batch: supported → vp below tau
                         Some(false) => Some(1.0), // batch: unsupported → flagged (vp ≥ tau)
                         None => {
-                            claim_violation_joint(&inference, claim, &judged, cap, posture).await
+                            claim_violation_joint(&inference, claim, &judged, cap, n_shared, posture)
+                                .await
                         }
                     }
                 };
