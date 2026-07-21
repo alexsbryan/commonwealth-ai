@@ -564,6 +564,7 @@ fn translate_request(
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        stable_prefix_len: None,
     })
 }
 

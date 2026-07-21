@@ -487,6 +487,7 @@ async fn score_thread_coverage(
         evidence_id_allowlist: None,
         lark_grammar: None,
         prompt_shape: None,
+        stable_prefix_len: None,
     };
 
     let resp = match session.inference.as_ref().complete(&request).await {

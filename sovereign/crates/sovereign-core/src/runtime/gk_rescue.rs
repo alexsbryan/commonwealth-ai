@@ -88,6 +88,7 @@ pub(crate) async fn rescue_ood_answer(
         evidence_id_allowlist: None,
         lark_grammar: None,
         prompt_shape: None,
+        stable_prefix_len: None,
     };
     let resp = inference.complete(&request).await.ok()?;
     let body = crate::title::strip_think_blocks(&resp.text);

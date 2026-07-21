@@ -32,14 +32,20 @@ pub(crate) struct GateVerdict {
 }
 
 /// One forced-choice A/B logprob pass on the primary (Critic) tier. Returns
-/// `(p_A, p_B)`.
+/// `(p_A, p_B)`. `stable_prefix_len` declares how many leading BYTES of
+/// `prompt` are byte-identical across sibling calls (the shared evidence
+/// window of a per-claim gate pass) so the engine's pinned-prefix cache can
+/// checkpoint/restore there instead of re-prefilling — `None` for one-off
+/// prompts.
 async fn forced_choice_ab(
     inference: &Arc<dyn InferenceProvider>,
     prompt: &str,
+    stable_prefix_len: Option<usize>,
     posture: ShardingPrivacy,
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
+        stable_prefix_len,
         system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
         // Critic role runs on the PRIMARY tier (role.rs: "a model
         // grading its own single pass is self-confirmation bias"; the
@@ -303,7 +309,7 @@ pub(crate) async fn verify_grounding(
              Answer with exactly one letter — A = the passage supports the claim, \
              B = it does not."
         );
-        if let Some((a, b)) = forced_choice_ab(inference, &prompt, posture).await {
+        if let Some((a, b)) = forced_choice_ab(inference, &prompt, None, posture).await {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
             let effective = if is_extra && support < CLAIM_RESCUE_FLOOR {
@@ -917,21 +923,45 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
     None
 }
 
+/// Leading literal of every claim-check prompt. Split out so the stable-prefix
+/// byte math below and the prompt construction cannot drift apart.
+const PASSAGES_SCAFFOLD: &str = "PASSAGES (multiple, separated by ---):\n\"\"\"\n";
+
+/// Byte length of the prompt prefix shared by every sibling claim-check in one
+/// gate pass: the scaffold + the first `n_stable` processed chunks (the shared
+/// prompt window — `gate_longform` appends claim-conditioned hits AFTER them,
+/// its ordering invariant). Uniform across siblings regardless of whether a
+/// given claim carries extra hits, so all N calls declare the SAME boundary and
+/// the engine pins once per turn. `None` when nothing is stable.
+fn stable_passages_prefix_len(processed: &[String], n_stable: usize) -> Option<usize> {
+    if n_stable == 0 || n_stable > processed.len() {
+        return None;
+    }
+    let shared_len: usize = processed[..n_stable].iter().map(String::len).sum::<usize>()
+        + "\n---\n".len() * (n_stable - 1);
+    Some(PASSAGES_SCAFFOLD.len() + shared_len)
+}
+
+/// `n_stable`: how many leading entries of `chunks` are the shared prompt
+/// window (byte-identical across every claim of this gate pass); entries after
+/// that are claim-conditioned and vary per call. 0 = declare nothing.
 pub(super) async fn claim_violation_joint(
     inference: &Arc<dyn InferenceProvider>,
     claim: &str,
     chunks: &[String],
     n_chunks: usize,
+    n_stable: usize,
     posture: ShardingPrivacy,
 ) -> Option<f64> {
-    let joined: String = chunks
+    let processed: Vec<String> = chunks
         .iter()
         .take(n_chunks)
         .map(|c| c.chars().take(1_500).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n---\n");
+        .collect();
+    let stable_prefix_len = stable_passages_prefix_len(&processed, n_stable.min(processed.len()));
+    let joined: String = processed.join("\n---\n");
     let prompt = format!(
-        "PASSAGES (multiple, separated by ---):\n\"\"\"\n{joined}\n\"\"\"\n\n\
+        "{PASSAGES_SCAFFOLD}{joined}\n\"\"\"\n\n\
          CLAIM: {claim}\n\n\
          Do the passages, taken together, state or clearly imply this claim? \
          Support assembled across several passages counts; paraphrase counts; \
@@ -940,7 +970,11 @@ pub(super) async fn claim_violation_joint(
          Answer with exactly one letter — A = the passages support the claim, \
          B = they do not."
     );
-    let (a, b) = forced_choice_ab(inference, &prompt, posture).await?;
+    debug_assert!(
+        stable_prefix_len.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
+        "stable prefix must be a valid prompt boundary"
+    );
+    let (a, b) = forced_choice_ab(inference, &prompt, stable_prefix_len, posture).await?;
     let denom = a + b;
     let support = if denom > 0.0 { a / denom } else { 0.0 };
     Some(1.0 - support)
@@ -1341,5 +1375,53 @@ mod tests {
             normalize_scan_item(item, answer),
             "ships cannot pay tolls at sea"
         );
+    }
+
+    /// The declared stable prefix must be byte-identical across sibling
+    /// claim-check prompts — one with claim-conditioned extras appended,
+    /// one without — and land on a char boundary. This is the contract
+    /// the engine's directed pin relies on; if the prompt construction
+    /// and `stable_passages_prefix_len` drift apart, restores silently
+    /// degrade to full prefills (latency, not correctness — but the
+    /// whole point of the feature evaporates).
+    #[test]
+    fn stable_prefix_is_shared_across_sibling_prompts() {
+        let shared = vec![
+            "alpha passage with some grounding text — ünïcode too".to_string(),
+            "beta passage carrying different content".to_string(),
+        ];
+        let extras = vec!["claim-conditioned hit only one sibling has".to_string()];
+        let build = |chunks: &[String], claim: &str| {
+            let processed: Vec<String> = chunks
+                .iter()
+                .map(|c| c.chars().take(1_500).collect::<String>())
+                .collect();
+            let joined = processed.join("\n---\n");
+            format!("{PASSAGES_SCAFFOLD}{joined}\n\"\"\"\n\nCLAIM: {claim}\n\n…")
+        };
+
+        let mut with_extras = shared.clone();
+        with_extras.extend(extras);
+        let p_extras = build(&with_extras, "claim one");
+        let p_plain = build(&shared, "another claim");
+
+        let n = stable_passages_prefix_len(&shared, shared.len()).expect("stable prefix");
+        assert!(p_extras.is_char_boundary(n) && p_plain.is_char_boundary(n));
+        assert_eq!(
+            &p_extras.as_bytes()[..n],
+            &p_plain.as_bytes()[..n],
+            "siblings must share the declared prefix byte-for-byte"
+        );
+        // The prompts genuinely diverge just past the boundary (separator
+        // + extra vs block close — both open with '\n', so compare a small
+        // window, not the single next byte).
+        assert_ne!(
+            &p_extras.as_bytes()[n..n + 5],
+            &p_plain.as_bytes()[n..n + 5]
+        );
+
+        // Degenerate declarations refuse rather than mis-declare.
+        assert_eq!(stable_passages_prefix_len(&shared, 0), None);
+        assert_eq!(stable_passages_prefix_len(&shared, 3), None);
     }
 }

@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Pid-liveness probe (kill(pid, 0)) for the prefix-state stale-dir sweep.
+libc = "0.2"
 sovereign-core = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.

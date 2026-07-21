@@ -258,7 +258,12 @@ fi
 # ── Adapter-absent fallback ────────────────────────────────────────────────
 if [[ ! -x "$ADAPTER" ]]; then
     echo "sovereign-test: adapter not found at $ADAPTER — running raw cargo test" >&2
-    (cd "$REPO_ROOT" && cargo "${cargo_argv[@]}" 2>&1)
+    # stdin from /dev/null: test binaries must never inherit an interactive
+    # terminal. A prompt helper that guards on `stdin().is_terminal()` (e.g.
+    # sovereign-cli-shared::confirm) sees a TTY when run from a shell and
+    # blocks in read_line forever — hanging the whole workspace run with no
+    # output. /dev/null makes that non-tty EOF path structurally guaranteed.
+    (cd "$REPO_ROOT" && cargo "${cargo_argv[@]}" </dev/null 2>&1)
     exit $?
 fi
 
@@ -278,7 +283,13 @@ start_ms=$(($(date +%s%N) / 1000000))
 
 (
     cd "$REPO_ROOT"
-    cargo "${cargo_argv[@]}" 2>&1 | tee "$raw_log" | "$ADAPTER" "monorepo" > "$out_jsonl"
+    # stdin from /dev/null: the pipe above only redirects cargo's STDOUT, so
+    # without this the test binaries inherit the caller's interactive terminal
+    # as stdin. A prompt helper that guards on `stdin().is_terminal()` then
+    # sees a TTY, skips its non-tty EOF fast-path, and blocks in read_line
+    # forever (observed: prompts::confirm hangs the entire --workspace run with
+    # zero output under --human). /dev/null forces the non-tty path everywhere.
+    cargo "${cargo_argv[@]}" </dev/null 2>&1 | tee "$raw_log" | "$ADAPTER" "monorepo" > "$out_jsonl"
     echo "${PIPESTATUS[0]}" > "$exit_file"
 )
 

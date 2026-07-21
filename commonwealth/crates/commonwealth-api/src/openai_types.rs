@@ -148,6 +148,17 @@ pub struct ChatCompletionRequest {
     /// instantiates `LlguidanceConstraint::new(lark, model)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lark_grammar: Option<String>,
+    /// Commonwealth extension: caller-directed stable-prefix length in
+    /// BYTES of the flattened user prompt — sibling requests share this
+    /// prefix byte-for-byte, so the engine may checkpoint/restore decode
+    /// state at that boundary (`prefix_state.rs`, the recurrent-safe
+    /// prefix-reuse path). Advisory; mismatches degrade to full prefill.
+    /// Wire path: HTTP body field `stable_prefix_len` → here →
+    /// `inference_adapter::build_completion_request` →
+    /// `CompletionRequest.stable_prefix_len` → `generate_sync` directed
+    /// pin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_prefix_len: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

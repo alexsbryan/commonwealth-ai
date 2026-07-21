@@ -347,6 +347,7 @@ impl SearchTool {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         };
 
         let response = self.inference.complete(&request).await?;

@@ -388,6 +388,7 @@ mod tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         }
     }
 
@@ -572,6 +573,7 @@ allow_tools = ["write"]
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            stable_prefix_len: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());

@@ -646,6 +646,46 @@ pub(crate) fn forced_choice_candidates(request: &CompletionRequest) -> Option<Ve
     request.forced_choice_candidates()
 }
 
+/// Map a caller-declared stable-prefix byte length (over the RAW user
+/// prompt, `CompletionRequest.stable_prefix_len`) to a conservative
+/// token boundary in the rendered prompt's token stream, for the
+/// pinned-prefix cache's directed plan. `None` (→ sighting-based plan)
+/// when the declaration is absent, malformed, or unlocatable.
+///
+/// Method: locate the declared prefix substring inside the rendered
+/// prompt (chat templates concatenate message content verbatim),
+/// tokenize the rendered text UP TO that boundary, and take its LCP
+/// with the full token stream, backing off 2 tokens. The back-off
+/// matters: BPE merges at the cut can differ from the full stream's
+/// (the boundary token may fuse with suffix bytes), and LCP+back-off
+/// makes the pin a guaranteed common token prefix of every sibling
+/// sharing the declared bytes. Cost: one extra tokenize of the prefix
+/// per request. Failures degrade to the undirected plan — full
+/// prefill at worst, never wrong output.
+fn directed_pin_tokens(
+    model: &LlamaModel,
+    request: &CompletionRequest,
+    full_prompt: &str,
+    tokens: &[crate::llama::cpp::token::LlamaToken],
+) -> Option<usize> {
+    let n = request.stable_prefix_len?;
+    // `.get` enforces both the range and the char-boundary contract.
+    let raw_prefix = request.prompt.get(..n)?;
+    if raw_prefix.is_empty() {
+        return None;
+    }
+    let start = full_prompt.find(raw_prefix)?;
+    let rendered_prefix = &full_prompt[..start + raw_prefix.len()];
+    let prefix_tokens = model.str_to_token(rendered_prefix, AddBos::Always).ok()?;
+    let lcp = prefix_tokens
+        .iter()
+        .zip(tokens.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let pin = lcp.saturating_sub(2);
+    (pin > 0).then_some(pin)
+}
+
 /// Read the model's next-token distribution over `candidates` in one
 /// forward pass (prompt already decoded). For each candidate we sum the
 /// mass over its single-token encodings — bare and space-prefixed, to
@@ -1633,7 +1673,10 @@ impl ModelSlot {
         // 2026-07-12). Restore/Learn override the LCP machinery for
         // this request (full clear either way); Pass leaves the
         // pre-existing behavior byte-identical.
-        let plan = prefix_state.plan(&tokens);
+        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
+            Some(pin) => prefix_state.plan_directed(&tokens, pin),
+            None => prefix_state.plan(&tokens),
+        };
         let mut state_prefix_ready = false;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {
@@ -2516,7 +2559,10 @@ impl ModelSlot {
         //
         //  - `session.begin(0, &tokens)` still receives the FULL
         //    token list, so per-seq position bookkeeping is unchanged.
-        let plan = prefix_state.plan(&tokens);
+        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
+            Some(pin) => prefix_state.plan_directed(&tokens, pin),
+            None => prefix_state.plan(&tokens),
+        };
         let mut prefix_base: usize = 0;
         match plan {
             PrefixPlan::Restore { key, prefix_len } => {

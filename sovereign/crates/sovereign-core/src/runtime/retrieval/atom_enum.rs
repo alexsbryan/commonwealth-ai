@@ -175,6 +175,7 @@ impl Runtime {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            stable_prefix_len: None,
         };
 
         let response = match self.inference.complete(&request).await {
