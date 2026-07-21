@@ -1473,6 +1473,31 @@ async fn gate_longform(
                 }
                 h
             };
+            // Batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY, default OFF):
+            // one call judges all claims with the evidence prefilled ONCE, so the
+            // N per-claim re-prefills of the same evidence collapse to one on the
+            // prefix-cache-vetoed qwen35moe. Indexed by the same enumerate() index
+            // as the loop below. Empty when the flag is off → the loop runs exactly
+            // as before. GATED on claim count: with only a few claims the single
+            // batched prefill does not amortise (measured net-negative below ~6
+            // claims), so small answers keep the per-claim path.
+            let claim_texts: Vec<String> = claims.iter().take(budget).cloned().collect();
+            let shadow_mode = config::gate_batch_shadow_enabled();
+            let batched_support: Vec<Option<bool>> = if (config::gate_batch_verify_enabled()
+                || shadow_mode)
+                && claim_texts.len() >= config::gate_batch_min_claims()
+            {
+                judge::claims_support_batched(
+                    &inference,
+                    &claim_texts,
+                    chunks,
+                    per_claim_chunks,
+                    posture,
+                )
+                .await
+            } else {
+                Vec::new()
+            };
             for (claim_idx, claim) in claims.iter().take(budget).enumerate() {
                 // Jurisdiction: honesty meta-language is not a world-claim —
                 // "the system does not have access to X" can never be stated
@@ -1528,10 +1553,18 @@ async fn gate_longform(
                     continue;
                 }
                 // Claim-conditioned retrieval: verify against the
-                // sealed CORPUS, not just the prompt snapshot. Hits
-                // go first (most relevant to THIS claim) and the cap
-                // widens by their count, so they never displace a
-                // prompt chunk the old audit would have judged.
+                // sealed CORPUS, not just the prompt snapshot. The
+                // SHARED prompt window goes first and claim-specific
+                // hits are APPENDED after it, so every per-claim judge
+                // prompt shares one byte-stable evidence prefix — the
+                // pinned-prefix state cache (SOVEREIGN_PREFIX_STATE)
+                // can restore that prefix instead of re-prefilling the
+                // ~10K-token evidence per claim on prefix-cache-vetoed
+                // hybrids (hits-FIRST ordering diverged the prompts at
+                // the first passage and thrashed the pin). Duplicates
+                // resolve in favor of the shared copy; novel hits widen
+                // the cap by their count, so they never displace a
+                // shared chunk the old audit would have judged.
                 let extra = match &searcher {
                     Some(s) => {
                         let hits = s.search(claim).await;
@@ -1546,19 +1579,46 @@ async fn gate_longform(
                     }
                     None => Vec::new(),
                 };
-                let dedup: HashSet<String> = extra
+                let shared: Vec<String> = chunks.iter().take(per_claim_chunks).cloned().collect();
+                let seen: HashSet<String> = shared
                     .iter()
                     .map(|c| c.chars().take(120).collect::<String>())
                     .collect();
-                let mut judged: Vec<String> = extra.clone();
+                let mut judged = shared;
                 judged.extend(
-                    chunks
+                    extra
                         .iter()
-                        .filter(|c| !dedup.contains(&c.chars().take(120).collect::<String>()))
+                        .filter(|c| !seen.contains(&c.chars().take(120).collect::<String>()))
                         .cloned(),
                 );
-                let cap = per_claim_chunks + extra.len();
-                match claim_violation_joint(&inference, claim, &judged, cap, posture).await {
+                let cap = judged.len();
+                // Use the batched pre-pass's verdict for this claim (both
+                // directions — the fan-out is dominated by UNSUPPORTED claims, so
+                // trusting only SUPPORTED yields no net win). A parse gap (None)
+                // falls back to the calibrated per-claim forced-choice. The
+                // deterministic in-world name/identifier veto already ran ABOVE, so
+                // blatant fabrication is caught before this LLM verdict either way.
+                let batch_v = batched_support.get(claim_idx).and_then(|v| *v);
+                let vp_opt = if shadow_mode {
+                    // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
+                    // the batched verdict alongside so batch-vs-calibrated agreement
+                    // can be scored without changing any answer.
+                    let cal = claim_violation_joint(&inference, claim, &judged, cap, posture).await;
+                    dbg(&format!(
+                        "shadow claim {claim_idx}: batch={batch_v:?} cal_vp={cal:?} cal_supported={:?}",
+                        cal.map(|vp| vp < tau)
+                    ));
+                    cal
+                } else {
+                    match batch_v {
+                        Some(true) => Some(0.0),  // batch: supported → vp below tau
+                        Some(false) => Some(1.0), // batch: unsupported → flagged (vp ≥ tau)
+                        None => {
+                            claim_violation_joint(&inference, claim, &judged, cap, posture).await
+                        }
+                    }
+                };
+                match vp_opt {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
                         emit_gate_progress(

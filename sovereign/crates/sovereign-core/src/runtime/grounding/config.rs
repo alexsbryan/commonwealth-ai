@@ -104,6 +104,47 @@ pub(crate) fn exactval_fix_enabled() -> bool {
     )
 }
 
+/// STUDY (`SOVEREIGN_GATE_BATCH_VERIFY=1`, default OFF): in `gate_longform`, run
+/// ONE batched support pass over all extracted claims — the evidence prefilled
+/// ONCE — and use its per-claim verdict for BOTH directions, re-verifying only
+/// parse-gap rows with the calibrated per-claim forced-choice. Reuses the
+/// evidence prefill on `qwen35moe`, where prefix caching is vetoed, so the N
+/// per-claim re-prefills of the same evidence collapse to one (measured ~11x
+/// less prefill / ~9x faster on a real long-form turn). NOT default-on: the
+/// batched verdict is a text A/B, not the calibrated single-token logit, so `tau`
+/// semantics shift and it needs recalibration before a flip. See
+/// project_35b_moe_gate_latency_2026_07_20.
+pub(crate) fn gate_batch_verify_enabled() -> bool {
+    std::env::var("SOVEREIGN_GATE_BATCH_VERIFY")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// SHADOW measurement (`SOVEREIGN_GATE_BATCH_SHADOW=1`, default OFF): run the
+/// batched pass AND the calibrated per-claim forced-choice for every claim, log
+/// the pair, but KEEP baseline behavior (use the calibrated verdict). This scores
+/// batch-vs-calibrated agreement without changing any answer — the decisive input
+/// for the default-on call (the false-support rate = batch says supported where
+/// calibrated says failed = fabrication-leak risk). Overrides the normal batch
+/// path when set.
+pub(crate) fn gate_batch_shadow_enabled() -> bool {
+    std::env::var("SOVEREIGN_GATE_BATCH_SHADOW")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Minimum extracted-claim count for the batched pre-pass to fire (else the
+/// per-claim path runs). The single batched prefill only amortises when it
+/// replaces enough per-claim re-prefills; the 2026-07-20 A/B measured a net
+/// regression on small answers (7→9 primary calls at ~3 claims) and clear wins
+/// at ~10+ (23→10). Default 6; tune with `SOVEREIGN_GATE_BATCH_MIN_CLAIMS`.
+pub(crate) fn gate_batch_min_claims() -> usize {
+    std::env::var("SOVEREIGN_GATE_BATCH_MIN_CLAIMS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6)
+}
+
 /// Opt-in (SOVEREIGN_GATE_PIPELINE=1): PHASE A SCAFFOLD — verify sentences on the
 /// fast slot AS the draft streams on the 35B, so audit #1 overlaps synthesis
 /// instead of running after it (see docs/specs/STREAMING_GATE_PIPELINE.md).
