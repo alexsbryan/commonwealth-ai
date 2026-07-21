@@ -59,6 +59,15 @@ conjectures, so the 6 `unknowable`-labeled probes "match" by emitting
 nothing while every satisfiable probe misses. It measures absence, not
 skill.
 
+The AFTER lane now reports its own decomposition (sub-lanes added
+2026-07-20, blended rate unchanged as the gate input): **satisfiable
+routing 4/5 (0.80)** — the resolver's actual skill; **unknowable
+contract**: 5/6 matched vacuously (answered turns resolve no routes),
+and the 1 *exercised* row (abstained unknowable) is a standing miss —
+the resolver's honest web fallback always fires, so scoring silence as
+correct requires an "unknowable detection" feature that does not exist
+yet. That miss is a known, attributed cost inside the 0.82, not noise.
+
 **The turn a user actually sees**, before vs after, on "What is the
 capital of Australia?" over a sealed novel corpus:
 
