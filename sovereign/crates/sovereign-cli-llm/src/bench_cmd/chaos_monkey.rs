@@ -1687,6 +1687,29 @@ fn print_summary(
                 report.n_acquisition_labeled,
             );
         }
+        // Sub-lane attribution: the blended gate rate mixes routing
+        // SKILL (satisfiable labels) with unknowable-contract outcomes,
+        // most of which match vacuously on answered turns. Print the
+        // decomposition so a moving blended rate is attributable.
+        if report.n_acq_satisfiable > 0 {
+            eprintln!(
+                "    ├ satisfiable routing       : {:.2}          [{}/{} — the resolver's actual skill ]",
+                report.acq_satisfiable_matched as f64 / report.n_acq_satisfiable as f64,
+                report.acq_satisfiable_matched,
+                report.n_acq_satisfiable,
+            );
+        }
+        {
+            let unk_total = report.n_acquisition_labeled - report.n_acq_satisfiable;
+            if unk_total > 0 {
+                eprintln!(
+                    "    └ unknowable contract       : exercised {}/{} silent · vacuous-match {}   [resolver never stays silent today — standing miss until unknowable-detection exists ]",
+                    report.acq_unknowable_exercised_matched,
+                    report.n_acq_unknowable_exercised,
+                    report.acq_unknowable_vacuous_matches,
+                );
+            }
+        }
     }
     // OOD helpfulness lane (rubric edit 2026-07-20): abstaining on an
     // out-of-domain probe is honest but timid — the hybrid ideal is a

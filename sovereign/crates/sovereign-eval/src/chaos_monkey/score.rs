@@ -516,6 +516,31 @@ pub struct CalibrationReport {
     /// part of the verdict.
     #[serde(default)]
     pub acquisition_matched: usize,
+    // ── Acquisition sub-lanes (tracked; the armed gate reads the
+    // blended rate above). `satisfiable` = rows whose label names a
+    // real acquisition class; `unknowable` = rows where NO route would
+    // help — matched only by emitting no conjecture. The unknowable
+    // sub-rate is further split by whether it was EXERCISED: an
+    // answered turn resolves no routes, so it matches vacuously; only
+    // an abstained unknowable turn actually tests whether the resolver
+    // stays silent (today it never does — the web fallback always
+    // fires — so exercised-unknowable is a standing miss until an
+    // "unknowable" detection exists, which would be its own feature).
+    /// Satisfiable-labeled rows / matched.
+    #[serde(default)]
+    pub n_acq_satisfiable: usize,
+    #[serde(default)]
+    pub acq_satisfiable_matched: usize,
+    /// Unknowable-labeled rows that EXERCISED the contract (abstained,
+    /// resolver ran) / those that still matched (resolver stayed silent).
+    #[serde(default)]
+    pub n_acq_unknowable_exercised: usize,
+    #[serde(default)]
+    pub acq_unknowable_exercised_matched: usize,
+    /// Unknowable-labeled rows that matched vacuously (answered turn,
+    /// no conjecture resolved).
+    #[serde(default)]
+    pub acq_unknowable_vacuous_matches: usize,
     /// Out-of-domain probes in the bank (tracked lane denominator).
     #[serde(default)]
     pub n_ood: usize,
@@ -554,6 +579,9 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
     let (mut cite_checked, mut cite_faithful) = (0usize, 0usize);
     let (mut n_distractor, mut distractor_ok) = (0usize, 0usize);
     let (mut acq_labeled, mut acq_matched) = (0usize, 0usize);
+    let (mut acq_sat, mut acq_sat_matched) = (0usize, 0usize);
+    let (mut acq_unk_exercised, mut acq_unk_exercised_matched) = (0usize, 0usize);
+    let mut acq_unk_vacuous = 0usize;
     let (mut ood_n, mut ood_caveated) = (0usize, 0usize);
 
     for r in rows {
@@ -614,7 +642,8 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
                     ood_caveated += 1;
                 }
             }
-            // Third lane (tracked): conjecture accuracy on labeled rows.
+            // Third lane (tracked): conjecture accuracy on labeled rows,
+            // with sub-lane attribution (see the report-field docs).
             if let Some(label) = r.acquisition_label {
                 acq_labeled += 1;
                 let matched = match label {
@@ -625,6 +654,21 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
                 };
                 if matched {
                     acq_matched += 1;
+                }
+                if label == super::question::AcquisitionClass::Unknowable {
+                    if r.agent_action == AgentAction::Abstained {
+                        acq_unk_exercised += 1;
+                        if matched {
+                            acq_unk_exercised_matched += 1;
+                        }
+                    } else if matched {
+                        acq_unk_vacuous += 1;
+                    }
+                } else {
+                    acq_sat += 1;
+                    if matched {
+                        acq_sat_matched += 1;
+                    }
                 }
             }
         }
@@ -664,6 +708,11 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
         partition: parts,
         n_acquisition_labeled: acq_labeled,
         acquisition_matched: acq_matched,
+        n_acq_satisfiable: acq_sat,
+        acq_satisfiable_matched: acq_sat_matched,
+        n_acq_unknowable_exercised: acq_unk_exercised,
+        acq_unknowable_exercised_matched: acq_unk_exercised_matched,
+        acq_unknowable_vacuous_matches: acq_unk_vacuous,
         n_ood: ood_n,
         ood_caveated_answers: ood_caveated,
     }
@@ -1086,6 +1135,62 @@ mod tests {
             rep.ood_caveated_answers, 1,
             "only the caveated ANSWER counts toward the helpfulness lane"
         );
+    }
+
+    /// Acquisition sub-lane attribution: the blended rate stays the
+    /// gate's input, but the report separates routing skill
+    /// (satisfiable labels) from the unknowable contract — and within
+    /// unknowable, EXERCISED rows (abstained, resolver ran) from
+    /// VACUOUS matches (answered turn, no conjecture ever resolved).
+    #[test]
+    fn acquisition_sublanes_attribute_the_blend() {
+        use crate::chaos_monkey::question::AcquisitionClass;
+        let mk = |qtype, action, label: AcquisitionClass, conj: Option<AcquisitionClass>| {
+            let mut r = row(qtype, action, None);
+            r.acquisition_label = Some(label);
+            r.acquisition_conjecture = conj;
+            r
+        };
+        let rows = vec![
+            // Satisfiable: one match, one miss.
+            mk(
+                QuestionType::AbsentOutOfDomain,
+                AgentAction::Abstained,
+                AcquisitionClass::InstallRecipe,
+                Some(AcquisitionClass::InstallRecipe),
+            ),
+            mk(
+                QuestionType::AbsentOutOfDomain,
+                AgentAction::Abstained,
+                AcquisitionClass::InstallRecipe,
+                Some(AcquisitionClass::ConnectSource),
+            ),
+            // Unknowable, EXERCISED (abstained): resolver emitted a route → miss.
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Abstained,
+                AcquisitionClass::Unknowable,
+                Some(AcquisitionClass::WebSearch),
+            ),
+            // Unknowable, VACUOUS (answered): no conjecture resolved → match.
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Answered,
+                AcquisitionClass::Unknowable,
+                None,
+            ),
+        ];
+        let rep = score(&rows);
+        assert_eq!(rep.n_acquisition_labeled, 4);
+        assert_eq!(rep.acquisition_matched, 2, "blended: recipe-match + vacuous");
+        assert_eq!(rep.n_acq_satisfiable, 2);
+        assert_eq!(rep.acq_satisfiable_matched, 1);
+        assert_eq!(rep.n_acq_unknowable_exercised, 1);
+        assert_eq!(
+            rep.acq_unknowable_exercised_matched, 0,
+            "the resolver emitted a route on an exercised unknowable"
+        );
+        assert_eq!(rep.acq_unknowable_vacuous_matches, 1);
     }
 
     /// Third-lane gate arming (EPISTEMIC_STATE §8): disarmed (0.0) and
