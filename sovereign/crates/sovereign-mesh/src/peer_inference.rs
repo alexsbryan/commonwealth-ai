@@ -2274,6 +2274,14 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.resident_slots()
     }
 
+    fn compute_children(&self) -> Vec<sovereign_core::traits::ComputeChildStatus> {
+        // Same reason as `resident_slots`: the compute children live under
+        // THIS node's local routing facade, and the mesh wrapper is the
+        // installed provider — without this forward `/status.inference.
+        // compute_children` would always be empty.
+        self.local.compute_children()
+    }
+
     fn effective_context_size(&self) -> Option<u32> {
         self.local.effective_context_size()
     }

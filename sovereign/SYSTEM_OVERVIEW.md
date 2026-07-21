@@ -153,6 +153,7 @@ crates/
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process Commonwealth embed
+├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
@@ -1033,6 +1034,28 @@ llama.cpp, TGI, Commonwealth). Full detail — slots, polished slot
 management, sibling pool, decode paths, MTP, OICP scoring, harness
 adapters, cutoff legibility, conversation-history compaction — in
 [`docs/inference.md`](./docs/inference.md).
+
+**Compute-slot process boundary (`sovereign-compute`, P1).** Optional
+(`[compute] enabled`, default OFF): the daemon runs a slot's compute in a
+supervised **child process** so a ggml `SIGABRT` kills only the child — the
+daemon keeps gossip / `/status` / the client API — and observes the exit as an
+event it re-plans around. **Its value is crash isolation + the can't-fit-one-box
+(distributed 122B) case, NOT throughput.** A live embed run confirmed that for a
+model that fits one box, N process replicas *lose* to in-process multi-sequence
+batching (one batched kernel vs N processes thrashing one device, plus HTTP hop
++ weight duplication + thread oversubscription) — so the replica-pool path is a
+demonstrated dead end for parallelism; the right lever there is extending
+in-process continuous batching (FastShort-style) to the primary + streaming.
+A child is `current_exe() --compute-child` (no new artifact); it speaks a
+**native lossless wire** (`POST /internal/complete[_stream]` carrying serde
+`CompletionRequest`/`StreamFrame` verbatim — grammar/allowlists/sampling_mode
+survive, llguidance runs in-child). Daemon-side: `ComputeRoutedProvider` routes
+by `model_id` to the child for that slot, else the in-process engine;
+`ComputeChildManager` supervises one child per `[[compute.slot]]` and streams
+lifecycle to `/status` (`compute_children`, target `compute_child`). The child
+supervisor was extracted here from the desktop (shared, byte-identical).
+Crash-isolation acceptance is proven (`compute_child_e2e.rs`). See
+`docs/DISTRIBUTED_PILOT_READINESS.md` P1.
 
 **CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
 linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),

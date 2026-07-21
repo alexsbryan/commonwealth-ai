@@ -26,6 +26,9 @@ path = "src/main.rs"
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
+# Compute-child process boundary (P1): the `--compute-child` re-exec arm in
+# run_with_args + the daemon-side ComputeChildManager/provider facade.
+sovereign-compute = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
@@ -63,6 +66,8 @@ tempfile = "3"
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }
+# compute_child_e2e.rs drives the compute-child manager + wire types directly.
+sovereign-contracts = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

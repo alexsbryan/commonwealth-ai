@@ -221,13 +221,67 @@ session and whole categories of "polish" dissolve.
    (A fifth, scale-only shape: **placement from an incomplete cost model** — VRAM-only.)
 
 ### The five root primitives
-**P1 — Compute-slot process boundary.** Run the distributed primary's compute as a
-supervised **child process** (the existing `sovereign-server` binary + the `/v1` API
-is the seam); the daemon keeps gossip, `/status`, the client API, the desktop bridge.
-A ggml abort kills the *child*; the daemon observes the exit as an **event** and
-re-plans (local-only / re-distribute). *Dissolves shape 1 wholesale.* **High leverage,
-high cost** — reshapes the daemon↔engine split; needs a feasibility spike (KV/streaming
-across the boundary; the in-process fast/embed slots). The load-bearing fork.
+**P1 — Compute-slot process boundary. — MECHANISM BUILT 2026-07-20 (new crate
+`sovereign-compute`), OPT-IN, DEFAULT OFF.** Run a slot's compute as a supervised
+**child process**; the daemon keeps gossip, `/status`, the client API, the
+desktop bridge. A ggml abort kills the *child*; the daemon observes the exit as
+an **event** and re-plans. *Dissolves shape 1 wholesale.* The feasibility spike is
+**resolved**: the seam is a **native lossless wire** (child speaks serde
+`CompletionRequest`/`StreamFrame` verbatim over `POST /internal/complete[_stream]`
+— NOT the OpenAI translation the earlier note assumed — so grammar/allowlists/
+sampling_mode survive; llguidance runs in-child unchanged via `build_sampler`),
+NOT the `sovereign-server` binary.
+
+**Value assessment — the honest scope (revised 2026-07-20 after the live embed
+run).** The genuine, non-replicable value of the boundary is **crash isolation +
+control-plane survival + the can't-fit-one-box (distributed) case.** It is NOT
+throughput parallelism: for a model that fits one box, in-process continuous
+batching — llama.cpp's multi-sequence decode, which `FastShortCoalescer` already
+uses for short calls and `EmbeddedLlamaCpp::embed_batch` uses for embeddings —
+beats process replicas on every axis (one batched kernel vs N processes fighting
+one device; no process/HTTP hop; no per-child weight duplication; no CPU-thread
+oversubscription). The live embed sweep *confirmed this against us*: a 4-replica
+CPU pool scaled only to ~2× and plateaued (four children each grabbed all 16
+cores), where a single batched context would scale further with none of the
+overhead. **Retired framing:** "the control plane scales by spawning" /
+"replicas unlock parallelism." FastShort's real gaps (no streaming, 6000-char
+cap, lockstep head-of-line) are fixed by *extending in-process batching to the
+primary + streaming*, not by spawning processes. The bench (`svrn bench
+replicas`) and its receipts (`sovereign/bench/replicas/`) stand as the evidence
+for THIS conclusion, not as a parallelism win.
+
+What shipped (opt-in behind `[compute] enabled`):
+- Child = `current_exe() --compute-child` re-exec (no new artifact); binds
+  `127.0.0.1:0`, prints a stdout port handshake → supervisor `Warming`; loads
+  the model async (health 503 during load) → `Serving`; `fast_exit` on SIGTERM;
+  `PR_SET_PDEATHSIG` so it never outlives the daemon.
+- The desktop's child-process supervisor was extracted to `sovereign-compute`
+  (shared, byte-identical for the desktop) and extended: stdout-handshake health
+  target, model-load startup grace, graceful `terminate()`.
+- Daemon-side `ComputeRoutedProvider` facade routes by `model_id` to the child
+  for that slot (else the in-process engine); `ComputeChildManager` supervises
+  one child per `[[compute.slot]]`, streams lifecycle to `/status`
+  (`compute_children`) under the `compute_child` glassbox target. (The
+  N-replica pool + least-in-flight + embed sharding + the `svrn bench replicas`
+  tool were REMOVED after the live run — a losing strategy's code.)
+- **Crash-isolation acceptance PASSED** (`compute_child_e2e.rs`) — the reason the
+  boundary exists: `kill -9` AND the uncatchable `kill -6` (SIGABRT) mid-stream →
+  the stream ends with a terminal `StreamFrame::Error` (no hang), the daemon
+  stays alive, the supervisor respawns the child to `serving`, a post-recovery
+  request succeeds.
+
+**Default-path changes that ride along even with `[compute]` OFF** (small, but
+NOT zero — see the "Default vs opt-in" table below): `/v1/embeddings` now issues
+one `embed_batch` (a single multi-sequence decode) instead of a per-input `embed`
+loop — faster for multi-input, semantically identical; `/status.inference` gains
+an (empty) `compute_children` array. Everything else — the facade, child spawning,
+pool routing — is inert unless a pool is configured.
+
+**Deferred:** routing the distributed 122B primary through a child (the seam is
+designed for it — a child with the RPC worker env distributes; placement change =
+child restart) — **this is the actual payoff and the real reason to keep the
+mechanism**; the desktop shared-model shell (P4); a `--threads`-per-child knob (the
+oversubscription cap, only relevant if replicas are used at all).
 
 **P2 — Worker-session liveness/identity authority.** One component owns "is peer X a
 usable worker, at what address + ABI," fusing signals by precedence: **connection-health
@@ -421,3 +475,50 @@ via load-balance skew on the next big-model validation).
   above. **Next: re-run the split e2e on the fixed binary to capture the still-
   missing split-path decode (P0.1 acceptance) and confirm the distribution
   HOLDS.**
+- **2026-07-20 — P1 COMPUTE-SLOT PROCESS BOUNDARY: small-model proof LANDED.**
+  New runtime-layer crate `sovereign-compute` (supervisor extracted from the
+  desktop + native lossless wire + child server/entrypoint + daemon-side
+  `ComputeRoutedProvider`/`ChildProvider`/`ComputeChildManager`). Wired
+  into `load_provider` behind `[compute] enabled` (default OFF → zero behaviour
+  change; full-workspace lint `fail:0` + tests green). Crash-isolation
+  acceptance PASSED via `sovereign-cli-daemon/tests/compute_child_e2e.rs`:
+  `kill -9` and the uncatchable `kill -6` (SIGABRT) of a mock child mid-stream
+  each yield a terminal `StreamFrame::Error` (bounded, no hang), the supervisor
+  respawns the child to `serving`, and a post-recovery completion succeeds
+  (crash isolation is the reason the boundary exists). A barrier test
+  (`pool_routing.rs::embed_batch_overlaps_across_replicas`) proves replicas *can*
+  run concurrently — a correctness property, NOT evidence that replicas are the
+  right way to get throughput (they are not; see the live-run entry below). The
+  seam is the **native lossless wire**, not
+  the OpenAI translation the P1 primitive note originally assumed (that would
+  have dropped `lark_grammar`/allowlists/`sampling_mode`); grammar-constrained
+  generation runs in-child unchanged. NOT yet run (needs a daemon reconfigure +
+  restart): the headline parallelism bench matrix (`svrn bench replicas`, bars
+  in `sovereign/bench/replicas/README.md`).
+- **2026-07-20 — LIVE EMBED RUN: process replicas LOSE to in-process batching
+  (the honest finding).** Reconfigured the deployed daemon with a `[compute]`
+  embed pool (Qwen3-Embedding-0.6B), restarted, ran `svrn bench replicas embed`
+  (batch=1, K sweep). Receipts in `sovereign/bench/replicas/results/`:
+  - **E0** in-process embed slot (GPU): throughput flat ~12 texts/s across K, p50
+    latency linear 665→5274 ms — serialized (the `/v1/embeddings` handler was
+    calling `embed` per input; the batched `embed_batch` path this PR now uses
+    would already parallelize these in ONE decode).
+  - **E1** pool N=1 (CPU): flat (13→15/s), latency linear 75→536 ms.
+  - **E3** pool N=4 (CPU): scales 13→26 texts/s but **plateaus at ~1.97×, not
+    4×** — the four children each grab all 16 cores and thrash. This is process
+    replicas *underperforming* what a single in-process multi-sequence decode
+    would do (one batched kernel, no oversubscription, no 4× weight duplication,
+    no HTTP hop). **Conclusion: for a fits-on-one-box model, replicas are the
+    WRONG tool for throughput.** The right lever is extending in-process
+    continuous batching (FastShort-style) to the primary + streaming. The
+    process boundary earns its keep on **crash isolation** and the
+    **can't-fit-one-box distributed** case ONLY.
+  Glassbox `/status.inference.compute_children` renders the children live.
+  **Two bugs the unit tests missed, found + fixed on the live run** (both now
+  have regression coverage): (1) `embed_batch_sharded` assigned shard `s` to a
+  fixed `serving[s]`, so every batch < replica-count piled onto replica 0
+  (child-0 burned 11s CPU vs ~1s for the others) — fixed to least-in-flight
+  `pick()` per shard; regression test `embed_batch_distributes_small_batches…`.
+  (2) `MeshInferenceProvider` (the provider the daemon actually installs) didn't
+  forward `compute_children()`, so `/status` was always empty — added the
+  delegation next to `resident_slots`. Daemon restored to its pre-test config.

@@ -334,6 +334,7 @@ mod tests {
     #[test]
     fn snapshot_from_cli_setup_signals_cli_config_present() {
         let cfg = SetupConfig {
+            compute: Default::default(),
             models: sovereign_core::setup_config::ModelsSection {
                 primary: "/p".into(),
                 fast: Some("/f".into()),

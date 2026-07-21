@@ -623,6 +623,7 @@ mod tests {
     /// multicast socket or binds an iroh endpoint. Everything else defaulted.
     fn hermetic_cfg() -> SetupConfig {
         SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: None,

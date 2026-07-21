@@ -28,6 +28,9 @@ sovereign-meshapp = { workspace = true }
 # daemon bootstrap, two entry points, no sidecar binary in the bundle.
 sovereign-cli-daemon = { path = "../../sovereign-cli-daemon" }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# Child-process supervisor (extracted here 2026-07-20 so the daemon's
+# compute-child manager shares it). `src/supervisor.rs` re-exports this.
+sovereign-compute = { workspace = true }
 # Mesh Health surfaces (peer preferences, dimensional contributions) —
 # Tauri commands access the in-process AppState's accessors. The
 # `sovereign-mesh` crate already path-depends on these so version

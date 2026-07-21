@@ -564,6 +564,7 @@ impl DesktopConfig {
         }
 
         let mut setup = existing.unwrap_or_else(|| SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::new(),
                 fast: None,

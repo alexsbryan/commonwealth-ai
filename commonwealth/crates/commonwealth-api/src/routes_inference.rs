@@ -563,9 +563,6 @@ pub async fn embeddings(
             .into_response();
     };
 
-    // Fan out over single-or-batch input. Each call is independent;
-    // a future pass can add `embed_batch` for backends that batch
-    // more efficiently than one-at-a-time.
     let inputs: Vec<String> = match request.input {
         EmbeddingInput::Single(s) => vec![s],
         EmbeddingInput::Batch(v) => v,
@@ -585,32 +582,59 @@ pub async fn embeddings(
     }
 
     let n_texts = inputs.len() as u64;
-    let mut data: Vec<EmbeddingData> = Vec::with_capacity(inputs.len());
-    let mut total_chars: usize = 0;
-    for (i, text) in inputs.into_iter().enumerate() {
-        total_chars += text.len();
-        match service.embed(&text).await {
-            Ok(vec) => data.push(EmbeddingData {
-                object: "embedding".into(),
-                embedding: vec,
-                index: i,
-            }),
-            Err(e) => {
-                warn!(error = %e, index = i, "embeddings: local embed failed");
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            format!("embedding[{i}] failed: {e}"),
-                            "backend_error",
-                        ))
-                        .unwrap_or_default(),
-                    ),
-                )
-                    .into_response();
-            }
+    let total_chars: usize = inputs.iter().map(|t| t.len()).sum();
+
+    // One batch call: a single multi-sequence decode on the embedded engine,
+    // or sharded across compute-child replicas by the routing facade. Both
+    // beat the former per-input sequential loop for bulk ingest.
+    let embeddings = match service.embed_batch(&inputs).await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(error = %e, "embeddings: local embed_batch failed");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(
+                        format!("embedding batch failed: {e}"),
+                        "backend_error",
+                    ))
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response();
         }
+    };
+    if embeddings.len() != inputs.len() {
+        warn!(
+            got = embeddings.len(),
+            want = inputs.len(),
+            "embeddings: backend returned the wrong number of vectors"
+        );
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(
+                serde_json::to_value(ErrorResponse::new(
+                    format!(
+                        "embedding backend returned {} vectors for {} inputs",
+                        embeddings.len(),
+                        inputs.len()
+                    ),
+                    "backend_error",
+                ))
+                .unwrap_or_default(),
+            ),
+        )
+            .into_response();
     }
+    let data: Vec<EmbeddingData> = embeddings
+        .into_iter()
+        .enumerate()
+        .map(|(i, embedding)| EmbeddingData {
+            object: "embedding".into(),
+            embedding,
+            index: i,
+        })
+        .collect();
 
     // The OpenAI spec counts token usage; we only have char count, so
     // we produce a conservative ~4 chars/token estimate rather than

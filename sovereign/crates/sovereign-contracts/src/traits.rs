@@ -309,6 +309,33 @@ pub struct ResidentSlot {
     pub placement: Option<SlotPlacement>,
 }
 
+/// One supervised compute-child's live status (DISTRIBUTED_PILOT_READINESS.md
+/// P1). Surfaced by [`InferenceProvider::compute_children`] and rendered on
+/// `/status` so an operator watching a silent local-only fallback sees the
+/// child lifecycle, not just a slower model.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComputeChildStatus {
+    /// Replica name (`<pool>-<i>`).
+    pub name: String,
+    /// `"generate"` | `"embed"`.
+    pub role: String,
+    /// The addressable pool id this replica belongs to.
+    pub model_id: String,
+    /// Lifecycle: `starting` | `warming` | `serving` | `degraded` |
+    /// `restarting` | `failed`.
+    pub lifecycle: String,
+    /// Current ephemeral port, when serving/warming.
+    #[serde(default)]
+    pub port: Option<u16>,
+    /// Restart count.
+    pub restarts: u32,
+    /// Reason for the most recent lifecycle transition.
+    pub last_transition_reason: String,
+    /// Reason for the most recent exit/crash, if any.
+    #[serde(default)]
+    pub last_exit: Option<String>,
+}
+
 /// The inference backend contract: completions (one-shot, streaming, batch),
 /// embeddings, optional rerank, plus slot/model introspection. Implemented by
 /// the embedded llama.cpp engine, remote HTTP forwarders, mesh-peer wrappers,
@@ -665,6 +692,14 @@ pub trait InferenceProvider: Send + Sync {
     /// it can introspect. Remote/mesh forwarders return `[]` — the
     /// daemon they forward to answers for its own residency.
     fn resident_slots(&self) -> Vec<ResidentSlot> {
+        Vec::new()
+    }
+
+    /// Live status of any supervised compute children this provider routes to
+    /// (DISTRIBUTED_PILOT_READINESS.md P1). Default empty — only the
+    /// compute-routing facade has children; every other provider inherits
+    /// this. Rendered on `/status`.
+    fn compute_children(&self) -> Vec<ComputeChildStatus> {
         Vec::new()
     }
 }

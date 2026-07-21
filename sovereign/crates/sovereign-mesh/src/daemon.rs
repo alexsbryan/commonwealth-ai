@@ -3777,6 +3777,7 @@ mod tests {
             AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, None);
 
         let cfg = SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
                 fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),

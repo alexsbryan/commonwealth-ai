@@ -15,6 +15,18 @@ pub enum Error {
     #[error("Inference error: {0}")]
     Inference(String),
 
+    /// A compute-slot child process (DISTRIBUTED_PILOT_READINESS.md P1) was
+    /// unreachable — not yet warm, mid-restart after a crash, or gone — and
+    /// the request had no in-process fallback. Fail-fast: the caller retries
+    /// after the supervisor respawns rather than hanging on a dead socket.
+    #[error("Compute slot unavailable: {slot}: {reason}")]
+    ComputeUnavailable {
+        /// Name of the compute slot/pool that was unreachable.
+        slot: String,
+        /// Why it was unavailable (warming / restarting / exited), surfaced verbatim.
+        reason: String,
+    },
+
     /// The named model/slot was requested but is not resident in memory.
     #[error("Model not loaded: {0}")]
     ModelNotLoaded(String),
