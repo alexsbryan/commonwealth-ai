@@ -613,6 +613,8 @@ impl Runtime {
             distinct_sources = shape.distinct_sources,
             title_match = shape.title_match,
             top_source = %shape.top_source_label,
+            top_cosine = ?shape.top_cosine,
+            token_coverage = shape.query_token_coverage,
             route = ?route,
             reason = ?decision.reason,
             role = "synthesizer",
@@ -620,6 +622,120 @@ impl Runtime {
             operation = ?operation,
             "KnowledgeQuery: evidence-shape routing decision"
         );
+
+        // 4b'. Evidence-shape EARLY DECLINE (dark until
+        // SOVEREIGN_EVIDENCE_DECLINE_FLOOR is calibrated + set). When both
+        // independent relevance signals say the survivors are off-topic
+        // (semantic floor AND token coverage — evidence::evidence_early_decline),
+        // route the turn as a PARAMETRIC answer immediately instead of
+        // synthesizing over garbage evidence and re-deriving the same verdict
+        // through a gap-check judge a minute later (measured 2026-07-21:
+        // 62 of a 90s decline spent after the signal existed).
+        //
+        // EPISTEMIC_STATE §1 alignment — this changes WHERE the cost is paid,
+        // never WHAT the answer policy is: the same parametric rules as the
+        // zero-chunk path apply (general-knowledge answer under the structural
+        // GK caveat when the model confidently can; a plain honest decline
+        // plus a concrete next step when it can't — never a dead end). The
+        // gap check stays ON (cheap against empty doc_context) so the
+        // conjecture/collaborate machinery still runs.
+        if let Some(sig) = crate::runtime::evidence::evidence_early_decline(&shape) {
+            tracing::info!(
+                top_cosine = sig.top_cosine,
+                floor = sig.floor,
+                coverage = sig.coverage,
+                coverage_max = sig.coverage_max,
+                chunks_dropped = chunks.len(),
+                "KnowledgeQuery: evidence-shape EARLY DECLINE — parametric turn, evidence withheld"
+            );
+            let corpora = context.installed_corpora_display();
+            // KEEP IN SYNC with the zero-chunk parametric prompt above (4a) —
+            // same guardrails, different lead-in. Duplicated deliberately: the
+            // 4a prompt is calibrated and byte-stable; a shared-const refactor
+            // risks silent drift in both.
+            // Small-model prompt discipline: same calibrated template as 4a,
+            // one changed clause in the lead-in; the match numbers stay in
+            // the narration frame / logs, NOT here (a percentage in-prompt
+            // invites the fast slot to echo meta-commentary).
+            let prompt = format!(
+                "The user asked: \"{message}\"\n\n\
+                 A search of the installed sources ({corpora}) found nothing \
+                 that covers this, so you have no usable evidence from the \
+                 user's own material. Your reply already opens by noting \
+                 that — so continue straight into the substance and do NOT \
+                 restate that opening (no echoing it, no second caveat).\n\n\
+                 If the question has a genuine general-knowledge answer (a public \
+                 fact, a concept, how something works), give it concisely and \
+                 directly.\n\
+                 If instead it asks for a specific detail that could only come \
+                 from a particular document, dataset, or codebase you don't have, \
+                 do NOT invent it — say in one short sentence that you don't have \
+                 that material, then offer one concrete next step. Never \
+                 fabricate names, numbers, code, identifiers, commands, or URLs.\n\
+                 Keep it brief and warm: a few sentences at most, no preamble and \
+                 no meta-commentary about source limitations.\n\
+                 You have NO tools, commands, or code search available here: never \
+                 emit tool-call syntax (\"<tool_call>\", \"<tool_code>\", \
+                 \"<symbols>\", function calls) and never say you will \"search the \
+                 codebase\" or \"look it up\" — you cannot. Answer directly or say \
+                 plainly you don't have it."
+            );
+            let request = CompletionRequest {
+                prompt,
+                system_message: None,
+                // Same rationale as the zero-chunk pin: no usable evidence
+                // shape → the 300-token parametric fallback, fast slot.
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(300),
+                temperature: Some(0.3),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                // Structural provenance caveat, exactly as on the zero-chunk
+                // path (prompt-only compliance measured ~60% on the fast slot).
+                assistant_prefix: Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+                stable_prefix_len: None,
+            };
+            return KnowledgeQueryPlan {
+                request,
+                chunks: Vec::new(),
+                gate_entity_anchored: false,
+                doc_context: String::new(),
+                // The REAL measured shape rides along so streaming's
+                // EvidenceCheck narration frame and turn metadata can show
+                // the user exactly what was found and why it was withheld.
+                shape,
+                route: SynthesisRoute::FastFocused,
+                // Weak evidence is a strong case for asking the user to
+                // supply something — keep the gap/conjecture machinery on
+                // (cheap: doc_context is empty).
+                gap_check_enabled: true,
+                search_ms,
+                retrieved_chunks: Vec::new(),
+                source_map: HashMap::new(),
+                result_quality: "weak_evidence",
+                prompt_budget_note: None,
+                folder_meta: std::collections::HashMap::new(),
+                meta_atlas_hits,
+                // Parametric decline/GK turn — length lessons don't engage,
+                // same as the zero-chunk path.
+                lessons: crate::runtime::types::TurnLessons::default(),
+                general_knowledge: Some(crate::runtime::types::GkReason::WeakEvidence),
+                demands,
+                query_embedding: embedding,
+            };
+        }
 
         // 4c. Cohesion expansion. Two flavors based on retrieval shape:
         //
@@ -1407,7 +1523,10 @@ impl Runtime {
                     &plan.chunks,
                 )) as _),
                 entity_anchored: plan.gate_entity_anchored,
-                top_similarity: None,
+                // The real nearest-chunk cosine from retrieval — arms the
+                // gate's SOVEREIGN_KQ_RETRY_FLOOR guard, which was a silent
+                // no-op on this path while this field was hardcoded None.
+                top_similarity: plan.shape.top_cosine,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

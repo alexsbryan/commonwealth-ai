@@ -487,6 +487,21 @@ export type NarrationPhase =
   // that collapses when the gated answer lands. The affordance contract:
   // draft text must never be styled as final.
   | { draft_delta: { delta: string } }
+  // Evidence-shape verdict, emitted right after retrieval completes
+  // (2026-07-21 decline-UX work): what retrieval found — passage count,
+  // distinct sources, best semantic match — and whether the turn is
+  // taking the fast honest-decline path instead of synthesizing over
+  // off-topic evidence. Routed to the `counter` context so the check
+  // station shows substance during the formerly-silent stretch.
+  | {
+      evidence_check: {
+        chunks: number;
+        sources: number;
+        top_similarity: number | null;
+        coverage: number;
+        early_decline: boolean;
+      };
+    }
   // ── Grounding-gate claim-check frames (the verification counter) ──
   // Live per-claim progress from the gate ladder. Routed to the
   // `counter` context field (never the narration log — see

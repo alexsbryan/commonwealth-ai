@@ -1069,13 +1069,70 @@ impl Runtime {
             "runtime:retrieval_start_to_complete"
         );
 
+        // EvidenceCheck — the evidence-shape verdict, narrated (2026-07-21
+        // decline-UX work). Every KQ turn tells the user what retrieval
+        // actually found (passages, sources, best semantic match) the moment
+        // it's known — the longest formerly-silent stretch of the turn — and
+        // an evidence-shape early decline announces itself here instead of
+        // 60s later. Bypasses try_emit_narration's early-suppression window
+        // for the same reason RetrievalStart does: this frame IS the
+        // activity signal.
+        {
+            let early_decline = matches!(
+                plan.general_knowledge,
+                Some(crate::runtime::types::GkReason::WeakEvidence)
+            );
+            let cos_pct = plan.shape.top_cosine.map(|c| (c.max(0.0) * 100.0).round());
+            let text = if early_decline {
+                match cos_pct {
+                    Some(p) => format!(
+                        "Your sources don't cover this (best match {p:.0}%) — answering honestly without them"
+                    ),
+                    None => "Your sources don't cover this — answering honestly without them".to_string(),
+                }
+            } else if plan.shape.count == 0 {
+                "No matching passages — answering from general knowledge".to_string()
+            } else {
+                match cos_pct {
+                    Some(p) => format!(
+                        "{} passages from {} sources — best match {p:.0}%",
+                        plan.shape.count, plan.shape.distinct_sources
+                    ),
+                    None => format!(
+                        "{} passages from {} sources",
+                        plan.shape.count, plan.shape.distinct_sources
+                    ),
+                }
+            };
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::EvidenceCheck {
+                            chunks: plan.shape.count,
+                            sources: plan.shape.distinct_sources,
+                            top_similarity: plan.shape.top_cosine,
+                            coverage: plan.shape.query_token_coverage,
+                            early_decline,
+                        },
+                        text,
+                        elapsed_ms: retrieval_start_at.elapsed().as_millis() as u64,
+                    },
+                })
+                .await;
+        }
+
         // PR5 — post-retrieval retrieval-miss diversion. Off-
         // target evidence shape (dispersed across ≥3 sources,
         // no source concentration, no title match) was
         // historically the exact input that produced confident
         // parametric fabrication. Suppress synthesis and emit a
-        // clarification card instead.
-        if plan.shape.is_off_target() {
+        // clarification card instead. Parametric plans (zero-chunk,
+        // weak-evidence early decline, OOD rescue) are exempt: they
+        // already decided their own honest shape and carry no
+        // synthesis-from-evidence fabrication risk to divert.
+        if plan.shape.is_off_target() && plan.general_knowledge.is_none() {
             tracing::info!(
                 session_id = %_session_id,
                 retrieval_count = plan.shape.count,

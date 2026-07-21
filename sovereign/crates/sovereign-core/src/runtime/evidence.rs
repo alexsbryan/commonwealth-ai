@@ -107,6 +107,18 @@ pub struct EvidenceShape {
     pub(crate) top_source_key: (String, String),
     /// Human-readable `corpus_id::title` for logging only.
     pub(crate) top_source_label: String,
+    /// Best nearest-chunk COSINE SIMILARITY (1 − `vector_distance`)
+    /// to the query across the top-K, in [-1, 1]. `None` when no
+    /// chunk carried a vector score (pure-FTS survivors). This is the
+    /// SEMANTIC relevance signal — `top1_score`/`median_score` above
+    /// are RRF-fused rank scores (~1/60 per list position), which
+    /// measure rank agreement, not relevance: measured 2026-07-21,
+    /// grounded answers and hopeless declines both live in 0.02–0.08
+    /// on the RRF axis. Also threaded into
+    /// `EvidenceContext.top_similarity` so the gate's retry floor
+    /// (`SOVEREIGN_KQ_RETRY_FLOOR`) stops being a silent no-op on the
+    /// KnowledgeQuery path.
+    pub(crate) top_cosine: Option<f32>,
 }
 
 /// Test-only constructor for `EvidenceShape`. Builds a synthetic
@@ -136,6 +148,8 @@ pub fn build_test_evidence_shape(
         query_token_coverage: 1.0,
         top_source_key: ("test-corpus".to_string(), "Test Note".to_string()),
         top_source_label: "test-corpus::Test Note".to_string(),
+        // Positive-evidence default, matching the coverage rationale above.
+        top_cosine: Some(0.7),
     }
 }
 
@@ -308,6 +322,7 @@ pub(crate) fn compute_evidence_shape(chunks: &[ScoredChunk], query: &str) -> Evi
             query_token_coverage: 0.0,
             top_source_key: (String::new(), String::new()),
             top_source_label: String::new(),
+            top_cosine: None,
         };
     }
 
@@ -379,6 +394,17 @@ pub(crate) fn compute_evidence_shape(chunks: &[ScoredChunk], query: &str) -> Evi
 
     let top_source_label = format!("{}::{}", top_key.0, top_key.1);
 
+    // Semantic relevance: best cosine similarity among chunks that carry a
+    // vector score. `vector_distance` is cosine DISTANCE (0 = identical,
+    // 2 = opposite), so similarity = 1 − distance, clamped defensively.
+    let top_cosine = chunks
+        .iter()
+        .filter_map(|c| c.vector_distance)
+        .map(|d| (1.0 - d).clamp(-1.0, 1.0))
+        .fold(None::<f32>, |acc, s| {
+            Some(acc.map_or(s, |a| a.max(s)))
+        });
+
     EvidenceShape {
         count: chunks.len(),
         top1_score,
@@ -390,7 +416,79 @@ pub(crate) fn compute_evidence_shape(chunks: &[ScoredChunk], query: &str) -> Evi
         query_token_coverage,
         top_source_key: top_key,
         top_source_label,
+        top_cosine,
     }
+}
+
+/// Evidence-shape early-decline verdict (2026-07-21 slow-abstention work).
+///
+/// The measured pathology: a turn whose evidence is quantitatively hopeless
+/// (specimen: best cosine ≈ nil, coverage ≈ 0 for a question the corpus
+/// simply doesn't cover) still pays full synthesis over the garbage chunks
+/// + an 18.5s gap-check judge + the gate — 62 of 90 seconds spent AFTER the
+/// decisive signal existed, only to decline anyway. This branch declines at
+/// the signal instead.
+///
+/// DARK BY DEFAULT: fires only when `SOVEREIGN_EVIDENCE_DECLINE_FLOOR`
+/// (cosine-similarity floor, 0..1) is set — the 2026-07-20 closeout showed
+/// thresholds here must be calibrated from measured distributions
+/// (`import_conversations` top-1 attractor), and no historical cosine data
+/// existed before this change plumbed the signal. Requires BOTH independent
+/// signals to agree, so a single miscalibrated axis cannot over-decline:
+///
+///  - `top_cosine < floor` — no survivor is semantically near the query
+///    (chunks without vector scores are ignored; ALL-FTS survivors give
+///    `top_cosine = None` → never fires: no semantic reading exists);
+///  - `query_token_coverage < SOVEREIGN_EVIDENCE_DECLINE_COVERAGE`
+///    (default 0.15) — retrieval text never touches the query's content
+///    tokens ("retrieval-without-signal scores near 0, on-topic 0.6+").
+///
+/// Never fires on empty retrieval (count = 0 has its own parametric path)
+/// and never on a `title_match` turn — a matched title is positive evidence
+/// retrieval found the right document even when scores read weak.
+pub(crate) fn evidence_early_decline(shape: &EvidenceShape) -> Option<EarlyDeclineSignal> {
+    let floor = std::env::var("SOVEREIGN_EVIDENCE_DECLINE_FLOOR")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|f| *f > 0.0 && *f < 1.0)?;
+    let coverage_max = std::env::var("SOVEREIGN_EVIDENCE_DECLINE_COVERAGE")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|c| *c > 0.0 && *c < 1.0)
+        .unwrap_or(0.15);
+    early_decline_with(floor, coverage_max, shape)
+}
+
+/// Pure core of [`evidence_early_decline`] — unit-tested without touching
+/// process env (env-mutating tests race under the parallel suite).
+fn early_decline_with(
+    floor: f32,
+    coverage_max: f32,
+    shape: &EvidenceShape,
+) -> Option<EarlyDeclineSignal> {
+    if shape.count == 0 || shape.title_match {
+        return None;
+    }
+    let cos = shape.top_cosine?;
+    if cos < floor && shape.query_token_coverage < coverage_max {
+        return Some(EarlyDeclineSignal {
+            top_cosine: cos,
+            floor,
+            coverage: shape.query_token_coverage,
+            coverage_max,
+        });
+    }
+    None
+}
+
+/// Why the early-decline branch fired — carried into the glassbox log line,
+/// the `EvidenceCheck` narration frame, and turn metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct EarlyDeclineSignal {
+    pub(crate) top_cosine: f32,
+    pub(crate) floor: f32,
+    pub(crate) coverage: f32,
+    pub(crate) coverage_max: f32,
 }
 
 /// Apply the routing heuristic. Returns `FastFocused` when the retrieval
@@ -1489,5 +1587,69 @@ mod output_budget_tests {
         assert!(!ends_mid_thought("a focused **summary**")); // markdown closer
         assert!(!ends_mid_thought("a deliberate trail-off...")); // ellipsis is intentional
         assert!(!ends_mid_thought("")); // nothing to continue
+    }
+
+    /// The early-decline verdict requires BOTH independent signals
+    /// (semantic floor + token coverage) and respects its guards —
+    /// title-match, empty retrieval, and FTS-only (no cosine) turns
+    /// never fire. Pure-core tested; env plumbing is a thin wrapper.
+    #[test]
+    fn early_decline_requires_both_signals_and_respects_guards() {
+        let mut shape = build_test_evidence_shape(20, 18, false, 1);
+        shape.top_cosine = Some(0.05);
+        shape.query_token_coverage = 0.02;
+        // Hopeless on both axes → fires, carrying the numbers.
+        let sig = early_decline_with(0.25, 0.15, &shape).expect("fires");
+        assert_eq!(sig.top_cosine, 0.05);
+        assert_eq!(sig.coverage, 0.02);
+
+        // Cosine weak but coverage healthy → the topic IS in the text;
+        // do not decline.
+        shape.query_token_coverage = 0.6;
+        assert!(early_decline_with(0.25, 0.15, &shape).is_none());
+
+        // Coverage weak but cosine strong → semantically near; keep going.
+        shape.query_token_coverage = 0.02;
+        shape.top_cosine = Some(0.55);
+        assert!(early_decline_with(0.25, 0.15, &shape).is_none());
+
+        // FTS-only survivors (no vector score anywhere) → no semantic
+        // reading exists; never fire on one axis alone.
+        shape.top_cosine = None;
+        assert!(early_decline_with(0.25, 0.15, &shape).is_none());
+
+        // Title match is positive evidence retrieval found the right
+        // document — never fire.
+        shape.top_cosine = Some(0.05);
+        shape.title_match = true;
+        assert!(early_decline_with(0.25, 0.15, &shape).is_none());
+
+        // Empty retrieval has its own parametric path.
+        shape.title_match = false;
+        shape.count = 0;
+        assert!(early_decline_with(0.25, 0.15, &shape).is_none());
+    }
+
+    /// compute_evidence_shape derives top_cosine as max(1 − distance)
+    /// over vector-scored chunks only.
+    #[test]
+    fn top_cosine_from_vector_distances() {
+        let mk = |dist: Option<f32>| corpus_engine::ScoredChunk {
+            content: "alpha beta".into(),
+            title: Some("T".into()),
+            url: None,
+            corpus_id: "c".into(),
+            score: 0.02,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: Some(1),
+            source_doc_id: None,
+            vector_distance: dist,
+        };
+        let chunks = vec![mk(Some(0.4)), mk(None), mk(Some(0.9))];
+        let shape = compute_evidence_shape(&chunks, "alpha");
+        // best similarity = 1 − 0.4 = 0.6
+        assert!((shape.top_cosine.unwrap() - 0.6).abs() < 1e-6);
+        let none = compute_evidence_shape(&[mk(None)], "alpha");
+        assert_eq!(none.top_cosine, None);
     }
 }

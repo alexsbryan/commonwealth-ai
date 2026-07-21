@@ -193,6 +193,31 @@ pub enum NarrationPhase {
     PrimarySynthesisStart,
     /// Gap-check fired and found a missing piece.
     GapCheckFired,
+    /// Evidence-shape verdict for the turn, emitted right after
+    /// retrieval completes (2026-07-21 decline-UX work): the counter
+    /// UI renders what retrieval actually found — passage count,
+    /// distinct sources, the best semantic match — instead of dead air,
+    /// and announces an early honest decline the moment the evidence
+    /// is measured hopeless (rather than after a synthesis + gap-check
+    /// ceremony discovers the same thing 60s later).
+    EvidenceCheck {
+        /// Survivor passages entering synthesis.
+        chunks: usize,
+        /// Distinct `(corpus, title)` sources among them.
+        sources: usize,
+        /// Best nearest-chunk cosine similarity to the query across
+        /// the survivors, in [-1, 1]. `None` when no survivor carried
+        /// a vector score (pure-FTS retrieval).
+        top_similarity: Option<f32>,
+        /// Fraction of the query's content tokens present in the
+        /// survivor text, in [0, 1] — near 0 = retrieval never touched
+        /// the topic.
+        coverage: f32,
+        /// True when the evidence-shape early-decline branch fired:
+        /// the turn will answer with a fast honest decline instead of
+        /// synthesizing from off-topic evidence.
+        early_decline: bool,
+    },
     /// Grounding gate is verifying the drafted answer against the
     /// retrieved passages before releasing it (the stream is held).
     GroundingVerifyStart,
