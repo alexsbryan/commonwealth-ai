@@ -310,9 +310,17 @@ export async function discoverBrainModel() {
   } catch {
     return null;
   }
+  // Canonical chat aliases first — the daemon lists them with the
+  // `commonwealth/` prefix (bare forms kept for older daemons). Using the
+  // SUT's own answering slot means no extra model residency and no stale
+  // pinned id: 2026-07-21 a stale-registered gemma id was picked while
+  // unloadable (221 dead calls/run) before the probe below could exist to
+  // catch it.
   const candidates = [
-    ...["primary", "fast"].filter((a) => ids.includes(a)),
-    ...ids.filter((id) => !/embed/i.test(id) && id !== "primary" && id !== "fast"),
+    ...["commonwealth/primary", "primary", "commonwealth/fast", "fast"].filter((a) =>
+      ids.includes(a),
+    ),
+    ...ids.filter((id) => !/embed/i.test(id) && !/^(commonwealth\/)?(primary|fast)$/.test(id)),
   ];
   for (const id of candidates) {
     try {

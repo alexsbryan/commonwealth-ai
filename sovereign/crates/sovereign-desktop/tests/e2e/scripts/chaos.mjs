@@ -203,14 +203,45 @@ async function discoverBrainModel() {
     const res = await fetch(`${DAEMON}/v1/models`, { signal: AbortSignal.timeout(5000) });
     const body = await res.json();
     const ids = (body.data ?? []).map((m) => m.id);
-    // Prefer a chat slot (not the embedder). SOVEREIGN_BRAIN_MODEL pins it
-    // explicitly — needed now that the daemon may list a SLOW big model (122B)
-    // first: the default first-non-embed pick would make the user-sim brain
-    // crawl and starve a timed run of turns. Pin the brain to the same tier as
-    // the SUT answerer so the daemon holds one model (no per-turn eviction).
-    BRAIN_MODEL =
-      process.env.SOVEREIGN_BRAIN_MODEL ??
-      ids.find((id) => !/embed/i.test(id)) ?? ids[0] ?? null;
+    // Prefer the daemon's canonical PRIMARY alias — the SUT's own answering
+    // slot — and live-probe candidates before committing. The old
+    // first-non-embed pick rotted twice on 2026-07-21: a stale-registered
+    // gemma id was chosen while unloadable (221 dead calls/run), and after
+    // its registration dropped, a thinking-family 4B was chosen whose
+    // deliberation leaks over the HTTP path (enable_thinking is not
+    // plumbed) — every generated question came out as raw "Thinking
+    // Process:" text. commonwealth/fast is deliberately NOT preferred for
+    // the same leak reason. SOVEREIGN_BRAIN_MODEL still pins explicitly.
+    const candidates = process.env.SOVEREIGN_BRAIN_MODEL
+      ? [process.env.SOVEREIGN_BRAIN_MODEL]
+      : [
+          ...["commonwealth/primary", "primary"].filter((a) => ids.includes(a)),
+          ...ids.filter(
+            (id) => !/embed/i.test(id) && !/^(commonwealth\/)?(primary|fast)$/.test(id),
+          ),
+        ];
+    BRAIN_MODEL = null;
+    for (const id of candidates) {
+      try {
+        const probe = await fetch(`${DAEMON}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: id,
+            messages: [{ role: "user", content: "Say OK" }],
+            max_tokens: 8,
+          }),
+          signal: AbortSignal.timeout(60_000),
+        });
+        const pbody = await probe.json();
+        if (pbody?.choices?.[0]?.message) {
+          BRAIN_MODEL = id;
+          break;
+        }
+      } catch {
+        /* try next candidate */
+      }
+    }
   } catch {
     BRAIN_MODEL = null;
   }
