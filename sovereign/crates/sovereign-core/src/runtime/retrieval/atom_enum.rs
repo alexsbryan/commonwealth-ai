@@ -635,19 +635,30 @@ impl Runtime {
                     .map(str::trim)
                     .filter(|p| !p.is_empty())
                 {
-                    fetched = self
-                        .search_corpus_indexes_with_overrides(
-                            &[],
-                            pv,
-                            1,
-                            "AtomEnum",
-                            None,
-                            enabled_corpora,
-                            corpus_ceiling,
-                        )
-                        .await
-                        .into_iter()
-                        .next();
+                    // Preview-FTS rescue scoped to the atom's OWN corpus —
+                    // its evidence lives there by construction. Searching
+                    // the whole enabled set was the dominant retrieval cost
+                    // of the 2026-07-21 soak (2,647 cross-corpus searches /
+                    // 5,949 cumulative s in 90 min; 31 corpora touched per
+                    // turn) and could attach the WRONG corpus's chunk as
+                    // evidence. An atom whose corpus is outside the enabled
+                    // set gets no rescue — that corpus isn't in play.
+                    let own_scope = [c.corpus.clone()];
+                    if enabled_corpora.is_none_or(|en| en.contains(&c.corpus)) {
+                        fetched = self
+                            .search_corpus_indexes_with_overrides(
+                                &[],
+                                pv,
+                                1,
+                                "AtomEnum",
+                                None,
+                                Some(&own_scope[..]),
+                                corpus_ceiling,
+                            )
+                            .await
+                            .into_iter()
+                            .next();
+                    }
                 }
             }
             let Some(mut chunk) = fetched else {
@@ -827,19 +838,26 @@ impl Runtime {
                             .map(str::trim)
                             .filter(|p| !p.is_empty())
                         {
-                            got = self
-                                .search_corpus_indexes_with_overrides(
-                                    &[],
-                                    pv,
-                                    1,
-                                    "AtomEnumOverview",
-                                    None,
-                                    enabled_corpora,
-                                    corpus_ceiling,
-                                )
-                                .await
-                                .into_iter()
-                                .next();
+                            // Same own-corpus scoping as the AtomEnum
+                            // rescue above — see that comment for the
+                            // 2026-07-21 soak measurements. The claim's
+                            // evidence chunk can only live in c.corpus.
+                            let own_scope = [c.corpus.clone()];
+                            if enabled_corpora.is_none_or(|en| en.contains(&c.corpus)) {
+                                got = self
+                                    .search_corpus_indexes_with_overrides(
+                                        &[],
+                                        pv,
+                                        1,
+                                        "AtomEnumOverview",
+                                        None,
+                                        Some(&own_scope[..]),
+                                        corpus_ceiling,
+                                    )
+                                    .await
+                                    .into_iter()
+                                    .next();
+                            }
                         }
                     }
                     got
