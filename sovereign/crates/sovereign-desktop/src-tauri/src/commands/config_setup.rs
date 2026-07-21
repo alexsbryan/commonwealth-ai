@@ -405,6 +405,7 @@ pub async fn set_setup_context_size(
         Err(_) => {
             let data_dir = state.config.read().await.data_dir.clone();
             SetupConfig {
+                compute: Default::default(),
                 models: sovereign_core::setup_config::ModelsSection {
                     primary: std::path::PathBuf::new(),
                     fast: None,
@@ -515,6 +516,7 @@ pub(crate) fn write_model_slots_to_setup(
             ));
         }
         Err(_) => SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: primary_path.clone(),
                 fast: fast_field.clone(),

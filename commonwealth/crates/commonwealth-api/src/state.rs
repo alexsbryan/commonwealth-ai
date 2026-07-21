@@ -76,6 +76,32 @@ pub struct ResidentSlot {
     pub placement: Option<SlotPlacement>,
 }
 
+/// One supervised compute-child's status (`/status` mirror of
+/// `sovereign_core::traits::ComputeChildStatus`). commonwealth-api cannot
+/// depend on sovereign-contracts, so this is copied field-for-field — the
+/// same convention as [`ResidentSlot`] / [`SlotPlacement`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ComputeChildStatus {
+    /// Replica name (`<pool>-<i>`).
+    pub name: String,
+    /// `"generate"` | `"embed"`.
+    pub role: String,
+    /// The addressable pool id this replica belongs to.
+    pub model_id: String,
+    /// `starting` | `warming` | `serving` | `degraded` | `restarting` | `failed`.
+    pub lifecycle: String,
+    /// Current ephemeral port, when serving/warming.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// Restart count.
+    pub restarts: u32,
+    /// Reason for the most recent lifecycle transition.
+    pub last_transition_reason: String,
+    /// Reason for the most recent exit/crash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_exit: Option<String>,
+}
+
 /// In-process inference service that fulfils chat-completions
 /// requests without spawning separate `llama-server` processes.
 /// The Sovereign desktop embeds its local `EmbeddedLlamaCpp` as
@@ -178,6 +204,26 @@ pub trait LocalInferenceService: Send + Sync {
     /// Route: `POST /internal/inference/warmup`.
     async fn warmup_primary(&self) -> Result<(), String> {
         Ok(())
+    }
+
+    /// Batch embedding in a single forward pass when the backend supports
+    /// it. Default is the sequential per-input fallback; the adapter
+    /// overrides this to delegate to `InferenceProvider::embed_batch`
+    /// (multi-sequence decode, or replica-sharded across compute children),
+    /// which is the corpus-ingest throughput win. Called by the
+    /// `/v1/embeddings` handler when the request carries multiple inputs.
+    async fn embed_batch(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        let mut out = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            out.push(self.embed(input).await?);
+        }
+        Ok(out)
+    }
+
+    /// Live status of any supervised compute children (P1). Empty by
+    /// default; the compute-routing facade populates it. Rendered on `/status`.
+    fn compute_children(&self) -> Vec<ComputeChildStatus> {
+        Vec::new()
     }
 }
 

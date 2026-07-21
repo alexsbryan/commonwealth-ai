@@ -58,6 +58,9 @@ crates = [
     "sovereign-workflow",
     "sovereign-tools-base",
     "sovereign-recipe-author",
+    # Supervised compute-child process boundary (P1). Depends on
+    # sovereign-inference (same layer) + sovereign-contracts (lower).
+    "sovereign-compute",
 ]
 
 # Capabilities over the runtime: tool implementations, work atlas, workflow

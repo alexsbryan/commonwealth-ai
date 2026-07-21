@@ -62,7 +62,9 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      synth.refusal_retry=info,\
      synth.citation=info,\
      synth.budget=info,\
-     placement=info";
+     placement=info,\
+     compute_child=info,\
+     sovereign_compute=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -94,6 +96,17 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     if std::env::var_os("RUST_MIN_STACK").is_none() {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
+
+    // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): the daemon's
+    // ComputeChildManager spawns `current_exe() --compute-child …`. This is a
+    // distinct inference process with its OWN runtime; it must skip the
+    // daemon's rebrand migration / panic hook / 8 MiB runtime below (it
+    // inherits the stack env vars set above). The success path never returns
+    // — the child `fast_exit`s on SIGTERM.
+    if raw_args.first().map(String::as_str) == Some("--compute-child") {
+        return sovereign_compute::child_main::run(&raw_args[1..]);
+    }
+
     // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
     // The daemon is the migration authority — it runs before binding the API port.
     sovereign_core::rebrand::promote_legacy_env();
@@ -200,6 +213,9 @@ mod tests {
             // per-device split. An operator must see this in the deployed
             // daemon, never infer it from `free`.
             "placement",
+            // Compute-child lifecycle transitions (P1). The glassbox source
+            // for "distributed across N children / warming / recovering".
+            "compute_child",
             "synth.lifecycle",
             "synth.truncation",
             "synth.continue",

@@ -66,6 +66,13 @@ pub struct SetupConfig {
     /// here. See [`DiscoverySection`].
     #[serde(default)]
     pub discovery: DiscoverySection,
+    /// `[compute]` — supervised compute-child process boundary
+    /// (DISTRIBUTED_PILOT_READINESS.md P1). Off by default; see
+    /// [`ComputeSection`]. When enabled, the daemon spawns each declared
+    /// pool's replicas as child processes and routes matching requests to
+    /// them, so a ggml SIGABRT kills only a child, not the daemon.
+    #[serde(default)]
+    pub compute: ComputeSection,
     /// External MCP servers whose tools are loaded into the agent's tool
     /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
     /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
@@ -430,6 +437,55 @@ pub struct ModelsSection {
     /// ```
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_pool: Option<PrimaryPoolSection>,
+}
+
+/// `[compute]` — the supervised compute-child process boundary
+/// (DISTRIBUTED_PILOT_READINESS.md P1). Off by default: an absent or
+/// `enabled = false` section spawns no children and changes nothing. When
+/// enabled, the daemon spawns each `[[compute.slot]]` as ONE child process
+/// (`current_exe() --compute-child …`) and the provider facade routes
+/// matching requests to it. There is no N-replica pool — a live embed run
+/// showed process replicas lose to in-process batching for a fits-on-one-box
+/// model; the boundary is kept for crash isolation + the distributed case.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ComputeSection {
+    /// Master switch. `false` (default) → no children, zero behaviour change.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The compute slots to run — each is exactly one child process.
+    #[serde(default)]
+    pub slot: Vec<ComputeSlotConfig>,
+}
+
+/// One `[[compute.slot]]` — a single model in a single supervised child.
+/// Requests whose `model_id` equals `name` route to the child; an `embed`
+/// slot with `capture_embed = true` additionally captures all `/v1/embeddings`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComputeSlotConfig {
+    /// Addressable id: a request `model_id` equal to this routes to the
+    /// child. Also used as the child `--name`.
+    pub name: String,
+    /// `"generate"` (EmbeddedLlamaCpp) or `"embed"` (EmbedOnlyProvider).
+    pub role: String,
+    /// GGUF path the child loads.
+    pub model: PathBuf,
+    /// Context size (generate role). Default 4096 (child-side).
+    #[serde(default)]
+    pub context_size: Option<u32>,
+    /// GPU offload layers. `None` (default) = auto; `Some(0)` = CPU-only.
+    #[serde(default)]
+    pub n_gpu_layers: Option<u32>,
+    /// Spawn this child at daemon boot. Default `true`.
+    #[serde(default = "default_true")]
+    pub warm: bool,
+    /// Embed slots only: when `true`, ALL `/v1/embeddings` traffic routes to
+    /// this child (embeddings carry no model id to route on). Default false.
+    #[serde(default)]
+    pub capture_embed: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Multi-primary slot pool config. See `ModelsSection::primary_pool`.
@@ -1145,6 +1201,7 @@ embed = "/m/e.gguf"
     #[test]
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: Some(PathBuf::from("/models/fast.gguf")),
@@ -1182,6 +1239,7 @@ embed = "/m/e.gguf"
         // user's servers on the next desktop config save.
         use crate::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
         let cfg = SetupConfig {
+            compute: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/p.gguf"),
                 fast: None,

@@ -59,6 +59,11 @@ members = [
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
     "sovereign/crates/sovereign-mesh",
+    # Supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
+    # P1) — child-process supervisor (extracted from sovereign-desktop) + the
+    # native lossless wire + child server/entrypoint + daemon-side provider
+    # facade & replica pool.
+    "sovereign/crates/sovereign-compute",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign/crates/sovereign-cli",
@@ -182,6 +187,7 @@ sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
+sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }

@@ -26,7 +26,7 @@ use sovereign_core::setup_config::SetupConfig;
 use tauri::async_runtime::{self, JoinHandle};
 use tracing::info;
 
-use crate::supervisor::{Supervisor, SupervisorConfig};
+use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig};
 
 /// Pairing card the Settings panel renders. `address` is already dialable (a
 /// wildcard bind is resolved to this node's tailnet IP). `iroh_dial` is the
@@ -65,16 +65,16 @@ pub fn start() -> Result<JoinHandle<()>, String> {
         // Unauthenticated liveness route (added to sovereign-server's router
         // outside the /v1 auth layer) — the heartbeat needs a 200 without a
         // tenant token.
-        health_url: format!("http://127.0.0.1:{port}/health"),
+        health: HealthTarget::Fixed(format!("http://127.0.0.1:{port}/health")),
         crash_log_dir,
         heartbeat_interval: Duration::from_secs(5),
         heartbeat_timeout: Duration::from_secs(5),
         // sovereign-server binds its listener LAST — only after loading the
-        // meta-atlas (~18s) — and the supervisor has no startup grace (it
-        // counts failures from spawn). A short threshold would kill the child
-        // mid-startup before it ever binds. 12 × 5s = 60s tolerates a cold
-        // meta-atlas load; a genuine crash is still caught within a minute.
+        // meta-atlas (~18s). Its `heartbeat_failure_threshold: 12` (12 × 5s =
+        // 60s) already tolerates a cold load; keep `ready_deadline: ZERO` so
+        // this path's behaviour is unchanged by the compute-child grace.
         heartbeat_failure_threshold: 12,
+        ready_deadline: Duration::ZERO,
         backoff_schedule: vec![
             Duration::from_secs(1),
             Duration::from_secs(5),

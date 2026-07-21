@@ -81,6 +81,18 @@ fn main() -> ExitCode {
         std::process::exit(sovereign_cli_daemon::daemon_child_main());
     }
 
+    // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): when the
+    // in-process daemon's ComputeChildManager spawns `current_exe()
+    // --compute-child …` and `current_exe` is THIS desktop binary, route
+    // straight to the daemon lib's arg dispatcher (which detects the flag and
+    // runs the inference child) and never initialize Tauri — a ggml SEGV
+    // then kills only this child, not the window.
+    if argv.iter().any(|a| a == "--compute-child") {
+        std::process::exit(sovereign_cli_daemon::run_with_args(
+            argv.iter().skip(1).cloned().collect(),
+        ));
+    }
+
     // The grounding gate's verification note (the failed-claim caveat) rides
     // `metadata.grounding_gate.failed_claims` on THIS surface, rendered as a
     // collapsible disclosure by AssistantMessage.svelte — not appended to the

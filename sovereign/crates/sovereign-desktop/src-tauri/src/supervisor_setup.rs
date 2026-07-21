@@ -24,7 +24,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
-use crate::supervisor::{Supervisor, SupervisorConfig, SupervisorState};
+use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
 /// Supervised child-process mode is the DEFAULT (DAEMON_RESILIENCE.md
 /// P0.1 — the W1 flip, 2026-07-18). Two opt-outs:
@@ -130,11 +130,14 @@ pub async fn maybe_start(
         args: spec.args,
         working_dir: None,
         env: vec![],
-        health_url: format!("http://127.0.0.1:{client_port}/v1/models"),
+        health: HealthTarget::Fixed(format!("http://127.0.0.1:{client_port}/v1/models")),
         crash_log_dir,
         heartbeat_interval: Duration::from_secs(2),
         heartbeat_timeout: Duration::from_secs(5),
         heartbeat_failure_threshold: 3,
+        // No startup grace: the desktop daemon binds its client port
+        // early, so failures count from spawn as before.
+        ready_deadline: Duration::ZERO,
         // 1s → 5s → 30s → 2min; on the 5th failure the crash-loop
         // ceiling latches Failed until manual reconnect.
         backoff_schedule: vec![

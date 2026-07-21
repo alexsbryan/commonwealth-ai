@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-compute"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
+# P1). Holds the child-process supervisor (extracted from sovereign-desktop so
+# daemon crates can reuse it — desktop can't be a dep of the daemon), plus (in
+# later increments) the native lossless wire contract, the child HTTP server +
+# entrypoint, the client, and the daemon-side provider facade + replica pool.
+#
+# Layer: runtime (quality/ARCH_LAYERS.toml). Depends only on same-or-lower
+# layers (sovereign-inference is same-layer; sovereign-contracts is lower).
+
+[dependencies]
+# The wire contract IS the contract crate's types — CompletionRequest /
+# CompletionResponse / StreamFrame cross the process boundary verbatim, and
+# the child server wraps an `Arc<dyn InferenceProvider>`.
+sovereign-contracts = { workspace = true }
+# The compute child embeds the real engine: EmbeddedLlamaCpp (generate) /
+# EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort
+# path. sovereign-core supplies ModelFamily. Both are runtime-layer (same
+# layer as this crate), so the dependency direction is legal.
+sovereign-inference = { workspace = true }
+sovereign-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Graceful child termination: SIGTERM (so the compute child can run
+# `fast_exit_skip_destructors` and dodge the ggml teardown SIGABRT) before
+# the bounded-grace SIGKILL fallback. tokio's `Child::kill` is SIGKILL only.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

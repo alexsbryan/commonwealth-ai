@@ -147,6 +147,41 @@ pub(crate) fn load_provider(
         }
     }
 
-    let provider: Arc<dyn InferenceProvider> = Arc::clone(&arc) as Arc<dyn InferenceProvider>;
+    let inner: Arc<dyn InferenceProvider> = Arc::clone(&arc) as Arc<dyn InferenceProvider>;
+
+    // Compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md P1).
+    // When `[compute]` declares pools, wrap the in-process engine in the
+    // routing facade: requests whose `model_id` names a pool (or embeddings,
+    // when a capturing embed pool is serving) route to supervised child
+    // processes; everything else falls through to `inner`. The concrete
+    // `arc` engine is still returned for the RPC-worker reload path. Default
+    // OFF → `inner` is installed unchanged.
+    let provider: Arc<dyn InferenceProvider> =
+        if config.compute.enabled && !config.compute.slot.is_empty() {
+            let binary = std::env::current_exe()
+                .unwrap_or_else(|_| PathBuf::from("sovereign-cli-daemon"));
+            let crash_dir = config.data.dir.join("compute-crash-logs");
+            match sovereign_compute::manager::build_compute_layer(
+                &config.compute,
+                Arc::clone(&inner),
+                binary,
+                crash_dir,
+            ) {
+                Some((facade, _manager)) => {
+                    tracing::info!(
+                        target: "compute_child",
+                        slots = config.compute.slot.len(),
+                        "compute-child routing facade installed"
+                    );
+                    // The facade holds the manager alive; children are
+                    // SIGTERM'd on daemon death via PR_SET_PDEATHSIG.
+                    facade as Arc<dyn InferenceProvider>
+                }
+                None => inner,
+            }
+        } else {
+            inner
+        };
+
     Ok((provider, arc, resolved_embed_family))
 }

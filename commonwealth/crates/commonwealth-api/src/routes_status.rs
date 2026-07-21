@@ -43,6 +43,15 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         None => Vec::new(),
     };
 
+    // Supervised compute children (P1) — the glassbox source for
+    // "distributed across N children / warming / recovering". Empty unless
+    // `[compute]` pools are configured.
+    let compute_children: Vec<crate::state::ComputeChildStatus> =
+        match &state.inner.local_inference {
+            Some(svc) => svc.compute_children(),
+            None => Vec::new(),
+        };
+
     let loaded_models: Vec<LoadedModelStatus> = plan
         .model_plans
         .iter()
@@ -109,6 +118,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         inference: InferenceStatus {
             loaded_models,
             resident,
+            compute_children,
         },
         knowledge: KnowledgeStatus {
             hosted_corpora,
@@ -289,6 +299,10 @@ pub struct InferenceStatus {
     /// embedded engine); populated on the desktop/embedded daemon.
     #[serde(default)]
     pub resident: Vec<crate::state::ResidentSlot>,
+    /// Supervised compute children (P1). Empty unless `[compute]` pools are
+    /// configured — then one entry per replica, with its live lifecycle.
+    #[serde(default)]
+    pub compute_children: Vec<crate::state::ComputeChildStatus>,
 }
 
 #[derive(Debug, Serialize)]

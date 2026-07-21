@@ -27,6 +27,7 @@ use sovereign_mesh::daemon::EmbeddedDaemon;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
+        compute: Default::default(),
         models: ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
             fast: Some(PathBuf::from("/models/fast.gguf")),

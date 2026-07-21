@@ -1339,6 +1339,17 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         self.provider.embed(input).await.map_err(|e| format!("{e}"))
     }
 
+    async fn embed_batch(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        // Delegate to the provider's batch path — a single multi-sequence
+        // decode on the embedded engine, or sharded across compute-child
+        // replicas by the routing facade. Beats the handler's per-input
+        // sequential loop for bulk `/v1/embeddings`.
+        self.provider
+            .embed_batch(inputs)
+            .await
+            .map_err(|e| format!("{e}"))
+    }
+
     // ── Runtime slot management ─────────────────────────────────
     //
     // These delegate to the InferenceProvider trait, which has
@@ -1396,6 +1407,25 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                         })
                         .collect(),
                 }),
+            })
+            .collect()
+    }
+
+    fn compute_children(&self) -> Vec<commonwealth_api::state::ComputeChildStatus> {
+        // Map the compute-child statuses across the api-crate seam (same
+        // copied-type convention as `resident_slots` above).
+        self.provider
+            .compute_children()
+            .into_iter()
+            .map(|c| commonwealth_api::state::ComputeChildStatus {
+                name: c.name,
+                role: c.role,
+                model_id: c.model_id,
+                lifecycle: c.lifecycle,
+                port: c.port,
+                restarts: c.restarts,
+                last_transition_reason: c.last_transition_reason,
+                last_exit: c.last_exit,
             })
             .collect()
     }

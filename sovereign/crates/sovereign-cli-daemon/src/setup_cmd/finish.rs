@@ -22,6 +22,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".sovereign"));
 
     let cfg = SetupConfig {
+        compute: Default::default(),
         models: ModelsSection {
             primary: paths.primary,
             // `svrn setup` always prompts for an explicit fast
