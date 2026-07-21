@@ -308,9 +308,11 @@ async fn stream_turn(
     // `(None, [])` — the client still gets a well-formed Complete frame.
     let metadata = tr.message_metadata(conversation_id, &message_id).await;
     let (provenance, citations) = project_message_metadata(&metadata);
+    let epistemic_state = crate::projection::project_epistemic_state(&metadata);
     let _ = out_tx.send(ServerEvent::Complete {
         message_id,
         provenance,
         citations,
+        epistemic_state,
     });
 }

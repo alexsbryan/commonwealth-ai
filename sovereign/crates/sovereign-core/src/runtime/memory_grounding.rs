@@ -54,6 +54,13 @@ pub struct RecallGroundingVerdict {
     /// a single offer-it-instead retry; `None` = no denial, or an
     /// honest one (nothing in view matches).
     pub denied_match: Option<usize>,
+    /// True when this verdict is the FAIL-OPEN default (judge error,
+    /// unparseable output, or out-of-scope input) rather than a real
+    /// judged verdict. The availability posture is unchanged — this
+    /// only makes it VISIBLE, so the epistemic ledger can record a
+    /// recall as `FailOpen` instead of dressing it as verified
+    /// (EPISTEMIC_STATE.md D5).
+    pub fail_open: bool,
 }
 
 impl RecallGroundingVerdict {
@@ -63,6 +70,7 @@ impl RecallGroundingVerdict {
             unsupported: String::new(),
             referenced: None,
             denied_match: None,
+            fail_open: true,
         }
     }
 }
@@ -290,6 +298,7 @@ fn parse_verdict(text: &str) -> Option<RecallGroundingVerdict> {
                             .denied_match
                             .and_then(|i| usize::try_from(i).ok())
                             .filter(|&i| i >= 1),
+                        fail_open: false,
                     });
                 }
             }

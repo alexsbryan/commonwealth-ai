@@ -4,8 +4,9 @@
 **Status:** system design, pre-implementation. Grounded in three code
 surveys run 2026-07-18 (retrieval/grounding pipeline, memory provenance,
 gap-recognition inventory); every claim about current behavior cites a
-file in this repo. Subplans derive from §9 — one phase, one plan, each
-with its own gates.
+file in this repo. Subplans derive from §9 — one initiative, one plan,
+each with its own gates (re-chunked from six phases into four sized
+initiatives 2026-07-18).
 
 ← companions: `RETRIEVAL_REDESIGN.md` (the retrieval half of the same
 program — §4 unifies with its S2/S5), `specs/TIERED_RETRIEVAL_MEMORIES.md`,
@@ -316,41 +317,129 @@ The program is judged partly by what it removes:
 - **Hard gates throughout:** chaos red lines, grounding bank,
   ci-bench retrieval lanes, p50 latency — no regression.
 
-## 9. Phase plan — each phase is one subplan
+## 9. Roadmap — four sized initiatives (re-chunked 2026-07-18)
 
-Ordering rule: **dark first, render late, measure always.** Every phase
-lands env-gated, A/B'd, with a decision note; losing knobs are retired,
-not accreted.
+T-shirt sizes are focused work **including bench/gate time** (this
+repo's real cost driver): XS < half day · S ~1 day · M 2–4 days ·
+L 1–2 weeks · XL > 2 weeks. Ordering rule unchanged: **dark first,
+render late, measure always.** The original P0–P5 phases survive as
+milestones inside the initiatives; every initiative lands env-gated,
+A/B'd, with a decision note, and losing knobs retired, not accreted.
 
-- **P0 — vocabulary + dark assembly.** `EpistemicState` in
-  `sovereign-contracts`; deterministic assembler collating what already
-  exists (gate claims/verdicts, memory bands + verifier outcomes, GK
-  signals, source list); persisted to message metadata + glassbox
-  tracing. Zero UI change, zero new model calls. Gate: metadata is a
-  strict superset of today's; suite green; chaos untouched.
-- **P1 — demand + coverage.** Land S2 `demand_plan` with retained
-  output (coordinates with RETRIEVAL_REDESIGN P2 — same feature, two
-  consumers); per-facet coverage stamps + Gap rows; coverage verdict
-  via lifted `nearest_vector_distance`. A/B against `gap.rs` on the
-  gap-check's own firing set; retire `gap.rs` on parity. Gate:
-  retrieval lanes green (this phase double-counts as retrieval S2).
-- **P2 — acquisition catalog + resolver.** Catalog assets (recipe
-  descriptions + connectors), embedded once at build/boot; resolver +
+**The load-bearing re-chunk decision: P1 splits.** The ledger needs
+*a* demand set, not the LLM demand plan — `decompose_question`, the
+entity extraction already in `entity_boost`, and coverage_select's
+facet affinity give a v1 demand model with **zero new model calls**
+(**P1a**, M). The LLM `demand_plan` (**P1b**, L) is the same feature
+as RETRIEVAL_REDESIGN S2 and inherits that program's
+prompt-iteration + re-baseline cost. The split means the headline
+product behavior does not wait on model work.
+
+### I1 — "The honest turn" (P0 + P1a + P2) — L. First.
+**STATUS: IMPLEMENTED 2026-07-18** (all three milestones; gates:
+workspace suite 7,767 green at A+B, desktop svelte-check 0/0 +
+vitest 315/315, C suite at close). Deviations from the letter of
+this plan, each recorded at the code site:
+
+- Vocabulary lives in `sovereign-contracts/src/types/epistemic.rs`
+  (own submodule, not narration.rs — ARCH §3 file-level SRP).
+- `Provenance::Corpus.corpus_id` is `Option<String>` — honest
+  attribution is only possible on single-corpus pools until
+  claim-level search binding (I2); `TurnVerdict::Unverified` added
+  for evidence-used-but-ungated turns.
+- The demand set is built + coverage-stamped inside
+  `prepare_knowledge_query_plan` and RETAINED ON THE PLAN
+  (`KnowledgeQueryPlan.demands` + `query_embedding`) — no new
+  pipeline step, no golden-test churn. Demands/gaps ship on the KQ
+  family (KnowledgeQuery/ComparisonQuery, both variants); Deep/Simple
+  surfaces carry the P0-level ledger (holdings + verdict) in I1.
+- The recall verifier's fail-open became VISIBLE
+  (`RecallGroundingVerdict.fail_open`) and its outcome persists on
+  `TurnProvenance.recall_verification` (non-streaming witness path;
+  the streaming witness runs no verifier and records `None`).
+- Ledger routes are stamped on the PRIMARY gap only, strictly on
+  gap turns (one embed on already-slow turns); catalog embeddings
+  are lazily disk-cached (`~/.sovereign/catalog-embed-cache.json`,
+  embed-model-keyed) — no committed bake.
+- Card route buttons navigate to the Library shelf
+  (`onOpenLibrary`); the AddSheet tab deep-link exceeded a small
+  prop-thread and is deferred to I2 as planned.
+- Chaos banks: 22 absent items labeled (`acquisition_class`:
+  adjacent → `unknowable`, out-of-domain → `install_recipe`);
+  the tracked lane reports via `CalibrationReport.
+  {n_acquisition_labeled, acquisition_matched}` + a TRACKED line in
+  the runner summary. Red lines untouched.
+
+**Live before/after demo** (real embed slot + real installed corpora,
+no mocks): `cargo run -p sovereign-cli-llm --features
+corpus-engine/treesitter --example epistemic_demo` (daemon must be
+up). Prints the predecessor's dead-end abstention next to the
+ledger's coverage verdict + acquisition conjecture per question —
+the resource-pitch artifact. Verified 2026-07-18 on 33 installed
+corpora: chaos "Heat's first name" → ClaimUncovered (0.80 similarity
+in chaos-secret-agent) → web search; "EU AI Act foundation-model
+rules" → TopicUncovered (0.50) → Install federal-register recipe.
+
+Outcome: every KQ/Deep/Simple turn carries a ledger; gap/abstain
+turns show what's missing plus 1–2 catalog-grounded acquisition
+routes on the *existing* InformationRequestCard; the third chaos lane
+reports (tracked). Zero new model calls, near-zero retrieval-pipeline
+risk. Milestones:
+
+- **P0 (M) — vocabulary + dark assembly.** `EpistemicState` in
+  `sovereign-contracts`; deterministic assembler collating what
+  already exists (gate claims/verdicts, memory bands + verifier
+  outcomes, GK signals, source list); persisted to message metadata +
+  glassbox tracing. Zero UI change. Gate: metadata strict superset;
+  suite green; chaos untouched.
+- **P1a (M) — deterministic demands + coverage.** Demand set from
+  existing signals; per-facet coverage stamps + Gap rows + derived
+  verdict; coverage verdict via lifted `nearest_vector_distance`
+  (gap/abstain turns only; latency A/B). Gate: retrieval lanes green;
+  p50 unchanged on non-gap turns.
+- **P2 (M) — acquisition catalog + resolver.** Catalog assets (recipe
+  descriptions + connectors) embedded once at build/boot; resolver +
   route DTOs; routes attached to gaps; existing InformationRequest
   card renders routes (old visual shell, new data). Gate: third chaos
-  lane exists and reports (tracked).
-- **P3 — render the ledger.** The answer footer + abstention rendering
-  + memory distinction; deletions §6.2–6.3; scorer migration behind
-  the parity gate. This is the only phase that changes what users see
-  wholesale. Gate: I3/I6 pinned; desktop `npm run check` + vitest +
+  lane exists and reports (tracked); labeled bank seeded.
+
+### I2 — "Rendering honesty" (P3 + P5 + P4b) — L–XL. Second.
+
+Outcome: the wholesale user-visible change. Milestones:
+
+- **P3 (L) — render the ledger.** Answer footer + abstention
+  rendering + memory distinction (bands, "remembered, not
+  verified"); deletions §6.2–6.3; scorer migration behind the chaos
+  parity gate. Gate: I3/I6 pinned; desktop `npm run check` + vitest +
   Playwright chaos specs.
-- **P4 — the unasked questions.** Persist Phase-5 open questions; feed
-  Open Question atoms + skeleton open-questions into the gap view and
-  notebook Explore. Gate: enrichment suite; digest byte-parity where
-  unchanged.
-- **P5 — surface completion.** Extend ledger production beyond
-  KQ/Deep/Simple to attached-doc and complex-task (both already emit
-  gate metadata; assembly generalizes), then flip I1 non-optional.
+- **P5 (M) — surface completion.** Extend ledger production to
+  attached-doc and complex-task (both already emit gate metadata;
+  assembly generalizes); flip invariant I1 non-optional.
+- **P4b (S–M) — the unasked-questions surface.** Open Question atoms
+  + persisted open-questions feed the gap view and notebook Explore,
+  riding the components P3 builds. Gate: enrichment suite; digest
+  byte-parity where unchanged.
+
+### I3 — "Unasked questions persist" (P4a) — S. Schedulable anywhere.
+
+Bind + persist the `detect_open_questions` result
+(`field_engine.rs:298`) to the skeleton sidecar. Independent of
+everything; a good warm-up inside I1.
+
+### I4 — "Demand intelligence" (P1b) — L. Last, on the retrieval cadence.
+
+The LLM `demand_plan`, executed **under RETRIEVAL_REDESIGN** (it is
+that doc's P2/S2; the bench harness and A/B discipline live there);
+the ledger consumes its output through the seam P1a establishes.
+`gap.rs` retires here, after the parity A/B on its own firing set.
+Gate: retrieval lanes + gap-check parity + re-baselines.
+
+**Priority order: I1 → I2 (I3 riding wherever) → I4.** I1 is highest
+value-per-risk — the vision's gap-plus-conjecture behavior,
+dark-to-visible in one initiative. I2 converts internal honesty into
+the product's felt character. I4 deepens gap *quality*, but the
+abstention+conjecture flow works day one without it. Arc total: ~5–7
+focused weeks.
 
 ## 10. Alignment
 
@@ -407,6 +496,8 @@ and reversible.
 - **Bench-bank labeling effort** for the third chaos lane (acquisition
   classes on absent items) — one curation pass, mirrors the witness
   fairness contract.
-- **Sequencing with RETRIEVAL_REDESIGN:** P1 and retrieval-S2 are the
-  same feature. Whichever lands first owns `demand_plan`; the other
-  consumes. The two docs cross-reference to prevent drift.
+- **Sequencing with RETRIEVAL_REDESIGN:** P1b and retrieval-S2 are the
+  same feature. Decision (2026-07-18 re-chunk): it executes **under
+  the retrieval program** as initiative I4 here; the ledger consumes
+  its output through the P1a seam. The two docs cross-reference to
+  prevent drift.

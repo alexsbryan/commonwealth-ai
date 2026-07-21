@@ -1287,7 +1287,7 @@ traversal). The desktop app registers as the system handler.
 | Architectural-correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md), [`docs/GIT_ARCHAEOLOGY.md`](./docs/GIT_ARCHAEOLOGY.md), [`docs/ARCHAEOLOGY_EVAL.md`](./docs/ARCHAEOLOGY_EVAL.md), [`docs/PLAN_ALIGNMENT.md`](./docs/PLAN_ALIGNMENT.md) |
 | Knowledge bases + tiered retrieval | [`docs/KNOWLEDGE_BASES.md`](./docs/KNOWLEDGE_BASES.md), [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md) |
 | Retrieval redesign — component model, measured integrity findings, phased swings | [`docs/RETRIEVAL_REDESIGN.md`](./docs/RETRIEVAL_REDESIGN.md) |
-| Epistemic state — the answer as a typed object (per-claim provenance, gap conjecture, acquisition routes; design, pre-implementation) | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md) |
+| Epistemic state — the answer as a typed object (per-claim provenance, gap conjecture, acquisition routes; SHIPPED — ledger on every answer surface, typed chaos verdict primary, gap.rs's LLM judge deleted 2026-07-20 in favor of the gate's abstention signal, status in `docs/EPISTEMIC_STATE_STATUS.md`) | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md) |
 | Browser actuation (MCP → Playwright) | [`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md) |
 | TDD machine | [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md), [`docs/TDD_MACHINE_DESIGN.md`](./docs/TDD_MACHINE_DESIGN.md) |

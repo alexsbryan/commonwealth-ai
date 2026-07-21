@@ -348,20 +348,21 @@ pub async fn ask_document(
 
     let sources_content: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
 
-    // Epistemic-humility hook: the runtime audits the document-op answer
-    // against its citations and may surface an InformationRequestCard so
-    // the user can paste additional context. Evidence is the concatenated
-    // citation content already shown to the model.
+    // Epistemic-humility hook. Detection is now the turn's gate
+    // abstention (I4-C retirement of gap.rs's LLM judge) — and the
+    // document-op path runs NO grounding gate, so it carries no
+    // abstention signal and never fires the card. That is the honest
+    // shape: the user attached THE document; the short-answer cases
+    // (off-topic, zero-hit RAG) already fell through to the gated
+    // runtime pipeline above, which does carry the signal.
     let final_content = {
         let runtime_guard = state.runtime.read().await;
         if let Some(runtime) = runtime_guard.as_ref() {
-            // Make sure the approval channel stamps this conversation id
-            // onto any info-request so the frontend can route the response
-            // back to the right pending oneshot.
+            // Approval-channel task id kept stamped for parity with the
+            // runtime path (a no-op when no card fires).
             state.approval.set_task_id(&conversation_id).await;
-            let evidence = sources_content.join("\n\n");
             runtime
-                .maybe_collaborate(&conversation_id, &question, &output.text, &evidence)
+                .maybe_collaborate(&conversation_id, &question, &output.text, false)
                 .await
         } else {
             output.text.clone()

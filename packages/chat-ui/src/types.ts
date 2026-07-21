@@ -65,3 +65,91 @@ export type PositionStyle =
   | "HardIncompatibilism"
   | "Libertarianism"
   | { Custom: { bg: string; text: string; border: string } };
+
+// ─── Epistemic ledger (EPISTEMIC_STATE.md) ────────────────────────
+//
+// TS mirror of the `sovereign-contracts` `epistemic` wire types
+// (`sovereign/crates/sovereign-contracts/src/types/epistemic.rs`),
+// serialized onto `MessageEntry.metadata.epistemic_state`. serde
+// `rename_all = "snake_case"` with NO container tag → externally-tagged
+// enums: unit variants are bare strings, data variants are single-key
+// objects. Additive only; the ledger carries a `version` for opt-in
+// reader changes. The desktop `EpistemicFooter` renders these.
+
+/** The kind of demand facet. Deterministic v1 facets (I4 adds
+ *  `stance`/`section`; kept forward-open with a string fallback). */
+export type DemandFacet = "query" | "sub_question" | "entity" | (string & {});
+
+/** How far the evidence pool got toward covering a demand. */
+export type CoverageLevel = "supported" | "retrieved" | "absent";
+
+/** One facet of what the question needs — the coverage contract. */
+export interface Demand {
+  facet: DemandFacet;
+  text: string;
+  covered: CoverageLevel;
+}
+
+/** Epistemic band of a recalled memory (derived from stored confidence). */
+export type MemoryBand = "told_directly" | "inferred" | "tentative";
+
+/** What verification a holding survived. */
+export type Verification = "verified" | "failed_once" | "fail_open" | "unverified";
+
+/** The basis of a holding — a closed set. Externally-tagged: data
+ *  variants are single-key objects, `general_knowledge` is a bare
+ *  string. Rendering paths MUST match on this so a memory recall can
+ *  never render as document evidence (invariant I3). */
+export type Provenance =
+  | { corpus: { corpus_id: string | null; chunk_id: number | null } }
+  | { memory: { band: MemoryBand; entry_id: string } }
+  | "general_knowledge"
+  | { tool_derived: { tool: string } };
+
+/** One claim the answer asserts, with its basis and verification. */
+export interface Holding {
+  claim: string;
+  provenance: Provenance;
+  verification: Verification;
+}
+
+/** The cross-corpus coverage verdict behind a gap. */
+export type GapCoverage = "topic_uncovered" | "claim_uncovered";
+
+/** One acquisition conjecture — a concrete place to fetch the missing
+ *  knowledge. Externally-tagged serde enum (unit variants are strings).
+ *  Structurally identical to the Rust `AcquisitionRoute`. */
+export type AcquisitionRoute =
+  | "connect_folder"
+  | "connect_vault"
+  | "import_conversations"
+  | { install_recipe: { recipe_id: string; name: string } }
+  | { web_search: { queries: string[] } }
+  | { provide_document: { kind: string } };
+
+/** A demand the evidence never covered, with acquisition conjecture. */
+export interface Gap {
+  demand_idx: number;
+  statement: string;
+  coverage: GapCoverage;
+  routes: AcquisitionRoute[];
+}
+
+/** The turn-level verdict, derived purely from holdings + gaps. */
+export type TurnVerdict =
+  | "grounded"
+  | "mixed"
+  | "memory_recall"
+  | "general_knowledge"
+  | "unverified"
+  | "cannot_know_from_here";
+
+/** The typed epistemic account of one answer turn. Lives on
+ *  `metadata.epistemic_state`. */
+export interface EpistemicState {
+  version: number;
+  demands: Demand[];
+  holdings: Holding[];
+  gaps: Gap[];
+  verdict: TurnVerdict;
+}

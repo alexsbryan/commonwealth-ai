@@ -1305,6 +1305,27 @@ async fn runtime_complex_task_end_to_end() {
     let task = response.task.unwrap();
     assert!(matches!(task.status, TaskStatus::Completed));
     assert!(!task.completed_steps.is_empty());
+
+    // I2-A invariant (I1): the complex-task surface persists the epistemic
+    // ledger on the assistant message when the flag is on (default). Before
+    // I2-A this surface discarded its gate claims and wrote no ledger.
+    let meta = response
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("complex-task must persist epistemic_state");
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
+    );
+    assert_eq!(
+        ledger.get("version").and_then(|v| v.as_u64()),
+        Some(1),
+        "ledger schema version stamped"
+    );
 }
 
 // ─── Executor Tool Step Tests ──────────────────────────────────
@@ -1578,6 +1599,7 @@ fn await_user_info_plan() -> (Plan, Task) {
         step_id: 0,
         kind: sovereign_core::types::InformationRequestKind::default(),
         task_title: String::new(),
+        routes: Vec::new(),
     };
     let plan = Plan {
         id: "info-test".to_string(),
@@ -1669,7 +1691,7 @@ async fn await_user_info_stamps_step_block_kind_and_task_title() {
     // surfaces to the UI as a `StepBlock` card with `task_title`
     // populated from the task goal. The UI uses this to render the
     // "task paused" chrome distinct from the post-answer refinement
-    // card produced by `gap::identify_gap`.
+    // card produced by `run_collaboration` on abstained turns.
     let inference = Arc::new(MockInference::new("unused"));
     let store = Arc::new(MockStore::new());
     let (plan, task) = await_user_info_plan();

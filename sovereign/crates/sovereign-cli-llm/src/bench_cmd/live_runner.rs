@@ -526,6 +526,28 @@ pub fn extraction_scorer_enabled() -> bool {
         .unwrap_or(true)
 }
 
+/// Derive the **answer-vs-abstain** decision from the turn's TYPED
+/// epistemic verdict (`epistemic_state.verdict == cannot_know_from_here`)
+/// rather than the gate-action string-prefix (I2-C). **Default ON** as of
+/// the 2026-07-19 parity gate (doc §8): a `chaos-monkey rescore` on 43
+/// frozen chaos transcripts showed 43/43 agreement between the typed and
+/// legacy answer-vs-abstain derivations — structural, since
+/// `cannot_know_from_here` is assembled from the same gate action the
+/// legacy prefix reads. `SOVEREIGN_CHAOS_TYPED_VERDICT=0/false` forces the
+/// legacy gate-action derivation. Ledger-less transcripts always fall back
+/// to legacy regardless.
+///
+/// NOTE: this governs ONLY answer-vs-abstain. The SAME parity run found the
+/// typed `general_knowledge` verdict is NOT a faithful proxy for the
+/// prose-level `caveat_present` judge (the verdict classifies the ledger's
+/// basis; the judge reads the answer's provenance-flag) — so caveat stays
+/// on `classify_caveat`, unconditionally.
+pub fn typed_verdict_enabled() -> bool {
+    !std::env::var("SOVEREIGN_CHAOS_TYPED_VERDICT")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+}
+
 /// Forced-choice provenance-caveat classifier for out-of-domain answers.
 /// `Some(true)` = the reply explicitly flags the answer is general knowledge /
 /// NOT drawn from the provided passages.

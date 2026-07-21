@@ -174,6 +174,7 @@ impl Runtime {
         // scope. Claim search is sealed to the conversation's corpora.
         let gate_surface = crate::runtime::grounding::GateSurface::SimpleQuery;
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let mut gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>> = None;
         let response_text = if gate_surface.enabled() && !want_witness_path && !kc.chunks.is_empty()
         {
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
@@ -199,18 +200,24 @@ impl Runtime {
             )
             .await;
             grounding_gate_meta = Some(outcome.meta);
+            gate_claims = Some(outcome.claims);
             outcome.text
         } else {
             response_text
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
-        // No-ops when disabled. Evidence is the same formatted-chunks text
-        // that was injected into the synthesis prompt (or empty if no
-        // corpus material was retrieved).
-        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        // No-ops when disabled. Detection is the turn's gate abstention
+        // (I4-C); un-gated turns (gate off / witness path / no chunks)
+        // never fire the card.
+        let collab_abstained = grounding_gate_meta
+            .as_ref()
+            .and_then(|m| m.get("action"))
+            .and_then(|a| a.as_str())
+            .map(|a| a.starts_with("abstained"))
+            .unwrap_or(false);
         let final_content = self
-            .maybe_collaborate(conversation_id, message, &response_text, &evidence)
+            .maybe_collaborate(conversation_id, message, &response_text, collab_abstained)
             .await;
 
         // Completion-telemetry tail comes from the shared helper
@@ -249,6 +256,22 @@ impl Runtime {
                 None
             };
 
+        // Epistemic ledger (EPISTEMIC_STATE.md) — dark collation. The
+        // simple surface's gate runs only on non-witness turns; witness
+        // turns carry recalled memories with no verifier here, which
+        // the assembler records honestly (no memory holdings without
+        // an attributed reference).
+        let epistemic_state = crate::runtime::epistemic::epistemic_state_enabled().then(|| {
+            crate::runtime::epistemic::assemble_epistemic_state(
+                crate::runtime::epistemic::EpistemicInputs {
+                    gate_meta: grounding_gate_meta.as_ref(),
+                    gate_claims: gate_claims.as_deref(),
+                    pool_corpora: crate::runtime::epistemic::pool_corpora(&kc.chunks),
+                    ..Default::default()
+                },
+            )
+        });
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -263,6 +286,7 @@ impl Runtime {
                     "provenance": provenance,
                     "retrieved_chunks": kc.retrieved_chunks,
                     "recalled_memories": recalled_memories_metadata,
+                    "epistemic_state": epistemic_state,
                 });
                 if let Some(g) = grounding_gate_meta {
                     m["grounding_gate"] = g;

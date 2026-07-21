@@ -120,6 +120,34 @@ pub struct ChaosQuestion {
     /// the current law the answer should cite instead of the obsolete one.
     #[serde(default)]
     pub active_successor_quote: Option<String>,
+    /// EPISTEMIC_STATE.md third lane (tracked): for ABSENT questions,
+    /// the acquisition class that would genuinely satisfy the gap —
+    /// what a well-calibrated conjecture should name. `None` = item
+    /// unlabeled (lane skips it). Never set on answerable items (the
+    /// fairness contract's spirit: labels describe the gap, not hints).
+    #[serde(default)]
+    pub acquisition_class: Option<AcquisitionClass>,
+}
+
+/// The acquisition-route class that would satisfy an absent question's
+/// gap. Mirrors the shape (not the payload) of the runtime's
+/// `AcquisitionRoute` so the tracked lane can compare a resolved
+/// route's class against the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AcquisitionClass {
+    /// A catalog recipe corpus would cover it (broad public knowledge).
+    InstallRecipe,
+    /// The user's own material would cover it (folder / vault / imports).
+    ConnectSource,
+    /// Current/web information would cover it.
+    WebSearch,
+    /// Only a specific document the user holds could cover it.
+    ProvideDocument,
+    /// Nothing reasonably acquirable covers it (fictional adjacent
+    /// detail that simply does not exist) — the honest conjecture is
+    /// none at all.
+    Unknowable,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -253,6 +281,7 @@ mod tests {
             } else {
                 None
             },
+            acquisition_class: None,
         }
     }
 

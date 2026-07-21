@@ -135,6 +135,11 @@ pub use conversation::{
     LandscapeDigest, Message, Role, SearchedSourceEntry, TemporalTension, ToolDossier,
     ToolDossierEntry, ToolDossierOutcome, WorkingMemory,
 };
+mod epistemic;
+pub use epistemic::{
+    AcquisitionRoute, CoverageLevel, Demand, DemandFacet, EpistemicState, Gap, GapCoverage,
+    Holding, MemoryBand, Provenance, TurnVerdict, Verification, EPISTEMIC_STATE_VERSION,
+};
 mod narration;
 pub use narration::{
     build_next_step_offers, decide_policy, ClarificationOption, ClarificationRequest,
@@ -341,8 +346,10 @@ pub enum InformationRequestKind {
 /// nameable gap that the local corpus can't fill. Rendered in the UI as a
 /// dedicated card (not a chat bubble) with the four fields spelled out.
 ///
-/// See `sovereign-core/src/gap.rs::identify_gap` for how these are produced
-/// and `StepKind::AwaitUserInfo` for how they're surfaced.
+/// Produced by `sovereign-core`'s `run_collaboration` on abstained turns
+/// (detection is the gate's abstention signal — I4-C retired the LLM
+/// gap judge; see bench/gap_check/DECISION.md) and by
+/// `StepKind::AwaitUserInfo` for planned task steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InformationRequest {
     /// What the agent currently believes, with appropriate uncertainty.
@@ -373,6 +380,14 @@ pub struct InformationRequest {
     /// card header. Empty for `Refinement` cards.
     #[serde(default)]
     pub task_title: String,
+    /// Catalog-grounded acquisition conjectures for this gap —
+    /// concrete places the user could fetch what would fill it
+    /// (install a recipe, connect a source, search the web). Resolved
+    /// by the runtime's acquisition resolver (EPISTEMIC_STATE.md
+    /// §4.3); structurally never model-invented. Empty when the
+    /// resolver is disabled or couldn't rank a route.
+    #[serde(default)]
+    pub routes: Vec<AcquisitionRoute>,
 }
 
 /// Emitted after an already-streamed assistant message has been

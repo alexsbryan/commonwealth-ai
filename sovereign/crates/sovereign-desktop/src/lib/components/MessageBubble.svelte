@@ -22,6 +22,9 @@
     /** Fired when the user clicks "Continue from here" on the cutoff
      *  chip. Forwarded to AssistantMessage; see its Props. */
     onContinue?: () => void;
+    /** Navigate to the Library — forwarded to AssistantMessage for the
+     *  EpistemicFooter abstention-panel route chips (I2-B). */
+    onOpenLibrary?: () => void;
   }
 
   let {
@@ -35,6 +38,7 @@
     searchAugmentation,
     onNextStep,
     onContinue,
+    onOpenLibrary,
   }: Props = $props();
 </script>
 
@@ -54,6 +58,7 @@
     {searchAugmentation}
     {onNextStep}
     {onContinue}
+    {onOpenLibrary}
   />
 {/if}
 
