@@ -275,6 +275,7 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
 
         let completion = self.inference.complete(&request).await?;

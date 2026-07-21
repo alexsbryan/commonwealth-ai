@@ -64,7 +64,8 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      synth.budget=info,\
      placement=info,\
      compute_child=info,\
-     sovereign_compute=info";
+     sovereign_compute=info,\
+     fim=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -216,6 +217,10 @@ mod tests {
             // Compute-child lifecycle transitions (P1). The glassbox source
             // for "distributed across N children / warming / recovering".
             "compute_child",
+            // FIM inline completion (INLINE_COMPLETION.md): slot install,
+            // alias-mode decisions, per-request stop outcomes — the
+            // "why did my ghost text do that" surface.
+            "fim",
             "synth.lifecycle",
             "synth.truncation",
             "synth.continue",
@@ -275,11 +280,18 @@ mod tests {
             tracing::info!(target: "grounding_gate", "probe");
             tracing::info!(target: "gate.call", "probe");
             tracing::info!(target: "synth.truncation", "probe");
+            tracing::info!(target: "fim", "probe");
             tracing::info!(target: "sovereign_core", "probe"); // module control: enabled
             tracing::info!(target: "definitely_unlisted_zzz", "probe"); // control: dropped
         });
         let seen = seen.lock().unwrap().clone();
-        for want in ["grounding_gate", "gate.call", "synth.truncation", "sovereign_core"] {
+        for want in [
+            "grounding_gate",
+            "gate.call",
+            "synth.truncation",
+            "fim",
+            "sovereign_core",
+        ] {
             assert!(
                 seen.iter().any(|t| t == want),
                 "filter dropped an event at target `{want}` — the allowlist does NOT \

@@ -349,6 +349,7 @@ pub(crate) async fn run_collaboration(
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        prompt_shape: None,
     };
 
     match inference.complete(&refine_req).await {

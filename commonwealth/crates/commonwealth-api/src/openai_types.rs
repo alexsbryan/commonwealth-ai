@@ -431,6 +431,85 @@ pub enum StreamFrame {
         usage: Option<StreamUsage>,
     },
     Error(String),
+    /// Out-of-band glassbox payload (INLINE_COMPLETION.md §6). The
+    /// FIM adapter emits one immediately before the terminal frame;
+    /// the `/v1/completions` route attaches it to the response when
+    /// the request opted in with `debug: true` and drops it
+    /// otherwise. Never produced on the chat path — `serve_local_stream`
+    /// discards it defensively.
+    Debug(serde_json::Value),
+}
+
+/// `/v1/completions` request — the FIM inline-completion surface
+/// (`sovereign/docs/INLINE_COMPLETION.md` §3.4, decision D6). Dual
+/// shape: the OpenAI-legacy fields (`model`/`prompt`/`suffix`/
+/// `max_tokens`/`stop`/`stream`) keep generic OpenAI-compat clients
+/// and curl working; the rich fields (`prefix`/`path`/`language`/
+/// `debug`) are what the first-party VSCode extension sends.
+/// `prefix` wins over `prompt` when both are present.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CompletionsRequestWire {
+    /// Legacy: model id. Echoed in the response envelope, but the
+    /// configured FIM slot always serves regardless.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Legacy: the prompt (treated as the FIM prefix).
+    #[serde(default)]
+    pub prompt: Option<String>,
+    /// Legacy + rich: code after the cursor.
+    #[serde(default)]
+    pub suffix: Option<String>,
+    /// Rich: code before the cursor. Wins over `prompt`.
+    #[serde(default)]
+    pub prefix: Option<String>,
+    /// Rich: file path (language fallback + debug echo).
+    #[serde(default)]
+    pub path: Option<String>,
+    /// Rich: explicit language id.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Generation cap override.
+    #[serde(default)]
+    pub max_tokens: Option<usize>,
+    /// Temperature override.
+    #[serde(default)]
+    pub temperature: Option<f32>,
+    /// Extra stop strings; OpenAI allows a bare string or an array.
+    #[serde(default)]
+    pub stop: Option<StopParam>,
+    /// SSE streaming when true.
+    #[serde(default)]
+    pub stream: Option<bool>,
+    /// Opt-in glassbox payload on the terminal chunk / response.
+    #[serde(default)]
+    pub debug: Option<bool>,
+}
+
+impl CompletionsRequestWire {
+    /// Effective prefix: rich `prefix` wins over legacy `prompt`.
+    pub fn effective_prefix(&self) -> Option<&str> {
+        self.prefix.as_deref().or(self.prompt.as_deref())
+    }
+}
+
+/// OpenAI's `stop` accepts a bare string or an array of strings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StopParam {
+    /// One stop string.
+    Single(String),
+    /// Up to four per the OpenAI spec (not enforced here).
+    Multi(Vec<String>),
+}
+
+impl StopParam {
+    /// Flatten to a vec for the tracker's union scan.
+    pub fn into_vec(self) -> Vec<String> {
+        match self {
+            StopParam::Single(s) => vec![s],
+            StopParam::Multi(v) => v,
+        }
+    }
 }
 
 /// OpenAI-compatible `/v1/embeddings` request. `input` may be a single

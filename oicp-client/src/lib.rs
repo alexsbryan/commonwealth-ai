@@ -1028,6 +1028,7 @@ mod tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
 
         let body = provider.build_request(&request);
@@ -1071,6 +1072,7 @@ mod tests {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
 
         let body = provider.build_request(&request);

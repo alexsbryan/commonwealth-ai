@@ -257,6 +257,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 extra: BTreeMap::new(),
                 primary_pool: None,
+                fim: None,
             },
             daemon: DaemonSection {
                 client_port: 9741,

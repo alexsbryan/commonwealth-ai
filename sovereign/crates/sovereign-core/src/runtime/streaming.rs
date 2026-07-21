@@ -2212,6 +2212,7 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist,
             lark_grammar: None,
+            prompt_shape: None,
         };
         // Phase-1 prompt-budget guard: assembled input + response
         // reservation must fit the context window, or the engine's

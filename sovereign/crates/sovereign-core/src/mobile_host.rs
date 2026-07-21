@@ -385,6 +385,7 @@ mod tests {
                 extra: Default::default(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
+                fim: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection {

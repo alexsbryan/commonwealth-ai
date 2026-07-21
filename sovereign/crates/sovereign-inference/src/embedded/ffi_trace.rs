@@ -83,6 +83,13 @@ pub enum ClearKvPhase {
     /// 0 (pin, save, then tail) and `lcp` is set to the pin length in
     /// the same scope.
     PrefixStateLearn,
+    /// Request-start reconciliation on the FIM partial-keep streaming
+    /// path (`generate_stream_sync_fim`, INLINE_COMPLETION.md F2). Same
+    /// legality argument as `PrefixCacheSetup`: `cached_tokens` is
+    /// cleared in the same scope, and the LCP/partial-clear decision
+    /// that follows owns correctness. Distinct variant so triage can
+    /// tell keystroke-path clears from chat-path clears.
+    FimPrefixCacheSetup,
 }
 
 /// One load-bearing FFI call, as recorded by the slot code.
@@ -346,6 +353,7 @@ mod tests {
             "Probe",
             "PrefixStateRestore",
             "PrefixStateLearn",
+            "FimPrefixCacheSetup",
         ];
         let mut undeclared = Vec::new();
         let mut unknown_phase = Vec::new();

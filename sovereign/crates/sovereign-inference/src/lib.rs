@@ -4,6 +4,7 @@ pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
 pub mod evidence_id_constraint;
+pub mod fim;
 pub mod gguf_meta;
 pub mod gguf_validator;
 pub mod hardware;

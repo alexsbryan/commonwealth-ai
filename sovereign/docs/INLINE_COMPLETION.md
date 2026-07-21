@@ -1,246 +1,243 @@
 # Inline Code Completion (FIM) — Design Spec
 
-Status: DRAFT / proposed. Author: (design session 2026-07-20).
-Scope: a real-time, in-IDE inline code-completion ("ghost text") experience —
-complete a function signature, a loop body, the next line — served by the
-resident Sovereign daemon over a local HTTP surface, consumed by thin VSCode
-and JetBrains plugins.
+Status: **v1 IMPLEMENTED** (2026-07-21). Ghost-text inline completion
+served by the resident Sovereign daemon over `POST /v1/completions`,
+consumed by the first-party VSCode extension
+(`packages/vscode-sovereign/`). JetBrains port deliberately deferred
+(the daemon contract is IDE-agnostic; ~2-3 days of Kotlin/Gradle when
+wanted). SCIP context injection deferred to a measured v2 (§5).
 
 Non-goal (explicitly out of scope): the agentic IDE seat (chat-with-repo,
-file-editing agent). That seat is gated on the lights-out tool-calling bench;
-this seat is not, and must not be coupled to it. See "Relationship to the
-bench" below.
+file-editing agent). That seat is gated on the lights-out tool-calling
+bench; this seat is not, and must not be coupled to it. See §8.
 
 ---
 
-## 1. Thesis: this is mostly configuration + prompt-shaping over existing machinery
+## 1. Thesis (validated): mostly configuration + prompt-shaping over existing machinery
 
-The single most important finding of the seam survey is how little *new engine
-code* this needs. Fill-in-the-middle (FIM) for the models we already ship
-(Qwen-Coder family) is expressed as a **plain-text prompt** using the model's
-own special-token markers (`<|fim_prefix|>`, `<|fim_suffix|>`,
-`<|fim_middle|>`, `<|endoftext|>`), tokenized with special-token parsing on.
-It does **not** require the `llama_token_fim_*` FFI or the infill sampler —
-those are an alternative, model-agnostic path we can adopt later, not a
-prerequisite.
+Fill-in-the-middle for the coder models we ship is a **plain-text
+prompt** using the model's own special-token markers, tokenized with
+special-token parsing on and no chat-template wrapping. The build
+decomposed onto existing surfaces exactly as surveyed:
 
-So the FIM request decomposes almost entirely onto surfaces that already exist:
-
-| FIM need | Existing surface to reuse | Location |
+| FIM need | Surface | Location |
 |---|---|---|
-| Request type (prompt, max_tokens, temp, sampling profile, slot routing) | `CompletionRequest` | `sovereign-contracts/src/types/completion.rs:15` |
-| Code sampling profile (T=0.6, top_p=0.95) | `SamplingMode::Code` | `completion.rs:216` |
-| Route a request to a named model | `CompletionRequest.model_id` + slot router | `completion.rs:60`, engine `select_slot_for_request` `engine.rs:1696` |
-| Token streaming with a typed terminal reason | `complete_stream_with_finish` → `StreamFrame::{Token, Finish{reason}}` | `contracts/src/traits.rs:367`, `completion.rs:502` |
-| Cancellation on client disconnect | `StreamFrame::Cancelled` (receiver-drop) already modeled | `traits.rs` / `completion.rs:507` |
-| Always-resident extra model (no hot-swap) | `SlotTarget::Extra(String)` eagerly-loaded, `extras_by_model_id` | `engine.rs:471` |
-| OpenAI-shaped HTTP surface + request adapter | `worker_inference_proxy` + `inference_adapter::build_completion_request` | `sovereign-mesh/src/worker_inference_proxy.rs:160`, `inference_adapter.rs:309` |
-| Tokenizer / sampler / decode wrapper | first-party llama wrapper over `llama-cpp-4` 0.4.2 | `sovereign-inference/src/llama.rs`, `crate::llama::cpp::{llama_batch, sampling}` |
-| Model-slot config plumbing | `ResolvedModelSlots` (already has a `code` field) | `sovereign-desktop/.../state/config.rs:655` |
+| Request type + raw lever | `CompletionRequest.prompt_shape: Option<PromptShape>` | `sovereign-contracts/src/types/completion.rs` |
+| Code sampling profile | `SamplingMode::Code` | same |
+| Named-slot routing | `model_id` → `select_slot_for_request` named-slot match | `embedded/engine.rs` |
+| Typed streaming + cancel | `complete_stream_with_finish` → `StreamFrame` | `contracts/src/traits.rs` |
+| Always-resident named slot | extras machinery, **pinned** under reserved name `"fim"` | `embedded/engine.rs` |
+| HTTP surface | `client_router` on :9741 (solo AND mesh) | `commonwealth-api/src/server.rs` |
+| Tokenizer/sampler/decode | first-party llama wrapper | `sovereign-inference/src/llama.rs` |
 
-The genuinely-new surface is small and named precisely in §3.
+The genuinely-new surface: `sovereign-inference/src/fim.rs` (marker
+table + prompt builder + vocab probe + stop tracker),
+`sovereign-mesh/src/fim_adapter.rs` (seam impl),
+`commonwealth-api/src/routes_completions.rs` (HTTP handler), and the
+VSCode extension.
 
----
+## 2. The two gaps (as solved)
 
-## 2. The two honest gaps (design decisions, not unknowns)
+### 2.1 Raw-prompt path — `PromptShape::Raw`
 
-### 2.1 There is no raw-prompt path — the engine always applies a chat template
+Every generation funnels through `format_prompt`
+(`embedded/prompt_helpers.rs`), which now early-returns the prompt
+verbatim for `PromptShape::Raw`. The serving tokenize sites use
+`AddBos::Never` for Raw (`add_bos_for`) — Mellum/Qwen-Coder declare
+add_bos=false, and a prepended BOS would be an untrained token at
+position 0.
 
-Every generation today routes through `apply_chat_template` /
-`apply_chat_template_minijinja` (`prompt_helpers.rs:417`, `:456`), which wraps
-`CompletionRequest.prompt` in a user turn. FIM must feed the raw
-`<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>` string to the tokenizer with
-**special-token parsing on and no chat-template wrapping**. This is the
-primary new engine entry point (§3.1).
+### 2.2 Residency — dedicated pinned slot OR fast-slot alias (D8)
 
-Deliberately *not* solved by abusing `assistant_prefix`/`cmd_prefix`
-(`completion.rs:123`,`:138`): those append after the template's generation
-marker; they don't suppress the user-turn wrapper. A clean `raw: bool`
-(or a `PromptShape::Raw` enum on the request) is the honest lever.
+The hot-swapping code slot was disqualifying for keystroke latency.
+Two supported arrangements:
 
-### 2.2 The existing code slot hot-swaps with primary — wrong for keystroke latency
+- **Alias mode (lean)**: when `[models.fim].path` equals the fast
+  slot's resolved path (`ModelsSection::fast_path()`), no model is
+  loaded — FIM probes the resident fast slot's tokenizer and routes
+  via the named-slot match. One model in RAM total. Chat traffic
+  shares the slot (documented caveat).
+- **Dedicated mode**: any other path loads a **pinned** extras slot
+  under the reserved name `"fim"` — skipped by both the idle monitor
+  and LRU eviction (`extras_slot_is_evictable`), though its bytes
+  still count toward `max_extras_memory_gb`. Explicit
+  `unload_extra("fim")` stays allowed (operator action).
 
-`engine.rs:1573`: "ONE lazy hot-swap slot shared between the Main responder and
-the Code specialist… at most one of the two roles is resident at any instant."
-If the user is chatting (primary resident) and then types (FIM wants the code
-model), the engine unloads primary and loads the code model — seconds. That is
-disqualifying for a sub-300ms ghost-text budget.
+### Marker detection is a vocab probe, NOT family-keyed
 
-**Decision:** serve FIM from a **dedicated, always-resident** slot, *not* the
-hot-swapping `code_path` slot. The lowest-new-code way to get an
-always-resident model addressed by name is the existing
-`SlotTarget::Extra(String)` mechanism (`engine.rs:471`, "operator-declared
-additional eagerly-loaded chat slot", routed via `extras_by_model_id` from
-`request.model_id`). The FIM model is declared as an eager extra; the FIM route
-sets `model_id` to it. No new slot enum arm required.
+`ModelFamily` is `Unknown` on all production slots, so family tables
+can't decide the marker convention. `detect_fim_style` instead
+requires every marker to tokenize to EXACTLY ONE token at slot
+install; no match → slot refused with an actionable boot-log message
+and `/v1/completions` 503s with the fix. The table
+(`sovereign-inference/src/fim.rs`) currently carries Qwen-Coder,
+Mellum (JetBrains — `<fim_prefix>` spelling, disambiguated from
+StarCoder2 by the `<|im_start|>` vocab token), and StarCoder2.
+**Validated artifact: Mellum2-12B-A2.5B-Instruct-Q6_K** (recommended;
+Thinking variant also validated but slower per token).
 
-Open sub-decision to settle during Phase 0: whether a 1–3B FIM model as an
-always-resident extra is an acceptable steady-state RAM cost on the low-mem
-profile, or whether it should be gated behind an opt-in config flag (default
-off on `low_mem`/`cpu_only`).
+## 3. As-built surface
 
----
+### 3.1 Engine raw entry
 
-## 3. New surface (the whole build)
+`PromptShape::{Templated, Raw}` on `CompletionRequest` (additive,
+serde-defaulted — every legacy caller unchanged). Raw → verbatim
+tokenization, special-token parsing on, no template, no BOS.
 
-### 3.1 Engine: a raw-completion entry (`sovereign-inference`)
+### 3.2 FIM prompt builder
 
-Add a raw-prompt generation path that:
-- tokenizes the prompt string directly with special-token parsing on,
-- skips the chat-template render,
-- accepts a stop-token / stop-string set,
-- returns the same `StreamFrame` stream every other caller consumes.
+`fim::build_fim_prompt(style, prefix, suffix)` — PSM ordering
+`{prefix-marker}{prefix}{suffix-marker}{suffix}{middle-marker}`:
+Qwen's documented shape AND prefix-cache friendly (the prefix section
+only appends as the user types — see §4).
 
-Reuse the existing decode/sampler/batch loop (`crate::llama::cpp::{llama_batch::LlamaBatch, sampling::LlamaSampler}`, `prompt_helpers.rs`) and `SamplingMode::Code` for sampler construction. This is the only change inside the hot decode path; keep it a sibling entry, not a fork of the templated path.
+### 3.3 Stop conditions — `FimStopTracker` (pure, unit-tested)
 
-Expression on the request: extend `CompletionRequest` with a minimal, additive
-signal (candidate: `prompt_shape: Option<PromptShape>` where `Raw` means
-"tokenize verbatim, no template"). Additive + `Option` keeps every existing
-caller unchanged.
+Mode is decided HERE, not by the model: `decide_mode(prefix_tail)` →
+Multi only on a trailing block opener (`{`/`(`/`[`/`:`/`=>`), Single
+otherwise. The tracker applies, earliest-position-wins:
 
-### 3.2 FIM prompt builder (new, small, first-party)
+1. stop strings (family markers ∪ client `stop`) with a holdback
+   buffer — a stop string split across token boundaries never leaks;
+2. suffix-duplication trim (first ≤40 chars of the caller's suffix,
+   ≥3-char probe);
+3. Single: first newline;
+4. Multi: net-negative bracket depth (closing the construct
+   containing the cursor — depth-0 deliberately does NOT stop:
+   nested opens would fire prematurely), blank line, or 8 lines.
 
-`build_fim_prompt(prefix, suffix, family) -> String`. Owns the model-family
-markers (Qwen-Coder: `<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>`).
-Keyed off `ModelFamily` so a second FIM family (StarCoder2, DeepSeek-Coder)
-is a table addition, not a rewrite. Lives beside the family-quirks tables the
-inference crate already keeps.
+The adapter (`sovereign-mesh/src/fim_adapter.rs`) runs the tracker as
+a stream combinator, synthesizes `Finish{Stop}`, and drops the inner
+stream (receiver-drop cancels the decode). Zero changes to the shared
+decode loop.
 
-### 3.3 Stop-condition logic (new — this is where the UX craft lives)
+### 3.4 HTTP route: `POST /v1/completions`
 
-Single-line vs multi-line completion is decided here, not by the model:
-- signature / single-line context → stop at newline or when the FIM/EOT token
-  is emitted;
-- body context → allow multi-line, stop on brace/paren depth returning to the
-  opener, on a blank line, or on `max_tokens`;
-- never emit text that duplicates the caller-provided `suffix`.
-Terminal reason surfaces through the existing `StreamFrame::Finish { reason }`
-(`stop`/`length`/`cancelled`). Budget real tuning time here per language.
+Lives in **`commonwealth-api`'s `client_router`** (:9741, loopback
+tokenless) — NOT `worker_inference_proxy` (that's the mesh-pod-only
+:9742 tunnel; the original spec draft had this wrong). Dual request
+shape: OpenAI-legacy `{model, prompt, suffix, max_tokens, stop,
+stream}` for generic clients, and rich `{prefix, suffix, path,
+language, debug}` (`prefix` wins). Response is the OpenAI
+`text_completion` object; streaming is SSE chunks + terminal
+`finish_reason` chunk + `[DONE]`.
 
-### 3.4 HTTP route: `POST /v1/completions` (FIM)
+The route crosses the existing `LocalInferenceService` seam via the
+defaulted `fim_completion_stream` / `fim_status` methods — only the
+embedded llama.cpp adapter overrides them. Provider wrappers forward
+`InferenceProvider::fim_slot_info` (mesh wrapper, compute facade) so
+the arrangement survives the daemon's decoration stack.
 
-Add alongside the OpenAI surface that already exists in
-`sovereign-mesh/src/worker_inference_proxy.rs` (which already does
-`chat_completions_proxy` `:160`, `models_proxy` `:183`, `embeddings_proxy`
-`:188`) and its adapter `inference_adapter::build_completion_request`
-(`:309`, already sets `sampling_mode` `:333` and `model_id` `:327`). The new
-handler:
-- parses `{prefix, suffix, path, language, max_tokens}` (accept the OpenAI
-  legacy `/v1/completions` `prompt`+`suffix` shape so off-the-shelf IDE
-  clients like Continue.dev work unmodified),
-- calls `build_fim_prompt`, builds a raw `CompletionRequest`
-  (`prompt_shape=Raw`, `sampling_mode=Code`, `model_id=<fim extra>`,
-  small `max_tokens`),
-- streams via `complete_stream_with_finish` out as **SSE** — reuse the
-  proxy's existing byte-for-byte SSE forwarding (`worker_inference_proxy.rs:27`
-  documents the non-buffering SSE compose), not the WS conversation path.
-- carries whatever auth/middleware the `/v1` surface already applies
-  (`sovereign-server/src/auth.rs`).
+### 3.5 Config
 
-Decision to confirm in Phase 0: does this route live in `sovereign-mesh`'s
-worker surface (co-located with the other `/v1` OpenAI routes) or in
-`sovereign-server`? Co-locating with `worker_inference_proxy` is the
-lower-friction reuse; confirm the daemon actually mounts that router in the
-single-node (non-mesh) case.
+```toml
+[models.fim]
+path = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"  # required; presence = opt-in
+context_size = 4096        # optional; defaults shown
+max_tokens = 48
+temperature = 0.2
+max_prefix_chars = 8000    # server keeps TAIL of prefix
+max_suffix_chars = 2000    # server keeps HEAD of suffix
+```
 
-### 3.5 Config: declare the FIM model
+Residency shows at `GET /status` → `inference.fim` `{slot, model_id,
+fim_style, aliased_to_fast}` — the extension's status bar reads
+exactly this (works in both modes).
 
-Extend the slot config (`ResolvedModelSlots` already has `code`;
-`config_setup.rs` `get/set_setup_model_slots` `:549/:589`) with an eager FIM
-extra, or reuse the `extras` map directly. On-disk in `config.toml` per the
-"config.toml is the sole home for model paths" invariant. Residency then shows
-at `/status.inference.resident` for free (the resident-slot enumerator at
-`engine.rs:1590` already walks configured slots).
+### 3.6 IDE plugin (VSCode; JetBrains deferred)
 
-### 3.6 IDE plugins (thin, per-IDE)
+`packages/vscode-sovereign/` — zero-runtime-dep esbuild bundle:
+`InlineCompletionItemProvider` with 120ms debounce, single-flight
+abort (CancellationToken → AbortController → SSE socket close →
+daemon receiver-drop cancels mid-token), line-stable context capture
+(60/20 lines), status bar over `/status.inference.fim`, and the
+glassbox commands **Explain Last Suggestion** / **Diagnose Completion
+Setup** (sequenced PASS/FAIL probes with the copy-pasteable fix).
+Install: `code --install-extension sovereign-fim-0.1.0.vsix`; the
+README in that directory is the hand-over doc.
 
-- **VSCode**: `InlineCompletionItemProvider`. Debounce ~120ms; pass the
-  editor `CancellationToken` to an `AbortController` on the fetch so a
-  superseded keystroke drops the SSE connection (engine sees receiver-drop →
-  `StreamFrame::Cancelled`). Render ghost text.
-- **JetBrains**: `InlineCompletionProvider` (2023.3+). Identical daemon
-  contract; same debounce/cancel discipline.
+## 4. Latency (measured 2026-07-21, Mellum2-12B-A2.5B-Instruct Q6_K, Strix Halo Vulkan)
 
-The plugins own editor events and rendering only. All model/slot/context logic
-stays daemon-side so both plugins ride the same improvements.
+Mechanisms: pinned slot (no load stall), PSM append-only prefix +
+**LCP partial-keep on the FIM route** (`generate_stream_sync_fim` —
+steady-state re-prefill is the suffix window + typing delta, not the
+full window), `max_tokens` 48, near-greedy T=0.2 + `SamplingMode::Code`,
+ctx 4096, no retrieval/grounding/template/think.
 
----
+`scripts/fim-smoke.sh` (both modes, 5 samples each):
 
-## 4. Latency budget (the acceptance criterion for Phase 0)
+| mode | TTFT p50 | TTFT p95 (cold-skewed) | total p50 |
+|---|---|---|---|
+| alias | 100ms | 423ms | 251ms |
+| dedicated | 99ms | 448ms | 251ms |
 
-Sub-300ms p95 end-to-end or the ghost text feels laggy and gets turned off.
-This dictates: 1–3B FIM model, `max_tokens ~64`, greedy/low-temp `Code`
-profile, always-resident (§2.2, no hot-swap), and **KV prefix-cache
-stability** — assemble the FIM prompt so the bulk is a stable prefix and each
-keystroke only decodes the delta. No retrieval, no grounding gate, no
-epistemic footer on this path — it shares the *engine*, never the chat
-*pipeline*.
+The p95 is the first (cold-cache) request; steady-state TTFT is
+~100ms, comfortably inside the sub-300ms budget. The two latency
+regimes matter: the eval bank (`scripts/fim_eval.py`, 60 masked real
+functions with ~6k-char prefixes, every case a DIFFERENT prefix so
+the LCP never hits) measures the full-prefill floor at ttft p50 ≈
+1.25s / total p50 ≈ 1.35s — real keystroke traffic sits in the
+high-overlap regime (the smoke's ~100ms), and the gap between the
+two numbers IS the F2 LCP win.
 
----
+Quality eval (2026-07-21, same model, 60 cases): 27% exact / 33%
+normalized / 45% first-line overall; typescript-single 75%, rust-
+single 36%; multi-line block cases 0% exact (expected — valid
+reimplementations don't byte-match; first-line is the accept proxy).
+Stop-rule histogram: newline 26, max_lines 22, depth_close 7, none 4,
+blank_line 1 — the max_lines share is the F1-tuning signal for this
+model family. Bank: `gym/fim/cases.jsonl`, regenerated
+deterministically by `gym/fim/harvest.py`.
 
-## 5. Deliberately deferred to a measured v2 (do NOT build in v1)
+## 5. Deliberately deferred to a measured v2 (do NOT build without an A/B)
 
-Repo-aware context injection — enriching the FIM prefix with SCIP-graph
-signatures (`symbols()`/`callees()` of types at the cursor). This is the real
-differentiator vs a generic local Ollama, and the function-signature use case
-is exactly where it should help — but "should" is a hypothesis. It costs
-latency and can thrash the prefix cache. v1 ships file-window context only
-(N lines before, M after). v2 adds the injector and **A/B-measures** whether it
-lifts accept-rate enough to justify the latency, on the same bench discipline
-applied everywhere else in this repo. Pull graph context from the resident
-SCIP index (microseconds), never LanceDB semantic search on the keystroke path.
+- **Repo-aware context injection** (SCIP signatures at the cursor) —
+  the real differentiator vs a generic local server, but "should
+  help" is a hypothesis; measure accept-rate lift against the latency
+  cost on the same bench discipline.
+- **JetBrains plugin** — the daemon contract is final; the port is
+  mechanical.
+- **Marketplace publish** — the .vsix attaches to a GitHub release
+  for now.
+- **Accept-rate telemetry + compile-check scoring** in the eval.
 
----
+## 6. Glassbox (shipped)
 
-## 6. Glassbox (house principle)
+Every completion response (opt-in `debug: true`, always on from the
+first-party extension) carries `sovereign_debug`: `{model_id, slot,
+fim_style, mode, stop_rule, trimmed_chars, prompt_chars,
+emitted_chars, timings_ms{ttft,total}, finish_reason}`. The daemon
+also logs per-request under the `fim` tracing target (slot, prefill
+scope incl. LCP hit tokens, stop outcome) — `fim=info` is in the
+daemon's default tracing allowlist, pinned by tests.
 
-Completion is a black box in every competing product. On an opt-in debug
-channel, return what fed the suggestion: model id, slot, injected context (in
-v2), decode time, `Finish` reason. An "explain this suggestion" hover.
-Consistent with the traceable/observable mandate and something Copilot
-structurally cannot do.
+## 7. Quality eval
 
----
-
-## 7. Quality eval (separate axis from the tool-calling bench)
-
-FIM quality is its own eval, unrelated to lights-out tool-calling: hold out
-real function bodies from our repos, mask them, measure exact-match +
-does-it-compile + accept-rate. This axis moves independently, so the
-completion seat is not gated on bench progress.
-
----
+§4 — `gym/fim/cases.jsonl` + `scripts/fim_eval.py`. This axis moves
+independently of the tool-calling bench (§8).
 
 ## 8. Relationship to the bench (why this seat is decoupled)
 
-Inline FIM never calls a tool — it is pure infill. None of the tool-calling
-hardening or epistemic/abstention work gates it. That work gates the *agentic*
-IDE seat (§ non-goal), where the model drives our MCP tools (`symbols`,
-`callers`, `blast`) unattended. Keep the two seats on independent readiness
-gates: FIM ships on a code model + latency budget; the agent seat ships when
-the lights-out bench clears.
+Inline FIM never calls a tool — it is pure infill. None of the
+tool-calling hardening or epistemic/abstention work gates it. That
+work gates the *agentic* IDE seat (§ non-goal). FIM shipped on a code
+model + latency budget; the agent seat ships when the lights-out
+bench clears.
 
----
+## 9. Verification surface (what proves v1)
 
-## 9. Phased plan
-
-- **Phase 0 — vertical slice, no IDE code.** Raw-completion engine entry
-  (§3.1) + FIM prompt builder (§3.2) + FIM model as always-resident extra
-  (§2.2/§3.5) + a `curl`-able `/v1/completions` (§3.4). Exit criterion:
-  measured p50/p95 latency sub-300ms and qualitatively-useful completions on a
-  real Qwen-Coder model. This de-risks the two unknowns (raw path + residency)
-  before any plugin work.
-- **Phase 1 — stop-condition craft (§3.3)** per language, driven by the §7
-  eval.
-- **Phase 2 — VSCode plugin (§3.6)** against the proven route.
-- **Phase 3 — JetBrains plugin**, reusing the identical daemon contract.
-- **Phase 4 (measured) — SCIP context injection A/B (§5).**
-
-## 10. Reuse ledger (what we are NOT writing)
-
-Not writing: a request type, a sampling profile, a streaming/`StreamFrame`
-protocol, cancellation semantics, an SSE forwarder, an OpenAI request adapter,
-a slot router, a residency tracker, a tokenizer/sampler/decode loop, or a
-config surface. All exist and are cited above. New code is confined to: a raw
-tokenization entry, a FIM string builder, stop logic, one HTTP handler, one
-config field, and two thin plugins.
+1. Weight-free units in `cargo test --workspace`: `fim.rs` table +
+   ~20-case tracker table, serde round-trip (legacy JSON without
+   `prompt_shape` deserializes), `extras_slot_is_evictable` pin test,
+   adapter mapping tests (stub provider, split stop string),
+   commonwealth-api route tests (503 / dual-shape / SSE / `[DONE]` /
+   debug), tracing-allowlist pin tests.
+2. `scripts/fim-smoke.sh` — both serving modes on a real GGUF
+   (isolated `$HOME`, scratch ports); asserts slot routing, marker
+   non-leak, stream shape, prints TTFT/total percentiles.
+3. `#[ignore]` integration test keyed on `SOVEREIGN_FIM_TEST_GGUF`
+   (`sovereign-inference/tests/fim_raw_path.rs`) — Raw through
+   `EmbeddedLlamaCpp` directly, two sequential requests proving the
+   LCP path doesn't desync.
+4. Extension: `npm test` in `packages/vscode-sovereign` (vitest +
+   mock daemon, incl. abort-actually-closes-socket).

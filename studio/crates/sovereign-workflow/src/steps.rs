@@ -145,6 +145,7 @@ impl Step for ModelStep {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: args.grammar.clone(),
+            prompt_shape: None,
         };
         let resp = self.provider.complete(&request).await?;
         // A structured step (one that declared a `structured_output` schema or a

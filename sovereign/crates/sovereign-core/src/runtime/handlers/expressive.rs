@@ -223,6 +223,7 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -685,6 +686,7 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
 
         let _synth_start = std::time::Instant::now();

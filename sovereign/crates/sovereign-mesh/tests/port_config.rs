@@ -37,6 +37,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
             max_extras_memory_gb: None,
             extra: BTreeMap::new(),
             primary_pool: None,
+            fim: None,
         },
         daemon: DaemonSection {
             client_port,

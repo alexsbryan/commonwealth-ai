@@ -1580,7 +1580,7 @@ impl ModelSlot {
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
-            .str_to_token(&full_prompt, AddBos::Always)
+            .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
         let n_batch = ctx.n_batch() as usize;
@@ -2490,7 +2490,7 @@ impl ModelSlot {
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
         let tokens = model
-            .str_to_token(&full_prompt, AddBos::Always)
+            .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
         if tokens.is_empty() {
             return Err(Error::Inference("MTP: empty prompt".into()));
@@ -3315,7 +3315,7 @@ impl ModelSlot {
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
-            .str_to_token(&full_prompt, AddBos::Always)
+            .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
         let n_ctx = ctx.n_ctx() as usize;
@@ -3554,7 +3554,7 @@ impl ModelSlot {
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
         let tokens = model
-            .str_to_token(&full_prompt, AddBos::Always)
+            .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
         let n_ctx = ctx.n_ctx() as usize;
@@ -3572,9 +3572,187 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
+        stream_generate_loop(StreamLoopParams {
+            model,
+            model_id,
+            ctx,
+            request,
+            tx,
+            quirks,
+            cancel,
+            prompt_len: prompt_tokens,
+            max_tokens,
+            clear_kv_at_end: true,
+        })
+    }
+
+    /// LCP partial-keep sibling of [`Self::generate_stream_sync_with_finish`]
+    /// for Raw FIM prompts (INLINE_COMPLETION.md §4, plan F2).
+    ///
+    /// The legacy streaming entry unconditionally clears the KV cache at
+    /// request start — on the keystroke path that means a full 1–2k
+    /// prefill per ghost-text request. FIM prompts are PSM-ordered, so
+    /// the prefix section is append-only across keystrokes: computing
+    /// the longest common prefix against the previous request's
+    /// (prompt-only) token sequence and keeping that KV slice drops
+    /// steady-state re-prefill to the suffix window + typing delta.
+    ///
+    /// Mechanism identical to `generate_sync`'s prefix cache (same
+    /// `compute_lcp` reserve-last-token rule, same `prefix_cache_gate`
+    /// capability veto, same defensive clear-on-error bookkeeping) —
+    /// minus the `prefix_state` pin machinery, which exists for chat's
+    /// stable system prompts and buys nothing here.
+    ///
+    /// End-of-generation does NOT clear the KV cache: positions
+    /// `[0, prompt_len)` stay resident for the next request's partial
+    /// clear (`cached_tokens` holds prompt tokens only, so generated
+    /// tokens beyond the prompt are dropped by the next
+    /// `clear_kv_cache_seq(lcp..)`).
+    pub(crate) fn generate_stream_sync_fim(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        tx: &tokio::sync::mpsc::Sender<StreamFrame>,
+        quirks: &ModelQuirks,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<()> {
+        let gate = prefix_cache_gate(
+            model.is_recurrent(),
+            model.is_hybrid(),
+            &slot_ctx.arch,
+            quirks.has_recurrent_layers,
+            slot_ctx.is_speculative(),
+            |k| std::env::var(k).ok(),
+        );
+        let prefix_cache_safe = gate.safe;
+        // Split-borrow per the generate_sync idiom (direct field access,
+        // not through `ctx_mut()`, so cached_tokens stays reachable).
+        let SlotContext {
+            mode,
+            cached_tokens,
+            ..
+        } = slot_ctx;
+        let ctx = match mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        };
+
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let tokens = model
+            .str_to_token(&full_prompt, add_bos_for(request))
+            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+
+        let n_batch = ctx.n_batch() as usize;
+        let n_ctx = ctx.n_ctx() as usize;
+        let admit_ctx = n_ctx.min(n_batch);
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), admit_ctx)?;
+        let prompt_tokens = tokens.len();
+
+        let cached_len_at_entry = cached_tokens.len();
+        let PrefixLcp {
+            raw: raw_lcp,
+            effective: lcp,
+        } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
+        // Clear BEFORE any cache mutation — restored on decode success
+        // below; a mid-decode crash forces a defensive full clear next call.
+        cached_tokens.clear();
+        if lcp == 0 {
+            ctx.clear_kv_cache(); // kv-phase: FimPrefixCacheSetup
+        } else if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+            tracing::warn!(
+                error = ?e,
+                lcp,
+                new_prompt_len = tokens.len(),
+                "fim prefix_cache: partial clear failed — falling back to full clear"
+            );
+            ctx.clear_kv_cache(); // kv-phase: FimPrefixCacheSetup
+        }
+
+        let tail = &tokens[lcp..];
+        let mut batch = LlamaBatch::new(tail.len().max(512), 1);
+        let last_idx = tail.len() - 1;
+        for (j, &token) in tail.iter().enumerate() {
+            batch
+                .add(token, (lcp + j) as i32, &[0], j == last_idx)
+                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+        }
+        tracing::info!(
+            target: "fim",
+            cache_hit_tokens = lcp,
+            raw_lcp,
+            new_prefill_tokens = tail.len(),
+            new_prompt_len = tokens.len(),
+            cached_len_at_entry,
+            "fim: prefill scope"
+        );
+        ctx.decode(&mut batch)
+            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+        // Prompt-only fingerprint — generated tokens are intentionally
+        // excluded (see generate_sync's rationale).
+        *cached_tokens = tokens.clone();
+
+        stream_generate_loop(StreamLoopParams {
+            model,
+            model_id,
+            ctx,
+            request,
+            tx,
+            quirks,
+            cancel,
+            prompt_len: prompt_tokens,
+            max_tokens,
+            clear_kv_at_end: false,
+        })
+    }
+}
+
+/// Parameter bundle for [`stream_generate_loop`] — the decode loop
+/// shared by the full-clear legacy streaming entry and the LCP
+/// partial-keep FIM entry.
+struct StreamLoopParams<'a, 'ctx> {
+    model: &'a LlamaModel,
+    model_id: &'a str,
+    ctx: &'a mut crate::llama::cpp::context::LlamaContext<'ctx>,
+    request: &'a CompletionRequest,
+    tx: &'a tokio::sync::mpsc::Sender<StreamFrame>,
+    quirks: &'a ModelQuirks,
+    cancel: Option<&'a tokio_util::sync::CancellationToken>,
+    /// Full prompt length in tokens — the position base for generated
+    /// tokens (NOT the prefilled tail length under partial-keep).
+    prompt_len: usize,
+    max_tokens: usize,
+    /// Legacy behaviour: clear the KV cache at end-of-generation. The
+    /// FIM entry passes false so the prompt's KV slice survives for
+    /// the next keystroke's LCP.
+    clear_kv_at_end: bool,
+}
+
+/// The shared sampling/decode loop behind the two typed streaming
+/// entries. Ends with a `Finish` frame carrying the real reason
+/// (`Stop` on EOG, `Length` on `max_tokens`, `Cancelled` on token /
+/// receiver-drop, `Error` on constraint failure).
+fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
+    let StreamLoopParams {
+        model,
+        model_id,
+        ctx,
+        request,
+        tx,
+        quirks,
+        cancel,
+        prompt_len,
+        max_tokens,
+        clear_kv_at_end,
+    } = p;
+    {
+        let tokens_len = prompt_len;
+        let prompt_tokens = prompt_len;
+
         let mut sampler = build_sampler(model, request, quirks);
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+        let mut batch = LlamaBatch::new(512, 1);
 
         let mut tail = String::with_capacity(32);
         let mut in_think = false;
@@ -3700,7 +3878,7 @@ impl ModelSlot {
 
             batch.clear();
             batch
-                .add(token, (tokens.len() + n_generated - 1) as i32, &[0], true)
+                .add(token, (tokens_len + n_generated - 1) as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
 
             ctx.decode(&mut batch)
@@ -3720,7 +3898,7 @@ impl ModelSlot {
                         sampler.accept(ct);
                         batch.clear();
                         batch
-                            .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
+                            .add(ct, (tokens_len + n_generated) as i32, &[0], true)
                             .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
                         ctx.decode(&mut batch)
                             .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
@@ -3734,7 +3912,11 @@ impl ModelSlot {
             }
         }
 
-        ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
+        if clear_kv_at_end {
+            ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
+        }
+        // else: FIM partial-keep — the prompt's KV slice stays resident
+        // for the next request's LCP (see generate_stream_sync_fim).
 
         if saw_close_tag && !saw_open_tag {
             tracing::warn!(

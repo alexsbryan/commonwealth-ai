@@ -77,6 +77,7 @@ impl HybridProvider {
                         url_allowlist: None,
                         evidence_id_allowlist: None,
                         lark_grammar: None,
+                        prompt_shape: None,
                     };
 
                     match provider.complete(&probe).await {

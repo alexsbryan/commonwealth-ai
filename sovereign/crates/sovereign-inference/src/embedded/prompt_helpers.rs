@@ -172,12 +172,34 @@ pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
     context_size.next_multiple_of(256)
 }
 
+/// BOS policy for prompt tokenization. Raw-shaped requests
+/// (`PromptShape::Raw` — the FIM path) tokenize with `AddBos::Never`:
+/// Qwen-Coder declares `add_bos=false` (its BPE config adds no BOS),
+/// and the FIM marker string is the whole prompt — a prepended BOS
+/// would be an untrained token at position 0. Templated requests keep
+/// the historical `AddBos::Always`.
+pub(crate) fn add_bos_for(request: &CompletionRequest) -> AddBos {
+    match request.prompt_shape {
+        Some(PromptShape::Raw) => AddBos::Never,
+        _ => AddBos::Always,
+    }
+}
+
 pub(crate) fn format_prompt(
     model: &LlamaModel,
     model_id: &str,
     request: &CompletionRequest,
     quirks: &ModelQuirks,
 ) -> Result<String> {
+    // Raw pass-through (INLINE_COMPLETION.md §3.1, decision D4): the
+    // caller already assembled the exact string the model must see
+    // (FIM markers and all) — no chat template, no think-suppression,
+    // no assistant-prefix append. Tokenization downstream parses
+    // special tokens and skips BOS (`AddBos::Never` at the serving
+    // sites), so the string is the whole contract.
+    if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
+        return Ok(request.prompt.clone());
+    }
     // Compute the rendered prompt via the inner tier dispatch, then
     // append `request.assistant_prefix` if present. The prefix lands
     // *after* the chat template's generation-position marker

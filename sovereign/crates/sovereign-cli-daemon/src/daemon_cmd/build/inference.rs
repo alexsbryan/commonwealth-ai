@@ -120,6 +120,21 @@ pub(crate) fn load_provider(
             return Err(());
         }
     }
+    // Optional FIM inline-completion slot from `[models.fim]`
+    // (INLINE_COMPLETION.md). Soft-fail like the reranker: a missing or
+    // marker-less model must not block daemon startup — the
+    // `/v1/completions` route simply 503s while `fim_slot_info()` is
+    // `None`, and `install_fim_slot` logs the actionable fix itself.
+    if let Some(fim) = config.models.fim.as_ref() {
+        if let Err(e) = arc.install_fim_slot(fim, config.models.fast_path()) {
+            tracing::warn!(
+                target: "fim",
+                error = %e,
+                "FIM slot install failed — /v1/completions will 503; \
+                 check [models.fim].path in config.toml"
+            );
+        }
+    }
     // Sourced from `[daemon].primary_idle_secs`. Default 300s suits a
     // desktop; batch workloads (atlas enrich) want 1800+ to skip the
     // 3–4 s reload tax between back-to-back short LLM calls.

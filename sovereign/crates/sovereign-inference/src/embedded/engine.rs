@@ -29,11 +29,28 @@ use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
+use sovereign_core::setup_config::FimSection;
 use sovereign_core::traits::{InferenceProvider, ResidentSlot};
 use sovereign_core::types::*;
 use sovereign_core::Result;
 
 use crate::hardware::HardwareProfile;
+
+/// Reserved extras-slot name for the FIM inline-completion model
+/// (`sovereign/docs/INLINE_COMPLETION.md`). The idle monitor and the
+/// LRU eviction pass both skip this name (decision D2 — the FIM slot
+/// is pinned: a reload tax on the keystroke path is disqualifying),
+/// while an explicit operator `unload_extra("fim")` stays allowed.
+pub const FIM_SLOT_NAME: &str = "fim";
+
+/// Pin predicate for the extras lineup (decision D2). The FIM slot
+/// is the only pinned entry today: its bytes still count toward the
+/// extras memory budget (a pinned 1.5–3B coder is ~1–2 GB the
+/// operator opted into), but neither the idle monitor nor LRU
+/// eviction may drop it.
+pub fn extras_slot_is_evictable(slot_name: &str) -> bool {
+    slot_name != FIM_SLOT_NAME
+}
 
 // ─── EmbeddedLlamaCpp (triple-slot) ────────────────────────────
 
@@ -403,6 +420,14 @@ pub struct EmbeddedLlamaCpp {
     /// requests, and dropped slots stay alive until their last
     /// in-flight request finishes (RAII via `Arc`).
     extras: Arc<std::sync::RwLock<ExtrasState>>,
+    /// Live FIM serving arrangement (`sovereign/docs/INLINE_COMPLETION.md`).
+    /// `Some` after `install_fim_slot` succeeds (dedicated pinned extra
+    /// OR fast-slot alias mode); `None` = FIM not configured or the
+    /// marker probe failed — `fim_slot_info()` surfaces it to the
+    /// `/status` and `/v1/completions` routes. Behind an RwLock (not
+    /// set-once) so a future operator reload path can re-probe without
+    /// daemon restart.
+    fim_info: Arc<std::sync::RwLock<Option<FimSlotInfo>>>,
     /// Inflight gate for the lazy slot (Primary or Code). Single
     /// permit. The fast / extras slots have their own per-slot
     /// `inflight` semaphores on `ModelSlot`; the lazy path can't use
@@ -1078,6 +1103,7 @@ impl EmbeddedLlamaCpp {
             fast_quirks,
             primary_quirks,
             extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
+            fim_info: Arc::new(std::sync::RwLock::new(None)),
             lazy_inflight: Arc::new(tokio::sync::Semaphore::new(1)),
             primary_pool,
         })
@@ -1173,6 +1199,157 @@ impl EmbeddedLlamaCpp {
             .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
         *guard = state;
         Ok(())
+    }
+
+    /// Install the FIM inline-completion slot (`[models.fim]` —
+    /// `sovereign/docs/INLINE_COMPLETION.md`). Two modes (decision D8):
+    ///
+    /// - **Alias mode** — `section.path` resolves to the same GGUF the
+    ///   always-resident fast slot already loaded (the daemon passes
+    ///   `config.models.fast_path()` as `fast_path`, so "same file" is
+    ///   decided against the *resolved* fast path, primary-fallback
+    ///   included). No duplicate load: probe the fast slot's own model
+    ///   for FIM markers and record a `FimSlotInfo` pointing at it.
+    ///   Requests route via the named-slot match in
+    ///   `select_slot_for_request` (`model_id == fast.model_id`).
+    /// - **Dedicated mode** — any other path loads a pinned extras
+    ///   slot under the reserved name [`FIM_SLOT_NAME`] (never
+    ///   idle-unloaded, never LRU-evicted — `extras_slot_is_evictable`).
+    ///
+    /// Marker detection is a vocab probe (plan correction #5):
+    /// `ModelFamily` is `Unknown` on every production slot, so family
+    /// tables can't decide the marker convention — the tokenizer can.
+    /// A probe failure never fails the daemon: `fim_info` stays `None`,
+    /// `/v1/completions` 503s with an actionable message, and the cause
+    /// is logged at warn with the fix (point `[models.fim].path` at a
+    /// base — non-instruct — coder GGUF).
+    pub fn install_fim_slot(&self, section: &FimSection, fast_path: &Path) -> Result<()> {
+        // Path comparison tolerant to symlink/spelling differences:
+        // direct equality first, canonicalized equality as fallback.
+        let aliases_fast = section.path == fast_path
+            || match (
+                std::fs::canonicalize(&section.path),
+                std::fs::canonicalize(fast_path),
+            ) {
+                (Ok(a), Ok(b)) => a == b,
+                _ => false,
+            };
+
+        let sampling = |info: &mut FimSlotInfo| {
+            info.max_tokens = section.effective_max_tokens();
+            info.temperature = section.effective_temperature();
+            info.max_prefix_chars = section.effective_max_prefix_chars();
+            info.max_suffix_chars = section.effective_max_suffix_chars();
+        };
+
+        if aliases_fast {
+            match crate::fim::detect_fim_style(&self.fast.model) {
+                Some(style) => {
+                    let mut info = FimSlotInfo {
+                        slot: "fast".to_string(),
+                        model_id: self.fast.model_id.clone(),
+                        fim_style: style,
+                        max_tokens: 0,
+                        temperature: 0.0,
+                        max_prefix_chars: 0,
+                        max_suffix_chars: 0,
+                        aliased_to_fast: true,
+                    };
+                    sampling(&mut info);
+                    tracing::info!(
+                        target: "fim",
+                        slot = "fast",
+                        model_id = %info.model_id,
+                        fim_style = style.as_str(),
+                        "FIM aliased to resident fast slot — no duplicate model load"
+                    );
+                    self.store_fim_info(Some(info));
+                }
+                None => {
+                    tracing::warn!(
+                        target: "fim",
+                        model_id = %self.fast.model_id,
+                        "FIM aliases the fast slot, but that model's tokenizer carries \
+                         no FIM markers — /v1/completions will 503. Fix: point \
+                         [models.fim].path at a coder GGUF whose tokenizer carries \
+                         FIM markers (Mellum2, Qwen2.5-Coder)"
+                    );
+                    self.store_fim_info(None);
+                }
+            }
+            return Ok(());
+        }
+
+        // Dedicated mode: load through the budget-aware extras path so
+        // the FIM slot's bytes count toward `max_extras_memory_gb`
+        // (decision D2: pinned, but accounted).
+        let budget = self.extras.read().map(|g| g.budget_bytes).unwrap_or(None);
+        let ctx = section.context_size.unwrap_or(4096);
+        let model_id = self.load_extra_with_budget(
+            FIM_SLOT_NAME.to_string(),
+            section.path.clone(),
+            ctx,
+            budget,
+        )?;
+
+        let model = {
+            let guard = self
+                .extras
+                .read()
+                .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
+            guard.slots.get(FIM_SLOT_NAME).map(|s| Arc::clone(&s.model))
+        };
+        let style = model.as_deref().and_then(crate::fim::detect_fim_style);
+        match style {
+            Some(style) => {
+                let mut info = FimSlotInfo {
+                    slot: FIM_SLOT_NAME.to_string(),
+                    model_id: model_id.clone(),
+                    fim_style: style,
+                    max_tokens: 0,
+                    temperature: 0.0,
+                    max_prefix_chars: 0,
+                    max_suffix_chars: 0,
+                    aliased_to_fast: false,
+                };
+                sampling(&mut info);
+                tracing::info!(
+                    target: "fim",
+                    slot = FIM_SLOT_NAME,
+                    model_id = %model_id,
+                    fim_style = style.as_str(),
+                    ctx,
+                    "FIM slot installed (dedicated, pinned)"
+                );
+                self.store_fim_info(Some(info));
+            }
+            None => {
+                // Probe failed — don't leave an unusable model resident.
+                let _ = self.unload_extra(FIM_SLOT_NAME);
+                tracing::warn!(
+                    target: "fim",
+                    path = %section.path.display(),
+                    model_id = %model_id,
+                    "FIM model's tokenizer carries no FIM markers — slot unloaded; \
+                     /v1/completions will 503. Fix: use a coder GGUF whose tokenizer \
+                     carries FIM markers (Mellum2, Qwen2.5-Coder)"
+                );
+                self.store_fim_info(None);
+            }
+        }
+        Ok(())
+    }
+
+    /// Current FIM serving arrangement, if installed cleanly.
+    pub fn fim_slot_info(&self) -> Option<FimSlotInfo> {
+        self.fim_info.read().ok().and_then(|g| g.clone())
+    }
+
+    fn store_fim_info(&self, info: Option<FimSlotInfo>) {
+        match self.fim_info.write() {
+            Ok(mut g) => *g = info,
+            Err(e) => tracing::warn!(target: "fim", error = %e, "fim_info lock poisoned"),
+        }
     }
 
     /// Install (or replace) the cross-encoder reranker slot at
@@ -1351,6 +1528,9 @@ impl EmbeddedLlamaCpp {
             .slots
             .iter()
             .filter(|(name, _)| name.as_str() != incoming_slot_name)
+            // Pinned slots (the FIM slot, decision D2) count toward
+            // the budget but are never eviction candidates.
+            .filter(|(name, _)| extras_slot_is_evictable(name))
             .filter_map(|(name, arc)| {
                 if Arc::strong_count(arc) > 1 {
                     None // in-flight; preserve
@@ -1876,6 +2056,7 @@ impl EmbeddedLlamaCpp {
                     guard
                         .slots
                         .iter()
+                        .filter(|(name, _)| extras_slot_is_evictable(name))
                         .filter_map(|(name, arc)| {
                             // strong_count == 1 means only the map
                             // holds this slot — safe to drop.
@@ -2056,6 +2237,26 @@ mod fast_alias_guard_tests {
         assert!(!fast_alias_too_large(88 * GB, 125 * GB, Some(100_000)));
         // Or tightens it: a 10GB model refused under a 4096MB override.
         assert!(fast_alias_too_large(10 * GB, 125 * GB, Some(4096)));
+    }
+}
+
+#[cfg(test)]
+mod fim_pin_tests {
+    use super::{extras_slot_is_evictable, FIM_SLOT_NAME};
+
+    #[test]
+    fn fim_slot_is_pinned() {
+        assert!(!extras_slot_is_evictable(FIM_SLOT_NAME));
+        assert!(!extras_slot_is_evictable("fim"));
+    }
+
+    #[test]
+    fn ordinary_extras_stay_evictable() {
+        assert!(extras_slot_is_evictable("reasoning"));
+        assert!(extras_slot_is_evictable("bulk"));
+        // Near-miss spellings must not be caught by the pin.
+        assert!(extras_slot_is_evictable("fim2"));
+        assert!(extras_slot_is_evictable("FIM"));
     }
 }
 
@@ -2829,15 +3030,32 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 slot.last_used
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
-                    &slot.model,
-                    &slot.model_id,
-                    ctx_lock.ctx_mut(),
-                    &request,
-                    &tx,
-                    &quirks,
-                    None,
-                ) {
+                // Raw (FIM) prompts take the LCP partial-keep sibling —
+                // steady-state keystrokes re-prefill only the typing
+                // delta instead of the full window (INLINE_COMPLETION.md
+                // §4). Templated requests keep the legacy full-clear path.
+                let gen_result = if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
+                    ModelSlot::generate_stream_sync_fim(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        &tx,
+                        &quirks,
+                        None,
+                    )
+                } else {
+                    ModelSlot::generate_stream_sync_with_finish(
+                        &slot.model,
+                        &slot.model_id,
+                        ctx_lock.ctx_mut(),
+                        &request,
+                        &tx,
+                        &quirks,
+                        None,
+                    )
+                };
+                if let Err(e) = gen_result {
                     tracing::warn!(slot = %slot_label_owned, error = %e, "stream error");
                     let _ = tx.blocking_send(StreamFrame::Finish {
                         reason: FinishReason::Error(format!("{e}")),
@@ -2975,15 +3193,31 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
-                    &slot.model,
-                    &slot.model_id,
-                    ctx_lock.ctx_mut(),
-                    &request,
-                    &tx,
-                    &quirks,
-                    None,
-                ) {
+                // Raw (FIM) prompts take the LCP partial-keep sibling —
+                // the alias-mode FIM slot IS this fast slot
+                // (INLINE_COMPLETION.md §4/D8).
+                let gen_result = if matches!(request.prompt_shape, Some(PromptShape::Raw)) {
+                    ModelSlot::generate_stream_sync_fim(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        &tx,
+                        &quirks,
+                        None,
+                    )
+                } else {
+                    ModelSlot::generate_stream_sync_with_finish(
+                        &slot.model,
+                        &slot.model_id,
+                        ctx_lock.ctx_mut(),
+                        &request,
+                        &tx,
+                        &quirks,
+                        None,
+                    )
+                };
+                if let Err(e) = gen_result {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(StreamFrame::Finish {
                         reason: FinishReason::Error(format!("{e}")),
@@ -3238,6 +3472,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             .and_then(|p| p.file_stem())
             .and_then(|s| s.to_str())
             .map(|s| s.to_string())
+    }
+
+    /// Live FIM arrangement — see `install_fim_slot`. `None` when FIM
+    /// isn't configured or the marker probe refused the model.
+    fn fim_slot_info(&self) -> Option<FimSlotInfo> {
+        EmbeddedLlamaCpp::fim_slot_info(self)
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

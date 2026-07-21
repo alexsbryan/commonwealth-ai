@@ -117,6 +117,7 @@ impl WebSearchTool {
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        prompt_shape: None,
         };
 
         match self.inference.complete(&request).await {
@@ -293,6 +294,7 @@ impl WebSearchTool {
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        prompt_shape: None,
         };
 
         let response = self.inference.complete(&request).await?;

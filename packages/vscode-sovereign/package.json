@@ -1,0 +1,93 @@
+{
+  "name": "sovereign-fim",
+  "displayName": "svrn fim \u2014 inline completion",
+  "description": "Ghost-text code completion served by your local svrn daemon \u2014 no cloud, no account, full glassbox.",
+  "version": "0.1.0",
+  "publisher": "sovereign",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sovereign-fim.explainLastSuggestion",
+        "title": "svrn fim: Explain Last Suggestion",
+        "category": "svrn fim"
+      },
+      {
+        "command": "sovereign-fim.diagnose",
+        "title": "svrn fim: Diagnose Completion Setup",
+        "category": "svrn fim"
+      }
+    ],
+    "configuration": {
+      "title": "svrn fim",
+      "properties": {
+        "sovereign-fim.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Sovereign inline completions."
+        },
+        "sovereign-fim.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:9741",
+          "description": "Base URL of the local Sovereign daemon."
+        },
+        "sovereign-fim.debounceMs": {
+          "type": "number",
+          "default": 120,
+          "description": "Keystroke debounce before requesting a completion."
+        },
+        "sovereign-fim.maxPrefixLines": {
+          "type": "number",
+          "default": 60,
+          "description": "Lines before the cursor sent as FIM prefix."
+        },
+        "sovereign-fim.maxSuffixLines": {
+          "type": "number",
+          "default": 20,
+          "description": "Lines after the cursor sent as FIM suffix."
+        },
+        "sovereign-fim.disabledLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "markdown",
+            "plaintext"
+          ],
+          "description": "Language ids where completions are not offered."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.86.0",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexsbryan/commonwealth-ai.git",
+    "directory": "packages/vscode-sovereign"
+  }
+}

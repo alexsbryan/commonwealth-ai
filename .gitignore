@@ -113,3 +113,9 @@ research/**/out-v2/
 
 
 dist/
+# ── Node packages (packages/vscode-sovereign, future npm packages) ────────
+# node_modules is per-host; package-lock.json IS tracked (reproducible
+# installs). The .vsix is a build artifact — regenerate with
+# `npm run package`; releases attach it on GitHub instead of tracking it.
+node_modules/
+packages/vscode-sovereign/*.vsix

@@ -2228,6 +2228,20 @@ impl InferenceProvider for MeshInferenceProvider {
         }))
     }
 
+    /// Plain typed-stream surface — delegates to the cascade sibling
+    /// and drops the attribution string, exactly like
+    /// `complete_stream` does for the legacy shape. Without this
+    /// override the trait default wraps `complete_stream` and
+    /// synthesizes `Finish{Stop}` for every stream, erasing the real
+    /// `Length`/`Cancelled` reasons the FIM inline-completion route
+    /// and the desktop cutoff chip depend on.
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>> {
+        Ok(self.complete_stream_with_id_and_finish(request).await?.0)
+    }
+
     async fn warmup_primary(&self) -> Result<()> {
         // Warm only the local primary slot. We deliberately don't
         // poke peers — that would tie up their lazy mutex during a
@@ -2263,6 +2277,15 @@ impl InferenceProvider for MeshInferenceProvider {
         // Delegate so the mesh-level self-advertisement sees the
         // same code slot the underlying `EmbeddedLlamaCpp` sees.
         self.local.code_model_id()
+    }
+
+    fn fim_slot_info(&self) -> Option<sovereign_core::types::FimSlotInfo> {
+        // FIM serving is inherently local (the keystroke path never
+        // leaves this machine), so the honest answer is the local
+        // engine's arrangement. Without this forward the mesh wrapper
+        // — the provider the daemon actually installs — would report
+        // the empty default and `/v1/completions` would 503 forever.
+        self.local.fim_slot_info()
     }
 
     fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {

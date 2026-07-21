@@ -52,9 +52,6 @@ pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
              to rejoin without a restart"
         );
     }
-    tokio::spawn(async move {
-        auto_collaborate_loop(state, daemon_port).await;
-    });
 }
 
 async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
