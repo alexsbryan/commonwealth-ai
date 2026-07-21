@@ -32,6 +32,14 @@ pub(crate) struct CatalogEntry {
     /// connectors) vs. deepens/verifies an existing topic (web,
     /// provide-document). Drives the GapCoverage bias.
     pub acquires_topic: bool,
+    /// Whether the entry's description states what the source CONTAINS
+    /// (recipes: yes) vs. points at the user's own material the catalog
+    /// knows nothing about (connectors: no). Content-bearing entries
+    /// outrank connectors at any similarity: a connector's match is
+    /// generic-form similarity, not topical evidence — measured
+    /// 2026-07-20, `import_conversations` ranked top-1 on 6/6 gap turns
+    /// across unrelated topics inside a 0.35-0.45 similarity mush.
+    pub content_bearing: bool,
 }
 
 /// The resolver's candidate set: installable catalog recipes (minus
@@ -61,6 +69,7 @@ impl AcquisitionCatalog {
                 },
                 match_text: format!("{name}. {description}"),
                 acquires_topic: true,
+                content_bearing: true,
             });
         }
         // Connector affordances — the Library Add-sheet's standing
@@ -71,6 +80,7 @@ impl AcquisitionCatalog {
                          reports, or papers you already have on this machine."
                 .into(),
             acquires_topic: true,
+            content_bearing: false,
         });
         entries.push(CatalogEntry {
             route: AcquisitionRoute::ConnectVault,
@@ -78,6 +88,7 @@ impl AcquisitionCatalog {
                          journals, and knowledge base."
                 .into(),
             acquires_topic: true,
+            content_bearing: false,
         });
         entries.push(CatalogEntry {
             route: AcquisitionRoute::ImportConversations,
@@ -85,6 +96,7 @@ impl AcquisitionCatalog {
                          exports as a searchable source."
                 .into(),
             acquires_topic: true,
+            content_bearing: false,
         });
         Self { entries }
     }
@@ -127,7 +139,36 @@ pub(crate) fn resolve_routes(
             *sim *= 0.75;
         }
     }
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    // Tiered rank: content-bearing entries (recipes — descriptions that
+    // state what the source contains) before connectors (pointers to the
+    // user's own material, about which the catalog has no content
+    // evidence), by similarity within each tier. A topic conjecture must
+    // be groundable in the entry's description; connector matches inside
+    // the observed 0.35-0.45 mush are form-similarity, not evidence
+    // (2026-07-20 slate receipts: import_conversations top-1 on 6/6 gap
+    // turns across unrelated topics). Connectors still rank when no
+    // recipe cleared the floor.
+    scored.sort_by(|a, b| {
+        b.1.content_bearing
+            .cmp(&a.1.content_bearing)
+            .then(b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    // Glassbox: the full ranked slate, so a mis-ranked top-1 is
+    // diagnosable from logs without re-instrumenting (the 2026-07-20
+    // import_conversations-attractor investigation). Gap turns only,
+    // ~8 short strings — cheap enough to build unconditionally.
+    let slate: Vec<String> = scored
+        .iter()
+        .take(8)
+        .map(|(s, e)| format!("{s:.3}·{}", route_label(&e.route)))
+        .collect();
+    tracing::debug!(
+        target: "epistemic.ledger",
+        gap = %gap_statement.chars().take(60).collect::<String>(),
+        coverage = ?coverage,
+        slate = %slate.join(" | "),
+        "acquisition ranking slate (post-bias)"
+    );
     // On ClaimUncovered the synthesized web-search conjecture is
     // guaranteed a slot — the topic exists locally, so "check a
     // fresher/deeper source" must never be squeezed out by two
@@ -158,6 +199,18 @@ pub(crate) fn resolve_routes(
     }
     routes.truncate(MAX_ROUTES);
     routes
+}
+
+/// Short display label for the ranking-slate glassbox trace.
+fn route_label(r: &AcquisitionRoute) -> String {
+    match r {
+        AcquisitionRoute::InstallRecipe { recipe_id, .. } => format!("recipe:{recipe_id}"),
+        AcquisitionRoute::ConnectFolder => "connect_folder".into(),
+        AcquisitionRoute::ConnectVault => "connect_vault".into(),
+        AcquisitionRoute::ImportConversations => "import_conversations".into(),
+        AcquisitionRoute::WebSearch { .. } => "web_search".into(),
+        AcquisitionRoute::ProvideDocument { .. } => "provide_document".into(),
+    }
 }
 
 fn cosine(a: &[f32], b: &[f32]) -> Option<f32> {
@@ -412,6 +465,73 @@ mod tests {
             );
             assert!(in_catalog || synthesized, "route outside catalog: {r:?}");
         }
+    }
+
+    /// The 2026-07-20 attractor fix: a connector that out-similarities
+    /// every recipe inside the mush must NOT take the top slot when any
+    /// recipe cleared the floor — content-bearing entries claim the
+    /// topic conjecture; connectors are the fallback tier.
+    #[test]
+    fn content_bearing_recipes_outrank_connectors() {
+        let c = catalog();
+        // Give the CONNECTOR entries the highest raw similarity and the
+        // one live recipe (sep) a floor-clearing but lower similarity —
+        // the measured import_conversations shape.
+        let dims = c.entries.len() + 1;
+        let mut gap = vec![0.0; dims];
+        gap[dims - 1] = 1.0;
+        let entry_embs: Vec<Vec<f32>> = c
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                // Cosine against `gap` = the last-axis component.
+                let sim: f32 = if e.content_bearing { 0.40 } else { 0.45 };
+                let mut v = vec![0.0; dims];
+                v[i] = (1.0 - sim * sim).sqrt();
+                v[dims - 1] = sim;
+                v
+            })
+            .collect();
+        let routes = resolve_routes(
+            "capital of Australia",
+            GapCoverage::TopicUncovered,
+            &c,
+            &gap,
+            &entry_embs,
+        );
+        assert!(
+            matches!(routes[0], AcquisitionRoute::InstallRecipe { .. }),
+            "a floor-clearing recipe must take the top slot over higher-sim connectors: {routes:?}"
+        );
+
+        // And when NO recipe clears the floor, connectors still rank —
+        // the tier is a preference, not an exclusion.
+        let entry_embs_low: Vec<Vec<f32>> = c
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let sim: f32 = if e.content_bearing { 0.10 } else { 0.45 };
+                let mut v = vec![0.0; dims];
+                v[i] = (1.0 - sim * sim).sqrt();
+                v[dims - 1] = sim;
+                v
+            })
+            .collect();
+        let routes = resolve_routes(
+            "what did I tell you about my project",
+            GapCoverage::TopicUncovered,
+            &c,
+            &gap,
+            &entry_embs_low,
+        );
+        assert!(
+            routes
+                .iter()
+                .any(|r| !matches!(r, AcquisitionRoute::InstallRecipe { .. })),
+            "connectors must still rank when no recipe clears the floor: {routes:?}"
+        );
     }
 
     #[test]

@@ -212,6 +212,41 @@ describe("EpistemicFooter render", () => {
     expect(onOpenLibrary).toHaveBeenCalledTimes(1);
   });
 
+  it("rescued GK turns render their gap routes outside the abstention panel", async () => {
+    // The OOD rescue (2026-07-20): a turn that ANSWERS from general
+    // knowledge still carries the uncovered-topic gap + catalog routes —
+    // the caveat without "where to get it" chips would be a dead end
+    // wearing a label. Routes must render on the non-abstention branch.
+    const onOpenLibrary = vi.fn();
+    const gaps = [
+      {
+        demand_idx: 0,
+        statement: "Your sources didn't settle this question",
+        coverage: "topic_uncovered" as const,
+        routes: [
+          { install_recipe: { recipe_id: "wikipedia", name: "Wikipedia" } },
+        ],
+      },
+    ];
+    const { container } = render(EpistemicFooter, {
+      props: {
+        ledger: ledger({ verdict: "general_knowledge", gaps }),
+        onOpenLibrary,
+      },
+    });
+    // Not the abstention panel — the GK receipt renders…
+    expect(screen.getByText(/From general knowledge/)).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-testid="abstention-routes"]'),
+    ).toBeNull();
+    // …and the routes row does too.
+    const row = container.querySelector('[data-testid="gap-routes"]');
+    expect(row).not.toBeNull();
+    const chip = screen.getByText("Install Wikipedia");
+    await fireEvent.click(chip);
+    expect(onOpenLibrary).toHaveBeenCalledTimes(1);
+  });
+
   it("I6: renders purely from the ledger object (prose can't override it)", () => {
     // The footer takes no prose — its only input is the typed ledger, so
     // a contradicting answer body structurally cannot change what renders.

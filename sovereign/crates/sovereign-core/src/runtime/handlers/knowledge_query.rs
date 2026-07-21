@@ -1419,20 +1419,77 @@ impl Runtime {
             completion.text.clone()
         };
 
+        // Coverage probe, hoisted (streaming twin): the OOD rescue needs
+        // the verdict before the answer is finalized; the epistemic
+        // block below reuses it. Gap/abstain turns only.
+        let gate_abstained = grounding_gate_meta
+            .as_ref()
+            .and_then(|m| m.get("action"))
+            .and_then(|a| a.as_str())
+            .map(|a| a.starts_with("abstained"))
+            .unwrap_or(false);
+        let mut general_knowledge = plan.general_knowledge;
+        let hoisted_probe_verdict: Option<crate::types::GapCoverage> =
+            if crate::runtime::epistemic::epistemic_state_enabled()
+                && (plan.chunks.is_empty() || gate_abstained || general_knowledge.is_some())
+            {
+                crate::runtime::epistemic::coverage_probe(
+                    self.corpus_engine.as_ref(),
+                    &plan.query_embedding,
+                    context.conversation.enabled_corpora.as_deref(),
+                )
+                .await
+                .map(|p| p.verdict)
+            } else {
+                None
+            };
+        // OOD general-knowledge rescue (gk_rescue.rs — see the streaming
+        // twin for the full contract): probe-confirmed uncovered topic +
+        // gated abstention → caveated parametric answer; the gap rows +
+        // routes survive on the ledger.
+        let mut completion_text = completion_text;
+        let mut rescued_turn = false;
+        if crate::runtime::gk_rescue::gk_rescue_enabled()
+            && gate_abstained
+            && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
+            && !plan.gate_entity_anchored
+        {
+            if let Some(rescued) =
+                crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message)
+                    .await
+            {
+                tracing::info!(
+                    target: "epistemic.ledger",
+                    chars = rescued.chars().count(),
+                    "gk rescue: abstention over uncovered topic → caveated parametric answer"
+                );
+                completion_text = rescued;
+                general_knowledge = Some(crate::runtime::types::GkReason::OodRescue);
+                rescued_turn = true;
+                if let Some(meta) = grounding_gate_meta.as_mut() {
+                    if let Some(prev) = meta.get("action").cloned() {
+                        meta["rescued_from"] = prev;
+                    }
+                    meta["action"] = serde_json::Value::from("gk_rescue_released");
+                }
+                gate_claims = Some(Vec::new());
+            }
+        }
+
         let final_content = if plan.gap_check_enabled {
             // Humility hook: detection is the turn's gate abstention
-            // (I4-C — see run_collaboration; answered turns pass
-            // through instantly). See the matching block in the
-            // streaming KQ path + the long-form note at
+            // (I4-C — see run_collaboration; answered turns — and
+            // rescued turns, which now answer — pass through
+            // instantly). See the matching block in the streaming KQ
+            // path + the long-form note at
             // `prepare_knowledge_query_plan`.
-            let abstained = grounding_gate_meta
-                .as_ref()
-                .and_then(|m| m.get("action"))
-                .and_then(|a| a.as_str())
-                .map(|a| a.starts_with("abstained"))
-                .unwrap_or(false);
-            self.maybe_collaborate(conversation_id, message, &completion_text, abstained)
-                .await
+            self.maybe_collaborate(
+                conversation_id,
+                message,
+                &completion_text,
+                gate_abstained && !rescued_turn,
+            )
+            .await
         } else {
             completion_text.clone()
         };
@@ -1541,24 +1598,18 @@ impl Runtime {
                 .and_then(|a| a.as_str())
                 .map(|a| a.starts_with("abstained"))
                 .unwrap_or(false);
-            let gap_turn =
-                plan.chunks.is_empty() || abstained || plan.general_knowledge.is_some();
-            let probe = if gap_turn {
-                crate::runtime::epistemic::coverage_probe(
-                    self.corpus_engine.as_ref(),
-                    &plan.query_embedding,
-                    context.conversation.enabled_corpora.as_deref(),
-                )
-                .await
-                .map(|p| p.verdict)
-            } else {
-                None
-            };
+            let gap_turn = plan.chunks.is_empty() || abstained || general_knowledge.is_some();
+            // The probe already ran (hoisted above the rescue) — reuse
+            // its verdict, never probe twice.
+            let probe = hoisted_probe_verdict;
             let mut demands = std::mem::take(&mut plan.demands);
+            // A rescued turn answered from GK, not from the sources —
+            // its demands are still uncovered residue, so the gap rows
+            // (and routes) survive alongside the caveated answer.
             let mut gaps = crate::runtime::epistemic::finish_demands(
                 &mut demands,
                 gate_claims.as_deref(),
-                abstained,
+                abstained || rescued_turn,
                 probe,
             );
             // Acquisition conjecture on the ledger's primary gap.
@@ -1589,7 +1640,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
-                    general_knowledge: plan.general_knowledge,
+                    general_knowledge,
                     pool_corpora: crate::runtime::epistemic::pool_corpora(&plan.chunks),
                     demands,
                     gaps,

@@ -1491,8 +1491,71 @@ impl Runtime {
                 gate_progress_wiring,
             )
             .await;
-            let gate_claims = gate_result.as_ref().map(|(_, c)| c.clone());
-            let grounding_gate_meta = gate_result.map(|(m, _)| m);
+            let mut gate_claims = gate_result.as_ref().map(|(_, c)| c.clone());
+            let mut grounding_gate_meta = gate_result.map(|(m, _)| m);
+            let mut general_knowledge = general_knowledge;
+
+            // Coverage probe, HOISTED above the held release (was inside
+            // the ledger block): the OOD rescue below needs the verdict
+            // before the answer goes out; the ledger block reuses it
+            // (one probe per turn, gap/abstain turns only — answered
+            // turns still pay nothing).
+            let gate_abstained = grounding_gate_meta
+                .as_ref()
+                .and_then(|m| m.get("action"))
+                .and_then(|a| a.as_str())
+                .map(|a| a.starts_with("abstained"))
+                .unwrap_or(false);
+            let hoisted_probe_verdict: Option<crate::types::GapCoverage> =
+                if crate::runtime::epistemic::epistemic_state_enabled()
+                    && (documents_found == 0 || gate_abstained || general_knowledge.is_some())
+                {
+                    crate::runtime::epistemic::coverage_probe(
+                        engine_for_ledger.as_ref(),
+                        &query_embedding_for_ledger,
+                        enabled_corpora_for_ledger.as_deref(),
+                    )
+                    .await
+                    .map(|p| p.verdict)
+                } else {
+                    None
+                };
+            // OOD general-knowledge rescue (gk_rescue.rs): a gated
+            // abstention over a probe-confirmed uncovered topic becomes
+            // the caveated parametric answer — streamed below in the
+            // held-release frame, so the user sees the rescue directly.
+            // In-topic (ClaimUncovered) abstentions and entity-anchored
+            // questions are structurally never rescued.
+            let mut rescued_turn = false;
+            if crate::runtime::gk_rescue::gk_rescue_enabled()
+                && gate_abstained
+                && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
+                && !gate_entity_anchored
+            {
+                if let Some(rescued) =
+                    crate::runtime::gk_rescue::rescue_ood_answer(inference.as_ref(), &gate_question)
+                        .await
+                {
+                    tracing::info!(
+                        target: "epistemic.ledger",
+                        chars = rescued.chars().count(),
+                        "gk rescue: abstention over uncovered topic → caveated parametric answer"
+                    );
+                    full_text = rescued;
+                    general_knowledge = Some(crate::runtime::types::GkReason::OodRescue);
+                    rescued_turn = true;
+                    if let Some(meta) = grounding_gate_meta.as_mut() {
+                        if let Some(prev) = meta.get("action").cloned() {
+                            meta["rescued_from"] = prev;
+                        }
+                        meta["action"] = serde_json::Value::from("gk_rescue_released");
+                    }
+                    // The discarded draft's audit records must not become
+                    // holdings on the rescued turn — the ledger's basis is
+                    // GeneralKnowledge, visibly.
+                    gate_claims = Some(Vec::new());
+                }
+            }
 
             // Post-synthesis guardrail: demote any quoted span that
             // isn't verbatim-present in the evidence shown to the
@@ -1648,22 +1711,19 @@ impl Runtime {
                     .unwrap_or(false);
                 let gap_turn =
                     documents_found == 0 || abstained || general_knowledge.is_some();
-                let probe = if gap_turn {
-                    crate::runtime::epistemic::coverage_probe(
-                        engine_for_ledger.as_ref(),
-                        &query_embedding_for_ledger,
-                        enabled_corpora_for_ledger.as_deref(),
-                    )
-                    .await
-                    .map(|p| p.verdict)
-                } else {
-                    None
-                };
+                // The probe already ran above the held release (hoisted
+                // for the OOD rescue) — reuse its verdict, never probe
+                // twice.
+                let probe = hoisted_probe_verdict;
                 probe_verdict_for_routes = probe;
+                // A rescued turn answered from GK, not from the sources
+                // — its demands are still uncovered residue, so the gap
+                // rows (and their acquisition routes) survive alongside
+                // the caveated answer.
                 let mut gaps = crate::runtime::epistemic::finish_demands(
                     &mut demands_for_ledger,
                     gate_claims.as_deref(),
-                    abstained,
+                    abstained || rescued_turn,
                     probe,
                 );
                 // Acquisition conjecture on the ledger's primary gap.

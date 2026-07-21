@@ -74,6 +74,7 @@ pub async fn cmd_chaos_monkey(args: &[String]) -> i32 {
         "run" => run(&args[1..]).await,
         "rescore" => rescore(&args[1..]).await,
         "score-answer" => score_answer(&args[1..]).await,
+        "fidelity" => fidelity(&args[1..]).await,
         other => {
             eprintln!("error: unknown chaos-monkey subcommand `{other}`");
             help::print(&HELP);
@@ -1347,6 +1348,220 @@ async fn score_answer(rest: &[String]) -> i32 {
         "{}",
         serde_json::to_string(&out).unwrap_or_else(|_| "{}".into())
     );
+    0
+}
+
+/// Ledger-fidelity pass (EPISTEMIC_STATE §8): are the typed receipts
+/// TRUE? Reads a chaos transcripts.jsonl (each row: question, answer,
+/// gate_action, epistemic_state) and audits the ledger against the
+/// prose it describes. Two layers:
+///
+/// 1. **Deterministic cross-checks** (no model):
+///    - a decline-shaped answer (the gate's own `answer_declines`
+///      primitive) carrying a `grounded`/`mixed` verdict — the forged-
+///      receipt class caught by luck on `ood-table-salt` (2026-07-20),
+///      now audited systematically;
+///    - holdings on an abstained (`cannot_know_from_here`) turn — the
+///      assembler's I2 contract, re-checked at the persisted artifact.
+/// 2. **Judge correspondence** (daemon judge): for every corpus/GK
+///    holding, does the ANSWER actually assert the held claim (or a
+///    clear paraphrase)? A holding the prose never asserts is a receipt
+///    for nothing.
+///
+/// Tracked-advisory: prints a fidelity report + writes findings JSONL;
+/// exit 0 unless the artifact is unreadable. Gate once a baseline
+/// exists (the standing bench convention).
+async fn fidelity(rest: &[String]) -> i32 {
+    let mut transcripts: Option<std::path::PathBuf> = None;
+    let mut judge_model = "fast".to_string();
+    let mut base_url = "http://127.0.0.1:9741".to_string();
+    let mut out: Option<std::path::PathBuf> = None;
+    let mut i = 0;
+    while i < rest.len() {
+        macro_rules! val {
+            ($flag:expr) => {{
+                i += 1;
+                match rest.get(i) {
+                    Some(v) => v.clone(),
+                    None => {
+                        eprintln!("error: {} requires a value", $flag);
+                        return 2;
+                    }
+                }
+            }};
+        }
+        match rest[i].as_str() {
+            "--transcripts" => transcripts = Some(std::path::PathBuf::from(val!("--transcripts"))),
+            "--judge-model" => judge_model = val!("--judge-model"),
+            "--base-url" => base_url = val!("--base-url"),
+            "--out" => out = Some(std::path::PathBuf::from(val!("--out"))),
+            other => {
+                eprintln!("error: unknown fidelity flag `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let Some(transcripts_path) = transcripts else {
+        eprintln!("error: --transcripts is required");
+        return 2;
+    };
+    let text = match std::fs::read_to_string(&transcripts_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: could not read {transcripts_path:?}: {e}");
+            return 1;
+        }
+    };
+    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
+    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &judge_model,
+        PROVIDER_CTX,
+    ));
+
+    let (mut n_rows, mut n_ledger) = (0usize, 0usize);
+    let mut verdict_decline_conflicts: Vec<String> = Vec::new();
+    let mut abstained_with_holdings: Vec<String> = Vec::new();
+    let (mut holdings_checked, mut holdings_asserted) = (0usize, 0usize);
+    let mut findings: Vec<serde_json::Value> = Vec::new();
+
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        let Ok(rec) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        n_rows += 1;
+        let id = rec.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+        let answer = rec.get("answer").and_then(|v| v.as_str()).unwrap_or("");
+        let Some(es) = rec.get("epistemic_state").filter(|v| !v.is_null()) else {
+            continue;
+        };
+        n_ledger += 1;
+        let verdict = es.get("verdict").and_then(|v| v.as_str()).unwrap_or("");
+        let holdings: Vec<&serde_json::Value> = es
+            .get("holdings")
+            .and_then(|h| h.as_array())
+            .map(|a| a.iter().collect())
+            .unwrap_or_default();
+
+        // 1a. Forged-receipt class: confident verdict over PURE decline
+        // prose. The strict primitive + a length cap keep rich answers
+        // that merely CONTAIN a negative clause ("the sources do not
+        // name X directly, but …") out of the finding — those assert
+        // content and their receipts are judged in layer 2.
+        if matches!(verdict, "grounded" | "mixed")
+            && answer.chars().count() < 300
+            && sovereign_core::runtime::released_pure_decline(answer)
+        {
+            verdict_decline_conflicts.push(id.to_string());
+            findings.push(serde_json::json!({
+                "id": id, "kind": "verdict_on_decline", "verdict": verdict,
+                "excerpt": answer.chars().take(160).collect::<String>(),
+            }));
+        }
+        // 1b. Structural: an abstained turn asserts nothing.
+        if verdict == "cannot_know_from_here" && !holdings.is_empty() {
+            abstained_with_holdings.push(id.to_string());
+            findings.push(serde_json::json!({
+                "id": id, "kind": "abstained_with_holdings", "holdings": holdings.len(),
+            }));
+        }
+        // 2. Judge: does the prose assert each held claim?
+        for h in &holdings {
+            let claim = h.get("claim").and_then(|c| c.as_str()).unwrap_or("");
+            if claim.is_empty() || answer.is_empty() {
+                continue;
+            }
+            holdings_checked += 1;
+            let prompt = format!(
+                "ANSWER:\n{}\n\nCLAIM: {}\n\nDoes the ANSWER assert this claim \
+                 (verbatim or as a clear paraphrase)? Reply with JSON only.",
+                answer.chars().take(2000).collect::<String>(),
+                claim.chars().take(400).collect::<String>(),
+            );
+            let mut req = sovereign_core::types::CompletionRequest::default();
+            req.prompt = prompt;
+            req.system_message =
+                Some("You audit answer/claim correspondence precisely. JSON only.".into());
+            req.max_tokens = Some(32);
+            req.temperature = Some(0.0);
+            req.structured_output = Some(serde_json::json!({
+                "type": "object",
+                "properties": { "asserted": { "type": "boolean" } },
+                "required": ["asserted"]
+            }));
+            match judge.complete(&req).await {
+                Ok(resp) => {
+                    let asserted = serde_json::from_str::<serde_json::Value>(
+                        resp.text
+                            .trim()
+                            .trim_start_matches("```json")
+                            .trim_start_matches("```")
+                            .trim_end_matches("```"),
+                    )
+                    .ok()
+                    .and_then(|v| v.get("asserted").and_then(|b| b.as_bool()));
+                    match asserted {
+                        Some(true) => holdings_asserted += 1,
+                        Some(false) => {
+                            findings.push(serde_json::json!({
+                                "id": id, "kind": "holding_not_asserted",
+                                "claim": claim.chars().take(200).collect::<String>(),
+                            }));
+                        }
+                        // Unparseable judge output: fail CLOSED for the
+                        // metric (don't award correspondence we can't
+                        // confirm) but record the ambiguity.
+                        None => {
+                            findings.push(serde_json::json!({
+                                "id": id, "kind": "judge_unparseable",
+                                "claim": claim.chars().take(200).collect::<String>(),
+                            }));
+                        }
+                    }
+                }
+                Err(e) => {
+                    findings.push(serde_json::json!({
+                        "id": id, "kind": "judge_error", "error": e.to_string(),
+                    }));
+                }
+            }
+        }
+    }
+
+    let fidelity_rate = if holdings_checked > 0 {
+        holdings_asserted as f64 / holdings_checked as f64
+    } else {
+        f64::NAN
+    };
+    eprintln!("\n── ledger fidelity (holdings ↔ prose) ──");
+    eprintln!("  rows {n_rows} · with ledger {n_ledger}");
+    eprintln!(
+        "  DETERMINISTIC  verdict-on-decline conflicts : {}  {:?}",
+        verdict_decline_conflicts.len(),
+        verdict_decline_conflicts,
+    );
+    eprintln!(
+        "  DETERMINISTIC  abstained-with-holdings      : {}  {:?}",
+        abstained_with_holdings.len(),
+        abstained_with_holdings,
+    );
+    eprintln!(
+        "  TRACKED        holding↔prose correspondence : {fidelity_rate:.2}  [{holdings_asserted}/{holdings_checked} holdings asserted by their prose ]",
+    );
+    if let Some(out_path) = out {
+        let body = findings
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if let Err(e) = std::fs::write(&out_path, body) {
+            eprintln!("  warn: could not write findings to {out_path:?}: {e}");
+        } else {
+            eprintln!("  findings → {out_path:?} ({})", findings.len());
+        }
+    }
     0
 }
 

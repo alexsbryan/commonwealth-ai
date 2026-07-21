@@ -33,6 +33,12 @@ const DEFAULT_QUESTIONS: &[&str] = &[
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    // RUST_LOG=epistemic.ledger=debug surfaces the resolver's ranking
+    // slate (per-entry sims) — the instrument for ranking work.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let daemon = std::env::var("SOVEREIGN_DAEMON_BASE")
         .unwrap_or_else(|_| "http://127.0.0.1:9741".to_string());
