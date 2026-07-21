@@ -116,6 +116,24 @@ pub fn project_message_metadata(meta: &Option<Value>) -> (Option<Provenance>, Ve
     (project_provenance(meta), project_citations(meta))
 }
 
+/// Project the persisted `epistemic_state` blob into the typed ledger
+/// (EPISTEMIC_STATE.md, initiative I2-C). The runtime stamps it on
+/// ledger-bearing turns; it is absent on old messages and `null` when
+/// the `SOVEREIGN_EPISTEMIC_STATE` kill switch is off — both degrade to
+/// `None`. `EpistemicState` is `Deserialize`, so this is a direct typed
+/// round-trip; a malformed blob degrades to `None` rather than failing
+/// the whole projection. Mobile *rendering* stays deferred — this closes
+/// the wire gap so the ledger reaches the REST + WS surfaces.
+pub fn project_epistemic_state(
+    meta: &Option<Value>,
+) -> Option<sovereign_core::types::EpistemicState> {
+    let es = meta.as_ref()?.get("epistemic_state")?;
+    if es.is_null() {
+        return None;
+    }
+    serde_json::from_value(es.clone()).ok()
+}
+
 fn project_provenance(meta: &Value) -> Option<Provenance> {
     let prov = meta.get("provenance")?;
     // A `provenance` key that isn't an object is malformed metadata —
@@ -335,6 +353,41 @@ mod tests {
         // rank preserves the original retrieved_chunks index (1), not the
         // post-filter position (0).
         assert_eq!(cites[0].rank, 1);
+    }
+
+    #[test]
+    fn projects_epistemic_state_when_present() {
+        let meta = json!({
+            "provenance": { "inference_backend": "local" },
+            "epistemic_state": {
+                "version": 1,
+                "demands": [],
+                "holdings": [{
+                    "claim": "The knife was a carving knife",
+                    "provenance": { "corpus": { "corpus_id": "secret-agent", "chunk_id": null } },
+                    "verification": "verified"
+                }],
+                "gaps": [],
+                "verdict": "grounded"
+            }
+        });
+        let ledger = project_epistemic_state(&Some(meta)).expect("ledger present");
+        assert_eq!(ledger.version, 1);
+        assert_eq!(ledger.holdings.len(), 1);
+        assert_eq!(
+            ledger.verdict,
+            sovereign_core::types::TurnVerdict::Grounded
+        );
+    }
+
+    #[test]
+    fn epistemic_state_absent_or_null_degrades_to_none() {
+        // Old message: no key at all.
+        assert!(project_epistemic_state(&Some(json!({ "intent": "x" }))).is_none());
+        // Kill switch off: the key is present but null.
+        assert!(project_epistemic_state(&Some(json!({ "epistemic_state": null }))).is_none());
+        // No metadata at all.
+        assert!(project_epistemic_state(&None).is_none());
     }
 
     #[test]

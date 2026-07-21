@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 mod harness;
 
-use harness::{GapScript, InfoResponseScript, RefineScript, TestHarness};
+use harness::{InfoResponseScript, PhraseScript, RefineScript, TestHarness};
 use sovereign_core::skills::parse_skill_toml;
 use sovereign_core::traits::*;
 use sovereign_core::types::*;
@@ -41,6 +41,89 @@ async fn deep_query_searches_local_knowledge() {
             .any(|s| s.origin == "sep" && s.count > 0),
         "Should find SEP chunks for Bergson query. Sources: {:?}",
         prov.sources
+    );
+}
+
+/// I2-A / invariant I1: the simple-answer surface persists the typed
+/// epistemic ledger on the assistant message when the flag is on (default).
+/// Guards the ledger-persistence contract the KQ/streaming/complex-task/
+/// attached-doc surfaces all share.
+#[tokio::test]
+async fn simple_surface_persists_epistemic_ledger() {
+    let h = TestHarness::new();
+    let resp = h.send("Say hello.").await;
+    let meta = resp
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("simple surface must carry an epistemic_state key");
+    assert!(
+        !ledger.is_null(),
+        "ledger must be populated when SOVEREIGN_EPISTEMIC_STATE is on (default): {meta}"
+    );
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
+    );
+}
+
+/// I2-A: the attached-doc surface persists the epistemic ledger. A bare
+/// `DocumentSession` on the conversation routes the turn to the attached-doc
+/// handler; the handler degrades gracefully with no asset/chunks (empty
+/// briefing, zero retrieved) and finalizes through
+/// `package_attached_doc_response`, which assembles the ledger regardless of
+/// whether the (default-off) grounding gate ran. Before I2-A this surface
+/// threw away its gate claims and wrote no ledger.
+#[tokio::test]
+async fn attached_doc_surface_persists_epistemic_ledger() {
+    let h = TestHarness::new();
+    let conv = "attached-doc-epistemic";
+    let session = DocumentSession {
+        id: "sess-epistemic-1".into(),
+        conversation_id: conv.into(),
+        filename: "notes.txt".into(),
+        source: "asset:missing".into(),
+        word_count: 0,
+        chunk_count: 0,
+        created_at: 0,
+        operation: "answer questions about the document".into(),
+        map_prompt: String::new(),
+        reduce_prompt: String::new(),
+        last_output: None,
+        history: Vec::new(),
+    };
+    h.store
+        .create_document_session(&session)
+        .await
+        .expect("create document session");
+
+    let resp = h
+        .send_in("What does the document say about the topic?", conv)
+        .await;
+    let meta = resp
+        .message
+        .metadata
+        .as_ref()
+        .expect("assistant message should carry metadata");
+    // Confirm the turn actually took the attached-doc surface.
+    assert_eq!(
+        meta.get("intent").and_then(|v| v.as_str()),
+        Some("AttachedDoc"),
+        "turn should route to the attached-doc surface: {meta}"
+    );
+    let ledger = meta
+        .get("epistemic_state")
+        .expect("attached-doc must carry an epistemic_state key");
+    assert!(
+        !ledger.is_null(),
+        "ledger must be populated when SOVEREIGN_EPISTEMIC_STATE is on (default): {meta}"
+    );
+    assert!(
+        ledger.get("verdict").is_some(),
+        "epistemic_state must carry a derived verdict: {ledger}"
     );
 }
 
@@ -1081,17 +1164,19 @@ async fn reason_with_tools_caps_at_max_iterations() {
     }
 }
 
-// ─── Auto-Collaborate (Phase 2) ──────────────────────────────
+// ─── Auto-Collaborate (Phase 2 → I4-C structural detection) ──
 //
-// These tests exercise `Runtime::maybe_collaborate` via the SimpleQuery
-// path (PassthroughRouter sends everything to SimpleQuery). The
-// ScriptableInference + ScriptedApprovalChannel doubles control the
-// gap-check output, the refinement output, and the user's choice.
+// These tests exercise `Runtime::maybe_collaborate` directly. Since the
+// I4-C retirement of gap.rs, DETECTION is structural — the card fires
+// iff the caller passes `abstained: true` (the gate signal the ledger's
+// CannotKnowFromHere verdict derives from) — so the scripted inference
+// only shapes the card's phrased ask and the refinement output; the
+// ScriptedApprovalChannel controls the user's choice.
 
 #[tokio::test]
 async fn auto_collaborate_off_passes_through_unchanged() {
     // With auto_collaborate disabled (TestHarness::new uses default config),
-    // the SimpleQuery path must never call the gap checker or approval
+    // the SimpleQuery path must never reach the phrasing or approval
     // channel. `RefineScript::Unused` / `InfoResponseScript::Unused` would
     // panic if touched — we use the regular harness here to keep things
     // explicit about "this path doesn't even reach the scriptable code".
@@ -1106,89 +1191,113 @@ async fn auto_collaborate_off_passes_through_unchanged() {
 }
 
 #[tokio::test]
-async fn auto_collaborate_on_with_no_gap_returns_original_answer() {
+async fn auto_collaborate_answered_turn_passes_through_instantly() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::NoGap,
+        // An answered turn (abstained=false) must touch NO script:
+        // detection is structural, no phrasing call, no card.
+        PhraseScript::Unused,
         RefineScript::Unused,
         InfoResponseScript::Unused,
     );
-    let resp = h.send("What is epistemology?").await;
-
-    // Gap check ran, reported no gap → no info request, no refinement.
-    // The message should be whatever the deterministic synthesis produced
-    // (an echo of the prompt). The absence of panic is the main signal —
-    // Unused scripts panic if invoked.
-    assert!(
-        !resp.message.content.is_empty(),
-        "synthesis still produces a message when no gap is identified"
-    );
+    let original = "Epistemology is the study of knowledge.";
+    let out = h
+        .runtime
+        .maybe_collaborate("conv-1", "What is epistemology?", original, false)
+        .await;
+    assert_eq!(out, original, "answered turn must pass through unchanged");
 }
 
 #[tokio::test]
-async fn auto_collaborate_on_with_gap_and_user_content_returns_refined_answer() {
+async fn auto_collaborate_abstained_with_user_content_returns_refined_answer() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "Need a 2024 pharmaceutical R&D statistic".to_string(),
-        },
+        PhraseScript::Text("A 2024 primary source on post-IRA R&D investment.".to_string()),
         RefineScript::Text("REFINED: integrates user source on pharma R&D post-IRA.".to_string()),
         InfoResponseScript::Pasted("Per NEJM 2024: post-IRA R&D investment fell 12%.".to_string()),
     );
-    let resp = h
-        .send("What is the evidence on IRA's innovation effects?")
+    let out = h
+        .runtime
+        .maybe_collaborate(
+            "conv-1",
+            "What is the evidence on IRA's innovation effects?",
+            "I couldn't confirm an answer to this from your sources.",
+            true,
+        )
         .await;
-
     assert!(
-        resp.message.content.starts_with("REFINED:"),
-        "expected refined answer, got: {}",
-        resp.message.content
+        out.starts_with("REFINED:"),
+        "expected refined answer, got: {out}"
     );
 }
 
 #[tokio::test]
-async fn auto_collaborate_on_with_user_skip_returns_original_answer() {
+async fn auto_collaborate_abstained_with_user_skip_returns_original_answer() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "Need a primary source".to_string(),
-        },
+        PhraseScript::Text("A primary source.".to_string()),
         // User pressed Skip → refinement must not be called.
         RefineScript::Unused,
         InfoResponseScript::Skip,
     );
-    let resp = h
-        .send("What is the evidence on IRA's innovation effects?")
+    let original = "I couldn't confirm an answer to this from your sources.";
+    let out = h
+        .runtime
+        .maybe_collaborate(
+            "conv-1",
+            "What is the evidence on IRA's innovation effects?",
+            original,
+            true,
+        )
         .await;
-
-    // The original corpus-only answer stays put; no panic from Unused script.
-    assert!(
-        !resp.message.content.starts_with("REFINED:"),
-        "skip must preserve the original answer; got: {}",
-        resp.message.content
-    );
+    // The original abstention stays put; no panic from Unused script.
+    assert_eq!(out, original, "skip must preserve the original answer");
 }
 
 #[tokio::test]
-async fn auto_collaborate_on_with_inference_error_returns_original_answer() {
+async fn auto_collaborate_phrasing_error_still_fires_card_with_raw_question() {
+    // D4: phrasing may phrase, never gate. A phrasing failure must not
+    // suppress the card — the flow continues with the user's question
+    // verbatim as the ask, and a pasted source still refines.
     let h = TestHarness::new_with_collaborate(
-        // Gap-check inference fails — the helper is documented to fall back
-        // to the original response rather than propagate the error.
-        GapScript::Error,
-        RefineScript::Unused,
-        InfoResponseScript::Unused,
+        PhraseScript::Error,
+        RefineScript::Text("REFINED: with the pasted source.".to_string()),
+        InfoResponseScript::Pasted("pasted source text".to_string()),
     );
-    let resp = h.send("What is epistemology?").await;
-
-    // Turn must still succeed — the gap-check error is swallowed.
+    let out = h
+        .runtime
+        .maybe_collaborate(
+            "conv-1",
+            "What is epistemology?",
+            "I couldn't confirm an answer to this from your sources.",
+            true,
+        )
+        .await;
     assert!(
-        !resp.message.content.is_empty(),
-        "gap-check error must not fail the turn"
-    );
-    assert!(
-        !resp.message.content.starts_with("REFINED:"),
-        "no refinement should happen when gap check errored"
+        out.starts_with("REFINED:"),
+        "phrasing error must not suppress the card/refinement flow; got: {out}"
     );
 }
 
 // ─── Epistemic Humility: default-on invariants (Phase 3) ─────
+
+/// Invariant I1, runtime half: a real turn through an answer surface
+/// persists a ledger with a derived verdict — default-on, no env setup.
+/// (The closed-surface compile-time pin lives in runtime/epistemic.rs;
+/// this drives the SimpleQuery path end-to-end as its runtime witness.)
+#[tokio::test]
+async fn simple_turn_persists_epistemic_ledger_with_verdict() {
+    let h = TestHarness::new();
+    let resp = h.send("What is epistemology?").await;
+    let ledger = resp
+        .message
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("epistemic_state"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    assert!(
+        ledger.get("verdict").is_some_and(|v| v.is_string()),
+        "I1: every answer turn must persist an epistemic_state with a derived verdict; got: {ledger}"
+    );
+}
 
 #[test]
 fn default_inference_config_has_epistemic_humility_on() {
@@ -1213,22 +1322,22 @@ fn default_inference_config_has_epistemic_humility_on() {
 #[tokio::test]
 async fn post_stream_refinement_rewrites_message_and_emits_event() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "Need a 2024 primary source".to_string(),
-        },
+        PhraseScript::Text("A 2024 primary source.".to_string()),
         RefineScript::Text("REFINED: streamed answer with user source.".to_string()),
         InfoResponseScript::Pasted("Paragraph from a relevant paper.".to_string()),
     );
 
     // Persist an initial "streamed" assistant message. The real
     // streaming spawn does this exact shape before calling the
-    // refinement hook.
+    // refinement hook. The abstained gate action is the card's
+    // detection signal (I4-C structural detection).
     let conv_id = uuid::Uuid::new_v4().to_string();
     let msg_id = uuid::Uuid::new_v4().to_string();
     let original = "Initial streamed answer from the corpus.";
     let meta = serde_json::json!({
         "streamed": true,
         "provenance": {},
+        "grounding_gate": { "action": "abstained" },
     });
     let initial = Message {
         id: msg_id.clone(),
@@ -1286,10 +1395,11 @@ async fn post_stream_refinement_rewrites_message_and_emits_event() {
 }
 
 #[tokio::test]
-async fn post_stream_refinement_noops_when_no_gap() {
+async fn post_stream_refinement_noops_when_turn_answered() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::NoGap,
-        // Refine must not be called when there's no gap.
+        // Answered turn (no abstained gate action in the metadata) →
+        // structural detection says no gap; nothing may be invoked.
+        PhraseScript::Unused,
         RefineScript::Unused,
         InfoResponseScript::Unused,
     );
@@ -1336,9 +1446,7 @@ async fn post_stream_refinement_emits_fallback_when_inference_errors() {
     // unchanged (no rewrite). Stale-write to the dossier does NOT
     // fire (`refined.is_none()`).
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "Need a primary source".to_string(),
-        },
+        PhraseScript::Text("A primary source.".to_string()),
         RefineScript::Error,
         InfoResponseScript::Pasted("user-supplied source text".to_string()),
     );
@@ -1346,20 +1454,21 @@ async fn post_stream_refinement_emits_fallback_when_inference_errors() {
     let conv_id = uuid::Uuid::new_v4().to_string();
     let msg_id = uuid::Uuid::new_v4().to_string();
     let original = "Initial streamed answer from the corpus.";
+    let abstained_meta = serde_json::json!({ "grounding_gate": { "action": "abstained" } });
     let initial = Message {
         id: msg_id.clone(),
         conversation_id: conv_id.clone(),
         role: Role::Assistant,
         content: original.to_string(),
         created_at: 0,
-        metadata: None,
+        metadata: Some(abstained_meta.clone()),
         version: 0,
     };
     h.store.save_message(&initial).await.unwrap();
 
     let refined = h
         .runtime
-        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", Some(abstained_meta))
         .await;
 
     // Refinement errored → caller should see `None` so the
@@ -1412,9 +1521,7 @@ async fn post_stream_refinement_emits_fallback_when_output_equals_original() {
     // we must emit `message-refined` (with the original) to clear
     // the flag.
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "Need a primary source".to_string(),
-        },
+        PhraseScript::Text("A primary source.".to_string()),
         RefineScript::Text("Initial streamed answer from the corpus.".to_string()),
         InfoResponseScript::Pasted("user-supplied source text".to_string()),
     );
@@ -1422,20 +1529,21 @@ async fn post_stream_refinement_emits_fallback_when_output_equals_original() {
     let conv_id = uuid::Uuid::new_v4().to_string();
     let msg_id = uuid::Uuid::new_v4().to_string();
     let original = "Initial streamed answer from the corpus.";
+    let abstained_meta = serde_json::json!({ "grounding_gate": { "action": "abstained" } });
     let initial = Message {
         id: msg_id.clone(),
         conversation_id: conv_id.clone(),
         role: Role::Assistant,
         content: original.to_string(),
         created_at: 0,
-        metadata: None,
+        metadata: Some(abstained_meta.clone()),
         version: 0,
     };
     h.store.save_message(&initial).await.unwrap();
 
     let refined = h
         .runtime
-        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", Some(abstained_meta))
         .await;
 
     assert!(
@@ -1455,9 +1563,7 @@ async fn post_stream_refinement_emits_fallback_when_output_equals_original() {
 #[tokio::test]
 async fn post_stream_refinement_noops_when_user_skips() {
     let h = TestHarness::new_with_collaborate(
-        GapScript::Gap {
-            gap: "something".to_string(),
-        },
+        PhraseScript::Text("something".to_string()),
         RefineScript::Unused,
         InfoResponseScript::Skip,
     );
@@ -1465,20 +1571,21 @@ async fn post_stream_refinement_noops_when_user_skips() {
     let conv_id = uuid::Uuid::new_v4().to_string();
     let msg_id = uuid::Uuid::new_v4().to_string();
     let original = "Initial streamed answer.";
+    let abstained_meta = serde_json::json!({ "grounding_gate": { "action": "abstained" } });
     let initial = Message {
         id: msg_id.clone(),
         conversation_id: conv_id.clone(),
         role: Role::Assistant,
         content: original.to_string(),
         created_at: 0,
-        metadata: None,
+        metadata: Some(abstained_meta.clone()),
         version: 0,
     };
     h.store.save_message(&initial).await.unwrap();
 
     let refined = h
         .runtime
-        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", Some(abstained_meta))
         .await;
 
     assert!(refined.is_none(), "skip → no-op");

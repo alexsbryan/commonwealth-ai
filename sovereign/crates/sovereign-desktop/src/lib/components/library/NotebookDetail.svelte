@@ -20,6 +20,7 @@
   import { untrack } from "svelte";
   import ChatView from "../ChatView.svelte";
   import AtlasSurface from "../atlas/AtlasSurface.svelte";
+  import NotebookOpenQuestions from "./NotebookOpenQuestions.svelte";
   import ConflictsPanel from "./ConflictsPanel.svelte";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
   import { cardSend, cardReceive } from "../../motion";
@@ -155,6 +156,23 @@
     outerWorkScopeStore.set([notebook.id]);
     chatSeedStore.set({
       text: `Tell me about ${name}.`,
+      atom_id: "",
+      source_section: null,
+      question_type: "user",
+    });
+    askConversationId = null;
+    askVisited = true;
+    tab = "ask";
+  }
+
+  // I2-D: seed the Ask tab with a verbatim open question the sources
+  // raise (the NotebookOpenQuestions panel). Same Map→Ask bridge as
+  // `handleAskAbout`, but the chip text IS the question — no "Tell me
+  // about …" wrapper.
+  function handleAskQuestion(question: string) {
+    outerWorkScopeStore.set([notebook.id]);
+    chatSeedStore.set({
+      text: question,
       atom_id: "",
       source_section: null,
       question_type: "user",
@@ -505,6 +523,7 @@
     {#if tab === "explore"}
       {#if explorable}
         <div class="explore-surface">
+          <NotebookOpenQuestions corpusId={notebook.id} onAsk={handleAskQuestion} />
           <AtlasSurface startingCorpusId={notebook.id} onAskAbout={handleAskAbout} />
         </div>
       {:else if enriching}

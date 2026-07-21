@@ -391,6 +391,7 @@ mod tests {
                 id: "oq1".into(),
                 question: "what kind of life do I actually want".into(),
                 status: "open".into(),
+                question_type: None,
                 related_question_id: None,
                 representative_chunk_ids: vec![],
             }],

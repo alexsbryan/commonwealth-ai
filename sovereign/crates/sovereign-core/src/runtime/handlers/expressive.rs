@@ -262,6 +262,7 @@ impl Runtime {
         // top-K). Measured: the single correction pass cut confab
         // ~50%→~30%; the binding re-verify + claim-free floor is the
         // lever for the residual (2026-07-08 recall bench).
+        let mut recall_verification: Option<crate::runtime::types::RecallVerificationProv> = None;
         if register == SkillRegister::Relational && !context.memories.is_empty() {
             use super::super::memory_grounding as mg;
             const VERIFY_CAP: usize = 3; // matches PROMPT_RENDER_CAP
@@ -282,6 +283,10 @@ impl Runtime {
                 mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen)
                     .await;
             let mut final_referenced = None;
+            // Tracks the verdict that describes the FINAL response_text
+            // (v1, or v2 after a correction retry) for the retained
+            // provenance record below.
+            let mut recall_verdict_state = (v1.grounded, v1.fail_open);
             if v1.grounded {
                 final_referenced = v1.referenced;
                 // False-denial correction: the draft is grounded but
@@ -329,6 +334,7 @@ impl Runtime {
                     seen,
                 )
                 .await;
+                recall_verdict_state = (v2.grounded, v2.fail_open);
                 if v2.grounded {
                     final_referenced = v2.referenced;
                 } else {
@@ -365,6 +371,11 @@ impl Runtime {
                     self.pin_referenced_memory(conversation_id, &m.id);
                 }
             }
+            recall_verification = Some(crate::runtime::types::RecallVerificationProv {
+                grounded: recall_verdict_state.0,
+                fail_open: recall_verdict_state.1,
+                referenced: final_referenced,
+            });
         }
 
         // Glassbox parity with the streaming variant: capture
@@ -374,6 +385,16 @@ impl Runtime {
         // once-per-thread replica — v9 receipts, 2026-07-10) both read
         // this via `get_last_turn_provenance`.
         let message_id = uuid::Uuid::new_v4().to_string();
+        // Epistemic ledger for the witness surface (EPISTEMIC_STATE §4.2/§5):
+        // attached ONLY when the recall verifier attributed the reply to a
+        // recalled entry — that turn genuinely asserts a memory, and the
+        // footer renders the band chip ("From what you've told me", with
+        // "remembered, not verified" on FailOpen). Un-attributed witness
+        // turns assert no memory and stay ledger-less: deriving `Unverified`
+        // there would render "used your sources" prose on a turn that used
+        // none. Streaming witness runs no verifier (records None) and so
+        // never attaches — extending the verifier there is the follow-up.
+        let mut witness_epistemic_state: Option<crate::types::EpistemicState> = None;
         if register == SkillRegister::Relational {
             let recalled_memories: Vec<RecalledMemoryProv> = context
                 .memories
@@ -390,6 +411,7 @@ impl Runtime {
                         .to_string(),
                     ),
                     source_memory_ids: m.source_memory_ids.clone(),
+                    confidence: Some(m.confidence),
                 })
                 .collect();
             let history_summary = HistorySummaryProv {
@@ -413,6 +435,20 @@ impl Runtime {
             } else {
                 vec![render_temporal_tensions(&context.temporal_tensions)]
             };
+            if crate::runtime::epistemic::epistemic_state_enabled()
+                && recall_verification
+                    .as_ref()
+                    .is_some_and(|rv| rv.referenced.is_some())
+            {
+                witness_epistemic_state =
+                    Some(crate::runtime::epistemic::assemble_epistemic_state(
+                        crate::runtime::epistemic::EpistemicInputs {
+                            recalled: &recalled_memories,
+                            recall_verification: recall_verification.as_ref(),
+                            ..Default::default()
+                        },
+                    ));
+            }
             let prov_system = request.system_message.clone().unwrap_or_default();
             let provenance = TurnProvenance {
                 conversation_id: conversation_id.to_string(),
@@ -433,6 +469,7 @@ impl Runtime {
                 max_tokens: request.max_tokens,
                 enable_thinking: request.enable_thinking,
                 pass_a_ms: metrics.pass_a_ms,
+                recall_verification,
             };
             if let Ok(mut guard) = self.turn_provenance.write() {
                 guard.insert(conversation_id.to_string(), provenance);
@@ -447,11 +484,21 @@ impl Runtime {
             role: Role::Assistant,
             content: response_text,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "intent": "ExpressiveQuery",
-                "current_goal": current_goal,
-                "had_prior_assistant": last_assistant.is_some(),
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "intent": "ExpressiveQuery",
+                    "current_goal": current_goal,
+                    "had_prior_assistant": last_assistant.is_some(),
+                });
+                // Memory-attributed witness turns carry the ledger so the
+                // footer renders the memory chip + band (I3) — see the
+                // gating note above `witness_epistemic_state`.
+                if let Some(state) = &witness_epistemic_state {
+                    m["epistemic_state"] =
+                        serde_json::to_value(state).unwrap_or(serde_json::Value::Null);
+                }
+                m
+            }),
             version: 0,
         };
         Ok(Response {
@@ -701,6 +748,7 @@ impl Runtime {
                         .to_string(),
                     ),
                     source_memory_ids: m.source_memory_ids.clone(),
+                    confidence: Some(m.confidence),
                 })
                 .collect();
 
@@ -735,6 +783,10 @@ impl Runtime {
                 max_tokens: request.max_tokens,
                 enable_thinking: request.enable_thinking,
                 pass_a_ms,
+                // The recall verifier runs only on the NON-streaming
+                // witness path today; `None` here is accurate, not a
+                // gap — the ledger records these recalls Unverified.
+                recall_verification: None,
             };
             if let Ok(mut guard) = self.turn_provenance.write() {
                 guard.insert(conversation_id.to_string(), provenance);
@@ -758,6 +810,45 @@ impl Runtime {
         let store = Arc::clone(&self.store);
         let conversation_id_owned = conversation_id.to_string();
         let message_id_for_persist = message_id.clone();
+        // Post-stream recall verification inputs (F2, EPISTEMIC_STATE P2):
+        // the non-streaming witness verifies BEFORE replying; here the
+        // tokens have already shipped, so verification runs after stream
+        // close and its outcome lands on the persisted metadata (the
+        // epistemic ledger) + TurnProvenance — visible provenance, no
+        // regen ladder on this path (v1): an ungrounded recall records
+        // `FailedOnce` instead of silently dressing as verified.
+        let verify_inference = Arc::clone(&self.inference);
+        let turn_prov_for_spawn = Arc::clone(&self.turn_provenance);
+        let is_relational = register == SkillRegister::Relational;
+        let verify_memories: Vec<crate::types::Memory> = if is_relational {
+            const VERIFY_CAP: usize = 3; // matches PROMPT_RENDER_CAP
+            context.memories[..context.memories.len().min(VERIFY_CAP)].to_vec()
+        } else {
+            Vec::new()
+        };
+        let recalled_for_ledger: Vec<RecalledMemoryProv> = if is_relational {
+            context
+                .memories
+                .iter()
+                .map(|m| RecalledMemoryProv {
+                    id: m.id.clone(),
+                    content: m.content.clone(),
+                    created_at: m.created_at,
+                    kind: Some(
+                        match m.kind {
+                            crate::types::MemoryKind::Raw => "raw",
+                            crate::types::MemoryKind::Summary => "summary",
+                        }
+                        .to_string(),
+                    ),
+                    source_memory_ids: m.source_memory_ids.clone(),
+                    confidence: Some(m.confidence),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let user_message_owned = message.to_string();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<String>>();
 
         tokio::spawn(async move {
@@ -786,6 +877,60 @@ impl Runtime {
                 }
             }
 
+            // Post-stream recall verification + ledger (see the input
+            // block above the spawn). Same verifier, same VERIFY_CAP
+            // window as the non-streaming witness.
+            let mut witness_epistemic_state: Option<crate::types::EpistemicState> = None;
+            if is_relational
+                && !verify_memories.is_empty()
+                && crate::runtime::epistemic::epistemic_state_enabled()
+            {
+                use crate::runtime::memory_grounding as mg;
+                let vd = mg::verify_recall_grounding(
+                    verify_inference.as_ref(),
+                    &user_message_owned,
+                    &full_text,
+                    &verify_memories,
+                )
+                .await;
+                let rv = crate::runtime::types::RecallVerificationProv {
+                    grounded: vd.grounded,
+                    fail_open: vd.fail_open,
+                    referenced: vd.referenced,
+                };
+                tracing::info!(
+                    target: "epistemic.ledger",
+                    grounded = rv.grounded,
+                    fail_open = rv.fail_open,
+                    referenced = ?rv.referenced,
+                    "streaming witness: post-stream recall verification"
+                );
+                // Update the turn's provenance capture (guarded on the
+                // message id — a newer turn may have overwritten the
+                // conversation slot while we verified).
+                if let Ok(mut guard) = turn_prov_for_spawn.write() {
+                    if let Some(p) = guard.get_mut(&conversation_id_owned) {
+                        if p.message_id == message_id_for_persist {
+                            p.recall_verification = Some(rv.clone());
+                        }
+                    }
+                }
+                // Memory-attributed turns carry the ledger (same gating
+                // as the non-streaming witness: un-attributed turns stay
+                // ledger-less — deriving `Unverified` there would render
+                // "used your sources" prose on a turn that used none).
+                if rv.referenced.is_some() {
+                    witness_epistemic_state =
+                        Some(crate::runtime::epistemic::assemble_epistemic_state(
+                            crate::runtime::epistemic::EpistemicInputs {
+                                recalled: &recalled_for_ledger,
+                                recall_verification: Some(&rv),
+                                ..Default::default()
+                            },
+                        ));
+                }
+            }
+
             let mut metadata = serde_json::json!({
                 "intent": "ExpressiveQuery",
                 "current_goal": current_goal,
@@ -794,6 +939,14 @@ impl Runtime {
             if let Some(mem) = recalled_memories_for_metadata {
                 if let serde_json::Value::Object(ref mut map) = metadata {
                     map.insert("recalled_memories".to_string(), mem);
+                }
+            }
+            if let Some(state) = &witness_epistemic_state {
+                if let serde_json::Value::Object(ref mut map) = metadata {
+                    map.insert(
+                        "epistemic_state".to_string(),
+                        serde_json::to_value(state).unwrap_or(serde_json::Value::Null),
+                    );
                 }
             }
 

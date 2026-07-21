@@ -307,7 +307,24 @@ export interface InformationRequestPayload {
    *  `refinement`. The card renders this as "Task: <goal>" in the
    *  header. */
   task_title: string;
+  /** Catalog-grounded acquisition routes for the gap — concrete places
+   *  the user could fetch what would fill it. Snake_case-tagged
+   *  variants mirroring the Rust `AcquisitionRoute` enum. May be
+   *  empty (resolver off / nothing ranked); the card then renders its
+   *  pre-routes layout. */
+  routes?: AcquisitionRoute[];
 }
+
+/** One acquisition conjecture attached to an information request.
+ *  Mirrors `sovereign-contracts` `AcquisitionRoute` (externally-tagged
+ *  serde enum, snake_case). Unit variants arrive as plain strings. */
+export type AcquisitionRoute =
+  | "connect_folder"
+  | "connect_vault"
+  | "import_conversations"
+  | { install_recipe: { recipe_id: string; name: string } }
+  | { web_search: { queries: string[] } }
+  | { provide_document: { kind: string } };
 
 /** Emitted when the agent re-synthesises an already-streamed assistant
  *  message with user-supplied content. The UI replaces the message's

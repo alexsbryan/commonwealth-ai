@@ -339,11 +339,11 @@ impl TestHarness {
     /// scripted approval channel (for the user's pasted content).
     /// The caller owns the scripts and can mutate them between sends.
     pub fn new_with_collaborate(
-        gap: GapScript,
+        phrase: PhraseScript,
         refine: RefineScript,
         info_response: InfoResponseScript,
     ) -> Self {
-        let scriptable = Arc::new(ScriptableInference::new(gap, refine));
+        let scriptable = Arc::new(ScriptableInference::new(phrase, refine));
         let inference: Arc<dyn InferenceProvider> = scriptable.clone();
         let shared_store = Arc::new(SqliteStateStore::open_in_memory().unwrap());
         let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
@@ -428,19 +428,22 @@ impl TestHarness {
 // Not intended as a general-purpose mock — every field encodes a
 // narrow test scenario. Keep the surface small.
 
-/// What the scriptable inference should return for a gap-check prompt
-/// (one whose text contains "single most valuable").
+/// What the scriptable inference should return for the gap PHRASING
+/// prompt (one whose text contains "naming the missing information").
+/// Detection itself is structural since the I4-C retirement — the card
+/// fires iff the turn's gate abstained — so the script only shapes the
+/// card's wording.
 #[derive(Clone)]
-pub enum GapScript {
-    /// Return `{"has_gap": false}` — auto-collaborate should pass the
-    /// original answer through unchanged.
-    NoGap,
-    /// Return a full gap JSON with the provided `gap` field. Uses
-    /// stubbed values for the other fields.
-    Gap { gap: String },
-    /// Simulate a transient inference failure. The helper is
-    /// documented to fall back to the original answer on error.
+pub enum PhraseScript {
+    /// Return this line as the card's phrased ask.
+    Text(String),
+    /// Simulate a phrasing inference failure. The card must STILL fire,
+    /// falling back to the user's question verbatim (D4: phrasing can
+    /// never gate the card).
     Error,
+    /// Should not be called in this scenario (answered turn) — panics
+    /// if invoked.
+    Unused,
 }
 
 /// What the scriptable inference should return for a refinement
@@ -474,15 +477,15 @@ pub enum InfoResponseScript {
 
 pub struct ScriptableInference {
     fallback: DeterministicInference,
-    gap: GapScript,
+    phrase: PhraseScript,
     refine: RefineScript,
 }
 
 impl ScriptableInference {
-    pub fn new(gap: GapScript, refine: RefineScript) -> Self {
+    pub fn new(phrase: PhraseScript, refine: RefineScript) -> Self {
         Self {
             fallback: DeterministicInference,
-            gap,
+            phrase,
             refine,
         }
     }
@@ -493,37 +496,26 @@ impl InferenceProvider for ScriptableInference {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let p = &request.prompt;
 
-        // Gap-check prompt? See gap.rs — the prompt always contains
-        // "single most valuable".
-        if p.contains("single most valuable") {
-            return match &self.gap {
-                GapScript::NoGap => Ok(CompletionResponse {
-                    text: r#"{"has_gap": false}"#.to_string(),
-                    tokens_used: 5,
+        // Gap PHRASING prompt? See collaboration.rs::phrase_gap_question —
+        // the prompt always contains "naming the missing information".
+        if p.contains("naming the missing information") {
+            return match &self.phrase {
+                PhraseScript::Text(line) => Ok(CompletionResponse {
+                    text: line.clone(),
+                    tokens_used: 10,
                     prompt_tokens: 0,
-                    model_id: "scriptable-gap".to_string(),
+                    model_id: "scriptable-phrase".to_string(),
                     latency_ms: 1,
                     oicp_meta: None,
                     finish_reason: None,
                     completion_tokens: None,
                 }),
-                GapScript::Gap { gap } => {
-                    let body = format!(
-                        r#"{{"has_gap": true, "current_understanding": "cu", "gap": "{gap}", "relevance": "r", "satisfying_source": "s", "search_hints": ["h"]}}"#,
-                        gap = gap.replace('"', "\\\""),
-                    );
-                    Ok(CompletionResponse {
-                        text: body,
-                        tokens_used: 20,
-                        prompt_tokens: 0,
-                        model_id: "scriptable-gap".to_string(),
-                        latency_ms: 1,
-                        oicp_meta: None,
-                        finish_reason: None,
-                        completion_tokens: None,
-                    })
+                PhraseScript::Error => {
+                    Err(Error::Inference("scripted phrasing failure".to_string()))
                 }
-                GapScript::Error => Err(Error::Inference("scripted gap-check failure".to_string())),
+                PhraseScript::Unused => {
+                    panic!("phrasing invoked unexpectedly; test configured PhraseScript::Unused")
+                }
             };
         }
 

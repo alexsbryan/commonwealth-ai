@@ -1701,6 +1701,7 @@
           searchAugmentation={msg.searchAugmentation}
           onNextStep={handleNextStep}
           onContinue={handleContinueFromCutoff}
+          {onOpenLibrary}
         />
       {/each}
 
@@ -1711,6 +1712,7 @@
       <InformationRequestCard
         request={pendingInfoRequest}
         conversationId={activeConversationId}
+        {onOpenLibrary}
         onHandled={() => send({ type: "CLEAR_INFO" })}
         onRefiningStarted={() => {
           // The to-be-refined message is the most recent COMPLETED

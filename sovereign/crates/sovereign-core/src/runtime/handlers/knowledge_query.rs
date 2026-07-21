@@ -401,8 +401,24 @@ impl Runtime {
             hot_corpora,
             entities,
             meta_atlas_hits,
+            demand_plan,
             ..
         } = pipeline_state;
+
+        // Epistemic demand set (EPISTEMIC_STATE.md P1a) — built from
+        // the pipeline's own signals (entities + heuristic
+        // decomposition), coverage-stamped against the composed pool.
+        // Zero model calls; retained on the plan for ledger assembly.
+        let demands = {
+            let mut d = crate::runtime::epistemic::build_demands(
+                message,
+                intent,
+                &entities,
+                demand_plan.as_ref(),
+            );
+            crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
+            d
+        };
 
         let search_ms = t_search.elapsed().as_millis() as u64;
         // Per-corpus breakdown at this checkpoint — paired with the
@@ -515,6 +531,9 @@ impl Runtime {
                 // Zero-retrieval parametric decline — a short honest
                 // "no sources" answer; lessons don't engage here.
                 lessons: crate::runtime::types::TurnLessons::default(),
+                general_knowledge: Some(crate::runtime::types::GkReason::ZeroChunk),
+                demands,
+                query_embedding: embedding,
             };
         }
 
@@ -1277,6 +1296,14 @@ impl Runtime {
         crate::runtime::grounding::dbg(&format!(
             "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
         ));
+        // Re-stamp demand coverage against the FINAL pool — the
+        // agentic loop may have widened it since the post-pipeline
+        // stamp. Stamping is monotonic (Absent → Retrieved only).
+        let demands = {
+            let mut d = demands;
+            crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
+            d
+        };
         KnowledgeQueryPlan {
             request,
             chunks,
@@ -1293,6 +1320,10 @@ impl Runtime {
             folder_meta,
             meta_atlas_hits,
             lessons: turn_lessons,
+            general_knowledge: (agentic_still_insufficient && !agentic_corpus_anchored)
+                .then_some(crate::runtime::types::GkReason::AgenticInsufficient),
+            demands,
+            query_embedding: embedding,
         }
     }
 
@@ -1310,7 +1341,7 @@ impl Runtime {
         self_assessment: Option<String>,
         routing_trigger: Option<String>,
     ) -> Result<Response> {
-        let plan = self
+        let mut plan = self
             .prepare_knowledge_query_plan(message, context, intent, None)
             .await;
 
@@ -1354,6 +1385,7 @@ impl Runtime {
         // for short answers, per-claim audit→rewrite→annotate for
         // long-form). No hold needed here: nothing was sent yet.
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let mut gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>> = None;
         // Domain-managed corpora (governance, proxy-voting) take their own
         // calibrated gate surface; else the general KnowledgeQuery gate.
         let gate_surface = self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
@@ -1381,27 +1413,81 @@ impl Runtime {
             )
             .await;
             grounding_gate_meta = Some(outcome.meta);
+            gate_claims = Some(outcome.claims);
             outcome.text
         } else {
             completion.text.clone()
         };
 
+        // Coverage probe, hoisted (streaming twin): the OOD rescue needs
+        // the verdict before the answer is finalized; the epistemic
+        // block below reuses it. Gap/abstain turns only.
+        let gate_abstained = grounding_gate_meta
+            .as_ref()
+            .and_then(|m| m.get("action"))
+            .and_then(|a| a.as_str())
+            .map(|a| a.starts_with("abstained"))
+            .unwrap_or(false);
+        let mut general_knowledge = plan.general_knowledge;
+        let hoisted_probe_verdict: Option<crate::types::GapCoverage> =
+            if crate::runtime::epistemic::epistemic_state_enabled()
+                && (plan.chunks.is_empty() || gate_abstained || general_knowledge.is_some())
+            {
+                crate::runtime::epistemic::coverage_probe(
+                    self.corpus_engine.as_ref(),
+                    &plan.query_embedding,
+                    context.conversation.enabled_corpora.as_deref(),
+                )
+                .await
+                .map(|p| p.verdict)
+            } else {
+                None
+            };
+        // OOD general-knowledge rescue (gk_rescue.rs — see the streaming
+        // twin for the full contract): probe-confirmed uncovered topic +
+        // gated abstention → caveated parametric answer; the gap rows +
+        // routes survive on the ledger.
+        let mut completion_text = completion_text;
+        let mut rescued_turn = false;
+        if crate::runtime::gk_rescue::gk_rescue_enabled()
+            && gate_abstained
+            && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
+            && !plan.gate_entity_anchored
+        {
+            if let Some(rescued) =
+                crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message)
+                    .await
+            {
+                tracing::info!(
+                    target: "epistemic.ledger",
+                    chars = rescued.chars().count(),
+                    "gk rescue: abstention over uncovered topic → caveated parametric answer"
+                );
+                completion_text = rescued;
+                general_knowledge = Some(crate::runtime::types::GkReason::OodRescue);
+                rescued_turn = true;
+                if let Some(meta) = grounding_gate_meta.as_mut() {
+                    if let Some(prev) = meta.get("action").cloned() {
+                        meta["rescued_from"] = prev;
+                    }
+                    meta["action"] = serde_json::Value::from("gk_rescue_released");
+                }
+                gate_claims = Some(Vec::new());
+            }
+        }
+
         let final_content = if plan.gap_check_enabled {
-            // Humility principle: always run the gap check on KQ
-            // paths. The retrieval-shape route is a synthesis-
-            // routing decision, not an answer-quality signal. See
-            // the matching block in the streaming KQ path + the
-            // long-form note at `prepare_knowledge_query_plan`.
-            tracing::debug!(
-                route = ?plan.route,
-                top_source = %plan.shape.top_source_label,
-                "KnowledgeQuery: running gap check"
-            );
+            // Humility hook: detection is the turn's gate abstention
+            // (I4-C — see run_collaboration; answered turns — and
+            // rescued turns, which now answer — pass through
+            // instantly). See the matching block in the streaming KQ
+            // path + the long-form note at
+            // `prepare_knowledge_query_plan`.
             self.maybe_collaborate(
                 conversation_id,
                 message,
                 &completion_text,
-                &plan.doc_context,
+                gate_abstained && !rescued_turn,
             )
             .await
         } else {
@@ -1500,6 +1586,71 @@ impl Runtime {
         });
         let offers_json = serde_json::to_value(&offers).unwrap_or_default();
 
+        // Epistemic ledger (EPISTEMIC_STATE.md) — collation of the
+        // judgments this turn already computed, plus the demand set's
+        // coverage residue. The cross-corpus probe runs ONLY on
+        // gap/abstain turns (empty pool / abstention / GK fallback) —
+        // p50 on answered turns is untouched.
+        let epistemic_state = if crate::runtime::epistemic::epistemic_state_enabled() {
+            let abstained = grounding_gate_meta
+                .as_ref()
+                .and_then(|m| m.get("action"))
+                .and_then(|a| a.as_str())
+                .map(|a| a.starts_with("abstained"))
+                .unwrap_or(false);
+            let gap_turn = plan.chunks.is_empty() || abstained || general_knowledge.is_some();
+            // The probe already ran (hoisted above the rescue) — reuse
+            // its verdict, never probe twice.
+            let probe = hoisted_probe_verdict;
+            let mut demands = std::mem::take(&mut plan.demands);
+            // A rescued turn answered from GK, not from the sources —
+            // its demands are still uncovered residue, so the gap rows
+            // (and routes) survive alongside the caveated answer.
+            let mut gaps = crate::runtime::epistemic::finish_demands(
+                &mut demands,
+                gate_claims.as_deref(),
+                abstained || rescued_turn,
+                probe,
+            );
+            // Acquisition conjecture on the ledger's primary gap.
+            // Strictly gap-turn-gated: an answered turn with a minor
+            // absent facet records the gap but pays no embed.
+            if gap_turn {
+                if let Some(g) = gaps.first_mut() {
+                    let ctx = crate::runtime::acquisition::RouteContext {
+                        engine: self.corpus_engine.clone(),
+                        coverage: Some(g.coverage),
+                    };
+                    // Resolve on the demand's RAW text (the question /
+                    // entity), not the display statement — cleaner
+                    // embedding match and web-search queries.
+                    let gap_query = demands
+                        .get(g.demand_idx)
+                        .map(|d| d.text.clone())
+                        .unwrap_or_else(|| g.statement.clone());
+                    g.routes = crate::runtime::acquisition::routes_for_gap(
+                        self.inference.as_ref(),
+                        &ctx,
+                        &gap_query,
+                    )
+                    .await;
+                }
+            }
+            Some(crate::runtime::epistemic::assemble_epistemic_state(
+                crate::runtime::epistemic::EpistemicInputs {
+                    gate_meta: grounding_gate_meta.as_ref(),
+                    gate_claims: gate_claims.as_deref(),
+                    general_knowledge,
+                    pool_corpora: crate::runtime::epistemic::pool_corpora(&plan.chunks),
+                    demands,
+                    gaps,
+                    ..Default::default()
+                },
+            ))
+        } else {
+            None
+        };
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -1519,6 +1670,7 @@ impl Runtime {
                 "prompt_budget": plan.prompt_budget_note,
                 "next_steps": offers_json,
                 "grounding_gate": grounding_gate_meta,
+                "epistemic_state": epistemic_state,
             })),
             version: now(),
         };

@@ -110,7 +110,13 @@ pub(crate) async fn run_collaboration(
     conversation_id: &str,
     question: &str,
     response: &str,
-    evidence: &str,
+    // Gap DETECTION signal (I4-C retirement, bench/gap_check/DECISION.md):
+    // the turn's ledger abstention — the same gate signal `TurnVerdict::
+    // CannotKnowFromHere` derives from (D3). Replaces `gap.rs`'s post-hoc
+    // LLM judge, which scored 12/12-equivalent to this deterministic
+    // detector on the fixture bank while paying a 15-55s fast-slot call
+    // on EVERY answered turn. `false` = no gap card, pass through.
+    abstained: bool,
     // Optional narration channel: when both `routing_events` and
     // `session_id` are `Some`, surface "checking for gaps" /
     // "found a gap" chips alongside the gap-check work so the user
@@ -135,6 +141,11 @@ pub(crate) async fn run_collaboration(
     // 150s dispatch AbortError queued behind turn 2's refinement on
     // the fast slot. `None` = legacy callers, never preempted.
     preempt: Option<CancellationToken>,
+    // Acquisition-route resolution context (EPISTEMIC_STATE.md §4.3):
+    // an engine handle for the recipe catalog + installed diff, plus
+    // the turn's coverage verdict when a probe ran. `None` = no route
+    // resolution (legacy callers) — the card renders as before.
+    route_ctx: Option<crate::runtime::acquisition::RouteContext>,
 ) -> RefinementOutcome {
     if !inference_config.auto_collaborate {
         return RefinementOutcome::NotAttempted;
@@ -156,14 +167,23 @@ pub(crate) async fn run_collaboration(
 
     let t_start = std::time::Instant::now();
 
-    // Glassbox chip: "I drafted, now I'm auditing the answer."
-    // Emitted before `identify_gap` because that call can run
-    // for tens of seconds on grammar-constrained Fast-slot
-    // inference and the user is otherwise staring at a finished
-    // answer wondering if anything else is happening. Bypasses
-    // `try_emit_narration` — the session may already be past the
-    // 30s retention window by the time gap-check fires, and the
-    // chip's value is highest precisely on long turns.
+    // 1. Detection is STRUCTURAL (I4-C retirement): the card fires
+    //    exactly when the turn abstained — the signal the ledger's
+    //    `CannotKnowFromHere` verdict derives from. No LLM judges
+    //    whether a gap exists; answered turns pass through instantly
+    //    (the ledger still records minor uncovered facets as gap rows,
+    //    without a card). This deleted `gap.rs`'s per-turn 15-55s
+    //    grammar-constrained fast-slot audit.
+    if !abstained {
+        tracing::debug!("maybe_collaborate: turn answered — no gap card");
+        return RefinementOutcome::NotAttempted;
+    }
+
+    // Glassbox chip: the turn came up short and the system is preparing
+    // the ask. Emitted before the phrasing pass + route resolution
+    // (each can take seconds on the fast slot). Bypasses
+    // `try_emit_narration` — the session may already be past the 30s
+    // retention window, and the chip's value is highest on long turns.
     if let (Some(events), Some(sid)) = (routing_events.as_ref(), session_id.as_ref()) {
         events
             .emit_turn_narration(TurnNarration {
@@ -171,7 +191,7 @@ pub(crate) async fn run_collaboration(
                 conversation_id: conversation_id.to_string(),
                 event: NarrationEvent {
                     phase: NarrationPhase::GapCheckFired,
-                    text: "Drafted. Auditing the answer for anything worth asking you about."
+                    text: "Came up short on this one — working out what would settle it."
                         .to_string(),
                     elapsed_ms: 0,
                 },
@@ -179,41 +199,42 @@ pub(crate) async fn run_collaboration(
             .await;
     }
 
-    // 1. Ask the gap-identifier whether anything external would sharpen
-    //    the answer. Conservative on any error — we never want this
-    //    hook to fail the turn.
-    let gap = match crate::gap::identify_gap(inference, question, response, evidence).await {
-        Ok(Some(req)) => req,
-        Ok(None) => {
-            tracing::info!(
-                latency_ms = t_start.elapsed().as_millis() as u64,
-                "maybe_collaborate: no gap identified — passing through"
-            );
-            return RefinementOutcome::NotAttempted;
-        }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "maybe_collaborate: gap check failed — passing through"
-            );
-            return RefinementOutcome::NotAttempted;
-        }
+    // 2. Build the request DETERMINISTICALLY: the gap is the unanswered
+    //    question itself. A fast-slot pass may PHRASE it into a concrete
+    //    ask (D4: may phrase, never invent — the fallback is the user's
+    //    question verbatim, and routes come only from the catalog
+    //    resolver below).
+    let gap_text = phrase_gap_question(inference, question, response)
+        .await
+        .unwrap_or_else(|| question.trim().to_string());
+    let mut req = InformationRequest {
+        current_understanding: String::new(),
+        gap: gap_text,
+        relevance: String::new(),
+        satisfying_source: String::new(),
+        search_hints: Vec::new(),
+        task_id: conversation_id.to_string(),
+        step_id: 0,
+        // Runtime owns the contract that "anything coming out of
+        // run_collaboration is post-answer refinement."
+        kind: InformationRequestKind::Refinement,
+        task_title: String::new(),
+        // Routes are stamped by the resolver below, never by a model.
+        routes: Vec::new(),
     };
 
-    // 2. Stamp task/step on the request so the UI can correlate it
-    //    with the current conversation. Force kind = Refinement here
-    //    even though gap.rs already sets it — this is the single point
-    //    where the runtime owns the contract that "anything coming out
-    //    of run_collaboration is post-answer refinement," independent
-    //    of what the gap-checker chose to put on the wire.
-    let mut req = gap;
-    req.task_id = conversation_id.to_string();
-    req.step_id = 0;
-    req.kind = InformationRequestKind::Refinement;
-    req.task_title.clear();
+    // Acquisition conjecture (EPISTEMIC_STATE.md §4.3): rank concrete
+    // catalog-grounded routes for THIS gap. One embed call for the gap
+    // text; catalog embeddings are disk-cached. Any failure ships the
+    // card without routes — never blocks the request.
+    if let Some(ctx) = route_ctx {
+        req.routes =
+            crate::runtime::acquisition::routes_for_gap(inference, &ctx, &req.gap).await;
+    }
 
     tracing::info!(
         gap_chars = req.gap.len(),
+        routes = req.routes.len(),
         "maybe_collaborate: surfacing information request"
     );
 
@@ -237,9 +258,9 @@ pub(crate) async fn run_collaboration(
             .await;
     }
 
-    // Boundary check: identify_gap can run tens of seconds on the
-    // fast slot; if a newer turn arrived meanwhile, don't surface a
-    // stale card.
+    // Boundary check: the phrasing + route resolution can take seconds
+    // on the fast slot; if a newer turn arrived meanwhile, don't
+    // surface a stale card.
     if preempted("post_gap_check") {
         return RefinementOutcome::NotAttempted;
     }
@@ -399,6 +420,42 @@ pub(crate) async fn run_collaboration(
     }
 }
 
+/// Phrase the unanswered question into the card's concrete ask — the D4
+/// "may phrase, never invent" pass (EPISTEMIC_STATE.md). One fast-slot
+/// call, plain-text output, hard fallback to the user's question
+/// verbatim: phrasing can improve the card's wording but can never
+/// gate the card, invent a gap, or fail the flow. Routes are resolved
+/// separately from the catalog and are never model-authored.
+async fn phrase_gap_question(
+    inference: &dyn InferenceProvider,
+    question: &str,
+    response: &str,
+) -> Option<String> {
+    const PHRASE_MAX_TOKENS: u32 = 72;
+    let q: String = question.chars().take(600).collect();
+    let r: String = response.chars().take(400).collect();
+    let prompt = format!(
+        "The assistant could not answer this from the user's connected sources.\n\n\
+         Question: {q}\n\n\
+         Reply given: {r}\n\n\
+         Write ONE short line naming the missing information — the specific \
+         fact, document, or source that would settle the question. Output the \
+         line only — no preface, no quotes."
+    );
+    let mut request =
+        crate::types::CompletionRequest::for_workload(crate::slot_policy::Workload::Housekeep, prompt)
+            .with_system("You phrase information requests precisely. Output one line only.")
+            .with_output_budget(PHRASE_MAX_TOKENS);
+    request.temperature = Some(0.0);
+    let resp = inference.complete(&request).await.ok()?;
+    let cleaned = crate::title::strip_think_blocks(&resp.text);
+    let line = cleaned.trim().lines().next()?.trim().trim_matches('"').trim();
+    if line.is_empty() || line.chars().count() > 240 {
+        return None;
+    }
+    Some(line.to_string())
+}
+
 /// Post-stream refinement primitive: run the gap check and, if the
 /// user provides content, overwrite the saved assistant message and
 /// emit `message-refined`. Called both from `handle_message_stream`'s
@@ -436,7 +493,21 @@ pub(crate) async fn run_post_stream_refinement(
     // Post-stream preemption — forwarded; see `run_collaboration`.
     preempt: Option<CancellationToken>,
     grounding_guard: Option<RefinementGuard>,
+    // Acquisition-route context — forwarded; see `run_collaboration`.
+    route_ctx: Option<crate::runtime::acquisition::RouteContext>,
 ) -> Option<String> {
+    // Gap detection (I4-C retirement): read the turn's abstention off the
+    // persisted gate metadata — the same field the epistemic assembler
+    // reads (D3: the ledger's `CannotKnowFromHere` verdict derives from
+    // exactly this signal). Ledger-less messages (gate off / legacy)
+    // never fire the card.
+    let abstained = original_metadata
+        .as_ref()
+        .and_then(|m| m.get("grounding_gate"))
+        .and_then(|g| g.get("action"))
+        .and_then(|a| a.as_str())
+        .map(|a| a.starts_with("abstained"))
+        .unwrap_or(false);
     let outcome = run_collaboration(
         inference,
         approval,
@@ -444,11 +515,12 @@ pub(crate) async fn run_post_stream_refinement(
         conversation_id,
         question,
         original_content,
-        evidence,
+        abstained,
         routing_events,
         session_id,
         lesson_prompt,
         preempt,
+        route_ctx,
     )
     .await;
 

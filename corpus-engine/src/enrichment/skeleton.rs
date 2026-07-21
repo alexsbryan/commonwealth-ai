@@ -71,6 +71,11 @@ pub struct SkeletonOpenQuestion {
     pub id: String,
     pub question: String,
     pub status: String,
+    /// Kind of question (e.g. `"conceptual"`). Carried from the detector's
+    /// `OpenQuestion::question_type` for fidelity. `#[serde(default)]` so old
+    /// sidecars written before I3 (no field) still parse.
+    #[serde(default)]
+    pub question_type: Option<String>,
     pub related_question_id: Option<String>,
     pub representative_chunk_ids: Vec<u64>,
 }
@@ -327,6 +332,7 @@ mod tests {
                 id: "oq_1".into(),
                 question: "What explains manipulation arguments?".into(),
                 status: "active_research".into(),
+                question_type: Some("conceptual".into()),
                 related_question_id: Some("q_free_will".into()),
                 representative_chunk_ids: vec![500],
             }],
@@ -451,6 +457,28 @@ mod tests {
         assert_eq!(pos.proponents, vec!["Frankfurt", "Dennett"]);
         assert_eq!(pos.source, "skeleton");
         assert!(pos.discovery_confidence.is_none());
+
+        // I3: question_type survives the round trip.
+        assert_eq!(
+            parsed.open_questions[0].question_type.as_deref(),
+            Some("conceptual")
+        );
+    }
+
+    /// I3 back-compat: a sidecar written before `question_type` existed (the
+    /// field is simply absent) must still parse, defaulting to `None`.
+    #[test]
+    fn open_question_without_type_defaults_to_none() {
+        let legacy = r#"{
+            "id": "oq_legacy",
+            "question": "Does the old sidecar still load?",
+            "status": "active_research",
+            "related_question_id": null,
+            "representative_chunk_ids": [7]
+        }"#;
+        let parsed: SkeletonOpenQuestion = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.id, "oq_legacy");
+        assert!(parsed.question_type.is_none());
     }
 
     #[test]

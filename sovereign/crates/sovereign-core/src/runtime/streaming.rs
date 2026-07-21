@@ -569,7 +569,7 @@ async fn gate_held_answer(
     request: &CompletionRequest,
     profile: &crate::runtime::grounding::GroundingProfile,
     progress: Option<GateProgressWiring>,
-) -> Option<serde_json::Value> {
+) -> Option<(serde_json::Value, Vec<crate::runtime::grounding::GateClaim>)> {
     if gate_on && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
         // Gate-progress narration reader (mirrors the token-count
         // heartbeat pattern above): the ladder try_sends claim-check
@@ -707,7 +707,7 @@ async fn gate_held_answer(
             final_tail = %tail_chars(full_text, 48),
             "gate lifecycle"
         );
-        Some(outcome.meta)
+        Some((outcome.meta, outcome.claims))
     } else {
         None
     }
@@ -1190,8 +1190,26 @@ impl Runtime {
             folder_meta,
             meta_atlas_hits,
             lessons,
+            general_knowledge,
+            demands,
+            query_embedding,
         } = plan;
         let documents_found = chunks.len();
+        // Distinct corpus ids for the epistemic ledger's provenance
+        // attribution — computed here (chunks are moved into the gate
+        // evidence inside the spawn) and moved into the spawn.
+        let pool_corpora_for_ledger = crate::runtime::epistemic::pool_corpora(&chunks);
+        // Ledger inputs that ride into the spawn: the plan's retained
+        // demand set + query embedding (gap-turn coverage probe) and
+        // an engine handle for the probe itself.
+        let mut demands_for_ledger = demands;
+        let query_embedding_for_ledger = query_embedding;
+        let engine_for_ledger = self.corpus_engine.clone();
+        // The turn's enabled-corpus scope for the coverage probe (D4: probe
+        // "your corpus", not every corpus on the box). Cloned before the
+        // spawn since `context` stays on the main task.
+        let enabled_corpora_for_ledger: Option<Vec<String>> =
+            context.conversation.enabled_corpora.clone();
         // Answerable-context gate for the refusal-retry (KQ path), mirroring
         // the DeepQuery spawn: only retry a refusal when evidence WAS
         // retrieved — a genuine "no sources" stays an honest abstention.
@@ -1461,7 +1479,7 @@ impl Runtime {
                 }),
                 _ => None,
             };
-            let grounding_gate_meta = gate_held_answer(
+            let gate_result = gate_held_answer(
                 &inference,
                 gate_on,
                 &observed_finish,
@@ -1473,6 +1491,71 @@ impl Runtime {
                 gate_progress_wiring,
             )
             .await;
+            let mut gate_claims = gate_result.as_ref().map(|(_, c)| c.clone());
+            let mut grounding_gate_meta = gate_result.map(|(m, _)| m);
+            let mut general_knowledge = general_knowledge;
+
+            // Coverage probe, HOISTED above the held release (was inside
+            // the ledger block): the OOD rescue below needs the verdict
+            // before the answer goes out; the ledger block reuses it
+            // (one probe per turn, gap/abstain turns only — answered
+            // turns still pay nothing).
+            let gate_abstained = grounding_gate_meta
+                .as_ref()
+                .and_then(|m| m.get("action"))
+                .and_then(|a| a.as_str())
+                .map(|a| a.starts_with("abstained"))
+                .unwrap_or(false);
+            let hoisted_probe_verdict: Option<crate::types::GapCoverage> =
+                if crate::runtime::epistemic::epistemic_state_enabled()
+                    && (documents_found == 0 || gate_abstained || general_knowledge.is_some())
+                {
+                    crate::runtime::epistemic::coverage_probe(
+                        engine_for_ledger.as_ref(),
+                        &query_embedding_for_ledger,
+                        enabled_corpora_for_ledger.as_deref(),
+                    )
+                    .await
+                    .map(|p| p.verdict)
+                } else {
+                    None
+                };
+            // OOD general-knowledge rescue (gk_rescue.rs): a gated
+            // abstention over a probe-confirmed uncovered topic becomes
+            // the caveated parametric answer — streamed below in the
+            // held-release frame, so the user sees the rescue directly.
+            // In-topic (ClaimUncovered) abstentions and entity-anchored
+            // questions are structurally never rescued.
+            let mut rescued_turn = false;
+            if crate::runtime::gk_rescue::gk_rescue_enabled()
+                && gate_abstained
+                && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
+                && !gate_entity_anchored
+            {
+                if let Some(rescued) =
+                    crate::runtime::gk_rescue::rescue_ood_answer(inference.as_ref(), &gate_question)
+                        .await
+                {
+                    tracing::info!(
+                        target: "epistemic.ledger",
+                        chars = rescued.chars().count(),
+                        "gk rescue: abstention over uncovered topic → caveated parametric answer"
+                    );
+                    full_text = rescued;
+                    general_knowledge = Some(crate::runtime::types::GkReason::OodRescue);
+                    rescued_turn = true;
+                    if let Some(meta) = grounding_gate_meta.as_mut() {
+                        if let Some(prev) = meta.get("action").cloned() {
+                            meta["rescued_from"] = prev;
+                        }
+                        meta["action"] = serde_json::Value::from("gk_rescue_released");
+                    }
+                    // The discarded draft's audit records must not become
+                    // holdings on the rescued turn — the ledger's basis is
+                    // GeneralKnowledge, visibly.
+                    gate_claims = Some(Vec::new());
+                }
+            }
 
             // Post-synthesis guardrail: demote any quoted span that
             // isn't verbatim-present in the evidence shown to the
@@ -1612,12 +1695,83 @@ impl Runtime {
                 )
                 .await
             };
+            // Epistemic ledger (EPISTEMIC_STATE.md) — collation of the
+            // turn's retained judgments + the demand set's coverage
+            // residue. The cross-corpus probe fires on gap/abstain
+            // turns only; answered turns pay nothing. The probe
+            // verdict is hoisted so the post-stream gap-check card can
+            // reuse it for acquisition-route bias.
+            let mut probe_verdict_for_routes: Option<crate::types::GapCoverage> = None;
+            let epistemic_state = if crate::runtime::epistemic::epistemic_state_enabled() {
+                let abstained = grounding_gate_meta
+                    .as_ref()
+                    .and_then(|m| m.get("action"))
+                    .and_then(|a| a.as_str())
+                    .map(|a| a.starts_with("abstained"))
+                    .unwrap_or(false);
+                let gap_turn =
+                    documents_found == 0 || abstained || general_knowledge.is_some();
+                // The probe already ran above the held release (hoisted
+                // for the OOD rescue) — reuse its verdict, never probe
+                // twice.
+                let probe = hoisted_probe_verdict;
+                probe_verdict_for_routes = probe;
+                // A rescued turn answered from GK, not from the sources
+                // — its demands are still uncovered residue, so the gap
+                // rows (and their acquisition routes) survive alongside
+                // the caveated answer.
+                let mut gaps = crate::runtime::epistemic::finish_demands(
+                    &mut demands_for_ledger,
+                    gate_claims.as_deref(),
+                    abstained || rescued_turn,
+                    probe,
+                );
+                // Acquisition conjecture on the ledger's primary gap.
+                // Strictly gap-turn-gated: an answered turn with a
+                // minor absent facet records the gap but pays no embed.
+                if gap_turn {
+                    if let Some(g) = gaps.first_mut() {
+                        let ctx = crate::runtime::acquisition::RouteContext {
+                            engine: engine_for_ledger.clone(),
+                            coverage: Some(g.coverage),
+                        };
+                        // Resolve on the demand's RAW text (the
+                        // question / entity), not the display
+                        // statement — cleaner embedding match and
+                        // web-search queries.
+                        let gap_query = demands_for_ledger
+                            .get(g.demand_idx)
+                            .map(|d| d.text.clone())
+                            .unwrap_or_else(|| g.statement.clone());
+                        g.routes = crate::runtime::acquisition::routes_for_gap(
+                            inference.as_ref(),
+                            &ctx,
+                            &gap_query,
+                        )
+                        .await;
+                    }
+                }
+                Some(crate::runtime::epistemic::assemble_epistemic_state(
+                    crate::runtime::epistemic::EpistemicInputs {
+                        gate_meta: grounding_gate_meta.as_ref(),
+                        gate_claims: gate_claims.as_deref(),
+                        general_knowledge,
+                        pool_corpora: pool_corpora_for_ledger,
+                        demands: demands_for_ledger,
+                        gaps,
+                        ..Default::default()
+                    },
+                ))
+            } else {
+                None
+            };
             let metadata_json = serde_json::json!({
                 "streamed": true,
                 "intent": "knowledge_query",
                 "documents_found": documents_found,
                 "search_ms": search_ms,
                 "result_quality": result_quality,
+                "epistemic_state": epistemic_state,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
                 // TEACHABLE P0 — which lessons influenced this turn
@@ -1850,6 +2004,10 @@ impl Runtime {
                 // must survive a gap-check rewrite of the answer.
                 let collab_lesson_prompt = lesson_prompt_form.clone();
                 let collab_preempt = preempt_for_spawn.clone();
+                let collab_route_ctx = Some(crate::runtime::acquisition::RouteContext {
+                    engine: engine_for_ledger.clone(),
+                    coverage: probe_verdict_for_routes,
+                });
                 tokio::spawn(async move {
                     tracing::info!(
                         conversation_id = %collab_cid,
@@ -1873,6 +2031,7 @@ impl Runtime {
                         collab_lesson_prompt,
                         collab_preempt,
                         collab_guard,
+                        collab_route_ctx,
                     )
                     .await;
                     if refined.is_some() {
@@ -2140,6 +2299,9 @@ impl Runtime {
         let store = Arc::clone(&self.store);
         let approval = Arc::clone(&self.approval);
         let inference_config = self.inference_config.clone();
+        // Engine handle for acquisition-route resolution on the
+        // post-stream gap-check card (EPISTEMIC_STATE.md §4.3).
+        let engine_for_routes = self.corpus_engine.clone();
         // Cloned into the spawn so the post-stream gap-check chips
         // can reach the desktop UI. See the matching block in the
         // KnowledgeQuery streaming branch above for the rationale.
@@ -2186,6 +2348,9 @@ impl Runtime {
         // today, and the long-form ladder doesn't consume it.
         let deep_gate_surface = crate::runtime::grounding::GateSurface::DeepQuery;
         let deep_gate_on = deep_gate_surface.enabled() && !kc.chunks.is_empty();
+        // Distinct corpus ids for the epistemic ledger (moved into the
+        // spawn; kc.chunks is consumed by the evidence build below).
+        let deep_pool_corpora = crate::runtime::epistemic::pool_corpora(&kc.chunks);
         // The turn's sealed evidence universe (deep answers are
         // usually long-form). Built pre-spawn; claim search sealed to
         // the conversation's corpora. entity_anchored=false — the
@@ -2351,7 +2516,7 @@ impl Runtime {
                     }),
                     _ => None,
                 };
-            let grounding_gate_meta = gate_held_answer(
+            let gate_result = gate_held_answer(
                 &inference,
                 deep_gate_on,
                 &observed_finish,
@@ -2363,6 +2528,8 @@ impl Runtime {
                 gate_progress_wiring,
             )
             .await;
+            let gate_claims = gate_result.as_ref().map(|(_, c)| c.clone());
+            let grounding_gate_meta = gate_result.map(|(m, _)| m);
 
             // Phase 5 — typed Finish frame from the provider is the
             // source of truth for length truncation. Falls back to
@@ -2398,6 +2565,19 @@ impl Runtime {
                 completion_tokens: Some(completion_tokens_val),
                 context_window: inference.effective_context_size(),
             };
+            // Epistemic ledger (EPISTEMIC_STATE.md) — dark collation;
+            // the deep/simple stream has no GK plan signal and its
+            // recall verifier doesn't run, so those inputs default.
+            let epistemic_state = crate::runtime::epistemic::epistemic_state_enabled().then(|| {
+                crate::runtime::epistemic::assemble_epistemic_state(
+                    crate::runtime::epistemic::EpistemicInputs {
+                        gate_meta: grounding_gate_meta.as_ref(),
+                        gate_claims: gate_claims.as_deref(),
+                        pool_corpora: deep_pool_corpora,
+                        ..Default::default()
+                    },
+                )
+            });
             let metadata_json = serde_json::json!({
                 "streamed": true,
                 "provenance": provenance,
@@ -2412,6 +2592,7 @@ impl Runtime {
                 // was trimmed to fit (see runtime::prompt_budget).
                 "prompt_budget": budget_note,
                 "grounding_gate": grounding_gate_meta,
+                "epistemic_state": epistemic_state,
             });
             // Post-synthesis guardrail (DeepQuery / reasoning stream):
             // same contract as the KnowledgeQuery stream — demote any
@@ -2544,6 +2725,10 @@ impl Runtime {
                 // refinement prompt (today-anchor precedent).
                 let collab_lesson_prompt = lesson_prompt_form.clone();
                 let collab_preempt = preempt_for_spawn.clone();
+                let collab_route_ctx = Some(crate::runtime::acquisition::RouteContext {
+                    engine: engine_for_routes.clone(),
+                    coverage: None,
+                });
                 tokio::spawn(async move {
                     run_post_stream_refinement(
                         collab_inference.as_ref(),
@@ -2561,6 +2746,7 @@ impl Runtime {
                         collab_lesson_prompt,
                         collab_preempt,
                         collab_guard,
+                        collab_route_ctx,
                     )
                     .await;
                 });

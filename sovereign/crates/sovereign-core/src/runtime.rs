@@ -126,8 +126,11 @@ pub(crate) use self::formatters::{
     format_scored_chunks_with_kinds, MAX_KNOWLEDGE_CHARS,
 };
 
+pub mod acquisition;
 mod code_trace;
 mod collaboration;
+pub mod epistemic;
+mod gk_rescue;
 mod evidence;
 mod evidence_loop;
 mod grounding;
@@ -136,6 +139,13 @@ mod grounding;
 // of "is this asserted value grounded," reachable as
 // `sovereign_core::runtime::{assess_asserted_value, AssertedValue}`.
 pub use grounding::{assess_asserted_value, AssertedValue};
+// The shared decline-shape primitives — one notion of "this prose answers
+// nothing", used by the gate's decline guard and the ledger-fidelity
+// bench's verdict-vs-prose cross-check. `released_pure_decline` is the
+// strict form (excludes caveated-GK pivots and decline-then-answer
+// shapes); `answer_declines` is the loose contains-form the specifics
+// guard uses.
+pub use grounding::{answer_declines, released_pure_decline};
 mod formatters;
 mod handlers;
 mod intent_helpers;

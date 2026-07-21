@@ -65,6 +65,10 @@ pub struct InformationRequestPayload {
     pub search_hints: Vec<String>,
     pub kind: sovereign_core::types::InformationRequestKind,
     pub task_title: String,
+    /// Catalog-grounded acquisition routes for the gap (may be empty).
+    /// Serialized with the contracts enum's snake_case tags — the TS
+    /// mirror in types.ts matches.
+    pub routes: Vec<sovereign_core::types::AcquisitionRoute>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -223,6 +227,7 @@ impl ApprovalChannel for TauriApprovalChannel {
                 search_hints: request.search_hints.clone(),
                 kind: request.kind,
                 task_title: request.task_title.clone(),
+                routes: request.routes.clone(),
             },
         );
 

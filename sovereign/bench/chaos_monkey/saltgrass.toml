@@ -157,36 +157,42 @@ rationale = "Maximal synthesis: the insured cargo stripped quietly and sold up t
 [[questions]]
 id = "absent-marlock-firstname"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "What is Constable Marlock's first name?"
 rationale = "He is only ever 'Constable Marlock' — verified by grep: no given name appears anywhere in the text."
 
 [[questions]]
 id = "absent-lugger-name"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "What is the name of Severin Quenholt's lugger?"
 rationale = "His lugger is mentioned but never named — verified by construction and grep."
 
 [[questions]]
 id = "absent-story-year"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "In what year is the story set?"
 rationale = "No year appears anywhere in the text (verified: no 18xx/19xx digits); the era is deliberately vague."
 
 [[questions]]
 id = "absent-hetch-firstname"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "What is Widow Hetch's first name?"
 rationale = "She is only ever 'Widow Hetch' — no given name in the text."
 
 [[questions]]
 id = "absent-cargo-manifest"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "What specific goods made up the Merrow Bell's insured cargo?"
 rationale = "The cargo is only ever 'the insured cargo' / 'general cargoes' — never enumerated; deliberately withheld."
 
 [[questions]]
 id = "absent-sentence"
 qtype = "absent_adjacent"
+acquisition_class = "unknowable"
 question = "What sentence did Severin Quenholt receive at his trial?"
 rationale = "The story ends before the assizes ('what the law would do with him the village did not yet know'); no sentence is stated."
 
@@ -195,30 +201,35 @@ rationale = "The story ends before the assizes ('what the law would do with him 
 [[questions]]
 id = "ood-canada-capital"
 qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
 question = "What is the capital of Canada?"
 rationale = "Outside the novella; the sealed corpus contains nothing about this."
 
 [[questions]]
 id = "ood-water-boiling"
 qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
 question = "At what temperature does water boil at sea level?"
 rationale = "Physics fact; out of domain for the corpus."
 
 [[questions]]
 id = "ood-css-center"
 qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
 question = "How do you center a div horizontally in CSS?"
 rationale = "Programming question; nothing in the literary corpus addresses it."
 
 [[questions]]
 id = "ood-moon-landing"
 qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
 question = "In what year did humans first land on the Moon?"
 rationale = "20th-century history; out of domain for the corpus."
 
 [[questions]]
 id = "ood-gold-symbol"
 qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
 question = "What is the chemical symbol for gold?"
 rationale = "Chemistry fact; out of domain for the corpus."
 
