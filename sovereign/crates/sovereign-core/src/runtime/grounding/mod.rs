@@ -1146,7 +1146,7 @@ fn short_specifics_scan_enabled() -> bool {
 /// evidence). Skipping is a latency optimisation and errs fail-open: a false
 /// skip just preserves prior behaviour. Measured 2026-07-01: 6/7 short-band scan
 /// flags on GOOD answers were exactly these honest abstentions.
-fn answer_declines(text: &str) -> bool {
+pub fn answer_declines(text: &str) -> bool {
     let h = text.trim_start().to_lowercase();
     const DECLINES: &[&str] = &[
         "i don't have reliable information",
@@ -1186,7 +1186,7 @@ fn answer_declines(text: &str) -> bool {
 /// declines-then-ANSWERS, and must keep releasing — so the caveat is
 /// stripped first and any remaining "from general knowledge" pivot vetoes
 /// the reclassification.
-fn released_pure_decline(text: &str) -> bool {
+pub fn released_pure_decline(text: &str) -> bool {
     let stripped = strip_gk_caveat(text);
     if stripped.to_lowercase().contains("from general knowledge") {
         return false;

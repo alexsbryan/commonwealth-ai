@@ -146,10 +146,30 @@ timidity now lives in the TRACKED `ood-caveated-answer` lane
 - **Mobile rendering** — projection wired (I2-C); rendering deferred
   until the mobile toolchain pass.
 
+## Landed 2026-07-20 (afternoon — the F-wave + the proof)
+- **F1** Acquisition resolver: content-bearing tier (recipes outrank
+  connectors; the `import_conversations` attractor is dead). Lane
+  0.45 → **0.82**; gate ARMED at 0.70 in the manifest.
+- **F2** Streaming witness: post-stream recall verification + banded
+  Memory-holding ledger on attributed recalls — the §5 memory
+  distinction now fires on the real desktop chat path.
+- **F3** OOD GK rescue (`gk_rescue.rs`, probe-gated, kill switch):
+  caveated parametric answer + routes instead of the dead-end decline.
+  OOD caveated-answer lane 0.20 → **0.80** (the 5th kept its honest
+  abstention when the rescue itself declined — by design).
+- **F4** Ledger-fidelity bench (`bench chaos-monkey fidelity`):
+  deterministic forged-receipt cross-check + judged holdings↔prose
+  correspondence. Caught a second forged-receipt instance on the
+  pre-guard artifact; **0 conflicts** post-guard; correspondence
+  tracked at ~0.75–0.80.
+- **F5** Paired before/after runs + [`EPISTEMIC_STATE_PROOF.md`](./EPISTEMIC_STATE_PROOF.md)
+  — the skeptic-facing case, every number citing a committed artifact.
+
 ## One-line take
-The honesty machinery is shipped end to end: the P0 abstain-vs-release
-defect is fixed at the gate, gap detection is structural (gap.rs
-deleted), the invariants are pinned, and the witness surface finally
-emits the memory holdings the §5 rendering was built for. Remaining:
-streaming-witness verifier, ledger-fidelity sampling, and arming the
-acquisition gate from the fresh baseline.
+The vision behaviors are now live end to end and measured: honest per
+statement (typed ledger, auditable receipts, forged-receipt class at
+zero), never a dead end (probe-driven rescue + catalog routes, 0.80/0.82
+on their lanes), memory visibly distinct on both witness paths — and the
+before/after proof doc makes the architecture case with committed
+artifacts. Remaining tail: holdings↔prose triage (0.75 tracked),
+`unknowable` lane semantics, mobile rendering, §6 cleanup.

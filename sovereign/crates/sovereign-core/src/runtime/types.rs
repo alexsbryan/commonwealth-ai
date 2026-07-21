@@ -218,6 +218,14 @@ pub(crate) enum GkReason {
     /// The agentic evidence loop ran and still judged the pool
     /// insufficient, and the question anchors to no enabled corpus.
     AgenticInsufficient,
+    /// The gate abstained AND the coverage probe judged the topic
+    /// uncovered by the enabled corpora — the answer was re-synthesized
+    /// from parametric knowledge under the GK caveat (gk_rescue.rs).
+    /// The probe verdict is what makes this safe: an in-topic
+    /// (ClaimUncovered) abstention is NEVER rescued, so a labelled-but-
+    /// confident in-world fabrication can't ride this path (the failure
+    /// the 2026-07-01 exactval fix closed).
+    OodRescue,
 }
 
 /// Retrieve-only projection of a [`KnowledgeQueryPlan`] — the evidence

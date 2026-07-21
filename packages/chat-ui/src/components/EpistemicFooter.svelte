@@ -238,11 +238,16 @@
     return bandLabel(p.memory.band);
   }
 
-  /** Acquisition-route chips for the abstention panel. `web_search`
-   *  and `provide_document` are excluded — the composer + paste box
-   *  already cover those; what remains are Library navigations. */
-  let abstentionRoutes = $derived.by(() => {
-    if (!isAbstention) return [] as AcquisitionRoute[];
+  /** Acquisition-route chips (Library navigations only — `web_search`
+   *  and `provide_document` are excluded; the composer + paste box
+   *  already cover those). NOT abstention-gated: a rescued
+   *  general-knowledge turn ("Not in your sources — from general
+   *  knowledge: …") carries the same gap routes and must render them —
+   *  the caveat without the "where to get it" chips would be a dead
+   *  end wearing a label (2026-07-20, the OOD rescue). Routes are only
+   *  ever resolved on gap turns, so answered-from-sources turns never
+   *  show the row. */
+  let libraryRoutes = $derived.by(() => {
     const routes: AcquisitionRoute[] = [];
     const seen = new Set<string>();
     for (const g of ledger.gaps) {
@@ -292,10 +297,10 @@
           {/each}
         </ul>
       {/if}
-      {#if onOpenLibrary && abstentionRoutes.length > 0}
+      {#if onOpenLibrary && libraryRoutes.length > 0}
         <div class="routes" data-testid="abstention-routes">
           <span class="routes-label">Where you could get this</span>
-          {#each abstentionRoutes as route}
+          {#each libraryRoutes as route}
             <button
               type="button"
               class="route-chip"
@@ -380,6 +385,26 @@
             {/each}
           </div>
         {/if}
+      </div>
+    {/if}
+
+    {#if onOpenLibrary && libraryRoutes.length > 0}
+      <!-- Non-abstention gap routes: a rescued/general-knowledge turn
+           answered, but the sources still don't cover the topic — the
+           caveat plus a concrete way to close the gap is the whole
+           point (never a dead end, never silently parametric). -->
+      <div class="routes routes-inline" data-testid="gap-routes">
+        <span class="routes-label">Add a source that covers this</span>
+        {#each libraryRoutes as route}
+          <button
+            type="button"
+            class="route-chip"
+            onclick={() => onOpenLibrary?.()}
+            title="Opens the Library so you can add the source"
+          >
+            {routeLabel(route)}
+          </button>
+        {/each}
       </div>
     {/if}
   {/if}
