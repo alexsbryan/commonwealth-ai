@@ -102,6 +102,63 @@ pub struct ComputeChildStatus {
     pub last_exit: Option<String>,
 }
 
+/// Fill-in-the-middle (inline completion) request — the daemon-side
+/// view of `POST /v1/completions` (`sovereign/docs/INLINE_COMPLETION.md`).
+/// The route has already unified the dual wire shape (OpenAI legacy
+/// `prompt`+`suffix` vs rich `prefix`+`suffix`) into these fields.
+#[derive(Debug, Clone)]
+pub struct FimCompletionRequest {
+    /// Code before the cursor (the route clamps nothing — the service
+    /// keeps the TAIL beyond its configured `max_prefix_chars`).
+    pub prefix: String,
+    /// Code after the cursor (service keeps the HEAD).
+    pub suffix: String,
+    /// File path for language detection + debug echo.
+    pub path: Option<String>,
+    /// Explicit language id; the service falls back to an extension
+    /// table over `path` when absent.
+    pub language: Option<String>,
+    /// Per-request generation cap override; `None` = slot default.
+    pub max_tokens: Option<usize>,
+    /// Per-request temperature override; `None` = slot default.
+    pub temperature: Option<f32>,
+    /// Client-supplied extra stop strings (unioned with the family's).
+    pub stop: Vec<String>,
+    /// Opt-in glassbox: terminal frame carries `sovereign_debug`.
+    pub debug: bool,
+}
+
+/// A started FIM stream plus the static metadata the route needs for
+/// response envelopes and the debug payload. Lives on the seam (not in
+/// sovereign-contracts) per the commonwealth-api no-dependency rule —
+/// the same convention as [`ResidentSlot`].
+pub struct FimStreamStart {
+    /// Token frames + terminal `Finish`/`Error`; may carry a
+    /// `StreamFrame::Debug` frame immediately before the terminal one.
+    pub stream: Pin<Box<dyn Stream<Item = crate::openai_types::StreamFrame> + Send>>,
+    /// Model id that served the request (echoed in the response envelope).
+    pub model_id: String,
+    /// Slot that served: `"fim"` (dedicated) or `"fast"` (alias mode).
+    pub slot: String,
+    /// Detected marker family (`"qwen_coder"` / `"starcoder2"`).
+    pub fim_style: String,
+}
+
+/// Static FIM slot description for `/status.inference.fim`. `None`
+/// from `fim_status()` means "no FIM available" (unconfigured or the
+/// marker probe refused the model at install).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FimSlotStatus {
+    /// Slot serving FIM (`"fim"` or `"fast"`).
+    pub slot: String,
+    /// Advertised model id (gguf file stem).
+    pub model_id: String,
+    /// Marker family string.
+    pub fim_style: String,
+    /// True when served from the shared fast slot (lean mode).
+    pub aliased_to_fast: bool,
+}
+
 /// In-process inference service that fulfils chat-completions
 /// requests without spawning separate `llama-server` processes.
 /// The Sovereign desktop embeds its local `EmbeddedLlamaCpp` as
@@ -111,8 +168,7 @@ pub struct ComputeChildStatus {
 /// locally. The standalone Commonwealth daemon leaves this `None`
 /// and uses the orchestrator-spawned llama-server path instead.
 #[async_trait]
-pub trait LocalInferenceService: Send + Sync {
-    /// One-shot chat completion (non-streaming). Called when the
+pub trait LocalInferenceService: Send + Sync {    /// One-shot chat completion (non-streaming). Called when the
     /// incoming request did NOT set `stream: true`.
     async fn chat_completion(
         &self,
@@ -224,6 +280,26 @@ pub trait LocalInferenceService: Send + Sync {
     /// default; the compute-routing facade populates it. Rendered on `/status`.
     fn compute_children(&self) -> Vec<ComputeChildStatus> {
         Vec::new()
+    }
+
+    /// FIM inline completion (`POST /v1/completions`,
+    /// `sovereign/docs/INLINE_COMPLETION.md`). Default `Err` — the
+    /// route maps it to 503 with the actionable `[models.fim]` fix.
+    /// Only the embedded llama.cpp adapter overrides.
+    async fn fim_completion_stream(
+        &self,
+        request: FimCompletionRequest,
+    ) -> Result<FimStreamStart, String> {
+        let _ = request;
+        Err("this local inference service does not serve FIM completions \
+             — only the embedded llama.cpp service does"
+            .to_string())
+    }
+
+    /// Static FIM slot description for `/status.inference.fim`.
+    /// `None` (the default) = FIM unavailable on this node.
+    fn fim_status(&self) -> Option<FimSlotStatus> {
+        None
     }
 }
 

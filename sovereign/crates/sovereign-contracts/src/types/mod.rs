@@ -121,9 +121,11 @@ impl Default for InferenceConfig {
 // HERE, as a reviewable diff. api-gate snapshots the resulting surface.
 mod completion;
 pub use completion::{
-    CompletionRequest, CompletionResponse, FinishReason, ProviderCapabilities, SamplingMode,
-    StreamFrame, StreamUsage, ToolSchema,
+    CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
+    SamplingMode, StreamFrame, StreamUsage, ToolSchema,
 };
+mod fim;
+pub use fim::{FimSlotInfo, FimStyle};
 mod routing;
 pub use routing::{
     compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,

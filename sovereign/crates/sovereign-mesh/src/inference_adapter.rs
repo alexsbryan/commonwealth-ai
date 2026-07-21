@@ -54,7 +54,7 @@ fn translate_stream_frame(frame: CoreStreamFrame) -> wire::StreamFrame {
     }
 }
 
-fn translate_finish_reason(r: CoreFinishReason) -> wire::FinishReason {
+pub(crate) fn translate_finish_reason(r: CoreFinishReason) -> wire::FinishReason {
     // Non-Stop reasons are operationally interesting (Length =
     // truncation, ContentFilter = guard tripped, Cancelled = client
     // bailed, Error = backend failed). Stop is the silent default.
@@ -83,7 +83,7 @@ fn translate_finish_reason(r: CoreFinishReason) -> wire::FinishReason {
     }
 }
 
-fn translate_stream_usage(u: CoreStreamUsage) -> wire::StreamUsage {
+pub(crate) fn translate_stream_usage(u: CoreStreamUsage) -> wire::StreamUsage {
     wire::StreamUsage {
         prompt_tokens: u.prompt_tokens,
         completion_tokens: u.completion_tokens,
@@ -1348,6 +1348,23 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .embed_batch(inputs)
             .await
             .map_err(|e| format!("{e}"))
+    }
+
+    // ── FIM inline completion (INLINE_COMPLETION.md) ─────────────
+    //
+    // Thin delegation to `fim_adapter` — all prompt assembly, slot
+    // routing, and stop-craft lives there; this impl block only owns
+    // the seam signature.
+
+    async fn fim_completion_stream(
+        &self,
+        request: commonwealth_api::state::FimCompletionRequest,
+    ) -> Result<commonwealth_api::state::FimStreamStart, String> {
+        crate::fim_adapter::fim_completion_stream(&self.provider, request).await
+    }
+
+    fn fim_status(&self) -> Option<commonwealth_api::state::FimSlotStatus> {
+        crate::fim_adapter::fim_status(&self.provider)
     }
 
     // ── Runtime slot management ─────────────────────────────────

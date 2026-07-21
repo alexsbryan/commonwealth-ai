@@ -1218,6 +1218,7 @@ impl DocumentAssetManager {
                 url_allowlist: None,
                 evidence_id_allowlist: None,
                 lark_grammar: None,
+                prompt_shape: None,
             })
             .await?;
 
@@ -1502,6 +1503,7 @@ impl DocumentAssetManager {
                 url_allowlist: None,
                 evidence_id_allowlist: None,
                 lark_grammar: None,
+                prompt_shape: None,
             })
             .await?;
 
@@ -1572,6 +1574,7 @@ impl DocumentAssetManager {
                 url_allowlist: None,
                 evidence_id_allowlist: None,
                 lark_grammar: None,
+                prompt_shape: None,
             })
             .await?;
 

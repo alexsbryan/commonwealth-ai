@@ -36,6 +36,7 @@ commonwealth-ai/
 ├── studio/                    # Liftable authoring package — workflow engine + recipe-author + headless CLI (see studio/BOUNDARY.md)
 ├── quality/                   # Quality program — ARCH_LAYERS.toml (layer map), gate baselines, arch-layers crate
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
+├── packages/vscode-sovereign/ # First-party VSCode FIM extension (ghost text; zero-dep esbuild bundle)
 └── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
 
@@ -1304,6 +1305,7 @@ traversal). The desktop app registers as the system handler.
 | Subsystem | Doc |
 |---|---|
 | Slots, OICP, harness, cutoffs | [`docs/inference.md`](./docs/inference.md) |
+| Inline completion (FIM) — ghost text served by the daemon: `[models.fim]` opt-in (lean alias OR pinned dedicated slot), vocab-probe marker detection, `POST /v1/completions`, stop-craft tracker, VSCode extension, measured latency | [`docs/INLINE_COMPLETION.md`](./docs/INLINE_COMPLETION.md), [`../packages/vscode-sovereign/README.md`](../packages/vscode-sovereign/README.md) |
 | Glassbox reading surface + Atlas Inspector | [`docs/knowledge-view.md`](./docs/knowledge-view.md) and `sovereign-tools/src/atlas_view/` |
 | KnowledgeView landscape splice | [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
 | ATOS — agent task orchestration | [`docs/ATOS.md`](./docs/ATOS.md), [`docs/ATOS_RUNNER.md`](./docs/ATOS_RUNNER.md) |

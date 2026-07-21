@@ -147,6 +147,7 @@ async fn main() {
         url_allowlist: None,
         evidence_id_allowlist: None,
         lark_grammar: None,
+        prompt_shape: None,
     };
 
     if args.stream {

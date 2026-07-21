@@ -199,6 +199,32 @@ pub struct CompletionRequest {
     /// in place of the usual `JsonConstraint`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lark_grammar: Option<String>,
+
+    /// How `prompt` reaches the tokenizer. `None`/`Templated` (the
+    /// default) preserves the historical behaviour: the provider's
+    /// chat template wraps `prompt` in a user turn. `Raw` tokenizes
+    /// the string verbatim with special-token parsing on and no
+    /// template wrapping — the fill-in-the-middle (FIM) inline-
+    /// completion path uses this to feed the model's own
+    /// `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>` markers
+    /// (built by `sovereign_inference::fim::build_fim_prompt`).
+    /// See `sovereign/docs/INLINE_COMPLETION.md` §3.1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_shape: Option<PromptShape>,
+}
+
+/// How the request's `prompt` reaches the tokenizer. Default is
+/// `Templated` (chat-template wrapping); `Raw` feeds the string
+/// verbatim — see `CompletionRequest::prompt_shape`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptShape {
+    /// Wrap `prompt` in the model's chat template (historical default).
+    Templated,
+    /// Tokenize `prompt` verbatim, special-token parsing on, no chat
+    /// template, no BOS injection. Used by the FIM inline-completion
+    /// path (INLINE_COMPLETION.md §3.1, decision D4).
+    Raw,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -264,6 +290,7 @@ impl CompletionRequest {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         }
     }
 
@@ -422,6 +449,7 @@ impl CompletionRequest {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         }
     }
 }

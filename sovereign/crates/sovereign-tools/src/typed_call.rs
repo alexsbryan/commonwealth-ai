@@ -150,6 +150,7 @@ impl<'a> TypedLlmCall<'a> {
                 url_allowlist: None,
                 evidence_id_allowlist: None,
                 lark_grammar: None,
+                prompt_shape: None,
             };
             let response = inference.complete(&request).await.map_err(|e| {
                 if let Some(subj) = self.trace_subject.as_ref() {

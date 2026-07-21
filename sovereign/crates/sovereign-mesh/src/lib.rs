@@ -22,6 +22,7 @@ pub mod daemon;
 pub mod deep_link;
 #[cfg(feature = "dst")]
 pub mod dst;
+pub mod fim_adapter;
 pub mod gossip;
 pub mod http_response;
 pub mod inference_adapter;

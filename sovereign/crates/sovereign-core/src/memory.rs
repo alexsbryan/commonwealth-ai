@@ -814,6 +814,7 @@ pub async fn extract_long_term_memories(
     url_allowlist: None,
     evidence_id_allowlist: None,
     lark_grammar: None,
+    prompt_shape: None,
     };
 
     let response = inference.complete(&request).await?;

@@ -344,6 +344,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
+                fim: None,
             },
             daemon: sovereign_core::setup_config::DaemonSection {
                 client_port: 19_741,

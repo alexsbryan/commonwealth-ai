@@ -119,6 +119,10 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             loaded_models,
             resident,
             compute_children,
+            fim: match &state.inner.local_inference {
+                Some(svc) => svc.fim_status(),
+                None => None,
+            },
         },
         knowledge: KnowledgeStatus {
             hosted_corpora,
@@ -303,6 +307,12 @@ pub struct InferenceStatus {
     /// configured — then one entry per replica, with its live lifecycle.
     #[serde(default)]
     pub compute_children: Vec<crate::state::ComputeChildStatus>,
+    /// FIM inline-completion arrangement (INLINE_COMPLETION.md §6). `None`
+    /// when FIM isn't configured or the marker probe refused the model —
+    /// the VSCode extension's status bar reads this to distinguish
+    /// "daemon up, no FIM model" from "daemon down".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fim: Option<crate::state::FimSlotStatus>,
 }
 
 #[derive(Debug, Serialize)]

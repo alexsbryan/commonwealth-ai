@@ -613,6 +613,23 @@ pub trait InferenceProvider: Send + Sync {
         None
     }
 
+    /// Live description of the FIM (fill-in-the-middle inline
+    /// completion) serving arrangement, when `[models.fim]` is
+    /// configured and the slot installed cleanly
+    /// (`sovereign/docs/INLINE_COMPLETION.md`). `None` means "no FIM
+    /// available" — either not configured, or the configured model
+    /// failed the marker vocab probe at install (the daemon logs the
+    /// actionable reason loudly at boot).
+    ///
+    /// Default returns `None` — remote providers, stubs, and test
+    /// harnesses satisfy the trait unchanged. `EmbeddedLlamaCpp`
+    /// overrides when `install_fim_slot` succeeded. Consumed by the
+    /// daemon's `POST /v1/completions` route (503 gate) and by
+    /// `GET /status` (`inference.fim` field).
+    fn fim_slot_info(&self) -> Option<FimSlotInfo> {
+        None
+    }
+
     /// Trigger any deferred slot loads so the next `complete()` /
     /// `complete_stream()` call doesn't pay the lazy-load tax.
     /// Specifically, eagerly load the primary chat slot on

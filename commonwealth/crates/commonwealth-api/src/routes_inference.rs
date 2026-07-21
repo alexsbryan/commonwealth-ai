@@ -1074,6 +1074,12 @@ async fn serve_local_stream(
                     e.replace('"', "\\\"")
                 )))
             }
+            StreamFrame::Debug(_) => {
+                // FIM-only glassbox frame; the chat path never
+                // produces it. Drop defensively so a future producer
+                // can't leak internals onto an unrelated surface.
+                Ok(Event::default().comment("debug frame dropped"))
+            }
         }
     });
 

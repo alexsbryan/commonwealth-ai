@@ -86,6 +86,7 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist: None,
             lark_grammar: None,
+            prompt_shape: None,
         };
 
         let (inner_stream, model_id) = self.inference.complete_stream_with_id(&request).await?;
