@@ -193,6 +193,26 @@ pub(crate) async fn verify_grounding(
         }
     };
 
+    // Jurisdiction scalpel: the extractor's NO_CLAIM exemption is
+    // LLM-mediated and misses declines that carry an explanatory rider —
+    // it then dutifully extracts the rider as "the central claim". When
+    // that rider is meta-language about the evidence/system (not a
+    // world-claim), auditing it is out of the gate's jurisdiction; treat
+    // it as NO_CLAIM deterministically. See `decline_rider_exempt`.
+    if decline_rider_exempt(answer, &claim) {
+        tracing::info!(
+            target: "grounding_gate",
+            claim = %claim.chars().take(90).collect::<String>(),
+            "claim is a decline meta-rider — exempt (jurisdiction) → vp=0"
+        );
+        dbg("claim is a decline meta-rider → NO_CLAIM → vp=0");
+        return Some(GateVerdict {
+            violation_prob: 0.0,
+            claim: None,
+            claim_evidence: Vec::new(),
+        });
+    }
+
     // First-principles fix for entity-anchored (in-world) questions. The
     // per-passage support loop below is CONFIRMATORY ("does this passage support
     // claim X?"), and a small forced-choice judge has a yes-bias: it grounds a
@@ -592,37 +612,8 @@ pub(super) fn unwrap_unverified_excerpts(s: &str) -> String {
 /// SHAPE is safe. Same family as the offline judge's decline-shape
 /// override (calibration gate) and the `[Source:]` scan-jurisdiction rule.
 pub(super) fn is_self_referential_decline(text: &str) -> bool {
-    // Strip markdown emphasis throughout ("does **not** have" must match
-    // "does not"), then leading list/quote decoration.
-    let t = text
-        .replace('*', "")
-        .trim()
-        .trim_start_matches(['-', ' ', '"', '\u{201c}'])
-        .to_lowercase();
-    let subject = [
-        "the system",
-        "the assistant",
-        "the model",
-        "the app",
-        "this system",
-        "i ",
-        "it ",
-        "the provided",
-        "the retrieved",
-        "the sources",
-        "the passages",
-        "the evidence",
-        "the corpus",
-        "the collection",
-        "the knowledge base",
-        "the local corpus",
-        "the initial answer",
-        "there is no",
-        "as of ",
-    ]
-    .iter()
-    .any(|s| t.starts_with(s));
-    if !subject {
+    let t = normalize_meta(text);
+    if !meta_subject(&t) {
         return false;
     }
     [
@@ -641,6 +632,84 @@ pub(super) fn is_self_referential_decline(text: &str) -> bool {
     ]
     .iter()
     .any(|n| t.contains(n))
+}
+
+/// Strip markdown emphasis ("does **not** have" must match "does not"),
+/// then leading list/quote decoration; lowercase. Shared normalization for
+/// the meta-language predicates below.
+fn normalize_meta(text: &str) -> String {
+    text.replace('*', "")
+        .trim()
+        .trim_start_matches(['-', ' ', '"', '\u{201c}'])
+        .to_lowercase()
+}
+
+/// Explicit system/evidence-artifact subjects — safe to treat as
+/// meta-language even WITHOUT a negation (a positive description of the
+/// evidence still isn't a world-claim).
+const META_SUBJECTS_CORE: &[&str] = &[
+    "the system",
+    "the assistant",
+    "the model",
+    "the app",
+    "this system",
+    "the provided",
+    "the retrieved",
+    "the sources",
+    "the passages",
+    "the evidence",
+    "the corpus",
+    "the collection",
+    "the knowledge base",
+    "the local corpus",
+    "the initial answer",
+];
+
+/// Looser subject prefixes ("I …", "It …", "There is no …", "As of …") that
+/// read as meta ONLY when the negation requirement of
+/// [`is_self_referential_decline`] constrains them — "It was sent in May" is
+/// a world-claim with a pronoun subject and must never match the
+/// negation-free arm.
+const META_SUBJECTS_LOOSE: &[&str] = &["i ", "it ", "there is no", "as of "];
+
+/// Subject test for [`is_self_referential_decline`] (negation-guarded →
+/// loose prefixes allowed).
+fn meta_subject(t: &str) -> bool {
+    META_SUBJECTS_CORE
+        .iter()
+        .chain(META_SUBJECTS_LOOSE)
+        .any(|s| t.starts_with(s))
+}
+
+/// Strict subject test for the negation-free rider arm of
+/// [`decline_rider_exempt`]: explicit evidence/system nouns only.
+fn meta_subject_strict(t: &str) -> bool {
+    META_SUBJECTS_CORE.iter().any(|s| t.starts_with(s))
+}
+
+/// Short-path jurisdiction scalpel (2026-07-21): should the gate SKIP
+/// auditing this extracted claim because it is a decline's meta-rider, not a
+/// world-claim? True when either:
+///
+///  1. the claim itself is a negated self-referential decline — the exact
+///     shape the longform gate already exempts (asserts ABSENCE, cannot
+///     launder a value); or
+///  2. the ANSWER's headline act is a deterministic decline
+///     (`answer_declines`) AND the claim's subject is the evidence/system —
+///     the rider case ("I don't have reliable information on this. The
+///     provided passages are Rust source code snippets…"). Auditing such a
+///     rider is category-confused — no passage states facts about the
+///     passages — so it reliably fails, burning the per-passage sweep
+///     (measured 16 × 0.8s, 2026-07-21 soak step 91) and then a doomed
+///     second-synthesis retry (the documented 50-160s slow abstention).
+///
+/// A decline that smuggles a WORLD-claim rider ("…However, John sent the
+/// memo on May 5") keeps its full audit: the claim extractor strips
+/// source-attribution wrappers, so a world rider arrives with a world
+/// subject and fails arm 2's subject test.
+pub(super) fn decline_rider_exempt(answer: &str, claim: &str) -> bool {
+    is_self_referential_decline(claim)
+        || (super::answer_declines(answer) && meta_subject_strict(&normalize_meta(claim)))
 }
 
 /// evidence"). Deterministic reduction, ordered:
@@ -1375,6 +1444,54 @@ mod tests {
             normalize_scan_item(item, answer),
             "ships cannot pay tolls at sea"
         );
+    }
+
+    /// The scalpel's two arms and — load-bearing — what it must NOT exempt.
+    /// The step-91 shape (2026-07-21 soak): decline headline + a POSITIVE
+    /// meta-rider about the passages, which the negation-requiring longform
+    /// predicate deliberately lets through, burned 16 per-passage checks +
+    /// a doomed retry. The conjunction (decline headline AND meta subject)
+    /// exempts it; a world-claim rider keeps its audit.
+    #[test]
+    fn decline_rider_exemption_scalpel() {
+        let decline_answer = "I don't have reliable information on this. The \
+             provided passages are Rust source code snippets from a \
+             corpus-engine project.";
+        // Arm 2: positive evidence-meta rider under a decline headline → exempt.
+        assert!(decline_rider_exempt(
+            decline_answer,
+            "The provided passages are Rust source code snippets from a corpus-engine project."
+        ));
+        // World-claim rider under the same decline headline → NOT exempt
+        // (subject is the world, must stay audited).
+        assert!(!decline_rider_exempt(
+            "I don't have reliable information on this. However, John Smith sent the memo.",
+            "John Smith sent the memo on May 5."
+        ));
+        // No decline headline → a positive meta-shaped claim is NOT exempt
+        // via arm 2 (the decline supplies the safety).
+        assert!(!decline_rider_exempt(
+            "The passages are Rust source code snippets.",
+            "The passages are Rust source code snippets."
+        ));
+        // Arm 1: a negated self-referential decline claim is exempt
+        // regardless of the answer's headline (longform-established shape).
+        assert!(decline_rider_exempt(
+            "Summary of what I found.",
+            "The sources do not contain information about the lamp mechanism."
+        ));
+        // Markdown emphasis must not defeat the subject/negation matching.
+        assert!(decline_rider_exempt(
+            "I don't have reliable information on this.",
+            "The **provided** passages are configuration files."
+        ));
+        // Pronoun-subject world claim under an answer that merely CONTAINS
+        // a decline phrase ("does not contain") — the loose "it " prefix is
+        // negation-guarded and must NOT satisfy the negation-free rider arm.
+        assert!(!decline_rider_exempt(
+            "The report does not contain the exact date, but John sent it in May.",
+            "It was sent in May."
+        ));
     }
 
     /// The declared stable prefix must be byte-identical across sibling
