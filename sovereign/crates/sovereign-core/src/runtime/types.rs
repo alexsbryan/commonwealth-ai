@@ -226,6 +226,14 @@ pub(crate) enum GkReason {
     /// confident in-world fabrication can't ride this path (the failure
     /// the 2026-07-01 exactval fix closed).
     OodRescue,
+    /// Retrieval returned chunks but the evidence-shape verdict judged
+    /// them quantitatively hopeless (semantic floor + token-coverage
+    /// floor both failed — `evidence::evidence_early_decline`,
+    /// SOVEREIGN_EVIDENCE_DECLINE_FLOOR). The turn declines FAST on a
+    /// tiny parametric prompt instead of synthesizing over off-topic
+    /// passages and re-deriving the same verdict through a gap-check
+    /// judge 60s later (the 2026-07-21 slow-abstention pathology).
+    WeakEvidence,
 }
 
 /// Retrieve-only projection of a [`KnowledgeQueryPlan`] — the evidence

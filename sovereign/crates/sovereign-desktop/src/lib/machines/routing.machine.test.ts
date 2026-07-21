@@ -520,6 +520,46 @@ describe("applyCounter — verification-counter reducer", () => {
     expect(done?.retrieval?.topTitles).toEqual([]);
   });
 
+  it("evidence_check fills the evidence field and routes to the counter, not the log", () => {
+    const phase = {
+      evidence_check: {
+        chunks: 20,
+        sources: 18,
+        top_similarity: 0.34,
+        coverage: 0.61,
+        early_decline: false,
+      },
+    };
+    const applied = applyCounter(null, frame(phase, 24_300));
+    expect(applied?.evidence).toEqual({
+      chunks: 20,
+      sources: 18,
+      topSimilarity: 0.34,
+      coverage: 0.61,
+      earlyDecline: false,
+    });
+    expect(applied?.elapsedMs).toBe(24_300);
+    // Counter frame contract: never double-rendered as a narration chip.
+    expect(applyNarration([], frame(phase))).toEqual([]);
+  });
+
+  it("early-decline evidence_check carries the flag and a null similarity survives", () => {
+    const applied = applyCounter(
+      null,
+      frame({
+        evidence_check: {
+          chunks: 12,
+          sources: 9,
+          top_similarity: null,
+          coverage: 0.02,
+          early_decline: true,
+        },
+      }),
+    );
+    expect(applied?.evidence?.earlyDecline).toBe(true);
+    expect(applied?.evidence?.topSimilarity).toBeNull();
+  });
+
   it("the audit-open frame (empty claims) opens check without wiping a later list", () => {
     const opened = applyCounter(
       null,

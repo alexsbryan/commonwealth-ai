@@ -43,6 +43,14 @@
 
   const retrieval = $derived(counter?.retrieval ?? null);
   const check = $derived(counter?.check ?? null);
+  const evidence = $derived(counter?.evidence ?? null);
+  // "best match 34%" — only when a semantic score exists (vector-scored
+  // retrieval); FTS-only turns show counts without a percentage.
+  const evidenceMatch = $derived(
+    evidence?.topSimilarity != null
+      ? `${Math.round(Math.max(0, evidence.topSimilarity) * 100)}%`
+      : null,
+  );
   const confirmedCount = $derived(
     check ? check.claims.filter((c) => c.verdict === "supported").length : 0,
   );
@@ -125,7 +133,21 @@
 
     <div class="stage">
       {#if station === "gather"}
-        {#if retrieval?.complete}
+        {#if evidence?.earlyDecline}
+          <div class="stage-line" data-testid="counter-early-decline">
+            Your sources don't cover this{evidenceMatch
+              ? ` (best match ${evidenceMatch})`
+              : ""} — answering honestly without them
+          </div>
+        {:else if evidence}
+          <div class="stage-line" data-testid="counter-evidence">
+            <span class="num">{evidence.chunks}</span> passages ·
+            <span class="num">{evidence.sources}</span>
+            source{evidence.sources === 1 ? "" : "s"}{evidenceMatch
+              ? ` · best match ${evidenceMatch}`
+              : ""}
+          </div>
+        {:else if retrieval?.complete}
           <div class="stage-line">
             Read <span class="num">{retrieval.chunksIn}</span> passages across
             <span class="num">{retrieval.corpora.length || 1}</span>
@@ -153,7 +175,11 @@
             Warming up the primary model&hellip;
           {/if}
         </div>
-        {#if retrieval?.complete}
+        {#if evidence?.earlyDecline}
+          <div class="stage-sub" data-testid="counter-early-decline-sub">
+            sources don't cover this — answering with a provenance caveat
+          </div>
+        {:else if retrieval?.complete}
           <div class="stage-sub">
             drafting from {retrieval.chunksIn} passages — held for verification
           </div>

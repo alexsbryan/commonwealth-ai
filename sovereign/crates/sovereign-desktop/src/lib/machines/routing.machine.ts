@@ -193,6 +193,18 @@ export interface CounterState {
     revising: number | null;
     complete: { confirmed: number; flagged: number } | null;
   } | null;
+  /** Evidence-shape verdict (2026-07-21 decline-UX work): what
+   *  retrieval actually found, shown the moment it's known — the
+   *  longest formerly-silent stretch of a turn. `earlyDecline` means
+   *  the backend measured the evidence off-topic on both independent
+   *  axes and took the fast honest-answer path without it. */
+  evidence: {
+    chunks: number;
+    sources: number;
+    topSimilarity: number | null;
+    coverage: number;
+    earlyDecline: boolean;
+  } | null;
   /** elapsed_ms of the most recent counter-relevant frame. */
   elapsedMs: number;
 }
@@ -240,6 +252,20 @@ function isRetrievalComplete(phase: NarrationEvent["phase"]): phase is {
   );
 }
 
+function isEvidenceCheck(phase: NarrationEvent["phase"]): phase is {
+  evidence_check: {
+    chunks: number;
+    sources: number;
+    top_similarity: number | null;
+    coverage: number;
+    early_decline: boolean;
+  };
+} {
+  return (
+    typeof phase === "object" && phase !== null && "evidence_check" in phase
+  );
+}
+
 /** True when the frame belongs to the verification counter (routed to
  *  `counter`, kept out of `narrationLog` — same contract as the
  *  synthesis heartbeat). */
@@ -248,7 +274,8 @@ export function isCounterFrame(phase: NarrationEvent["phase"]): boolean {
     isClaimCheckStart(phase) ||
     isClaimVerdict(phase) ||
     isClaimRevisionStart(phase) ||
-    isClaimCheckComplete(phase)
+    isClaimCheckComplete(phase) ||
+    isEvidenceCheck(phase)
   );
 }
 
@@ -268,8 +295,23 @@ export function applyCounter(
   const base: CounterState = prev ?? {
     retrieval: null,
     check: null,
+    evidence: null,
     elapsedMs: 0,
   };
+  if (isEvidenceCheck(phase)) {
+    const p = phase.evidence_check;
+    return {
+      ...base,
+      evidence: {
+        chunks: p.chunks,
+        sources: p.sources,
+        topSimilarity: p.top_similarity,
+        coverage: p.coverage,
+        earlyDecline: p.early_decline,
+      },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
   if (phase === "retrieval_start") {
     return {
       ...base,
