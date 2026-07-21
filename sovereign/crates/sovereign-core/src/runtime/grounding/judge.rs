@@ -946,9 +946,150 @@ pub(super) async fn claim_violation_joint(
     Some(1.0 - support)
 }
 
+/// Batched support pre-pass: the evidence is prefilled ONCE and every claim is
+/// judged in a SINGLE generation, returning per-claim support aligned to the
+/// input order (`Some(true)` supported, `Some(false)` unsupported, `None` = no
+/// clean aligned verdict → the caller re-verifies that row with the calibrated
+/// per-claim `claim_violation_joint`).
+///
+/// Why this exists: on the `qwen35moe` primary, prefix caching is vetoed (Gated
+/// DeltaNet partial-KV-keep corruption), so the N per-claim forced-choice calls
+/// re-prefill the SAME evidence N times — measured ~11x more prefill / ~9x slower
+/// on a real long-form turn ([[project_35b_moe_gate_latency_2026_07_20]]). One
+/// sequence, one prefill sidesteps that without touching the prefix-cache hazard.
+///
+/// STUDY ONLY (behind `SOVEREIGN_GATE_BATCH_VERIFY`): the verdict here is a TEXT
+/// A/B, NOT the calibrated single-token forced-choice logit. `gate_longform` uses
+/// it for BOTH directions (the fan-out is dominated by unsupported claims, so
+/// trusting only "supported" yields no net win) and re-verifies only the `None`
+/// (parse-gap) rows with the calibrated pass; the deterministic in-world
+/// name/identifier veto still runs first, catching blatant fabrication regardless.
+/// Because `tau` is calibrated against the forced-choice logit, borderline claims
+/// shift under the binary A/B — hence STUDY, needs recalibration before default-on.
+/// Alignment is hardened by explicit numbering; a mis-count leaves the affected
+/// rows `None` (fallback), never a shifted verdict.
+pub(super) async fn claims_support_batched(
+    inference: &Arc<dyn InferenceProvider>,
+    claims: &[String],
+    chunks: &[String],
+    n_chunks: usize,
+    posture: ShardingPrivacy,
+) -> Vec<Option<bool>> {
+    if claims.is_empty() {
+        return Vec::new();
+    }
+    let joined: String = chunks
+        .iter()
+        .take(n_chunks)
+        .map(|c| c.chars().take(1_500).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    let numbered: String = claims
+        .iter()
+        .enumerate()
+        .map(|(i, c)| format!("{}. {}", i + 1, c))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "PASSAGES (multiple, separated by ---):\n\"\"\"\n{joined}\n\"\"\"\n\n\
+         CLAIMS (numbered):\n{numbered}\n\n\
+         For EACH numbered claim, do the passages, taken together, state or clearly \
+         imply it? Support assembled across several passages counts; paraphrase \
+         counts; the passages merely mentioning the people or things involved, \
+         without establishing the claimed connection, does NOT count.\n\n\
+         Output EXACTLY one line per claim, in order, formatted \"<n>: A\" (the \
+         passages support it) or \"<n>: B\" (they do not). Output the {n} lines \
+         and nothing else.",
+        n = claims.len(),
+    );
+    let req = CompletionRequest {
+        prompt,
+        system_message: Some(
+            "You are a careful classifier. For each numbered claim answer A or B.".into(),
+        ),
+        preferred_speed: Speed::Slow,
+        oicp: Some(Workload::Judge.requirements(posture)),
+        // ~5 tokens per "<n>: A\n" verdict line + headroom for two-digit indices.
+        max_tokens: Some(claims.len() * 8 + 16),
+        temperature: Some(0.0),
+        think_budget: Some(0),
+        enable_thinking: Some(false),
+        ..Default::default()
+    };
+    match inference.complete(&req).await {
+        Ok(resp) => {
+            let verdicts = parse_batched_verdicts(&resp.text, claims.len());
+            let n_sup = verdicts.iter().filter(|v| **v == Some(true)).count();
+            let n_none = verdicts.iter().filter(|v| v.is_none()).count();
+            dbg(&format!(
+                "batched verify: {} claims -> {} supported, {} unparsed | raw head: {:?}",
+                claims.len(),
+                n_sup,
+                n_none,
+                resp.text.chars().take(220).collect::<String>()
+            ));
+            verdicts
+        }
+        Err(e) => {
+            tracing::warn!(target: "grounding_gate", error = %e, "batched verify pass failed");
+            dbg(&format!("batched verify failed: {e}"));
+            vec![None; claims.len()] // total failure → per-claim fallback for all
+        }
+    }
+}
+
+/// Parse `"<n>: A|B"` verdict lines into a per-claim support vec (1-based `n` →
+/// 0-based index). Tolerant of `:`/`.`/`)` separators and list bullets; last
+/// write wins; out-of-range or malformed rows stay `None` so the caller
+/// re-verifies them with the calibrated pass. Pure/synchronous so the alignment
+/// contract is pinned by `cargo test` without a model.
+fn parse_batched_verdicts(text: &str, n: usize) -> Vec<Option<bool>> {
+    let mut out = vec![None; n];
+    for line in text.lines() {
+        let t = line.trim().trim_start_matches(['-', '*', '•', ' ']).trim();
+        let digits: String = t.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if digits.is_empty() {
+            continue;
+        }
+        let idx = match digits.parse::<usize>() {
+            Ok(v) if v >= 1 && v <= n => v - 1,
+            _ => continue,
+        };
+        let rest = t[digits.len()..]
+            .trim_start_matches([':', '.', ')', ' ', '-', '=', '>'])
+            .trim();
+        match rest.chars().next().map(|c| c.to_ascii_uppercase()) {
+            Some('A') => out[idx] = Some(true),
+            Some('B') => out[idx] = Some(false),
+            _ => {} // ambiguous → leave None (fallback re-verifies)
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batched_verdicts_align_by_number_and_fallback_on_gaps() {
+        // Clean case: all rows present, mixed A/B, tolerant separators.
+        let v = parse_batched_verdicts("1: A\n2. B\n3) A", 3);
+        assert_eq!(v, vec![Some(true), Some(false), Some(true)]);
+        // Out-of-order lines still land on the right claim (numbering, not position).
+        let v = parse_batched_verdicts("2: B\n1: A", 2);
+        assert_eq!(v, vec![Some(true), Some(false)]);
+        // A missing row stays None (caller re-verifies with the calibrated pass);
+        // a bullet-prefixed / prose-wrapped line is tolerated.
+        let v = parse_batched_verdicts("- 1: A\n3: B", 3);
+        assert_eq!(v, vec![Some(true), None, Some(false)]);
+        // Out-of-range index is ignored (no panic, no shifted verdict).
+        let v = parse_batched_verdicts("1: A\n9: B", 2);
+        assert_eq!(v, vec![Some(true), None]);
+        // Ambiguous verdict token → None, not a coin-flip.
+        let v = parse_batched_verdicts("1: maybe\n2: B", 2);
+        assert_eq!(v, vec![None, Some(false)]);
+    }
 
     #[test]
     fn name_sweep_skips_citation_labels_and_boilerplate() {
