@@ -209,7 +209,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
                      --remove-partitions  Delete each <corpus>-partition-*/ \
                      dir AFTER the merge succeeds. Off by default — verify \
                      the canonical index serves queries first.\n\n\
-                     Stop the daemon (sovereign daemon stop) before running \
+                     Stop the daemon (svrn daemon stop) before running \
                      this if it's currently writing to any of the partitions \
                      (LanceDB locks are per-directory, but a peer-pulled \
                      partition can still be receiving writes from gossip)."
@@ -251,7 +251,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
             "Canonical index already exists at {}.\n\
              merge-partitions never clobbers existing canonical data. If you \
              want to rebuild from the partition dirs, remove the canonical \
-             first:\n  sovereign corpus remove {corpus_id}",
+             first:\n  svrn corpus remove {corpus_id}",
             canonical_path.display()
         );
         return 1;
@@ -571,7 +571,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
             eprintln!("\nmerge_partitions_into_canonical failed: {e}");
             eprintln!("Canonical (if partial) is at {}.", canonical_path.display());
             eprintln!(
-                "You can retry with: sovereign corpus install {corpus_id}  \
+                "You can retry with: svrn corpus install {corpus_id}  \
                  (resume picks up the partial state)"
             );
             return 1;
@@ -615,7 +615,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     );
     println!();
     println!("Next: the daemon's installed_indexes() picks up the canonical on its next tick.");
-    println!("Verify with: sovereign corpus diag {corpus_id}");
+    println!("Verify with: svrn corpus diag {corpus_id}");
     0
 }
 
@@ -764,7 +764,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
         .join("_source_manifest.json");
     println!("Manifest written to: {}", index_path.display());
     println!();
-    println!("Next step: sovereign corpus collaborate {corpus_id}");
+    println!("Next step: svrn corpus collaborate {corpus_id}");
     println!();
     0
 }

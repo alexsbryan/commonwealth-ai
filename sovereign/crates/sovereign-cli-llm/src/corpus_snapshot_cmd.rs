@@ -48,7 +48,7 @@ const HELP_SNAPSHOT_RESTORE: Help = Help {
     sections: &[
         HelpSection::Usage(
             "svrn corpus snapshot restore <hf_repo>/<filename> [flags]\n\
-             sovereign corpus snapshot restore --archive <path> [flags]",
+             svrn corpus snapshot restore --archive <path> [flags]",
         ),
         HelpSection::Flags(&[
             ("--archive <path>", "Use a local .tar.zst instead of fetching from HF"),
@@ -254,7 +254,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     };
 
     let Some(corpus_id) = parsed.corpus_id else {
-        eprintln!("usage: sovereign corpus snapshot publish <corpus_id> [flags]");
+        eprintln!("usage: svrn corpus snapshot publish <corpus_id> [flags]");
         return 2;
     };
 

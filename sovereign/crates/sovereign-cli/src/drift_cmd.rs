@@ -34,12 +34,12 @@ pub async fn run(args: &[String]) -> i32 {
             // print a usage hint rather than dispatching with no
             // target.
             eprintln!(
-                "  sovereign drift requires a feature id (Phase 1).\n\
+                "  svrn drift requires a feature id (Phase 1).\n\
                  \n\
                  USAGE\n  \
-                   sovereign drift <feature-id>                    Show drift for one feature\n  \
-                   sovereign drift accept <feature-id> --reason X  Accept current spec\n  \
-                   sovereign drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report\n\
+                   svrn drift <feature-id>                    Show drift for one feature\n  \
+                   svrn drift accept <feature-id> --reason X  Accept current spec\n  \
+                   svrn drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report\n\
                  \n\
                  The no-arg multi-feature summary lands in Phase 5."
             );
@@ -54,8 +54,8 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage(
             "svrn drift <feature-id>                       Diff approved vs. on-disk\n\
-             sovereign drift accept <feature-id> --reason X     Accept current spec\n\
-             sovereign drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report",
+             svrn drift accept <feature-id> --reason X     Accept current spec\n\
+             svrn drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report",
         ),
         crate::util::help::HelpSection::Notes(
             "Replaces `svrn atos spec diff` and `svrn atos spec accept`. Old \

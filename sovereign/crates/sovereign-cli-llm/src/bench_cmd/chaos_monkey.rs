@@ -1187,7 +1187,7 @@ async fn score_answer(rest: &[String]) -> i32 {
             "--critic-model" => critic_model = val!("--critic-model"),
             "--base-url" => base_url = val!("--base-url"),
             "--help" | "-h" => {
-                eprintln!("usage: sovereign bench chaos-monkey score-answer [--input <file>] [--judge-model <stem>] [--critic-model <stem>] [--base-url <url>]");
+                eprintln!("usage: svrn bench chaos-monkey score-answer [--input <file>] [--judge-model <stem>] [--critic-model <stem>] [--base-url <url>]");
                 eprintln!("  reads {{\"question\",\"answer\",\"chunks\":[..]}} JSON from --input or stdin; writes a JSON verdict to stdout");
                 return 0;
             }

@@ -264,12 +264,12 @@ where
 ///   [questions / unresolved_entity_name] — 73 failure(s)
 ///     Sample: `sketch:entity_state:sec_0017#3` — entity-state sketch references unknown entity `Gabe Sharma`...
 ///     Remediate: Fuzzy resolver couldn't match...
-///     Retry: sovereign enrich atlas-resolve <corpus> --phase all
+///     Retry: svrn enrich atlas-resolve <corpus> --phase all
 ///
 ///   [atlas-named-clusters / parse_drift] — 4 failure(s)
 ///     Sample: `cluster:claim:cl_c_14` — parse error naming cluster cl_c_14...
 ///     Remediate: Retry with `svrn enrich extract <corpus> --retry-failed`...
-///     Retry: sovereign enrich name-atlas-clusters <corpus>
+///     Retry: svrn enrich name-atlas-clusters <corpus>
 /// ```
 ///
 /// Groups are sorted by count descending so the biggest signal

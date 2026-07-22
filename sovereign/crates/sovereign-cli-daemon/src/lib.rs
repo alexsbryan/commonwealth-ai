@@ -14,6 +14,7 @@ mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
 mod listener_watch;
+mod model_cmd;
 pub(crate) mod log_rotation;
 mod memory_watch;
 mod panic_hook;
@@ -168,6 +169,7 @@ async fn dispatch(raw_args: Vec<String>) -> i32 {
 
     match cmd {
         "daemon" => daemon_cmd::run(rest).await,
+        "model" => model_cmd::run(rest).await,
         "setup" => setup_cmd::run_setup(rest).await,
         "install-service" => install_service_cmd::run(rest).await,
         "doctor" => doctor_cmd::run_doctor(rest).await,

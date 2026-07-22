@@ -19,7 +19,7 @@ pub(super) async fn cmd_corpus_list() -> i32 {
     println!("  sep             Stanford Encyclopedia of Philosophy (~0.5 GB)");
     println!("  crs_reports     Congressional Research Service reports (~4 GB)");
     println!();
-    println!("Install with: sovereign corpus install <id>");
+    println!("Install with: svrn corpus install <id>");
     0
 }
 
@@ -152,7 +152,7 @@ pub(crate) async fn submit_install_request(
             if !body_text.is_empty() {
                 println!("{body_text}");
             }
-            println!("Watch progress: sovereign corpus status");
+            println!("Watch progress: svrn corpus status");
             0
         }
         Ok(resp) => {
@@ -164,7 +164,7 @@ pub(crate) async fn submit_install_request(
         Err(e) => {
             eprintln!(
                 "Failed to contact daemon at {url}: {e}\n\n\
-                 Is `svrn daemon` running? Try: sovereign daemon status"
+                 Is `svrn daemon` running? Try: svrn daemon status"
             );
             1
         }

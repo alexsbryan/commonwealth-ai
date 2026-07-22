@@ -26,6 +26,19 @@ First-run onboarding. Detects hardware, downloads models, starts the daemon.
 | `--reset` | Wipe config and re-run (uninstalls service first) |
 | `--data-dir <path>` | Override the default data root (`~/.sovereign`) |
 
+### `svrn model`
+
+See and change the models the daemon loads, without hand-editing `config.toml` and without the non-obvious restart. Changes are written to the `[models]` config and **hot-applied** to a running daemon via the admin reload endpoint (models swap with no restart); if the daemon isn't running, they take effect on its next start. A `<file>` is an absolute path or a bare filename resolved against the models dir (`~/.svrnmesh/models`, with or without a `.gguf` suffix) and is validated to exist before anything is written.
+
+| Subcommand | Description |
+|---|---|
+| `list` (default) | Show the configured slots (primary / fast / embed / code / extras / context) and, when the daemon is running, which are currently `[loaded]` |
+| `set <primary\|fast\|embed\|code> <file>` | Point a slot at a model file, then apply it live |
+| `unset <fast\|code>` | Clear an optional slot (it falls back to the primary); `primary`/`embed` are required and cannot be cleared |
+| `set-extra <name> <file>` | Add or replace a named always-resident extra slot |
+| `rm-extra <name>` | Remove a named extra slot |
+| `context <n\|auto>` | Set the context window (`n_ctx`) applied to all slots, or `auto` for the default |
+
 ### `svrn project`
 
 Per-project code intelligence **and** the project-layer half of ATOS (charter + phases). See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow and [ATOS.md](ATOS.md) for the charter flow.

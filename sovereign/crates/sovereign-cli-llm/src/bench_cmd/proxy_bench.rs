@@ -59,7 +59,7 @@ const HELP: Help = Help {
 /// citation fidelity). No bespoke orchestrator.
 async fn qa(args: &[String]) -> i32 {
     let Some((corpus, rest)) = args.split_first() else {
-        eprintln!("error: usage: sovereign bench proxy qa <corpus-id> [--bank <t>] [--manifest <t>] [--out <jsonl>] [chaos flags]");
+        eprintln!("error: usage: svrn bench proxy qa <corpus-id> [--bank <t>] [--manifest <t>] [--out <jsonl>] [chaos flags]");
         return 2;
     };
     if corpus.starts_with("--") {

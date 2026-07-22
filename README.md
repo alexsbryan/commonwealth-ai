@@ -29,7 +29,7 @@ svrn setup          # finds models that fit your hardware, downloads them, start
 svrn chat session   # start talking
 ```
 
-That's the whole loop. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it. Both are covered in [the svrnmesh guide](./sovereign/README.md).
+That's the whole loop. Want a different model later? `svrn model list` shows what's loaded, and `svrn model set primary <file>` swaps one in, applied live with no config editing or restart. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it. Both are covered in [the svrnmesh guide](./sovereign/README.md).
 
 ## Build a pipeline, or bring in your own knowledge
 

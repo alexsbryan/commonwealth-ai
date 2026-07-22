@@ -437,7 +437,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     println!("  ✓ embed_model   = {embed}");
     println!();
     println!(
-        "  Next: sovereign enrich extract {} --chapters {}",
+        "  Next: svrn enrich extract {} --chapters {}",
         parsed.corpus_id,
         manifest
             .chapter_ids()
@@ -630,7 +630,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     }
     println!();
     println!(
-        "  Next: sovereign enrich extract {} --chapters {}",
+        "  Next: svrn enrich extract {} --chapters {}",
         parsed.corpus_id,
         manifest
             .chapter_ids()

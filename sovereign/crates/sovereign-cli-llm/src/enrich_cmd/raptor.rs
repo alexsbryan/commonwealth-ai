@@ -737,7 +737,7 @@ fn print_usage() {
     );
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  sovereign enrich raptor <corpus-id> [flags]");
+    eprintln!("  svrn enrich raptor <corpus-id> [flags]");
     eprintln!();
     eprintln!("FLAGS:");
     eprintln!("  --doc-type <tag>    Summary cue: argument|narrative|evidence|chronicle|technical|unknown");

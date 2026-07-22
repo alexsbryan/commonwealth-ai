@@ -208,7 +208,7 @@ pub async fn run_inner_chaos(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("inner-chaos: {e}");
             eprintln!(
-                "Hint: ensure the sovereign daemon is running (`svrn daemon start`) and \
+                "Hint: ensure the svrn daemon is running (`svrn daemon start`) and \
                  run from the repo root so bench/inner_work and the modes dir resolve."
             );
             1
@@ -282,7 +282,7 @@ async fn run_calibrate_mode(flags: &[(String, String)], bench_dir: Option<PathBu
         Ok(s) => s,
         Err(e) => {
             eprintln!("inner-chaos: bootstrap failed: {e}");
-            eprintln!("Hint: ensure the sovereign daemon is running (`svrn daemon start`).");
+            eprintln!("Hint: ensure the svrn daemon is running (`svrn daemon start`).");
             return 1;
         }
     };
@@ -367,7 +367,7 @@ async fn run_recall_mode(flags: &[(String, String)], bench_dir: Option<PathBuf>)
         Err(e) => {
             eprintln!("inner-chaos recall: {e}");
             eprintln!(
-                "Hint: ensure the sovereign daemon is running (`svrn daemon start`) and \
+                "Hint: ensure the svrn daemon is running (`svrn daemon start`) and \
                  run from the repo root so bench/inner_work resolves."
             );
             1
@@ -523,7 +523,7 @@ async fn run_recall_calibrate_mode(flags: &[(String, String)], bench_dir: Option
         Ok(s) => s,
         Err(e) => {
             eprintln!("inner-chaos: bootstrap failed: {e}");
-            eprintln!("Hint: ensure the sovereign daemon is running (`svrn daemon start`).");
+            eprintln!("Hint: ensure the svrn daemon is running (`svrn daemon start`).");
             return 1;
         }
     };
@@ -557,8 +557,8 @@ fn print_help() {
     eprintln!("svrn eval inner-chaos — adversarial safety harness for the inner-work witness");
     eprintln!();
     eprintln!("USAGE");
-    eprintln!("  sovereign eval inner-chaos [--minutes N | --threads N] [--persona <id>]");
-    eprintln!("  sovereign eval inner-chaos --calibrate [--calibration <path>]");
+    eprintln!("  svrn eval inner-chaos [--minutes N | --threads N] [--persona <id>]");
+    eprintln!("  svrn eval inner-chaos --calibrate [--calibration <path>]");
     eprintln!();
     eprintln!("RUN FLAGS");
     eprintln!("  --minutes <N>          Wall-clock budget; cycles the persona bank until spent.");

@@ -28,7 +28,7 @@
 //!     #     shipped 2026-05-24 with the vault tiered port). Score the
 //!     #     registered vault corpus directly:
 //!     #
-//!     #         sovereign bench obsidian --corpus obsidian-<hash> \
+//!     #         svrn bench obsidian --corpus obsidian-<hash> \
 //!     #             --report /tmp/obsidian-bench.json
 //!     #
 //!     #     (re-run extraction after a prompt iteration without a
@@ -37,13 +37,13 @@
 //!     # (b) literary_atlas pin (legacy comparison surface) — one-time,
 //!     #     per major content shift in the vault:
 //!     #
-//!     #         sovereign enrich init obsidian-vault \
+//!     #         svrn enrich init obsidian-vault \
 //!     #             --source "$SOVEREIGN_OBSIDIAN_VAULT" \
 //!     #             --pipeline literary_atlas --force
-//!     #         sovereign enrich build obsidian-vault
+//!     #         svrn enrich build obsidian-vault
 //!
 //!     # every prompt-tuning iteration
-//!     sovereign bench obsidian --report /tmp/obsidian-bench.json
+//!     svrn bench obsidian --report /tmp/obsidian-bench.json
 //!
 //! See `sovereign/bench/obsidian/README.md` for the bench's scope
 //! (root essays only, COMMONWEALTH/ excluded), authoring posture,
@@ -104,7 +104,7 @@ const HELP: Help = Help {
                 "Score the default corpus (obsidian-vault) against the in-repo golden.",
             ),
             (
-                "SOVEREIGN_OBSIDIAN_VAULT=\"$HOME/Documents/Obsidian Vault\" \\\n  sovereign bench obsidian --report /tmp/r.json",
+                "SOVEREIGN_OBSIDIAN_VAULT=\"$HOME/Documents/Obsidian Vault\" \\\n  svrn bench obsidian --report /tmp/r.json",
                 "Set the vault path via env var so the pre-flight hint suggests the right `enrich init` line.",
             ),
         ]),

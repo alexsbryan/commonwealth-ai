@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Cross-platform service registration for the sovereign daemon.
+//! Cross-platform service registration for the svrn daemon.
 //!
 //! On macOS, writes a launchd plist to `~/Library/LaunchAgents/` and
 //! invokes `launchctl load`. On Linux, writes a systemd user unit to
@@ -23,7 +23,7 @@ const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.svrnme
 #[cfg(target_os = "linux")]
 const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/svrnmesh.service");
 
-/// Install and enable the sovereign daemon service for the current
+/// Install and enable the svrn daemon service for the current
 /// user. `bin_path` must be absolute and point to the `sovereign`
 /// binary that should be invoked by the service manager.
 ///
@@ -54,7 +54,7 @@ pub fn install_service(bin_path: &Path) -> Result<(), String> {
     }
 }
 
-/// Stop the running sovereign daemon without unregistering it from
+/// Stop the running svrn daemon without unregistering it from
 /// the service manager. A subsequent `svrn daemon restart` (or
 /// `launchctl start`) will bring it back.
 ///
@@ -106,7 +106,7 @@ pub fn stop_service() -> Result<(), String> {
             .map_err(|e| format!("spawn systemctl: {e}"))?;
         if !out.status.success() {
             return Err(format!(
-                "systemctl --user stop sovereign failed: {}",
+                "systemctl --user stop svrnmesh failed: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             ));
         }

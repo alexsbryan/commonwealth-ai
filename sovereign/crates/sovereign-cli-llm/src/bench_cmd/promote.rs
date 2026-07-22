@@ -373,7 +373,7 @@ async fn run(args_in: &[String]) -> i32 {
         }
     } else {
         eprintln!(
-            "[promote] ACCEPTED (proposal) — to apply:\n    sovereign bench promote --param {}={} --corpus {} --apply",
+            "[promote] ACCEPTED (proposal) — to apply:\n    svrn bench promote --param {}={} --corpus {} --apply",
             args.param.id(),
             settings_value_for(&args.param, &candidate),
             args.corpus,

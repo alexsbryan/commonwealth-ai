@@ -73,7 +73,7 @@ fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
     } else if err.is_connect() {
         format!(
             "Could not connect to the daemon at {url}: {err}\n\n\
-             Is `svrn daemon` running? Try: sovereign daemon status"
+             Is `svrn daemon` running? Try: svrn daemon status"
         )
     } else {
         format!("Request to {url} failed: {err}")
@@ -274,7 +274,7 @@ pub async fn run_register(args: &[String]) -> i32 {
     println!("  initial_sweep = {:?}", parsed.initial_sweep);
     println!();
     println!(
-        "Track progress with:  sovereign corpus watch-status {}",
+        "Track progress with:  svrn corpus watch-status {}",
         parsed.corpus_id
     );
     0

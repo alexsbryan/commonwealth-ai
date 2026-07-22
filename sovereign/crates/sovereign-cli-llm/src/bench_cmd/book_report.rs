@@ -1785,7 +1785,7 @@ async fn list_assets(store: &dyn StateStore) -> Result<(), String> {
         eprintln!("{:<38}  {:<24}  {:?}", a.id, title, a.state);
     }
     eprintln!();
-    eprintln!("Reuse one with:  sovereign bench book-report --reuse-asset <asset_id>");
+    eprintln!("Reuse one with:  svrn bench book-report --reuse-asset <asset_id>");
     Ok(())
 }
 

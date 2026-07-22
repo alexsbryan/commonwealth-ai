@@ -4,10 +4,10 @@
 //! Surface:
 //!
 //! ```text
-//! sovereign pipeline run    <recipe.toml> [--db <path>] [--seed-only]
-//! sovereign pipeline status <recipe-id>   [--db <path>]
-//! sovereign pipeline list   [--db <path>]
-//! sovereign pipeline pause  <recipe-id>   [--force]
+//! svrn pipeline run    <recipe.toml> [--db <path>] [--seed-only]
+//! svrn pipeline status <recipe-id>   [--db <path>]
+//! svrn pipeline list   [--db <path>]
+//! svrn pipeline pause  <recipe-id>   [--force]
 //! ```
 //!
 //! State lives in `--db` (defaults to `~/.sovereign/pipeline.db`).
@@ -139,7 +139,7 @@ pub async fn run_pipeline(args: &[String]) -> i32 {
 async fn cmd_run(args: &[String]) -> i32 {
     let Some(recipe_path) = args.first().map(PathBuf::from) else {
         eprintln!(
-            "usage: sovereign pipeline run <recipe.toml> \
+            "usage: svrn pipeline run <recipe.toml> \
              [--db <path>] [--seed-only] [--slugs <path>] [--key <slug>] \
              [--concurrency <N>]"
         );
@@ -297,7 +297,7 @@ async fn cmd_run(args: &[String]) -> i32 {
 
 async fn cmd_status(args: &[String]) -> i32 {
     let Some(recipe_id) = args.first().cloned() else {
-        eprintln!("usage: sovereign pipeline status <recipe-id> [--db <path>]");
+        eprintln!("usage: svrn pipeline status <recipe-id> [--db <path>]");
         return 2;
     };
     let mut db_path: Option<PathBuf> = None;
@@ -412,7 +412,7 @@ fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
             .filter(|s| !s.is_empty())
             .map(|s| String::from_utf8_lossy(s).to_string())
             .collect();
-        // Match shape: `... sovereign pipeline run <recipe-path>`.
+        // Match shape: `... svrn pipeline run <recipe-path>`.
         // Anything else isn't a pipeline driver we care about.
         let is_driver = argv.windows(3).any(|w| {
             (w[0].ends_with("svrn")
@@ -447,7 +447,7 @@ fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
 
 async fn cmd_pause(args: &[String]) -> i32 {
     let Some(recipe_id) = args.first().cloned() else {
-        eprintln!("usage: sovereign pipeline pause <recipe-id> [--force] [--local-only]");
+        eprintln!("usage: svrn pipeline pause <recipe-id> [--force] [--local-only]");
         return 2;
     };
     let mut force = false;
@@ -670,7 +670,7 @@ fn render_pause_node(n: &PausePerNode, recipe_id: &str, force: bool) -> String {
 
 async fn cmd_pod(args: &[String]) -> i32 {
     if args.is_empty() {
-        eprintln!("usage: sovereign pipeline pod <up | pool | list | down> [flags]");
+        eprintln!("usage: svrn pipeline pod <up | pool | list | down> [flags]");
         return 2;
     }
     match args[0].as_str() {
@@ -794,7 +794,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
-                    "usage: sovereign pipeline pod up \\\n\
+                    "usage: svrn pipeline pod up \\\n\
                     \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
                     \x20\x20[--max-price <usd>] [--job-id <s>] \\\n\
                     \x20\x20[--upload <path>]... [--upload-url <name>=<sha256-hex>=<url>]... \\\n\
@@ -1097,7 +1097,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     println!("  token: {}", handle.worker_token());
     println!();
     println!("Tear down with:");
-    println!("  sovereign pipeline pod down {}", instance.instance_id);
+    println!("  svrn pipeline pod down {}", instance.instance_id);
     0
 }
 
@@ -1149,7 +1149,7 @@ fn cmd_pod_list(_args: &[String]) -> i32 {
 
 fn cmd_pod_down(args: &[String]) -> i32 {
     let Some(vast_id) = args.first().cloned() else {
-        eprintln!("usage: sovereign pipeline pod down <vast-id>");
+        eprintln!("usage: svrn pipeline pod down <vast-id>");
         return 2;
     };
     let path = ledger::default_path();
@@ -1385,7 +1385,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
-                    "usage: sovereign pipeline pod pool \\\n\
+                    "usage: svrn pipeline pod pool \\\n\
                     \x20\x20--pods <N> --manifest <units.jsonl> [--output <results.jsonl>]\\\n\
                     \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
                     \x20\x20[--max-price <usd>] [--job-id <s>] [--keep-alive] \\\n\

@@ -737,7 +737,25 @@ impl EmbeddedLlamaCpp {
         code_family: ModelFamily,
     ) -> Result<Self> {
         let hardware = HardwareProfile::detect();
-        let n_gpu_layers = gpu_layers.unwrap_or(hardware.recommended_gpu_layers);
+        // GPU offload layer count. Precedence: explicit config > env override
+        // > hardware default (999 when a GPU is detected, else 0).
+        //
+        // `SOVEREIGN_GPU_LAYERS=<n>` (or `off`/`cpu` = 0) is the escape hatch
+        // for machines where a GPU is detected but can't actually load the
+        // model at full offload — e.g. some Vulkan/iGPU setups where 999
+        // layers make `load_from_file` return a null result. Without it, a
+        // detected-but-unusable GPU forces 999 with no way to fall back to CPU.
+        let n_gpu_layers = gpu_layers
+            .or_else(gpu_layers_from_env)
+            .unwrap_or(hardware.recommended_gpu_layers);
+        if let Some(env_n) = gpu_layers_from_env() {
+            if gpu_layers.is_none() {
+                tracing::info!(
+                    n_gpu_layers = env_n,
+                    "gpu layers overridden by SOVEREIGN_GPU_LAYERS"
+                );
+            }
+        }
 
         let fast_quirks = fast_family.default_quirks();
         let primary_quirks = primary_family.default_quirks();
@@ -2218,6 +2236,19 @@ fn alias_ceiling_env() -> Option<u64> {
     std::env::var("SOVEREIGN_FAST_ALIAS_MAX_MB")
         .ok()
         .and_then(|v| v.trim().parse().ok())
+}
+
+/// Operator override for GPU offload layers: `SOVEREIGN_GPU_LAYERS=<n>`, or
+/// `off`/`cpu` for pure-CPU inference. `None` when unset or unparseable, so
+/// the caller falls back to the hardware default. The CPU escape hatch for
+/// detected-but-unusable GPUs (see the call site in the engine constructor).
+fn gpu_layers_from_env() -> Option<u32> {
+    let raw = std::env::var("SOVEREIGN_GPU_LAYERS").ok()?;
+    let v = raw.trim();
+    if v.eq_ignore_ascii_case("off") || v.eq_ignore_ascii_case("cpu") {
+        return Some(0);
+    }
+    v.parse::<u32>().ok()
 }
 
 #[cfg(test)]

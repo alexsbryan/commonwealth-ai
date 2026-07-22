@@ -344,7 +344,7 @@ async fn run_download_model(model_id: &str) -> i32 {
         Ok(()) => {
             eprintln!("✓ model installed at {}", root.display());
             eprintln!();
-            eprintln!("  next: sovereign corpus extract-entities <corpus_id>");
+            eprintln!("  next: svrn corpus extract-entities <corpus_id>");
             0
         }
         Err(e) => {
@@ -356,7 +356,7 @@ async fn run_download_model(model_id: &str) -> i32 {
 
 fn parse_args(args: &[String]) -> Result<Parsed, String> {
     if args.is_empty() {
-        return Err("usage: sovereign corpus extract-entities <corpus_id> [--model <id>] [--threshold <f>] [--labels <l1,l2,...>] [--dry-run]".to_string());
+        return Err("usage: svrn corpus extract-entities <corpus_id> [--model <id>] [--threshold <f>] [--labels <l1,l2,...>] [--dry-run]".to_string());
     }
     if matches!(args[0].as_str(), "--help" | "-h") {
         return Err(String::new());
@@ -445,8 +445,8 @@ fn print_help() {
     eprintln!("    --download-model   Fetch the GliNER model files + exit (no extraction).");
     eprintln!();
     eprintln!("  First-install workflow:");
-    eprintln!("    sovereign corpus extract-entities --download-model");
-    eprintln!("    sovereign corpus extract-entities conversations-anthropic");
+    eprintln!("    svrn corpus extract-entities --download-model");
+    eprintln!("    svrn corpus extract-entities conversations-anthropic");
     eprintln!();
     eprintln!("  Once the model is installed, the daemon's tiered ingest path");
     eprintln!("  also fires GliNER automatically on every conv-corpus import.");

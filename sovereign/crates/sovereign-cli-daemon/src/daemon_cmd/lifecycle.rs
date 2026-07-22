@@ -10,7 +10,7 @@ use super::home_dir_buf;
 /// change that isn't hot-reloadable (port, data_dir). For model-only
 /// changes, prefer `svrn daemon reload` — no gap in availability.
 pub(super) async fn stop_daemon() -> i32 {
-    eprintln!("stopping sovereign daemon …");
+    eprintln!("stopping the daemon …");
 
     // Prefer the PID file written by `daemon start` — that's the only
     // way we can reliably stop a daemon that wasn't launched via a
@@ -417,7 +417,7 @@ pub(super) async fn start_daemon() -> i32 {
         }
     }
 
-    eprintln!("starting sovereign daemon (logs: {})…", log_dir.display());
+    eprintln!("starting the daemon (logs: {})…", log_dir.display());
 
     let mut cmd = std::process::Command::new(&exe);
     cmd.arg("daemon")
@@ -486,7 +486,7 @@ pub(super) async fn start_daemon() -> i32 {
             pid_path.display()
         );
         // Don't abort — the daemon is still coming up; caller can
-        // stop via `pkill -f 'sovereign daemon run'` if needed.
+        // stop via `pkill -f 'svrn daemon run'` if needed.
     }
 
     let timeout = ready_timeout();
@@ -499,7 +499,7 @@ pub(super) async fn start_daemon() -> i32 {
         if !crate::service_install::service_installed() {
             eprintln!(
                 "note: this daemon is unsupervised (no restart on crash). \
-                 For auto-restart: sovereign install-service"
+                 For auto-restart: svrn install-service"
             );
         }
         return 0;
@@ -650,7 +650,7 @@ extern "C" {
 /// `launchctl kickstart -k gui/$(id -u)/com.svrnmesh.daemon`
 /// directly.
 pub(super) async fn restart_daemon() -> i32 {
-    eprintln!("restarting sovereign daemon …");
+    eprintln!("restarting the daemon …");
     let stop_rc = stop_daemon().await;
     if stop_rc != 0 {
         // stop_daemon already printed the failure reason. Don't try
@@ -768,7 +768,7 @@ pub(super) async fn status_daemon() -> i32 {
         Ok(r) => {
             eprintln!(
                 "⚠ something is answering on :9741 but returned {}. \
-                 not a sovereign daemon, or in a bad state.",
+                 not a svrn daemon, or in a bad state.",
                 r.status()
             );
             1

@@ -50,7 +50,7 @@ pub async fn run(args: &[String]) -> i32 {
              Installing the service now would spawn a second daemon that \
              loses the :9741 bind and crash-loops.\n\
              Stop it first, then re-run:\n\
-             \n  sovereign daemon stop && sovereign install-service\n"
+             \n  svrn daemon stop && svrn install-service\n"
         );
         return 1;
     }
@@ -63,7 +63,7 @@ pub async fn run(args: &[String]) -> i32 {
             // the background. Print one line so the user knows the
             // daemon should already be coming up; they can verify
             // with `svrn daemon status` (or `svrn status`).
-            eprintln!("  Verify with: sovereign daemon status");
+            eprintln!("  Verify with: svrn daemon status");
             0
         }
         Err(e) => {
@@ -80,7 +80,7 @@ pub async fn run(args: &[String]) -> i32 {
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn install-service",
-    summary: "Register the sovereign daemon with launchd (macOS) or systemd (Linux).",
+    summary: "Register the svrnmesh daemon with launchd (macOS) or systemd (Linux).",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage("svrn install-service"),
         sovereign_cli_shared::help::HelpSection::Notes(

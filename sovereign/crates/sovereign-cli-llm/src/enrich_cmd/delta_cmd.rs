@@ -720,7 +720,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
     println!("  new ids: {}", new_ids.join(","));
     println!();
     println!(
-        "  Next: sovereign enrich delta {} --chapters {}",
+        "  Next: svrn enrich delta {} --chapters {}",
         parsed.corpus_id,
         new_ids.join(",")
     );

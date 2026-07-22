@@ -70,8 +70,8 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         println!("  \u{2713} Wizard complete.");
         println!();
         println!("  Next steps:");
-        println!("    sovereign daemon              # start the daemon (foreground)");
-        println!("    sovereign install-service     # register as a launchd/systemd service");
+        println!("    svrn daemon                   # start the daemon (foreground)");
+        println!("    svrn install-service          # register as a launchd/systemd service");
         return 0;
     }
 
@@ -128,6 +128,12 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         cfg.daemon.client_port
     );
 
+    // ── Next steps — the two commands a new user most wants next ──
+    println!();
+    println!("  Next steps:");
+    println!("    svrn chat session          # start talking");
+    println!("    svrn model list            # see the models it loaded; `svrn model set <slot> <file>` to change one (applies live)");
+
     // ── opencode config — write the global file directly ─────────
     //
     // Earlier the script just printed a snippet pointing at
@@ -176,12 +182,12 @@ fn diagnose_daemon_failure(data_dir: &Path) {
     eprintln!("  To diagnose, try one of:");
 
     #[cfg(target_os = "macos")]
-    eprintln!("    launchctl list | grep sovereign       # is the service loaded?");
+    eprintln!("    launchctl list | grep svrnmesh        # is the service loaded?");
     #[cfg(target_os = "linux")]
-    eprintln!("    systemctl --user status sovereign     # is the unit active?");
+    eprintln!("    systemctl --user status svrnmesh      # is the unit active?");
 
     eprintln!(
-        "    sovereign daemon run                  # run in the foreground to see errors live"
+        "    svrn daemon run                       # run in the foreground to see errors live"
     );
     eprintln!();
 
