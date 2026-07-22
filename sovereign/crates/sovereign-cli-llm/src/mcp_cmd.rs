@@ -146,7 +146,7 @@ async fn cmd_tools(args: &[String]) -> i32 {
     }
 
     if !found_any {
-        eprintln!("No tools found. Check server connections with: sovereign mcp list");
+        eprintln!("No tools found. Check server connections with: svrn mcp list");
     }
     0
 }

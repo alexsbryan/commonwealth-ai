@@ -235,7 +235,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     }
 
     println!();
-    println!("  Next: sovereign enrich build {corpus_id}");
+    println!("  Next: svrn enrich build {corpus_id}");
     0
 }
 

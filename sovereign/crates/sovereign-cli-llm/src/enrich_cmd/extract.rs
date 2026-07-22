@@ -631,13 +631,13 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         eprintln!();
         eprintln!("    Retry just these chapters:");
         eprintln!(
-            "      sovereign enrich extract {} --chapters {}",
+            "      svrn enrich extract {} --chapters {}",
             cfg.corpus_id,
             ids.join(",")
         );
         eprintln!("    Or, from the latest run file:");
         eprintln!(
-            "      sovereign enrich extract {} --retry-failed",
+            "      svrn enrich extract {} --retry-failed",
             cfg.corpus_id
         );
         return 1;

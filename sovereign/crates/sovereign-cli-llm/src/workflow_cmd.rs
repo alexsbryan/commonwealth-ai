@@ -137,7 +137,7 @@ async fn cmd_author(args: &[String]) -> i32 {
     }
     let Some(desc) = desc else {
         eprintln!("Usage: svrn workflow author \"<describe the workflow you want>\"");
-        eprintln!("Example: sovereign workflow author \"fetch a web page and write a 3-sentence summary\"");
+        eprintln!("Example: svrn workflow author \"fetch a web page and write a 3-sentence summary\"");
         return 1;
     };
 
@@ -220,8 +220,8 @@ async fn cmd_author(args: &[String]) -> i32 {
         .unwrap_or_default();
     println!("{}", content.trim());
     eprintln!("\n— authored workflows land in ~/.sovereign/workflows/ —");
-    eprintln!("  sovereign workflow list                 # see them");
-    eprintln!("  sovereign workflow run <name> --folder <dir>   # run it");
+    eprintln!("  svrn workflow list                 # see them");
+    eprintln!("  svrn workflow run <name> --folder <dir>   # run it");
     0
 }
 
@@ -352,7 +352,7 @@ async fn cmd_run(args: &[String]) -> i32 {
 
     let Some(file) = file else {
         eprintln!("Usage: svrn workflow run <name|file.toml> [--folder <dir>] …");
-        eprintln!("       sovereign workflow list   # to see available workflows");
+        eprintln!("       svrn workflow list   # to see available workflows");
         return 1;
     };
 
@@ -450,9 +450,9 @@ fn cmd_list() -> i32 {
         let d: String = desc.chars().take(64).collect();
         println!("{name:<24} {kind:<9} {d}");
     }
-    println!("\nRun:   sovereign workflow run <name> [--folder <dir>] [--param k=v]");
+    println!("\nRun:   svrn workflow run <name> [--folder <dir>] [--param k=v]");
     println!("       a workflow name runs its steps; a recipe name installs that corpus.");
-    println!("Edit:  sovereign workflow copy <workflow> <new-name>   # → ~/.sovereign/workflows/");
+    println!("Edit:  svrn workflow copy <workflow> <new-name>   # → ~/.sovereign/workflows/");
     0
 }
 
@@ -536,7 +536,7 @@ fn write_user_workflow(name: &str, toml: &str) -> i32 {
         return 1;
     }
     println!("Created {}", dest.display());
-    println!("Edit it, then:  sovereign workflow run {name} --folder <dir>");
+    println!("Edit it, then:  svrn workflow run {name} --folder <dir>");
     0
 }
 
@@ -595,8 +595,8 @@ pub(crate) async fn run_assembled(
         if let Some(corpus) = params.get("corpus").filter(|c| !c.is_empty()) {
             eprintln!(
                 "\n✓ Notebook \"{corpus}\" is searchable — nothing left your machine.\n\n  \
-                 Ask it (cited, instant):\n    sovereign chat inspect --corpus {corpus} \"your question\"\n  \
-                 Or chat with full answers:\n    sovereign chat ask \"your question\"\n"
+                 Ask it (cited, instant):\n    svrn chat inspect --corpus {corpus} \"your question\"\n  \
+                 Or chat with full answers:\n    svrn chat ask \"your question\"\n"
             );
         }
     }

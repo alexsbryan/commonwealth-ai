@@ -2,7 +2,7 @@
 //! `svrn recipe-agent live-trial` — scripted, daemon-driven trial.
 //!
 //! Drives the recipe-author agent loop end-to-end against the running
-//! sovereign daemon's `/v1/chat/completions`. Reads partner messages
+//! svrn daemon's `/v1/chat/completions`. Reads partner messages
 //! from a script file, runs an OpenAI-style tool-call loop with the
 //! recipe-author skill's system prompt and tool definitions, then
 //! validates the generated recipe + runs an initial fetch.
@@ -312,7 +312,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
 
 fn print_help() {
     eprintln!(
-        "Usage:\n  sovereign recipe-agent live-trial \\\n    \
+        "Usage:\n  svrn recipe-agent live-trial \\\n    \
          --charter <FILE> --script <FILE> \\\n    \
          [--feature-id <ID>] [--title <T>] \\\n    \
          [--daemon <URL>] [--skills-dir <D>] \\\n    \
@@ -375,7 +375,7 @@ async fn probe_daemon(base: &str) -> std::result::Result<(), String> {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) => Err(format!(
             "daemon at {base} returned {} from /v1/models. \
-             Is it really a sovereign daemon?",
+             Is it really a svrn daemon?",
             r.status()
         )),
         Err(_) => Err(format!(

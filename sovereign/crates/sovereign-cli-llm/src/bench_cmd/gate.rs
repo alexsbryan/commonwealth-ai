@@ -18,9 +18,9 @@
 //!
 //! ```text
 //! # capture (once, on a healthy daemon):
-//! sovereign bench gate chaos-monkey --report chaos.jsonl --update-baseline
+//! svrn bench gate chaos-monkey --report chaos.jsonl --update-baseline
 //! # gate (every CI run):
-//! sovereign bench gate chaos-monkey --report chaos.jsonl
+//! svrn bench gate chaos-monkey --report chaos.jsonl
 //!   → exit 0 if no metric regressed vs baseline (first-run also passes),
 //!     exit 1 if a metric regressed.
 //! ```

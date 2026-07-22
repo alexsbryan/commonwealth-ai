@@ -36,11 +36,11 @@ pub async fn run(args: &[String]) -> i32 {
         _ => {
             eprintln!(
                 "usage:\n\
-                 \x20 sovereign meshapp new <id> --corpus <corpus-id> [--name <title>] [--dir <base>]\n\
-                 \x20 sovereign meshapp dev <id> [--dir <bundle-dir>] [--index <index-dir>] [--port <n>]\n\
-                 \x20 sovereign meshapp publish <id> [--dir <bundle-dir>] [--out <dir>]\n\
-                 \x20 sovereign meshapp install <id> [--from <path|url>]\n\
-                 \x20 sovereign meshapp list\n\n\
+                 \x20 svrn meshapp new <id> --corpus <corpus-id> [--name <title>] [--dir <base>]\n\
+                 \x20 svrn meshapp dev <id> [--dir <bundle-dir>] [--index <index-dir>] [--port <n>]\n\
+                 \x20 svrn meshapp publish <id> [--dir <bundle-dir>] [--out <dir>]\n\
+                 \x20 svrn meshapp install <id> [--from <path|url>]\n\
+                 \x20 svrn meshapp list\n\n\
                  new      scaffold an SDK-composed bundle (index.html + app.js + meshapp.json).\n\
                  dev      serve a bundle with a live `window.meshApp` over a local corpus.\n\
                  publish  pack a bundle (+ _sdk) into a tar.zst + register it.\n\
@@ -123,10 +123,10 @@ fn run_new(args: &[String]) -> i32 {
     println!("scaffolded mesh app `{app_id}` → {}", dir.display());
     println!("  next:");
     println!(
-        "    sovereign meshapp dev {app_id}      # serve it against your local `{corpus}` corpus"
+        "    svrn meshapp dev {app_id}      # serve it against your local `{corpus}` corpus"
     );
     println!("  then, to ship it so others can one-click the data:");
-    println!("    1. publish your corpus snapshot:  sovereign corpus snapshot publish {corpus}");
+    println!("    1. publish your corpus snapshot:  svrn corpus snapshot publish {corpus}");
     println!("    2. copy your recipe into the bundle as recipe.toml (it carries the [prebuilt] HF block)");
     println!("    3. add to meshapp.json:  \"corpus_data\": {{ \"size_indexed_gb\": <n>, \"recipe\": \"recipe.toml\" }}");
     0

@@ -40,7 +40,7 @@ pub async fn cmd_sheets_ingest(args: &[String]) -> i32 {
             "--keyword" => keyword_mode = true,
             "-h" | "--help" => {
                 println!(
-                    "usage: sovereign enrich sheets-ingest <folder> --corpus <id> \
+                    "usage: svrn enrich sheets-ingest <folder> --corpus <id> \
                      [--indexes-dir <path>] [--keyword]\n\n\
                      Default classifies columns with the embed-centroid HeaderClassifier \
                      (semantic, generalizes); --keyword uses the substring header map \

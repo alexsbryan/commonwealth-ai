@@ -676,7 +676,7 @@ async fn probe_or_bail(base: &str) -> Result<()> {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) => Err(Error::Serialization(format!(
             "daemon at {base} returned {} from /v1/models. \
-             Is it really a sovereign daemon? Try `svrn doctor`.",
+             Is it really a svrn daemon? Try `svrn doctor`.",
             r.status()
         ))),
         Err(_) => Err(Error::Serialization(format!(

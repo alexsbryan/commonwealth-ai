@@ -92,7 +92,7 @@ pub fn soft_limit_mb() -> u64 {
 /// opted into. Enable with `SOVEREIGN_RSS_HARD_LIMIT_MB=<mb>` (explicit) or
 /// `=auto` (RAM-derived: 85% Linux / 65% macOS); `0`/`off`/unset/garbage all
 /// leave it disabled. `scripts/daemon-supervised.sh` sets it; bare
-/// `sovereign daemon run` leaves it off (soft-warn still fires).
+/// `svrn daemon run` leaves it off (soft-warn still fires).
 pub fn hard_limit_mb() -> Option<u64> {
     hard_limit_policy(
         std::env::var("SOVEREIGN_RSS_HARD_LIMIT_MB").ok().as_deref(),
@@ -114,7 +114,7 @@ fn derived_hard_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
 /// **Disabled unless explicitly enabled.** A hard limit self-SIGTERMs the
 /// daemon, which only makes sense under a supervisor that relaunches it
 /// (`scripts/daemon-supervised.sh`, or a launchd/systemd unit that sets the
-/// env); on an unsupervised `sovereign daemon run` it is pure downtime with
+/// env); on an unsupervised `svrn daemon run` it is pure downtime with
 /// no recovery. So the default is OFF and supervisors opt in — matching
 /// DAEMON_RESILIENCE.md ("hard limit disabled unless env set"). The soft
 /// limit (warn-only, non-fatal) stays on as the observability signal.

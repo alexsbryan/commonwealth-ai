@@ -57,7 +57,7 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 eprintln!(
-                    "usage: sovereign corpus export-parcels --corpus <id> [--entity-type parcel] [--out <path>]"
+                    "usage: svrn corpus export-parcels --corpus <id> [--entity-type parcel] [--out <path>]"
                 );
                 return 0;
             }

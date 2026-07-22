@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign solve <workdir> "goal"` — hand the daemon a coding
+//! `svrn solve <workdir> "goal"` — hand the daemon a coding
 //! goal, get a green tree back. Spec: `docs/specs/SOLVE_UX.md`.
 //!
 //! Thin client over the daemon's `/v1/solve/jobs` surface: submit,
@@ -11,12 +11,12 @@ use serde_json::Value;
 use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 use sovereign_core::setup_config::SetupConfig;
 
-const HELP: &str = r#"sovereign solve — give the daemon a coding goal, get a green tree back
+const HELP: &str = r#"svrn solve — give the daemon a coding goal, get a green tree back
 
 USAGE:
-  sovereign solve <workdir> "<goal>" [--watch] [options]
-  sovereign solve --status <job_id>
-  sovereign solve --cancel <job_id>
+  svrn solve <workdir> "<goal>" [--watch] [options]
+  svrn solve --status <job_id>
+  svrn solve --cancel <job_id>
 
 The daemon makes the goal test-shaped (using your failing tests if
 you have them; writing the one failing test that pins the goal if
@@ -178,7 +178,7 @@ pub async fn run(args: &[String]) -> i32 {
         return 2;
     };
     // The daemon resolves paths on ITS filesystem — absolutize here
-    // so `sovereign solve . "goal"` means the caller's cwd.
+    // so `svrn solve . "goal"` means the caller's cwd.
     let workdir = match std::fs::canonicalize(workdir) {
         Ok(p) => p,
         Err(e) => {
@@ -226,7 +226,7 @@ pub async fn run(args: &[String]) -> i32 {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: daemon call failed: {e}");
-            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            eprintln!("hint: is the daemon running? try `svrn daemon status`.");
             return 1;
         }
     };
@@ -263,7 +263,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     if !parsed.watch {
         println!(
-            "\nrunning in the background —\n  watch:  sovereign solve --status {job_id}\n  cancel: sovereign solve --cancel {job_id}"
+            "\nrunning in the background —\n  watch:  svrn solve --status {job_id}\n  cancel: svrn solve --cancel {job_id}"
         );
         return 0;
     }
@@ -397,7 +397,7 @@ async fn print_status(http: &reqwest::Client, base: &str, id: &str) -> i32 {
         }
         Err(e) => {
             eprintln!("error: daemon call failed: {e}");
-            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            eprintln!("hint: is the daemon running? try `svrn daemon status`.");
             1
         }
     }

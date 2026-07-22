@@ -1056,7 +1056,7 @@ async fn cmd_create(args: &[String]) -> i32 {
         eprintln!("A mesh already exists (created during `svrn setup`).");
         eprintln!("To generate a new shareable join key, run:");
         eprintln!();
-        eprintln!("  sovereign mesh rotate");
+        eprintln!("  svrn mesh rotate");
         eprintln!();
         return 1;
     }
@@ -1132,7 +1132,7 @@ fn print_mesh_share(
     println!();
     println!("Share with a friend:");
     println!("  App:  {app_link}");
-    println!("  CLI:  sovereign mesh join {join_key}");
+    println!("  CLI:  svrn mesh join {join_key}");
     println!();
 }
 
@@ -1348,9 +1348,9 @@ async fn cmd_rotate(args: &[String]) -> i32 {
 ///                      populated addresses).
 ///
 /// Examples:
-///   sovereign mesh status
-///   sovereign mesh status --json
-///   export SOVEREIGN_FOUNDER_ADDR=$(sovereign mesh status --self --addr-only)
+///   svrn mesh status
+///   svrn mesh status --json
+///   export SOVEREIGN_FOUNDER_ADDR=$(svrn mesh status --self --addr-only)
 async fn cmd_status(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh status [--json] [--self] [--addr-only]");
@@ -1520,12 +1520,12 @@ async fn cmd_status(args: &[String]) -> i32 {
     0
 }
 
-/// `sovereign mesh transport` — the operator's "is anyone actually on
+/// `svrn mesh transport` — the operator's "is anyone actually on
 /// iroh, and via a direct path or the relay?" surface (H2). Reads the
 /// `iroh_transport` block of `/v1/mesh/status`.
 async fn cmd_transport(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
-        eprintln!("Usage: sovereign mesh transport [--json]");
+        eprintln!("Usage: svrn mesh transport [--json]");
         eprintln!();
         eprintln!("Show each peer's live iroh connection path (direct / relayed / mixed / idle).");
         eprintln!(
@@ -1648,8 +1648,8 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
         eprintln!("Pulls a GGUF from a mesh peer over the tailnet. No R2 credentials required.");
         eprintln!();
         eprintln!("Examples:");
-        eprintln!("  sovereign mesh fetch-model Darwin-9B-Opus.Q4_K_M.gguf");
-        eprintln!("  sovereign mesh fetch-model Qwen3-Embedding-0.6B-Q8_0.gguf --out ~/models");
+        eprintln!("  svrn mesh fetch-model Darwin-9B-Opus.Q4_K_M.gguf");
+        eprintln!("  svrn mesh fetch-model Qwen3-Embedding-0.6B-Q8_0.gguf --out ~/models");
         return 0;
     }
 

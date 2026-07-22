@@ -208,7 +208,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
             Err(e) => {
                 eprintln!("voice eval: live run failed: {e}");
                 eprintln!(
-                    "Hint: ensure the sovereign daemon is running (`svrn daemon start`) \
+                    "Hint: ensure the svrn daemon is running (`svrn daemon start`) \
                      and the bundled skills directory is reachable. Pass --canned-response \
                      to skip the live path."
                 );

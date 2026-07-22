@@ -38,10 +38,10 @@ use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 fn print_help() {
     eprintln!(
         "Usage:\n  \
-         sovereign recipe-agent new --charter <FILE> [--title <TITLE>]\n  \
-         sovereign recipe-agent show <FEATURE_ID>\n  \
-         sovereign recipe-agent list\n  \
-         sovereign recipe-agent live-trial --charter <FILE> --script <FILE> [...]\n\n\
+         svrn recipe-agent new --charter <FILE> [--title <TITLE>]\n  \
+         svrn recipe-agent show <FEATURE_ID>\n  \
+         svrn recipe-agent list\n  \
+         svrn recipe-agent live-trial --charter <FILE> --script <FILE> [...]\n\n\
         \"new\" prints the new project's feature_id to stdout. Pass it to \n\
         the chat REPL (with the recipe-author skill on \n\
         ~/.sovereign/skills/) to drive the agent loop.\n\

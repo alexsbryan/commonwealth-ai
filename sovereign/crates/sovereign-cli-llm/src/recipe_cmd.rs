@@ -3,9 +3,9 @@
 //!
 //! Provides two commands that don't require a loaded inference model:
 //!
-//!   sovereign recipe test <path>      [--sample-size N] [--output path]
+//!   svrn recipe test <path>      [--sample-size N] [--output path]
 //!                                     [--no-embed] [--verbose] [--offline]
-//!   sovereign recipe validate <path>  [--offline]
+//!   svrn recipe validate <path>  [--offline]
 //!
 //! Both commands use a stub `EmbedFn` that returns zero-vectors. Embedding
 //! is always disabled (`--no-embed`) in this code path because loading an
@@ -712,7 +712,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     println!("  SHA-256:      {sha256}");
     println!();
     println!("Install with:");
-    println!("  sovereign corpus install {}", recipe.corpus.id);
+    println!("  svrn corpus install {}", recipe.corpus.id);
 
     if submit_pr {
         if let Err(e) = submit_upstream_pr(&recipe, &dest_recipe_path) {

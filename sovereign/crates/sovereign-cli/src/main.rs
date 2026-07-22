@@ -182,6 +182,10 @@ const HELP: Help = Help {
                 "First-run: detect hardware, download models, start daemon",
             ),
             (
+                "model",
+                "See/change the models the daemon loads; applies live (list / set / unset / context)",
+            ),
+            (
                 "chat",
                 "CLI mirror of the desktop chat flow (ask / session / inspect)",
             ),
@@ -346,6 +350,7 @@ const ALL_VERBS: &[&str] = &[
     "meta-atlas",
     "milestone",
     "mobile",
+    "model",
     "newsworthy",
     "notes",
     "nudge",
@@ -925,6 +930,13 @@ async fn async_main() {
                 // sovereign-cli-daemon — same binary that hosts the
                 // daemon they configure.
                 let code = daemon_bin::exec("setup", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "model" => {
+                // Reads/writes the [models] config and hot-applies via the
+                // daemon's admin reload — lives in sovereign-cli-daemon next
+                // to setup (shares the config type) and the daemon it reloads.
+                let code = daemon_bin::exec("model", &raw_args[1..]);
                 std::process::exit(code);
             }
             "daemon" => {

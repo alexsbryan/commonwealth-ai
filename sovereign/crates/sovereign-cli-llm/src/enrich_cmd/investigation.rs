@@ -211,7 +211,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     if !index_dir.is_dir() {
         eprintln!(
             "error: corpus `{corpus_id}` is not installed at {}.\n\
-             Run: sovereign corpus install {corpus_id}",
+             Run: svrn corpus install {corpus_id}",
             index_dir.display()
         );
         return 1;
@@ -325,7 +325,7 @@ async fn cmd_build(args: &[String]) -> i32 {
             );
             println!();
             println!("Outputs: {}/{INVESTIGATION_DIRNAME}/", index_dir.display());
-            println!("Inspect with: sovereign enrich investigation show {corpus_id}");
+            println!("Inspect with: svrn enrich investigation show {corpus_id}");
             0
         }
         Err(e) => {
@@ -355,7 +355,7 @@ async fn cmd_show(args: &[String]) -> i32 {
     if !invest_dir.is_dir() {
         eprintln!(
             "error: no investigation outputs at {}.\n\
-             Run: sovereign enrich investigation build {corpus_id}",
+             Run: svrn enrich investigation build {corpus_id}",
             invest_dir.display(),
         );
         return 1;
@@ -442,7 +442,7 @@ async fn cmd_recoalesce(args: &[String]) -> i32 {
     if !invest_dir.is_dir() {
         eprintln!(
             "error: no investigation outputs at {}.\n\
-             Run: sovereign enrich investigation build {corpus_id}",
+             Run: svrn enrich investigation build {corpus_id}",
             invest_dir.display(),
         );
         return 1;

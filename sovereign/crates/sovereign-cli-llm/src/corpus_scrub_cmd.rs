@@ -39,7 +39,7 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage(
             "svrn corpus scrub <corpus_id> [--out <path>] [--min-salience <f>]\n\
-             sovereign corpus scrub --apply-to <bank.toml> --map <map.json>",
+             svrn corpus scrub --apply-to <bank.toml> --map <map.json>",
         ),
         HelpSection::Flags(&[
             (

@@ -118,7 +118,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn daemon [--setup-only] | sovereign daemon <subcommand>",
+            "svrn daemon [--setup-only] | svrn daemon <subcommand>",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
@@ -355,7 +355,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // env at boot so the existing per-request lookup picks it up.
     // Caller-supplied env wins — `std::env::set_var` only overrides
     // when nothing was set on the CLI invocation. Operators who want
-    // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 sovereign daemon
+    // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 svrn daemon
     // run`) can still do so without editing the config file.
     if config.daemon.force_tool_calls && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err() {
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
@@ -373,7 +373,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // `TopLevelGrammar::from_json_schema` path instead of the
     // in-house `JsonConstraint` mask. Caller-supplied env wins so
     // operators can A/B test (`SOVEREIGN_ALTERNATION_GRAMMAR=0
-    // sovereign daemon run` ignores the config).
+    // svrn daemon run` ignores the config).
     //
     // launchd-spawned daemons don't inherit caller env, so flipping
     // this in setup_config.toml is the load-bearing path on macOS

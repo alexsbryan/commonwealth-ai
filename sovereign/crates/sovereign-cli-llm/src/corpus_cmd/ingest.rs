@@ -105,7 +105,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
         crate::workflow_cmd::run_assembled(&wf, DEFAULT_DAEMON, concurrency, no_cache, params)
             .await;
     if code == 0 {
-        eprintln!("\nDone. Query it:  sovereign corpus search {corpus} \"<your question>\"");
+        eprintln!("\nDone. Query it:  svrn corpus search {corpus} \"<your question>\"");
     }
     code
 }

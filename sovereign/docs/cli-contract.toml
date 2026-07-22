@@ -49,6 +49,14 @@ flags = [
   { name = "--data-dir", takes_value = true },
 ]
 
+# `svrn model` — see/change the [models] config and hot-apply via the daemon's
+# admin reload (no manual config edit, no restart). Subcommand-shaped (list /
+# set / unset / set-extra / rm-extra / context), so no top-level flags.
+[[command]]
+path = "model"
+binary = "daemon"
+visibility = "public"
+
 [[command]]
 path = "doctor"
 binary = "daemon"

@@ -305,15 +305,15 @@ math        = 3
 creative    = 3
 
 [profiles.high.embed]
-repo    = "Qwen/Qwen3-Embedding-4B-GGUF"
-file    = "Qwen3-Embedding-4B-Q4_K_M.gguf"
+repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+file    = "Qwen3-Embedding-0.6B-Q8_0.gguf"
 family  = "Qwen3Embedding"
-quant   = "Q4_K_M"
-size_gb = 2.5
+quant   = "Q8_0"
+size_gb = 0.6
 thinking = false
-hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF"
+hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
 [profiles.high.embed.quirks_override]
-"embed.output_dimensions" = 2560
+"embed.output_dimensions" = 1024
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -361,15 +361,15 @@ math        = 3
 creative    = 3
 
 [profiles.very_high.embed]
-repo    = "Qwen/Qwen3-Embedding-4B-GGUF"
-file    = "Qwen3-Embedding-4B-Q8_0.gguf"
+repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+file    = "Qwen3-Embedding-0.6B-Q8_0.gguf"
 family  = "Qwen3Embedding"
 quant   = "Q8_0"
-size_gb = 4.3
+size_gb = 0.6
 thinking = false
-hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF"
+hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
 [profiles.very_high.embed.quirks_override]
-"embed.output_dimensions" = 2560
+"embed.output_dimensions" = 1024
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CURATED ALTERNATIVES (opt-in, never auto-selected)

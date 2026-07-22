@@ -180,8 +180,8 @@ pub async fn run_demo_server(args: &[String]) -> i32 {
     let url = format!("http://{addr}/mcp");
     eprintln!("Reference MCP server listening — {url}");
     eprintln!();
-    eprintln!("  1. sovereign mcp add demo --url {url}");
-    eprintln!("  2. sovereign chat \"what is Vega's clearance code?\"   →  TR-7741-Q");
+    eprintln!("  1. svrn mcp add demo --url {url}");
+    eprintln!("  2. svrn chat \"what is Vega's clearance code?\"   →  TR-7741-Q");
     eprintln!();
     eprintln!("Sealed agents: Vega, Orion, Lyra.  Ctrl-C to stop.");
 

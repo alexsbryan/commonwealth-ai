@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical port constants + URL builders used by every subcommand
-//! that needs to reach the sovereign daemon.
+//! that needs to reach the svrn daemon.
 //!
 //! Keeping these centralised means a port migration (as happened when
 //! we consolidated `:8080` → `:9741` in the port-unification pass)

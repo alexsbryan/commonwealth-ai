@@ -24,7 +24,7 @@
 //!
 //! Workflow:
 //!   1. Edit `~/.sovereign/config.toml` `[models].primary`.
-//!   2. `systemctl --user restart sovereign.service`
+//!   2. `systemctl --user restart svrnmesh.service`
 //!   3. `svrn bench atlas --output run-<label>.json`
 //!   4. Repeat for each candidate model.
 
@@ -317,7 +317,7 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
         tasks.iter().collect()
     };
 
-    println!("=== sovereign bench atlas ===");
+    println!("=== svrn bench atlas ===");
     println!("  daemon:   {}", cfg.base_url);
     println!("  corpus:   {}", parsed.corpus);
     println!(

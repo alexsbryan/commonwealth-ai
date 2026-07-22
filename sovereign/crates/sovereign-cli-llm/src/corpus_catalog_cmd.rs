@@ -32,10 +32,10 @@ use sovereign_tools::catalog_ingest::{
 };
 
 const HELP_CATALOG: &str = "\
-sovereign corpus catalog — Catalog-corpus probes and on-demand ingest demo.
+svrn corpus catalog — Catalog-corpus probes and on-demand ingest demo.
 
 USAGE:
-    sovereign corpus catalog <subcommand>
+    svrn corpus catalog <subcommand>
 
 SUBCOMMANDS:
     query <text>      Search installed catalog corpora and print
@@ -53,8 +53,8 @@ FLAGS (simulate):
     --yes             Auto-confirm the ingest prompt (for scripting).
 
 EXAMPLES:
-    sovereign corpus catalog query \"moby dick\"
-    sovereign corpus catalog simulate \"obsession in 19th century american literature\"
+    svrn corpus catalog query \"moby dick\"
+    svrn corpus catalog simulate \"obsession in 19th century american literature\"
 ";
 
 pub async fn run_catalog(args: &[String]) -> i32 {

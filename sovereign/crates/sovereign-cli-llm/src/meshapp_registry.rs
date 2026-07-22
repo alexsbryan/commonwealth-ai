@@ -184,7 +184,7 @@ pub fn publish(args: &[String]) -> i32 {
     println!("  sha256 {sha}");
     println!("  size   {:.1} KB", size as f64 / 1024.0);
     println!(
-        "\ninstall locally:  sovereign meshapp install {}",
+        "\ninstall locally:  svrn meshapp install {}",
         manifest.id
     );
     println!("to publish to the CURATED registry (so others can install + one-click data):");
@@ -299,7 +299,7 @@ pub async fn install(args: &[String]) -> i32 {
         "installed `{app_id}` ({trust}) → {}",
         dest.join(&app_id).display()
     );
-    println!("  run it:  sovereign meshapp dev {app_id}");
+    println!("  run it:  svrn meshapp dev {app_id}");
     println!("  or open it from the Mesh apps section in Sovereign Desktop.");
     0
 }

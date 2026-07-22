@@ -221,13 +221,13 @@ async fn cmd_add(args: &[String]) -> i32 {
 /// content_hash-deduplicating so re-running is idempotent.
 ///
 /// Usage:
-///   sovereign notes migrate-from /path/to/notes.db
-///   sovereign notes migrate-from /path/to/notes.db --target /alt/notes.db
+///   svrn notes migrate-from /path/to/notes.db
+///   svrn notes migrate-from /path/to/notes.db --target /alt/notes.db
 async fn cmd_migrate_from(args: &[String]) -> i32 {
     if args.is_empty() {
         eprintln!(
             "notes migrate-from: requires a source path. \
-             Example: sovereign notes migrate-from \
+             Example: svrn notes migrate-from \
              /Users/<you>/dev/<repo>/.sovereign/notes.db"
         );
         return 2;
@@ -360,14 +360,14 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage(
             "svrn notes                           30-day reflection view (default)\n\
-             sovereign notes add --kind <k> -m \"...\"   Append a note\n\
-             sovereign notes promote <id> --to <s>     Promote scope\n\
-             sovereign notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
-             sovereign notes rationalize               Candidate report: consolidate/supersede moves (no LLM, no writes)\n\
-             sovereign notes rationalize --distill     Preview the LLM-written survivors/verdicts (no writes)\n\
-             sovereign notes rationalize --apply --yes Write survivors + retire-with-pointer links\n\
-             sovereign notes gc [--days 30]            TTL sweep: tombstone expired telemetry (daemon runs this daily)\n\
-             sovereign notes --since 7d --tool <name>  Reflection filters",
+             svrn notes add --kind <k> -m \"...\"   Append a note\n\
+             svrn notes promote <id> --to <s>     Promote scope\n\
+             svrn notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
+             svrn notes rationalize               Candidate report: consolidate/supersede moves (no LLM, no writes)\n\
+             svrn notes rationalize --distill     Preview the LLM-written survivors/verdicts (no writes)\n\
+             svrn notes rationalize --apply --yes Write survivors + retire-with-pointer links\n\
+             svrn notes gc [--days 30]            TTL sweep: tombstone expired telemetry (daemon runs this daily)\n\
+             svrn notes --since 7d --tool <name>  Reflection filters",
         ),
         crate::util::help::HelpSection::Notes(
             "Replaces `svrn reflect` and `svrn atos promote`. Old names \

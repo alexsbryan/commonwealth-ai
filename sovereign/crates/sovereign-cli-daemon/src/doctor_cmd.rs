@@ -1013,7 +1013,7 @@ async fn check_mcp_live() -> CheckResult {
             name: "mcp_live",
             layer: Layer::Omo,
             status: CheckStatus::Failed,
-            message: "MCP /mcp unreachable — agents cannot use sovereign tools".into(),
+            message: "MCP /mcp unreachable — agents cannot use svrn tools".into(),
             repair: Repair::Executable("svrn daemon restart".into()),
         },
     }
@@ -1097,7 +1097,7 @@ async fn check_project_watchers() -> CheckResult {
             status: CheckStatus::Warning,
             message: "daemon is running but no projects registered".into(),
             repair: Repair::Manual(
-                "cd <repo-root> && sovereign project register  (run from each repo root)".into(),
+                "cd <repo-root> && svrn project register  (run from each repo root)".into(),
             ),
         };
     }

@@ -11,9 +11,9 @@
 //! CLI front-end (argument parsing, the pairing card, process launch).
 //!
 //! ```text
-//! sovereign mobile serve     # foreground; run on a server / under systemd
-//! sovereign mobile status    # is the daemon up? is the host listening?
-//! sovereign mobile pair      # print the pairing card (address + token)
+//! svrn mobile serve     # foreground; run on a server / under systemd
+//! svrn mobile status    # is the daemon up? is the host listening?
+//! svrn mobile pair      # print the pairing card (address + token)
 //! ```
 
 use std::net::{TcpStream, ToSocketAddrs};
