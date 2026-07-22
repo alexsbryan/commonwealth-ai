@@ -15,8 +15,8 @@ measured by adversarial benches — *gates, not vibes*.
 
 | | |
 |---|---|
-| Workspace | 40 crates across 4 projects |
-| Tests | 7,230 — none require GPU, network, or model weights |
+| Workspace | 4 projects, one Rust workspace |
+| Tests | thousands — none require GPU, network, or model weights |
 | Knowledge pipeline | 24 extractors · 7 chunkers, all recipe-declared |
 | CLI | 55 verbs behind one `svrm` dispatcher |
 | Telemetry | none — nothing phones home |
@@ -53,11 +53,6 @@ and check every claim yourself.
 
 <sub>Surfaces: `sovereign-cli` (+ 3 sibling binaries), `sovereign-desktop` (Tauri 2 + Svelte), `sovereign-server` (`:8080`, multi-tenant, the phone's host), `sovereign-mobile` (thin client). The runtime is `router → policy → retrieval → synthesis → grounding gate` over `sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval`; the wire types live in `oicp-types`.</sub>
 
-The monorepo also carries `packages/chat-ui` (one Svelte chat surface
-shared by desktop and mobile) and carve-out crates (`corpus-engine-scip`,
-`-notes`, `-atos`, `-archaeology`) split out to shrink rebuild blast
-radius.
-
 *Deep dive: SYSTEM_OVERVIEW §1–§2 (project map, per-crate table).*
 
 ## 2. One message's journey: nothing ships unverified
@@ -73,19 +68,14 @@ This is the pipeline every question rides. Two ideas make it unusual:
 
 <p align="center"><img src="diagrams/02-journey.svg" alt="A message flows through Router (what kind of ask), Retrieval (search all your sources — local corpora, mesh peers, your docs), and Synthesis (draft an answer), then reaches the grounding gate, which extracts each claim and checks it against the sealed evidence. Three outcomes: released with citations, rewrite the unsupported bits and re-check, or honestly abstain. The model never originates a number." width="900"></p>
 
-The gate is belt-and-suspenders: an LLM judge verifies claims against
-evidence, and deterministic vetoes run beside it — garbled `[Source:]`
-labels snap to the real source, code-shaped identifiers absent from the
-evidence are refused, mid-token generation stops are completed from the
-verified source. A **numeric audit** guarantees *the model never
-originates a number* in analytics answers: every figure is value-matched
-against tool output, and derivations are appended verbatim by the system.
-
-`ComplexTask` rides the same gate for its narration, plus its own
-machinery: an **idempotency ledger** (non-idempotent tool steps are
-exactly-once across crash and replay) and a **Delegate context-firewall**
-(a worker sees raw tool output; the orchestrator sees only a typed
-contract).
+The gate is belt-and-suspenders: an LLM judge checks each claim against the
+evidence, and deterministic vetoes run beside it — garbled `[Source:]` labels
+snap to the real source, invented code identifiers are refused, and a
+**numeric audit** guarantees *the model never originates a number*, every
+figure value-matched against tool output. `ComplexTask` rides the same gate,
+plus an idempotency ledger (tool steps run exactly once across crash and
+replay) and a Delegate firewall (the worker sees raw output; the orchestrator
+sees only a typed contract).
 
 *Deep dive: SYSTEM_OVERVIEW §4 — runtime data flow, retrieval pipeline,
 grounding gate, role layer. Code: `sovereign-core/src/runtime/`
@@ -134,19 +124,14 @@ A cross-corpus query, custody preserved end to end:
 
 <sub>The asking node searches its peer's `/internal/knowledge/search` on a 3-second per-peer budget. `query_sharing = true` lets the peer answer; `mesh_sharing = false` refuses replication of its index *independently* of query access — flip it to `true` and the corpus can live on several machines you allow, replicated on purpose. Peer offline ⇒ the asker degrades to local, never breaks.</sub>
 
-**Two transport modes, both deliberate.** By default a mesh runs in
-**trusted-network mode**: you pool machines on a network you already
-control — a tailnet, WireGuard, or your LAN — and the perimeter is the
-boundary. Since the iroh migration even this mode dials peers over
-encrypted QUIC *first*, falling back to the trusted network only when a
-direct encrypted path isn't available. Turn on **encrypted mode**
-(`require_encryption`, founder-set) and every node moves onto iroh
-QUIC/TLS, dial-by-Ed25519-key, fail-closed — no plaintext path exists, the
-daemon refuses to start if it can't encrypt, a stale or hostile peer can't
-downgrade it, and relays can be self-hosted or severed from public
-infrastructure entirely. The one documented exception, in either mode, is
-multi-host tensor-split RPC, which stays raw TCP — so we don't claim
-end-to-end encryption while it's in use.
+**Two transport modes.** By default a mesh runs **trusted-network mode** — you
+pool machines on a network you already control (a tailnet, WireGuard, your
+LAN), and since the iroh migration even this dials peers over encrypted QUIC
+first. Turn on **encrypted mode** (`require_encryption`, founder-set) and every
+node moves onto iroh QUIC/TLS, dial-by-key, fail-closed — no plaintext path,
+relays self-hostable. The one exception, either mode, is multi-host
+tensor-split RPC, which stays raw TCP; we don't claim end-to-end encryption
+while it's in use.
 
 *Deep dive: SYSTEM_OVERVIEW §5; [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md);
 hands-on: [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md). The
@@ -167,8 +152,8 @@ work.
 | Numeric audit | runtime | every number in analytics answers | "the model never originates a number" — prose figures value-matched against tool outputs |
 | Chaos monkey | bench | honesty under adversarial questioning | two red lines scored separately — competence when the answer is present, honesty when it's absent — never blended |
 | Mechanism fidelity | bench | does the model *reason* or pattern-match? | metamorphic probes, anytime-valid stopping; per-model results persist as **fidelity cards** |
-| Workspace suite | CI | all 40 crates | 7,230 tests; no GPU/network/weights required — breaking that is treated as a regression |
-| docs-gate | CI | the documentation contract | every cited path must resolve; extractor enum + all 40 crates must be mentioned; machine-local citations fail the build |
+| Workspace suite | CI | every crate | thousands of tests; no GPU/network/weights required — breaking that is a regression |
+| docs-gate | CI | the documentation contract | every cited path must resolve; extractor enum + every crate must be mentioned; machine-local citations fail the build |
 | arch-gate | CI | architectural debt | file-size ratchet (>1,200 lines frozen via baseline, only allowed down) + the §1 project map must resolve on disk |
 | Drift toolchain | mesh-side | docs vs code, semantically | LLM-bound reconciliation (drift detect, capability-reconcile, spec↔code fact pipeline) runs on your own hardware |
 
