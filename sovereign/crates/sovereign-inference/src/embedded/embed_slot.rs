@@ -112,8 +112,9 @@ impl EmbedSlot {
         };
         let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
 
-        let model = LlamaModel::load_from_file(backend, model_path, &model_params)
-            .map_err(|e| Error::Inference(format!("Failed to load embed model: {e}")))?;
+        let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
+            Error::Inference(crate::llama::describe_model_load_failure("embed", model_path, e))
+        })?;
 
         let n_embd = model.n_embd() as usize;
         // Per-input truncation: any single text longer than this is

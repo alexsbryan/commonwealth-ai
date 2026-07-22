@@ -189,8 +189,13 @@ impl RerankSlot {
         };
         let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
 
-        let model = LlamaModel::load_from_file(backend, model_path, &model_params)
-            .map_err(|e| Error::Inference(format!("Failed to load reranker model: {e}")))?;
+        let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
+            Error::Inference(crate::llama::describe_model_load_failure(
+                "reranker",
+                model_path,
+                e,
+            ))
+        })?;
 
         // The reranker emits one scalar per sequence — n_embd is
         // typically 1 in this mode but we don't read it; we just

@@ -336,9 +336,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // with no actionable detail. Installed exactly once per process.
     sovereign_inference::llama::install_log_tracing();
 
-    // VRAM capacity preflight — refuse a config that would overcommit
-    // VRAM (full rationale on `build::preflight::check_vram`). Bypass with
-    // SOVEREIGN_SKIP_VRAM_CHECK=1.
+    // VRAM capacity preflight — ADVISORY by default: warns and starts
+    // anyway on overcommit (so CPU-only / low-VRAM machines aren't
+    // hard-blocked). Only refuses under SOVEREIGN_STRICT_VRAM_CHECK=1 or
+    // when a model file is unreadable. Full rationale on
+    // `build::preflight::check_vram`.
     if !build::preflight::check_vram(&config) {
         return 1;
     }

@@ -304,39 +304,93 @@ pub struct BackendDevice {
 /// Idempotent: subsequent calls replace the callback. Safe to call
 /// once at daemon startup.
 ///
-/// Maps ggml log levels to tracing levels (DEBUG/INFO unchanged,
-/// WARN/ERROR straight; CONT is a continuation of the prior line and
-/// gets logged at DEBUG with a marker).
-pub fn install_log_tracing() {
+/// Two modes share one callback, selected by `LLAMA_LOG_ERRORS_ONLY`:
+///   - full (`install_log_tracing`): DEBUG/INFO/WARN/ERROR map straight
+///     through; CONT continuations log at DEBUG.
+///   - errors-only (`install_log_tracing_errors_only`): WARN/ERROR still
+///     surface, but INFO/DEBUG/CONT are demoted to TRACE so routine
+///     load chatter stays hidden under a normal `info` subscriber while
+///     the lines that explain a *failed* load still show. This is the
+///     daemon default — it replaces the old `void_logs()`, which hid the
+///     failure reason too and left the operator with a bare "null result
+///     from llama cpp".
+static LLAMA_LOG_ERRORS_ONLY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+unsafe extern "C" fn ggml_log_cb(
+    level: sys::ggml_log_level,
+    text: *const std::os::raw::c_char,
+    _user_data: *mut std::os::raw::c_void,
+) {
     use std::ffi::CStr;
-
-    unsafe extern "C" fn cb(
-        level: sys::ggml_log_level,
-        text: *const std::os::raw::c_char,
-        _user_data: *mut std::os::raw::c_void,
-    ) {
-        if text.is_null() {
-            return;
-        }
-        let msg = unsafe { CStr::from_ptr(text) }.to_string_lossy();
-        let msg = msg.trim_end_matches('\n');
-        if msg.is_empty() {
-            return;
-        }
-        match level {
-            sys::GGML_LOG_LEVEL_ERROR => tracing::error!(target: "llama_cpp", "{}", msg),
-            sys::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "llama_cpp", "{}", msg),
-            sys::GGML_LOG_LEVEL_INFO => tracing::info!(target: "llama_cpp", "{}", msg),
-            sys::GGML_LOG_LEVEL_DEBUG | sys::GGML_LOG_LEVEL_CONT => {
-                tracing::debug!(target: "llama_cpp", "{}", msg)
-            }
-            _ => tracing::trace!(target: "llama_cpp", level = level, "{}", msg),
-        }
+    if text.is_null() {
+        return;
     }
+    let msg = unsafe { CStr::from_ptr(text) }.to_string_lossy();
+    let msg = msg.trim_end_matches('\n');
+    if msg.is_empty() {
+        return;
+    }
+    let errors_only = LLAMA_LOG_ERRORS_ONLY.load(std::sync::atomic::Ordering::Relaxed);
+    match level {
+        sys::GGML_LOG_LEVEL_ERROR => tracing::error!(target: "llama_cpp", "{}", msg),
+        sys::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "llama_cpp", "{}", msg),
+        sys::GGML_LOG_LEVEL_INFO if !errors_only => tracing::info!(target: "llama_cpp", "{}", msg),
+        sys::GGML_LOG_LEVEL_DEBUG | sys::GGML_LOG_LEVEL_CONT if !errors_only => {
+            tracing::debug!(target: "llama_cpp", "{}", msg)
+        }
+        _ => tracing::trace!(target: "llama_cpp", level = level, "{}", msg),
+    }
+}
 
+/// Route llama.cpp/ggml logs to `tracing` at their native levels (verbose).
+pub fn install_log_tracing() {
+    LLAMA_LOG_ERRORS_ONLY.store(false, std::sync::atomic::Ordering::Relaxed);
     unsafe {
-        cpp::log_set(Some(cb), std::ptr::null_mut());
+        cpp::log_set(Some(ggml_log_cb), std::ptr::null_mut());
     }
+}
+
+/// Route only ggml WARN/ERROR to `tracing`; demote INFO/DEBUG to TRACE.
+/// The daemon default: quiet in normal operation, but a failed model load
+/// still explains itself instead of surfacing as a bare null result.
+pub fn install_log_tracing_errors_only() {
+    LLAMA_LOG_ERRORS_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
+    unsafe {
+        cpp::log_set(Some(ggml_log_cb), std::ptr::null_mut());
+    }
+}
+
+/// Turn a `LlamaModel::load_from_file` failure into an operator-actionable
+/// error. The underlying llama.cpp text (often just "null result from
+/// llama cpp") is opaque on its own; the real reason rides the ggml log
+/// stream, which the daemon now surfaces by default. This adds the model
+/// path, its on-disk size against detected host RAM, and the most common
+/// causes so the message stands on its own even if logs are missed.
+pub fn describe_model_load_failure(
+    role: &str,
+    model_path: &std::path::Path,
+    err: impl std::fmt::Display,
+) -> String {
+    let mut s = format!("failed to load {role} model {}: {err}", model_path.display());
+    let size_gb = std::fs::metadata(model_path)
+        .ok()
+        .map(|m| m.len() as f64 / 1_000_000_000.0);
+    let ram_gb =
+        crate::hardware::HardwareProfile::detect().system_ram_bytes as f64 / 1_000_000_000.0;
+    if let Some(g) = size_gb {
+        s.push_str(&format!(
+            "\n  model file: {g:.1} GB on disk; detected host RAM: {ram_gb:.1} GB"
+        ));
+    }
+    s.push_str(
+        "\n  likely causes: it didn't fit in memory (pick a smaller quant or the low_mem \
+         profile via `svrn setup`), the GGUF is incomplete or corrupt (re-download), or the \
+         quant/arch isn't supported by this build. The underlying llama.cpp error is logged \
+         just above on the daemon's stderr; SOVEREIGN_LLAMA_LOGS=1 makes it fully verbose, \
+         =0 silences it.",
+    );
+    s
 }
 
 pub fn list_llama_ggml_backend_devices() -> Vec<BackendDevice> {
