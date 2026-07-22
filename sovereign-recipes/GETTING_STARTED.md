@@ -19,9 +19,9 @@ you from an idea to a queryable corpus.
 
 ## 0. Prerequisites
 
-- A working `sovereign` CLI (`sovereign --version`). If `sovereign` isn't on your
+- A working `svrn` CLI (`svrn --version`). If `svrn` isn't on your
   PATH, see the repo root README for the symlink one-liner.
-- The Sovereign daemon running for the embed/index steps: `sovereign daemon start`.
+- The Sovereign daemon running for the embed/index steps: `svrn daemon start`.
 - Your data source: a URL to a dump, a HuggingFace dataset, a local folder, or a
   REST API.
 
@@ -116,7 +116,7 @@ vector = true                   # embedding_model/dimensions auto-detect from th
 ## 3. Validate (no download)
 
 ```bash
-sovereign recipe validate ~/.sovereign/recipes/my-corpus/recipe.toml
+svrn recipe validate ~/.sovereign/recipes/my-corpus/recipe.toml
 ```
 
 This parses the TOML, checks every field against the schema, and validates
@@ -128,7 +128,7 @@ it reports. Exit code `0` means the shape is sound.
 ## 4. Test on a sample
 
 ```bash
-sovereign recipe test ~/.sovereign/recipes/my-corpus/recipe.toml \
+svrn recipe test ~/.sovereign/recipes/my-corpus/recipe.toml \
   --sample-size 50 \
   --output ~/.sovereign/recipes/my-corpus/TEST_REPORT.md
 ```
@@ -147,14 +147,14 @@ choices produce sensible text. Iterate here until the chunks look right.
 ## 5. Build the full corpus
 
 ```bash
-sovereign corpus install my-corpus
+svrn corpus install my-corpus
 ```
 
 Runs the whole pipeline and embeds + indexes every chunk (daemon must be
 running). The index lands at `~/.sovereign/indexes/my-corpus/`. Then query it:
 
 ```bash
-sovereign chat            # retrieval now includes your corpus
+svrn chat            # retrieval now includes your corpus
 ```
 
 ---
@@ -164,7 +164,7 @@ sovereign chat            # retrieval now includes your corpus
 If your recipe has an `[enrichment]` block:
 
 ```bash
-sovereign enrich build --corpus-id my-corpus
+svrn enrich build --corpus-id my-corpus
 ```
 
 This runs the atlas phases (extract → cluster → name → resolve → tensions →
@@ -185,10 +185,10 @@ When a local recipe earns its keep, promote it:
    `RecipeId` enum in `corpus-engine/src/recipe_builtin.rs` (the
    `bundled_recipe_covers_every_snapshot_entry` test tells you if you missed a
    step).
-4. `sovereign recipe test … --output TEST_REPORT.md` and commit the report.
+4. `svrn recipe test … --output TEST_REPORT.md` and commit the report.
 5. Open a pull request.
 
-`sovereign recipe publish <path>` does step 1–2 into your **local** registry
+`svrn recipe publish <path>` does step 1–2 into your **local** registry
 (`~/.sovereign/recipes/registry.toml`) for testing; add `--submit-pr` to draft
 the upstream PR via `gh`.
 
@@ -202,4 +202,4 @@ the upstream PR via `gh`.
   field names (`content_field` / `content_column`). Re-read your data's shape.
 - **Chunks are huge or tiny** — tune `[chunk] max_chars` / `overlap_chars`.
 - **`corpus install` can't embed** — the daemon isn't running
-  (`sovereign daemon start`) or no embedding model is loaded.
+  (`svrn daemon start`) or no embedding model is loaded.

@@ -3,15 +3,15 @@
 [![CI](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml)
 [![docs reconciled](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml)
 
-An AI assistant that runs on your own computer — and, when one machine isn't enough, across a few you trust. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves your device unless you ask it to.
+An AI assistant that runs on your own computer, and across a few you trust when one machine isn't enough. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves your device unless you ask it to.
 
 It comes in two parts:
 
-- **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through — the model answering you lives on the machine in front of you.
+- **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through. The model answering you lives on the machine in front of you.
 - **cmnwlth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
 
 New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is the
-ten-minute map —
+ten-minute map:
 diagrams, tables, and the vocabulary. The verifiable deep map is
 [sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md).
 Building from source? [SETUP.md](./SETUP.md) gets you from a fresh clone to a
@@ -19,7 +19,7 @@ green test suite on a Mac or Linux in about half an hour.
 
 ## What you get
 
-Your conversations, documents, and memory stay on your machine. Answers come grounded in sources you choose to keep — Wikipedia, the Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts, your own files — searched before each reply and cited, so you can trace a claim back to where it came from. It remembers what mattered from earlier instead of starting cold every time. Web search is there if you want it, off by default and labelled plainly when it runs. There's no telemetry; nothing was built to phone home.
+Your conversations, documents, and memory stay on your machine. Answers come grounded in sources you choose to keep: Wikipedia, the Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts, your own files, your Obsidian vault, all searched before each reply and cited, so you can trace a claim back to where it came from. And the list isn't fixed: a source is just a small recipe you write, so you can bring in whatever you want, whether a folder of notes, an export, or an API, and get the same enrichment, retrieval, and cited synthesis over it. It remembers what mattered from earlier instead of starting cold every time. Web search is there if you want it, off by default and labelled plainly when it runs. There's no telemetry; nothing was built to phone home.
 
 ## Get started
 
@@ -29,33 +29,41 @@ svrn setup          # finds models that fit your hardware, downloads them, start
 svrn chat session   # start talking
 ```
 
-That's the whole loop. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it — both in [the svrnmesh guide](./sovereign/README.md).
+That's the whole loop. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it. Both are covered in [the svrnmesh guide](./sovereign/README.md).
 
-## Run a model bigger than your machine
+## Build a pipeline, or bring in your own knowledge
 
-Some models won't fit on one computer. You can run them anyway by pooling a second — or a few — that you or people you trust already own. The model's layers spread across the machines, and you talk to it as if it were running locally. Three 64 GB machines can hold a model no one of them could.
+Two things here come down to a small TOML file you write and run, with no code in between.
 
-```sh
-svrn mesh create        # on the host — prints a key like cwth-a1b2-c3d4-e5f6
-svrn mesh join <key>    # on each machine you're pooling in
-```
-
-[Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
-(Already ran `svrn setup`? Your machine quietly founded a solo mesh — read its key with `svrn mesh status` instead of `create`.)
-
-Pooling **knowledge** instead of compute works the same way: the
-[two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a
-cited answer from a corpus that never leaves the other.
-
-## Build a pipeline
-
-Have an idea shaped like a pipeline — read a folder of things, run a model over each, call a tool in between, save the results? Write it as a small TOML file and run it, no code. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
+A **workflow** is a pipeline: read a folder of things, run a model over each, call a tool between steps, save the results. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
 
 ```sh
 svrn workflow run my-pipeline.toml
 ```
 
-[Write a workflow](./docs/WRITE_A_WORKFLOW.md) shows you how.
+A **recipe** points that same declarative idea at knowledge: it says how a source is pulled in, chunked, embedded, indexed, and enriched into a searchable, cited corpus. Aim one at an Obsidian vault, a folder of notes, a mailbox export, or an API, `[[wiki-links]]` and all, and it answers with the same grounding the built-in corpora get. What's yours stays `scope = "local"`: never advertised to peers, never copied off your machine.
+
+```sh
+svrn corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
+```
+
+[Write a workflow](./docs/WRITE_A_WORKFLOW.md) and [build your first recipe](./sovereign-recipes/GETTING_STARTED.md) each start from a copyable starter.
+
+## Run a model bigger than your machine
+
+Some models won't fit on one computer. You can run them anyway by pooling a second, or a few, that you or people you trust already own. The model's layers spread across the machines, and you talk to it as if it were running locally. Three 64 GB machines can hold a model no one of them could.
+
+```sh
+svrn mesh create        # on the host, prints a key like cwth-a1b2-c3d4-e5f6
+svrn mesh join <key>    # on each machine you're pooling in
+```
+
+[Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
+(Already ran `svrn setup`? Your machine quietly founded a solo mesh; read its key with `svrn mesh status` instead of `create`.)
+
+Pooling **knowledge** instead of compute works the same way: the
+[two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a
+cited answer from a corpus that never leaves the other.
 
 ## Going deeper
 
@@ -63,7 +71,7 @@ The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge ba
 
 ## Contributing
 
-Commonwealth AI is opening up to contributions. If you'd like to help — a bug report, a fix, a doc correction — start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public issue tracker.
+Commonwealth AI is opening up to contributions. If you'd like to help, whether a bug report, a fix, or a doc correction, start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public issue tracker.
 
 ---
 
