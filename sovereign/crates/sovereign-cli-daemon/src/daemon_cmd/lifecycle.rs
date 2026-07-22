@@ -341,6 +341,12 @@ pub(super) async fn start_daemon() -> i32 {
     // Detect by asking lsof / ss who owns the port. If it's NOT our
     // pidfile owner, refuse loudly with a kill-the-orphan hint rather
     // than start a second listener.
+    //
+    // Unix-only: `find_daemon_pid_by_port` shells to lsof/ss (see its
+    // `#[cfg(unix)]` gate). On Windows the detector is skipped — the
+    // bind-collision failure mode it guards against is the Unix
+    // loopback address-specific-listener routing quirk.
+    #[cfg(unix)]
     if let Some(holder_pid) = find_daemon_pid_by_port(9741) {
         let our_pid = read_daemon_pid();
         if our_pid != Some(holder_pid) {
