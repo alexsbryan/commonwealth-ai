@@ -706,6 +706,7 @@ impl Runtime {
                 evidence_id_allowlist: None,
                 lark_grammar: None,
                 stable_prefix_len: None,
+                prompt_shape: None,
             };
             return KnowledgeQueryPlan {
                 request,
