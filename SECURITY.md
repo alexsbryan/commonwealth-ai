@@ -42,7 +42,7 @@ get extra attention:
   or telemetry leave a device without the user asking — the sharpest kind of bug
   this project can have.
 - **The mesh.** Peer authentication, key handling, and the gossip layer in
-  Commonwealth. A peer should never reach data or compute it wasn't granted.
+  cmnwlth. A peer should never reach data or compute it wasn't granted.
 - **Secrets.** How API tokens and keys are stored and resolved (the file-backed
   secret store), and anything that could expose them.
 - **The local API and daemon.** The OpenAI-compatible server and the daemon's

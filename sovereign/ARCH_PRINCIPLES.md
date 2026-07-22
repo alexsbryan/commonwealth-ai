@@ -478,7 +478,7 @@ Enforced two ways, one parser (the `quality/arch-layers` crate, so the
 halves can't drift on semantics):
 
 - `cargo xtask layer-gate` checks **Cargo-declared** edges in CI (<1s).
-- `sovereign code arch-report` checks **SCIP-observed** symbol references —
+- `svrn code arch-report` checks **SCIP-observed** symbol references —
   the coupling that re-export chains hide from Cargo — and persists the
   posture for the `arch_posture` tool.
 
@@ -723,7 +723,7 @@ engineer inherits a todo list, not a surprise.
 When a feature lands under ATOS orchestration (`.sovereign/features/<id>/`),
 the `milestone-N.md`, `red-team.md`, and `epistemic-report.md` are the
 reviewer's reading list. Write them honestly. The audit rollup at
-`sovereign project audit` is only as useful as the notes that feed it.
+`svrn project audit` is only as useful as the notes that feed it.
 
 ---
 
