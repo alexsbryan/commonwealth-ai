@@ -2,7 +2,7 @@
 
 An AI assistant that runs on your machine — and proves what it says.
 
-Commonwealth AI is two products sharing one Rust workspace. **Sovereign**
+Commonwealth AI is two products sharing one Rust workspace. **svrn**
 is the assistant: local models, local knowledge, every answer retrieved
 from sources you chose and *verified before you see it*. **cmnwlth**
 is the optional mesh: pool machines you trust to run models none could
@@ -18,7 +18,7 @@ measured by adversarial benches — *gates, not vibes*.
 | Workspace | 40 crates across 4 projects |
 | Tests | 7,230 — none require GPU, network, or model weights |
 | Knowledge pipeline | 24 extractors · 7 chunkers, all recipe-declared |
-| CLI | 55 verbs behind one `sovereign` dispatcher |
+| CLI | 55 verbs behind one `svrm` dispatcher |
 | Telemetry | none — nothing phones home |
 
 > This tour is a *rendering* for newcomers (figures as of July 2026).
@@ -29,39 +29,29 @@ measured by adversarial benches — *gates, not vibes*.
 
 ---
 
-## 1. The territory: four projects, one dependency direction
+## 1. The pieces, and what each is for
 
-Dependencies point strictly downward — wire types at the bottom, product
-surfaces at the top. The knowledge layer never knows about the assistant;
-the assistant never knows about the mesh's internals; everything speaks
-through traits.
+There are only a few parts, and each has one job. **Sovereign** is the
+assistant you talk to — the whole loop (CLI, desktop, or server) running on
+your machine. It composes two things: **a local model** that answers you on
+your own hardware, and **corpus-engine**, which turns your sources — notes,
+email, Wikipedia — into knowledge it can search and cite. **cmnwlth** is
+optional: pool machines with people you trust and it federates both, so a
+group can run a bigger model together or share knowledge that never leaves
+its owner's disk.
 
-```mermaid
-flowchart TD
-    subgraph surfaces [Surfaces]
-        CLI["sovereign-cli (+ 3 sibling binaries)"]
-        Desktop["sovereign-desktop (Tauri 2 + Svelte)"]
-        Server["sovereign-server (:8080, multi-tenant, phone host)"]
-        Mobile["sovereign-mobile (thin client)"]
-    end
-    subgraph sovereign [Sovereign — the assistant]
-        Runtime["runtime: router → policy → retrieval → synthesis → grounding gate"]
-        Crates["sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval"]
-    end
-    subgraph commonwealth [cmnwlth — the mesh]
-        Mesh["gossip · scheduling · knowledge fan-out · tensor-split inference"]
-    end
-    subgraph corpus [corpus-engine — the knowledge layer]
-        Engine["recipes → acquire → extract → chunk → embed → index (LanceDB + Tantivy) → enrich (atlas)"]
-    end
-    OICP["oicp-types — Open Inference Capabilities Protocol wire types (CC0, no deps)"]
+<p align="center"><img src="diagrams/01-territory.svg" alt="Sovereign is the assistant you talk to; it composes a local model (runs on your hardware) and corpus-engine (turns your sources into searchable, cited knowledge). cmnwlth is an optional mesh that federates both across machines you trust, by invitation. It speaks the ordinary OpenAI API so any OpenAI-compatible tool just works, with OICP adding only a thin layer on top for nodes to advertise what they do — no server in the middle, no account, and the real foundation is that you can read the source and check it yourself." width="820"></p>
 
-    surfaces --> sovereign
-    surfaces --> commonwealth
-    sovereign --> corpus
-    commonwealth --> corpus
-    corpus --> OICP
-```
+Under the hood it speaks the ordinary **OpenAI API** — point any
+OpenAI-compatible tool at the daemon and it just works. **OICP** (the Open
+Inference Capabilities Protocol) is only a thin, additive layer on top of that,
+so nodes can advertise what they're good at; it's a detail, not the point. The
+dependency graph is clean (each part speaks to the next through traits, and the
+knowledge layer never knows about the assistant), yet nothing here is the
+"foundation everything rests on" — the real base is that you can read the source
+and check every claim yourself.
+
+<sub>Surfaces: `sovereign-cli` (+ 3 sibling binaries), `sovereign-desktop` (Tauri 2 + Svelte), `sovereign-server` (`:8080`, multi-tenant, the phone's host), `sovereign-mobile` (thin client). The runtime is `router → policy → retrieval → synthesis → grounding gate` over `sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval`; the wire types live in `oicp-types`.</sub>
 
 The monorepo also carries `packages/chat-ui` (one Svelte chat surface
 shared by desktop and mobile) and carve-out crates (`corpus-engine-scip`,
@@ -81,22 +71,7 @@ This is the pipeline every question rides. Two ideas make it unusual:
   sealed evidence** — release, rewrite, or honestly abstain. Streaming
   paths narrate while the gate holds.
 
-```mermaid
-flowchart LR
-    U[user message] --> R["Router.classify<br/>(embed-router stack +<br/>coarse→refine LLM)"]
-    R --> P["decide_policy (pure fn)<br/>tier + Commit / Propose / Ask"]
-    P --> KQ["Knowledge / Deep / Simple"]
-    P --> CT["ComplexTask → Planner<br/>(DAG · tools · approvals)"]
-    KQ --> RP
-    subgraph RP ["retrieval pipeline — steps are data; golden tests pin the order"]
-        H["shared head:<br/>local corpora ∥ mesh fan-out ∥ doc store"] --> C["shared 12-step core:<br/>dedupe · atlas/RAPTOR grounding · boosts · noise floor"] --> T["per-intent tail:<br/>expansion · truncate"]
-    end
-    RP --> S["synthesis — role layer<br/>(fast slot vs primary slot by route)"]
-    S --> G{"grounding gate:<br/>extract claims →<br/>verify each against<br/>the sealed corpus"}
-    G -->|"all claims supported"| OK["released — answer with [Source: …] citations"]
-    G -->|"failures"| RW["corrective retry / rewrite<br/>(replace, don't delete)"] --> G
-    G -->|"can't ground it"| AB["grounded abstention — honest 'not in my sources'"]
-```
+<p align="center"><img src="diagrams/02-journey.svg" alt="A message flows through Router (what kind of ask), Retrieval (search all your sources — local corpora, mesh peers, your docs), and Synthesis (draft an answer), then reaches the grounding gate, which extracts each claim and checks it against the sealed evidence. Three outcomes: released with citations, rewrite the unsupported bits and re-check, or honestly abstain. The model never originates a number." width="900"></p>
 
 The gate is belt-and-suspenders: an LLM judge verifies claims against
 evidence, and deterministic vetoes run beside it — garbled `[Source:]`
@@ -125,11 +100,7 @@ by a TOML **recipe**. Recipes are the designed first contribution: pure
 TOML, back-compat disciplined (serde defaults, aliases, deprecation
 arms, regression fixtures), useful at n=1.
 
-```mermaid
-flowchart LR
-    R["recipe.toml<br/>(license + sharing flags)"] --> A["acquire<br/>(bulk · HF · http_api · local)"] --> E["extract<br/>(24 extractors)"] --> F["filter + chunk<br/>(7 chunkers)"] --> I["embed + index<br/>(LanceDB IVF-PQ + Tantivy FTS)"] --> D["~/.sovereign/indexes/&lt;corpus&gt;/"]
-    D -.->|"optional, LLM"| X["enrichment: atlas of typed atoms<br/>(claims · entities · tensions) + edges"]
-```
+<p align="center"><img src="diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.sovereign/indexes/, with an optional LLM enrichment step that builds an atlas of typed atoms (claims, entities, tensions). Two custody flags: query_sharing (may peers search it and get cited snippets), mesh_sharing (may the index bytes replicate to peers), and scope = local (keep it off the mesh entirely)." width="900"></p>
 
 Two flags in every recipe carry the custody policy, enforced in separate
 code paths:
@@ -159,19 +130,9 @@ every 10 seconds. It buys you two things: **federated knowledge** and
 
 A cross-corpus query, custody preserved end to end:
 
-```mermaid
-sequenceDiagram
-    participant B as node B (asks — hosts nothing)
-    participant A as node A (hosts the sep corpus)
-    B->>B: embed query locally — no local hit
-    B->>A: /internal/knowledge/search (3s per-peer budget)
-    A->>A: search sep locally (query_sharing = true)
-    A-->>B: scored CHUNKS + provenance — never index bytes
-    A->>A: ledger: KnowledgeQueryServed (credit for serving B)
-    B->>B: merge → synthesize locally → grounding gate verifies
-    B->>B: answer cites [Source: sep] via node A
-    Note over A,B: mesh_sharing = false ⇒ replication of A's index is refused,<br/>independently of query access. Peer offline ⇒ B degrades to local, never breaks.
-```
+<p align="center"><img src="diagrams/04-mesh-custody.svg" alt="You ask a question but host nothing; your machine embeds the query, finds no local match, and searches a peer you trust that hosts the sep corpus. The peer returns scored chunks plus provenance — never the index bytes, which stay put because this corpus is set mesh_sharing = false — and records a ledger entry for serving your query. Your machine merges, synthesizes, runs the grounding gate, and cites Source: sep, served by your peer. Custody is a choice: set mesh_sharing = true and the same corpus can replicate to machines you allow." width="900"></p>
+
+<sub>The asking node searches its peer's `/internal/knowledge/search` on a 3-second per-peer budget. `query_sharing = true` lets the peer answer; `mesh_sharing = false` refuses replication of its index *independently* of query access — flip it to `true` and the corpus can live on several machines you allow, replicated on purpose. Peer offline ⇒ the asker degrades to local, never breaks.</sub>
 
 **Two transport modes, both deliberate.** By default a mesh runs in
 **trusted-network mode**: you pool machines on a network you already
@@ -197,6 +158,8 @@ and `tests/local_only_corpus_locality.rs`.*
 The project's real asset isn't any subsystem — it's that correctness is
 *measured*, adversarially, at every layer, and the measurements gate the
 work.
+
+<p align="center"><img src="diagrams/05-gates.svg" alt="You don't have to trust us — verify. A ladder of gates that check the claims rather than assert them: the grounding gate and numeric audit at runtime, chaos monkey and mechanism fidelity at the bench, docs-gate and arch-gate in CI. Measured, not asserted — read them, run them." width="820"></p>
 
 | Gate | Layer | Guards | How |
 |---|---|---|---|

@@ -9,6 +9,8 @@ your machine to do it.
 That text file is a *workflow*. The same `sovereign` daemon you already run
 executes it, using whatever model you have loaded.
 
+<p align="center"><img src="diagrams/07-workflow.svg" alt="A workflow reads a source (a folder of notes) and runs steps over each item: a model step summarizes, a tool step writes the file. Steps wire themselves together by reference — content = {summary.output} — so mentioning a result is the arrow; you never draw the wiring. Point the daemon at a folder with corpus watch and the workflow runs itself on every change." width="820"></p>
+
 ## Start from a starter
 
 A few workflows ship ready to run. List them:

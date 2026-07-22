@@ -5,6 +5,8 @@ second machine — or a few — that you or people you trust already own. The mo
 layers spread across the machines, and you talk to it as if it were running
 locally. Three 64 GB machines can hold a model no one of them could.
 
+<p align="center"><img src="diagrams/06-bigger-model.svg" alt="A model too big for one box has its layers split across a host and its workers; the host holds the file, splits it, and serves answers, while workers lend memory and GPU. Once loaded, each worker keeps its slice resident and only a few kilobytes of state cross the wire per answer." width="820"></p>
+
 This is built in. There's no extra software and no separate server to babysit —
 the same `svrn` daemon you already run takes on a role from a single setting.
 

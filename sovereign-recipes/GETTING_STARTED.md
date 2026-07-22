@@ -7,6 +7,8 @@ data source into a searchable knowledge corpus. It declares one pipeline:
 acquire → extract → filter → chunk → embed → index → (optional) enrich
 ```
 
+<p align="center"><img src="../docs/diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.sovereign/indexes/, with an optional enrichment step. Two custody flags decide sharing: query_sharing (may peers search it), mesh_sharing (may the bytes replicate), and scope = local (keep it off the mesh entirely)." width="820"></p>
+
 You don't write code. You pick an acquirer, an extractor, and a chunker from a
 fixed menu, point them at your data, and run the corpus engine. This guide takes
 you from an idea to a queryable corpus.

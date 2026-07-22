@@ -3,6 +3,8 @@
 [![CI](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml)
 [![docs reconciled](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml)
 
+<p align="center"><img src="docs/diagrams/00-hero.svg" alt="Commonwealth AI: an assistant that runs on your own computer, and across a few machines you trust when one isn't enough. The model and your knowledge stay on your machine; nothing leaves unless you ask." width="880"></p>
+
 An AI assistant that runs on your own computer, and across a few you trust when one machine isn't enough. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves your device unless you ask it to.
 
 It comes in two parts:
@@ -11,8 +13,9 @@ It comes in two parts:
 - **cmnwlth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
 
 New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is the
-ten-minute map:
-diagrams, tables, and the vocabulary. The verifiable deep map is
+ten-minute map — a hand-drawn [flip-book](./docs/diagrams/) that walks you from
+"what is this?" to "I see how the pieces fit," with the tables and vocabulary
+beside it. The verifiable deep map is
 [sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md).
 Building from source? [SETUP.md](./SETUP.md) gets you from a fresh clone to a
 green test suite on a Mac or Linux in about half an hour.
@@ -33,6 +36,8 @@ That's the whole loop. Want a different model later? `svrn model list` shows wha
 
 ## Build a pipeline, or bring in your own knowledge
 
+<p align="center"><img src="docs/diagrams/03-recipe.svg" alt="A recipe is one TOML file that runs a corpus through acquire, extract, filter, chunk, embed, and index into a local searchable index — with two flags, query_sharing and mesh_sharing, that decide whether peers may search it or copy it." width="820"></p>
+
 Two things here come down to a small TOML file you write and run, with no code in between.
 
 A **workflow** is a pipeline: read a folder of things, run a model over each, call a tool between steps, save the results. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
@@ -50,6 +55,8 @@ svrn corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
 [Write a workflow](./docs/WRITE_A_WORKFLOW.md) and [build your first recipe](./sovereign-recipes/GETTING_STARTED.md) each start from a copyable starter.
 
 ## Run a model bigger than your machine
+
+<p align="center"><img src="docs/diagrams/06-bigger-model.svg" alt="A model too big for one box has its layers split across a host and its workers; the host holds the file and serves answers, workers lend memory and GPU, and once loaded only a few kilobytes of state cross the wire per answer." width="820"></p>
 
 Some models won't fit on one computer. You can run them anyway by pooling a second, or a few, that you or people you trust already own. The model's layers spread across the machines, and you talk to it as if it were running locally. Three 64 GB machines can hold a model no one of them could.
 
