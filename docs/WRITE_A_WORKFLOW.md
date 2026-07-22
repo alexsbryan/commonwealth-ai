@@ -1,13 +1,11 @@
 # Write a workflow
 
-Your computer can read a whole folder for you. Point it at two hundred notes, or
-a year of meeting transcripts, or every draft in a directory — and have it go
-through each one, run a model over it, and hand you back something useful. You
-write that as a small text file. No code, no build step, and not one byte leaves
-your machine to do it.
-
-That text file is a *workflow*. The same `sovereign` daemon you already run
-executes it, using whatever model you have loaded.
+Point your computer at a folder — two hundred notes, a year of transcripts,
+every draft in a directory — and have it run a model over each one and hand you
+back something useful. You write that as a small text file: no code, no build
+step, and not one byte leaves your machine. That file is a *workflow*, and the
+same `sovereign` daemon you already run executes it with whatever model you have
+loaded.
 
 <p align="center"><img src="diagrams/07-workflow.svg" alt="A workflow reads a source (a folder of notes) and runs steps over each item: a model step summarizes, a tool step writes the file. Steps wire themselves together by reference — content = {summary.output} — so mentioning a result is the arrow; you never draw the wiring. Point the daemon at a folder with corpus watch and the workflow runs itself on every change." width="820"></p>
 

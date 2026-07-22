@@ -5,24 +5,10 @@
 
 <p align="center"><img src="docs/diagrams/00-hero.svg" alt="Commonwealth AI: an assistant that runs on your own computer, and across a few machines you trust when one isn't enough. The model and your knowledge stay on your machine; nothing leaves unless you ask." width="880"></p>
 
-An AI assistant that runs on your own computer, and across a few you trust when one machine isn't enough. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves your device unless you ask it to.
+An AI assistant that runs on your own computer — and across a few machines you trust when one isn't enough. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves unless you ask.
 
-It comes in two parts:
-
-- **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through. The model answering you lives on the machine in front of you.
-- **cmnwlth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
-
-New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is the
-ten-minute map — a hand-drawn [flip-book](./docs/diagrams/) that walks you from
-"what is this?" to "I see how the pieces fit," with the tables and vocabulary
-beside it. The verifiable deep map is
-[sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md).
-Building from source? [SETUP.md](./SETUP.md) gets you from a fresh clone to a
-green test suite on a Mac or Linux in about half an hour.
-
-## What you get
-
-Your conversations, documents, and memory stay on your machine. Answers come grounded in sources you choose to keep: Wikipedia, the Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts, your own files, your Obsidian vault, all searched before each reply and cited, so you can trace a claim back to where it came from. And the list isn't fixed: a source is just a small recipe you write, so you can bring in whatever you want, whether a folder of notes, an export, or an API, and get the same enrichment, retrieval, and cited synthesis over it. It remembers what mattered from earlier instead of starting cold every time. Web search is there if you want it, off by default and labelled plainly when it runs. There's no telemetry; nothing was built to phone home.
+- **svrnmesh** — the assistant you run. Write, search what you already know, think a problem through. The model is on the machine in front of you.
+- **cmnwlth** — the optional mesh. Pool machines you trust to run a model none of them could hold alone, or share a knowledge base. No central server; nothing leaves the group.
 
 ## Get started
 
@@ -32,53 +18,46 @@ svrn setup          # finds models that fit your hardware, downloads them, start
 svrn chat session   # start talking
 ```
 
-That's the whole loop. Want a different model later? `svrn model list` shows what's loaded, and `svrn model set primary <file>` swaps one in, applied live with no config editing or restart. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it. Both are covered in [the svrnmesh guide](./sovereign/README.md).
+That's the whole loop. Answers come grounded in sources you keep — your files, an Obsidian vault, Wikipedia, the Stanford Encyclopedia — searched before each reply and **cited**, so you can trace any claim back to where it came from. Your conversations, documents, and memory stay put, and it remembers what mattered across sessions. Web search is off by default; there's no telemetry.
 
-## Build a pipeline, or bring in your own knowledge
+Swap models live with `svrn model set primary <file>`. There's a desktop app too, and the daemon serves an OpenAI-compatible API you can point your own tools at — both in [the svrnmesh guide](./sovereign/README.md).
+
+## Bring your own knowledge, or build a pipeline
 
 <p align="center"><img src="docs/diagrams/03-recipe.svg" alt="A recipe is one TOML file that runs a corpus through acquire, extract, filter, chunk, embed, and index into a local searchable index — with two flags, query_sharing and mesh_sharing, that decide whether peers may search it or copy it." width="820"></p>
 
-Two things here come down to a small TOML file you write and run, with no code in between.
+Two things come down to one small TOML file, no code in between:
 
-A **workflow** is a pipeline: read a folder of things, run a model over each, call a tool between steps, save the results. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
-
-```sh
-svrn workflow run my-pipeline.toml
-```
-
-A **recipe** points that same declarative idea at knowledge: it says how a source is pulled in, chunked, embedded, indexed, and enriched into a searchable, cited corpus. Aim one at an Obsidian vault, a folder of notes, a mailbox export, or an API, `[[wiki-links]]` and all, and it answers with the same grounding the built-in corpora get. What's yours stays `scope = "local"`: never advertised to peers, never copied off your machine.
+- a **recipe** turns a source — an Obsidian vault, a mailbox export, an API — into a searchable, cited corpus. What's yours stays `scope = "local"`: never advertised to peers, never copied off your machine.
+- a **workflow** is a pipeline: read a folder, run a model over each item, call a tool between steps, save the results. Swap one line to repurpose the whole thing.
 
 ```sh
 svrn corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
+svrn workflow run my-pipeline.toml
 ```
 
-[Write a workflow](./docs/WRITE_A_WORKFLOW.md) and [build your first recipe](./sovereign-recipes/GETTING_STARTED.md) each start from a copyable starter.
+[Build your first recipe](./sovereign-recipes/GETTING_STARTED.md) and [write a workflow](./docs/WRITE_A_WORKFLOW.md) each start from a copyable starter.
 
 ## Run a model bigger than your machine
 
 <p align="center"><img src="docs/diagrams/06-bigger-model.svg" alt="A model too big for one box has its layers split across a host and its workers; the host holds the file and serves answers, workers lend memory and GPU, and once loaded only a few kilobytes of state cross the wire per answer." width="820"></p>
 
-Some models won't fit on one computer. You can run them anyway by pooling a second, or a few, that you or people you trust already own. The model's layers spread across the machines, and you talk to it as if it were running locally. Three 64 GB machines can hold a model no one of them could.
+Some models won't fit on one computer. Pool a second, or a few, that you or people you trust already own — the layers spread across them and you talk to it as if it were local. Three 64 GB machines can hold a model no one of them could.
 
 ```sh
 svrn mesh create        # on the host, prints a key like cwth-a1b2-c3d4-e5f6
 svrn mesh join <key>    # on each machine you're pooling in
 ```
 
-[Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
-(Already ran `svrn setup`? Your machine quietly founded a solo mesh; read its key with `svrn mesh status` instead of `create`.)
-
-Pooling **knowledge** instead of compute works the same way: the
-[two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a
-cited answer from a corpus that never leaves the other.
+[Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks it through. Pooling **knowledge** instead of compute works the same way — the [two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a cited answer from a corpus that never leaves the other. (Already ran `svrn setup`? You quietly founded a solo mesh — read its key with `svrn mesh status`.)
 
 ## Going deeper
 
-The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it. Building an integration? [docs/INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) says which surfaces are contracts and which are internals.
+New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) is a hand-drawn [flip-book](./docs/diagrams/) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Building an integration? [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
 
 ## Contributing
 
-Commonwealth AI is opening up to contributions. If you'd like to help, whether a bug report, a fix, or a doc correction, start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public issue tracker.
+A bug report, a fix, or a doc correction — start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public tracker.
 
 ---
 

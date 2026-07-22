@@ -2128,9 +2128,9 @@ or `systemctl --user restart sovereign` (Linux).
 
 ### Build / test
 
-The repo is **one unified Cargo workspace** — 40 members under the root
-`Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its carve-outs
-are directories of member crates, **not** separate workspaces). Use the
+The repo is **one unified Cargo workspace** — every crate a member under the
+root `Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its
+carve-outs are directories of member crates, **not** separate workspaces). Use the
 **sovereign watcher** (`lint_status` / `test_status` MCP tools) for
 compilation feedback — running `cargo build` / `cargo test` directly via Bash
 contends with the watcher for the file lock and idles.
