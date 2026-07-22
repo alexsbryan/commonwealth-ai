@@ -122,10 +122,27 @@ Two habits carry a lot of weight here:
 
 ## Licensing
 
-Commonwealth AI is free software under [AGPL-3.0-or-later](./LICENSE). By
-contributing, you agree your contribution is licensed under the same terms
-(inbound = outbound). Please don't paste in code you don't have the right to
-license this way.
+Commonwealth AI is free software under [AGPL-3.0-or-later](./LICENSE), and it
+stays that way. Every contribution is always available under the license the
+project uses on the day you submit it, or another OSI-approved open-source
+license. That promise is written into the contributor agreement and cannot be
+walked back.
+
+Contributions are covered by a **Contributor License Agreement**
+([CLA.md](./CLA.md)), the standard Harmony agreement (v1.0). In plain terms: you
+keep your copyright, you grant the maintainer a broad license (including the
+right to offer the project under other licenses, such as a commercial one
+alongside the public AGPL), and in return the project is guaranteed to stay open
+source. Everyone signs the identical document, so no contributor ends up holding
+rights another doesn't.
+
+You sign once, electronically, the first time you open a pull request: a bot
+posts a link, you confirm, and it records your signature against your GitHub
+account. If you're contributing as part of your job, use the Entity agreement in
+the same file, or have your employer sign it, since your employer may own the
+work.
+
+Please don't paste in code you don't have the right to license this way.
 
 ## Code of Conduct
 

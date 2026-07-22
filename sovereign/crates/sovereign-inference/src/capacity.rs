@@ -127,9 +127,11 @@ pub fn estimate_slot_vram(plan: &SlotPlan) -> std::io::Result<VramEstimate> {
 }
 
 /// Aggregated capacity report — one row per slot plus a verdict.
-/// `fits == false` means the daemon will refuse to start under
-/// this config; the rendered message includes the per-slot
-/// breakdown so the operator can pick what to drop.
+/// `fits == false` means the config overcommits detected VRAM. By
+/// default the daemon warns and starts anyway; it only refuses under
+/// `SOVEREIGN_STRICT_VRAM_CHECK=1` or when a slot's file is unreadable.
+/// The rendered message includes the per-slot breakdown so the operator
+/// can pick what to drop.
 #[derive(Debug, Clone)]
 pub struct CapacityReport {
     pub per_slot: Vec<(String, VramEstimate)>,
@@ -187,12 +189,52 @@ impl CapacityReport {
         s.push_str("  - Set SOVEREIGN_SKIP_VRAM_CHECK=1 to bypass (you accept thrash risk)\n");
         s
     }
+
+    /// Operator-facing message for the DEFAULT (advisory) posture: the
+    /// config overcommits the detected VRAM budget, but the daemon is
+    /// starting anyway. A concise caution rather than the full refusal
+    /// breakdown — on CPU-only or low-VRAM machines this fires on every
+    /// boot, so it stays short. Empty when the config fits.
+    pub fn warn_message(&self) -> String {
+        if self.fits {
+            return String::new();
+        }
+        let mut s = String::new();
+        s.push_str("VRAM capacity check: this configuration exceeds detected VRAM.\n");
+        s.push_str(
+            "Starting anyway (advisory). On CPU-only or low-VRAM machines this is \
+             expected — models run on host RAM, just slower.\n",
+        );
+        s.push_str(&format!(
+            "  available:   {} MiB (after {} MiB safety reserved)\n",
+            self.available_mb, self.safety_reserved_mb,
+        ));
+        s.push_str(&format!("  required:    {} MiB\n", self.total_required_mb));
+        s.push_str(&format!(
+            "  overcommit:  {} MiB\n",
+            self.total_required_mb.saturating_sub(self.available_mb),
+        ));
+        s
+    }
+
+    /// True when a slot's model file could not be read (missing or moved
+    /// GGUF). `check_fit` flags such slots by prefixing their role with
+    /// `(UNREADABLE`. This is a hard error under every posture — the file
+    /// problem, not a capacity margin, is what needs fixing — so the
+    /// preflight refuses even in advisory mode.
+    pub fn has_unreadable_slot(&self) -> bool {
+        self.per_slot
+            .iter()
+            .any(|(role, _)| role.contains("(UNREADABLE"))
+    }
 }
 
 /// Run the planner against a slot mix and the detected hardware.
 /// Returns a report; callers decide whether to honor `fits`. The
-/// daemon's startup path treats `fits == false` as a hard error
-/// unless `SOVEREIGN_SKIP_VRAM_CHECK` is set.
+/// daemon's startup path is advisory by default — `fits == false`
+/// prints a warning and starts anyway — and only hard-refuses under
+/// `SOVEREIGN_STRICT_VRAM_CHECK=1` (or a genuinely unreadable model
+/// file). See `daemon_cmd::build::preflight::check_vram`.
 pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
     let available_total_mb = (hw.effective_vram_gb() as u64) * 1024;
     // Safety reserve covers CUDA context (~300-500 MB), cuBLAS

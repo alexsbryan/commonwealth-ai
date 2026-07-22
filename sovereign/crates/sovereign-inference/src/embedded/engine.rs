@@ -746,12 +746,18 @@ impl EmbeddedLlamaCpp {
 
         let mut backend = LlamaBackend::init()
             .map_err(|e| Error::Inference(format!("Failed to init llama backend: {e}")))?;
-        // Suppress llama.cpp/ggml C-level stderr noise by default. Set
-        // SOVEREIGN_LLAMA_LOGS=1 when diagnosing a model-load failure
-        // (e.g. an unsupported quant or arch returning a "null result")
-        // so the underlying libllama error reaches daemon.err.
-        if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-            backend.void_logs();
+        // Route llama.cpp/ggml logs to `tracing`. By DEFAULT we surface
+        // WARN/ERROR (so a model-load failure explains itself instead of
+        // reaching the operator as a bare "null result from llama cpp")
+        // while demoting INFO/DEBUG chatter to TRACE to stay quiet. The
+        // old default was `void_logs()`, which silenced the failure reason
+        // too — the exact trap behind field reports of an opaque null.
+        //   SOVEREIGN_LLAMA_LOGS=1 → full ggml verbosity (deep debugging)
+        //   SOVEREIGN_LLAMA_LOGS=0 → silence llama.cpp entirely (old behavior)
+        match std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() {
+            Some("1") => crate::llama::install_log_tracing(),
+            Some("0") => backend.void_logs(),
+            _ => crate::llama::install_log_tracing_errors_only(),
         }
         let backend = Arc::new(backend);
 
