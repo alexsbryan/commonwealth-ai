@@ -13,7 +13,7 @@ with a test proving they work are the easiest to merge.
 
 - **Report a bug.** Use the bug template — it asks for your version and platform
   up front. If the bug involves the running daemon, mesh, or models, the output
-  of `sovereign doctor` helps too.
+  of `svrn doctor` helps too.
 - **Suggest something.** Feature ideas go through the issue template too.
   Describe what you're trying to do, not only the fix you have in mind.
 - **Send a change.** Small, focused pull requests are far easier to review than

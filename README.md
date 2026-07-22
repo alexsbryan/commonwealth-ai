@@ -8,7 +8,7 @@ An AI assistant that runs on your own computer — and, when one machine isn't e
 It comes in two parts:
 
 - **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through — the model answering you lives on the machine in front of you.
-- **Commonwealth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
+- **cmnwlth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
 
 New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is the
 ten-minute map —

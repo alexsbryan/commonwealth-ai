@@ -14,7 +14,7 @@ executes it, using whatever model you have loaded.
 A few workflows ship ready to run. List them:
 
 ```bash
-sovereign workflow list
+svrn workflow list
 ```
 
 The flagship turns a folder of documents into a private, cited notebook you can
@@ -22,16 +22,16 @@ chat with — it reads each file (PDF, Office, HTML, Markdown, text), and nothin
 leaves your machine:
 
 ```bash
-sovereign workflow run notebook --folder ~/Documents/notes --corpus my-notebook
-sovereign chat inspect --corpus my-notebook "your question"
+svrn workflow run notebook --folder ~/Documents/notes --corpus my-notebook
+svrn chat inspect --corpus my-notebook "your question"
 ```
 
 To make one your own, copy it and edit the text file — it's the same kind of file
 this guide is about:
 
 ```bash
-sovereign workflow copy notebook my-recipe
-# edit ~/.sovereign/workflows/my-recipe.toml, then:  sovereign workflow run my-recipe --folder …
+svrn workflow copy notebook my-recipe
+# edit ~/.sovereign/workflows/my-recipe.toml, then:  svrn workflow run my-recipe --folder …
 ```
 
 The rest of this guide is how those files work, so you can change one or write
@@ -69,7 +69,7 @@ params = { path = "summaries/{item.stem}.md", content = "{summary.output}" }
 Run it:
 
 ```bash
-sovereign workflow run summarize.toml
+svrn workflow run summarize.toml
 ```
 
 Come back to a `summaries/` folder with one Markdown file per note. No API key,
@@ -138,12 +138,12 @@ HTTP (Sovereign connects to endpoints; it doesn't supervise processes):
 ```bash
 npx -y supergateway --stdio "npx -y @modelcontextprotocol/server-filesystem ~/meetings" \
     --outputTransport streamableHttp --port 8766 &
-sovereign mcp add fs --url http://localhost:8766/mcp
-sovereign mcp tools fs            # confirm Sovereign sees its tools
+svrn mcp add fs --url http://localhost:8766/mcp
+svrn mcp tools fs            # confirm Sovereign sees its tools
 
-sovereign workflow run meeting-to-done --folder ~/meetings/transcripts \
+svrn workflow run meeting-to-done --folder ~/meetings/transcripts \
     --param outdir=~/meetings --corpus meetings
-sovereign chat inspect --corpus meetings "what did we decide about pricing?"
+svrn chat inspect --corpus meetings "what did we decide about pricing?"
 ```
 
 The action step is just `uses = "mcp:fs:write_file"`. Swap that one line for a
@@ -161,7 +161,7 @@ whenever a file lands or changes, the workflow runs — unattended, on your mach
 command:
 
 ```bash
-sovereign corpus watch ~/meetings/transcripts --on-change meeting-to-done
+svrn corpus watch ~/meetings/transcripts --on-change meeting-to-done
 ```
 
 Because a triggered workflow runs without you watching, Sovereign shows what it can do
@@ -198,7 +198,7 @@ workflow doesn't change; it just has a bigger brain behind it.
 
 **Make a private, searchable notebook out of a folder.** Read each document,
 break it into pieces, turn each piece into a vector, and store them in a searchable
-index — then ask questions of it from `sovereign chat`. This is real corpus ingest,
+index — then ask questions of it from `svrn chat`. This is real corpus ingest,
 written as data:
 
 ```toml

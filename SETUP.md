@@ -133,7 +133,7 @@ svrn project refresh                # (re)build the call graph — runs rust-ana
 One gotcha worth knowing up front: that step shells out to `rust-analyzer`, and
 **a failed export wipes the graph to zero** rather than leaving the last good
 one in place. So if `symbols` suddenly returns nothing, the usual cause is a
-missing component — `rustup component add rust-analyzer`, then `sovereign
+missing component — `rustup component add rust-analyzer`, then `svrn
 project refresh` again. (Both bootstrap paths above install it, so this only
 bites if you set Rust up entirely by hand.)
 

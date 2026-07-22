@@ -50,7 +50,7 @@ manifest; see
 [sovereign/docs/MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md)
 and copy a shipped example.
 
-**CLI scripting** — `sovereign tools call <id> --format json` is the
+**CLI scripting** — `svrn tools call <id> --format json` is the
 stable machine-readable path (stdout stays clean; logs go to stderr).
 Other commands print for humans unless they document a `--format
 json` of their own — don't parse human output.

@@ -4,7 +4,7 @@ An AI assistant that runs on your machine — and proves what it says.
 
 Commonwealth AI is two products sharing one Rust workspace. **Sovereign**
 is the assistant: local models, local knowledge, every answer retrieved
-from sources you chose and *verified before you see it*. **Commonwealth**
+from sources you chose and *verified before you see it*. **cmnwlth**
 is the optional mesh: pool machines you trust to run models none could
 hold alone, or query each other's knowledge — without the knowledge ever
 leaving its owner.
@@ -48,7 +48,7 @@ flowchart TD
         Runtime["runtime: router → policy → retrieval → synthesis → grounding gate"]
         Crates["sovereign-core · -inference (llama.cpp) · -tools · -store · -mesh · -eval"]
     end
-    subgraph commonwealth [Commonwealth — the mesh]
+    subgraph commonwealth [cmnwlth — the mesh]
         Mesh["gossip · scheduling · knowledge fan-out · tensor-split inference"]
     end
     subgraph corpus [corpus-engine — the knowledge layer]
@@ -144,9 +144,9 @@ SEP ships `query_sharing = true, mesh_sharing = false`: queryable,
 never copied.
 
 *Deep dive: SYSTEM_OVERVIEW §3. Schema SSOT: `corpus-engine/src/recipe.rs`.
-Try it: `sovereign corpus install sep` — or put your own inbox in:
+Try it: `svrn corpus install sep` — or put your own inbox in:
 export from Gmail (Google Takeout) or Apple Mail (File → Export Mailbox),
-then `sovereign corpus install email-archive --params path=~/inbox.mbox`.
+then `svrn corpus install email-archive --params path=~/inbox.mbox`.
 Mbox, maildir, and `.eml` folders are detected by content; the corpus is
 `scope = "local"` — structurally off-mesh.*
 
@@ -163,7 +163,7 @@ A cross-corpus query, custody preserved end to end:
 sequenceDiagram
     participant B as node B (asks — hosts nothing)
     participant A as node A (hosts the sep corpus)
-    B->>B: embed query locally; no local hit
+    B->>B: embed query locally — no local hit
     B->>A: /internal/knowledge/search (3s per-peer budget)
     A->>A: search sep locally (query_sharing = true)
     A-->>B: scored CHUNKS + provenance — never index bytes
@@ -226,7 +226,7 @@ work.
 
 ## 7. Where to start
 
-1. **Run it.** `sovereign setup` then `sovereign chat` — the
+1. **Run it.** `svrn setup` then `svrn chat` — the
    [README](../README.md) quickstart gets you a cited answer from a local
    corpus in one sitting.
 2. **Feel the mesh.** [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md) —

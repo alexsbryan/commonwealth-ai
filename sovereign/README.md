@@ -2,7 +2,7 @@
 
 svrnmesh is an AI assistant that runs on your own computer. Ask it to write, to search what you already know, or to think through a problem, and the model that answers you lives on your machine rather than in someone's cloud. Nothing leaves your device unless you ask it to.
 
-Commonwealth, its optional mesh, lets you pool machines with a few people you trust so you can run models no single one of you could hold alone. There's more on that further down.
+cmnwlth, its optional mesh, lets you pool machines with a few people you trust so you can run models no single one of you could hold alone. There's more on that further down.
 
 It's early — pre-release, and source-available for audit under [AGPL-3.0-or-later](../LICENSE). Reading, building, and taking the code apart is welcome; there's just no contribution process yet.
 
@@ -46,7 +46,7 @@ svrn project init
 
 This is developer tooling: `project`, `code`, and `tools` ship only in a dev build, not the prebuilt install above. The build flags, the full flow, and multi-project setups are in [Code intelligence](docs/CODE_INTELLIGENCE.md) and the [development guide](docs/DEVELOPMENT.md).
 
-## Commonwealth
+## cmnwlth
 
 Setup leaves you on a private mesh of one. When you want company, promote it and share the key it prints:
 
@@ -85,4 +85,4 @@ If something breaks, `svrn doctor` walks the checks and the [troubleshooting gui
 
 ## License
 
-AGPL-3.0-or-later, one license across the whole monorepo. The network-use clause applies mainly to the Commonwealth mesh daemon, which is a service other people connect to.
+AGPL-3.0-or-later, one license across the whole monorepo. The network-use clause applies mainly to the cmnwlth mesh daemon, which is a service other people connect to.

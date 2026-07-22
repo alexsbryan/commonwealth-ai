@@ -20,14 +20,14 @@ At the end you'll have:
   gossip and knowledge fan-out) and, on a shared LAN, **UDP 5353**
   (mDNS discovery). The client API (`:9741`) stays loopback unless you
   deliberately expose it.
-- On each machine: install and run `sovereign setup` (downloads a
+- On each machine: install and run `svrn setup` (downloads a
   primary + fast + embedding model for your hardware). The machine that
   *asks* does the synthesis, so it needs a real primary model (~2.5 GB
   at the CPU-only floor); the machine that only *hosts* knowledge works
   with the embedding model and its corpus.
 - One thing worth knowing up front: the first daemon boot after `setup`
   quietly creates a **solo mesh** on that machine. That's why step 2
-  reads the existing mesh rather than creating one — `sovereign mesh
+  reads the existing mesh rather than creating one — `svrn mesh
   create` on an already-set-up machine errors with "a mesh already
   exists" (the fix is `rotate`, not `create`).
 
@@ -36,15 +36,15 @@ At the end you'll have:
 On each machine:
 
 ```sh
-sovereign daemon start
-sovereign mesh status     # each machine shows its own solo mesh [1/1 online]
+svrn daemon start
+svrn mesh status     # each machine shows its own solo mesh [1/1 online]
 ```
 
 ## 2 — Read the invite on node A
 
 ```sh
-sovereign mesh status     # prints the join key: cwth-XXXX-XXXX-XXXX
-# want a fresh key (e.g. the old one leaked)? sovereign mesh rotate
+svrn mesh status     # prints the join key: cwth-XXXX-XXXX-XXXX
+# want a fresh key (e.g. the old one leaked)? svrn mesh rotate
 ```
 
 ## 3 — Join from node B
@@ -52,20 +52,20 @@ sovereign mesh status     # prints the join key: cwth-XXXX-XXXX-XXXX
 Same LAN (mDNS finds A automatically):
 
 ```sh
-sovereign mesh join cwth-XXXX-XXXX-XXXX
+svrn mesh join cwth-XXXX-XXXX-XXXX
 ```
 
 Across networks, or on WiFi with client isolation, mDNS can't see A —
 hand the join an explicit relay to A's internal port instead:
 
 ```sh
-sovereign mesh join "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=<node-A-ip>:9742"
+svrn mesh join "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=<node-A-ip>:9742"
 ```
 
 Then on either machine:
 
 ```sh
-sovereign mesh status     # wait for [2/2 online]
+svrn mesh status     # wait for [2/2 online]
 ```
 
 Connectivity details and firewall troubleshooting live in
@@ -76,7 +76,7 @@ Connectivity details and firewall troubleshooting live in
 On node A:
 
 ```sh
-sovereign corpus install sep      # Stanford Encyclopedia of Philosophy, ~0.5 GB
+svrn corpus install sep      # Stanford Encyclopedia of Philosophy, ~0.5 GB
 ```
 
 `sep` is the deliberate choice here, because its recipe encodes the
@@ -95,7 +95,7 @@ queryable-but-never-copied (sep), or fully private (both `false`, or
 `scope = "local"` to keep it off-mesh entirely).
 
 (If `sep` isn't fetchable from your network, any corpus works for the
-mechanics — `sovereign corpus list` shows the catalog; the `gutenberg`
+mechanics — `svrn corpus list` shows the catalog; the `gutenberg`
 catalog plus one `gutenberg-<id>` work is the fastest public-domain
 alternative.)
 
@@ -104,7 +104,7 @@ alternative.)
 On node B, which hosts nothing:
 
 ```sh
-sovereign chat
+svrn chat
 > Is free will compatible with determinism?
 ```
 
@@ -125,7 +125,7 @@ served it.
   separate, `mesh_sharing`-gated mechanism that `sep` opts out of.
 - **The serve was recorded.** A emits one `KnowledgeQueryServed` ledger
   event per contributing corpus, stamped with B's node id — visible in
-  the contribution ledger (`sovereign mesh balance`).
+  the contribution ledger (`svrn mesh balance`).
 - **Failure degrades, never breaks.** If A is offline it is excluded
   from the fan-out plan; transport errors never propagate — B just
   answers from whatever it can reach.
@@ -164,11 +164,11 @@ client_bind = "127.0.0.1"
 dir = "/tmp/svrn-node-b"
 ```
 
-and because the `sovereign mesh join` CLI talks to the daemon on
+and because the `svrn mesh join` CLI talks to the daemon on
 `:9741`, the second daemon joins via its own client port directly:
 
 ```sh
-sovereign daemon run --config node-b.toml &
+svrn daemon run --config node-b.toml &
 curl -s -X POST http://127.0.0.1:9743/v1/mesh/join \
   -H 'content-type: application/json' \
   -d '{"key_or_url": "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=127.0.0.1:9742", "node_name": "node-b"}'
@@ -183,8 +183,8 @@ dev convenience, not the demo.
 ## Troubleshooting
 
 - **"A mesh already exists"** on `mesh create` — expected after
-  `setup`; read the key with `sovereign mesh status` or mint a new one
-  with `sovereign mesh rotate`.
+  `setup`; read the key with `svrn mesh status` or mint a new one
+  with `svrn mesh rotate`.
 - **Join hangs on shared WiFi** — client isolation is blocking mDNS;
   use the explicit `?relay=<ip>:9742` join form.
 - **macOS firewall prompt** for the daemon listening on `0.0.0.0:9742` —
