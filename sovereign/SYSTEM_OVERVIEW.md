@@ -151,6 +151,7 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
+├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process cmnwlth embed
@@ -159,6 +160,7 @@ crates/
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
 ├── sovereign-cli-shared     # Tiny shared lib (dirs, repo, help, prompts, tracing init)
+├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
 ├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib — the desktop's --daemon-child re-enters via daemon_child_main)
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)

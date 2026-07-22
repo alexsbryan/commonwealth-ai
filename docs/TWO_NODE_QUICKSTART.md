@@ -5,6 +5,8 @@ knowledge corpus that lives on only one of them, and a sourced answer on
 the other — where what crossed the network was retrieval snippets, never
 the corpus itself.
 
+<p align="center"><img src="diagrams/04-mesh-custody.svg" alt="You ask a question but host nothing; your machine searches a peer you trust that hosts the sep corpus. The peer returns scored chunks plus provenance — never the index bytes, which stay put because this corpus is set mesh_sharing = false — and records a ledger entry. Your machine synthesizes, runs the grounding gate, and cites Source: sep, served by your peer. Set mesh_sharing = true and the same corpus could instead replicate to machines you allow." width="820"></p>
+
 At the end you'll have:
 
 - **Node A (founder)** hosting a corpus.

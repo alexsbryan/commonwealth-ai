@@ -1,0 +1,12 @@
+{
+  "name": "commonwealth-diagrams",
+  "private": true,
+  "type": "module",
+  "description": "Hand-drawn (rough.js) architecture diagrams for the docs. Run: npm i && npm run build",
+  "scripts": {
+    "build": "OUT=.. node build.mjs"
+  },
+  "dependencies": {
+    "roughjs": "^4.6.6"
+  }
+}
