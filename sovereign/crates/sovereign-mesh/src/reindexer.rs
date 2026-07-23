@@ -668,6 +668,29 @@ async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<Rebui
     })
     .to_string();
 
+    // Belt-and-suspenders wipe guard. `export_all` already fails closed on a
+    // non-viable export (`ExportAborted` → the `?` above bails before we get
+    // here), but the rename is irreversible, so we double-check the one residual
+    // case export_all cannot see: it operates on the fresh staging graph, whose
+    // prior count is 0, so its "populated → empty" rule can't fire. Here we DO
+    // have the live count. If the staging export is empty while the live graph
+    // is populated, renaming would wipe it — refuse and preserve live.
+    let live_symbols = ctx.graph.load().symbol_count().await;
+    if summary.total_symbols == 0 && live_symbols > 0 {
+        let _ = std::fs::remove_file(&staging_path);
+        tracing::error!(
+            corpus = %corpus_id,
+            live_symbols,
+            skipped = ?summary.languages_skipped.iter().map(|s| &s.language).collect::<Vec<_>>(),
+            "SCIP rebuild produced an empty graph; refusing to rename over the \
+             populated live graph — preserving {live_symbols} symbols"
+        );
+        return Err(format!(
+            "rebuild produced 0 symbols; preserved existing graph ({live_symbols} symbols)"
+        )
+        .into());
+    }
+
     let head = read_git_head(&ctx.entry.root);
     new_graph
         .record_rebuild(req.reason.as_str(), head.as_deref(), Some(&outcomes_json))

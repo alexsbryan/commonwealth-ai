@@ -161,6 +161,14 @@ pub(super) async fn build_tool_registry(
         }
         tools.register(Box::new(tool));
     }
+    // Findings half of the drift pair. `MCP_TOOLS_ALWAYS` declares
+    // `drift_findings`, but the daemon previously registered only
+    // `drift_posture` — so the tool was on the manifest yet absent from the
+    // live surface (preflight FAIL: "declared but not served"). It reads the
+    // canonical `~/.sovereign/drift` sidecar via its default `drift_dir`, so a
+    // bare `::new()` is correct — mirroring the CapabilityFindingsTool
+    // registration below (a posture/findings pair that was wired symmetrically).
+    tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));
     // Capability-reconciliation freshness + findings — siblings to drift_*,
     // over the `enrich capability-reconcile` artifact.
     {

@@ -22,6 +22,17 @@ pub enum Error {
 
     #[error("Database error: {0}")]
     Database(String),
+
+    /// A full SCIP export was refused because completing it would have
+    /// destroyed the existing graph — e.g. an exporter that is present in
+    /// PATH but fails at runtime (a broken rust-analyzer shim) yields zero
+    /// symbols, and clearing/replacing on that would wipe a good index.
+    /// `export_all` returns this INSTEAD of `Ok` so every caller (the CLI
+    /// refresh and the daemon Reindexer alike) fails closed: the graph is
+    /// left untouched and the operation reports failure rather than a
+    /// silent "done" over an emptied index. Carries a human-readable reason.
+    #[error("export aborted (existing graph preserved): {0}")]
+    ExportAborted(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
