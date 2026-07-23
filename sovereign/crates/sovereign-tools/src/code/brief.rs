@@ -433,6 +433,11 @@ async fn render_notes(
             kept.push(row);
         }
     }
+    // Dedup by content — mesh gossip can hold the same global note many
+    // times over; a boot brief that shows one decision 12× buries every
+    // other note under the budget (observed live 2026-07-23).
+    let mut seen_content = std::collections::HashSet::new();
+    kept.retain(|row| seen_content.insert(row.content.trim().to_string()));
     if kept.is_empty() {
         return Ok(String::new());
     }
