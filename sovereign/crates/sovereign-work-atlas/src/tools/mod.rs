@@ -14,4 +14,4 @@ pub mod work_in_flight;
 pub use broadcast::{ClaimBroadcaster, DeferredBroadcaster, NullBroadcaster};
 pub use declare_scope::DeclareScopeTool;
 pub use release_scope::ReleaseScopeTool;
-pub use work_in_flight::WorkInFlightTool;
+pub use work_in_flight::{collect_in_flight, InFlight, WorkInFlightTool};

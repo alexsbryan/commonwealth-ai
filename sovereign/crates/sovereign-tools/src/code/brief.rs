@@ -108,6 +108,28 @@ pub struct BriefInputs<'a> {
     /// `repo_root` is set, a "Drift posture" section is rendered.
     /// `None` ⇒ skip the section.
     pub drift_dir: Option<&'a Path>,
+    /// Live work-atlas signals overlapping the working set (peer
+    /// claims + edit observations), precomputed by the caller via
+    /// `sovereign_work_atlas::tools::collect_in_flight`. Empty ⇒
+    /// skip the "Work in flight" section. The brief stays a pure
+    /// renderer — it never opens the atlas store itself.
+    pub work_in_flight: &'a [WorkInFlightEntry],
+}
+
+/// One live peer signal for the "Work in flight" section — a claim
+/// or an edit observation, already reduced to display fields by the
+/// caller (the daemon `briefing` tool or `svrn code brief`).
+pub struct WorkInFlightEntry {
+    /// What the signal overlaps: a working-set file path or a
+    /// claimed scope (symbol id / path prefix).
+    pub scope: String,
+    /// Confidence grade: `declared` (explicit claim), `active`
+    /// (edited ≤5 min ago), or `recent` (edited ≤30 min ago).
+    pub grade: String,
+    /// Claim intent, or a short edit summary ("edited 3m ago").
+    pub detail: String,
+    /// Peer node id when known.
+    pub node: Option<String>,
 }
 
 /// The structural-atlas-side sidecar produced by `sovereign git-archaeology`.
@@ -140,6 +162,17 @@ pub async fn assemble_brief(
     // Section 1: Working set — always present.
     let s1 = render_working_set(inputs.working_set);
     push_if_fits(&mut out, &mut remaining, &s1);
+
+    // Section 1.2: Work in flight.
+    // Directly after the working set because it qualifies those same
+    // files: a peer actively editing one of them changes what the
+    // agent should do FIRST (coordinate), before any principle or
+    // note below matters. Empty input ⇒ no section — quiet is the
+    // common case and shouldn't burn brief tokens.
+    let s_wif = render_work_in_flight(inputs.work_in_flight);
+    if !s_wif.is_empty() {
+        push_if_fits(&mut out, &mut remaining, &s_wif);
+    }
 
     // Section 1.4: Drift posture.
     // Slots between working-set and principles because drift status
@@ -241,6 +274,42 @@ fn render_working_set(files: &[PathBuf]) -> String {
         out.push_str(&format!("- _+{} more_\n", files.len() - 20));
     }
     out.push('\n');
+    out
+}
+
+/// Render the "Work in flight" section — live peer signals on the
+/// working set. Empty input renders nothing: quiet is the common
+/// case, and an always-present empty section would train readers to
+/// skip it. Entries are capped at 8; peer collision is rare enough
+/// that more than that means something is systemically wrong (stale
+/// TTLs) rather than eight genuine concurrent edits.
+fn render_work_in_flight(entries: &[WorkInFlightEntry]) -> String {
+    if entries.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("## Work in flight (peers)\n\n");
+    for e in entries.iter().take(8) {
+        let node = e
+            .node
+            .as_deref()
+            .map(|n| {
+                // Node ids are long; the first 8 chars are enough to
+                // cross-reference against `sovereign mesh status`.
+                let short: String = n.chars().take(8).collect();
+                format!(" (node {short}…)")
+            })
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "- [{}] `{}` — {}{}\n",
+            e.grade, e.scope, e.detail, node
+        ));
+    }
+    if entries.len() > 8 {
+        out.push_str(&format!("- _+{} more_\n", entries.len() - 8));
+    }
+    out.push_str(
+        "\n_Coordinate before editing these — `work_in_flight(scope, match_mode)` for detail._\n\n",
+    );
     out
 }
 
@@ -680,6 +749,7 @@ mod tests {
             budget_tokens: 1500,
             feature_id: None,
             drift_dir: None,
+            work_in_flight: &[],
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("# Project context: test @ main"));
@@ -688,6 +758,38 @@ mod tests {
         // Not present: structural / recent (no atlas + no repo).
         assert!(!brief.contains("## Structurally observed"));
         assert!(!brief.contains("## Recent activity"));
+    }
+
+    #[test]
+    fn work_in_flight_empty_renders_nothing() {
+        assert_eq!(render_work_in_flight(&[]), "");
+    }
+
+    #[test]
+    fn work_in_flight_lists_entries_and_caps_at_8() {
+        let mk = |i: usize, grade: &str| WorkInFlightEntry {
+            scope: format!("src/file_{i}.rs"),
+            grade: grade.to_string(),
+            detail: if grade == "declared" {
+                "claim: refactor the ingest path".to_string()
+            } else {
+                format!("edited {i}m ago · 2 event(s)")
+            },
+            node: Some("abcdef1234567890".to_string()),
+        };
+        let entries: Vec<WorkInFlightEntry> = (0..10)
+            .map(|i| mk(i, if i == 9 { "active" } else { "declared" }))
+            .collect();
+        let out = render_work_in_flight(&entries);
+        assert!(out.contains("## Work in flight (peers)"));
+        // Node ids are shortened to 8 chars.
+        assert!(out.contains("(node abcdef12…)"));
+        assert!(out.contains("[declared] `src/file_0.rs` — claim: refactor the ingest path"));
+        // 10 entries → 8 rendered + overflow marker. The renderer
+        // trusts the caller's ordering (OverlapAccumulator sorts).
+        assert_eq!(out.matches("\n- [").count(), 8);
+        assert!(out.contains("_+2 more_"));
+        assert!(out.contains("work_in_flight(scope, match_mode)"));
     }
 
     #[tokio::test]
@@ -706,6 +808,7 @@ mod tests {
             budget_tokens: 4000,
             feature_id: None,
             drift_dir: None,
+            work_in_flight: &[],
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("`f0.rs`"));
@@ -746,6 +849,7 @@ mod tests {
             budget_tokens: 4000,
             feature_id: None,
             drift_dir: None,
+            work_in_flight: &[],
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("Recent activity"));
@@ -772,6 +876,7 @@ mod tests {
             budget_tokens: 50,
             feature_id: None,
             drift_dir: None,
+            work_in_flight: &[],
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         let cost = estimate_tokens(&brief);

@@ -134,6 +134,21 @@ impl AtlasObserver {
         let Some(session) = self.touch_ambient_session().await else {
             return;
         };
+        // Canonical path shape: REPO-RELATIVE. CodeWatcher emits
+        // absolute paths; strip the repo root at write time so
+        // observations and claims (declare_scope normalizes the same
+        // way) live in one shape and file-mode queries with
+        // repo-relative paths — the form every doc example uses —
+        // actually match. Paths outside the repo pass through
+        // verbatim.
+        let paths: Vec<PathBuf> = paths
+            .into_iter()
+            .map(|p| {
+                p.strip_prefix(&self.repo_root)
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or(p)
+            })
+            .collect();
         let now = now_secs();
         let mut to_broadcast: Vec<PathBuf> = Vec::new();
         {

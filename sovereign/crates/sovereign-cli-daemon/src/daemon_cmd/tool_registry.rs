@@ -229,6 +229,22 @@ pub(super) async fn build_tool_registry(
     // conversation (the consumer is the model's synthesis path,
     // not arbitrary MCP clients).
 
+    // Session-orientation brief — the SessionStart hook's renderer on
+    // the MCP surface. Threads the live work-atlas store so the
+    // "Work in flight" section reflects what this daemon has heard
+    // from peers, not a stale read-only snapshot. Registered without
+    // a workspace too: it rejects at execute time with the same
+    // actionable set-SOVEREIGN_WORKSPACE_DIR message the watcher
+    // tools use, rather than being silently absent.
+    {
+        let mut tool = sovereign_tools::BriefingTool::new(Arc::clone(&notes))
+            .with_atlas(Arc::clone(&work_atlas_store));
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
+
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
         &notes,

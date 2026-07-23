@@ -1033,6 +1033,14 @@ async fn cmd_brief(args: &[String]) -> i32 {
         None
     };
 
+    // ── Work in flight (best-effort) ──────────────────────────
+    // Peer claims + edit observations overlapping the working set,
+    // read from the same mesh.db the daemon writes. Any failure
+    // (no daemon ever ran here, fresh checkout) degrades to an
+    // empty section — the brief must not fail on coordination
+    // signals being unavailable.
+    let work_in_flight = collect_brief_overlaps(&repo_root, &working_set).await;
+
     // ── Assemble ──────────────────────────────────────────────
     let inputs = BriefInputs {
         working_set: &working_set,
@@ -1044,6 +1052,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         budget_tokens,
         feature_id: feature_id.as_deref(),
         drift_dir: drift_dir_opt,
+        work_in_flight: &work_in_flight,
     };
     let brief = match assemble_brief(inputs, &notes).await {
         Ok(b) => b,
@@ -1897,6 +1906,117 @@ async fn cmd_search(args: &[String]) -> i32 {
 }
 
 // ─── helpers ──────────────────────────────────────────────────
+
+/// Best-effort work-atlas overlaps for the brief's "Work in flight"
+/// section. Daemon-first: the daemon's atlas MeshStore is IN-MEMORY
+/// (`bootstrap.rs` builds it with `MeshStore::in_memory()`), so a
+/// separate CLI process cannot open any file to see live
+/// claims/observations — the only read path is the daemon's `/mcp`
+/// `work_in_flight` tool. One prefix query on the absolute repo root
+/// catches all observations (stored absolute) and absolute-scoped
+/// claims; observations are then filtered to working-set membership
+/// client-side. Falls back to the repo-local `.sovereign/mesh.db`
+/// (which only ever holds CLI-written claims) and finally to an
+/// empty section — the brief must never fail on coordination
+/// signals being unavailable.
+async fn collect_brief_overlaps(
+    repo_root: &Path,
+    working_set: &[PathBuf],
+) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
+    if let Some(entries) = daemon_brief_overlaps(repo_root, working_set).await {
+        return entries;
+    }
+    local_brief_overlaps(repo_root, working_set)
+}
+
+/// Query the daemon's `work_in_flight` over `/mcp` with the empty
+/// scope (documented contract: matches every live signal — atlas
+/// paths are repo-relative canonical, so no absolute prefix could
+/// cover them). `None` (→ caller falls back) when the daemon is
+/// unreachable or the response shape is off.
+async fn daemon_brief_overlaps(
+    repo_root: &Path,
+    working_set: &[PathBuf],
+) -> Option<Vec<sovereign_tools::code::brief::WorkInFlightEntry>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok()?;
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "work_in_flight",
+            "arguments": {
+                "scope": "",
+                "match_mode": "file"
+            }
+        }
+    });
+    let resp = client
+        .post("http://localhost:9741/mcp/message")
+        .json(&body)
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: serde_json::Value = resp.json().await.ok()?;
+    let text = v["result"]["content"][0]["text"].as_str()?;
+    let payload: serde_json::Value = serde_json::from_str(text).ok()?;
+
+    let ws: std::collections::HashSet<String> = working_set
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let mut acc = sovereign_tools::OverlapAccumulator::new(repo_root);
+    for c in payload["claims"].as_array()? {
+        // Claims are repo-scoped signals; a live claim anywhere in
+        // the repo is orientation-relevant, so no working-set filter.
+        acc.add_claim(c);
+    }
+    for o in payload["observations"].as_array()? {
+        // Observations are file-level noise beyond the working set —
+        // filter to membership (paths arrive absolute; compare
+        // repo-relative).
+        let abs = o["file_path"].as_str().unwrap_or_default();
+        let rel = Path::new(abs)
+            .strip_prefix(repo_root)
+            .map(|r| r.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| abs.to_string());
+        if ws.contains(&rel) {
+            acc.add_observation(o);
+        }
+    }
+    Some(acc.finish())
+}
+
+/// Fallback when the daemon is down: the repo-local `.sovereign/mesh.db`.
+/// Only ever holds claims written by CLI tool invocations on this
+/// machine — the daemon's live atlas is in-memory and unreachable
+/// here — but stale-claim visibility beats nothing.
+fn local_brief_overlaps(
+    repo_root: &Path,
+    working_set: &[PathBuf],
+) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let Some(sovereign_dir) = sovereign_cli_shared::repo::find_sovereign_dir(&cwd) else {
+        return Vec::new();
+    };
+    let mesh_db = sovereign_dir.join("mesh.db");
+    if !mesh_db.exists() {
+        return Vec::new();
+    }
+    let Ok(mesh_store) = commonwealth_state::MeshStore::open(&mesh_db) else {
+        return Vec::new();
+    };
+    let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("."));
+    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let store = sovereign_work_atlas::WorkAtlasStore::new(Arc::new(mesh_store), node_id);
+    sovereign_tools::overlaps_for_working_set(&store, repo_root, working_set, None)
+}
 
 fn default_data_dir() -> Option<PathBuf> {
     // Mirrors project_cmd::default_data_dir; both just wrap

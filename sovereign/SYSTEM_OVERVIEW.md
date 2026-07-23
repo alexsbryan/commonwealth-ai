@@ -1140,7 +1140,11 @@ for RAG and discards the path). Spec: `docs/specs/ATTACH_FILE_FOR_TOOLS.md`
 `svrn daemon`; ad-hoc via `svrn project serve`. Tools
 under `sovereign-tools/src/code/` cover code index (`symbols`
 = `symbol_lookup`, `code_search`, `recent_changes`, `working_set`,
-`brief`), the deterministic tree-sitter fact base (`facts` — fn defs
+`brief`), the session-orientation brief as an MCP tool (`briefing` —
+the SessionStart hook's renderer callable by any MCP client; the
+daemon variant threads its live work-atlas store so the brief's
+"Work in flight" section shows peer claims/edit-observations
+overlapping the working set), the deterministic tree-sitter fact base (`facts` — fn defs
 / config construction-fields / string literals, cited + freshness-
 stamped, embed-free; see [`docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md)),
 SCIP call graph (`callers`, `callees`, `blast_radius`),

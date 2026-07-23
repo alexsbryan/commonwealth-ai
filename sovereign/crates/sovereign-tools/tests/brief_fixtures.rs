@@ -197,6 +197,7 @@ async fn snapshot_clean_main() {
         budget_tokens: 1500,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("01_clean_main", &brief);
@@ -232,6 +233,7 @@ async fn snapshot_small_feature_branch_with_notes() {
         budget_tokens: 1500,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("02_small_feature_branch_with_notes", &brief);
@@ -255,6 +257,7 @@ async fn snapshot_large_refactor_caps_working_set_at_20() {
         budget_tokens: 4000,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("03_large_refactor", &brief);
@@ -288,6 +291,7 @@ async fn snapshot_with_atlas_and_archaeology() {
         budget_tokens: 2000,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("04_with_atlas_and_archaeology", &brief);
@@ -340,6 +344,7 @@ min_score = 0.5
         budget_tokens: 1500,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("05_principles_for_this_area", &brief);
@@ -382,6 +387,7 @@ async fn snapshot_recent_activity_with_backdated_commits() {
         budget_tokens: 2000,
         feature_id: None,
         drift_dir: None,
+        work_in_flight: &[],
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     // Recent-activity section is non-deterministic on commit hash
