@@ -102,10 +102,69 @@ class Report:
         ])
 
 
+def check_harness_config(rep):
+    """0. Harness-side toolbox config — does the AGENT even have the tools?
+
+    Root-caused 2026-07-23: the sovereign server was declared under
+    `mcpServers` in `.claude/settings.json` — a key Claude Code does not read —
+    so NO session ever surfaced the MCP tools, while every daemon-side check
+    here passed. The daemon being healthy is worthless if the harness never
+    mounts the toolbox. Canonical config: `.mcp.json` at repo root, approved
+    via `enabledMcpjsonServers` / `enableAllProjectMcpServers` in settings.
+    This check is filesystem-only and runs even when the daemon is down.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, ".."))
+    mcp_json = os.path.join(root, ".mcp.json")
+    settings_path = os.path.join(root, ".claude", "settings.json")
+
+    server_names = []
+    try:
+        with open(mcp_json) as f:
+            servers = json.load(f).get("mcpServers", {})
+        server_names = list(servers.keys())
+        if server_names:
+            rep.add("PASS", "harness .mcp.json", f"declares: {', '.join(server_names)}")
+        else:
+            rep.add("FAIL", "harness .mcp.json", "exists but declares no servers",
+                    "add the sovereign HTTP server to .mcp.json at the repo root")
+    except FileNotFoundError:
+        rep.add("FAIL", "harness .mcp.json", "MISSING — agents have NO MCP tools in-session",
+                'create .mcp.json at repo root: {"mcpServers": {"sovereign": '
+                '{"type": "http", "url": "http://localhost:9741/mcp"}}}')
+    except Exception as e:
+        rep.add("FAIL", "harness .mcp.json", f"unparseable: {e}", "fix the JSON")
+
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+        if "mcpServers" in settings:
+            rep.add("WARN", "harness settings.json", "dead `mcpServers` key present (ignored by "
+                    "Claude Code — servers belong in .mcp.json)",
+                    "remove it so the config can't masquerade as working")
+        enabled = settings.get("enabledMcpjsonServers", [])
+        enable_all = settings.get("enableAllProjectMcpServers", False)
+        unapproved = [s for s in server_names if s not in enabled and not enable_all]
+        if server_names and unapproved:
+            rep.add("WARN", "harness mcp approval",
+                    f"not durably enabled in settings: {', '.join(unapproved)}",
+                    'add "enabledMcpjsonServers": [...] to .claude/settings.json '
+                    "(each user must also trust the workspace once)")
+        elif server_names:
+            rep.add("PASS", "harness mcp approval", "enabled in project settings")
+    except FileNotFoundError:
+        pass  # no project settings — approval is per-user; nothing to verify
+    except Exception as e:
+        rep.add("WARN", "harness settings.json", f"unparseable: {e}", "fix the JSON")
+
+
 def run(golden):
     rep = Report()
     status_url = golden["status_url"]
     mcp_url = golden["mcp_url"]
+
+    # 0. Agent-side toolbox config — independent of daemon liveness.
+    check_harness_config(rep)
 
     # 1. Daemon reachable — the whole surface lives behind :9741.
     status = http_get_json(status_url)

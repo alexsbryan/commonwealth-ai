@@ -132,7 +132,10 @@ impl ProjectDocsStore {
     /// Full-text search over indexed documentation. Returns up to `limit`
     /// results ordered by BM25 relevance (best first).
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<DocResult>> {
-        if query.trim().is_empty() {
+        // Sanitize free text before it reaches MATCH — raw prose with
+        // parens/quotes is invalid FTS5 syntax (see `notes::fts5_user_query`).
+        let match_expr = crate::notes::fts5_user_query(query);
+        if match_expr.is_empty() {
             return Ok(vec![]);
         }
 
@@ -151,7 +154,7 @@ impl ProjectDocsStore {
 
         let mut stmt = conn.prepare(sql).map_err(sqlite_err)?;
         let rows = stmt
-            .query_map(params![query, limit as i64], |row| {
+            .query_map(params![match_expr, limit as i64], |row| {
                 let bm25: f64 = row.get(3)?;
                 Ok(DocResult {
                     source: row.get(0)?,

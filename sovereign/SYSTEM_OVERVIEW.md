@@ -1284,11 +1284,18 @@ stay mesh-side.
 Verbs by sibling binary:
 
 - `sovereign-cli` (dispatcher + light delegators, no LLM dep) —
-  `notes`, `status`, `drift`, `audit`, `charter`, `amend`,
-  `design`, `plan`, `init`, `milestone`, `refresh`, `reflect`,
-  `rough-edges`, `archaeology-eval`, `git-archaeology`,
-  `agent-bench`, `nudge`, `serve`, `stop`, `memory`,
-  `awareness` (feature-gated).
+  `notes`, `status`, `drift`, `audit`, `cache-audit`, `session`,
+  `charter`, `amend`, `design`, `plan`, `init`, `milestone`,
+  `refresh`, `reflect`, `rough-edges`, `archaeology-eval`,
+  `git-archaeology`, `agent-bench`, `nudge`, `serve`, `stop`,
+  `memory`, `awareness` (feature-gated). `session`
+  (`session_cmd.rs`) is the session-continuity surface: `session
+  distill <id>` parses a Claude Code transcript (same source as
+  `cache-audit`), extracts the deterministic narrative spine, and
+  synthesizes a schema-v1 session frame via one daemon chat call —
+  see `sovereign/docs/specs/SESSION_CONTINUITY.md` and the graded
+  golden at `quality/session-frame.golden.md`. Frames + spines land
+  under `~/.sovereign/sessions/<session_id>/`.
 - `sovereign-cli-daemon` — `daemon` (owns :9741), `setup`,
   `install-service`, `doctor`.
 - `sovereign-cli-dev` — `atos`, `project`, `code`, `tools`.
