@@ -6,11 +6,32 @@
     "padding": 1
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "sh .claude/hooks/session-boot.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "command": "sh .claude/hooks/inject-notes.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Bash",
+        "hooks": [
+          {
+            "command": "python3 .claude/hooks/prefer-code-intel.py",
             "type": "command"
           }
         ]
