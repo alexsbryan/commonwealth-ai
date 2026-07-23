@@ -163,6 +163,19 @@ Review session reflections and retire ones that are no longer relevant. The cano
 | `--todos` | List open todo notes only |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
+### `svrn cache-audit`
+
+Glassbox telemetry for the fleet's context spend. Parses the local Claude Code transcripts (`~/.claude/projects/<encoded-cwd>/*.jsonl`) and reports, per session, where the token/cache budget went and — the headline — the **raw-acquisition ratio**: how many raw file/grep tokens were pulled into context versus how many code-intelligence / RAG calls (`symbols`, `callers`, `code_search`, `notes`, …) were made. A session that acquired its codebase context entirely through `Read`/`cat`/`grep` (high left number, zero on the right) is the leak: each raw read then rides the cache-read tail for the rest of the session. Pricing is model-aware (Opus/Sonnet/Haiku/Fable). Read-only; no daemon or network.
+
+| Flag | Description |
+|---|---|
+| `--project <path>` | Audit the project whose working dir is `<path>` (default: current dir) |
+| `--dir <path>` | Audit a specific directory of `.jsonl` transcripts (overrides `--project`) |
+| `--session <id>` | Detailed breakdown for one session (matches a filename/short-id prefix) |
+| `--last <N>` | Show the N most recent sessions (default 10) |
+| `--sort <key>` | `cost` \| `recent` \| `ratio` (default `cost`) |
+| `--json` | Machine-readable output |
+
 ### `svrn recipe`
 
 Run and curate corpus ingestion recipes.

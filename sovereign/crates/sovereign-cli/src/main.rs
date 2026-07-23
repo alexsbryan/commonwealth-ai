@@ -29,6 +29,7 @@ mod amend_cmd;
 #[cfg(feature = "dev-tools")]
 mod archaeology_eval_cmd;
 mod audit_cmd;
+mod cache_audit_cmd;
 #[cfg(feature = "awareness")]
 mod awareness_cmd;
 mod charter_cmd;
@@ -326,6 +327,7 @@ const ALL_VERBS: &[&str] = &[
     "audit",
     "awareness",
     "bench",
+    "cache-audit",
     "charter",
     "chat",
     "claim",
@@ -771,6 +773,12 @@ async fn async_main() {
             }
             "audit" => {
                 let code = audit_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "cache-audit" => {
+                // In-process telemetry over Claude Code transcripts — reads
+                // only local ~/.claude/projects/*.jsonl, no daemon/network.
+                let code = cache_audit_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "milestone" => {

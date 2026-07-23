@@ -834,7 +834,10 @@ impl QuantizeParams {
                 let bytes = kv.key.to_bytes_with_nul();
                 let copy_len = bytes.len().min(128);
                 for (dst, &src) in raw.key.iter_mut().zip(bytes[..copy_len].iter()) {
-                    *dst = src.cast_signed();
+                    // `raw.key` is `[c_char; 128]`; c_char is i8 on x86_64 but
+                    // u8 on aarch64. `as c_char` is correct on both (identical
+                    // to cast_signed on x86); `cast_signed()` breaks aarch64.
+                    *dst = src as ::std::os::raw::c_char;
                 }
                 match &kv.value {
                     KvOverrideValue::Int(v) => {

@@ -148,6 +148,12 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "solve",
     "solve_status",
     "solve_cancel",
+    // Semantic code search. Restored to the MCP surface (2026-07-22): agents
+    // reaching the server had no way to search by concept and fell back to raw
+    // `grep`/file reads — the exact behaviour the code-intelligence path exists
+    // to replace. Now health-aware (reports a DEGRADED index instead of a
+    // silent empty), so exposing it can't masquerade "index stale" as "absent".
+    "code_search",
 ];
 
 /// MCP tools that should only appear when a spec exists in the
@@ -167,7 +173,9 @@ pub const MCP_TOOLS_SPEC_GATED: &[&str] = &["spec", "drift"];
 /// Documentation only — exposure is decided by [`is_mcp_exposed`].
 #[allow(dead_code)]
 pub const MCP_TOOLS_RETIRED: &[&str] = &[
-    "code_search",
+    // `code_search` was here but is back on the MCP surface (see
+    // MCP_TOOLS_ALWAYS) — semantic search is the agent-facing alternative to
+    // raw grep, so retiring it worked against the code-intelligence goal.
     "recent_changes",
     "test_status",
     "run_tests",

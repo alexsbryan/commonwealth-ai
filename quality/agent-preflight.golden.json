@@ -1,0 +1,22 @@
+{
+  "_comment": "Golden set for agent-preflight.py — the versioned contract that the code-intelligence / RAG surface must satisfy before an agent trusts it. Edit deliberately: a golden that stops resolving is a REGRESSION signal, not a reason to weaken the check.",
+  "status_url": "http://localhost:9741/status",
+  "mcp_url": "http://localhost:9741/mcp",
+
+  "expected_mcp_tools": [
+    "symbols", "callers", "callees", "blast",
+    "notes", "note", "drift_findings", "work_in_flight"
+  ],
+
+  "known_cli_only": {
+    "_comment": "Tools that are registered but NOT exposed over MCP (mcp_surface.rs MCP_TOOLS_RETIRED). Agents reaching the MCP surface cannot call these; the preflight WARNs so the gap stays visible.",
+    "tools": ["code_search", "project_context", "recent_changes"]
+  },
+
+  "golden": {
+    "_comment": "Round-trips that must return real answers on this repo. Stable, load-bearing names chosen so a miss means the index/store regressed, not that the code changed.",
+    "symbols": [{ "name": "ToolRegistry" }],
+    "callers": [{ "symbol": "register" }],
+    "notes_query": "cache"
+  }
+}

@@ -39,6 +39,13 @@
 #   scripts/cli-smoke.sh [--model-dir sovereign/models] [--distros "ubuntu:24.04,debian:12"]
 #                        [--runtime auto|podman|docker] [--prompt "..."] [--keep] [--dry-run]
 #
+# Local NATIVE soak (arm64 host): build the arm64 binaries first
+# (scripts/build-cli-linux-arm64.sh), then loop chat turns for N minutes:
+#   scripts/cli-smoke.sh --install-mode binary --platform linux/arm64 \
+#     --binary target-container-linux-arm64/aarch64-unknown-linux-gnu/release \
+#     --model-dir <dir-of-tiny-gguf> --soak 30
+#   (--soak defaults --gpu-layers to `off`: GPU-less container runs on CPU.)
+#
 # Exit: 0 = every executed distro passed; 1 = a regression/golden-path failure;
 #       2 = harness/setup error. SKIPPED phases never fail the run.
 
@@ -51,7 +58,8 @@ cd "$REPO_ROOT"
 INSTALL_MODE="hosted"                       # hosted | local | binary
 INSTALL_URL="https://svrnme.sh/install.sh"
 LOCAL_INSTALLER="$REPO_ROOT/landing/install.sh"
-BINARY=""                                   # dir of locally-built LINUX binaries (binary mode);
+DATA_DIR_HOST=""                             # persist /data on the host (models + config) across runs
+BINARY=""                                    # dir of locally-built LINUX binaries (binary mode);
                                             # defaults to the repo's container-build output
 DEFAULT_BINARY_DIR="$REPO_ROOT/target-container-linux/x86_64-unknown-linux-gnu/release"
 MODEL_DIR=""                                # host dir of tiny GGUFs to pre-mount (optional)
@@ -62,8 +70,10 @@ PROMPT="What is this assistant and where does it run?"
 KEEP=""
 DRY_RUN=""
 INSTALL_ONLY=""                              # stop after install (fast; no model/inference)
-: "${SMOKE_HEALTH_TIMEOUT:=180}"
-: "${SMOKE_CHAT_TIMEOUT:=180}"
+SOAK_MINUTES="0"                             # >0: loop chat turns for a long soak
+GPU_LAYERS=""                                # SOVEREIGN_GPU_LAYERS to pass in (soak defaults to off)
+: "${SMOKE_HEALTH_TIMEOUT:=300}"
+: "${SMOKE_CHAT_TIMEOUT:=300}"
 : "${SMOKE_DAEMON_PORT:=9741}"
 
 die()  { echo "cli-smoke: $*" >&2; exit 2; }
@@ -75,17 +85,24 @@ while [ $# -gt 0 ]; do
     --install-url)  INSTALL_URL="${2:?}"; shift 2;;
     --binary)       BINARY="${2:?}"; shift 2;;
     --model-dir)    MODEL_DIR="${2:?}"; shift 2;;
+    --data-dir)     DATA_DIR_HOST="${2:?}"; shift 2;;
     --distros)      DISTROS="${2:?}"; shift 2;;
     --runtime)      RUNTIME="${2:?}"; shift 2;;
     --platform)     PLATFORM="${2:?}"; shift 2;;
     --prompt)       PROMPT="${2:?}"; shift 2;;
     --install-only) INSTALL_ONLY="1"; shift;;
+    --soak)         SOAK_MINUTES="${2:?}"; shift 2;;
+    --gpu-layers)   GPU_LAYERS="${2:?}"; shift 2;;
     --keep)         KEEP="1"; shift;;
     --dry-run)      DRY_RUN="1"; shift;;
-    -h|--help)      sed -n '2,46p' "$0"; exit 0;;
+    -h|--help)      sed -n '2,50p' "$0"; exit 0;;
     *) die "unknown arg: $1 (see --help)";;
   esac
 done
+
+# Soak runs in GPU-less containers; a Vulkan-compiled arm64 binary must fall
+# back to CPU, so default the layer override to `off` unless the caller set one.
+if [ "$SOAK_MINUTES" != "0" ] && [ -z "$GPU_LAYERS" ]; then GPU_LAYERS="off"; fi
 
 case "$INSTALL_MODE" in
   hosted|local|binary) ;;
@@ -94,6 +111,7 @@ esac
 if [ "$INSTALL_MODE" = "binary" ]; then
   [ -n "$BINARY" ] || BINARY="$DEFAULT_BINARY_DIR"   # default to the local container build
   [ -d "$BINARY" ] || die "--install-mode binary needs a directory of linux binaries (got '$BINARY'); build with scripts/release-cli-local.sh (linux leg) or pass --binary <dir>"
+  BINARY="$(cd "$BINARY" && pwd)"   # absolute — podman treats a relative -v source as a named volume
   for b in sovereign-cli sovereign-cli-daemon sovereign-cli-llm; do
     [ -f "$BINARY/$b" ] || die "missing binary in $BINARY: $b (the dispatcher exec()s its siblings — all three are required)"
   done
@@ -120,8 +138,8 @@ IFS=',' read -r -a DISTRO_ARR <<< "$DISTROS"
 # needs libgomp; libstdc++/libm are in the base images. NOT a toolchain. ───────
 deps_cmd_for() {
   case "$1" in
-    ubuntu:*|debian:*) echo "apt-get update -qq && apt-get install -y -qq ca-certificates curl tar libgomp1 >/dev/null";;
-    fedora:*|rockylinux:*|almalinux:*) echo "dnf install -y -q ca-certificates curl tar libgomp >/dev/null";;
+    ubuntu:*|debian:*) echo "apt-get update -qq && apt-get install -y -qq ca-certificates curl tar libgomp1 libvulkan1 >/dev/null";;
+    fedora:*|rockylinux:*|almalinux:*) echo "dnf install -y -q ca-certificates curl tar libgomp vulkan-loader >/dev/null";;
     alpine:*) echo "echo 'WARN: alpine is musl; the -gnu installer binary will not run' >&2; apk add --no-cache ca-certificates curl tar libgomp libstdc++ >/dev/null";;
     *) echo "true # unknown distro: hoping base image has curl/tar/libgomp";;
   esac
@@ -139,6 +157,11 @@ export PATH="$HOME/.local/bin:$PATH"
 export SOVEREIGN_DATA_DIR="/data"
 mkdir -p /data
 PORT="${SMOKE_DAEMON_PORT:-9741}"
+
+# CPU-only containers: force the GPU offload layer count when requested. Soak
+# runs default this to `off` (see the outer script) so a Vulkan-compiled binary
+# runs on CPU instead of failing to offload to an absent GPU.
+[ -n "${SMOKE_GPU_LAYERS:-}" ] && export SOVEREIGN_GPU_LAYERS="$SMOKE_GPU_LAYERS"
 
 echo "RESULT: phase=deps begin"
 eval "$DEPS_CMD" || { echo "RESULT: phase=deps status=FAIL"; exit 21; }
@@ -205,6 +228,39 @@ else
   exit 22
 fi
 
+# ── Soak: loop chat turns for a duration (long local run) ───────────────────
+SOAK="${SMOKE_SOAK_MINUTES:-0}"
+if [ "$SOAK" != "0" ]; then
+  echo "RESULT: phase=soak begin minutes=$SOAK gpu_layers=${SMOKE_GPU_LAYERS:-default}"
+  END=$(( $(date +%s) + SOAK * 60 ))
+  set -- "What is this assistant and where does it run?" \
+         "Name one source it can cite." \
+         "Does anything leave my machine by default?" \
+         "What can it help me do?"
+  turns=0; fails=0; grounded=0; i=0
+  while [ "$(date +%s)" -lt "$END" ]; do
+    eval "p=\${$(( i % 4 + 1 ))}"
+    out="$(timeout "${SMOKE_CHAT_TIMEOUT:-300}" svrn chat ask "$p" 2>&1)"
+    turns=$((turns+1)); i=$((i+1))
+    if [ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+      fails=$((fails+1)); echo "RESULT: soak_turn=$turns status=FAIL detail=empty"
+    else
+      printf '%s' "$out" | grep -q "\[Source:" && grounded=$((grounded+1))
+      echo "RESULT: soak_turn=$turns status=PASS"
+    fi
+    if ! curl -fsS "http://127.0.0.1:${PORT}/status" >/dev/null 2>&1; then
+      echo "RESULT: soak_daemon=DIED after_turns=$turns"
+      echo "RESULT: phase=soak done turns=$turns fails=$fails grounded=$grounded status=FAIL"
+      kill "$DAEMON_PID" 2>/dev/null; exit 25
+    fi
+  done
+  st=$([ "$fails" -eq 0 ] && echo PASS || echo DEGRADED)
+  echo "RESULT: phase=soak done turns=$turns fails=$fails grounded=$grounded status=$st"
+  kill "$DAEMON_PID" 2>/dev/null
+  echo "RESULT: phase=done status=PASS scope=soak turns=$turns fails=$fails grounded=$grounded"
+  exit 0
+fi
+
 # ── Golden path: one grounded chat turn ─────────────────────────────────────
 echo "RESULT: phase=chat begin"
 CHAT_OUT="$(timeout "${SMOKE_CHAT_TIMEOUT:-180}" svrn chat ask "$SMOKE_PROMPT" 2>&1)"
@@ -261,6 +317,12 @@ for distro in "${DISTRO_ARR[@]}"; do
   fi
   [ "$INSTALL_MODE" = local ]  && mounts+=(-v "$LOCAL_INSTALLER:/host-install.sh:ro")
   [ -n "$MODEL_DIR" ] && mounts+=(-v "$(cd "$MODEL_DIR" && pwd):/models:ro")
+  # Persist /data (config + downloaded models) so a soak downloads once and
+  # reuses it on later runs instead of re-fetching into an ephemeral container.
+  if [ -n "$DATA_DIR_HOST" ]; then
+    mkdir -p "$DATA_DIR_HOST"
+    mounts+=(-v "$(cd "$DATA_DIR_HOST" && pwd):/data:Z")
+  fi
 
   "$RUNTIME" run --rm --name "$cname" --platform "$PLATFORM" \
     ${mounts[@]+"${mounts[@]}"} \
@@ -272,6 +334,8 @@ for distro in "${DISTRO_ARR[@]}"; do
     -e SMOKE_HEALTH_TIMEOUT="$SMOKE_HEALTH_TIMEOUT" \
     -e SMOKE_CHAT_TIMEOUT="$SMOKE_CHAT_TIMEOUT" \
     -e SMOKE_DAEMON_PORT="$SMOKE_DAEMON_PORT" \
+    -e SMOKE_SOAK_MINUTES="$SOAK_MINUTES" \
+    -e SMOKE_GPU_LAYERS="$GPU_LAYERS" \
     "$distro" \
     /bin/sh -c "$(container_driver)" > "$log" 2>&1
   drc=$?
@@ -285,6 +349,9 @@ for distro in "${DISTRO_ARR[@]}"; do
     verdict="FAIL"; note="bare 'null result from llama cpp' with no guidance (diagnostics regression)"; overall=1
   elif grep -q "RESULT: phase=done status=PASS scope=install-only" "$log"; then
     note="installer OK — $(grep -o 'version=.*' "$log" | head -n1)"
+  elif grep -q "RESULT: phase=done status=PASS scope=soak" "$log"; then
+    s="$(grep -o 'RESULT: phase=soak done .*' "$log" | tail -n1 | sed 's/RESULT: phase=soak done //')"
+    note="soak OK — $s"
   elif grep -q "RESULT: phase=done status=PASS" "$log"; then
     note="golden path OK$(grep -q 'chat_grounded=yes' "$log" && echo ' (grounded)' || echo ' (ungrounded)')"
   elif grep -q "RESULT: phase=daemon status=PASS" "$log" && [ -z "$MODEL_DIR" ]; then
