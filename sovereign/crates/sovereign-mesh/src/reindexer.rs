@@ -23,8 +23,9 @@
 //! rename, the worker opens the new file fresh and swaps it into
 //! the project's [`ScipGraphHandle`] (an `ArcSwap`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -355,6 +356,107 @@ struct RebuildCtx {
     rebuild_permits: Arc<Semaphore>,
 }
 
+/// How long the demoted full rust-analyzer export stays suppressed after it
+/// last ran, while FS saves keep arriving. The tree-sitter overlay keeps symbol
+/// defs fresh in this window; only the precise cross-file edges wait. Five
+/// minutes turns "rust-analyzer on every save" (the contention that had the
+/// watcher disabled) into "at most once per five minutes of active editing,"
+/// while a commit refreshes precisely and immediately (git-HEAD path).
+const FULL_REBUILD_COOLDOWN: Duration = Duration::from_secs(300);
+
+/// Spawn the heavy full rust-analyzer rebuild as a DETACHED task instead of
+/// awaiting it inline in the select loop. This is what keeps the overlay (and
+/// FS-event collection) responsive while a multi-minute export runs — the loop
+/// must never block on rust-analyzer, or "fresh during work" breaks and every
+/// rebuild is a blackout. `in_flight` guards against stacking concurrent
+/// rebuilds for the same project: if one is already running, we coalesce by
+/// marking the project dirty and returning — the overlay keeps symbol defs fresh
+/// in the meantime, so a deferred full rebuild only delays precise cross-file
+/// edges, never symbol existence. Returns whether a rebuild was actually
+/// spawned (so the caller can stamp its cooldown only when one started).
+fn spawn_full_rebuild(
+    ctx: &RebuildCtx,
+    req: RebuildRequest,
+    in_flight: &Arc<AtomicBool>,
+) -> bool {
+    // Acquire the single-rebuild slot; if already taken, coalesce.
+    if in_flight.swap(true, Ordering::AcqRel) {
+        ctx.state.mark_dirty();
+        return false;
+    }
+    let ctx = ctx.clone();
+    let in_flight = Arc::clone(in_flight);
+    tokio::spawn(async move {
+        run_one_rebuild(&ctx, req).await;
+        in_flight.store(false, Ordering::Release);
+    });
+    true
+}
+
+/// Overlay merge (structural watcher hot path): re-index the changed *source*
+/// files with tree-sitter and merge their symbol definitions into `graph` via
+/// [`ScipGraph::replace_file_symbols`]. Embed-free, no rust-analyzer, no
+/// blocking on the inference slots. Returns `(files_merged, symbols_merged)`.
+///
+/// - Non-source paths (no tree-sitter pack) are skipped — the full export owns
+///   them.
+/// - A changed source file that can't be read (deleted/renamed-away) is still
+///   passed to `replace_file_symbols` with no symbols, so its stale defs are
+///   dropped.
+/// A merge failure is logged and swallowed: the overlay is best-effort freshness
+/// and must never wedge the watcher or corrupt the graph (the primitive rolls
+/// back on error).
+async fn run_overlay_merge(
+    merged: &ScipGraphHandle,
+    corpus_id: &str,
+    root: &Path,
+    changed: &[PathBuf],
+) -> (usize, usize) {
+    use corpus_engine::facts::{extract_symbol_defs, pack_for_extension};
+
+    let mut files: Vec<String> = Vec::new();
+    let mut symbols = Vec::new();
+    for rel in changed {
+        // Only files a tree-sitter pack claims; others belong to the full export.
+        let is_source = rel
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| pack_for_extension(e).is_some())
+            .unwrap_or(false);
+        if !is_source {
+            continue;
+        }
+        let rel_str = rel.to_string_lossy().to_string();
+        files.push(rel_str.clone());
+        // Read from the working tree; a deleted file simply contributes no
+        // symbols, so `replace_file_symbols` drops its prior defs.
+        if let Ok(src) = std::fs::read_to_string(root.join(rel)) {
+            symbols.extend(extract_symbol_defs(&rel_str, &src));
+        }
+    }
+
+    if files.is_empty() {
+        return (0, 0);
+    }
+    let n_files = files.len();
+    let n_syms = symbols.len();
+    // Write into the MERGED graph the daemon's tools query, scoped to this
+    // project's corpus_id (the merged graph's rows are per-project-scoped). This
+    // is what makes the overlay visible to a live `symbols()` call without a
+    // full re-import or a daemon restart.
+    let g = merged.load();
+    match g.replace_file_symbols_for(corpus_id, &files, symbols).await {
+        Ok(()) => (n_files, n_syms),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "scip overlay merge failed (graph preserved); full export will correct"
+            );
+            (0, 0)
+        }
+    }
+}
+
 async fn run_worker(ctx: WorkerCtx) {
     let WorkerCtx {
         entry,
@@ -408,6 +510,19 @@ async fn run_worker(ctx: WorkerCtx) {
 
     let mut pending_fs = false;
     let mut last_fs_event: Option<Instant> = None;
+    // Structural watcher — tree-sitter overlay hot path.
+    // `changed_files` accumulates the workspace-relative paths touched since the
+    // last debounce flush; on flush we re-parse just those with tree-sitter and
+    // merge symbol defs (embed-free, no rust-analyzer) so `symbols()` is fresh
+    // in milliseconds. The heavy whole-workspace rust-analyzer export is DEMOTED
+    // off the per-save path: it runs on commit (git-HEAD, below) and at most
+    // once per `FULL_REBUILD_COOLDOWN` of active editing — this is what removes
+    // the per-save memory contention that had the watcher switched off.
+    let mut changed_files: HashSet<PathBuf> = HashSet::new();
+    let mut last_full_rebuild: Option<Instant> = None;
+    // Guards the single detached rust-analyzer rebuild so the select loop never
+    // blocks on it (see `spawn_full_rebuild`).
+    let rebuild_in_flight = Arc::new(AtomicBool::new(false));
 
     loop {
         let debounce_sleep = match (pending_fs, last_fs_event) {
@@ -434,11 +549,23 @@ async fn run_worker(ctx: WorkerCtx) {
                 }
                 let snapshot = rebuild_rx.borrow_and_update().clone();
                 if let Some(req) = snapshot {
-                    run_one_rebuild(&rebuild_ctx, req).await;
+                    // Spawn (don't await) so startup/explicit rebuilds don't
+                    // freeze the loop — the overlay must keep serving saves.
+                    if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
+                        last_full_rebuild = Some(Instant::now());
+                    }
                 }
             }
             maybe_evt = fs_rx.recv() => {
-                if maybe_evt.is_some() {
+                if let Some(evt) = maybe_evt {
+                    // Record which files changed (workspace-relative) for the
+                    // overlay merge on the next debounce flush. Absolute paths
+                    // outside the repo root are ignored defensively.
+                    for p in &evt.paths {
+                        if let Ok(rel) = p.strip_prefix(&entry.root) {
+                            changed_files.insert(rel.to_path_buf());
+                        }
+                    }
                     pending_fs = true;
                     last_fs_event = Some(Instant::now());
                 }
@@ -497,7 +624,15 @@ async fn run_worker(ctx: WorkerCtx) {
                             },
                             enqueued_at: Instant::now(),
                         };
-                        run_one_rebuild(&rebuild_ctx, req).await;
+                        // Spawn (don't await): a commit-triggered rebuild must
+                        // not block the loop's overlay servicing either.
+                        if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
+                            // A commit is the natural precise-refresh boundary and
+                            // resets the FS-change cooldown: the graph is being
+                            // brought fully current, so no FS-triggered full
+                            // export is due yet.
+                            last_full_rebuild = Some(Instant::now());
+                        }
                     }
                 }
             }
@@ -505,11 +640,56 @@ async fn run_worker(ctx: WorkerCtx) {
                 if pending_fs {
                     pending_fs = false;
                     last_fs_event = None;
-                    let req = RebuildRequest {
-                        reason: RebuildReason::FsChange,
-                        enqueued_at: Instant::now(),
-                    };
-                    run_one_rebuild(&rebuild_ctx, req).await;
+
+                    // 1) Overlay merge — ALWAYS, and first. Cheap (tree-sitter,
+                    //    embed-free, no rust-analyzer), so `symbols()` reflects
+                    //    added/moved/removed functions within milliseconds of a
+                    //    save. Never contends with inference.
+                    let files: Vec<PathBuf> = changed_files.drain().collect();
+                    let (merged_files, merged_syms) = run_overlay_merge(
+                        &rebuild_ctx.merged,
+                        &rebuild_ctx.entry.corpus_id,
+                        &entry.root,
+                        &files,
+                    )
+                    .await;
+                    if merged_files > 0 {
+                        tracing::debug!(
+                            corpus_id = %rebuild_ctx.entry.corpus_id,
+                            files = merged_files,
+                            symbols = merged_syms,
+                            "scip overlay: symbol defs refreshed (tree-sitter, embed-free)"
+                        );
+                        rebuild_ctx.state.mark_graph_updated();
+                    }
+
+                    // 2) Full rust-analyzer export — DEMOTED. Runs at most once
+                    //    per FULL_REBUILD_COOLDOWN of active editing (the overlay
+                    //    keeps defs fresh in between; precise cross-file edges and
+                    //    qualified names lag one cooldown/commit). This is the
+                    //    contention fix: whole-workspace rust-analyzer no longer
+                    //    fires on every save.
+                    let due = last_full_rebuild
+                        .map(|t| t.elapsed() >= FULL_REBUILD_COOLDOWN)
+                        .unwrap_or(true);
+                    if due {
+                        let req = RebuildRequest {
+                            reason: RebuildReason::FsChange,
+                            enqueued_at: Instant::now(),
+                        };
+                        // Spawned, not awaited: the loop stays live for the next
+                        // save's overlay while rust-analyzer runs in the
+                        // background. Only stamp the cooldown if one actually
+                        // started (else a rebuild is already in flight).
+                        if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
+                            last_full_rebuild = Some(Instant::now());
+                        }
+                    } else {
+                        tracing::debug!(
+                            corpus_id = %rebuild_ctx.entry.corpus_id,
+                            "full rust-analyzer export deferred (within cooldown); overlay keeps defs fresh"
+                        );
+                    }
                 }
             }
         }
@@ -940,6 +1120,71 @@ pub fn read_git_head(root: &Path) -> Option<String> {
 mod tests {
     use super::*;
     use crate::projects::WatcherToggles;
+
+    // ── Structural watcher overlay (hot-path merge) ──
+
+    fn mem_graph() -> ScipGraphHandle {
+        Arc::new(ArcSwap::from_pointee(
+            ScipGraph::open_in_memory("overlay-test").unwrap(),
+        ))
+    }
+
+    #[tokio::test]
+    async fn overlay_merge_refreshes_symbol_defs_from_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("lib.rs"), "fn hello() {}\nfn world() {\n  let x=1;\n}\n")
+            .unwrap();
+        let graph = mem_graph();
+
+        let (files, syms) =
+            run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("lib.rs")]).await;
+        assert_eq!(files, 1);
+        assert_eq!(syms, 2);
+
+        // The end-to-end proof: symbols() finds functions that only exist on
+        // disk, with NO rust-analyzer, purely via the tree-sitter overlay.
+        let g = graph.load();
+        assert!(!g.find_symbols_by_name("hello", None, 8).await.unwrap().is_empty());
+        let world = g.find_symbols_by_name("world", None, 8).await.unwrap();
+        assert_eq!(world.len(), 1);
+        assert_eq!(world[0].file_path, "lib.rs");
+    }
+
+    #[tokio::test]
+    async fn overlay_merge_skips_non_source_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("README.md"), "# not code\nfn nope() {}").unwrap();
+        let graph = mem_graph();
+        let (files, syms) = run_overlay_merge(
+            &graph,
+            "overlay-test",
+            tmp.path(),
+            &[PathBuf::from("README.md"), PathBuf::from("Cargo.toml")],
+        )
+        .await;
+        assert_eq!(files, 0, "non-source paths belong to the full export, not the overlay");
+        assert_eq!(syms, 0);
+    }
+
+    #[tokio::test]
+    async fn overlay_merge_drops_defs_for_deleted_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let graph = mem_graph();
+        // Seed a def for gone.rs, then "delete" it (never write the file).
+        std::fs::write(tmp.path().join("gone.rs"), "fn ghost() {}").unwrap();
+        run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("gone.rs")]).await;
+        assert!(!graph.load().find_symbols_by_name("ghost", None, 8).await.unwrap().is_empty());
+
+        std::fs::remove_file(tmp.path().join("gone.rs")).unwrap();
+        let (files, syms) =
+            run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("gone.rs")]).await;
+        assert_eq!(files, 1, "deleted source file is still processed (to drop its rows)");
+        assert_eq!(syms, 0);
+        assert!(
+            graph.load().find_symbols_by_name("ghost", None, 8).await.unwrap().is_empty(),
+            "deleted file's defs must be gone"
+        );
+    }
 
     fn sample_entry(id: &str, root: PathBuf) -> ProjectEntry {
         ProjectEntry {

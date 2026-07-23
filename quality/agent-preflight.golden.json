@@ -5,12 +5,12 @@
 
   "expected_mcp_tools": [
     "symbols", "callers", "callees", "blast",
-    "notes", "note", "drift_findings", "work_in_flight"
+    "notes", "note", "drift_findings", "facts", "work_in_flight"
   ],
 
   "known_cli_only": {
-    "_comment": "Tools that are registered but NOT exposed over MCP (mcp_surface.rs MCP_TOOLS_RETIRED). Agents reaching the MCP surface cannot call these; the preflight WARNs so the gap stays visible.",
-    "tools": ["code_search", "project_context", "recent_changes"]
+    "_comment": "Tools that are registered but NOT exposed over MCP (mcp_surface.rs MCP_TOOLS_RETIRED). Agents reaching the MCP surface cannot call these; the preflight WARNs so the gap stays visible. `code_search` was restored to MCP 2026-07-22 and is no longer here.",
+    "tools": ["project_context", "recent_changes"]
   },
 
   "golden": {

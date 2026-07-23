@@ -107,6 +107,13 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // `drift_posture` (freshness gate). Reads the canonical drift
     // JSON sidecar; never re-runs the LLM pipeline.
     "drift_findings",
+    // Code facts — the embed-free deterministic fact base (tree-sitter
+    // fn defs / config construction-fields / string literals), cited to
+    // file:line and freshness-stamped. The structural companion to
+    // `symbols`/`callers` (call graph) and `code_search` (semantic);
+    // reading it never touches the inference slots. See
+    // docs/CHECK_CODE_AGAINST_SPEC.md.
+    "facts",
     // `drift_posture` is wired in the in-process registry today
     // but stayed out of MCP_TOOLS_ALWAYS because the freshness-
     // gate use case was operator-facing. Adding it here lets an
