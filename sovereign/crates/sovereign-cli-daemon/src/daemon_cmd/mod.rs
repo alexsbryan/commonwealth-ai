@@ -612,6 +612,19 @@ async fn run_daemon(args: &[String]) -> i32 {
     // loopback.
     let solve_jobs = Arc::new(solve_http::SolveJobs::new(config.daemon.client_port));
 
+    // ── Shared merged SCIP graph ──────────────────────────────────
+    // Built ONCE here and handed to BOTH the tool registry (below) and the
+    // project reindexer (`start_freshness_pipeline`), so the reindexer's live
+    // updates — the tree-sitter overlay on every save and the periodic full
+    // rebuild — are visible to `symbols`/`callers`/`blast` immediately, with no
+    // daemon restart. Previously each side built its own snapshot and the
+    // reindexer's graph had no readers, so the tool surface was frozen at
+    // startup — the deepest cause of "the watcher is always stale."
+    let merged_scip_handle: sovereign_mesh::reindexer::ScipGraphHandle =
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+            tool_registry::build_merged_scip_graph(&data_dir.join("indexes")).await,
+        ));
+
     // ── Tool registry (code intelligence + notes) ─────────────────
     // The embedded daemon serves /mcp for all locally-indexed corpora
     // under data_dir/indexes/. Tools return helpful errors when no
@@ -634,6 +647,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         work_atlas_repo_id.clone(),
         work_atlas_branch.clone(),
         Arc::clone(&solve_jobs),
+        Arc::clone(&merged_scip_handle),
     )
     .await;
 
@@ -721,6 +735,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         Arc::clone(&daemon),
         Arc::clone(&engine),
         Arc::clone(&provider),
+        Arc::clone(&merged_scip_handle),
     )
     .await;
 

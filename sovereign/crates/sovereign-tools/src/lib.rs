@@ -78,6 +78,7 @@ pub use sovereign_tools_base::zip;
 pub use attached_document_search::AttachedDocumentSearchTool;
 #[cfg(feature = "treesitter")]
 pub use code::drift_findings::DriftFindingsTool;
+pub use code::facts_tool::FactsTool;
 pub use code::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;

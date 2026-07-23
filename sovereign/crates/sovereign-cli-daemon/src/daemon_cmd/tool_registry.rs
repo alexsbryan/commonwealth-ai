@@ -29,6 +29,13 @@ pub(super) async fn build_tool_registry(
     work_atlas_repo_id: Option<String>,
     work_atlas_branch: Option<String>,
     solve_jobs: Arc<super::solve_http::SolveJobs>,
+    // The shared merged SCIP graph. Created ONCE by the caller and handed to
+    // BOTH these tools and the project reindexer, so the reindexer's live
+    // updates (the tree-sitter overlay and full rebuilds) are visible to
+    // symbols/callers/blast without a daemon restart. Before this was shared,
+    // the tools read a frozen startup snapshot while the reindexer updated an
+    // orphan graph nothing queried — the root of "always stale."
+    merged_graph_handle: sovereign_tools::ScipGraphHandle,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -48,9 +55,10 @@ pub(super) async fn build_tool_registry(
     //
     // The graph also backs `symbols`/exact-name lookup, so build it
     // BEFORE registering the code-intel tools below.
-    let merged_graph = build_merged_scip_graph(&indexes_dir).await;
-    let graph_handle: sovereign_tools::ScipGraphHandle =
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(merged_graph));
+    // Use the caller-provided shared handle (see the param doc) rather than
+    // building a private snapshot — that private snapshot never saw the
+    // reindexer's updates and is the staleness this unification fixes.
+    let graph_handle = merged_graph_handle;
 
     // Code intelligence — scoped to discovered corpora under indexes_dir.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
@@ -169,6 +177,11 @@ pub(super) async fn build_tool_registry(
     // bare `::new()` is correct — mirroring the CapabilityFindingsTool
     // registration below (a posture/findings pair that was wired symmetrically).
     tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));
+    // Code facts — the embed-free structural fact base (tree-sitter fn defs /
+    // config construction-fields / string literals), read from
+    // `<indexes_dir>/<corpus>/facts.json`. Read-only and model-free, so it never
+    // contends with agent inference; every response is freshness-stamped.
+    tools.register(Box::new(sovereign_tools::FactsTool::new(indexes_dir.clone())));
     // Capability-reconciliation freshness + findings — siblings to drift_*,
     // over the `enrich capability-reconcile` artifact.
     {

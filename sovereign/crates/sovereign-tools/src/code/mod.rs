@@ -109,6 +109,7 @@ pub mod drift_posture;
 // side counterpart to `callers(name)` / `blast(name)`.
 #[cfg(feature = "treesitter")]
 pub mod drift_findings;
+pub mod facts_tool;
 
 // Capability-reconciliation freshness gate + findings query — siblings to
 // drift_posture / drift_findings, over the `enrich capability-reconcile`

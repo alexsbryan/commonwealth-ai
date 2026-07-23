@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use super::lifecycle::daemon_pid_path;
 use super::provider::LlamaCppFactory;
-use super::tool_registry::build_merged_scip_graph;
 use super::warn_orphaned_indexes;
 use commonwealth_core::ids::NodeId;
 use corpus_engine::{CorpusEngine, EmbedFn};
@@ -1055,6 +1054,9 @@ pub(super) async fn start_freshness_pipeline(
     daemon: Arc<EmbeddedDaemon>,
     engine: Arc<CorpusEngine>,
     provider: Arc<dyn InferenceProvider>,
+    // The merged SCIP graph the MCP tools also hold. Shared (not rebuilt here)
+    // so the reindexer's overlay + full-rebuild updates are live to `symbols()`.
+    merged_handle: sovereign_mesh::reindexer::ScipGraphHandle,
 ) -> Arc<sovereign_mesh::reindexer::Reindexer> {
     // ── Project freshness pipeline ────────────────────────────────
     //
@@ -1067,15 +1069,9 @@ pub(super) async fn start_freshness_pipeline(
     // so a daemon restart resumes watching everything without a
     // user action.
     let freshness_indexes_dir = data_dir.join("indexes");
-    let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle = {
-        // Reuse the merged ScipGraph we already build for the MCP
-        // tool registry so tool calls and the reindexer see the
-        // same object. `build_tool_registry` below creates its
-        // own copy; we wrap ours in an ArcSwap so the reindexer
-        // can hot-swap after every rebuild.
-        let initial = build_merged_scip_graph(&freshness_indexes_dir).await;
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(initial))
-    };
+    // `merged_handle` is the SAME graph the tool registry holds (passed in by
+    // the caller), so every rebuild/overlay update the reindexer makes is
+    // immediately visible to `symbols`/`callers`/`blast`.
     let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
         freshness_indexes_dir.clone(),
         Arc::clone(&merged_handle),

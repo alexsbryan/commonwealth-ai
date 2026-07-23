@@ -1140,7 +1140,10 @@ for RAG and discards the path). Spec: `docs/specs/ATTACH_FILE_FOR_TOOLS.md`
 `svrn daemon`; ad-hoc via `svrn project serve`. Tools
 under `sovereign-tools/src/code/` cover code index (`symbols`
 = `symbol_lookup`, `code_search`, `recent_changes`, `working_set`,
-`brief`), SCIP call graph (`callers`, `callees`, `blast_radius`),
+`brief`), the deterministic tree-sitter fact base (`facts` — fn defs
+/ config construction-fields / string literals, cited + freshness-
+stamped, embed-free; see [`docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md)),
+SCIP call graph (`callers`, `callees`, `blast_radius`),
 lint/test watchers (`lint_status`, `get_lint_output`,
 `test_status`, `run_tests`, `get_run_output`, `build`), notes
 (`write_note`, `read_notes`, `delete_note`, `suggest_note`,
@@ -1156,8 +1159,23 @@ project + design context
 work-atlas coordination (`declare_scope`, `release_scope`,
 `work_in_flight` — see [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md)).
 
-A `CodeWatcher` re-indexes modified files and marks them stale in
-the call graph. Staleness levels carry calibrated confidence:
+**Live graph freshness (`sovereign-mesh::reindexer`).** The daemon's
+tool graph and the reindexer share ONE merged `ScipGraph` handle
+(built once in `daemon_cmd/mod.rs`, passed to both `build_tool_registry`
+and `start_freshness_pipeline`), so reindexer updates are visible to
+`symbols`/`callers`/`blast` live, without a daemon restart — before
+this unification the tools read a frozen startup snapshot. On each
+debounced save the reindexer runs a **tree-sitter overlay**
+(`facts::extract_symbol_defs` → `ScipGraph::replace_file_symbols_for`):
+embed-free, no rust-analyzer, symbol *defs* fresh in milliseconds and
+never contending with inference. The heavy whole-workspace
+rust-analyzer export is **demoted** — spawned (never blocking the watch
+loop) and rate-limited to at most once per `FULL_REBUILD_COOLDOWN`
+(300s) of active editing plus on git-HEAD (commit) — so it no longer
+fires on every save (the contention that had the watcher disabled).
+Cross-file call edges and qualified names therefore lag one full export
+(accepted eventual-consistency); overlay rows carry `qualified_name=""`,
+`kind="function"`. Staleness levels still carry calibrated confidence:
 `None` / `SomeCallSitesMayBeStale` / `GraphIsAging` / `GraphIsStale`
 / `LanguageNotIndexed`. `blast_radius` does BFS over the call graph
 and appends a `macro_hints` text scan for references SCIP doesn't

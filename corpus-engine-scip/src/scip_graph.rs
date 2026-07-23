@@ -1434,6 +1434,97 @@ impl ScipGraph {
         Ok(())
     }
 
+    /// Symbols-ONLY per-file replace: swap each file's symbol *definitions*
+    /// while leaving its reference edges untouched. The transactional,
+    /// roll-back-on-error sibling of [`replace_files`], but deliberately narrower
+    /// — it is the tree-sitter overlay's write primitive.
+    ///
+    /// The overlay (structural watcher hot path) re-parses a saved file with
+    /// tree-sitter, which can see symbol *existence* (a function was added,
+    /// removed, or moved) but NOT cross-file call edges — those need
+    /// rust-analyzer. So it updates the `symbols` table only and leaves `refs`
+    /// as the last full export left them: slightly stale edges (a moved fn's
+    /// call sites point at old lines) are gentler and more useful than edges
+    /// deleted-until-rebuild, and the idle/periodic full export corrects them.
+    /// That is exactly the accepted eventual-consistency contract: symbol-defs
+    /// are immediately fresh, cross-file edges lag one full export.
+    ///
+    /// Merged files are dropped from the stale set (defs are now current).
+    ///
+    /// Uses this graph's own `corpus_id`. For the merged daemon graph — whose
+    /// rows are scoped by each source project's id, not the literal "merged" —
+    /// use [`replace_file_symbols_for`] with the project's corpus_id.
+    pub async fn replace_file_symbols(
+        &self,
+        files: &[String],
+        symbols: Vec<ScipSymbolRecord>,
+    ) -> Result<()> {
+        let corpus = self.corpus_id.clone();
+        self.replace_file_symbols_for(&corpus, files, symbols).await
+    }
+
+    /// Corpus-parameterized [`replace_file_symbols`]: swap symbol defs for
+    /// `files` under an EXPLICIT `corpus_id`. Needed for the shared merged graph
+    /// the daemon's tools query — its rows carry each source project's corpus_id
+    /// (set by [`import_from_path`]/`replace_corpus`), not the graph's own
+    /// "merged" id. The structural watcher overlay writes here with the
+    /// project's id so `symbols()` sees the update live, without a full re-import.
+    pub async fn replace_file_symbols_for(
+        &self,
+        corpus_id: &str,
+        files: &[String],
+        symbols: Vec<ScipSymbolRecord>,
+    ) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+        {
+            let conn = self.conn.lock().await;
+            let corpus = corpus_id.to_string();
+
+            conn.execute_batch("BEGIN TRANSACTION")
+                .map_err(|e| Error::Database(format!("replace_file_symbols begin: {e}")))?;
+
+            let txn: std::result::Result<(), rusqlite::Error> = (|| {
+                for f in files {
+                    conn.execute(
+                        "DELETE FROM symbols WHERE corpus_id = ? AND file_path = ?",
+                        params![corpus, f],
+                    )?;
+                }
+                for sym in &symbols {
+                    conn.execute(
+                        "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![corpus, sym.name, sym.qualified_name, sym.kind, sym.file_path, sym.line_start, sym.line_end, sym.language],
+                    )?;
+                }
+                Ok(())
+            })();
+
+            match txn {
+                Ok(()) => conn
+                    .execute_batch("COMMIT")
+                    .map_err(|e| Error::Database(format!("replace_file_symbols commit: {e}")))?,
+                Err(e) => {
+                    let _ = conn.execute_batch("ROLLBACK");
+                    return Err(Error::Database(format!(
+                        "replace_file_symbols failed (rolled back, graph preserved): {e}"
+                    )));
+                }
+            }
+        } // conn lock dropped before touching the stale-set lock
+
+        {
+            let mut stale = self.stale_files.write().await;
+            for f in files {
+                stale.remove(f);
+            }
+        }
+        self.persist_stale_files().await;
+        Ok(())
+    }
+
     /// Snapshot of the files the CodeWatcher has marked stale since the last
     /// export — the work-list for an incremental re-index.
     pub async fn stale_files_snapshot(&self) -> Vec<String> {
@@ -2099,6 +2190,61 @@ mod integrity_tests {
         assert!(g.find_symbols_by_name("a_one", None, 8).await.unwrap().is_empty(), "old a.rs rows gone");
         assert!(!g.find_symbols_by_name("a_new", None, 8).await.unwrap().is_empty(), "new a.rs row present");
         assert!(!g.find_symbols_by_name("b_one", None, 8).await.unwrap().is_empty(), "b.rs untouched");
+    }
+
+    #[tokio::test]
+    async fn replace_file_symbols_updates_defs_but_preserves_refs() {
+        let g = ScipGraph::open_in_memory("alpha").unwrap();
+        // a.rs has one symbol and one outgoing ref (a_one -> b_one).
+        g.ingest_symbols_and_refs(
+            vec![sym("a_one", "a.rs")],
+            vec![ScipRefRecord {
+                caller_symbol: "a_one".into(),
+                callee_symbol: "b_one".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
+                file_path: "a.rs".into(),
+                line: 5,
+                ref_kind: "call".into(),
+            }],
+        )
+        .await
+        .unwrap();
+        assert_eq!(g.symbol_count().await, 1);
+        assert_eq!(g.ref_count().await, 1);
+
+        // Overlay re-index of a.rs: the fn was renamed a_one -> a_renamed.
+        g.replace_file_symbols(&["a.rs".to_string()], vec![sym("a_renamed", "a.rs")])
+            .await
+            .unwrap();
+
+        // Symbol def updated...
+        assert!(g.find_symbols_by_name("a_renamed", None, 8).await.unwrap().len() == 1);
+        assert!(g.find_symbols_by_name("a_one", None, 8).await.unwrap().is_empty());
+        // ...but the ref edge is LEFT for the full rebuild to correct.
+        assert_eq!(g.ref_count().await, 1, "overlay must not delete ref edges");
+    }
+
+    #[tokio::test]
+    async fn replace_file_symbols_for_targets_explicit_corpus() {
+        // A "merged"-style graph whose rows belong to other corpora. The overlay
+        // writes under the PROJECT's corpus_id, not the graph's own "merged" id.
+        let g = ScipGraph::open_in_memory("merged").unwrap();
+        g.replace_file_symbols_for("projA", &["src/a.rs".to_string()], vec![sym("fn_a", "src/a.rs")])
+            .await
+            .unwrap();
+        // Findable (name lookup is corpus-agnostic) and stored under projA.
+        let hits = g.find_symbols_by_name("fn_a", None, 8).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].corpus_id, "projA", "row must carry the project's corpus_id, not 'merged'");
+
+        // A second corpus's same-path file is independent — updating projA does
+        // not disturb projB's row.
+        g.replace_file_symbols_for("projB", &["src/a.rs".to_string()], vec![sym("fn_b", "src/a.rs")])
+            .await
+            .unwrap();
+        assert_eq!(g.find_symbols_by_name("fn_a", None, 8).await.unwrap().len(), 1, "projA untouched");
+        assert_eq!(g.find_symbols_by_name("fn_b", None, 8).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

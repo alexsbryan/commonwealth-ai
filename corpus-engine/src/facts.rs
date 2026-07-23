@@ -197,6 +197,87 @@ mod ts {
     use streaming_iterator::StreamingIterator;
     use tree_sitter::{Node, Parser, Query, QueryCursor};
 
+    /// Per-file SCIP symbol-def extraction (the structural watcher hot path).
+    /// Reuses the pack's `fn_query` (name capture `@n`), then walks up to the
+    /// enclosing `fn_node_kind` node for the full body span. Lines are 0-based
+    /// to match the SCIP protobuf ingest. See the public wrapper's doc for the
+    /// fidelity contract (bare name, function-kind only, no cross-file edges).
+    pub fn extract_symbol_defs(
+        rel: &str,
+        src: &str,
+        pack: &LangPack,
+    ) -> Vec<corpus_engine_scip::ScipSymbolRecord> {
+        let lang: tree_sitter::Language = pack.lang.into();
+        let mut parser = Parser::new();
+        if parser.set_language(&lang).is_err() {
+            return Vec::new();
+        }
+        let tree = match parser.parse(src, None) {
+            Some(t) => t,
+            None => return Vec::new(),
+        };
+        let b = src.as_bytes();
+        let root = tree.root_node();
+        let mut out = Vec::new();
+
+        let q = match Query::new(&lang, pack.fn_query) {
+            Ok(q) => q,
+            Err(_) => return out,
+        };
+        let ni = match q.capture_index_for_name("n") {
+            Some(i) => i,
+            None => return out,
+        };
+        let mut c = QueryCursor::new();
+        let mut ms = c.matches(&q, root, b);
+        while let Some(m) = ms.next() {
+            if let Some(name_node) = m.nodes_for_capture_index(ni).next() {
+                let name = name_node.utf8_text(b).unwrap_or("").to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                // Span comes from the enclosing function node (body), not the
+                // name identifier — mirrors how the SCIP export reads
+                // `enclosing_range` for `line_end`.
+                let (line_start, line_end) = fn_span(name_node, pack.fn_node_kind);
+                out.push(corpus_engine_scip::ScipSymbolRecord {
+                    name,
+                    qualified_name: String::new(),
+                    kind: "function".to_string(),
+                    file_path: rel.to_string(),
+                    line_start,
+                    line_end,
+                    language: pack.id.to_string(),
+                });
+            }
+        }
+        out
+    }
+
+    /// 0-based `(start_row, end_row)` of the nearest `fn_node_kind` ancestor of
+    /// the name node — the function body span. Falls back to the name node's own
+    /// span when no enclosing function node is found (defensive; shouldn't
+    /// happen for a well-formed `fn_query`).
+    fn fn_span(name_node: Node, fn_node_kind: &str) -> (i32, i32) {
+        let mut n = name_node;
+        loop {
+            if n.kind() == fn_node_kind {
+                return (
+                    n.start_position().row as i32,
+                    n.end_position().row as i32,
+                );
+            }
+            match n.parent() {
+                Some(p) => n = p,
+                None => break,
+            }
+        }
+        (
+            name_node.start_position().row as i32,
+            name_node.end_position().row as i32,
+        )
+    }
+
     /// Nearest ancestor of `fn_node_kind`, returning its `name` field. The kind is
     /// supplied by the pack so this stays language-agnostic.
     fn enclosing_fn(mut n: Node, src: &[u8], fn_node_kind: &str) -> String {
@@ -336,6 +417,42 @@ pub fn extract_facts(_repo: &Path, _roots: &[String]) -> Facts {
     Facts::default()
 }
 
+/// Extract SCIP symbol-definition rows for ONE file, using tree-sitter only —
+/// no rust-analyzer, no embeddings, no I/O beyond the caller-supplied source.
+///
+/// This is the structural watcher's hot-path primitive: on a file save the
+/// daemon re-parses just that file (milliseconds) and merges the result via
+/// [`corpus_engine_scip::ScipGraph::replace_files`], so `symbols(name)` finds a
+/// newly-added or moved function immediately — without waiting for the heavy,
+/// whole-workspace rust-analyzer export that runs later (idle-gated).
+///
+/// ## Fidelity — deliberately partial, honestly so
+///
+/// tree-sitter sees a single file, so these rows carry:
+///   - `qualified_name: ""` — no cross-crate SCIP descriptor (rust-analyzer's
+///     job). Resolution falls back to `name`, which is what the bare-name
+///     lookups (`symbols`, `resolve_symbol`) use anyway.
+///   - `kind: "function"` — only function definitions, the existence fact.
+/// The idle rust-analyzer pass later REPLACES these same file rows with fully
+/// qualified, multi-kind symbols and the cross-file reference edges tree-sitter
+/// cannot see. So overlay rows are a fresh-but-coarse stand-in between saves,
+/// never the final word. Lines are 0-based to match the SCIP protobuf ingest
+/// (`scip_export::parse_scip_file`), NOT the 1-based facts convention.
+///
+/// Returns an empty vec for a file whose extension no [`LangPack`] claims.
+#[cfg(feature = "treesitter")]
+pub fn extract_symbol_defs(rel: &str, src: &str) -> Vec<corpus_engine_scip::ScipSymbolRecord> {
+    let ext = match std::path::Path::new(rel).extension().and_then(|e| e.to_str()) {
+        Some(e) => e,
+        None => return Vec::new(),
+    };
+    let pack = match pack_for_extension(ext) {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
+    ts::extract_symbol_defs(rel, src, pack)
+}
+
 #[cfg(all(test, feature = "treesitter"))]
 mod tests {
     use super::*;
@@ -357,6 +474,47 @@ mod tests {
         assert!(tools.value.contains("None"));
         assert_eq!(tools.enclosing_fn, "make_runtime");
         assert!(f.str_lits.iter().any(|s| s.content.contains("prod")));
+    }
+
+    // ── extract_symbol_defs (structural watcher hot-path primitive) ──
+
+    #[test]
+    fn symbol_defs_capture_name_and_0based_span() {
+        // fn spans lines 0..2 (0-based): `fn foo() {` on row 0, `}` on row 2.
+        let src = "fn foo() {\n    let x = 1;\n}\n";
+        let defs = extract_symbol_defs("src/lib.rs", src);
+        assert_eq!(defs.len(), 1);
+        let d = &defs[0];
+        assert_eq!(d.name, "foo");
+        assert_eq!(d.kind, "function");
+        assert_eq!(d.language, "rust");
+        assert_eq!(d.file_path, "src/lib.rs");
+        assert_eq!(d.qualified_name, ""); // bare — rust-analyzer fills this later
+        assert_eq!(d.line_start, 0, "0-based to match SCIP ingest");
+        assert_eq!(d.line_end, 2, "end = enclosing fn node, not the name node");
+    }
+
+    #[test]
+    fn symbol_defs_multiple_functions() {
+        let src = "fn a() {}\nfn b() {\n  let z=2;\n}\n";
+        let mut names: Vec<String> =
+            extract_symbol_defs("m.rs", src).into_iter().map(|d| d.name).collect();
+        names.sort();
+        assert_eq!(names, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn symbol_defs_python() {
+        let defs = extract_symbol_defs("app.py", "def handler(req):\n    return 1\n");
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].name, "handler");
+        assert_eq!(defs[0].language, "python");
+    }
+
+    #[test]
+    fn symbol_defs_unsupported_extension_is_empty() {
+        assert!(extract_symbol_defs("README.md", "# hi\nfn not_code() {}").is_empty());
+        assert!(extract_symbol_defs("noext", "fn x() {}").is_empty());
     }
 
     // The new Python pack: same three facts out of idiomatic Python.
