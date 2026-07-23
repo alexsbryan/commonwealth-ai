@@ -95,6 +95,12 @@ impl From<corpus_engine_scip::Error> for Error {
         match e {
             corpus_engine_scip::Error::Io(io) => Error::Io(io),
             corpus_engine_scip::Error::Database(s) => Error::Database(s),
+            // No dedicated corpus-engine variant; fold into Database but keep
+            // the "graph preserved" meaning in the message so callers/logs
+            // still see WHY the export refused to complete.
+            corpus_engine_scip::Error::ExportAborted(s) => {
+                Error::Database(format!("export aborted (existing graph preserved): {s}"))
+            }
         }
     }
 }

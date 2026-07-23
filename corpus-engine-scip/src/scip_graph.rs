@@ -1297,6 +1297,149 @@ impl ScipGraph {
         Ok(())
     }
 
+    /// Atomically replace ALL symbols/refs for this corpus in a single
+    /// transaction. The graph is never observably empty mid-swap, and on ANY
+    /// error the transaction rolls back — the prior graph is left intact.
+    ///
+    /// This is the write half of the "never wipe on failure" contract: callers
+    /// (`export_all`) collect a full, *viable* export first and only then swap
+    /// it in here. Contrast [`clear`] + [`ingest_symbols_and_refs`], where a
+    /// crash between the two leaves the graph empty. Scoped by `corpus_id` so a
+    /// shared multi-corpus DB only touches this corpus's rows.
+    pub async fn replace_all(
+        &self,
+        symbols: Vec<ScipSymbolRecord>,
+        refs: Vec<ScipRefRecord>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let corpus = self.corpus_id.clone();
+
+        conn.execute_batch("BEGIN TRANSACTION")
+            .map_err(|e| Error::Database(format!("replace_all begin: {e}")))?;
+
+        let txn: std::result::Result<(), rusqlite::Error> = (|| {
+            conn.execute("DELETE FROM refs WHERE corpus_id = ?", params![corpus])?;
+            conn.execute("DELETE FROM symbols WHERE corpus_id = ?", params![corpus])?;
+            for sym in &symbols {
+                conn.execute(
+                    "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![corpus, sym.name, sym.qualified_name, sym.kind, sym.file_path, sym.line_start, sym.line_end, sym.language],
+                )?;
+            }
+            for r in &refs {
+                conn.execute(
+                    "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.ref_kind],
+                )?;
+            }
+            Ok(())
+        })();
+
+        match txn {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")
+                    .map_err(|e| Error::Database(format!("replace_all commit: {e}")))?;
+                Ok(())
+            }
+            Err(e) => {
+                // Roll back so the prior graph survives a mid-swap failure.
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(Error::Database(format!(
+                    "replace_all failed (rolled back, graph preserved): {e}"
+                )))
+            }
+        }
+    }
+
+    /// Incrementally merge a re-export of ONLY the given `files`: delete each
+    /// file's prior symbols/refs and insert the freshly-parsed ones, all in one
+    /// transaction, leaving every OTHER file's rows untouched. Rolls back on
+    /// error. On success, the merged files are removed from the stale set (see
+    /// [`mark_file_stale`] / [`staleness_for`]) so agents stop seeing the
+    /// "call sites may be stale" caution for files that are now fresh.
+    ///
+    /// This is the storage primitive behind the changed-files incremental path:
+    /// an agent editing a handful of files gets those re-indexed in
+    /// milliseconds without a full multi-minute re-export, and a failure here
+    /// never degrades the rest of the graph. `symbols`/`refs` MUST belong to
+    /// `files` (the caller filters the exporter output by `file_path`).
+    pub async fn replace_files(
+        &self,
+        files: &[String],
+        symbols: Vec<ScipSymbolRecord>,
+        refs: Vec<ScipRefRecord>,
+    ) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+        {
+            let conn = self.conn.lock().await;
+            let corpus = self.corpus_id.clone();
+
+            conn.execute_batch("BEGIN TRANSACTION")
+                .map_err(|e| Error::Database(format!("replace_files begin: {e}")))?;
+
+            let txn: std::result::Result<(), rusqlite::Error> = (|| {
+                for f in files {
+                    conn.execute(
+                        "DELETE FROM symbols WHERE corpus_id = ? AND file_path = ?",
+                        params![corpus, f],
+                    )?;
+                    conn.execute(
+                        "DELETE FROM refs WHERE corpus_id = ? AND file_path = ?",
+                        params![corpus, f],
+                    )?;
+                }
+                for sym in &symbols {
+                    conn.execute(
+                        "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![corpus, sym.name, sym.qualified_name, sym.kind, sym.file_path, sym.line_start, sym.line_end, sym.language],
+                    )?;
+                }
+                for r in &refs {
+                    conn.execute(
+                        "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.ref_kind],
+                    )?;
+                }
+                Ok(())
+            })();
+
+            match txn {
+                Ok(()) => conn
+                    .execute_batch("COMMIT")
+                    .map_err(|e| Error::Database(format!("replace_files commit: {e}")))?,
+                Err(e) => {
+                    let _ = conn.execute_batch("ROLLBACK");
+                    return Err(Error::Database(format!(
+                        "replace_files failed (rolled back, graph preserved): {e}"
+                    )));
+                }
+            }
+        } // conn lock dropped here before touching the stale-set lock
+
+        // These files are now fresh — drop them from the stale set so the
+        // staleness caution stops firing for them.
+        {
+            let mut stale = self.stale_files.write().await;
+            for f in files {
+                stale.remove(f);
+            }
+        }
+        self.persist_stale_files().await;
+        Ok(())
+    }
+
+    /// Snapshot of the files the CodeWatcher has marked stale since the last
+    /// export — the work-list for an incremental re-index.
+    pub async fn stale_files_snapshot(&self) -> Vec<String> {
+        self.stale_files.read().await.iter().cloned().collect()
+    }
+
     /// A single-lock snapshot of graph health metrics.
     /// Used by IndexHealthChecker to classify staleness without
     /// acquiring the mutex multiple times per tool call.
@@ -1907,6 +2050,75 @@ mod integrity_tests {
             1,
             "import_from_path must not accumulate duplicates"
         );
+    }
+
+    fn sym(name: &str, file: &str) -> ScipSymbolRecord {
+        ScipSymbolRecord {
+            name: name.into(),
+            qualified_name: String::new(),
+            kind: "function".into(),
+            file_path: file.into(),
+            line_start: 1,
+            line_end: 2,
+            language: "rust".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn replace_all_swaps_contents_atomically() {
+        let g = ScipGraph::open_in_memory("alpha").unwrap();
+        g.ingest_symbols_and_refs(vec![sym("old_a", "a.rs"), sym("old_b", "b.rs")], vec![])
+            .await
+            .unwrap();
+        assert_eq!(g.symbol_count().await, 2);
+
+        // Full replace with a different set — old rows gone, new rows present.
+        g.replace_all(vec![sym("new_c", "c.rs")], vec![]).await.unwrap();
+        assert_eq!(g.symbol_count().await, 1);
+        assert!(g.find_symbols_by_name("old_a", None, 8).await.unwrap().is_empty(), "replace_all must clear prior rows");
+        assert!(!g.find_symbols_by_name("new_c", None, 8).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn replace_files_merges_only_named_files() {
+        let g = ScipGraph::open_in_memory("alpha").unwrap();
+        g.ingest_symbols_and_refs(
+            vec![sym("a_one", "a.rs"), sym("a_two", "a.rs"), sym("b_one", "b.rs")],
+            vec![],
+        )
+        .await
+        .unwrap();
+        assert_eq!(g.symbol_count().await, 3);
+
+        // Re-index ONLY a.rs (now with a single symbol). b.rs must be untouched.
+        g.replace_files(&["a.rs".to_string()], vec![sym("a_new", "a.rs")], vec![])
+            .await
+            .unwrap();
+
+        assert_eq!(g.symbol_count().await, 2, "a.rs replaced (2→1), b.rs kept (1)");
+        assert!(g.find_symbols_by_name("a_one", None, 8).await.unwrap().is_empty(), "old a.rs rows gone");
+        assert!(!g.find_symbols_by_name("a_new", None, 8).await.unwrap().is_empty(), "new a.rs row present");
+        assert!(!g.find_symbols_by_name("b_one", None, 8).await.unwrap().is_empty(), "b.rs untouched");
+    }
+
+    #[tokio::test]
+    async fn replace_files_drops_merged_files_from_stale_set() {
+        let g = ScipGraph::open_in_memory("alpha").unwrap();
+        g.ingest_symbols_and_refs(vec![sym("a_one", "a.rs")], vec![])
+            .await
+            .unwrap();
+        g.mark_file_stale("a.rs").await;
+        g.mark_file_stale("b.rs").await;
+        assert_eq!(g.stale_file_count().await, 2);
+
+        // Merging a.rs makes it fresh; b.rs stays stale.
+        g.replace_files(&["a.rs".to_string()], vec![sym("a_new", "a.rs")], vec![])
+            .await
+            .unwrap();
+
+        let stale = g.stale_files_snapshot().await;
+        assert!(!stale.contains(&"a.rs".to_string()), "merged file left the stale set");
+        assert!(stale.contains(&"b.rs".to_string()), "unmerged file stays stale");
     }
 
     /// Two source DBs with different corpus_ids must coexist in

@@ -343,8 +343,78 @@ pub async fn export_all(
         return Ok(summary);
     }
 
-    // Clear existing data before re-importing.
-    graph.clear().await?;
+    // Symbol count BEFORE we touch anything. The viability check at the end
+    // uses it to refuse replacing a populated graph with an empty/degraded
+    // export. We deliberately DO NOT clear up front any more: the old
+    // `graph.clear()` here is exactly what wiped a good index when a
+    // present-in-PATH-but-broken exporter (e.g. a stale rust-analyzer shim)
+    // then failed at runtime, leaving the graph empty yet returning Ok.
+    let prior_symbols = graph.symbol_count().await;
+
+    // Run every available exporter and COLLECT all parsed rows (no graph
+    // mutation yet) — shared with `export_changed` so the exporter plumbing
+    // lives in exactly one place.
+    let (all_symbols, all_refs) =
+        run_exporters_collect(&exporters, resolved_roots, output_dir, progress, &mut summary)
+            .await?;
+
+    // ── Viability gate — the "never wipe on failure" contract ──
+    // Only now, with the full export collected, do we decide whether it is safe
+    // to replace the graph. A non-viable export (0 symbols after an exporter
+    // failed, a populated graph collapsing to empty, or a >50% symbol loss
+    // coinciding with a failure) is REFUSED: we return `ExportAborted` and
+    // leave the existing graph untouched, rather than swapping in a wipe and
+    // reporting success. Callers fail closed on this — the CLI prints an error
+    // and the daemon Reindexer's `?` bails before its staging→live rename.
+    let had_failures = !summary.languages_skipped.is_empty();
+    if let Err(reason) = export_is_viable(all_symbols.len(), had_failures, prior_symbols) {
+        tracing::error!(
+            collected_symbols = all_symbols.len(),
+            prior_symbols,
+            had_failures,
+            skipped = ?summary.languages_skipped.iter().map(|s| &s.language).collect::<Vec<_>>(),
+            "SCIP export refused — existing graph preserved: {reason}"
+        );
+        return Err(Error::ExportAborted(reason));
+    }
+
+    // Atomically swap the freshly-collected export in. The graph is never
+    // observably empty mid-swap, and a failure here rolls back to the prior
+    // graph (see `ScipGraph::replace_all`).
+    graph.replace_all(all_symbols, all_refs).await?;
+
+    // Record the export in the graph.
+    graph.record_export().await;
+    graph
+        .record_languages(
+            &summary
+                .languages_exported
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>(),
+        )
+        .await;
+
+    Ok(summary)
+}
+
+/// Run every available exporter across the resolved workspace roots and
+/// COLLECT all parsed (symbols, refs). Per-language failures are recorded
+/// into `summary.languages_skipped` and the run continues — the caller
+/// decides viability and how to apply the rows. Shared by `export_all`
+/// (full atomic replace) and `export_changed` (per-file merge); neither
+/// touches the graph here.
+async fn run_exporters_collect(
+    exporters: &[&'static ScipExporterConfig],
+    resolved_roots: &[std::path::PathBuf],
+    output_dir: &Path,
+    progress: &(dyn Fn(ScipProgress<'_>) + Send + Sync),
+    summary: &mut ExportSummary,
+) -> Result<(Vec<ScipSymbolRecord>, Vec<ScipRefRecord>)> {
+    // Collect every language's parsed rows first, then swap them in atomically
+    // via `replace_all` — never clear-then-hope.
+    let mut all_symbols: Vec<ScipSymbolRecord> = Vec::new();
+    let mut all_refs: Vec<ScipRefRecord> = Vec::new();
 
     std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
@@ -454,12 +524,15 @@ pub async fn export_all(
                 continue;
             }
 
-            // Parse and ingest this language's SCIP file.
+            // Parse this language's SCIP file and COLLECT its rows. We do not
+            // touch the graph here — the atomic replace happens once at the
+            // end, only if the whole export proves viable.
             let (symbols, refs) = parse_scip_file(&scip_path, exporter.language_id)?;
             let sym_count = symbols.len();
             let ref_count = refs.len();
 
-            graph.ingest_symbols_and_refs(symbols, refs).await?;
+            all_symbols.extend(symbols);
+            all_refs.extend(refs);
 
             if !summary
                 .languages_exported
@@ -483,19 +556,146 @@ pub async fn export_all(
         }
     }
 
-    // Record the export in the graph.
-    graph.record_export().await;
-    graph
-        .record_languages(
-            &summary
-                .languages_exported
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>(),
-        )
-        .await;
+    Ok((all_symbols, all_refs))
+}
 
-    Ok(summary)
+/// Summary of an incremental changed-files re-index.
+#[derive(Debug, Default)]
+pub struct ChangedExportSummary {
+    /// Files whose rows were re-indexed (deleted + re-inserted).
+    pub files_merged: usize,
+    pub symbols_merged: usize,
+    pub refs_merged: usize,
+    pub languages: Vec<String>,
+    pub languages_skipped: Vec<SkippedLanguage>,
+}
+
+/// Incrementally re-index ONLY `changed_files` and merge the result into the
+/// graph, leaving every OTHER file's symbols/refs untouched. Runs the same
+/// exporters as `export_all`, keeps just the rows whose `file_path` EXACTLY
+/// matches a changed file, and applies them via `ScipGraph::replace_files`
+/// (which also drops the merged files from the stale set).
+///
+/// Correctness rests on one invariant the whole system already relies on: the
+/// stored `file_path` (`doc.relative_path`), the stale-set entries
+/// (`CodeWatcher` passes the workspace-relative path), and `changed_files`
+/// here are all the SAME workspace-relative form — so exact matching on the
+/// delete-set and the insert rows never drifts. Callers should pass the
+/// relative paths from `ScipGraph::stale_files_snapshot()` (or git).
+///
+/// This NEVER wipes on failure: a failed exporter simply contributes no rows,
+/// and unchanged files keep their entries. NOTE: whole-workspace exporters
+/// (e.g. rust-analyzer) still run over the whole workspace, so the exporter
+/// cost is unchanged for Rust — the win here is a scoped, safe DB merge and
+/// staleness clearing, not a cheaper exporter run. True sub-second Rust
+/// freshness wants a tree-sitter overlay feeding `replace_files` directly.
+pub async fn export_changed(
+    repo_root: &Path,
+    output_dir: &Path,
+    graph: &ScipGraph,
+    changed_files: &[String],
+    workspace_roots: Option<&[std::path::PathBuf]>,
+    progress: &(dyn Fn(ScipProgress<'_>) + Send + Sync),
+) -> Result<ChangedExportSummary> {
+    let mut result = ChangedExportSummary::default();
+    if changed_files.is_empty() {
+        return Ok(result);
+    }
+
+    // Resolve roots (same policy as export_all).
+    let owned_auto: Vec<std::path::PathBuf>;
+    let resolved_roots: &[std::path::PathBuf] = match workspace_roots {
+        Some(roots) => roots,
+        None => {
+            owned_auto = {
+                let roots = find_cargo_workspace_roots(repo_root);
+                if roots.is_empty() {
+                    vec![repo_root.to_path_buf()]
+                } else {
+                    roots
+                }
+            };
+            &owned_auto
+        }
+    };
+
+    let exporters = check_exporters(resolved_roots).available;
+    if exporters.is_empty() {
+        return Ok(result);
+    }
+    std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
+
+    let mut summary = ExportSummary::default();
+    let (collected_syms, collected_refs) =
+        run_exporters_collect(&exporters, resolved_roots, output_dir, progress, &mut summary)
+            .await?;
+
+    // Keep only rows for the changed files (exact match on the shared
+    // relative form — see the invariant above).
+    let changed: std::collections::HashSet<&str> =
+        changed_files.iter().map(|s| s.as_str()).collect();
+    let syms: Vec<ScipSymbolRecord> = collected_syms
+        .into_iter()
+        .filter(|s| changed.contains(s.file_path.as_str()))
+        .collect();
+    let refs: Vec<ScipRefRecord> = collected_refs
+        .into_iter()
+        .filter(|r| changed.contains(r.file_path.as_str()))
+        .collect();
+
+    result.files_merged = changed_files.len();
+    result.symbols_merged = syms.len();
+    result.refs_merged = refs.len();
+    result.languages = summary.languages_exported.clone();
+    result.languages_skipped = summary.languages_skipped;
+
+    // Merge only the changed files' rows; every other file stays put, and a
+    // failed exporter cannot degrade them.
+    graph.replace_files(changed_files, syms, refs).await?;
+
+    Ok(result)
+}
+
+/// Decide whether a freshly-collected full export may replace the live graph,
+/// or whether replacing it would destroy data (the P0 "refresh wiped the
+/// index" class). Pure — no I/O — so the policy is unit-testable in isolation.
+///
+/// Returns `Err(reason)` when the caller must PRESERVE the existing graph:
+///   (a) 0 symbols collected while an exporter failed — the canonical
+///       broken-exporter wipe (protects the daemon's empty-staging→rename
+///       path, where `prior_symbols` is 0 and only this rule fires);
+///   (b) a previously-populated graph collapsing to 0 symbols, even with no
+///       reported failure — zero-from-nonzero on a full export is a wipe
+///       signature (protects the CLI live-graph path);
+///   (c) a >50% symbol loss that coincides with an exporter failure — far more
+///       likely a partial/broken export than a real mass deletion.
+/// Otherwise `Ok(())` — including legitimate first builds (prior 0, no failure)
+/// and normal edits.
+fn export_is_viable(
+    collected_symbols: usize,
+    had_failures: bool,
+    prior_symbols: usize,
+) -> std::result::Result<(), String> {
+    if collected_symbols == 0 && had_failures {
+        return Err(format!(
+            "export produced 0 symbols and one or more exporters failed at runtime; \
+             preserving existing graph ({prior_symbols} symbols)"
+        ));
+    }
+    if collected_symbols == 0 && prior_symbols > 0 {
+        return Err(format!(
+            "export produced 0 symbols but the graph currently holds {prior_symbols}; \
+             a full export collapsing to empty is a wipe — preserving existing graph"
+        ));
+    }
+    if had_failures && prior_symbols > 0 && collected_symbols.saturating_mul(2) < prior_symbols {
+        return Err(format!(
+            "export produced {collected_symbols} symbols, under half the existing \
+             {prior_symbols}, while an exporter failed; likely a degraded export — \
+             preserving existing graph"
+        ));
+    }
+    Ok(())
 }
 
 // ─── SCIP file parsing ──────────────────────────────────────
@@ -726,6 +926,69 @@ pub fn format_export_report(summary: &ExportSummary) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── export_is_viable: the "never wipe on failure" policy ──
+
+    #[test]
+    fn viable_normal_full_export() {
+        // Healthy re-export of a populated repo, no failures.
+        assert!(export_is_viable(180_000, false, 179_500).is_ok());
+    }
+
+    #[test]
+    fn viable_first_build_from_empty() {
+        // First ever export: prior 0, no failure, real symbols → allowed.
+        assert!(export_is_viable(50_000, false, 0).is_ok());
+    }
+
+    #[test]
+    fn viable_legit_empty_repo() {
+        // Nothing to index and nothing failed (e.g. empty staging, empty repo).
+        assert!(export_is_viable(0, false, 0).is_ok());
+    }
+
+    #[test]
+    fn refused_zero_symbols_with_exporter_failure() {
+        // THE P0: a present-but-broken exporter fails at runtime → 0 symbols.
+        // Must be refused regardless of prior count (protects the daemon's
+        // empty-staging→rename path where prior is 0).
+        assert!(export_is_viable(0, true, 0).is_err());
+        assert!(export_is_viable(0, true, 189_000).is_err());
+    }
+
+    #[test]
+    fn refused_populated_graph_collapsing_to_empty() {
+        // Zero-from-nonzero on a full export is a wipe even with no reported
+        // failure (protects the CLI live-graph path).
+        assert!(export_is_viable(0, false, 189_000).is_err());
+    }
+
+    #[test]
+    fn refused_catastrophic_drop_with_failure() {
+        // >50% symbol loss coinciding with a failure → likely degraded export.
+        assert!(export_is_viable(50_000, true, 189_000).is_err());
+    }
+
+    #[test]
+    fn allowed_moderate_drop_without_failure() {
+        // A real refactor deleting some code, no exporter failure → allowed
+        // (we only treat a drop as suspicious when an exporter actually failed).
+        assert!(export_is_viable(120_000, false, 189_000).is_ok());
+    }
+
+    #[test]
+    fn allowed_drop_over_half_without_failure() {
+        // Even a large drop is allowed when NO exporter failed — could be a
+        // legitimate mass deletion; we don't second-guess a clean export.
+        assert!(export_is_viable(1_000, false, 189_000).is_ok());
+    }
+
+    #[test]
+    fn allowed_minor_drop_with_failure() {
+        // A failure in one small language plus a modest overall dip (>half
+        // retained) is normal partial coverage, not a wipe.
+        assert!(export_is_viable(180_000, true, 189_000).is_ok());
+    }
 
     #[test]
     fn all_exporters_not_empty() {

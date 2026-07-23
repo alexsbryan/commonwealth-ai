@@ -872,6 +872,15 @@ mod tests {
             );
         }
 
+        // `code_search` is a canonical tool with NO deprecated alias (it was
+        // never renamed — it was restored to the MCP surface on 2026-07-22, see
+        // mcp_surface.rs). It must appear, and it must NOT contribute an alias
+        // mirror, hence the total below is 7 (4 canonical + 3 aliases), not 8.
+        assert!(
+            names.contains(&"code_search"),
+            "Canonical tool `code_search` missing from tools/list — got {names:?}"
+        );
+
         // Deprecated aliases also appear, marked as such, so a
         // cached client keeps working.
         for legacy in &["symbol_lookup", "find_callers", "find_callees"] {
@@ -900,11 +909,13 @@ mod tests {
             );
         }
 
-        // 3 canonicals + 3 deprecated mirrors = 6.
+        // 4 canonicals (symbols, callers, callees, code_search) + 3 deprecated
+        // mirrors (symbol_lookup, find_callers, find_callees) = 7. code_search
+        // has no alias, so it adds one canonical without a mirror.
         assert_eq!(
             tools.len(),
-            6,
-            "expected 3 canonical + 3 alias mirrors, got {names:?}"
+            7,
+            "expected 4 canonical + 3 alias mirrors, got {names:?}"
         );
     }
 
