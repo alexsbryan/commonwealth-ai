@@ -30,6 +30,7 @@
 //! and Lance errors at column resolution before the predicate can run.
 
 pub mod brief;
+pub mod briefing_tool;
 pub mod code_search;
 pub mod recent_changes;
 pub mod working_set;
@@ -206,6 +207,8 @@ pub use callers::FindCallersTool;
 pub use capability_map_tool::CapabilityMapTool;
 #[cfg(feature = "treesitter")]
 pub use symbol_lookup::SymbolLookupTool;
+
+pub use briefing_tool::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
 
 #[cfg(feature = "treesitter")]
 pub use get_run_output::GetRunOutputTool;

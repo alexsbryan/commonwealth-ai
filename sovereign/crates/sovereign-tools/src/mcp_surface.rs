@@ -107,6 +107,12 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // `drift_posture` (freshness gate). Reads the canonical drift
     // JSON sidecar; never re-runs the LLM pipeline.
     "drift_findings",
+    // Session-orientation brief — the same renderer the SessionStart
+    // hook injects (working set + work-in-flight + drift posture +
+    // notes + recent activity), callable by any MCP client so peer
+    // agents and mid-session re-orientation don't depend on the
+    // `svrn code brief` CLI sibling being on PATH.
+    "briefing",
     // Code facts — the embed-free deterministic fact base (tree-sitter
     // fn defs / config construction-fields / string literals), cited to
     // file:line and freshness-stamped. The structural companion to

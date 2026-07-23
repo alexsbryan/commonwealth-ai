@@ -159,18 +159,33 @@ impl Tool for DeclareScopeTool {
             .map_err(map_err)?;
 
         // Phase 1: SCIP resolution deferred. Store the user's string
-        // verbatim in `file_path` so subsequent `work_in_flight`
-        // queries with the same string find it (see `matches_scope`
-        // fallback in `store.rs`). Phase 2 promotes this to actual
-        // SCIP-graph lookup with `scip_was_fresh` reflecting reality.
+        // in `file_path` so subsequent `work_in_flight` queries find
+        // it (see `matches_scope` fallback in `store.rs`). Phase 2
+        // promotes this to actual SCIP-graph lookup with
+        // `scip_was_fresh` reflecting reality.
+        //
+        // Canonical path shape: REPO-RELATIVE. An absolute path
+        // inside this repo is stripped at write time — the observer
+        // normalizes its CodeWatcher paths the same way — so
+        // file-mode readers never have to guess which shape the
+        // writer used. (Before 2026-07-23 the two writers disagreed:
+        // observations were absolute, claims verbatim; every
+        // relative file query silently missed all observations.)
         let symbol_refs: Vec<SymbolRef> = symbols
             .iter()
             .filter_map(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
-            .map(|s| SymbolRef {
-                scip_symbol: None,
-                file_path: std::path::PathBuf::from(s),
-                scip_was_fresh: false,
+            .map(|s| {
+                let raw = std::path::Path::new(s);
+                let file_path = raw
+                    .strip_prefix(&self.repo_root)
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|_| raw.to_path_buf());
+                SymbolRef {
+                    scip_symbol: None,
+                    file_path,
+                    scip_was_fresh: false,
+                }
             })
             .collect();
         if symbol_refs.is_empty() {

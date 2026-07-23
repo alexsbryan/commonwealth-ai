@@ -31,6 +31,111 @@ impl WorkInFlightTool {
     }
 }
 
+/// Live in-flight signals for one scope, already TTL-filtered,
+/// graded, and stripped of the caller's own sessions. JSON shape is
+/// exactly what the `work_in_flight` tool returns in `claims` /
+/// `observations`.
+pub struct InFlight {
+    /// Live explicit claims (grade `declared`), TTL-filtered.
+    pub claims: Vec<Value>,
+    /// CodeWatcher observations graded `active`/`recent` at read time.
+    pub observations: Vec<Value>,
+}
+
+/// Query + filter the atlas for one scope. Single source of truth for
+/// TTL expiry, read-time grading, and self-session exclusion — shared
+/// by the `work_in_flight` tool and the session-boot brief's "Work in
+/// flight" section so the two surfaces can never disagree.
+///
+/// `caller_token` identifies the caller's own sessions (paired with
+/// this node's id); pass `None` for callers with no registered agent
+/// session (e.g. the CLI brief) — same semantics the tool uses when
+/// `ToolContext.agent_session_token` is absent.
+pub fn collect_in_flight(
+    store: &WorkAtlasStore,
+    scope: &str,
+    match_mode: ScopeMatch,
+    caller_token: Option<&str>,
+) -> std::result::Result<InFlight, String> {
+    let now = now_secs();
+    let claims = store
+        .list_claims_for_scope(scope, match_mode)
+        .map_err(|e| e.to_string())?;
+    let observations = store
+        .list_observations_for_scope(scope, match_mode)
+        .map_err(|e| e.to_string())?;
+
+    let caller_node = store.node_id();
+    let self_session_ids: std::collections::HashSet<uuid::Uuid> = store
+        .scan_sessions()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|s| s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token)
+        .map(|s| s.session_id)
+        .collect();
+
+    let mut filtered_claims: Vec<Value> = Vec::with_capacity(claims.len());
+    for c in claims {
+        if c.ttl_expires_at < now {
+            continue;
+        }
+        if self_session_ids.contains(&c.session_id) {
+            continue;
+        }
+        let session_node = store
+            .get_session(c.session_id)
+            .ok()
+            .flatten()
+            .map(|s| s.node_id);
+        filtered_claims.push(json!({
+            "claim_id":       c.claim_id.to_string(),
+            "session_id":     c.session_id.to_string(),
+            "intent":         c.intent,
+            "declared_at":    c.declared_at,
+            "ttl_expires_at": c.ttl_expires_at,
+            "node_id":        session_node.map(|n| n.to_string()),
+            "confidence":     ConfidenceGrade::Declared.id(),
+            // The claim's own declared scopes (file-path form), so a
+            // consumer that matched this claim via a broad prefix
+            // query can still show WHAT was claimed.
+            "scopes":         c.symbol_refs.iter()
+                                  .map(|r| r.file_path.to_string_lossy())
+                                  .collect::<Vec<_>>(),
+        }));
+    }
+
+    let mut filtered_observations: Vec<Value> = Vec::with_capacity(observations.len());
+    for o in observations {
+        if self_session_ids.contains(&o.session_id) {
+            continue;
+        }
+        // Grade computed at read time so an Observation gracefully
+        // degrades Active → Recent → dropped as time passes.
+        let Some(grade) = observation_grade(now, o.last_observed_at, o.source) else {
+            continue;
+        };
+        let session_node = store
+            .get_session(o.session_id)
+            .ok()
+            .flatten()
+            .map(|s| s.node_id);
+        filtered_observations.push(json!({
+            "session_id":         o.session_id.to_string(),
+            "file_path":          o.file_path.to_string_lossy(),
+            "first_observed_at":  o.first_observed_at,
+            "last_observed_at":   o.last_observed_at,
+            "event_count":        o.event_count,
+            "node_id":            session_node.map(|n| n.to_string()),
+            "confidence":         grade.id(),
+        }));
+    }
+
+    Ok(InFlight {
+        claims: filtered_claims,
+        observations: filtered_observations,
+    })
+}
+
 #[async_trait]
 impl Tool for WorkInFlightTool {
     fn descriptor(&self) -> ToolDescriptor {
@@ -45,7 +150,11 @@ impl Tool for WorkInFlightTool {
                           (Active ≤5min, Recent ≤30min). Phase 2: Observations \
                           are file-level — `match_mode=file` matches them; \
                           symbol-graph distance arrives in Phase 2b. \
-                          Excludes the caller's own session."
+                          Excludes the caller's own session. \
+                          File paths are stored REPO-RELATIVE (canonical since \
+                          2026-07-23) — query with repo-relative paths. An \
+                          empty scope with match_mode=file matches EVERYTHING: \
+                          the supported way to fetch all live signals at once."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -186,102 +295,29 @@ impl Tool for WorkInFlightTool {
             }
         };
 
-        let now = now_secs();
-        let claims = self
-            .store
-            .list_claims_for_scope(scope, match_mode)
-            .map_err(|e| Error::Tool {
-                tool_id: "work_in_flight".into(),
-                message: e.to_string(),
-            })?;
-        let observations = self
-            .store
-            .list_observations_for_scope(scope, match_mode)
-            .map_err(|e| Error::Tool {
-                tool_id: "work_in_flight".into(),
-                message: e.to_string(),
-            })?;
-
-        let caller_token = ctx.agent_session_token.as_deref();
-        let caller_node = self.store.node_id();
-        let self_session_ids: std::collections::HashSet<uuid::Uuid> = self
-            .store
-            .scan_sessions()
-            .map_err(|e| Error::Tool {
-                tool_id: "work_in_flight".into(),
-                message: e.to_string(),
-            })?
-            .into_iter()
-            .filter(|s| {
-                s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token
-            })
-            .map(|s| s.session_id)
-            .collect();
-
-        let mut filtered_claims: Vec<Value> = Vec::with_capacity(claims.len());
-        for c in claims {
-            if c.ttl_expires_at < now {
-                continue;
-            }
-            if self_session_ids.contains(&c.session_id) {
-                continue;
-            }
-            let session_node = self
-                .store
-                .get_session(c.session_id)
-                .ok()
-                .flatten()
-                .map(|s| s.node_id);
-            filtered_claims.push(json!({
-                "claim_id":       c.claim_id.to_string(),
-                "session_id":     c.session_id.to_string(),
-                "intent":         c.intent,
-                "declared_at":    c.declared_at,
-                "ttl_expires_at": c.ttl_expires_at,
-                "node_id":        session_node.map(|n| n.to_string()),
-                "confidence":     ConfidenceGrade::Declared.id(),
-            }));
-        }
-
-        let mut filtered_observations: Vec<Value> = Vec::with_capacity(observations.len());
-        for o in observations {
-            if self_session_ids.contains(&o.session_id) {
-                continue;
-            }
-            // Grade computed at read time so an Observation gracefully
-            // degrades Active → Recent → dropped as time passes.
-            let Some(grade) = observation_grade(now, o.last_observed_at, o.source) else {
-                continue;
-            };
-            let session_node = self
-                .store
-                .get_session(o.session_id)
-                .ok()
-                .flatten()
-                .map(|s| s.node_id);
-            filtered_observations.push(json!({
-                "session_id":         o.session_id.to_string(),
-                "file_path":          o.file_path.to_string_lossy(),
-                "first_observed_at":  o.first_observed_at,
-                "last_observed_at":   o.last_observed_at,
-                "event_count":        o.event_count,
-                "node_id":            session_node.map(|n| n.to_string()),
-                "confidence":         grade.id(),
-            }));
-        }
+        let in_flight = collect_in_flight(
+            &self.store,
+            scope,
+            match_mode,
+            ctx.agent_session_token.as_deref(),
+        )
+        .map_err(|message| Error::Tool {
+            tool_id: "work_in_flight".into(),
+            message,
+        })?;
 
         tracing::debug!(
             scope,
             match_mode = match_mode_str,
-            claim_hits = filtered_claims.len(),
-            observation_hits = filtered_observations.len(),
+            claim_hits = in_flight.claims.len(),
+            observation_hits = in_flight.observations.len(),
             "work_atlas:query"
         );
         Ok(StepOutput::Json(json!({
             "scope": scope,
             "match_mode": match_mode_str,
-            "claims": filtered_claims,
-            "observations": filtered_observations,
+            "claims": in_flight.claims,
+            "observations": in_flight.observations,
         })))
     }
 }
