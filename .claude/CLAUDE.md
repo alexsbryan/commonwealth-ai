@@ -77,6 +77,8 @@ The /context audit on 2026-05-12 attributed 74.3k tokens to file reads, with ~22
 
 When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the returned site. The combined cost beats a blind Read every time.
 
+**See your own context spend — `sovereign cache-audit`.** This parses the local Claude Code transcripts and reports, per session, where the token/cache budget went plus the **raw-acquisition ratio**: raw file/grep tokens pulled into context vs. code-intelligence / RAG calls made. `cache-audit --sort ratio` ranks the worst offenders; `cache-audit --session <id>` deep-dives one. It exists because a fleet agent spent ~70% of its budget on cache-read (re-sending a large context every turn) — and every session audited so far shows hundreds of thousands of raw-read tokens against **zero** `symbols`/`callers`/`code_search`/`notes` calls. That is the leak this whole section is trying to prevent; the tool makes it measurable. Run it on yourself when a task ran long.
+
 ### When to use which tool
 
 | Situation | Tool |
@@ -95,6 +97,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Is anyone else on the mesh touching this?" | `work_in_flight(scope, match_mode)` |
 | "Where is the coupling actually? / which symbols carry it?" | `arch_report(corpus_id, include_git?)` |
 | "Architectural headlines + is the arch report current?" | `arch_posture()` |
+| "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
 | "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock gates) |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |

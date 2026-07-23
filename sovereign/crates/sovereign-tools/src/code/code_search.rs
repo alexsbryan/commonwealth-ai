@@ -192,6 +192,12 @@ impl Tool for CodeSearchTool {
             })?;
 
         let mut rows: Vec<CodeRow> = Vec::new();
+        // Track index health so an empty result is never mistaken for "the
+        // code doesn't exist" when the real cause is a missing/stale chunk
+        // index (the silent-degradation trap — a skipped corpus used to
+        // vanish into a `tracing::debug!`).
+        let code_corpora = indexes.iter().filter(|i| i.kind == CorpusKind::Code).count();
+        let mut opened_ok = 0usize;
         for info in &indexes {
             if info.kind != CorpusKind::Code {
                 continue;
@@ -199,6 +205,7 @@ impl Tool for CodeSearchTool {
             let Ok(index) = self.engine.open_index(&info.path).await else {
                 continue;
             };
+            opened_ok += 1;
             let table = index.table();
 
             // Vector-first if we have an embedding, else FTS.
@@ -257,16 +264,29 @@ impl Tool for CodeSearchTool {
 
         let mut text = format_approximate_response(query, &rows);
 
-        // Append index health note when no code indexes are present.
-        // Knowledge / catalog corpora don't count for this tool's purposes.
-        let indexes = self.engine.installed_indexes().await.unwrap_or_default();
-        let has_code = indexes.iter().any(|i| i.kind == CorpusKind::Code);
-        if !has_code {
+        // Index-health note (glassbox) — reuses the code-corpora tally from
+        // the search loop above rather than re-enumerating. Three distinct
+        // states so an empty result is never read as "the code isn't there":
+        //   - no code corpora installed  → build the index
+        //   - corpora present but some/all failed to open → DEGRADED (stale /
+        //     missing chunk index); the symbol may exist but not appear here
+        //   - corpora all opened, still empty → a genuine no-match (no note)
+        if code_corpora == 0 {
             text.push_str(
-                "\n\n---\nIndex: absent | 0 symbols\n\
+                "\n\n---\nIndex: absent | 0 code corpora\n\
                  Code index not built. Run `sovereign code index <path>` \
                  to enable semantic code search.",
             );
+        } else if opened_ok < code_corpora {
+            let failed = code_corpora - opened_ok;
+            text.push_str(&format!(
+                "\n\n---\nIndex: DEGRADED | {failed}/{code_corpora} code corpora unreadable\n\
+                 The chunk index for {failed} of {code_corpora} code corpora is missing or \
+                 stale, so these results are INCOMPLETE — a symbol you searched for may EXIST \
+                 but not appear here. Do not conclude the code is absent. Rebuild with \
+                 `sovereign project refresh`. For an exact name, `symbols` reads the SCIP graph \
+                 directly and is unaffected by this."
+            ));
         }
 
         Ok(StepOutput::Text(text))

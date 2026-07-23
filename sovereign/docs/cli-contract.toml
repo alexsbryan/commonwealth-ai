@@ -866,6 +866,21 @@ path = "stop"
 binary = "dispatcher"
 hidden = true
 [[command]]
+# Glassbox context-spend telemetry over Claude Code transcripts
+# (cache_audit_cmd.rs, 2026-07-22). In-process, offline, read-only — parses
+# ~/.claude/projects/*.jsonl. Documented internal surface (CLI_REFERENCE.md).
+path = "cache-audit"
+binary = "dispatcher"
+visibility = "internal"
+flags = [
+  { name = "--project", takes_value = true },
+  { name = "--dir", takes_value = true },
+  { name = "--session", takes_value = true },
+  { name = "--last", takes_value = true },
+  { name = "--sort", takes_value = true },
+  { name = "--json" },
+]
+[[command]]
 # Self-update: resolves the newest published cli-v* by max semver and
 # re-runs the canonical installer pinned to it (update_cmd.rs, 2026-07-15).
 # Hidden until it graduates to the documented surface.
