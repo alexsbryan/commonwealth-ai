@@ -176,6 +176,19 @@ Glassbox telemetry for the fleet's context spend. Parses the local Claude Code t
 | `--sort <key>` | `cost` \| `recent` \| `ratio` (default `cost`) |
 | `--json` | Machine-readable output |
 
+### `svrn session`
+
+Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` shows this project's Claude Code transcripts with a first-user-turn hint; `session distill <id>` extracts the deterministic **narrative spine** (real user turns + assistant texts + the edit working-set — tool results and hook payloads are dropped) and synthesizes a schema-v1 **session frame**: the ≤2k-token essential state (goal, position, next actions, decisions, invariants, dead ends, working set, verification) a successor agent needs to seamlessly continue a dead session's work. Frontmatter and the Working-set section are assembled deterministically by the CLI; the LLM writes only the narrative sections and is validated against the section contract (invalid frames are written but flagged, exit 1). Output: `~/.sovereign/sessions/<session_id>/{frame.md,spine.txt}`. Distillation quality is graded against `quality/session-frame.golden.md`.
+
+| Flag | Description |
+|---|---|
+| `--project <path>` | Project working dir whose transcripts to read (default: current dir) |
+| `--dir <path>` | Explicit transcript directory (overrides `--project`) |
+| `--no-llm` | Stop after the spine (also the daemon-down fallback) |
+| `--model <id>` | Chat model for synthesis (default `primary`) |
+| `--max-tokens <n>` | Synthesis output budget (default 3000) |
+| `--stdout` | Print the frame as well as writing it |
+
 ### `svrn recipe`
 
 Run and curate corpus ingestion recipes.

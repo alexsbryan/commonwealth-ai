@@ -14,11 +14,8 @@ pub const DEFAULT_CLIENT_PORT: u16 = 9741;
 /// `http://localhost:<port>/v1` — the OpenAI-compatible API root.
 /// Use `v1_models_url` for the readiness probe.
 ///
-/// Only consumed by `awareness_cmd` (gated behind the `dev-tools`
-/// feature). Gating the function on the same feature keeps the
-/// default-feature build lint-clean without sprinkling
-/// `#[allow(dead_code)]`.
-#[cfg(feature = "dev-tools")]
+/// Consumed by `session_cmd` (default build) and `awareness_cmd`
+/// (`dev-tools`), so it is no longer feature-gated.
 pub fn v1_url(port: u16) -> String {
     format!("http://localhost:{port}/v1")
 }
@@ -49,7 +46,6 @@ mod tests {
         assert_eq!(v1_models_url(12345), "http://localhost:12345/v1/models");
     }
 
-    #[cfg(feature = "dev-tools")]
     #[test]
     fn v1_url_strips_to_api_root() {
         assert_eq!(v1_url(9741), "http://localhost:9741/v1");

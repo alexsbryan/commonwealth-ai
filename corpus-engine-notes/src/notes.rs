@@ -346,6 +346,29 @@ pub(crate) fn cosine_sim(a: &[f32], b: &[f32]) -> f64 {
     }
 }
 
+/// Convert free text (an agent prompt, a plain-English question) into a safe
+/// FTS5 query: each term double-quoted, joined with OR, capped at 32 terms.
+/// Raw caller text must NEVER reach `MATCH` as syntax — parentheses, quotes,
+/// `+`, and bare uppercase operators in ordinary prose are FTS5 operators
+/// and raise `fts5: syntax error near …` (observed live 2026-07-23: the
+/// inject-notes hook's semantic path failed on every prompt containing
+/// parentheses, silently downgrading the whole fleet to recency injection).
+/// OR + BM25 keeps long natural-language queries recall-friendly while
+/// exact matches still rank first; for the common bare-words query the
+/// quoted form is semantically similar (OR instead of implicit AND, with
+/// rank preserving precision at the top). Returns an empty string when the
+/// text has no indexable terms — callers must skip FTS in that case
+/// (`MATCH ''` is itself a syntax error).
+pub(crate) fn fts5_user_query(query: &str) -> String {
+    query
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|t| !t.is_empty())
+        .take(32)
+        .map(|t| format!("\"{t}\""))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
 /// FTS5 candidate pool: top-`pool_size` notes ranked by BM25.
 /// Returns `(NoteRow, bm25_rank)` — bm25 returns "lower is
 /// better"; the caller flips the sign before min-max
@@ -359,6 +382,10 @@ fn fetch_bm25_pool(
     pool_size: usize,
     include_retired: bool,
 ) -> Result<Vec<(NoteRow, f64)>> {
+    let match_expr = fts5_user_query(query);
+    if match_expr.is_empty() {
+        return Ok(Vec::new());
+    }
     let (where_extra, bound) = build_filter_clause(symbols, files, kinds);
     let retired_clause = if include_retired {
         ""
@@ -383,7 +410,7 @@ fn fetch_bm25_pool(
         LIMIT ?"
     );
     let mut params_owned: Vec<rusqlite::types::Value> = Vec::new();
-    params_owned.push(rusqlite::types::Value::Text(query.to_string()));
+    params_owned.push(rusqlite::types::Value::Text(match_expr));
     params_owned.extend(bound);
     params_owned.push(rusqlite::types::Value::Integer(pool_size as i64));
     let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -2788,7 +2815,9 @@ impl NoteStore {
 
         let rows: Vec<NoteRow> = {
             let conn = self.conn.lock().await;
-            if let Some(q) = query.filter(|s| !s.is_empty()) {
+            // Sanitize free text before it reaches MATCH — raw prose with
+            // parens/quotes is invalid FTS5 syntax (see `fts5_user_query`).
+            if let Some(q) = query.map(fts5_user_query).filter(|s| !s.is_empty()) {
                 let sql = format!(
                     "WITH ranked AS (
                         SELECT rowid, bm25(notes_fts) AS rank
@@ -3758,6 +3787,54 @@ mod tests {
             .write_note("totally_invalid", "x", vec![], vec![], "s1")
             .await;
         assert!(r.is_err(), "CHECK must reject unknown kind");
+    }
+
+    #[test]
+    fn fts5_user_query_neutralizes_operator_syntax() {
+        // Bare words: quoted, OR-joined.
+        assert_eq!(fts5_user_query("blast radius"), "\"blast\" OR \"radius\"");
+        // The live failure class: prose with parens/quotes/plus is emitted as
+        // plain quoted terms, never operators.
+        let q = fts5_user_query("The plan sounds good (schema + \"golden frame\") NEAR/2");
+        assert!(!q.contains('('));
+        assert!(q.contains("\"good\""));
+        assert!(q.contains("\"NEAR\"")); // operator word demoted to a term
+        // Underscored identifiers survive as one term.
+        assert_eq!(fts5_user_query("reindex_file"), "\"reindex_file\"");
+        // Punctuation-only input yields empty — callers must skip FTS.
+        assert_eq!(fts5_user_query("(((+++)))"), "");
+    }
+
+    #[tokio::test]
+    async fn read_notes_survives_fts5_operator_prose() {
+        // Regression: the inject-notes hook passes raw prompts as `query`;
+        // parens made FTS5 error out and darkened the fleet's semantic path.
+        let store = make_store().await;
+        store
+            .write_note(
+                "decision",
+                "chose the golden frame schema for session continuity",
+                vec![],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+        let results = store
+            .read_notes(
+                Some("The plan sounds good (schema + golden frame from the FactStore session)"),
+                &[],
+                &[],
+                &[],
+                10,
+                false,
+            )
+            .await
+            .expect("operator-laden prose must not be an FTS5 syntax error");
+        assert!(
+            results.iter().any(|n| n.content.contains("golden frame")),
+            "OR-ranked recall should surface the relevant note"
+        );
     }
 
     #[tokio::test]

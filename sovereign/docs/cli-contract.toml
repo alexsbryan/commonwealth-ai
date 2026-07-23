@@ -881,6 +881,23 @@ flags = [
   { name = "--json" },
 ]
 [[command]]
+# Session continuity — distill a Claude Code transcript into a session frame
+# (session_cmd.rs, 2026-07-23; spec: docs/specs/SESSION_CONTINUITY.md).
+# Stage 1 (spine) is offline like cache-audit; stage 2 (frame synthesis)
+# needs the daemon, but --help/parse is offline-probeable. Documented
+# internal surface (CLI_REFERENCE.md).
+path = "session"
+binary = "dispatcher"
+visibility = "internal"
+flags = [
+  { name = "--project", takes_value = true },
+  { name = "--dir", takes_value = true },
+  { name = "--no-llm" },
+  { name = "--model", takes_value = true },
+  { name = "--max-tokens", takes_value = true },
+  { name = "--stdout" },
+]
+[[command]]
 # Self-update: resolves the newest published cli-v* by max semver and
 # re-runs the canonical installer pinned to it (update_cmd.rs, 2026-07-15).
 # Hidden until it graduates to the documented surface.

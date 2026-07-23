@@ -50,6 +50,7 @@ mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
 mod rough_edges_cmd;
 mod serve_cmd;
+mod session_cmd;
 mod sibling;
 mod status_cmd;
 mod stop_cmd;
@@ -370,6 +371,7 @@ const ALL_VERBS: &[&str] = &[
     "router-cache",
     "search-gym",
     "serve",
+    "session",
     "setup",
     "solve",
     "status",
@@ -779,6 +781,14 @@ async fn async_main() {
                 // In-process telemetry over Claude Code transcripts — reads
                 // only local ~/.claude/projects/*.jsonl, no daemon/network.
                 let code = cache_audit_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "session" => {
+                // Session continuity — distill a transcript into a session
+                // frame (docs/specs/SESSION_CONTINUITY.md). Reads the same
+                // local transcripts as cache-audit; the synthesis stage
+                // talks to the local daemon only.
+                let code = session_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "milestone" => {

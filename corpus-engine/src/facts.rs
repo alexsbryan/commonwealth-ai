@@ -171,13 +171,11 @@ pub fn pack_for_extension(ext: &str) -> Option<&'static LangPack> {
     lang_packs().iter().find(|p| p.extensions.contains(&ext))
 }
 
-/// Recursively collect source files that some pack knows how to read. Dispatch by
-/// extension happens in [`extract_facts`]; unsupported files never enter the list.
-#[cfg(feature = "treesitter")]
 /// Directory names never worth walking for facts: build outputs, VCS, and
 /// dependency trees. Recursing `target/` alone stat-walks millions of
 /// build-artifact entries — the fact base is source facts, not artifacts, so
 /// skipping these makes `code facts` fast and keeps vendored code out.
+#[cfg(feature = "treesitter")]
 fn is_ignored_dir(name: &str) -> bool {
     matches!(
         name,
@@ -185,6 +183,9 @@ fn is_ignored_dir(name: &str) -> bool {
     ) || name.starts_with('.')
 }
 
+/// Recursively collect source files that some pack knows how to read. Dispatch by
+/// extension happens in [`extract_facts`]; unsupported files never enter the list.
+#[cfg(feature = "treesitter")]
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(rd) = std::fs::read_dir(dir) {
         for e in rd.flatten() {

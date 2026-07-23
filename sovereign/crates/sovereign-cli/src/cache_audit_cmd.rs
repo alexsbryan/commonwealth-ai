@@ -133,6 +133,42 @@ fn is_bash_read_like(cmd: &str) -> bool {
     NEEDLES.iter().any(|n| cmd.contains(n))
 }
 
+/// A Bash invocation of the sovereign CLI IS a code-intelligence call — the
+/// harness-side MCP surface is not the only door to the brain. Sessions that
+/// route acquisition through `sovereign tools call symbols` / `svrn notes` /
+/// `session distill` were previously scored "0 code-intel calls" (observed
+/// 2026-07-23 on a session with dozens of such calls), making the compliant
+/// path indistinguishable from the leak the audit exists to expose.
+///
+/// Detection is by COMMAND POSITION, not substring: for each `&&`/`;`/`|`
+/// segment, skip leading `VAR=…` env assignments and test the first real
+/// token. This keeps `cargo build -p sovereign-cli` (an argument) and
+/// `rg sovereign` (a pattern) out.
+fn is_sovereign_cli(cmd: &str) -> bool {
+    cmd.split(|c| c == ';' || c == '|' || c == '&')
+        .filter(|seg| !seg.trim().is_empty())
+        .any(|seg| {
+            let first = seg
+                .split_whitespace()
+                .find(|tok| !tok.contains('=')); // skip VAR=val prefixes
+            match first {
+                Some(tok) => {
+                    tok == "sovereign"
+                        || tok == "svrn"
+                        || tok == "sovereign-cli"
+                        || tok.ends_with("/sovereign-cli")
+                        || tok.ends_with("/sovereign")
+                        || tok.ends_with("/svrn")
+                }
+                None => false,
+            }
+        })
+}
+
+/// Pseudo tool name under which sovereign-CLI Bash calls are tallied, so the
+/// per-tool table and the CodeIntel bucket both see them.
+const SOVEREIGN_CLI_PSEUDO_TOOL: &str = "sovereign-cli (via Bash)";
+
 /// Approximate token count of a chunk of text (~4 chars/token).
 fn approx_tokens(s: &str) -> u64 {
     (s.len() as u64) / 4
@@ -287,7 +323,20 @@ fn analyze(path: &Path) -> Option<SessionReport> {
             for block in content {
                 match block.get("type").and_then(|t| t.as_str()) {
                     Some("tool_use") => {
-                        let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?").to_string();
+                        let mut name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?").to_string();
+                        if name == "Bash" {
+                            if let Some(cmd) = block.get("input").and_then(|i| i.get("command")).and_then(|c| c.as_str()) {
+                                if is_sovereign_cli(cmd) {
+                                    // CLI-path brain calls are code-intel, and
+                                    // their result tokens must route there too
+                                    // (via the id→name map below) — never into
+                                    // the raw-acquisition tally.
+                                    name = SOVEREIGN_CLI_PSEUDO_TOOL.to_string();
+                                } else if is_bash_read_like(cmd) {
+                                    bash_read_like += 1;
+                                }
+                            }
+                        }
                         if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
                             tool_id_name.insert(id.to_string(), name.clone());
                         }
@@ -296,13 +345,6 @@ fn analyze(path: &Path) -> Option<SessionReport> {
                         buckets.entry(bucket).or_default().calls += 1;
                         if bucket == Bucket::CodeIntel {
                             code_intel_calls += 1;
-                        }
-                        if name == "Bash" {
-                            if let Some(cmd) = block.get("input").and_then(|i| i.get("command")).and_then(|c| c.as_str()) {
-                                if is_bash_read_like(cmd) {
-                                    bash_read_like += 1;
-                                }
-                            }
                         }
                     }
                     Some("tool_result") => {
@@ -375,7 +417,8 @@ fn encode_project_path(path: &str) -> String {
         .collect()
 }
 
-fn short_id(file: &str) -> String {
+/// Shared with `session_cmd` — both read the same transcript layout.
+pub(crate) fn short_session_id(file: &str) -> String {
     let stem = file.strip_suffix(".jsonl").unwrap_or(file);
     stem.chars().take(8).collect()
 }
@@ -405,7 +448,8 @@ fn print_help() {
     );
 }
 
-fn resolve_dir(project: Option<&str>, dir: Option<&str>) -> Result<PathBuf, String> {
+/// Shared with `session_cmd` — both read the same transcript layout.
+pub(crate) fn resolve_transcript_dir(project: Option<&str>, dir: Option<&str>) -> Result<PathBuf, String> {
     if let Some(d) = dir {
         return Ok(PathBuf::from(d));
     }
@@ -461,7 +505,7 @@ fn print_table(reports: &[SessionReport]) {
         let model = r.model.split('[').next().unwrap_or(&r.model);
         println!(
             "{:<10} {:>6} {:>10} {:>7.1}% {:>10.2} {:>12}  {}{}",
-            short_id(&r.file),
+            short_session_id(&r.file),
             r.turns,
             r.max_ctx,
             cache_pct,
@@ -490,7 +534,7 @@ fn print_detail(r: &SessionReport) {
     let model = r.model.split('[').next().unwrap_or(&r.model);
     println!(
         "=== {} ===\n{} turns, peak context {} tok, model {}{}",
-        short_id(&r.file),
+        short_session_id(&r.file),
         r.turns,
         r.max_ctx,
         model,
@@ -562,7 +606,7 @@ fn print_json(reports: &[SessionReport]) {
              \"cache_write_5m\":{},\"cache_write_1h\":{},\"output\":{}}},\
              \"cost_usd\":{{\"input\":{:.4},\"cache_read\":{:.4},\"cache_write\":{:.4},\"output\":{:.4},\"total\":{:.4}}},\
              \"cache_read_pct\":{:.1},\"raw_acq_tokens\":{},\"code_intel_calls\":{},\"bash_read_like\":{},\"mtime_unix\":{}}}",
-            json_str(&short_id(&r.file)),
+            json_str(&short_session_id(&r.file)),
             json_str(&r.file),
             json_str(&r.model),
             r.model_assumed,
@@ -632,7 +676,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
 
-    let target_dir = match resolve_dir(project.as_deref(), dir.as_deref()) {
+    let target_dir = match resolve_transcript_dir(project.as_deref(), dir.as_deref()) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("cache-audit: {e}");
@@ -657,7 +701,7 @@ pub async fn run(args: &[String]) -> i32 {
     if let Some(sel) = &session {
         let matches: Vec<&SessionReport> = reports
             .iter()
-            .filter(|r| r.file.starts_with(sel.as_str()) || short_id(&r.file) == *sel)
+            .filter(|r| r.file.starts_with(sel.as_str()) || short_session_id(&r.file) == *sel)
             .collect();
         match matches.as_slice() {
             [] => {
@@ -671,7 +715,7 @@ pub async fn run(args: &[String]) -> i32 {
             many => {
                 eprintln!("cache-audit: `{sel}` is ambiguous ({} matches):", many.len());
                 for m in many {
-                    eprintln!("  {}", short_id(&m.file));
+                    eprintln!("  {}", short_session_id(&m.file));
                 }
                 return 2;
             }
@@ -737,6 +781,47 @@ mod tests {
         assert!(is_bash_read_like("cat foo.rs"));
         assert!(is_bash_read_like("rg pattern src/"));
         assert!(!is_bash_read_like("cargo build --release"));
+    }
+
+    #[test]
+    fn sovereign_cli_detected_by_command_position_only() {
+        assert!(is_sovereign_cli("sovereign tools call symbols --name=Foo"));
+        assert!(is_sovereign_cli("svrn notes add --kind decision -m x"));
+        assert!(is_sovereign_cli("SOVEREIGN_NO_STALE_WARN=1 sovereign cache-audit"));
+        assert!(is_sovereign_cli("cd /repo && sovereign tools call callers --symbol=f"));
+        assert!(is_sovereign_cli("target/debug/sovereign-cli session list"));
+        assert!(is_sovereign_cli("sovereign tools call lint_status 2>&1 | head -5"));
+        // Argument/pattern positions must NOT match.
+        assert!(!is_sovereign_cli("cargo build -p sovereign-cli"));
+        assert!(!is_sovereign_cli("rg sovereign src/"));
+        assert!(!is_sovereign_cli("cat sovereign/SYSTEM_OVERVIEW.md"));
+    }
+
+    #[test]
+    fn analyze_counts_sovereign_bash_as_code_intel_not_raw() {
+        // A sovereign-CLI Bash call: its call AND its result tokens must land
+        // in CodeIntel, with zero raw acquisition — the compliant CLI path
+        // must not be indistinguishable from the leak.
+        let body = concat!(
+            r#"{"message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sovereign tools call symbols --name=Foo"}}]}}"#,
+            "\n",
+            r#"{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#,
+            "\n"
+        );
+        let dir = std::env::temp_dir().join(format!("cache_audit_svrn_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("dcba4321-session.jsonl");
+        std::fs::write(&path, body).unwrap();
+
+        let r = analyze(&path).expect("has usage");
+        assert_eq!(r.code_intel_calls, 1);
+        assert_eq!(r.raw_acq_tokens, 0);
+        assert_eq!(r.bash_read_like, 0);
+        let intel = r.buckets.get(&Bucket::CodeIntel).expect("intel bucket");
+        assert_eq!(intel.calls, 1);
+        assert!(intel.ctx_tokens > 0, "result tokens route to CodeIntel");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

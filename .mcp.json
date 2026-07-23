@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sovereign": {
+      "type": "http",
+      "url": "http://localhost:9741/mcp"
+    }
+  }
+}
