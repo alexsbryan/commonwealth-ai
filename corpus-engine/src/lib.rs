@@ -27,6 +27,9 @@ pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod facts;
+/// SQLite-backed, per-file-patchable home for the fact base (rusqlite → `stores`).
+#[cfg(feature = "stores")]
+pub mod facts_store;
 #[cfg(feature = "treesitter")]
 pub mod facts_check;
 pub mod filters;

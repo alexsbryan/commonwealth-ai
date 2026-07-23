@@ -26,72 +26,31 @@
 //! the code graph (`scip_graph.db`) has moved since. An agent always knows how
 //! much to trust what it just read. Honest staleness over silent staleness.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
-use tokio::sync::Mutex;
 
-use corpus_engine::facts::Facts;
+use corpus_engine::facts_store::FactStore;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-/// One parsed fact base plus the mtime it was parsed at, so repeated queries
-/// against an unchanged `facts.json` don't re-parse a large file (the corpus
-/// fact base can be tens of MB — re-parsing it per agent query is exactly the
-/// raw-token/CPU waste the code-intel path exists to avoid).
-struct CachedFacts {
-    mtime_secs: i64,
-    facts: Arc<Facts>,
-}
-
 pub struct FactsTool {
-    /// Root under which each corpus has `<corpus_id>/facts.json`.
+    /// Root under which each corpus has `<corpus_id>/facts.db` (a legacy
+    /// `facts.json` is migrated into it on first read).
     indexes_dir: PathBuf,
-    /// mtime-keyed parse cache, shared across concurrent calls.
-    cache: Arc<Mutex<HashMap<PathBuf, CachedFacts>>>,
 }
 
 impl FactsTool {
     pub fn new(indexes_dir: impl Into<PathBuf>) -> Self {
         Self {
             indexes_dir: indexes_dir.into(),
-            cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Load `facts.json`, using the mtime-keyed cache when the file is
-    /// unchanged since the last parse. Returns `None` when the file is absent.
-    async fn load_facts(&self, facts_path: &Path) -> Option<Arc<Facts>> {
-        let mtime = mtime_secs(facts_path)?;
-        {
-            let cache = self.cache.lock().await;
-            if let Some(c) = cache.get(facts_path) {
-                if c.mtime_secs == mtime {
-                    return Some(Arc::clone(&c.facts));
-                }
-            }
-        }
-        // Cache miss / stale — parse and store. `Facts::load` is a full read;
-        // do it outside the lock so concurrent queries on OTHER corpora aren't
-        // blocked behind a large parse.
-        let facts = Arc::new(Facts::load(facts_path).ok()?);
-        let mut cache = self.cache.lock().await;
-        cache.insert(
-            facts_path.to_path_buf(),
-            CachedFacts {
-                mtime_secs: mtime,
-                facts: Arc::clone(&facts),
-            },
-        );
-        Some(facts)
-    }
-
-    /// Corpora to search: the named one, or every corpus dir that has a
-    /// `facts.json` when none is named.
+    /// Corpora to search: the named one, or every corpus dir with a built fact
+    /// base (`facts.db`, or a legacy `facts.json` awaiting migration).
     fn resolve_corpora(&self, corpus_id: Option<&str>) -> Vec<String> {
         if let Some(id) = corpus_id {
             return vec![id.to_string()];
@@ -99,7 +58,8 @@ impl FactsTool {
         let mut out = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&self.indexes_dir) {
             for e in entries.flatten() {
-                if e.path().join("facts.json").is_file() {
+                let p = e.path();
+                if p.join("facts.db").is_file() || p.join("facts.json").is_file() {
                     if let Some(name) = e.file_name().to_str() {
                         out.push(name.to_string());
                     }
@@ -241,7 +201,6 @@ impl Tool for FactsTool {
         if query.is_empty() {
             return Err(Error::InvalidInput("`query` must not be empty".into()));
         }
-        let lc = query.to_lowercase();
         let corpus_id = params.get("corpus_id").and_then(|v| v.as_str());
         let kind = params.get("kind").and_then(|v| v.as_str()).unwrap_or("all");
         let want = |k: &str| kind == "all" || kind == k;
@@ -264,60 +223,59 @@ impl Tool for FactsTool {
 
         for corpus in &corpora {
             let corpus_dir = self.indexes_dir.join(corpus);
-            let facts_path = corpus_dir.join("facts.json");
-            let facts = match self.load_facts(&facts_path).await {
-                Some(f) => f,
-                None => continue, // no fact base for this corpus — skip, reported via status
+            // Opens facts.db (migrating a legacy facts.json in on first read).
+            // Queries hit indexed SQL — no 43 MB load, and WAL means overlay
+            // writes from the watcher are visible to this read immediately.
+            let store = match FactStore::open_for_dir(&corpus_dir, corpus).await {
+                Ok(Some(s)) => s,
+                _ => continue, // no fact base / open failed — reported via status
             };
             any_facts_present = true;
 
-            // Freshness inputs for this corpus.
-            if let Some(built) = mtime_secs(&facts_path) {
-                oldest_built = Some(oldest_built.map_or(built, |o| o.min(built)));
+            // Freshness: recorded build time (falls back to facts.db mtime) vs
+            // the SCIP graph mtime — has the code moved since these facts were cut?
+            let built = store
+                .built_at(std::slice::from_ref(corpus))
+                .await
+                .ok()
+                .flatten()
+                .or_else(|| mtime_secs(&corpus_dir.join("facts.db")));
+            if let Some(b) = built {
+                oldest_built = Some(oldest_built.map_or(b, |o| o.min(b)));
                 if let Some(graph_mtime) = mtime_secs(&corpus_dir.join("scip_graph.db")) {
-                    if graph_mtime > built {
+                    if graph_mtime > b {
                         any_lags_graph = true;
                     }
                 }
             }
 
+            // SQLite LIKE is case-insensitive for ASCII (matches the prior
+            // lowercase `.contains()` behaviour); the store escapes metachars.
             if want("function") {
-                for f in &facts.fn_defs {
-                    if functions.len() >= limit * corpora.len() {
-                        break;
-                    }
-                    if f.name.to_lowercase().contains(&lc) {
+                if let Ok(hits) = store.find_fn_defs(Some(corpus), query, limit).await {
+                    for h in hits {
                         functions.push(json!({
-                            "name": f.name, "file": f.file, "line": f.line, "corpus": corpus
+                            "name": h.name, "file": h.file, "line": h.line, "corpus": h.corpus_id
                         }));
                     }
                 }
             }
             if want("config") {
-                for c in &facts.ctor_fields {
-                    if config.len() >= limit * corpora.len() {
-                        break;
-                    }
-                    if c.struct_type.to_lowercase().contains(&lc)
-                        || c.field.to_lowercase().contains(&lc)
-                        || c.value.to_lowercase().contains(&lc)
-                    {
+                if let Ok(hits) = store.find_ctor_fields(Some(corpus), query, limit).await {
+                    for h in hits {
                         config.push(json!({
-                            "struct_type": c.struct_type, "field": c.field, "value": c.value,
-                            "enclosing_fn": c.enclosing_fn, "file": c.file, "line": c.line, "corpus": corpus
+                            "struct_type": h.struct_type, "field": h.field, "value": h.value,
+                            "enclosing_fn": h.enclosing_fn, "file": h.file, "line": h.line, "corpus": h.corpus_id
                         }));
                     }
                 }
             }
             if want("literal") {
-                for s in &facts.str_lits {
-                    if literals.len() >= limit * corpora.len() {
-                        break;
-                    }
-                    if s.content.to_lowercase().contains(&lc) {
+                if let Ok(hits) = store.find_str_lits(Some(corpus), query, limit).await {
+                    for h in hits {
                         literals.push(json!({
-                            "content": s.content, "enclosing_fn": s.enclosing_fn,
-                            "file": s.file, "line": s.line, "corpus": corpus
+                            "content": h.content, "enclosing_fn": h.enclosing_fn,
+                            "file": h.file, "line": h.line, "corpus": h.corpus_id
                         }));
                     }
                 }
@@ -332,7 +290,7 @@ impl Tool for FactsTool {
                 Some(id) => format!(
                     "No fact base for corpus `{id}` at {}. Build it with \
                      `sovereign code facts <repo> --corpus-id {id}`.",
-                    self.indexes_dir.join(id).join("facts.json").display()
+                    self.indexes_dir.join(id).join("facts.db").display()
                 ),
                 None => format!(
                     "No fact base found under {}. Build one with \
@@ -424,7 +382,7 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::facts::{CtorField, FnDef, StrLit};
+    use corpus_engine::facts::{CtorField, Facts, FnDef, StrLit};
 
     fn write_facts(dir: &Path, corpus: &str, facts: &Facts) -> PathBuf {
         let cdir = dir.join(corpus);

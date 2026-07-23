@@ -409,13 +409,17 @@ fn spawn_full_rebuild(
 async fn run_overlay_merge(
     merged: &ScipGraphHandle,
     corpus_id: &str,
+    indexes_dir: &Path,
     root: &Path,
     changed: &[PathBuf],
 ) -> (usize, usize) {
-    use corpus_engine::facts::{extract_symbol_defs, pack_for_extension};
+    use corpus_engine::facts::{extract_facts_for_file, extract_symbol_defs, pack_for_extension, Facts};
 
     let mut files: Vec<String> = Vec::new();
     let mut symbols = Vec::new();
+    // Facts for the changed files — the SAME tree-sitter pass as the symbol
+    // defs, so we read each file once and extract both.
+    let mut facts = Facts::default();
     for rel in changed {
         // Only files a tree-sitter pack claims; others belong to the full export.
         let is_source = rel
@@ -428,10 +432,14 @@ async fn run_overlay_merge(
         }
         let rel_str = rel.to_string_lossy().to_string();
         files.push(rel_str.clone());
-        // Read from the working tree; a deleted file simply contributes no
-        // symbols, so `replace_file_symbols` drops its prior defs.
+        // Read from the working tree ONCE; a deleted file simply contributes no
+        // records, so the per-file replaces drop its prior rows.
         if let Ok(src) = std::fs::read_to_string(root.join(rel)) {
             symbols.extend(extract_symbol_defs(&rel_str, &src));
+            let f = extract_facts_for_file(&rel_str, &src);
+            facts.fn_defs.extend(f.fn_defs);
+            facts.ctor_fields.extend(f.ctor_fields);
+            facts.str_lits.extend(f.str_lits);
         }
     }
 
@@ -440,21 +448,38 @@ async fn run_overlay_merge(
     }
     let n_files = files.len();
     let n_syms = symbols.len();
-    // Write into the MERGED graph the daemon's tools query, scoped to this
-    // project's corpus_id (the merged graph's rows are per-project-scoped). This
-    // is what makes the overlay visible to a live `symbols()` call without a
-    // full re-import or a daemon restart.
+
+    // 1) SCIP symbol defs → the MERGED in-memory graph the daemon's tools query,
+    //    scoped to this project's corpus_id — visible to a live `symbols()` call
+    //    with no full re-import or restart.
     let g = merged.load();
-    match g.replace_file_symbols_for(corpus_id, &files, symbols).await {
-        Ok(()) => (n_files, n_syms),
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "scip overlay merge failed (graph preserved); full export will correct"
-            );
-            (0, 0)
+    if let Err(e) = g.replace_file_symbols_for(corpus_id, &files, symbols).await {
+        tracing::warn!(
+            error = %e,
+            "scip overlay merge failed (graph preserved); full export will correct"
+        );
+        return (0, 0);
+    }
+
+    // 2) Facts → the on-disk per-corpus facts.db the `facts` tool reads. We only
+    //    PATCH an existing store; if facts.db isn't built yet we skip (a full
+    //    `code facts` run, or the tool's first-read migration of legacy
+    //    facts.json, creates it) so the hot path never pays the one-time
+    //    whole-repo JSON→SQLite migration inline. WAL makes these writes visible
+    //    to the tool's next read immediately — facts go live-fresh per save.
+    let facts_db = indexes_dir.join(corpus_id).join("facts.db");
+    if facts_db.exists() {
+        match corpus_engine::facts_store::FactStore::open(&facts_db) {
+            Ok(store) => {
+                if let Err(e) = store.replace_files(corpus_id, &files, &facts).await {
+                    tracing::warn!(error = %e, "facts overlay merge failed (store preserved)");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "facts.db open failed for overlay"),
         }
     }
+
+    (n_files, n_syms)
 }
 
 async fn run_worker(ctx: WorkerCtx) {
@@ -649,6 +674,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     let (merged_files, merged_syms) = run_overlay_merge(
                         &rebuild_ctx.merged,
                         &rebuild_ctx.entry.corpus_id,
+                        &rebuild_ctx.indexes_dir,
                         &entry.root,
                         &files,
                     )
@@ -1137,7 +1163,7 @@ mod tests {
         let graph = mem_graph();
 
         let (files, syms) =
-            run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("lib.rs")]).await;
+            run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("lib.rs")]).await;
         assert_eq!(files, 1);
         assert_eq!(syms, 2);
 
@@ -1159,6 +1185,7 @@ mod tests {
             &graph,
             "overlay-test",
             tmp.path(),
+            tmp.path(),
             &[PathBuf::from("README.md"), PathBuf::from("Cargo.toml")],
         )
         .await;
@@ -1172,12 +1199,12 @@ mod tests {
         let graph = mem_graph();
         // Seed a def for gone.rs, then "delete" it (never write the file).
         std::fs::write(tmp.path().join("gone.rs"), "fn ghost() {}").unwrap();
-        run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("gone.rs")]).await;
+        run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("gone.rs")]).await;
         assert!(!graph.load().find_symbols_by_name("ghost", None, 8).await.unwrap().is_empty());
 
         std::fs::remove_file(tmp.path().join("gone.rs")).unwrap();
         let (files, syms) =
-            run_overlay_merge(&graph, "overlay-test", tmp.path(), &[PathBuf::from("gone.rs")]).await;
+            run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("gone.rs")]).await;
         assert_eq!(files, 1, "deleted source file is still processed (to drop its rows)");
         assert_eq!(syms, 0);
         assert!(

@@ -195,8 +195,17 @@ async fn cmd_facts(args: &[String]) -> i32 {
         eprintln!("cannot create {}: {e}", out_dir.display());
         return 1;
     }
-    let out = out_dir.join("facts.json");
-    if let Err(e) = facts.write(&out) {
+    // Write the SQLite fact store (per-file patchable), not the legacy
+    // monolithic facts.json. `replace_all` swaps this corpus's facts atomically.
+    let out = out_dir.join("facts.db");
+    let store = match corpus_engine::facts_store::FactStore::open(&out) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("cannot open fact store {}: {e}", out.display());
+            return 1;
+        }
+    };
+    if let Err(e) = store.replace_all(&corpus_id, &facts).await {
         eprintln!("cannot write facts: {e}");
         return 1;
     }
@@ -473,10 +482,26 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     };
     let idx = home.join(".sovereign").join("indexes").join(&corpus);
 
-    let facts = match corpus_engine::facts::Facts::load(&idx.join("facts.json")) {
-        Ok(f) => f,
+    // Load facts from the SQLite store (migrating a legacy facts.json in on
+    // first read). `check-spec`'s deterministic checks iterate `Facts` in
+    // memory, so we reconstruct the in-memory shape for this one corpus.
+    let facts = match corpus_engine::facts_store::FactStore::open_for_dir(&idx, &corpus).await {
+        Ok(Some(store)) => match store.load_all(&corpus).await {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("check-spec: load facts from store: {e}");
+                return 1;
+            }
+        },
+        Ok(None) => {
+            eprintln!(
+                "check-spec: no fact base at {}\n  run `sovereign code facts <repo> --corpus-id {corpus}` first",
+                idx.join("facts.db").display()
+            );
+            return 1;
+        }
         Err(e) => {
-            eprintln!("check-spec: load {}: {e}\n  run `sovereign code facts <repo> --corpus-id {corpus}` first", idx.join("facts.json").display());
+            eprintln!("check-spec: open fact store: {e}");
             return 1;
         }
     };

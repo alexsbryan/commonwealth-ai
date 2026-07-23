@@ -92,8 +92,11 @@ with fresh eyes. The spec check is just that same map, held up against your inte
 ## What it costs
 
 Two passes. Building the fact base is a single tree-sitter read of your code — fast,
-and cheap to redo when the code changes. Checking a spec is then a lookup per claim:
-the deterministic checks are instant, and the ones that need a call-graph trace are
+and cheap to redo when the code changes. The facts live in a small per-file-keyed
+SQLite store (`facts.db`), so a save doesn't rebuild the whole base: only the edited
+file's facts are re-extracted and swapped in, and when the code watcher is running
+they refresh live as you edit. Checking a spec is then a lookup per claim: the
+deterministic checks are indexed reads, and the ones that need a call-graph trace are
 near-instant against a graph loaded once into memory. The heaviest part is a small
 model tagging each claim, and it runs on your own machine. There's no giant index to
 keep warm.

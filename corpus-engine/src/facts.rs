@@ -174,12 +174,29 @@ pub fn pack_for_extension(ext: &str) -> Option<&'static LangPack> {
 /// Recursively collect source files that some pack knows how to read. Dispatch by
 /// extension happens in [`extract_facts`]; unsupported files never enter the list.
 #[cfg(feature = "treesitter")]
+/// Directory names never worth walking for facts: build outputs, VCS, and
+/// dependency trees. Recursing `target/` alone stat-walks millions of
+/// build-artifact entries — the fact base is source facts, not artifacts, so
+/// skipping these makes `code facts` fast and keeps vendored code out.
+fn is_ignored_dir(name: &str) -> bool {
+    matches!(
+        name,
+        "target" | ".git" | "node_modules" | "vendor" | ".sovereign" | ".svrnmesh"
+    ) || name.starts_with('.')
+}
+
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(rd) = std::fs::read_dir(dir) {
         for e in rd.flatten() {
             let p = e.path();
             if p.is_dir() {
-                walk(&p, out);
+                let skip = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(is_ignored_dir);
+                if !skip {
+                    walk(&p, out);
+                }
             } else if p
                 .extension()
                 .and_then(|x| x.to_str())
@@ -440,6 +457,24 @@ pub fn extract_facts(_repo: &Path, _roots: &[String]) -> Facts {
 /// (`scip_export::parse_scip_file`), NOT the 1-based facts convention.
 ///
 /// Returns an empty vec for a file whose extension no [`LangPack`] claims.
+/// Extract the full fact set (fn defs + config construction-fields + string
+/// literals) for ONE file — the per-file companion to [`extract_facts`], for the
+/// structural watcher's overlay. Same tree-sitter machinery, one file's worth,
+/// so a save re-extracts ~166 records instead of the whole 280k-record repo.
+/// Returns an empty [`Facts`] for a file no [`LangPack`] claims.
+#[cfg(feature = "treesitter")]
+pub fn extract_facts_for_file(rel: &str, src: &str) -> Facts {
+    let mut f = Facts::default();
+    let ext = match std::path::Path::new(rel).extension().and_then(|e| e.to_str()) {
+        Some(e) => e,
+        None => return f,
+    };
+    if let Some(pack) = pack_for_extension(ext) {
+        ts::extract_file(rel, src, pack, &mut f);
+    }
+    f
+}
+
 #[cfg(feature = "treesitter")]
 pub fn extract_symbol_defs(rel: &str, src: &str) -> Vec<corpus_engine_scip::ScipSymbolRecord> {
     let ext = match std::path::Path::new(rel).extension().and_then(|e| e.to_str()) {
@@ -474,6 +509,30 @@ mod tests {
         assert!(tools.value.contains("None"));
         assert_eq!(tools.enclosing_fn, "make_runtime");
         assert!(f.str_lits.iter().any(|s| s.content.contains("prod")));
+    }
+
+    #[test]
+    fn walk_skips_build_and_vcs_dirs() {
+        assert!(is_ignored_dir("target"));
+        assert!(is_ignored_dir(".git"));
+        assert!(is_ignored_dir("node_modules"));
+        assert!(is_ignored_dir("vendor"));
+        assert!(is_ignored_dir(".hidden"));
+        assert!(!is_ignored_dir("src"));
+        assert!(!is_ignored_dir("corpus-engine"));
+    }
+
+    #[test]
+    fn extract_facts_for_file_gets_all_kinds() {
+        let f = extract_facts_for_file(
+            "lib.rs",
+            "fn go() {\n    let c = Cfg { on: true };\n    let _ = \"hello world\";\n}\n",
+        );
+        assert!(f.fn_defs.iter().any(|d| d.name == "go"));
+        assert!(f.ctor_fields.iter().any(|c| c.struct_type == "Cfg" && c.field == "on"));
+        assert!(f.str_lits.iter().any(|s| s.content.contains("hello world")));
+        // Non-source file yields nothing.
+        assert!(extract_facts_for_file("README.md", "# hi").fn_defs.is_empty());
     }
 
     // ── extract_symbol_defs (structural watcher hot-path primitive) ──
