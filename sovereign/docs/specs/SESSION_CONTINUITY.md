@@ -90,19 +90,36 @@ Rules that keep frames honest:
 
 ---
 
-## 3. Write paths (proposal)
+## 3. Write paths (paths 2–3 SHIPPED 2026-07-23; path 1 proposal)
 
 Three, in trust order — the frame must exist even when the agent never
 cooperated:
 
 1. **Self-report** — a `session_state` upsert call at transitions (task start,
    plan step done, blocker hit). Cheapest and sharpest; discipline-dependent,
-   so never the only path.
-2. **Harness lifecycle hooks** — Claude Code `PreCompact` (snapshot before the
-   window is destroyed), `SessionEnd`/`Stop` (final flush). The suit principle:
-   never rely on model discipline for anything load-bearing.
-3. **Retrospective distillation** — `sovereign session distill <session-id>`
-   (§4). Rescues past sessions and any harness that only leaves a transcript.
+   so never the only path. (Proposal.)
+2. **Harness lifecycle hooks** — SHIPPED: `.claude/hooks/session-frame.sh`
+   wired on `PreCompact` (snapshot before the window is destroyed) and
+   `SessionEnd` (final flush). The hook exits in <100ms and runs distill
+   fully detached — safe because the transcript JSONL retains full history
+   regardless of compaction, so a frame written a minute late is still
+   correct. Skips transcripts <100KB (no successor value); per-session
+   lockfile (10-min TTL) dedups PreCompact/SessionEnd firing together;
+   falls back to `--no-llm` spine when the daemon is down. Verified by
+   distilling the session that built it (valid 8-section frame).
+   The suit principle: never rely on model discipline for anything
+   load-bearing.
+3. **Retrospective distillation** — SHIPPED: `sovereign session distill
+   <session-id>` (§4). Rescues past sessions and any harness that only
+   leaves a transcript.
+
+**Splitting signal (SHIPPED 2026-07-23):** the statusline
+(`.claude/scripts/read-budget-statusline.py`) renders `ctx <N>k` from the
+last assistant `usage` record (actual context, not a heuristic) — yellow
+"split soon" ≥90k, red "SPLIT" ≥140k — plus `frame ✓<age>` for this
+session's frame freshness. The thresholds are deliberately ABSOLUTE, not
+window-relative: the lever is cache-read cost (≈ avg_ctx × turns), which a
+1M window does not change. Red ctx + fresh frame = split is safe right now.
 
 Storage: `~/.sovereign/sessions/<session_id>/frame.md` (single-writer per
 session; last-write-wins upsert). Mesh gossip + privacy model follow the work
