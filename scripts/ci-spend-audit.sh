@@ -81,6 +81,8 @@ def ts(s):
 wf = collections.defaultdict(lambda: [0.0, 0])   # billed, jobs
 job = collections.defaultdict(lambda: [0.0, 0])
 runner = collections.defaultdict(float)
+byday = collections.defaultdict(float)
+aborted = []
 unknown = set()
 days = set()
 
@@ -96,15 +98,33 @@ for line in open(sys.argv[1]):
     a, b = ts(started), ts(completed)
     if not a or not b:
         continue
+    secs = (b - a).total_seconds()
+    # NEVER-STARTED JOBS ARE NOT BILLED — do not count them.
+    #
+    # When an account hits its spending limit, GitHub still creates a job
+    # record and marks it `failure` a few seconds later ("The job was not
+    # started because recent account payments have failed"). Those look like
+    # ordinary short jobs in this API. Counting them overstates spend AND —
+    # worse — hides the shape of the real curve behind a flat wall of noise.
+    # The first version of this script did exactly that and reported 5,302
+    # minutes for July 2026 where the true figure was 4,369, with 843 of
+    # 1,199 job-runs never having started at all.
+    #
+    # 12s is comfortably above the observed 2-4s abort and below any real job.
+    if secs <= 12 and _concl == 'failure':
+        aborted.append((a.date().isoformat(), name, label))
+        days.add(a.date())
+        continue
     days.add(a.date())
     # GitHub bills per job, rounded UP to the whole minute.
-    mins = math.ceil((b - a).total_seconds() / 60)
+    mins = math.ceil(secs / 60)
     if label not in MULT:
         unknown.add(label)
     billed = mins * MULT.get(label, 1)
     wf[name][0] += billed;  wf[name][1] += 1
     job[(name, jobname)][0] += billed; job[(name, jobname)][1] += 1
     runner[label] += billed
+    byday[a.date().isoformat()] += billed
 
 total = sum(v[0] for v in wf.values())
 if not total and not wf:
@@ -137,4 +157,30 @@ print("Top 12 jobs (this is where to aim):")
 for (w, j), (b, c) in sorted(job.items(), key=lambda x: -x[1][0])[:12]:
     per = b / c if c else 0
     print(f"  {(w + ' / ' + j)[:56]:<58}{c:>5} runs {b:>8.0f} min  ({per:>5.1f}/run)")
+
+# The daily curve, because the total hides the failure mode. Measured spend on
+# this repo was not a drift — two days in July 2026 consumed the entire monthly
+# allowance while every other day was near-idle. A budget blown by BURSTS needs
+# different fixes (cancel-in-progress, local gates, cheap iteration) than one
+# blown by a high floor.
+peak = max(byday.values()) if byday else 0
+if byday:
+    print()
+    print("Daily curve (bursts are the thing to look for):")
+    running = 0
+    for d in sorted(byday):
+        running += byday[d]
+        bar = '█' * int(byday[d] / peak * 44) if peak else ''
+        print(f"  {d}  {byday[d]:>7.0f}  (cum {running:>7.0f})  {bar}")
+
+if aborted:
+    print()
+    print(f"NOT BILLED — {len(aborted)} job(s) never started (<=12s failures).")
+    print("  This is the signature of a spending-limit or payment hard-stop:")
+    print("  jobs are created, fail in seconds, and on a PR page look like")
+    print("  checks that ran and passed. Confirm with: gh run view <run-id>")
+    bydate = collections.Counter(d for d, _, _ in aborted)
+    first = min(bydate)
+    print(f"  First seen {first}; worst day {max(bydate, key=bydate.get)} "
+          f"({max(bydate.values())} jobs).")
 PY

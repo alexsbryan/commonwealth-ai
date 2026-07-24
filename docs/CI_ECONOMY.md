@@ -41,19 +41,42 @@ repo, so it cannot be trusted; `scripts/ci-spend-audit.sh` computes billed
 minutes itself, applying runner multipliers and correctly counting
 self-hosted runners as free.)
 
-| Workflow | jobs | billed min | share |
-|---|---:|---:|---:|
-| CI | 778 | 2,992 | 56.4% |
-| Dependabot's own update runs | 58 | 1,017 | 19.2% |
-| Desktop release | 43 | 637 | 12.0% |
-| docs | 166 | 241 | 4.5% |
-| CLI release | 33 | 196 | 3.7% |
-| Mesh soak (nightly) | 24 | 122 | 2.3% |
-| Labeler / CLA / weekly / baseline-tighten | 97 | 97 | 1.8% |
-| **Total** | **1,199** | **5,302** | |
+**843 of the 1,199 July job-runs never started** — they are the billing aborts,
+and GitHub does not bill an unstarted job. Excluding them:
 
-Over 24 days that projects to **~6,600 billed minutes per 30 days against a
-3,000-minute private-repo allowance — 2.2× over.**
+| Workflow | billed min | share |
+|---|---:|---:|
+| CI | 2,423 | 55.5% |
+| Dependabot's own update runs | 1,017 | 23.3% |
+| Desktop release | 605 | 13.8% |
+| docs | 105 | 2.4% |
+| Mesh soak (nightly) | 104 | 2.4% |
+| CLI release | 95 | 2.2% |
+| Labeler | 20 | 0.5% |
+| **Total** | **4,369** | |
+
+But the total is the least interesting number here. **The daily curve is the
+finding:**
+
+```
+Jul 01        7
+Jul 02    2,065   ███████████████████████████████████████████
+Jul 03      885   ██████████████████
+Jul 04–24  ~30–90/day, almost all of it aborting
+```
+
+**July 2–3 consumed ~2,950 minutes — effectively the entire monthly allowance
+in two days**, and the hard-stop began around July 7. Everything after that is
+the aftermath, not the cause.
+
+So the burn is **not steady-state development. It is bursts.** July 2 was a day
+spent iterating on CI itself (the ENOSPC and linker-OOM fixes this file's
+sibling comments describe), and every iteration cost a full cold workspace
+build. Release days have the same shape: tag, fail, fix, re-tag — each cycle
+paying full price, and on macOS paying it at 10×.
+
+**This is the thing to design against.** Average-case cost was never the
+problem; the cost of *iterating* on the expensive paths was.
 
 ### The five mechanisms behind that number
 
@@ -214,6 +237,51 @@ Off the critical path entirely; advisory.
   of every seven results were not being read.
 - `baseline-tighten` — Mondays, banks ratchet improvements.
 
+### Releases — local is primary, hosted is the fallback
+
+`scripts/release-all.sh` is the release process: one command, every target,
+cut from the arm64 Mac, publishing to `alexsbryan/svrnmesh-releases`. It costs
+**zero Actions minutes** and it is where the real guards live — the
+version-already-published check, the disk reclaim, and the CPU-aware per-leg
+stall watchdog that exists because the Linux leg once hung silently for 10.5
+hours and still reported exit 0.
+
+`.github/workflows/{desktop,cli}-release.yml` are the **fallback**: a
+clean-checkout build when you want one, or a way to ship when the Mac is
+unavailable. Four changes made that split real:
+
+1. **The tag triggers are gone.** `push: tags: desktop-v*` / `cli-v*` fired the
+   hosted workflows automatically — and since `release-all.sh` *requires* a tag
+   at HEAD before it will run, every local release also kicked off a full
+   hosted build of the same artifacts. You paid twice for one release. They are
+   now `workflow_dispatch` + `workflow_call` only.
+2. **Same llama cache-key fix as CI.** Both release workflows carried the
+   `hashFiles('Cargo.lock')` key. On the macOS legs, that discarded ~20 minutes
+   of C++ build at a 10× multiplier — roughly **200 of the 250 billed minutes**
+   the `macos-arm64` leg cost per run, spent reproducing bit-identical output.
+3. **Release legs are now cache CONSUMERS, never writers** (`save-if: false`,
+   `cache/restore` instead of `cache`). This is the fix for the mechanism in
+   §2.1 that was invisible from either side alone: GitHub caps a repo at **10 GB
+   of Actions cache total**, and this repo had ~9 distinct multi-GB rust-cache
+   keys competing for it (`workspace`, `xtask`, `api`, `router-cache-gate`, plus
+   `desktop-release-*` and `cli-release-*` per target). They LRU-evicted each
+   other continuously. **Releases were evicting CI's cache and CI was evicting
+   theirs** — that is why the cache measured 0 bytes. A twice-monthly job must
+   not evict what a daily job depends on.
+4. **Concurrency control, which neither workflow had.** A duplicate run is the
+   most expensive mistake available in this repo.
+
+What was already right and was left alone: `build` correctly `needs`
+`router-cache-gate`, so you never pay 10× to discover a version mismatch.
+
+**Known divergence — the two paths publish to different repos.** The local
+scripts publish to `alexsbryan/svrnmesh-releases`; the hosted workflows use
+`softprops/action-gh-release`, which targets the *current* repo
+(`commonwealth-ai`) — which is private, so its release assets are not publicly
+downloadable. The hosted fallback therefore produces correct artifacts in the
+wrong place. Deliberately not changed here: where a release publishes is
+outward-facing. Fix it before relying on the fallback to actually ship.
+
 ### Dependabot
 
 **Monthly, one grouped PR per ecosystem, majors included**
@@ -241,22 +309,31 @@ for the monthly window.
 | Dependabot (1 update run + 1 CI run) | ~60 |
 | Mesh soak (weekly) + weekly quality | ~50 |
 | Labeler + CLA | ~85 |
-| Releases (on demand) | ~250 |
-| **Total** | **~1,500–1,700** |
+| Releases — normal path (`scripts/release-all.sh`, local) | **0** |
+| Releases — hosted fallback, if invoked (~50–70/run post-fix) | 0–140 |
+| **Total** | **~1,250–1,500** |
 
-Against a 3,000-minute allowance that is roughly 45% headroom — deliberately,
-because the number that matters is not the average month but the month with a
-release, a dependency crisis, and a contributor.
+Against a 3,000-minute allowance that is roughly half in reserve —
+deliberately, because the number that matters is not the average month but the
+month with a release, a dependency crisis, and a contributor. And because the
+measured failure mode was a *burst*, not a drift: two days consumed a month.
 
 ### Where the remaining risk is
 
-**Release builds are the expensive per-run item.** macOS runners bill at
-**10×**: `Desktop release / build / macos-arm64` measured **250 billed minutes
-per run** (2 runs, 500 minutes). At two releases a month that is fine; at two a
-week it becomes the top line item. If release cadence rises, that job — not
-CI — is the thing to attack, and the self-hosted Intel Mac already referenced
-by `desktop-release.yml` is the obvious lever, since self-hosted minutes are
-free.
+**Iteration on the expensive paths**, which is what actually emptied the
+account. A day spent debugging CI or chasing a release failure can still cost
+hundreds of minutes, because each cycle is a fresh build. The mitigations are
+structural rather than numeric: `cancel-in-progress` everywhere (a superseded
+run stops costing), the pre-push hook (most CI-debugging cycles become local
+ones), and local-first releases (a failed release attempt costs electricity,
+not allowance).
+
+**The hosted macOS legs, if the fallback ever becomes routine.** `macos-arm64`
+measured 250 billed minutes per run before the cache-key fix. If release
+cadence rises or the Mac becomes unavailable for a stretch, register the arm64
+Mac as a self-hosted runner alongside the Intel one — self-hosted minutes are
+free. Note the Intel runner is manually started (`./run.sh`), which is why its
+recorded "wall times" of 7–12 hours are mostly queue-wait, not build time.
 
 **Cold-cache months.** Bumping `rust-toolchain.toml` invalidates the rust
 caches by design. Expect the first run after a toolchain bump to cost a full
