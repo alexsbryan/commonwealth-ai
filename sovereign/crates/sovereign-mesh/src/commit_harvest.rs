@@ -220,6 +220,28 @@ pub async fn harvest_between(
     let harvest = filter_and_classify(commits);
     let mut wrote = 0_usize;
     for c in harvest {
+        // Idempotency guard keyed on (source='committed', hash).
+        // Several registered projects can watch the same monorepo,
+        // and a poll can re-cover an already-harvested range — both
+        // used to write duplicates (4.5x measured on the live store
+        // 2026-07-23). First writer wins; everyone else skips.
+        match notes
+            .note_exists_for_entity(NoteSource::Committed, &c.hash)
+            .await
+        {
+            Ok(true) => {
+                tracing::debug!(hash = %c.hash, "commit_harvest: already harvested — skipping");
+                continue;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    hash = %c.hash,
+                    error = %e,
+                    "commit_harvest: dedup lookup failed — writing anyway"
+                );
+            }
+        }
         match notes
             .write_note_with_source(
                 c.kind,
@@ -425,6 +447,12 @@ mod tests {
 
         let wrote = harvest_between(repo, &old_head, &new_head, &store, "harvest-test").await;
         assert_eq!(wrote, 1, "expected exactly one harvested commit");
+
+        // Idempotency: the same range harvested again — as happens
+        // when several registered projects watch one monorepo, or a
+        // poll re-covers the range — writes nothing new.
+        let rewrote = harvest_between(repo, &old_head, &new_head, &store, "harvest-other").await;
+        assert_eq!(rewrote, 0, "re-harvest of the same range must dedup to zero");
 
         // The new note exists with source='committed'.
         let rows = store
