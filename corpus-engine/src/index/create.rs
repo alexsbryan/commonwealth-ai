@@ -550,6 +550,21 @@ impl CorpusIndex {
         write_meta(index_dir, &meta)
     }
 
+    /// Returns true if an index actually lives at `path` — i.e. its
+    /// `_corpus_meta.json` is on disk.
+    ///
+    /// "Does the directory exist?" is a DIFFERENT question, and the wrong
+    /// one for deciding create-vs-open. Other subsystems write siblings
+    /// into `<index_dir>/<corpus_id>/` before the first ingest — the
+    /// generic enrichment-progress sink drops an `_enrichment_state.json`
+    /// there — so the directory routinely exists with no index in it. A
+    /// caller that branches on `path.exists()` sends exactly that case
+    /// down `open()` and gets `IndexNotFound: Missing metadata`, the
+    /// failure it was trying to avoid.
+    pub fn exists_at(path: &Path) -> bool {
+        meta_path(path).exists()
+    }
+
     /// Returns true if the index has a complete, fully-committed ingestion.
     /// Used by `installed_indexes()` to skip partially-ingested directories
     /// left behind by a process kill.

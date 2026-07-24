@@ -58,7 +58,18 @@ test.describe("atlas corpus view — windowed atom list", () => {
       // Unique atom_id per atom (the #each key) — duplicates would trip
       // the harness console gate.
       w.__sovereign_test__.setHandler("atlas_list_atoms", (args: unknown) => {
-        const a = args as { page?: { offset?: number; limit?: number } };
+        const a = args as {
+          filter?: { atom_type?: string };
+          page?: { offset?: number; limit?: number };
+        };
+        // Honour the atom_type filter the real backend applies. The
+        // Explore surface also asks for Question atoms (the "open
+        // questions your sources raise" chip row); this corpus is all
+        // Entity atoms, so that request must come back empty — otherwise
+        // the same display names render twice on the page.
+        if (a.filter?.atom_type && a.filter.atom_type !== "Entity") {
+          return { items: [], total_matching: 0, next_offset: undefined };
+        }
         const offset = a.page?.offset ?? 0;
         const limit = a.page?.limit ?? 200;
         const end = Math.min(offset + limit, total);
@@ -97,8 +108,12 @@ test.describe("atlas corpus view — windowed atom list", () => {
     // (1) Windowed: far fewer rows in the DOM than the 1000 loaded.
     // Even a tall viewport renders only tens of rows + overscan.
     expect(await rows.count()).toBeLessThan(100);
+    // Row-scoped: other surfaces on this page (the open-questions chip
+    // row) can carry atom display names too, so "is Atom N on screen?"
+    // must mean "is it in the windowed list?".
+    const row = (name: string) => rows.getByText(name, { exact: true });
     // The list starts at the top — Atom 0 is the first row.
-    await expect(page.getByText("Atom 0", { exact: true })).toBeVisible();
+    await expect(row("Atom 0")).toBeVisible();
 
     // (2) The container can actually scroll to the bottom. Repeatedly
     // scroll to the end; infinite-scroll loads further pages until all
@@ -108,9 +123,7 @@ test.describe("atlas corpus view — windowed atom list", () => {
       .poll(
         async () => {
           await scroll.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-          return page
-            .getByText("Atom 999", { exact: true })
-            .count();
+          return row("Atom 999").count();
         },
         { timeout: 12_000, intervals: [150, 250, 400, 600] },
       )
@@ -119,7 +132,7 @@ test.describe("atlas corpus view — windowed atom list", () => {
     // Still windowed at the bottom — the DOM never held all 1000, and
     // the top rows have been recycled out (Atom 0 is no longer present).
     expect(await rows.count()).toBeLessThan(100);
-    await expect(page.getByText("Atom 0", { exact: true })).toHaveCount(0);
+    await expect(row("Atom 0")).toHaveCount(0);
   });
 
   // Freshness — atoms whose source doc was re-indexed after install

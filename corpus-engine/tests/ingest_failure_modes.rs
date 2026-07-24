@@ -333,3 +333,58 @@ async fn reinstalling_after_failure_works() {
         "successful re-install should appear in installed_indexes()"
     );
 }
+
+/// `ensure_empty_index` must materialise the index even when the index
+/// DIRECTORY already exists without an index in it.
+///
+/// This is the real-world shape, not a contrived one: the generic
+/// enrichment-progress sink writes `<index_dir>/<corpus_id>/
+/// _enrichment_state.json` before the first ingest completes, so by the
+/// time an all-unreadable folder reaches this path the directory is
+/// already there. Branching on `path.exists()` sent that case to
+/// `CorpusIndex::open`, which failed with
+/// `IndexNotFound: Missing metadata at …/_corpus_meta.json` — precisely
+/// the state `ensure_empty_index` exists to repair. Caught 2026-07-24 by
+/// the desktop real-mode e2e harness, whose governance fixture (two .md
+/// files under a `folder` corpus, which allows only pdf+txt) extracts
+/// zero documents and lands here.
+#[tokio::test]
+async fn ensure_empty_index_succeeds_when_dir_exists_without_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let parquet_path = dir.path().join("fixture.parquet");
+    make_tiny_parquet(&parquet_path);
+    let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
+
+    // Another subsystem got here first: the directory exists and holds a
+    // sibling state file, but no `_corpus_meta.json`.
+    let index_path = indexes_dir.join("test_corpus");
+    std::fs::create_dir_all(&index_path).unwrap();
+    std::fs::write(
+        index_path.join("_enrichment_state.json"),
+        br#"{"status":"Queued"}"#,
+    )
+    .unwrap();
+
+    let embed_fn: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
+    let engine = build_engine(embed_fn, recipes_dir, indexes_dir.clone());
+
+    let result = engine
+        .ensure_empty_index(&CorpusSpec::RecipePath(recipe_path))
+        .await
+        .expect("ensure_empty_index must repair a metadata-less directory, not fail on it");
+    assert_eq!(result.chunks_created, 0);
+
+    // The index is now valid on disk and visible to the rest of the system.
+    assert!(index_path.join("_corpus_meta.json").exists());
+    let installed = engine.installed_indexes().await.unwrap();
+    assert!(
+        installed.iter().any(|i| i.corpus_id == "test_corpus"),
+        "an ensured-empty index must be listed as installed"
+    );
+    // The sibling file that caused the bug is untouched.
+    assert!(index_path.join("_enrichment_state.json").exists());
+}

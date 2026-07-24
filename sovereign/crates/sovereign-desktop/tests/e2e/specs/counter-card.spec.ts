@@ -178,12 +178,20 @@ test.describe("verification counter", () => {
     // …but the moment tokens stream live (no heartbeat, no claim
     // frames), this is an ungated turn — the counter yields to the
     // legacy narration line instead of sitting on "warming up".
-    await page.evaluate((mid) => {
-      window.__sovereign_test__.emit("message-chunk", {
-        message_id: mid,
-        chunk: "Tokens are streaming live. ",
-      });
-    }, ctx.messageId);
+    // `conversation_id` is load-bearing: ChatView's message-chunk
+    // listener drops any chunk whose conversation isn't the one on
+    // screen (the orphaned-turn fix). Omit it and the chunk never
+    // reaches the bubble, so the counter never learns to yield.
+    await page.evaluate(
+      ({ mid, cid }) => {
+        window.__sovereign_test__.emit("message-chunk", {
+          conversation_id: cid,
+          message_id: mid,
+          chunk: "Tokens are streaming live. ",
+        });
+      },
+      { mid: ctx.messageId, cid: ctx.conversationId },
+    );
     await expect(page.locator('[data-testid="counter-card"]')).toHaveCount(0);
     await expect(
       page.locator('.doc-progress-indicator[data-source="narration"]'),
