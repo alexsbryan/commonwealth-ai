@@ -658,6 +658,9 @@ struct CfReport {
     batch_upper_bound_saved: f64,
     raw_tokens: u64,
     route_raw_saved: f64,
+    /// H5: work-item-close evictions applied and their net $ saved.
+    evictions: u64,
+    evict_saved: f64,
 }
 
 /// Markers whose presence in a user-record text block identifies content
@@ -682,6 +685,10 @@ const SMALL_TURN_GROWTH: u64 = 1_500;
 /// Code-intel answers the same question in ~1/5 the tokens of a raw read
 /// (observed: symbols/callers responses vs whole-file Reads).
 const INTEL_COMPRESSION: u64 = 5;
+/// H5: gist tokens retained in working context per closed work item — the
+/// note + pointers that replace the item's verbatim traces (reads, tool
+/// output, build logs) after eviction. MEMORY_MODEL.md §5 E1.
+const GIST_TOKENS_PER_ITEM: u64 = 1_000;
 
 fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
     let text = std::fs::read_to_string(path).ok()?;
@@ -693,6 +700,9 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
     let (mut actual_total, mut actual_cr_cost) = (0.0_f64, 0.0_f64);
     let mut model_counts: BTreeMap<String, u64> = BTreeMap::new();
     let mut last_usage_id: Option<String> = None;
+    // Request indices where a `git commit` tool call was issued — H5's
+    // work-item-close boundaries.
+    let mut commit_reqs: std::collections::BTreeSet<usize> = Default::default();
 
     for line in text.lines() {
         let line = line.trim();
@@ -740,12 +750,17 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
                     Some("tool_use") => {
                         let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
                         let raw = match name {
-                            "Bash" => block
-                                .get("input")
-                                .and_then(|i| i.get("command"))
-                                .and_then(|c| c.as_str())
-                                .map(|c| !is_sovereign_cli(c) && is_bash_read_like(c))
-                                .unwrap_or(false),
+                            "Bash" => {
+                                let cmd = block
+                                    .get("input")
+                                    .and_then(|i| i.get("command"))
+                                    .and_then(|c| c.as_str())
+                                    .unwrap_or("");
+                                if cmd.contains("git commit") && !points.is_empty() {
+                                    commit_reqs.insert(points.len() - 1);
+                                }
+                                !is_sovereign_cli(cmd) && is_bash_read_like(cmd)
+                            }
                             _ => classify(name) == Bucket::RawFileSearch,
                         };
                         if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
@@ -867,6 +882,34 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
         })
         .sum();
 
+    // H5 — evict at work-item close (MEMORY_MODEL.md §5 E1). Proxy for
+    // "item closed": a `git commit` tool call. On close, the item's verbatim
+    // traces collapse to a ~1k gist and context returns to seed + accumulated
+    // gists. Eviction edits the cached prefix, so the retained context is
+    // re-prefilled once (priced as a 5m cache write); every subsequent
+    // request saves the evicted tokens from its cache-read line. Same
+    // monotonic-growth offset model as H1.
+    let mut evict_saved = 0.0_f64;
+    let mut evictions = 0u64;
+    {
+        let mut offset = 0u64;
+        let mut closed = 0u64;
+        for (i, pt) in points.iter().enumerate() {
+            let saved_cr = offset.min(pt.cache_read);
+            evict_saved += (saved_cr as f64) / 1e6 * pt.price_cr;
+            if commit_reqs.contains(&i) {
+                let retained = seed + (closed + 1) * GIST_TOKENS_PER_ITEM;
+                if pt.ctx.saturating_sub(offset) > retained {
+                    closed += 1;
+                    evictions += 1;
+                    offset = pt.ctx - retained;
+                    evict_saved -=
+                        (retained as f64) / 1e6 * dominant_price.cache_write_5m;
+                }
+            }
+        }
+    }
+
     Some(CfReport {
         file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
         actual_total_cost: actual_total,
@@ -880,6 +923,8 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
         batch_upper_bound_saved: batch_saved,
         raw_tokens,
         route_raw_saved,
+        evictions,
+        evict_saved,
     })
 }
 
@@ -920,15 +965,23 @@ fn print_counterfactual(reports: &[CfReport]) {
         format!("H4 route raw reads via code-intel ({}k raw)", raw_total / 1000),
         reports.iter().map(|r| r.route_raw_saved).sum(),
     );
+    let evict_total: u64 = reports.iter().map(|r| r.evictions).sum();
+    lever(
+        format!("H5 evict at work-item close ({evict_total} evictions)"),
+        reports.iter().map(|r| r.evict_saved).sum(),
+    );
 
     println!(
         "\nassumptions: split seed = preamble + {}k (frame+brief+re-acquisition), splits \
          re-written as 1h cache; injections detected by hook markers; small turn = ctx \
-         growth < {}; intel compression = {}x. Levers are INDEPENDENT counterfactuals — \
-         they overlap (a split also evicts raw-read tokens); do not sum them.",
+         growth < {}; intel compression = {}x; work-item close = git commit call, \
+         {}k gist/item retained, eviction re-prefills retained ctx as a 5m write. \
+         Levers are INDEPENDENT counterfactuals — they overlap (a split also evicts \
+         raw-read tokens); do not sum them.",
         SPLIT_SEED_EXTRA / 1000,
         SMALL_TURN_GROWTH,
-        INTEL_COMPRESSION
+        INTEL_COMPRESSION,
+        GIST_TOKENS_PER_ITEM / 1000
     );
     println!("per-session: svrn cache-audit --counterfactual --session <id>");
 }
@@ -956,6 +1009,10 @@ fn print_counterfactual_detail(r: &CfReport) {
         "  H4 route raw reads ({:>4}k tok)   ${:>8.2}",
         r.raw_tokens / 1000,
         r.route_raw_saved
+    );
+    println!(
+        "  H5 evict-at-close ({:>3} evictions) ${:>7.2}",
+        r.evictions, r.evict_saved
     );
 }
 
@@ -1458,6 +1515,42 @@ mod tests {
 
         let cf = analyze_counterfactual(&path).expect("has usage");
         assert_eq!(cf.n_requests, 1, "counterfactual points deduped too");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn evict_at_close_prices_commit_boundary_eviction() {
+        // 50k preamble; a git-commit request at 200k ctx (the work-item
+        // close); six follow-up requests each billing 200k cache-read.
+        // seed = 50k + 6k, retained = seed + 1k gist = 57k, offset = 143k.
+        // Expected: 1 eviction; net = 6 * 143k * $0.50/M - 57k * $6.25/M
+        // = $0.429 - $0.356 = ~$0.073.
+        let mk = |id: &str, input: u64, cr: u64, block: &str| {
+            format!(
+                r#"{{"message":{{"id":"{id}","role":"assistant","model":"claude-opus-4-8","usage":{{"input_tokens":{input},"output_tokens":10,"cache_read_input_tokens":{cr},"cache_creation_input_tokens":0}},"content":[{block}]}}}}"#
+            )
+        };
+        let text_block = r#"{"type":"text","text":"working"}"#;
+        let commit_block = r#"{"type":"tool_use","id":"tc","name":"Bash","input":{"command":"git add -A && git commit -m 'done'"}}"#;
+        let mut lines = vec![mk("m1", 50_000, 0, text_block), mk("m2", 200_000, 0, commit_block)];
+        for i in 0..6 {
+            lines.push(mk(&format!("m{}", i + 3), 10_000, 200_000, text_block));
+        }
+        let body = lines.join("\n");
+        let dir =
+            std::env::temp_dir().join(format!("cache_audit_h5_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("h5evict99-session.jsonl");
+        std::fs::write(&path, body).unwrap();
+
+        let cf = analyze_counterfactual(&path).expect("has usage");
+        assert_eq!(cf.evictions, 1, "one commit boundary above retained ctx");
+        assert!(
+            cf.evict_saved > 0.05 && cf.evict_saved < 0.10,
+            "net saving ~$0.073, got {}",
+            cf.evict_saved
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
