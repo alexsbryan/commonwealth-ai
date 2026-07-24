@@ -1329,6 +1329,33 @@ impl NoteStore {
         .await
     }
 
+    /// True iff a live (non-retired) note with this `source` and
+    /// `related_entity` already exists. Write-time idempotency guard
+    /// for harvesters: the commit harvester keys on
+    /// `(source='committed', related_entity=<commit hash>)` so N
+    /// projects watching one monorepo — or a re-poll of an already
+    /// harvested range — write one note per commit, not one per
+    /// (project × poll). Before this guard existed the live store
+    /// had accumulated 1873 committed notes over 414 distinct
+    /// commits (measured 2026-07-23), drowning real decisions in
+    /// every notes query.
+    pub async fn note_exists_for_entity(
+        &self,
+        source: NoteSource,
+        related_entity: &str,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM notes
+                 WHERE source = ? AND related_entity = ? AND retired_at IS NULL",
+                params![source.as_str(), related_entity],
+                |r| r.get(0),
+            )
+            .map_err(sqlite_err)?;
+        Ok(n > 0)
+    }
+
     /// Full-fat v7 write path that also accepts a structured
     /// `payload_json` blob for per-kind data (e.g. `decision_kind`
     /// on `decision` rows, `authority` on `research_finding`,
