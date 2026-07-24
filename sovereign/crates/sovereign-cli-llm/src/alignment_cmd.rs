@@ -31,10 +31,18 @@ use corpus_engine::extractors::Extractor;
 
 const CORPUS_ID: &str = "alignment";
 
-/// The canonical alignment recipe, embedded at compile time from the
-/// single source of truth (`sovereign-recipes/alignment/recipe.toml`).
+/// The canonical alignment recipe, owned inline by the command that
+/// drives the alignment workflow.
 ///
-/// `alignment` is deliberately kept OUT of the public recipe catalog
+/// It is deliberately NOT loaded from `sovereign-recipes/alignment/` —
+/// that path is `.gitignore`d (the alignment corpus syncs the author's
+/// private `~/.claude`, so nothing about it belongs in the tracked
+/// recipe tree), which means an `include_str!` of it fails to compile on
+/// any clean checkout. Embedding the TOML as a `const` keeps the recipe
+/// out of the shared catalog while making the build self-contained: no
+/// external file, no fragile relative path.
+///
+/// `alignment` is also kept OUT of the public recipe catalog
 /// (`sovereign-recipes/registry.toml`) and the bundled-enum
 /// (`corpus_engine::recipe_builtin`): it syncs the author's own
 /// `~/.claude`, so it must not surface in `sovereign corpus list` or be
@@ -47,8 +55,52 @@ const CORPUS_ID: &str = "alignment";
 /// submitting the install, so `fetch_recipe` resolves it locally without
 /// ever needing a public catalog row. The command that owns the
 /// alignment workflow owns its recipe — no shared-registry surface area.
-const BUNDLED_RECIPE: &str =
-    include_str!("../../../../sovereign-recipes/alignment/recipe.toml");
+const BUNDLED_RECIPE: &str = r#"[corpus]
+id = "alignment"
+name = "Alignment workspace"
+description = """
+The user's `~/.claude/` plan files, auto-memory entries, and plan template, \
+ingested as a mutable-merge corpus that mesh-replicates between the user's \
+own daemons. Pairs with `mutable_merge = "source_doc_id_newest_mtime"` so \
+two machines that edit the same memory or plan file converge on the newer \
+copy after a mesh tick. The post-merge projector materializes the resulting \
+chunks back to disk on the receiving daemon — so a fresh machine reaches \
+parity with one `sovereign corpus install alignment`.\
+"""
+license = "private"
+mesh_sharing = true
+# Tailscale-IP is the auth boundary; advertising the corpus only exposes
+# it to peers already in the user's mesh. Privacy stays structural.
+mutable_merge = "source_doc_id_newest_mtime"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+# `local_file` resolves to the directory the extractor walks. The
+# extractor's own walk restricts itself to the canonical alignment
+# subset (plans/, projects/-*/memory/, _TEMPLATE.md), so pointing at
+# `~/.claude` is safe even though it contains other surfaces.
+[acquire]
+type = "local_file"
+path = "~/.claude"
+
+[extract]
+type = "alignment_workspace"
+
+# One chunk per markdown file. The extractor populates `mtime` via
+# metadata; passthrough preserves it. Mutable-merge keys on
+# `source_doc_id` (the relative path), so two machines editing the
+# same `plans/today.md` converge on the higher-mtime version.
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+# No enrichment — the alignment corpus is a transport, not an atlas.
+[enrichment]
+enabled = false
+"#;
 
 /// Write the embedded alignment recipe into the daemon's tier-1 recipe
 /// override directory so `fetch_recipe(CORPUS_ID)` resolves it before it
