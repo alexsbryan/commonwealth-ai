@@ -368,7 +368,14 @@ pub(super) async fn start_daemon() -> i32 {
         }
     };
 
-    let log_dir = home_dir_buf().join(".sovereign").join("logs");
+    // Derive from the resolved runtime root (`~/.svrnmesh`, falling back to a
+    // populated legacy `~/.sovereign`) — NOT a hardcoded `~/.sovereign`. This
+    // keeps manual `svrn daemon start` writing to the same `logs/daemon.err`
+    // the service path uses (service_install.rs) and every reader expects.
+    // The bare `.sovereign` hardcode survived the `svrnmesh` rename and sent
+    // manual-start logs to a stale dir, which is what made an alignment
+    // ingest's progress invisible on 2026-07-24.
+    let log_dir = sovereign_cli_shared::dirs::sovereign_root().join("logs");
     if let Err(e) = std::fs::create_dir_all(&log_dir) {
         eprintln!("error: cannot create {}: {e}", log_dir.display());
         return 1;

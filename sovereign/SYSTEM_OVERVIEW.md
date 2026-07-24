@@ -2256,10 +2256,67 @@ minutes on a ~7.7k-test run). Three scoping levers, with **different reach**:
   `--workspace`, so the gate never silently under-covers.
 - `--filter <pat>` → a libtest **name** filter (`cargo test … -- <pat>`):
   narrows which tests RUN within the selected scope, but a name filter cannot
-  shrink the compile — use it to focus a run, not to skip building crates.
-Mind treesitter feature-unification thrash on narrow `-p` builds (a bare
-`-p` flip rebuilds `corpus-engine` + its dependents); the script already
-carries `-F corpus-engine/treesitter` to stay on the watcher's resolution.
+  shrink the compile on its own, so as of 2026-07-24 it **also scopes the
+  build**: a single test cost 36s workspace-scoped against 1s for
+  `cargo test -p <crate>`. The scope is derived from the pattern — libtest
+  matches it as a substring of each test's full path, so any test it can match
+  must have that substring in its own crate's sources, and `git grep`-ing for
+  it OVER-approximates the owning crates (it can select a crate with no
+  matching test, harmless; it cannot miss one that has a match). Verified on a
+  deliberately broad 29-crate pattern: identical 187-test set vs workspace
+  scope. Broad patterns degrade gracefully to the full workspace;
+  `--filter-workspace` forces the old compile-everything behaviour.
+
+Feature flags are **scope-aware**. `--features <pkg>/<feat>` is a hard cargo
+ERROR when `<pkg>` is outside the `-p` selection, so the previously
+unconditional `-F corpus-engine/treesitter` made `--package <leaf-crate>` fail
+outright (`--package oicp-types` → exit 101, zero tests run). `resolve_features`
+in `scripts/lib/cargo-scope.sh` now emits a flag only when its package is in
+the selection's workspace-internal dependency closure; the unscoped run still
+gets both flags, so the gate's own coverage is unchanged. That lib also holds
+`crate_for_path` + `keep_members`, shared with `nextest.sh` so the two runners
+cannot drift apart — and `keep_members` is load-bearing: `crate_for_path` can
+resolve a `[package]` dir that is **not** a workspace member (`sovereign-mobile`
+is a standalone Tauri app), and `cargo -p <non-member>` aborts the entire run.
+
+Scoped runs share the workspace `target/` unless sccache is genuinely wired
+(`command -v sccache` **and** `RUSTC_WRAPPER`). The isolated
+`target/sovereign-test-scoped` dir only pays off when sccache serves the
+unchanged crates; without it it is just a second permanently-cold build tree —
+it had reached 37 GB and a week of staleness before this gate landed. The
+fallback re-accepts treesitter feature-unification thrash (a bare `-p` flip can
+rebuild `corpus-engine` + its dependents), which is far cheaper than a
+guaranteed from-scratch build.
+
+**Executors — `--engine auto|nextest|cargo`.** `cargo test` runs the
+workspace's 178 test binaries *serially*: 90.5s of in-binary time against a
+16.7s slowest binary. nextest runs them in parallel, so the gate's own
+`--engine nextest` (the `auto` default wherever cargo-nextest is installed)
+cuts test execution to ~19s. `auto` falls back to cargo on a machine that never
+ran bootstrap — nextest is a speed win, not a correctness dependency — but an
+*explicit* `--engine nextest` errors rather than silently downgrading, since
+quietly running a different executor is how "nextest is green" comes to mean
+nothing. `scripts/bootstrap.sh` installs cargo-nextest at a **pinned** version
+(profiles live in `.config/nextest.toml`, so version skew is silent behaviour
+skew across the mesh).
+
+Switching engines changes the clock, never the coverage. Three things enforce
+that. (1) nextest reports via JUnit rather than libtest stdout, so
+`sovereign-nextest-junit-adapter` translates it into the **same** Tier 2 JSONL
+the libtest adapter emits — `n` stays the bare test path, so no existing
+consumer can tell the engines apart. (2) nextest cannot run doctests at all, so
+the gate unconditionally appends a `cargo test --doc` pass (~4s; the workspace
+has 43 doctest targets and 0 runnable doctests today, making it pure insurance
+against the first doctest anyone writes silently never running). (3) The JUnit
+report is written at the *end* of a run, so a run that dies during compilation
+would leave the previous report in place — the gate deletes it first, making
+"no report" unambiguously mean "this run produced no results" instead of
+replaying a stale green. `--no-tests=pass` restores cargo's exit-0-on-no-match
+semantics, which `--filter`'s deliberate over-approximation depends on.
+
+`scripts/nextest.sh` remains as the fast-path dev runner, with nextest's richer
+`-E` filter-expression language; the gate deliberately keeps plain substring
+filter semantics so its results are comparable across both engines.
 
 ### Run
 

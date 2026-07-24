@@ -35,11 +35,19 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# resolve_features / nextest_install_hint — shared with sovereign-test.sh so the
+# two runners cover identically. See scripts/lib/cargo-scope.sh.
+# shellcheck source=lib/cargo-scope.sh
+source "${SCRIPT_DIR}/lib/cargo-scope.sh"
+
 PACKAGES=()
 HUMAN=0
 FILTER=""
 PROFILE="default"
-EXTRA_FEATURES="--features corpus-engine/treesitter"
+# WHICH `<pkg>/<feature>` flags apply is decided after arg parsing, from the
+# resolved package selection — see "Feature selection" below.
+WANT_FEATURES=1
+EXTRA_FEATURES=""
 RUN_DOCTESTS=1
 
 print_help() {
@@ -61,7 +69,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --no-default-features)
-            EXTRA_FEATURES=""
+            WANT_FEATURES=0
             shift
             ;;
         --profile)
@@ -83,9 +91,27 @@ done
 
 if ! command -v cargo-nextest >/dev/null 2>&1; then
     echo "nextest: cargo-nextest not installed." >&2
-    echo "  Install: cargo install cargo-nextest --locked" >&2
-    echo "  Or precompiled: curl -LsSf https://get.nexte.st/latest/mac | tar zxf - -C ~/.cargo/bin" >&2
+    # Platform-correct hint — the precompiled tarballs are keyed by OS, so a
+    # hardcoded /mac URL handed Linux developers a macOS binary.
+    nextest_install_hint >&2
+    echo "  (scripts/sovereign-test.sh works without nextest — it's the gate anyway.)" >&2
     exit 2
+fi
+
+# ── Feature selection — scope-aware ────────────────────────────────────────
+# Identical rule to sovereign-test.sh: a `<pkg>/<feature>` flag whose package is
+# outside the `-p` selection is a hard cargo ERROR, not a no-op. This script
+# previously hardcoded `--features corpus-engine/treesitter` (so `--package
+# oicp-types` could not run at all) and never passed sovereign-cli/dev-tools at
+# all (so it silently UNDER-COVERED the dev-verb suites that the gate runs).
+# Both runners now ask the same helper, so their coverage cannot drift apart.
+if [[ $WANT_FEATURES -eq 1 ]]; then
+    feature_list="$(resolve_features ${PACKAGES[@]+"${PACKAGES[@]}"})"
+    if [[ -n "$feature_list" ]]; then
+        EXTRA_FEATURES="--features $feature_list"
+        [[ ${#PACKAGES[@]} -gt 0 ]] && \
+            echo "nextest: features in scope: ${feature_list}" >&2
+    fi
 fi
 
 # Build nextest argv.

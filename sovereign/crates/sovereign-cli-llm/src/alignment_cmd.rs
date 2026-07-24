@@ -28,6 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine::extractors::alignment_workspace::AlignmentWorkspaceExtractor;
 use corpus_engine::extractors::Extractor;
+use corpus_engine::IngestProgress;
 
 const CORPUS_ID: &str = "alignment";
 
@@ -295,11 +296,13 @@ async fn cmd_status(_args: &[String]) -> i32 {
     };
     print_scope_summary(&scope, true);
 
-    // Check for an installed alignment corpus on disk.
+    // On-disk corpus (persisted only after the first index flush).
+    let mut have_local = false;
     if let Some(indexes_dir) = mesh_indexes_dir() {
         let canonical = indexes_dir.join(CORPUS_ID);
         let meta = canonical.join("_corpus_meta.json");
         if meta.exists() {
+            have_local = true;
             println!();
             println!("Local alignment corpus: {}", canonical.display());
             if let Ok(raw) = std::fs::read_to_string(&meta) {
@@ -317,16 +320,162 @@ async fn cmd_status(_args: &[String]) -> i32 {
                     }
                 }
             }
-        } else {
+        }
+    }
+
+    // Live in-flight ingest, straight from the daemon — the authoritative
+    // "is it running?" signal. The on-disk `_corpus_meta.json` above only
+    // appears after the first index flush, so before this check `status`
+    // reported "No local alignment corpus yet — run migrate" *while an
+    // ingest was actively running*, telling the user to re-launch the very
+    // job already in flight (observed 2026-07-24). Query the same progress
+    // map the Desktop UI polls so the two surfaces can never disagree.
+    match fetch_alignment_progress().await {
+        Ok(Some(IngestProgress::Complete {
+            total_chunks,
+            duration_secs,
+        })) => {
             println!();
             println!(
-                "No local alignment corpus yet. Run `svrn alignment migrate` \
-                 to ingest the local state."
+                "✓ Ingest complete — {total_chunks} chunks in {duration_secs}s. \
+                 The corpus registers once the projector materializes it."
             );
+        }
+        Ok(Some(progress)) => {
+            println!();
+            println!("⏳ Ingest in progress — {}", render_ingest_progress(&progress));
+            println!("   Re-run `svrn alignment status` to refresh.");
+            println!("   Live log: tail -f {} | grep '[alignment]'", daemon_log_path());
+        }
+        Ok(None) => {
+            if !have_local {
+                println!();
+                println!(
+                    "No local alignment corpus yet, and no ingest is running on the \
+                     daemon. Run `svrn alignment migrate` to ingest the local state."
+                );
+            }
+        }
+        Err(reason) => {
+            // Daemon unreachable — say so honestly rather than claiming
+            // nothing is running (we genuinely can't tell from here).
+            if !have_local {
+                println!();
+                println!(
+                    "No local alignment corpus yet. Could not reach the daemon to \
+                     check for an in-flight ingest ({reason}). Is `svrn daemon` \
+                     running? Try: svrn daemon status"
+                );
+            }
         }
     }
 
     0
+}
+
+/// GET the daemon's live ingest-progress snapshot (`/internal/corpus/progress`,
+/// the same map the Desktop UI polls) and return the entry for the alignment
+/// corpus, if any.
+///
+/// - `Ok(Some(_))` — an ingest for `alignment` is in flight (or just
+///   completed and not yet evicted).
+/// - `Ok(None)` — daemon reachable but not ingesting alignment.
+/// - `Err(_)` — daemon unreachable, so we genuinely don't know.
+///
+/// Deliberately short-timeout: `status` must stay responsive even when the
+/// daemon is busy embedding.
+async fn fetch_alignment_progress() -> Result<Option<IngestProgress>, String> {
+    #[derive(serde::Deserialize)]
+    struct ProgressSnapshot {
+        progress: HashMap<String, IngestProgress>,
+    }
+    // Same internal port the install path posts to (config.node.internal_port,
+    // default 9742). Keep the two in lockstep — they talk to the same daemon.
+    let url = "http://127.0.0.1:9742/internal/corpus/progress";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("daemon returned {}", resp.status()));
+    }
+    let snap: ProgressSnapshot = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(snap.progress.get(CORPUS_ID).cloned())
+}
+
+/// One-line human rendering of an in-flight ingest phase, for `status`.
+fn render_ingest_progress(p: &IngestProgress) -> String {
+    match p {
+        IngestProgress::Downloading {
+            percent,
+            bytes_downloaded,
+            ..
+        } => format!(
+            "downloading {percent:.0}% ({:.0} MB)",
+            *bytes_downloaded as f64 / 1_048_576.0
+        ),
+        IngestProgress::Extracting {
+            documents_processed,
+        } => format!("extracting — {documents_processed} documents scanned"),
+        IngestProgress::Chunking { chunks_created } => {
+            format!("chunking — {chunks_created} chunks created")
+        }
+        IngestProgress::Embedding {
+            chunks_embedded,
+            total,
+            docs_processed,
+            chunks_per_sec,
+            expected_docs,
+        } => {
+            let mut s = format!(
+                "embedding — {docs_processed} docs, {chunks_embedded} chunks @ {chunks_per_sec:.1}/s"
+            );
+            // Prefer the doc-ratio denominator for filtered ingests (the only
+            // honest one), else the chunk total when it's known.
+            if let Some(exp) = expected_docs.filter(|e| *e > 0) {
+                let pct = (*docs_processed as f64 / exp as f64 * 100.0).min(100.0);
+                s.push_str(&format!(" ({pct:.0}% of ~{exp} docs)"));
+            } else if *total > 0 {
+                let pct = (*chunks_embedded as f64 / *total as f64 * 100.0).min(100.0);
+                s.push_str(&format!(" ({pct:.0}% of {total} chunks)"));
+            }
+            s
+        }
+        IngestProgress::Indexing {
+            chunks_indexed,
+            total,
+        } => format!("indexing — {chunks_indexed}/{total} chunks"),
+        IngestProgress::OptimizingIndex { current_chunks } => {
+            format!("optimizing search index ({current_chunks} chunks)")
+        }
+        IngestProgress::Enriching {
+            phase,
+            detail,
+            fraction,
+        } => match fraction {
+            Some(f) => format!("enriching [{phase}] {detail} ({:.0}%)", f * 100.0),
+            None => format!("enriching [{phase}] {detail}"),
+        },
+        IngestProgress::Complete {
+            total_chunks,
+            duration_secs,
+        } => format!("complete — {total_chunks} chunks in {duration_secs}s"),
+    }
+}
+
+/// Path to the live daemon log for the "watch progress" hint. Derived from
+/// `sovereign_root()` (the branded runtime home, `~/.svrnmesh`) so it tracks
+/// the `svrnmesh` rename — the daemon writes `[alignment] …` progress lines
+/// to `daemon.err` there. (The legacy `~/.sovereign/logs/daemon.log` is frozen
+/// post-rename, which is what made this ingest's progress invisible on
+/// 2026-07-24.)
+fn daemon_log_path() -> String {
+    sovereign_cli_shared::dirs::sovereign_root()
+        .join("logs")
+        .join("daemon.err")
+        .display()
+        .to_string()
 }
 
 // ─── shared scaffolding ─────────────────────────────────────────────
@@ -470,11 +619,136 @@ fn make_backup(home: &Path, scope: &AlignmentScope) -> Result<PathBuf, String> {
 }
 
 fn mesh_indexes_dir() -> Option<PathBuf> {
-    Some(sovereign_cli_shared::dirs::mesh_data_dir().join("indexes"))
+    // Corpora live under the runtime root (`sovereign_root()/indexes`,
+    // i.e. `~/.svrnmesh/indexes`) — the same root the daemon's corpus
+    // engine writes to and `project serve` reads from. The old
+    // `mesh_data_dir().join("indexes")` pointed at the XDG *data* dir
+    // (`~/.local/share/svrnmesh/indexes`), which only holds mesh identity
+    // (mesh.json, node_id) and never any corpus — so `status` reported
+    // "No local alignment corpus yet" even after a fully-materialized
+    // 1930-chunk ingest sitting in `~/.svrnmesh/indexes/alignment`
+    // (observed 2026-07-24).
+    Some(sovereign_cli_shared::dirs::sovereign_indexes())
 }
 
 fn format_unix_secs(secs: i64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0)
         .map(|dt| dt.to_rfc3339())
         .unwrap_or_else(|| secs.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The rendering is what a user reads to answer "is my ingest running?".
+    // Pin each phase, and especially the two Embedding denominators, so the
+    // percent math can't silently drift.
+
+    #[test]
+    fn embedding_prefers_expected_docs_ratio() {
+        let p = IngestProgress::Embedding {
+            chunks_embedded: 1280,
+            total: 0,
+            docs_processed: 25,
+            chunks_per_sec: 13.7,
+            expected_docs: Some(100),
+        };
+        let s = render_ingest_progress(&p);
+        assert!(s.contains("25 docs"), "{s}");
+        assert!(s.contains("1280 chunks"), "{s}");
+        assert!(s.contains("13.7/s"), "{s}");
+        assert!(s.contains("25% of ~100 docs"), "{s}");
+    }
+
+    #[test]
+    fn embedding_falls_back_to_chunk_total_when_no_expected_docs() {
+        let p = IngestProgress::Embedding {
+            chunks_embedded: 500,
+            total: 1000,
+            docs_processed: 500,
+            chunks_per_sec: 12.0,
+            expected_docs: None,
+        };
+        let s = render_ingest_progress(&p);
+        assert!(s.contains("50% of 1000 chunks"), "{s}");
+    }
+
+    #[test]
+    fn embedding_percent_is_clamped_to_100() {
+        // Filtered ingests scan the whole source, so docs_processed can
+        // overshoot the estimate — the bar must not read "150%".
+        let p = IngestProgress::Embedding {
+            chunks_embedded: 0,
+            total: 0,
+            docs_processed: 150,
+            chunks_per_sec: 0.0,
+            expected_docs: Some(100),
+        };
+        let s = render_ingest_progress(&p);
+        assert!(s.contains("100% of ~100 docs"), "{s}");
+    }
+
+    #[test]
+    fn embedding_omits_percent_when_denominator_unknown() {
+        let p = IngestProgress::Embedding {
+            chunks_embedded: 10,
+            total: 0,
+            docs_processed: 5,
+            chunks_per_sec: 1.0,
+            expected_docs: None,
+        };
+        let s = render_ingest_progress(&p);
+        assert!(!s.contains('%'), "no denominator known, so no percent: {s}");
+    }
+
+    #[test]
+    fn renders_every_phase_nonempty() {
+        let phases = [
+            IngestProgress::Downloading {
+                percent: 42.0,
+                bytes_downloaded: 5 * 1_048_576,
+                bytes_total: Some(10 * 1_048_576),
+            },
+            IngestProgress::Extracting {
+                documents_processed: 7,
+            },
+            IngestProgress::Chunking { chunks_created: 9 },
+            IngestProgress::Indexing {
+                chunks_indexed: 3,
+                total: 8,
+            },
+            IngestProgress::OptimizingIndex {
+                current_chunks: 100,
+            },
+            IngestProgress::Enriching {
+                phase: "entity-extraction".into(),
+                detail: "extracting entities".into(),
+                fraction: Some(0.5),
+            },
+            IngestProgress::Complete {
+                total_chunks: 1280,
+                duration_secs: 120,
+            },
+        ];
+        for p in &phases {
+            assert!(!render_ingest_progress(p).is_empty(), "{p:?}");
+        }
+    }
+
+    #[test]
+    fn enriching_renders_fraction_when_present_and_omits_when_absent() {
+        let with = IngestProgress::Enriching {
+            phase: "clustering".into(),
+            detail: "clustering embeddings".into(),
+            fraction: Some(0.5),
+        };
+        assert!(render_ingest_progress(&with).contains("50%"));
+        let without = IngestProgress::Enriching {
+            phase: "clustering".into(),
+            detail: "clustering embeddings".into(),
+            fraction: None,
+        };
+        assert!(!render_ingest_progress(&without).contains('%'));
+    }
 }

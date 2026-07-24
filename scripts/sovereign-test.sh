@@ -11,18 +11,30 @@
 #   every failing test by name, and points at the saved adapter logs
 #   for failure-output triage.
 #
-# Coverage. One `cargo test --workspace` invocation. Pre-monorepo this
-# script fanned out across three independent cargo workspaces; the
-# 2026-05-10 monorepo collapse means a single root workspace covers
-# every crate, and one cargo invocation does the job a fan would.
-# Treesitter is enabled explicitly (`-F corpus-engine/treesitter`)
-# because sovereign-test ran corpus-engine with --features treesitter
-# before the merge and we don't want test coverage to silently shrink.
-# `sovereign-cli/dev-tools` is enabled for the same reason: the dev
-# verbs (and their integration suites — aliases, phase3 serve/init,
-# phase6 retirement) are feature-gated out of the default end-user
-# build, and this script tests the developer build. The default
-# build's intercept contract is covered separately by
+# Coverage. One workspace-wide run. Pre-monorepo this script fanned out
+# across three independent cargo workspaces; the 2026-05-10 monorepo
+# collapse means a single root workspace covers every crate, so one
+# invocation does the job a fan would — this script has NOT added any
+# parallelism of its own since then, and never claimed the speed the
+# fan-out once gave (see --engine for where the parallelism actually
+# comes from now).
+#
+# Two executors, one coverage contract. `--engine nextest` (the default
+# where cargo-nextest is installed) runs test binaries in parallel and
+# reports via JUnit; `--engine cargo` runs them serially and reports via
+# libtest. Both are translated to the SAME Tier 2 JSONL by their
+# respective adapters, and nextest's inability to run doctests is covered
+# by an unconditional `cargo test --doc` pass — so switching engines
+# changes the clock, never the coverage.
+#
+# The `<pkg>/<feature>` flags are chosen per-selection by resolve_features
+# in lib/cargo-scope.sh, not hardcoded: treesitter because sovereign-test
+# ran corpus-engine with --features treesitter before the merge and we
+# don't want coverage to silently shrink, and `sovereign-cli/dev-tools`
+# for the same reason — the dev verbs (and their integration suites:
+# aliases, phase3 serve/init, phase6 retirement) are feature-gated out of
+# the default end-user build, and this script tests the developer build.
+# The default build's intercept contract is covered separately by
 # `sovereign-cli/tests/default_build_gate.rs` under plain
 # `cargo test -p sovereign-cli`.
 #
@@ -36,6 +48,21 @@
 #   --human                 Compact human-readable summary on stderr.
 #                           Tier 2 JSONL still written to logs; stdout
 #                           becomes the summary.
+#   --engine <auto|nextest|cargo>
+#                           Test executor. Default `auto` = nextest when
+#                           cargo-nextest is installed, else cargo.
+#                           nextest runs the workspace's ~178 test binaries
+#                           in PARALLEL where `cargo test` runs them one at a
+#                           time: measured 2026-07-24, test execution 19.0s
+#                           vs ~104s, full run 58.9s vs 126s. Both engines
+#                           emit the identical Tier 2 JSONL contract, so the
+#                           daemon's test_status cannot tell them apart.
+#                           `cargo` forces the old path (and is the automatic
+#                           fallback on a machine without nextest, so the gate
+#                           still works everywhere).
+#                           NOTE nextest does not run DOCTESTS — this script
+#                           always appends a separate `cargo test --doc` pass
+#                           so switching engines can never shrink coverage.
 #   --package <name>        Run only the named package (e.g.
 #                           `--package sovereign-cli`). Repeatable or
 #                           comma-separated. Maps to cargo's `-p` flag.
@@ -51,18 +78,26 @@
 #                           so the gate never silently under-covers.
 #                           Scoped runs (--changed/--package) build into an
 #                           ISOLATED target dir (target/sovereign-test-scoped)
-#                           so their smaller feature-unification set can't
-#                           invalidate the --workspace cache the watcher and
-#                           pre-merge gate keep warm. sccache (keyed by
-#                           compiler inputs, not target dir) keeps the isolated
-#                           build fast. Set CARGO_TARGET_DIR to override.
+#                           ONLY when sccache is actually wired up — see the
+#                           "Target-dir isolation" note below for why that
+#                           precondition is load-bearing. Set CARGO_TARGET_DIR
+#                           to override either way.
 #   --filter <pattern>      Pass <pattern> to cargo test as a libtest
-#                           NAME filter. This narrows which tests RUN, not
-#                           which crates COMPILE: a name filter can't tell
-#                           cargo to skip building a crate, so the whole
-#                           selected scope still compiles. For a lean
-#                           BUILD, reach for --changed / --package; use
-#                           --filter to focus the run within that scope.
+#                           NAME filter, AND auto-scope the build to the
+#                           crates whose sources contain <pattern>.
+#                           A libtest filter is a substring match on the
+#                           test's full path, so any test it can match must
+#                           have that substring somewhere in its crate's
+#                           .rs sources — grepping for it therefore
+#                           OVER-approximates the owning crates and can
+#                           never under-cover. A broad pattern selects
+#                           broadly (degrading to the full workspace),
+#                           which is exactly the old behaviour.
+#                           Explicit --package / --changed win over this.
+#   --filter-workspace      Keep --filter workspace-scoped (compile every
+#                           crate, run the filtered tests). The pre-2026-07
+#                           behaviour; use it when you suspect the grep
+#                           heuristic is missing a crate.
 #   --no-default-features   Skip the corpus-engine treesitter feature
 #                           (and any others). Default off.
 #   --keep-logs             Preserve adapter logs even on success
@@ -81,7 +116,13 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-test-adapter"
+NEXTEST_ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-nextest-junit-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# crate_for_path / keep_members / resolve_features — shared with nextest.sh so
+# the two runners cover identically. See scripts/lib/cargo-scope.sh.
+# shellcheck source=lib/cargo-scope.sh
+source "${SCRIPT_DIR}/lib/cargo-scope.sh"
 LOG_DIR="${REPO_ROOT}/target/sovereign-test"
 
 PACKAGES=()
@@ -89,7 +130,16 @@ HUMAN=0
 KEEP_LOGS=0
 CHANGED=0
 FILTER=""
-EXTRA_FEATURES="--features corpus-engine/treesitter"
+FILTER_WORKSPACE=0
+ENGINE="auto"
+# nextest writes its JUnit report under <target>/nextest/<profile>/. Pinned to
+# the `default` profile, whose fail-fast=false matches the gate's --no-fail-fast
+# intent; .config/nextest.toml defines the junit path for it.
+NEXTEST_PROFILE="default"
+# Whether to pass the `<pkg>/<feature>` flags at all. WHICH flags is decided
+# later, from the resolved package selection — see "Feature selection".
+WANT_FEATURES=1
+EXTRA_FEATURES=""
 
 print_help() {
     sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
@@ -110,8 +160,18 @@ while [[ $# -gt 0 ]]; do
             FILTER="$1"
             shift
             ;;
+        --filter-workspace) FILTER_WORKSPACE=1; shift ;;
+        --engine)
+            shift
+            ENGINE="$1"
+            case "$ENGINE" in
+                auto|nextest|cargo) ;;
+                *) echo "sovereign-test: --engine must be auto|nextest|cargo (got '$ENGINE')" >&2; exit 2 ;;
+            esac
+            shift
+            ;;
         --no-default-features)
-            EXTRA_FEATURES=""
+            WANT_FEATURES=0
             shift
             ;;
         --keep-logs) KEEP_LOGS=1; shift ;;
@@ -129,33 +189,8 @@ done
 # builds + runs ONLY the touched crates (and their dependents' tests).
 # This is a genuine INPUT filter: cargo never compiles an untouched crate.
 #
-# "Owns" = nearest ancestor directory holding a Cargo.toml with a
-# `[package]` section (the virtual workspace-root manifest has only
-# `[workspace]`, so it's skipped — a change to a non-crate path like
-# scripts/ resolves to no crate and is reported, not silently swallowed).
-crate_for_path() {
-    # Walk up from the file's directory to REPO_ROOT looking for the
-    # nearest crate manifest; echo its package name, or nothing.
-    local dir="$REPO_ROOT/$1"
-    dir="$(dirname "$dir")"
-    while :; do
-        local manifest="$dir/Cargo.toml"
-        if [[ -f "$manifest" ]] && grep -q '^\[package\]' "$manifest"; then
-            awk '
-                /^\[package\]/ { inpkg=1; next }
-                /^\[/          { inpkg=0 }
-                inpkg && /^name[[:space:]]*=/ {
-                    gsub(/^name[[:space:]]*=[[:space:]]*"/, "")
-                    gsub(/".*$/, "")
-                    print; exit
-                }
-            ' "$manifest"
-            return 0
-        fi
-        [[ "$dir" == "$REPO_ROOT" || "$dir" == "/" ]] && return 0
-        dir="$(dirname "$dir")"
-    done
-}
+# crate_for_path and keep_members come from lib/cargo-scope.sh (sourced above),
+# so this runner and nextest.sh resolve crate ownership identically.
 
 if [[ $CHANGED -eq 1 ]]; then
     changed_crates=()
@@ -190,7 +225,7 @@ if [[ $CHANGED -eq 1 ]]; then
                 [[ "$p" == "$c" ]] && { already=1; break; }
             done
             [[ $already -eq 0 ]] && PACKAGES+=("$c")
-        done < <(printf '%s\n' "${changed_crates[@]}" | sort -u)
+        done < <(printf '%s\n' "${changed_crates[@]}" | sort -u | keep_members)
     fi
 
     if [[ ${#PACKAGES[@]} -gt 0 ]]; then
@@ -202,31 +237,95 @@ if [[ $CHANGED -eq 1 ]]; then
     fi
 fi
 
-# `sovereign-cli/dev-tools` re-enables the feature-gated dev-verb
-# suites (aliases, phase3 serve/init, phase6 retirement). The
-# `pkg/feature` syntax is an ERROR (not a no-op) when the package is
-# outside the `-p` selection, and sovereign-cli is a leaf crate no one
-# depends on — so only add it when sovereign-cli is actually selected.
-if [[ -n "$EXTRA_FEATURES" ]]; then
-    if [[ ${#PACKAGES[@]} -eq 0 ]]; then
-        EXTRA_FEATURES+=",sovereign-cli/dev-tools"
+# ── --filter → owning crates ───────────────────────────────────────────────
+# A libtest name filter narrows which tests RUN but tells cargo nothing about
+# which crates to COMPILE, so `--filter one_test` used to pay the full
+# workspace build: measured 2026-07-24 at 36s (22s cargo staleness-checking 52
+# crates + 14s launching all 229 test binaries so each could filter everything
+# out) against 1s for the same single test under `cargo test -p <crate>`.
+#
+# Close that gap by deriving the crate scope from the pattern itself. libtest
+# matches the filter as a SUBSTRING of each test's full path (module path +
+# fn name), so every test the filter can match necessarily has that substring
+# somewhere in its own crate's .rs sources. Grepping for it therefore
+# OVER-approximates the owning crates — it can select a crate that turns out
+# to have no matching test (harmless: that crate just reports 0 tests run),
+# but it cannot miss one that does. A broad pattern selects broadly and
+# degrades gracefully to the full workspace, i.e. to the old behaviour.
+#
+# `git grep --untracked` (not `grep -r`) is load-bearing: it honours
+# .gitignore, so it never descends into target/ — which is 474 GB on a
+# working machine — while still seeing new, not-yet-committed test files.
+#
+# Explicit --package/--changed win: if the caller already scoped the build,
+# --filter goes back to being a pure run-narrower within that scope.
+if [[ -n "$FILTER" && ${#PACKAGES[@]} -eq 0 && $FILTER_WORKSPACE -eq 0 ]]; then
+    filter_crates=()
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        c="$(crate_for_path "$f")"
+        [[ -n "$c" ]] && filter_crates+=("$c")
+    done < <(git -C "$REPO_ROOT" grep -l --untracked -F -e "$FILTER" -- '*.rs' 2>/dev/null)
+
+    if [[ ${#filter_crates[@]} -gt 0 ]]; then
+        while IFS= read -r c; do
+            [[ -z "$c" ]] && continue
+            PACKAGES+=("$c")
+        done < <(printf '%s\n' "${filter_crates[@]}" | sort -u | keep_members)
+    fi
+
+    if [[ ${#PACKAGES[@]} -gt 0 ]]; then
+        echo "sovereign-test: --filter '${FILTER}' scoped to ${#PACKAGES[@]} crate(s): ${PACKAGES[*]}" >&2
+        echo "sovereign-test:   (--filter-workspace keeps the old compile-everything behaviour)" >&2
     else
-        for p in "${PACKAGES[@]}"; do
-            if [[ "$p" == "sovereign-cli" ]]; then
-                EXTRA_FEATURES+=",sovereign-cli/dev-tools"
-                break
-            fi
-        done
+        echo "sovereign-test: --filter '${FILTER}' matched no workspace crate — running FULL workspace (never under-cover)" >&2
     fi
 fi
 
-# Build cargo argv. `--workspace` covers every member; `-p` filters
-# stack on top so `--package foo --package bar` runs only those.
-cargo_argv=(test)
+# ── Feature selection — scope-aware ────────────────────────────────────────
+# resolve_features (lib/cargo-scope.sh) picks the `<pkg>/<feature>` flags that
+# are both needed for coverage and LEGAL for this selection — passing one whose
+# package is outside the `-p` set is a hard cargo error, not a no-op. nextest.sh
+# calls the same helper, so the two runners cover identically.
+if [[ $WANT_FEATURES -eq 1 ]]; then
+    feature_list="$(resolve_features ${PACKAGES[@]+"${PACKAGES[@]}"})"
+    if [[ -n "$feature_list" ]]; then
+        EXTRA_FEATURES="--features $feature_list"
+        [[ ${#PACKAGES[@]} -gt 0 ]] && \
+            echo "sovereign-test: features in scope: ${feature_list}" >&2
+    else
+        EXTRA_FEATURES=""
+    fi
+fi
+
+# ── Engine resolution ──────────────────────────────────────────────────────
+# `auto` prefers nextest and silently falls back to cargo, so a machine that
+# never ran bootstrap still has a working gate — nextest is a speed win, not a
+# correctness dependency.
+if [[ "$ENGINE" == "auto" ]]; then
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        ENGINE="nextest"
+    else
+        ENGINE="cargo"
+    fi
+elif [[ "$ENGINE" == "nextest" ]] && ! command -v cargo-nextest >/dev/null 2>&1; then
+    # Explicitly requested but absent — do NOT silently downgrade. The caller
+    # asked for a specific executor; quietly running a different one is how a
+    # "nextest is green" claim ends up meaning nothing.
+    echo "sovereign-test: --engine nextest requested but cargo-nextest is not installed." >&2
+    echo "sovereign-test:   Install: cargo install cargo-nextest --locked" >&2
+    echo "sovereign-test:   Or:      ${REPO_ROOT}/scripts/bootstrap.sh" >&2
+    echo "sovereign-test:   Or run with --engine cargo." >&2
+    exit 2
+fi
+
+# Scope flags are engine-independent: `--workspace` covers every member, `-p`
+# filters stack so `--package foo --package bar` runs only those.
+scope_argv=()
 if [[ ${#PACKAGES[@]} -eq 0 ]]; then
-    cargo_argv+=(--workspace)
+    scope_argv+=(--workspace)
 else
-    for p in "${PACKAGES[@]}"; do cargo_argv+=(-p "$p"); done
+    for p in "${PACKAGES[@]}"; do scope_argv+=(-p "$p"); done
 fi
 
 # ── Target-dir isolation for scoped runs ───────────────────────────────────
@@ -243,16 +342,60 @@ fi
 # sccache serves every unchanged crate. Full-workspace runs keep the default
 # target dir so the daemon watcher and the pre-merge gate share one warm cache.
 #
+# (b) IS LOAD-BEARING, AND IT IS A PRECONDITION — NOT A GIVEN. Without a wired
+# sccache the isolated dir is simply a second, permanently-cold build tree: on
+# RuggedFox 2026-07-24 it had grown to 37 GB and gone a week stale, so reaching
+# for --package/--changed — the lever meant to make a run LEAN — bought a cold
+# rebuild instead. That inverts the whole point of the flag, so only redirect
+# when sccache is genuinely in play.
+#
+# The fallback (sharing the workspace target dir) re-accepts the feature-
+# unification thrash this isolation was introduced to prevent: a scoped build
+# resolves corpus-engine's features over a smaller crate set, so alternating
+# scoped and --workspace runs can invalidate corpus-engine + its ~17 dependents.
+# That costs a recompile of one closure. The isolated-and-cold alternative costs
+# a from-scratch build of everything, every time. Cheaper disease than cure.
+#
 # Respect an explicit CARGO_TARGET_DIR from the environment (CI / operator
 # override) — only redirect when the caller hasn't pinned one.
 if [[ ${#PACKAGES[@]} -gt 0 && -z "${CARGO_TARGET_DIR:-}" ]]; then
-    export CARGO_TARGET_DIR="${REPO_ROOT}/target/sovereign-test-scoped"
-    echo "sovereign-test: scoped run → isolated target dir ${CARGO_TARGET_DIR#$REPO_ROOT/} (keeps the --workspace cache warm)" >&2
+    if command -v sccache >/dev/null 2>&1 && [[ -n "${RUSTC_WRAPPER:-}" ]]; then
+        export CARGO_TARGET_DIR="${REPO_ROOT}/target/sovereign-test-scoped"
+        echo "sovereign-test: scoped run → isolated target dir ${CARGO_TARGET_DIR#$REPO_ROOT/} (sccache wired; keeps the --workspace cache warm)" >&2
+    else
+        echo "sovereign-test: scoped run → sharing the workspace target dir (no wired sccache;" >&2
+        echo "sovereign-test:   an isolated dir would be a guaranteed cold rebuild). Set" >&2
+        echo "sovereign-test:   RUSTC_WRAPPER=sccache to get isolation back." >&2
+    fi
 fi
-# shellcheck disable=SC2206
-cargo_argv+=($EXTRA_FEATURES --no-fail-fast)
-if [[ -n "$FILTER" ]]; then
-    cargo_argv+=(-- "$FILTER")
+# ── Engine argv ────────────────────────────────────────────────────────────
+# Both engines take a trailing positional as a SUBSTRING name filter, so
+# --filter means the same thing either way (nextest's richer -E expression
+# language is available in scripts/nextest.sh, not here — the gate keeps one
+# filter semantics so its results are comparable across engines).
+doc_argv=()
+if [[ "$ENGINE" == "nextest" ]]; then
+    # --no-tests=pass restores cargo's semantics: a filter that matches nothing
+    # is 0 tests and exit 0, not a failure. Load-bearing because --filter
+    # auto-scoping deliberately OVER-approximates the owning crates, so
+    # selecting a crate with no matching test is an expected, benign outcome.
+    # nextest's default for this is exit 4.
+    # shellcheck disable=SC2206
+    cargo_argv=(nextest run "${scope_argv[@]}" $EXTRA_FEATURES
+                --profile "$NEXTEST_PROFILE" --no-fail-fast --no-tests=pass)
+    [[ -n "$FILTER" ]] && cargo_argv+=(-- "$FILTER")
+
+    # nextest CANNOT run doctests (upstream limitation, not a config choice), so
+    # the gate appends a plain cargo doctest pass. The workspace has 43 doctest
+    # targets and 0 runnable doctests today, making this ~4s of pure insurance —
+    # but without it, the first doctest anyone writes would silently never run.
+    # shellcheck disable=SC2206
+    doc_argv=(test --doc "${scope_argv[@]}" $EXTRA_FEATURES --no-fail-fast)
+    [[ -n "$FILTER" ]] && doc_argv+=(-- "$FILTER")
+else
+    # shellcheck disable=SC2206
+    cargo_argv=(test "${scope_argv[@]}" $EXTRA_FEATURES --no-fail-fast)
+    [[ -n "$FILTER" ]] && cargo_argv+=(-- "$FILTER")
 fi
 
 # ── Adapter-absent fallback ────────────────────────────────────────────────
@@ -281,33 +424,81 @@ exit_file="${RUN_DIR}/cargo.exit"
 
 start_ms=$(($(date +%s%N) / 1000000))
 
-(
-    cd "$REPO_ROOT"
-    # stdin from /dev/null: the pipe above only redirects cargo's STDOUT, so
-    # without this the test binaries inherit the caller's interactive terminal
-    # as stdin. A prompt helper that guards on `stdin().is_terminal()` then
-    # sees a TTY, skips its non-tty EOF fast-path, and blocks in read_line
-    # forever (observed: prompts::confirm hangs the entire --workspace run with
-    # zero output under --human). /dev/null forces the non-tty path everywhere.
-    cargo "${cargo_argv[@]}" </dev/null 2>&1 | tee "$raw_log" | "$ADAPTER" "monorepo" > "$out_jsonl"
-    echo "${PIPESTATUS[0]}" > "$exit_file"
-)
+# stdin from /dev/null throughout: the pipes below only redirect cargo's
+# STDOUT, so without this the test binaries inherit the caller's interactive
+# terminal as stdin. A prompt helper that guards on `stdin().is_terminal()`
+# then sees a TTY, skips its non-tty EOF fast-path, and blocks in read_line
+# forever (observed: prompts::confirm hangs the entire --workspace run with
+# zero output under --human). /dev/null forces the non-tty path everywhere.
+if [[ "$ENGINE" == "nextest" ]]; then
+    # nextest reports via a JUnit file rather than parseable stdout. That file
+    # is written at the END of a run, so a run that dies during COMPILATION
+    # leaves the PREVIOUS run's report in place — and translating that would
+    # report a stale green as if it were current, the exact orphaned-results
+    # failure this repo treats as unforgivable. Delete it first: absent report
+    # then unambiguously means "this run produced no results".
+    junit_path="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}/nextest/${NEXTEST_PROFILE}/junit.xml"
+    rm -f "$junit_path"
 
-elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
-exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
+    (
+        cd "$REPO_ROOT"
+        cargo "${cargo_argv[@]}" </dev/null 2>&1 | tee "$raw_log"
+        echo "${PIPESTATUS[0]}" > "$exit_file"
+    )
+    "$NEXTEST_ADAPTER" "$junit_path" > "$out_jsonl" 2>>"$raw_log"
+
+    # Doctest pass — appended to the same log and JSONL stream, through the
+    # libtest adapter (cargo test --doc still speaks libtest).
+    doc_exit_file="${RUN_DIR}/doc.exit"
+    (
+        cd "$REPO_ROOT"
+        cargo "${doc_argv[@]}" </dev/null 2>&1 | tee -a "$raw_log" | "$ADAPTER" "monorepo" >> "$out_jsonl"
+        echo "${PIPESTATUS[0]}" > "$doc_exit_file"
+    )
+
+    elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
+    exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
+    doc_exit=$(cat "$doc_exit_file" 2>/dev/null || echo 1)
+    # First non-zero wins, so a green nextest run can't mask a red doctest.
+    [[ "$exit_val" == "0" ]] && exit_val="$doc_exit"
+else
+    (
+        cd "$REPO_ROOT"
+        cargo "${cargo_argv[@]}" </dev/null 2>&1 | tee "$raw_log" | "$ADAPTER" "monorepo" > "$out_jsonl"
+        echo "${PIPESTATUS[0]}" > "$exit_file"
+    )
+    elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
+    exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
+fi
 
 # ── Build-vs-run split (glassbox) ──────────────────────────────────────────
-# cargo prints exactly one `Finished ... target(s) in <Xm >Ys` line the moment
-# compilation ends and test execution begins. Parse it so the summary can say
-# whether a slow run was COMPILE cost (cache thrash / cold build) or genuinely
-# slow tests — the distinction that turns "it's slow" into an actionable lead.
+# cargo prints a `Finished ... target(s) in <Xm >Ys` line the moment compilation
+# ends and test execution begins. Parse it so the summary can say whether a slow
+# run was COMPILE cost (cache thrash / cold build) or genuinely slow tests — the
+# distinction that turns "it's slow" into an actionable lead.
+#
+# SUM every such line rather than taking the last: the nextest path runs two
+# cargo invocations (the nextest build, then the doctest build) and so emits
+# two markers. Taking `tail -1` there would report only the doctest build —
+# seconds — and make a cold 20-minute compile look like a slow test suite. The
+# cargo path emits exactly one line, so summing is identical to the old
+# behaviour for it.
 build_secs=""
-build_line="$(grep -E 'Finished .* target\(s\) in ' "$raw_log" 2>/dev/null | tail -1)"
-if [[ -n "$build_line" ]]; then
+if grep -qE 'Finished .* target\(s\) in ' "$raw_log" 2>/dev/null; then
     # Forms: "in 13m 56s", "in 2m 03s", "in 8.42s".
-    bmin=$(sed -nE 's/.* in ([0-9]+)m .*/\1/p' <<< "$build_line")
-    bsec=$(sed -nE 's/.* in ([0-9]+m )?([0-9]+(\.[0-9]+)?)s.*/\2/p' <<< "$build_line")
-    build_secs=$(awk -v m="${bmin:-0}" -v s="${bsec:-0}" 'BEGIN{printf "%.0f", m*60+s}')
+    build_secs="$(grep -E 'Finished .* target\(s\) in ' "$raw_log" 2>/dev/null | awk '
+        {
+            m = 0; s = 0
+            if (match($0, / in [0-9]+m /)) {
+                mstr = substr($0, RSTART + 4, RLENGTH - 5); m = mstr + 0
+            }
+            if (match($0, /[0-9]+(\.[0-9]+)?s/)) {
+                s = substr($0, RSTART, RLENGTH - 1) + 0
+            }
+            total += m * 60 + s
+        }
+        END { printf "%.0f", total }
+    ')"
 fi
 
 # ── Aggregate ───────────────────────────────────────────────────────────────
@@ -328,6 +519,7 @@ fi
 # failure signal downstream).
 total_pass=0
 total_fail=0
+total_warn=0
 failed_names=""
 fails_file="${RUN_DIR}/failed_names.txt"
 counts_file="${RUN_DIR}/counts.env"
@@ -341,6 +533,7 @@ emit = not human  # daemon mode streams the JSONL through to stdout
 
 total_pass = 0
 total_fail = 0
+total_warn = 0   # skipped/ignored tests — nextest reports these explicitly
 failed = []
 out = sys.stdout
 
@@ -358,9 +551,17 @@ with open(in_path, "r", errors="replace") as fh:
             continue
         kind = d.get("t", "")
         if kind == "summary":
-            # Authoritative counts; our final_summary replaces this record.
-            total_pass = d.get("pass", 0)
-            total_fail = d.get("fail", 0)
+            # Authoritative counts; our final_summary replaces these records.
+            #
+            # ACCUMULATE, don't assign. The nextest path concatenates two
+            # adapter outputs (JUnit translation + the doctest pass), so there
+            # are TWO summary records; assigning would let the trailing doctest
+            # summary (0/0 on a workspace with no doctests) silently overwrite
+            # a 7993-test result and report an empty run as green. The cargo
+            # path emits exactly one summary, so summing is identical there.
+            total_pass += d.get("pass", 0)
+            total_fail += d.get("fail", 0)
+            total_warn += d.get("warn", 0)
             continue
         if kind == "fail":
             n = d.get("n", "")
@@ -372,6 +573,7 @@ with open(in_path, "r", errors="replace") as fh:
 with open(counts_path, "w") as cf:
     cf.write("total_pass=%d\n" % int(total_pass))
     cf.write("total_fail=%d\n" % int(total_fail))
+    cf.write("total_warn=%d\n" % int(total_warn))
 with open(fails_path, "w") as ff:
     ff.write("\n".join(failed))
 PY
@@ -382,7 +584,7 @@ if [[ -f "$counts_file" ]]; then
 fi
 failed_names="$(cat "$fails_file" 2>/dev/null || true)"
 
-final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":0,\"ms\":${elapsed_ms}}"
+final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms}}"
 
 if [[ $HUMAN -eq 1 ]]; then
     {
@@ -390,8 +592,20 @@ if [[ $HUMAN -eq 1 ]]; then
         echo "═══════════════════════════════════════════════════════════════"
         echo " sovereign-test — repo-wide regression gate"
         echo "═══════════════════════════════════════════════════════════════"
+        # Name the executor: two engines that agree are a stronger signal than
+        # one, but only if you can tell which one produced the number.
+        if [[ "$ENGINE" == "nextest" ]]; then
+            printf " %-12s  %s\n" "engine:" "nextest (+ cargo doctest pass)"
+        else
+            printf " %-12s  %s\n" "engine:" "cargo"
+        fi
         printf " %-12s  %s\n" "pass:" "$total_pass"
         printf " %-12s  %s\n" "fail:" "$total_fail"
+        # Skipped tests are invisible in cargo's output but explicit in
+        # nextest's — surfacing the count keeps a newly-#[ignore]d test from
+        # quietly leaving the suite.
+        [[ "${total_warn:-0}" -gt 0 ]] && \
+            printf " %-12s  %s\n" "skipped:" "$total_warn"
         printf " %-12s  %s\n" "elapsed:" "${elapsed_ms}ms"
         if [[ -n "$build_secs" ]]; then
             # Clamp: cargo's build marker and our wall-clock are measured a

@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# sovereign-nextest-junit-adapter — translates cargo-nextest's JUnit XML into
+# Tier 2 test events.
+#
+# Sibling to sovereign-cargo-test-adapter. That one parses libtest's
+# `test <name> ... ok` lines off a pipe; nextest doesn't emit libtest output at
+# all, so this reads the JUnit report nextest writes at the end of a run
+# (path configured by [profile.<name>.junit] in .config/nextest.toml, landing
+# at target/nextest/<profile>/junit.xml).
+#
+# Usage: sovereign-nextest-junit-adapter <path/to/junit.xml>
+#
+# Emits the SAME event shapes as the libtest adapter, so downstream consumers
+# (test_results.db, `sovereign tools call test_status`) cannot tell which engine
+# produced them:
+#
+#   {"t":"pass","n":"<test_name>"}
+#   {"t":"fail","n":"<test_name>","out":"<captured output>"}
+#   {"t":"summary","pass":<N>,"fail":<N>,"warn":0,"ms":0}
+#
+# CONTRACT NOTE. `n` is the bare testcase name — the test path WITHIN its
+# binary (`atoms::tests::round_trip`), exactly what libtest prints and what the
+# cargo adapter emits. nextest additionally knows the owning `crate::binary`
+# (JUnit `classname`), which would make names globally unique, but changing `n`
+# would silently redefine the key every existing consumer stores. So the crate
+# goes into the failure `out` text instead, where it aids triage without
+# breaking the contract.
+#
+# Exit code: 1 if any test failed, else 0 (mirrors the libtest adapter).
+
+set -uo pipefail
+
+junit_path="${1:-}"
+if [[ -z "$junit_path" ]]; then
+    echo "usage: sovereign-nextest-junit-adapter <junit.xml>" >&2
+    exit 2
+fi
+if [[ ! -f "$junit_path" ]]; then
+    # A build failure means nextest never got as far as writing a report. Say so
+    # on stderr and emit an empty summary: the caller's non-zero cargo exit is
+    # what carries the failure downstream, exactly as the libtest adapter
+    # behaves when a build error produces no `test result:` lines.
+    echo "sovereign-nextest-junit-adapter: no report at ${junit_path} (build failure?)" >&2
+    echo '{"t": "summary", "pass": 0, "fail": 0, "warn": 0, "ms": 0}'
+    exit 1
+fi
+
+python3 - "$junit_path" <<'PY'
+import json, sys
+import xml.etree.ElementTree as ET
+
+path = sys.argv[1]
+
+try:
+    root = ET.parse(path).getroot()
+except Exception as exc:  # malformed/truncated report
+    print(json.dumps({"t": "summary", "pass": 0, "fail": 0, "warn": 0, "ms": 0}))
+    sys.stderr.write("sovereign-nextest-junit-adapter: cannot parse %s: %s\n" % (path, exc))
+    sys.exit(1)
+
+n_pass = 0
+n_fail = 0
+n_skip = 0
+
+for testsuite in root.iter("testsuite"):
+    suite = testsuite.get("name", "")
+    for testcase in testsuite.iter("testcase"):
+        name = testcase.get("name", "")
+        if not name:
+            continue
+
+        # nextest nests <failure>/<error> for a red test, <skipped> for one it
+        # did not run. A testcase with none of those passed.
+        bad = testcase.find("failure")
+        if bad is None:
+            bad = testcase.find("error")
+
+        if bad is not None:
+            n_fail += 1
+            # Prefer the element text (full panic + assertion message); fall
+            # back to the one-line `message` attribute.
+            detail = (bad.text or bad.get("message") or "").strip()
+            # system-err carries the panic when the runner captured it
+            # separately; append only when it adds something.
+            stderr_el = testcase.find("system-err")
+            if stderr_el is not None and stderr_el.text:
+                extra = stderr_el.text.strip()
+                if extra and extra not in detail:
+                    detail = (detail + "\n" + extra).strip()
+            # The suite (crate::binary) is not part of `n` — see CONTRACT NOTE —
+            # so carry it here, where triage needs it.
+            out = ("[%s]\n%s" % (suite, detail)).strip() if suite else detail
+            event = {"t": "fail", "n": name}
+            if out:
+                event["out"] = out[:4096]
+            print(json.dumps(event))
+            continue
+
+        if testcase.find("skipped") is not None:
+            n_skip += 1
+            continue
+
+        n_pass += 1
+        print(json.dumps({"t": "pass", "n": name}))
+
+# `warn` carries the skipped count. The libtest adapter always emits warn=0
+# because cargo simply omits ignored tests from its output; nextest reports them
+# explicitly, and dropping that on the floor would make a run with newly-ignored
+# tests look identical to one where they still run.
+print(json.dumps({"t": "summary", "pass": n_pass, "fail": n_fail,
+                  "warn": n_skip, "ms": 0}))
+
+sys.exit(1 if n_fail > 0 else 0)
+PY
