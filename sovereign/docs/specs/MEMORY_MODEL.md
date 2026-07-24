@@ -156,12 +156,16 @@ model-discipline-dependent.
 
 **E4 — Close the generation-effect gap (the 17% problem).** Three parts,
 priority ordered by P2:
-- **E4a (encode-time, strong path):** ship write-path 1 properly — a
-  `session_state` upsert tool the agent calls at transitions (task start,
-  step done, blocker hit), so the frame is *continuously* current and
-  SessionEnd needs no LLM at all. The CLAUDE.md donor protocol is the manual
-  version; E4a makes it a tool call. Gate: frames graded ≥70% with zero
-  hallucinated verification claims, produced without a wrap-up prompt.
+- **E4a (encode-time, strong path): TOOL SHIPPED 2026-07-24.** The
+  `session_state` MCP tool (sovereign-tools `code/session_state.rs`,
+  registered daemon + cli-dev, on `MCP_TOOLS_ALWAYS`) is a section-level
+  frame upsert called at transitions, so the frame is *continuously*
+  current and SessionEnd needs no LLM at all. Budget-gated (over-2k writes
+  rejected with per-section counts), provenance always re-stamped
+  self-reported, dogfooded on its own build session (838-token frame,
+  8/8 sections). Gate STILL OPEN: frames graded ≥70% with zero
+  hallucinated verification claims, produced without a wrap-up prompt —
+  needs a golden for a live session that used the tool mid-work.
 - **E4b (retrieval practice, weak path):** restructure the distill stage-2
   prompt from "summarize the spine" to "answer the eight section-questions,
   citing spine evidence per item" (testing effect / elaborative

@@ -242,6 +242,11 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .with_workspace_root(repo_root.clone())
             .with_atlas(Arc::clone(&atlas_store)),
     ));
+    // Encode-time session-frame upsert — `svrn tools call
+    // session_state` is the scriptable/hook path to write-path 1.
+    tools.register(Box::new(
+        sovereign_tools::SessionStateTool::new().with_workspace_root(repo_root.clone()),
+    ));
 
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
