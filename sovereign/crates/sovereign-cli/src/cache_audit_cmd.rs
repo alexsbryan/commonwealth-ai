@@ -423,6 +423,349 @@ pub(crate) fn short_session_id(file: &str) -> String {
     stem.chars().take(8).collect()
 }
 
+// ── Counterfactual replay ────────────────────────────────────────────────
+//
+// Re-prices existing transcripts under four independent cost levers so the
+// "what should the suit build next?" question is answered by arithmetic on
+// sessions already paid for, not by intuition. Pure replay: no LLM, no
+// network — the same JSONL walk `analyze` does, but keeping a per-request
+// timeline instead of aggregates, because a token's true cost is
+// (requests remaining after it entered) × cache-read price.
+//
+// The levers are priced INDEPENDENTLY — they overlap (splitting also
+// evicts raw-read tokens), so the numbers must not be summed.
+
+/// One API request on the session timeline.
+struct ReqPoint {
+    /// Total context this request carried (input + cache_read + cache_write).
+    ctx: u64,
+    /// Tokens actually billed as cache-read on this request.
+    cache_read: u64,
+    /// Cache-read $/MTok for this request's model.
+    price_cr: f64,
+}
+
+/// Tokens that entered context at a known timeline position.
+struct TimedTokens {
+    /// Index of the NEXT request (the first one that re-transmits them).
+    req_index: usize,
+    tokens: u64,
+}
+
+struct CfReport {
+    file: String,
+    actual_total_cost: f64,
+    actual_cr_cost: f64,
+    preamble0: u64,
+    n_requests: usize,
+    /// (threshold, splits, net $ saved)
+    splits: Vec<(u64, u64, f64)>,
+    halve_preamble_saved: f64,
+    injection_tokens: u64,
+    cap_injections_saved: f64,
+    batch_upper_bound_saved: f64,
+    raw_tokens: u64,
+    route_raw_saved: f64,
+}
+
+/// Markers whose presence in a user-record text block identifies content
+/// injected by the suit's own hooks rather than typed by the human.
+const INJECTION_MARKERS: &[&str] = &[
+    "hook success",
+    "## Sovereign notes",
+    "<system-reminder>",
+    "# Project context:",
+    "session-frame/v1",
+];
+
+/// Fixed context a successor session starts with after a split, beyond the
+/// re-loaded preamble: frame (~2k) + boot brief (~1.5k) + re-acquisition
+/// slop (~2.5k). Deliberately conservative.
+const SPLIT_SEED_EXTRA: u64 = 6_000;
+/// Per-prompt injection budget for the "cap injections" counterfactual.
+const INJECTION_CAP: u64 = 500;
+/// A request that grew context by less than this is a "small turn" —
+/// candidate for batching with its neighbours.
+const SMALL_TURN_GROWTH: u64 = 1_500;
+/// Code-intel answers the same question in ~1/5 the tokens of a raw read
+/// (observed: symbols/callers responses vs whole-file Reads).
+const INTEL_COMPRESSION: u64 = 5;
+
+fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
+    let text = std::fs::read_to_string(path).ok()?;
+
+    let mut points: Vec<ReqPoint> = Vec::new();
+    let mut injections: Vec<TimedTokens> = Vec::new();
+    let mut raw_acq: Vec<TimedTokens> = Vec::new();
+    let mut tool_id_raw: BTreeMap<String, bool> = BTreeMap::new();
+    let (mut actual_total, mut actual_cr_cost) = (0.0_f64, 0.0_f64);
+    let mut model_counts: BTreeMap<String, u64> = BTreeMap::new();
+
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let obj: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let msg = match obj.get("message") {
+            Some(m) if m.is_object() => m,
+            _ => continue,
+        };
+
+        if let Some(usage) = msg.get("usage").filter(|u| u.is_object()) {
+            let a = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let o = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let cr = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let cw = usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let model = msg.get("model").and_then(|m| m.as_str()).unwrap_or("");
+            if !model.is_empty() {
+                *model_counts.entry(model.to_string()).or_default() += 1;
+            }
+            let p = Pricing::for_model(model);
+            actual_total += (a as f64) / 1e6 * p.input
+                + (o as f64) / 1e6 * p.output
+                + (cr as f64) / 1e6 * p.cache_read
+                + (cw as f64) / 1e6 * p.cache_write_5m;
+            actual_cr_cost += (cr as f64) / 1e6 * p.cache_read;
+            points.push(ReqPoint { ctx: a + cr + cw, cache_read: cr, price_cr: p.cache_read });
+            // NO `continue` — assistant records carry BOTH usage and the
+            // tool_use blocks; skipping their content scan would leave the
+            // id→raw map empty and silently zero H4 (the first fleet run
+            // did exactly that: "0k raw" against sessions the plain audit
+            // attributes 66k–284k raw tokens to).
+        }
+
+        // Tool results and user turns attribute to the NEXT request index
+        // (they enter context there first).
+        let req_index = points.len();
+        if let Some(content) = msg.get("content").and_then(|c| c.as_array()) {
+            for block in content {
+                match block.get("type").and_then(|t| t.as_str()) {
+                    Some("tool_use") => {
+                        let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                        let raw = match name {
+                            "Bash" => block
+                                .get("input")
+                                .and_then(|i| i.get("command"))
+                                .and_then(|c| c.as_str())
+                                .map(|c| !is_sovereign_cli(c) && is_bash_read_like(c))
+                                .unwrap_or(false),
+                            _ => classify(name) == Bucket::RawFileSearch,
+                        };
+                        if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
+                            tool_id_raw.insert(id.to_string(), raw);
+                        }
+                    }
+                    Some("tool_result") => {
+                        let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                        if tool_id_raw.get(tid).copied().unwrap_or(false) {
+                            let toks = block
+                                .get("content")
+                                .map(result_text)
+                                .map(|s| approx_tokens(&s))
+                                .unwrap_or(0);
+                            if toks > 0 {
+                                raw_acq.push(TimedTokens { req_index, tokens: toks });
+                            }
+                        }
+                    }
+                    Some("text") => {
+                        let t = block.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                        if INJECTION_MARKERS.iter().any(|m| t.contains(m)) {
+                            injections.push(TimedTokens { req_index, tokens: approx_tokens(t) });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if points.is_empty() {
+        return None;
+    }
+    let n = points.len();
+    let preamble0 = points[0].ctx;
+    let dominant_price = model_counts
+        .iter()
+        .max_by_key(|(_, c)| **c)
+        .map(|(m, _)| Pricing::for_model(m))
+        .unwrap_or_else(|| Pricing::for_model(""));
+    let p_dom = dominant_price.cache_read;
+
+    // H1 — split at threshold K. A split evicts (ctx − seed) tokens from
+    // every subsequent request until the next split; each split re-writes
+    // the seed once (priced as a 1h cache write).
+    let seed = preamble0 + SPLIT_SEED_EXTRA;
+    let mut splits_out = Vec::new();
+    for k in [100_000u64, 140_000, 200_000] {
+        let mut offset = 0u64;
+        let mut splits = 0u64;
+        let mut saved = 0.0_f64;
+        for pt in &points {
+            let mut eff = pt.ctx.saturating_sub(offset);
+            if eff > k && pt.ctx > seed {
+                splits += 1;
+                offset = pt.ctx - seed;
+                eff = seed;
+            }
+            let evicted = pt.ctx - eff; // == offset, clamped by saturating math
+            let saved_cr = evicted.min(pt.cache_read);
+            saved += (saved_cr as f64) / 1e6 * pt.price_cr;
+        }
+        let split_cost = (splits as f64) * (seed as f64) / 1e6 * dominant_price.cache_write_1h;
+        splits_out.push((k, splits, saved - split_cost));
+    }
+
+    // H2a — halve the turn-0 preamble (system prompt + CLAUDE.md + boot
+    // injections). It rides every request's cache-read after the first.
+    let halve_preamble_saved: f64 = points
+        .iter()
+        .skip(1)
+        .map(|pt| ((preamble0 / 2).min(pt.cache_read) as f64) / 1e6 * pt.price_cr)
+        .sum();
+
+    // H2b — cap each per-prompt hook injection at INJECTION_CAP tokens.
+    let injection_tokens: u64 = injections.iter().map(|i| i.tokens).sum();
+    let cap_injections_saved: f64 = injections
+        .iter()
+        .map(|i| {
+            let excess = i.tokens.saturating_sub(INJECTION_CAP);
+            (excess as f64) * ((n.saturating_sub(i.req_index)) as f64) / 1e6 * p_dom
+        })
+        .sum();
+
+    // H3 — batch runs of ≥3 consecutive small-growth requests 3:1. Each
+    // removed request saves its entire cache-read line. UPPER BOUND: replay
+    // cannot prove the calls were independent enough to batch.
+    let mut batch_saved = 0.0_f64;
+    {
+        let mut close_run = |start: usize, end_incl: usize| {
+            let run_len = end_incl + 1 - start;
+            if run_len >= 3 {
+                let removable = run_len - run_len.div_ceil(3);
+                for pt in points[start..=end_incl].iter().rev().take(removable) {
+                    batch_saved += (pt.cache_read as f64) / 1e6 * pt.price_cr;
+                }
+            }
+        };
+        let mut run_start = 0usize;
+        for i in 0..n - 1 {
+            let growth = points[i + 1].ctx.saturating_sub(points[i].ctx);
+            if growth >= SMALL_TURN_GROWTH {
+                close_run(run_start, i);
+                run_start = i + 1;
+            }
+        }
+        close_run(run_start, n - 1);
+    }
+
+    // H4 — route raw reads through code-intel at 1/5 the tokens. Each
+    // avoided token would have been re-read on every remaining request.
+    let raw_tokens: u64 = raw_acq.iter().map(|r| r.tokens).sum();
+    let route_raw_saved: f64 = raw_acq
+        .iter()
+        .map(|r| {
+            let avoided = r.tokens - r.tokens / INTEL_COMPRESSION;
+            (avoided as f64) * ((n.saturating_sub(r.req_index)) as f64) / 1e6 * p_dom
+        })
+        .sum();
+
+    Some(CfReport {
+        file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
+        actual_total_cost: actual_total,
+        actual_cr_cost,
+        preamble0,
+        n_requests: n,
+        splits: splits_out,
+        halve_preamble_saved,
+        injection_tokens,
+        cap_injections_saved,
+        batch_upper_bound_saved: batch_saved,
+        raw_tokens,
+        route_raw_saved,
+    })
+}
+
+fn print_counterfactual(reports: &[CfReport]) {
+    let total: f64 = reports.iter().map(|r| r.actual_total_cost).sum();
+    let total_cr: f64 = reports.iter().map(|r| r.actual_cr_cost).sum();
+    println!(
+        "counterfactual replay — {} session(s), actual total ${total:.2} (cache-read ${total_cr:.2})\n",
+        reports.len()
+    );
+
+    let lever = |label: String, saved: f64| {
+        println!("  {label:<44} ${saved:>9.2}   {:>5.1}%", saved / total * 100.0);
+    };
+
+    for (idx, k) in [100_000u64, 140_000, 200_000].iter().enumerate() {
+        let saved: f64 = reports.iter().map(|r| r.splits[idx].2).sum();
+        let splits: u64 = reports.iter().map(|r| r.splits[idx].1).sum();
+        lever(format!("H1 split sessions at {}k ({splits} splits)", k / 1000), saved);
+    }
+    let avg_preamble: u64 =
+        reports.iter().map(|r| r.preamble0).sum::<u64>() / reports.len().max(1) as u64;
+    lever(
+        format!("H2a halve turn-0 preamble (avg {}k tok)", avg_preamble / 1000),
+        reports.iter().map(|r| r.halve_preamble_saved).sum(),
+    );
+    let inj_total: u64 = reports.iter().map(|r| r.injection_tokens).sum();
+    lever(
+        format!("H2b cap hook injections at {INJECTION_CAP} tok ({}k injected)", inj_total / 1000),
+        reports.iter().map(|r| r.cap_injections_saved).sum(),
+    );
+    lever(
+        "H3 batch small turns 3:1 (UPPER BOUND)".to_string(),
+        reports.iter().map(|r| r.batch_upper_bound_saved).sum(),
+    );
+    let raw_total: u64 = reports.iter().map(|r| r.raw_tokens).sum();
+    lever(
+        format!("H4 route raw reads via code-intel ({}k raw)", raw_total / 1000),
+        reports.iter().map(|r| r.route_raw_saved).sum(),
+    );
+
+    println!(
+        "\nassumptions: split seed = preamble + {}k (frame+brief+re-acquisition), splits \
+         re-written as 1h cache; injections detected by hook markers; small turn = ctx \
+         growth < {}; intel compression = {}x. Levers are INDEPENDENT counterfactuals — \
+         they overlap (a split also evicts raw-read tokens); do not sum them.",
+        SPLIT_SEED_EXTRA / 1000,
+        SMALL_TURN_GROWTH,
+        INTEL_COMPRESSION
+    );
+    println!("per-session: svrn cache-audit --counterfactual --session <id>");
+}
+
+fn print_counterfactual_detail(r: &CfReport) {
+    println!(
+        "=== {} — counterfactual ===\n{} requests, preamble {}k tok, actual ${:.2} (cache-read ${:.2})\n",
+        short_session_id(&r.file),
+        r.n_requests,
+        r.preamble0 / 1000,
+        r.actual_total_cost,
+        r.actual_cr_cost
+    );
+    for (k, splits, saved) in &r.splits {
+        println!("  H1 split at {:>4}k   {splits:>3} split(s)   ${saved:>8.2}", k / 1000);
+    }
+    println!("  H2a halve preamble               ${:>8.2}", r.halve_preamble_saved);
+    println!(
+        "  H2b cap injections ({:>4}k tok)   ${:>8.2}",
+        r.injection_tokens / 1000,
+        r.cap_injections_saved
+    );
+    println!("  H3 batch small turns (UPPER)     ${:>8.2}", r.batch_upper_bound_saved);
+    println!(
+        "  H4 route raw reads ({:>4}k tok)   ${:>8.2}",
+        r.raw_tokens / 1000,
+        r.route_raw_saved
+    );
+}
+
 fn print_help() {
     println!(
         "Usage: svrn cache-audit [options]\n\n\
@@ -440,6 +783,11 @@ fn print_help() {
          \x20 --last <N>         Show the N most recent sessions (default 10).\n\
          \x20 --sort <key>       cost | recent | ratio  (default cost).\n\
          \x20 --json             Machine-readable output.\n\
+         \x20 --counterfactual   Replay sessions under four independent cost levers\n\
+         \x20                    (splitting, preamble/injection overhead, turn\n\
+         \x20                    batching, acquisition routing) and price each —\n\
+         \x20                    pure arithmetic on existing transcripts, no LLM.\n\
+         \x20                    Combine with --session <id> for per-session detail.\n\
          \x20 --help, -h         Show this message.\n\n\
          Examples:\n\
          \x20 svrn cache-audit                         # recent sessions, this project\n\
@@ -641,6 +989,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut last: usize = 10;
     let mut sort = "cost".to_string();
     let mut json = false;
+    let mut counterfactual = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -650,6 +999,7 @@ pub async fn run(args: &[String]) -> i32 {
                 return 0;
             }
             "--json" => json = true,
+            "--counterfactual" => counterfactual = true,
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
             "--session" => session = it.next().cloned(),
@@ -695,6 +1045,39 @@ pub async fn run(args: &[String]) -> i32 {
     if reports.is_empty() {
         eprintln!("cache-audit: no sessions with usage data in {}", target_dir.display());
         return 1;
+    }
+
+    // -------- counterfactual replay --------
+    if counterfactual {
+        // Same session selection as the ranked table: most recent `last`.
+        reports.sort_by(|a, b| b.mtime_unix.cmp(&a.mtime_unix));
+        let selected: Vec<&SessionReport> = match &session {
+            Some(sel) => reports
+                .iter()
+                .filter(|r| r.file.starts_with(sel.as_str()) || short_session_id(&r.file) == *sel)
+                .collect(),
+            None => reports.iter().take(last).collect(),
+        };
+        if selected.is_empty() {
+            eprintln!("cache-audit: no session matching the selection");
+            return 1;
+        }
+        let cf: Vec<CfReport> = selected
+            .iter()
+            .filter_map(|r| analyze_counterfactual(&target_dir.join(&r.file)))
+            .collect();
+        if cf.is_empty() {
+            eprintln!("cache-audit: counterfactual replay produced no data");
+            return 1;
+        }
+        if session.is_some() {
+            for r in &cf {
+                print_counterfactual_detail(r);
+            }
+        } else {
+            print_counterfactual(&cf);
+        }
+        return 0;
     }
 
     // -------- single-session deep dive --------
