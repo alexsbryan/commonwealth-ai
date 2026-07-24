@@ -173,6 +173,18 @@ facts — a wrong sha, count, or symbol name scores zero for that item):
 Pass bar for promoting a stage-2 prompt: ≥70% weighted recall, zero
 hallucinated verification claims.
 
+**Grader SHIPPED 2026-07-23:** `svrn session grade <id|path> [--golden <path>]`
+— one daemon judge call per golden section (deterministic everything else:
+bullet extraction, weighting, arithmetic, pass bar; exit 0/1/2). Judge
+calibration lesson: the local model flags candidate detail merely ABSENT
+from the golden as hallucination despite prose instructions not to, so the
+judge must cite the reference item each hallucination CONTRADICTS and the
+CLI drops entries that cannot (or that cite an item the judge itself marked
+captured). Self-calibration: golden-vs-golden grades 42/42 = 100% PASS.
+Baseline: the e09c5e3d distilled frame grades 17% FAIL — Next 0/4,
+Invariants 0/9 — confirming the known stage-2 weakness (spine trimming at
+the 16k window); that number is the iteration target.
+
 ---
 
 ## 6. Boot integration (proposal — the zero-friction payoff)
