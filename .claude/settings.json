@@ -22,6 +22,11 @@
           {
             "command": "sh .claude/hooks/inject-notes.sh",
             "type": "command"
+          },
+          {
+            "command": "python3 .claude/hooks/split-enforce.py",
+            "type": "command",
+            "timeout": 5
           }
         ]
       }
