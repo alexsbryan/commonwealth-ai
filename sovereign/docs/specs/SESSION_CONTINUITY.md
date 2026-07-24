@@ -200,6 +200,14 @@ frontmatter + sections, stamp `provenance: distilled`. `--no-llm` stops after
 stage 1 and emits the spine (still useful raw; also the daemon-down fallback —
 degrade honestly, never silently).
 
+Precedence: distill never overwrites a `provenance: self-reported` frame — it
+refreshes `spine.txt` and skips the frame write (`--force` overrides, e.g. for
+grading runs). The encode-time write is the strong path (§3 rule 2); before
+this guard, the SessionEnd distill was restamping banked frames as `distilled`,
+silently demoting them to rescue-only in split-enforce. The reverse direction
+already held: a `session_state` upsert over a distilled frame upgrades
+provenance to `self-reported`.
+
 Grading loop: distill the golden's source session, score against the golden
 (§5), iterate on the stage-2 prompt. The intent-forced-prompt lesson from
 `CODE_INTEL_CHAT.md §3.2` applies: the prompt is the lever; expect to tune it

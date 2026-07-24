@@ -1055,8 +1055,14 @@ pub(crate) fn resolve_transcript_dir(project: Option<&str>, dir: Option<&str>) -
     if let Some(d) = dir {
         return Ok(PathBuf::from(d));
     }
+    // Canonicalize so `--project .` / relative paths encode the same dir name
+    // Claude Code derives from the absolute cwd ("." used to encode as "-").
     let cwd = project
-        .map(|p| p.to_string())
+        .map(|p| {
+            std::fs::canonicalize(p)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| p.to_string())
+        })
         .or_else(|| std::env::current_dir().ok().map(|p| p.display().to_string()))
         .ok_or_else(|| "could not determine the current working directory".to_string())?;
     let home = dirs::home_dir().ok_or_else(|| "could not locate the home directory".to_string())?;
