@@ -785,3 +785,82 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     let sidecar = downloads.join(format!("{corpus_id}.extracted.jsonl.count"));
     assert!(sidecar.exists(), "sidecar file should be written");
 }
+
+/// Installing a corpus whose recipe cannot be resolved (no local
+/// override, no catalog entry, no bundled fallback) must fail LOUDLY:
+/// the daemon returns 404, not a 200 with `spawned:false` that a client
+/// can't tell apart from "already running". Regression guard for the
+/// alignment-migrate silent-failure bug — the install POST reported
+/// success while the daemon logged `No registry entry for corpus`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn install_unresolvable_recipe_is_404_not_silent_success() {
+    let tmp = TempDir::new().unwrap();
+    // `test_state` gives an engine rooted in an empty temp recipes dir,
+    // so this id has no override to resolve and isn't in the bundled
+    // snapshot.
+    let state = test_state(&tmp, fast_mock_embed_fn());
+
+    let (status, body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": "no-such-corpus-xyz" }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "unresolvable recipe must surface as 404, got body: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let err: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let msg = err.get("error").and_then(|e| e.as_str()).unwrap_or("");
+    assert!(
+        msg.contains("no-such-corpus-xyz"),
+        "error body should name the corpus, got: {msg}"
+    );
+}
+
+/// A benign idempotent second install (corpus already in flight) stays a
+/// 200 with `spawned:false` — it is NOT a failure, so it must not be
+/// promoted to a 4xx by the new outcome mapping. Guards the boundary
+/// between "already active" (fine) and "recipe not found" (error).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn second_install_while_active_is_200_spawned_false() {
+    let tmp = TempDir::new().unwrap();
+    let corpus_id = "dualpath";
+    // A slow embed keeps the first ingest in `active_ingests` long
+    // enough for the second POST to observe it.
+    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 40, true);
+    let state = test_state(&tmp, slow_mock_embed_fn());
+
+    let (status1, body1) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(status1, StatusCode::OK, "first install should be 200");
+    let first: InstallResp = serde_json::from_slice(&body1).unwrap();
+    assert!(first.spawned, "first install should spawn a task");
+
+    // Second install while the first is still running: benign no-op.
+    let (status2, body2) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(
+        status2,
+        StatusCode::OK,
+        "already-active install must stay 200, got body: {}",
+        String::from_utf8_lossy(&body2)
+    );
+    let second: InstallResp = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(second.corpus_id, corpus_id);
+    assert!(
+        !second.spawned,
+        "already-active install must report spawned:false"
+    );
+}
