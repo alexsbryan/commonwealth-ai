@@ -10,7 +10,9 @@
 //! source `cache-audit` reads), extract the **narrative spine** (real user
 //! turns + assistant texts + the edit working-set — ~1% of the transcript;
 //! tool results and hook payloads are the noise), then synthesize a
-//! schema-v1 frame via one local-daemon chat call.
+//! schema-v1 frame via retrieval practice: one local-daemon chat call per
+//! body section, each answering a focused question with mandatory spine
+//! citations (uncited bullets are machine-dropped).
 //!
 //! Glassbox discipline:
 //!   - Stage 1 (spine) is deterministic and kept on disk next to the frame,
@@ -258,16 +260,18 @@ pub(crate) fn render_spine(spine: &Spine) -> String {
         out.push_str(&format!("  {n:3}  {fp}\n"));
     }
 
+    // Items carry stable citation ids ([uN]/[aN]) — the retrieval-practice
+    // synthesis requires every answer bullet to cite the item it came from.
     out.push_str(&format!("\nUSER TURNS ({}):\n", spine.user_turns.len()));
     for (i, t) in spine.user_turns.iter().enumerate() {
-        out.push_str(&format!("\n--- user {} ---\n{t}\n", i + 1));
+        out.push_str(&format!("\n--- [u{}] user turn ---\n{t}\n", i + 1));
     }
     out.push_str(&format!(
         "\nASSISTANT TEXTS ({}):\n",
         spine.assistant_texts.len()
     ));
     for (i, t) in spine.assistant_texts.iter().enumerate() {
-        out.push_str(&format!("\n--- assistant {} ---\n{t}\n", i + 1));
+        out.push_str(&format!("\n--- [a{}] assistant ---\n{t}\n", i + 1));
     }
     out
 }
@@ -290,6 +294,93 @@ pub(crate) fn cap_spine_middle(spine: &mut Spine, char_cap: usize) -> usize {
             .insert(mid, format!("[… {dropped} mid-session assistant texts omitted for budget …]"));
     }
     dropped
+}
+
+/// Sections whose golden content is *mined* from the whole session — often
+/// from mid-session debugging — rather than summarized from its ends
+/// (measured on e09c5e3d: with the ends-biased fitted spine, Invariants and
+/// Dead ends graded 0/9 and 0/2 because their golden items sat in the
+/// trimmed middle). These are asked once per chunk of the full spine and the
+/// answers unioned; the remaining sections are asked once on the fitted
+/// spine, whose kept head (goal formation) and tail (final state) are
+/// exactly what they need.
+const MINED_SECTIONS: &[&str] = &["## Next", "## Decisions", "## Invariants", "## Dead ends"];
+
+/// Contiguous chunks of the spine's assistant texts, each fitting
+/// `char_cap` once rendered alongside the header and all user turns.
+/// Returns `(lo, hi)` index ranges over `spine.assistant_texts`.
+pub(crate) fn chunk_ranges(spine: &Spine, char_cap: usize) -> Vec<(usize, usize)> {
+    let overhead: usize =
+        200 + spine.user_turns.iter().map(|t| t.len() + 24).sum::<usize>();
+    let budget = char_cap.saturating_sub(overhead).max(8_000);
+    let mut out = Vec::new();
+    let mut lo = 0usize;
+    let mut acc = 0usize;
+    for (i, t) in spine.assistant_texts.iter().enumerate() {
+        let cost = t.len() + 24;
+        if acc + cost > budget && i > lo {
+            out.push((lo, i));
+            lo = i;
+            acc = 0;
+        }
+        acc += cost;
+    }
+    if lo < spine.assistant_texts.len() || out.is_empty() {
+        out.push((lo, spine.assistant_texts.len()));
+    }
+    out
+}
+
+/// Render one chunk: header + all user turns (orientation — they are the
+/// smallest, highest-signal part) + assistant texts `[lo..hi)` with their
+/// TRUE global ids, so citations stay valid across chunks.
+pub(crate) fn render_spine_chunk(
+    spine: &Spine,
+    lo: usize,
+    hi: usize,
+    part: usize,
+    parts: usize,
+) -> String {
+    let mut out = format!(
+        "SESSION {} (part {part}/{parts}) | model {} | {} → {} | cwd {} | branch {}\n",
+        spine.session_id, spine.model, spine.first_ts, spine.last_ts, spine.cwd, spine.git_branch
+    );
+    out.push_str(&format!("\nUSER TURNS ({}):\n", spine.user_turns.len()));
+    for (i, t) in spine.user_turns.iter().enumerate() {
+        out.push_str(&format!("\n--- [u{}] user turn ---\n{t}\n", i + 1));
+    }
+    out.push_str(&format!(
+        "\nASSISTANT TEXTS [a{}]..[a{}] of {}:\n",
+        lo + 1,
+        hi.max(lo + 1),
+        spine.assistant_texts.len()
+    ));
+    for i in lo..hi {
+        out.push_str(&format!(
+            "\n--- [a{}] assistant ---\n{}\n",
+            i + 1,
+            spine.assistant_texts[i]
+        ));
+    }
+    out
+}
+
+/// Union-dedupe for chunked answers: the same fact re-found in two chunks
+/// should appear once. Keyed on the lowercased alphanumeric skeleton so
+/// punctuation/whitespace variants collapse.
+pub(crate) fn dedupe_bullets(bullets: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    bullets
+        .into_iter()
+        .filter(|b| {
+            let key: String = b
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .collect::<String>()
+                .to_lowercase();
+            seen.insert(key)
+        })
+        .collect()
 }
 
 // ── Stage 2: frame synthesis ─────────────────────────────────────────────
@@ -363,59 +454,170 @@ pub(crate) fn render_working_set(spine: &Spine) -> String {
     out
 }
 
-/// Splice the deterministic Working set over whatever the model emitted for
-/// that section (or append it if the model dropped the heading).
-pub(crate) fn replace_working_set(body: &str, working_set: &str) -> String {
-    let lines: Vec<&str> = body.lines().collect();
-    let start = lines.iter().position(|l| l.trim() == "## Working set");
-    match start {
-        None => format!("{}\n\n{}", body.trim_end(), working_set.trim_end()),
-        Some(s) => {
-            let end = lines[s + 1..]
-                .iter()
-                .position(|l| l.trim_start().starts_with("## "))
-                .map(|off| s + 1 + off)
-                .unwrap_or(lines.len());
-            let mut out = lines[..s].join("\n");
-            out.push('\n');
-            out.push_str(working_set.trim_end());
-            out.push('\n');
-            if end < lines.len() {
-                out.push_str(&lines[end..].join("\n"));
-            }
-            out
+/// Stage-2 synthesis prompt, v2 (MEMORY_MODEL E4b): retrieval practice.
+/// One call per section — the model answers a focused question about the
+/// spine and must cite the spine item(s) each bullet came from. The v1
+/// single-shot "write all eight sections" prompt graded 17% against the
+/// golden (Next 0/4, Invariants 0/9): one call spread over eight sections
+/// summarizes at wrap-up altitude instead of mining the mid-session
+/// specifics a successor needs. Citations are machine-enforced —
+/// `parse_cited_bullets` drops uncited bullets — because prose instructions
+/// alone don't hold on local models (same lesson as the grading judge's
+/// contradiction citations).
+fn retrieval_system_prompt() -> &'static str {
+    "You answer one question about a coding-session transcript spine. Spine items are \
+     numbered: user turns [u1], [u2], … and assistant texts [a1], [a2], …\n\
+     Rules:\n\
+     - Reply with markdown bullets only (`- `), one specific fact per bullet.\n\
+     - Every bullet ends with the spine item(s) it came from: [u3] or [a17] or [u3,a17]. \
+       A bullet with no citation is discarded unread.\n\
+     - Use only facts in the spine. Copy exact numbers, test counts, file names, symbol \
+       names, flags, and commands — never approximate or generalize them.\n\
+     - Prefer many specific bullets over few broad ones.\n\
+     - If the spine holds nothing relevant, reply exactly: none recorded"
+}
+
+/// The per-section retrieval question. Phrased to pull the successor-facing
+/// content the golden holds — mined specifics, not the session's wrap-up
+/// summary. Tune against `quality/session-frame.golden.md`; the questions
+/// are the lever now.
+fn section_question(heading: &str) -> &'static str {
+    match heading {
+        "## Goal" => {
+            "What task was this session working on, and what larger objective does it \
+             serve? Answer in 1-2 bullets."
         }
+        "## State" => {
+            "What did this session complete? One bullet per completed piece of work, each \
+             with its proof (test counts, live verification, measurements). Add bullets \
+             for anything left in flight or explicitly deferred."
+        }
+        "## Next" => {
+            "What should a successor session do next? Mine these items for: unfinished or \
+             uncommitted work, untuned values, expectations stated but not yet verified, \
+             work explicitly deferred, and open backlog items — watch for phrases like \
+             untuned, deferred, later, still open, P1, TODO, not yet. Anchor each bullet \
+             to a file, symbol, or command."
+        }
+        "## Decisions" => {
+            "What design choices did this session make between alternatives? One bullet per \
+             choice: what was chosen, over what, and the stated reason."
+        }
+        "## Invariants" => {
+            "What operational traps and constraints did this session learn that remain \
+             true for a successor — rules about running commands, reading outputs, \
+             ordering operations, environment facts, and off-by-ones? Not the bugs this \
+             session already fixed; the gotchas a fresh agent would still hit. Keep each \
+             exactly as specific as stated: exact numbers, paths, flags, commands."
+        }
+        "## Dead ends" => {
+            "Which approaches were tried or considered and then abandoned, rejected, or \
+             superseded? One bullet each, with the reason."
+        }
+        "## Verification" => {
+            "At session end: what were the final build/test results, what was live-verified \
+             and how, and what was committed vs still uncommitted?"
+        }
+        _ => "",
     }
 }
 
-/// The synthesis prompt. Succinct and non-contradictory by convention (this
-/// runs on local open-weight models); the schema's section rules are the
-/// whole instruction. Expect to tune this against
-/// `quality/session-frame.golden.md` — the prompt is the lever.
-fn synthesis_system_prompt() -> String {
-    format!(
-        "You distill a coding-session transcript spine into a session frame: the essential \
-         state a successor agent needs to seamlessly continue the work.\n\
-         Output ONLY markdown body sections — no YAML, no preamble, no code fences.\n\
-         Emit exactly these eight sections, in this order:\n{}\n\
-         Section rules:\n\
-         - Goal: the task and the larger objective it serves. At most 3 sentences.\n\
-         - State: what was completed WITH its proof (test counts, live verification), what is \
-           in flight, what was not started. Facts only, no narrative.\n\
-         - Next: ranked concrete actions a successor should take, each anchored to a file, \
-           symbol, or command from the spine.\n\
-         - Decisions: each significant choice plus the stated reason for it.\n\
-         - Invariants: constraints and gotchas learned that would bite a fresh session. Copy \
-           each one as specifically as the spine states it — keep exact numbers, conventions, \
-           and command names; never generalize a gotcha into a principle.\n\
-         - Dead ends: approaches tried and abandoned, with the reason.\n\
-         - Working set: emit the heading followed by exactly one line: assembled automatically\n\
-         - Verification: final build/test results, deploy state, and uncommitted work.\n\
-         Hard rules: use only facts present in the spine; never invent numbers, commit shas, \
-         file names, or symbol names. If a section has no facts, write exactly: none recorded.\n\
-         Keep the whole output under 1500 words.",
-        FRAME_SECTIONS.join("\n")
-    )
+/// One parsed retrieval answer: bullets that carried a valid spine citation
+/// (citations stripped from the text), plus how many bullets were discarded
+/// for citing nothing.
+pub(crate) struct CitedBullets {
+    pub(crate) kept: Vec<String>,
+    pub(crate) dropped: usize,
+}
+
+/// Machine-enforcement of the citation rule: extract the reply's bullets
+/// (with wrapped continuation lines), keep only those containing at least
+/// one citation group whose items all exist in the spine, and strip the
+/// citation groups from the kept text. Non-citation bracket text is left
+/// alone.
+pub(crate) fn parse_cited_bullets(reply: &str, n_user: usize, n_assistant: usize) -> CitedBullets {
+    let mut raw: Vec<String> = Vec::new();
+    for line in reply.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let bullet_text = if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+            Some(rest.trim_start().to_string())
+        } else {
+            t.split_once(". ").and_then(|(num, rest)| {
+                (!num.is_empty() && num.chars().all(|c| c.is_ascii_digit()))
+                    .then(|| rest.to_string())
+            })
+        };
+        match bullet_text {
+            Some(b) => raw.push(b),
+            None => {
+                // Continuation line of a wrapped bullet; prose outside any
+                // bullet (preamble chatter) is dropped.
+                if let Some(last) = raw.last_mut() {
+                    last.push(' ');
+                    last.push_str(t);
+                }
+            }
+        }
+    }
+    let mut kept = Vec::new();
+    let mut dropped = 0usize;
+    for b in raw {
+        let (text, cited) = strip_valid_citations(&b, n_user, n_assistant);
+        if cited && !text.is_empty() {
+            kept.push(text);
+        } else {
+            dropped += 1;
+        }
+    }
+    CitedBullets { kept, dropped }
+}
+
+/// Remove every valid citation group (`[u3]`, `[a17]`, `[u3,a17]`) from
+/// `text`; returns the cleaned text and whether at least one valid group was
+/// found. A group only counts when every token in it names an existing spine
+/// item — `[u99]` against a 5-turn spine is not a citation, it's an invented
+/// reference, and the bullet carrying only that gets dropped.
+fn strip_valid_citations(text: &str, n_user: usize, n_assistant: usize) -> (String, bool) {
+    let token_ok = |tok: &str| -> bool {
+        if let Some(n) = tok.strip_prefix('u') {
+            n.parse::<usize>().is_ok_and(|i| (1..=n_user).contains(&i))
+        } else if let Some(n) = tok.strip_prefix('a') {
+            n.parse::<usize>().is_ok_and(|i| (1..=n_assistant).contains(&i))
+        } else {
+            false
+        }
+    };
+    let mut out = String::new();
+    let mut cited = false;
+    let mut rest = text;
+    while let Some(start) = rest.find('[') {
+        let Some(off) = rest[start..].find(']') else {
+            break;
+        };
+        let inner = &rest[start + 1..start + off];
+        let toks: Vec<&str> = inner.split([',', ';', ' ']).filter(|s| !s.is_empty()).collect();
+        if !toks.is_empty() && toks.iter().all(|t| token_ok(t)) {
+            cited = true;
+            out.push_str(&rest[..start]);
+        } else {
+            out.push_str(&rest[..start + off + 1]);
+        }
+        rest = &rest[start + off + 1..];
+    }
+    out.push_str(rest);
+    let cleaned = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Stripping mid-sentence / consecutive citations leaves punctuation
+    // artifacts: " .", " ,", ",,", ",." and trailing separators.
+    let mut cleaned = cleaned.replace(" .", ".").replace(" ,", ",");
+    while cleaned.contains(",,") {
+        cleaned = cleaned.replace(",,", ",");
+    }
+    let cleaned = cleaned.replace(",.", ".");
+    let cleaned = cleaned.trim().trim_end_matches([',', ';', ' ']).to_string();
+    (cleaned, cited)
 }
 
 /// POST an OpenAI-style chat completion to the daemon and return the
@@ -814,7 +1016,7 @@ fn print_help() {
          \x20 --dir <path>       Explicit transcript directory (overrides --project).\n\
          \x20 --no-llm           Stop after the spine (also the daemon-down fallback).\n\
          \x20 --model <id>       Chat model (default: primary).\n\
-         \x20 --max-tokens <n>   Synthesis output budget (default 3000).\n\
+         \x20 --max-tokens <n>   Per-section answer budget (default 700).\n\
          \x20 --stdout           Print the frame instead of only writing it.\n\n\
          Output: ~/.sovereign/sessions/<session_id>/{{frame.md,spine.txt}}\n"
     );
@@ -990,47 +1192,164 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
     let max_tokens: u32 = flags
         .get("max-tokens")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(3000);
+        .unwrap_or(700);
 
-    println!("synthesizing frame via daemon (model {model}, this can take a few minutes on a local model)…");
+    println!(
+        "synthesizing frame via daemon (model {model}; retrieval practice — one question per section)…"
+    );
     // Local slots have small context windows; fit the *prompt* copy of the
-    // spine to the slot, shrinking + retrying on the daemon's honest
+    // spine to the slot, shrinking + refitting on the daemon's honest
     // "Prompt too long". The on-disk spine keeps full detail regardless.
+    // The spine is the shared PREFIX of every per-section prompt (the
+    // question is appended after it), so the daemon's prefix cache absorbs
+    // the seven-call fan-out.
     let mut prompt_spine = spine.clone();
     let mut prompt_cap = PROMPT_CHAR_CAP_INITIAL;
-    let body = loop {
+    let sections: Vec<(&str, String)> = 'fit: loop {
         let trimmed = cap_spine_middle(&mut prompt_spine, prompt_cap);
         if trimmed > 0 {
             println!("  fitting spine to the model window: {trimmed} more assistant texts trimmed (cap {prompt_cap} chars)");
         }
-        match daemon_complete(
-            &base_url,
-            &model,
-            &synthesis_system_prompt(),
-            &render_spine(&prompt_spine),
-            max_tokens,
-        )
-        .await
-        {
-            Ok(b) => break b,
-            Err(e) if e.contains("Prompt too long") && prompt_cap > PROMPT_CHAR_CAP_MIN => {
-                prompt_cap /= 2;
-                println!("  model window too small for the spine — retrying at {prompt_cap} chars");
-            }
-            Err(e) => {
-                eprintln!(
-                    "session: frame synthesis failed: {e}\n\
-                     The spine is written at {} — re-run once the daemon is up,\n\
-                     or hand-write the frame from the spine.",
-                    spine_path.display()
-                );
-                return 1;
-            }
+        let spine_render = render_spine(&prompt_spine);
+        let fit_n_user = prompt_spine.user_turns.len();
+        let fit_n_assistant = prompt_spine.assistant_texts.len();
+        // Mined sections sweep the FULL (on-disk) spine in chunks so
+        // mid-session content — where invariants and dead ends live — is
+        // never invisible to the model.
+        let chunks = chunk_ranges(&spine, prompt_cap);
+        if chunks.len() > 1 {
+            println!(
+                "  mined sections ({}) sweep the full spine in {} chunks",
+                MINED_SECTIONS.iter().map(|h| h.trim_start_matches("## ")).collect::<Vec<_>>().join(", "),
+                chunks.len()
+            );
         }
+        let mut acc: Vec<(&str, String)> = Vec::new();
+        for heading in FRAME_SECTIONS {
+            // Working set is assembled deterministically below, never asked.
+            if *heading == "## Working set" {
+                continue;
+            }
+            // (prompt, n_user, n_assistant) per call for this section.
+            let calls: Vec<(String, usize, usize)> = if MINED_SECTIONS.contains(heading) {
+                chunks
+                    .iter()
+                    .enumerate()
+                    .map(|(k, (lo, hi))| {
+                        (
+                            format!(
+                                "{}\nQUESTION (for the {heading} section):\n{}",
+                                render_spine_chunk(&spine, *lo, *hi, k + 1, chunks.len()),
+                                section_question(heading)
+                            ),
+                            spine.user_turns.len(),
+                            spine.assistant_texts.len(),
+                        )
+                    })
+                    .collect()
+            } else {
+                vec![(
+                    format!(
+                        "{spine_render}\nQUESTION (for the {heading} section):\n{}",
+                        section_question(heading)
+                    ),
+                    fit_n_user,
+                    fit_n_assistant,
+                )]
+            };
+            let mut kept: Vec<String> = Vec::new();
+            let mut dropped = 0usize;
+            for (user, n_user, n_assistant) in &calls {
+                // Citation compliance is per-call flaky on local models (MoE
+                // sampling): one re-ask when every bullet came back uncited
+                // recovers the section instead of silently emitting "none
+                // recorded" over real content.
+                let mut attempts = 0;
+                let parsed = loop {
+                    attempts += 1;
+                    match daemon_complete(&base_url, &model, retrieval_system_prompt(), user, max_tokens)
+                        .await
+                    {
+                        Ok(reply) => {
+                            let parsed = parse_cited_bullets(&reply, *n_user, *n_assistant);
+                            if parsed.kept.is_empty() && parsed.dropped > 0 && attempts == 1 {
+                                println!(
+                                    "  {heading}: {} bullet(s) all uncited — re-asking once",
+                                    parsed.dropped
+                                );
+                                continue;
+                            }
+                            break Ok(parsed);
+                        }
+                        Err(e) => break Err(e),
+                    }
+                };
+                match parsed {
+                    Ok(parsed) => {
+                        kept.extend(parsed.kept);
+                        dropped += parsed.dropped;
+                    }
+                    Err(e) if e.contains("Prompt too long") && prompt_cap > PROMPT_CHAR_CAP_MIN => {
+                        prompt_cap /= 2;
+                        println!("  model window too small — refitting at {prompt_cap} chars");
+                        continue 'fit;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "session: frame synthesis failed on {heading}: {e}\n\
+                             The spine is written at {} — re-run once the daemon is up,\n\
+                             or hand-write the frame from the spine.",
+                            spine_path.display()
+                        );
+                        return 1;
+                    }
+                }
+            }
+            let kept = dedupe_bullets(kept);
+            let body = if kept.is_empty() {
+                if dropped > 0 {
+                    println!(
+                        "  {heading}: all {dropped} bullet(s) dropped — no valid spine citation"
+                    );
+                } else {
+                    println!("  {heading}: none recorded");
+                }
+                "none recorded\n".to_string()
+            } else {
+                println!(
+                    "  {heading}: {} bullet(s){}",
+                    kept.len(),
+                    if dropped > 0 {
+                        format!(", {dropped} dropped uncited")
+                    } else {
+                        String::new()
+                    }
+                );
+                kept.iter().map(|b| format!("- {b}\n")).collect()
+            };
+            acc.push((heading, body));
+        }
+        break acc;
     };
 
     let head = head_at_end_of(&spine.cwd, &spine.last_ts);
-    let body = replace_working_set(body.trim(), &render_working_set(&spine));
+    let mut body = String::new();
+    for heading in FRAME_SECTIONS {
+        if *heading == "## Working set" {
+            body.push_str(render_working_set(&spine).trim_end());
+        } else {
+            let sec = sections
+                .iter()
+                .find(|(h, _)| h == heading)
+                .map(|(_, b)| b.as_str())
+                .unwrap_or("none recorded");
+            body.push_str(heading);
+            body.push('\n');
+            body.push_str(sec.trim_end());
+        }
+        body.push_str("\n\n");
+    }
+    let body = body.trim().to_string();
     let frame = format!(
         "{}\n{}\n",
         render_frontmatter(&spine, &head, "distilled"),
@@ -1261,16 +1580,76 @@ mod tests {
         assert!(ws.contains("- src/a.rs (5 edits)"));
         assert!(ws.contains("- /elsewhere/b.rs (1 edits)")); // outside cwd stays absolute
 
-        // Splice replaces the model's (possibly hallucinated) section…
-        let body = "## Goal\ng\n## Working set\n- /Users/aexsbrayn/mangled.rs\n## Verification\nv";
-        let spliced = replace_working_set(body, &ws);
-        assert!(!spliced.contains("mangled.rs"));
-        assert!(spliced.contains("- src/a.rs (5 edits)"));
-        assert!(spliced.contains("## Verification\nv"));
+    }
 
-        // …and appends when the model dropped the heading entirely.
-        let appended = replace_working_set("## Goal\ng", &ws);
-        assert!(appended.contains("## Working set"));
+    #[test]
+    fn chunks_cover_all_items_with_global_ids() {
+        let spine = Spine {
+            user_turns: vec!["fix the bug".into()],
+            assistant_texts: (0..30).map(|i| format!("text-{i} {}", "x".repeat(900))).collect(),
+            ..Default::default()
+        };
+        let chunks = chunk_ranges(&spine, 12_000);
+        assert!(chunks.len() > 1, "30x900 chars must not fit one 12k chunk");
+        // Full coverage, no overlap, in order.
+        assert_eq!(chunks[0].0, 0);
+        assert_eq!(chunks.last().unwrap().1, 30);
+        for w in chunks.windows(2) {
+            assert_eq!(w[0].1, w[1].0);
+        }
+        // Global ids: the second chunk's first item keeps its true id.
+        let (lo, hi) = chunks[1];
+        let rendered = render_spine_chunk(&spine, lo, hi, 2, chunks.len());
+        assert!(rendered.contains(&format!("--- [a{}] assistant ---", lo + 1)));
+        assert!(rendered.contains("[u1] user turn"), "user turns ride every chunk");
+        assert!(rendered.contains(&format!("(part 2/{})", chunks.len())));
+
+        // A tiny spine is one chunk covering everything.
+        let small = Spine {
+            assistant_texts: vec!["short".into()],
+            ..Default::default()
+        };
+        assert_eq!(chunk_ranges(&small, 48_000), vec![(0, 1)]);
+    }
+
+    #[test]
+    fn dedupe_bullets_collapses_punctuation_variants() {
+        let out = dedupe_bullets(vec![
+            "Suite: 7928 pass / 0 fail".into(),
+            "suite 7928 pass, 0 fail".into(),
+            "different fact".into(),
+        ]);
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn cited_bullets_kept_stripped_and_uncited_dropped() {
+        let reply = "Here are the facts:\n\
+                     - suite went 7888 to 7928 tests [a12]\n\
+                     - uncited claim that must be dropped\n\
+                     - wrapped bullet about the export\n  fail-closed guard [u2,a30]\n\
+                     1. numbered bullet with mid-cite [a3] and a tail\n\
+                     - bad range citation [a999]\n";
+        let parsed = parse_cited_bullets(reply, 5, 40);
+        assert_eq!(parsed.kept.len(), 3);
+        assert_eq!(parsed.dropped, 2);
+        assert_eq!(parsed.kept[0], "suite went 7888 to 7928 tests");
+        assert_eq!(parsed.kept[1], "wrapped bullet about the export fail-closed guard");
+        assert_eq!(parsed.kept[2], "numbered bullet with mid-cite and a tail");
+    }
+
+    #[test]
+    fn cited_bullets_preserve_noncitation_brackets() {
+        let parsed = parse_cited_bullets("- keep [sic] the brackets [u1]", 2, 2);
+        assert_eq!(parsed.kept, vec!["keep [sic] the brackets"]);
+        // A citation-shaped token out of range is not a citation.
+        let parsed = parse_cited_bullets("- only invalid [u3]", 2, 2);
+        assert!(parsed.kept.is_empty());
+        assert_eq!(parsed.dropped, 1);
+        // Prose outside bullets is not a bullet.
+        let parsed = parse_cited_bullets("no bullets here [u1]", 2, 2);
+        assert!(parsed.kept.is_empty());
+        assert_eq!(parsed.dropped, 0);
     }
 
     #[test]

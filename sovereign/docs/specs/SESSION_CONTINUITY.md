@@ -153,10 +153,13 @@ The protocol:
    session). Yellow (≥90k) means: write/refresh the frame at the next natural
    boundary.
 2. **Only self-reported or hand-written frames authorize a split.** The agent
-   holding the state writes 100%-fidelity frames; distilled frames grade at
-   17% recall (§5) and exist to rescue sessions that died uncooperatively —
-   never split *onto* one. If the freshest frame is `provenance: distilled`,
-   refresh it via self-report before forking.
+   holding the state writes 100%-fidelity frames; distilled frames (88%
+   recall as of stage-2 v4, up from 17% — see §5) exist to rescue sessions
+   that died uncooperatively — never split *onto* one. The rule is about
+   provenance, not just score: a distilled frame is a reconstruction, and
+   the encode-time write is always the strong path (MEMORY_MODEL P2). If the
+   freshest frame is `provenance: distilled`, refresh it via self-report
+   before forking.
 3. **The successor works from the frame + code-intel** (`symbols`/`callers`/
    `facts`/`notes`), does not re-read `SYSTEM_OVERVIEW`/specs the frame
    already summarizes, and self-measures after its first work stretch:
@@ -178,8 +181,21 @@ timestamps/model. Measured on the golden's source session: 4.1MB → ~40k chars
 (~1% of transcript). User turns are the highest-signal tokens in the
 transcript — they carry every goal statement and steer.
 
-**Stage 2 — frame synthesis** (LLM). One local-daemon chat call
-(`POST :9741/v1/chat/completions`): spine in, schema-v1 frame out; validate
+**Stage 2 — frame synthesis** (LLM, v2 2026-07-24: retrieval practice per
+MEMORY_MODEL E4b). One local-daemon chat call *per body section*, not one
+call for the whole frame: each call carries the spine plus one focused
+question ("what operational traps remain true for a successor?"), and every
+answer bullet must cite the spine item(s) it came from (`[u3]`, `[a17]` —
+items are numbered in the spine render). Citations are machine-enforced:
+`parse_cited_bullets` drops uncited bullets (prose instructions alone don't
+hold on local models — same lesson as the grade judge's contradiction
+citations), and a single re-ask recovers the occasional call where the model
+ignores the citation rule entirely. The *mined* sections (Next, Decisions,
+Invariants, Dead ends) additionally sweep the FULL spine in chunks with
+stable global item ids, answers unioned + deduped — their golden content
+lives in mid-session debugging, which the ends-biased window trim made
+invisible (that trim was the single biggest cause of the 17% v1 baseline).
+Goal/State/Verification stay on the ends-biased fitted spine. Validate
 frontmatter + sections, stamp `provenance: distilled`. `--no-llm` stops after
 stage 1 and emits the spine (still useful raw; also the daemon-down fallback —
 degrade honestly, never silently).
@@ -187,7 +203,14 @@ degrade honestly, never silently).
 Grading loop: distill the golden's source session, score against the golden
 (§5), iterate on the stage-2 prompt. The intent-forced-prompt lesson from
 `CODE_INTEL_CHAT.md §3.2` applies: the prompt is the lever; expect to tune it
-against the golden, not trust the first draft.
+against the golden, not trust the first draft. (The v1→v2 iteration bore this
+out: 17% → 29% from retrieval-practice questions alone → 88% once the mined
+sections swept the full spine.)
+
+Known tradeoff: the union sweep makes distilled frames rich but fat
+(measured ~3.9k tokens vs the ~2k self-reported budget). Acceptable for a
+dead-session rescue artifact; E4c candidate: judge-based near-dup merge
+across chunk answers.
 
 ---
 
@@ -220,9 +243,23 @@ from the golden as hallucination despite prose instructions not to, so the
 judge must cite the reference item each hallucination CONTRADICTS and the
 CLI drops entries that cannot (or that cite an item the judge itself marked
 captured). Self-calibration: golden-vs-golden grades 42/42 = 100% PASS.
-Baseline: the e09c5e3d distilled frame grades 17% FAIL — Next 0/4,
-Invariants 0/9 — confirming the known stage-2 weakness (spine trimming at
-the 16k window); that number is the iteration target.
+
+**Stage-2 iteration history (all graded on e09c5e3d vs the golden):**
+- v1 single-shot "write all eight sections": **17% FAIL** — Next 0/4,
+  Invariants 0/9; the window trim hid mid-session content and one call
+  spread over eight sections summarized at wrap-up altitude.
+- v2 retrieval practice (per-section questions, machine-enforced spine
+  citations): **29% FAIL** — Decisions 3/5→5/5 proved the mechanism, but
+  Invariants stayed 0/9: still invisible behind the trim.
+- v3/v4 + chunked full-spine sweep for mined sections + uncited re-ask:
+  **88% PASS** — Goal 1/1, State 6/7, Next 3/4, Decisions 5/5,
+  Invariants 9/9, Dead ends 0/2, Verification 1/1, zero hallucination
+  penalties. Residual: Dead ends items are one-line mid-session asides and
+  flicker 0–1/2 across runs.
+
+Distilled-frame recall is now rescue-grade rather than token-grade; the
+§3a rule stands — only self-reported/hand-written frames authorize a split,
+distilled frames rescue sessions that died uncooperatively.
 
 ---
 
