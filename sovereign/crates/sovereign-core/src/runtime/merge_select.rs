@@ -60,7 +60,10 @@ const ARTICLE_DECAY: f64 = 0.7;
 /// "0"/"false"/"off"/"no" restores the legacy stack byte-identically.
 pub(crate) fn merge_select_enabled() -> bool {
     match std::env::var("SOVEREIGN_MERGE_SELECT") {
-        Ok(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Ok(v) => !matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
         Err(_) => true,
     }
 }
@@ -155,7 +158,8 @@ pub(crate) fn merge_demand_select(
     //    rank, once by the decay) and measured −4/−5 wiki depth facts
     //    against the legacy stack. The decay term alone now carries
     //    the depth-vs-breadth trade.
-    let mut article_count: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let mut article_count: std::collections::HashMap<&str, usize> =
+        std::collections::HashMap::new();
     let mut article_best: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for i in 0..n {
         article_best.entry(title_lower[i].as_str()).or_insert(i);
@@ -172,8 +176,7 @@ pub(crate) fn merge_demand_select(
             let t = title_lower[i].as_str();
             let dup = article_count.get(t).copied().unwrap_or(0);
             let rank_term = 1.0 / (i as f64 + RANK_K);
-            let article_term = 1.0
-                / (article_best.get(t).copied().unwrap_or(i) as f64 + RANK_K);
+            let article_term = 1.0 / (article_best.get(t).copied().unwrap_or(i) as f64 + RANK_K);
             let value = rank_term.max(article_term) * ARTICLE_DECAY.powi(dup as i32);
             if best.map(|(_, bv)| value > bv).unwrap_or(true) {
                 best = Some((i, value));
@@ -237,7 +240,9 @@ mod tests {
         let mut pool: Vec<_> = (0..25).map(|_| chunk("Dominant Article", None)).collect();
         pool.push(chunk("Isaac Newton", None));
         let out = merge_demand_select(pool, &["Newton".to_string()], 10);
-        assert!(out.iter().any(|c| c.title.as_deref() == Some("Isaac Newton")));
+        assert!(out
+            .iter()
+            .any(|c| c.title.as_deref() == Some("Isaac Newton")));
         assert_eq!(out.len(), 10);
     }
 

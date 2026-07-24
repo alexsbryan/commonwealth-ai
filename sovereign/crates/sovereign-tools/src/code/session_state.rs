@@ -136,8 +136,7 @@ impl Frame {
 }
 
 fn now_iso() -> String {
-    chrono::Utc::now()
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 fn git_capture(repo_root: &Path, args: &[&str]) -> Option<String> {
@@ -177,8 +176,8 @@ fn parse_frame(text: &str) -> Frame {
     let mut current: Option<usize> = None;
     for line in rest.lines() {
         if let Some(heading) = line.strip_prefix("## ") {
-            current = canonical_section(heading)
-                .and_then(|c| bodies.iter().position(|(n, _)| n == c));
+            current =
+                canonical_section(heading).and_then(|c| bodies.iter().position(|(n, _)| n == c));
             continue;
         }
         if let Some(idx) = current {
@@ -522,10 +521,8 @@ mod tests {
     use super::*;
 
     fn tmp_root(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "session_state_test_{}_{tag}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("session_state_test_{}_{tag}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -565,17 +562,15 @@ mod tests {
     fn patch_replaces_named_section_and_preserves_others() {
         let root = tmp_root("patch");
         upsert_frame(&root, "s", None, update_with(&[("goal", "original goal")])).unwrap();
-        let out = upsert_frame(
-            &root,
-            "s",
-            None,
-            update_with(&[("state", "- step 1 done")]),
-        )
-        .unwrap();
+        let out =
+            upsert_frame(&root, "s", None, update_with(&[("state", "- step 1 done")])).unwrap();
         assert!(!out.created);
         assert_eq!(out.sections_updated, vec!["State"]);
         let text = std::fs::read_to_string(&out.path).unwrap();
-        assert!(text.contains("original goal"), "goal must survive a state patch");
+        assert!(
+            text.contains("original goal"),
+            "goal must survive a state patch"
+        );
         assert!(text.contains("- step 1 done"));
         std::fs::remove_dir_all(&root).ok();
     }
@@ -605,8 +600,7 @@ mod tests {
     fn over_budget_upsert_is_rejected_and_writes_nothing() {
         let root = tmp_root("budget");
         let big = "word ".repeat(3000); // ~3.7k tokens
-        let err = upsert_frame(&root, "s3", None, update_with(&[("state", &big)]))
-            .unwrap_err();
+        let err = upsert_frame(&root, "s3", None, update_with(&[("state", &big)])).unwrap_err();
         assert!(err.contains("budget"), "{err}");
         assert!(err.contains("State"), "per-section counts named: {err}");
         assert!(!root.join("s3").join("frame.md").exists());
@@ -616,8 +610,7 @@ mod tests {
     #[test]
     fn unknown_section_and_bad_status_are_rejected() {
         let root = tmp_root("reject");
-        let err =
-            upsert_frame(&root, "s4", None, update_with(&[("vibes", "x")])).unwrap_err();
+        let err = upsert_frame(&root, "s4", None, update_with(&[("vibes", "x")])).unwrap_err();
         assert!(err.contains("unknown section"));
         let mut update = update_with(&[]);
         update.status = Some("paused".into());

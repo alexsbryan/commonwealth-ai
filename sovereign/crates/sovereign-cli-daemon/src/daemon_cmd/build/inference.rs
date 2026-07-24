@@ -173,8 +173,8 @@ pub(crate) fn load_provider(
     // OFF → `inner` is installed unchanged.
     let provider: Arc<dyn InferenceProvider> =
         if config.compute.enabled && !config.compute.slot.is_empty() {
-            let binary = std::env::current_exe()
-                .unwrap_or_else(|_| PathBuf::from("sovereign-cli-daemon"));
+            let binary =
+                std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-cli-daemon"));
             let crash_dir = config.data.dir.join("compute-crash-logs");
             match sovereign_compute::manager::build_compute_layer(
                 &config.compute,

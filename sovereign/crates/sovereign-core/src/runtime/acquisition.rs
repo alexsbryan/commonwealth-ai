@@ -321,7 +321,13 @@ pub async fn routes_for_gap(
         }
     };
     let coverage = ctx.coverage.unwrap_or(GapCoverage::ClaimUncovered);
-    let routes = resolve_routes(gap_text, coverage, &catalog, &gap_embedding, &entry_embeddings);
+    let routes = resolve_routes(
+        gap_text,
+        coverage,
+        &catalog,
+        &gap_embedding,
+        &entry_embeddings,
+    );
     tracing::info!(
         target: "epistemic.ledger",
         routes = ?routes,

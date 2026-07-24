@@ -85,7 +85,12 @@ async fn cmd_set(args: &[String]) -> i32 {
         "code" => cfg.models.code = Some(path.clone()),
         _ => unreachable!(),
     }
-    apply(cfg, &format!("models.{slot}"), &format!("{slot} → {}", path.display())).await
+    apply(
+        cfg,
+        &format!("models.{slot}"),
+        &format!("{slot} → {}", path.display()),
+    )
+    .await
 }
 
 async fn cmd_unset(args: &[String]) -> i32 {
@@ -112,7 +117,12 @@ async fn cmd_unset(args: &[String]) -> i32 {
             return 2;
         }
     }
-    apply(cfg, &format!("models.{slot}"), &format!("{slot} cleared (subsumed by primary)")).await
+    apply(
+        cfg,
+        &format!("models.{slot}"),
+        &format!("{slot} cleared (subsumed by primary)"),
+    )
+    .await
 }
 
 async fn cmd_set_extra(args: &[String]) -> i32 {
@@ -132,7 +142,12 @@ async fn cmd_set_extra(args: &[String]) -> i32 {
         Err(rc) => return rc,
     };
     cfg.models.extra.insert(name.to_string(), path.clone());
-    apply(cfg, "models.extra", &format!("extra '{name}' → {}", path.display())).await
+    apply(
+        cfg,
+        "models.extra",
+        &format!("extra '{name}' → {}", path.display()),
+    )
+    .await
 }
 
 async fn cmd_rm_extra(args: &[String]) -> i32 {
@@ -192,9 +207,9 @@ async fn cmd_list() -> i32 {
         Err(rc) => return rc,
     };
     let resident = fetch_resident().await; // None when the daemon isn't reachable
-    // Only annotate load state when we actually parsed a resident set; an
-    // empty/unknown set (daemon up but schema not matched) stays unlabeled
-    // rather than falsely claiming every slot is "not loaded".
+                                           // Only annotate load state when we actually parsed a resident set; an
+                                           // empty/unknown set (daemon up but schema not matched) stays unlabeled
+                                           // rather than falsely claiming every slot is "not loaded".
     let mark = |p: &Path| -> &'static str {
         match &resident {
             Some(set) if !set.is_empty() => {
@@ -209,12 +224,20 @@ async fn cmd_list() -> i32 {
     };
 
     println!("Models (from {})", SetupConfig::default_path().display());
-    println!("  primary  {}{}", cfg.models.primary.display(), mark(&cfg.models.primary));
+    println!(
+        "  primary  {}{}",
+        cfg.models.primary.display(),
+        mark(&cfg.models.primary)
+    );
     match &cfg.models.fast {
         Some(p) => println!("  fast     {}{}", p.display(), mark(p)),
         None => println!("  fast     (subsumed by primary)"),
     }
-    println!("  embed    {}{}", cfg.models.embed.display(), mark(&cfg.models.embed));
+    println!(
+        "  embed    {}{}",
+        cfg.models.embed.display(),
+        mark(&cfg.models.embed)
+    );
     match &cfg.models.code {
         Some(p) => println!("  code     {}{}", p.display(), mark(p)),
         None => println!("  code     (none; primary handles code)"),
@@ -271,7 +294,14 @@ fn resolve_model_path(spec: &str) -> Result<PathBuf, i32> {
         }
     }
     eprintln!("svrn model: no model file found for '{spec}'.");
-    eprintln!("  looked at: {}", candidates.iter().map(|c| c.display().to_string()).collect::<Vec<_>>().join(", "));
+    eprintln!(
+        "  looked at: {}",
+        candidates
+            .iter()
+            .map(|c| c.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let md = models_dir();
     if let Ok(rd) = std::fs::read_dir(&md) {
         let ggufs: Vec<String> = rd

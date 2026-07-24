@@ -198,7 +198,10 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
                 line_start,
                 line_end,
                 lines,
-                is_public: v.get("is_public").and_then(|x| x.as_bool()).unwrap_or(false),
+                is_public: v
+                    .get("is_public")
+                    .and_then(|x| x.as_bool())
+                    .unwrap_or(false),
             },
             embedding: normalize(&embedding),
         };
@@ -235,9 +238,7 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         exact_clones_from_source(&db_path, inputs.corpus_id, &source_root, inputs.scope)
             .await
             .unwrap_or_else(|e| {
-                eprintln!(
-                    "dry_report: exact-clone tier unavailable ({e}); near clones only"
-                );
+                eprintln!("dry_report: exact-clone tier unavailable ({e}); near clones only");
                 (Vec::new(), HashSet::new())
             });
     eprintln!(
@@ -250,8 +251,7 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
     // these as functions too, so two same-named re-exports would score ≈1.0.
     if !alias_syms.is_empty() {
         let before = candidates.len();
-        candidates
-            .retain(|c| !alias_syms.contains(&(c.r.file.clone(), c.r.symbol.clone())));
+        candidates.retain(|c| !alias_syms.contains(&(c.r.file.clone(), c.r.symbol.clone())));
         let dropped = before - candidates.len();
         if dropped > 0 {
             eprintln!("dry_report: dropped {dropped} use-alias symbol(s) from near tier");
@@ -314,7 +314,10 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
                 })
             })
             .collect();
-        handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect()
     });
 
     eprintln!(
@@ -373,11 +376,7 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
             .max()
             .unwrap_or(0);
         let mut refs: Vec<SymbolRef> = members.iter().map(|&i| candidates[i].r.clone()).collect();
-        refs.sort_by(|a, b| {
-            a.file
-                .cmp(&b.file)
-                .then(a.line_start.cmp(&b.line_start))
-        });
+        refs.sort_by(|a, b| a.file.cmp(&b.file).then(a.line_start.cmp(&b.line_start)));
         near_clusters.push(NearCluster {
             members: refs,
             min_sim: if max_sim == 0.0 { 0.0 } else { min_sim },
@@ -487,8 +486,7 @@ async fn exact_clones_from_source(
     source_root: &Path,
     scope: Option<&str>,
 ) -> Result<(Vec<ExactClone>, HashSet<(String, String)>)> {
-    let graph =
-        ScipGraph::open(db_path, corpus_id).map_err(|e| err("scip_open", e.to_string()))?;
+    let graph = ScipGraph::open(db_path, corpus_id).map_err(|e| err("scip_open", e.to_string()))?;
     let syms = graph
         .iter_all_symbols()
         .await
@@ -551,7 +549,9 @@ async fn exact_clones_from_source(
                 alias_syms.insert((file.clone(), name));
                 continue;
             }
-            let sig = blake3::hash(body.join("\n").as_bytes()).to_hex().to_string();
+            let sig = blake3::hash(body.join("\n").as_bytes())
+                .to_hex()
+                .to_string();
             groups.entry(sig).or_default().push(SymbolRef {
                 symbol: name,
                 kind: "function".to_string(),
@@ -729,9 +729,7 @@ mod tests {
         assert!(is_use_alias(&body(&[
             "pub use sovereign_core::time::unix_now as unix_now;"
         ])));
-        assert!(is_use_alias(&body(&[
-            "pub(crate) use foo::bar as bar;"
-        ])));
+        assert!(is_use_alias(&body(&["pub(crate) use foo::bar as bar;"])));
         assert!(is_use_alias(&body(&["pub(super) use foo::bar as bar;"])));
     }
 

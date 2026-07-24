@@ -61,7 +61,9 @@ pub async fn run(
     };
 
     let skills_dir = match crate::voice_eval::runner::resolve_skills_dir(
-        super::get_flag(flags, "skills-dir").map(PathBuf::from).as_ref(),
+        super::get_flag(flags, "skills-dir")
+            .map(PathBuf::from)
+            .as_ref(),
     ) {
         Ok(d) => d,
         Err(e) => {
@@ -175,9 +177,7 @@ pub async fn run(
             done += 1;
             let started = Instant::now();
             let response = match session.runtime.handle_message(&rec.user, &conv_id).await {
-                Ok(resp) => {
-                    sovereign_core::title::strip_thinking_response(&resp.message.content)
-                }
+                Ok(resp) => sovereign_core::title::strip_thinking_response(&resp.message.content),
                 Err(e) => {
                     eprintln!(
                         "  [{done}/{total_turns}] {} t{}: runtime failed: {e}",

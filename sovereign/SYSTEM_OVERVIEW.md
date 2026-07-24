@@ -2319,6 +2319,44 @@ semantics, which `--filter`'s deliberate over-approximation depends on.
 `-E` filter-expression language; the gate deliberately keeps plain substring
 filter semantics so its results are comparable across both engines.
 
+**Where the gate runs — `scripts/pre-push.sh` first, CI second.** As of
+2026-07-24 the *primary* correctness gate is a pre-push hook, not GitHub
+Actions. The reason is a failure mode metered gates have and unmetered ones do
+not: on 2026-07-24 the repo exhausted its Actions allowance and every job began
+aborting in ~4s with "the job was not started because recent account payments
+have failed" — which on a PR page is nearly indistinguishable from a gate that
+ran and passed. Audited spend was ~6,600 billed min/month against a 3,000-min
+allowance, 56% of it CI, with the Actions cache measured **empty** (so every run
+cold-built the workspace incl. llama.cpp: 56.7 min median). The full audit,
+the five mechanisms behind it, and the resulting budget are in
+`docs/CI_ECONOMY.md`; `scripts/ci-spend-audit.sh` reproduces the numbers on
+demand (GitHub's own `/timing` endpoint reports zeros here, so the script sums
+per-job wall time and applies runner multipliers itself).
+
+The hook runs this same regression gate, scoped to what the push changes, plus
+rustfmt, `xtask docs-gate`, and the desktop `npm run check`/`test` pair. It is
+installed via `scripts/install-git-hooks.sh` (called from
+`scripts/bootstrap.sh`), which points `core.hooksPath` at the
+version-controlled `.githooks/` — so the gate is a reviewed artifact that
+updates with a `git pull` rather than a per-clone file that drifts between
+machines. It **fails closed**: if the push range cannot be diffed, it gates
+everything rather than reporting "no changes."
+
+`.github/workflows/ci.yml` then confirms the same thing on a clean checkout and
+gates outside contributions. It is path-filtered behind a `changes` job,
+cancels superseded runs on main as well as PRs, restricts cache *writes* to
+main (many concurrent writers against GitHub's 10 GB budget were LRU-evicting
+each other — the mechanism behind the empty cache), keys the llama.cpp CMake
+tree on `llama-cpp-sys-4`'s version rather than the `Cargo.lock` hash
+(`Cargo.lock` churned 29× in July; that version has changed 4× ever), and
+invokes `scripts/sovereign-test.sh` so CI and local share one definition of
+"the tests pass" — which also closed a real coverage hole, since bare
+`cargo test --workspace` had never exercised the `sovereign-cli/dev-tools`
+suites. Merge-blocking status is aggregated into a single `CI OK` job, which
+treats `skipped` as success so path filtering stays compatible with branch
+protection. `.github/dependabot.yml` is monthly and single-grouped: its update
+runs alone had cost 19% of total spend to produce PRs that were mostly closed.
+
 ### Run
 
 ```sh

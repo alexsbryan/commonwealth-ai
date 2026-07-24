@@ -948,7 +948,10 @@ pub(crate) fn demand_plan_enabled() -> bool {
 /// the planner's default effect is ledger-only (plan → epistemic demand
 /// set + entity merge), with the expensive fan-out an opt-in lever.
 pub(crate) fn demand_plan_fanout_enabled() -> bool {
-    std::env::var("SOVEREIGN_DEMAND_PLAN_FANOUT").ok().as_deref() == Some("1")
+    std::env::var("SOVEREIGN_DEMAND_PLAN_FANOUT")
+        .ok()
+        .as_deref()
+        == Some("1")
 }
 
 fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
@@ -1264,8 +1267,12 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // (merge-select). The tasks own Arc clones and a seed
         // snapshot — no pipeline borrow — and join at
         // `ppr_struct_expand`, overlapping every step in between.
-        st.ppr_pending =
-            rt.spawn_ppr_lane(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling);
+        st.ppr_pending = rt.spawn_ppr_lane(
+            &st.chunks,
+            st.message,
+            st.enabled_corpora,
+            st.corpus_ceiling,
+        );
         st.obligations_pending =
             rt.spawn_entity_obligations(st.message, st.enabled_corpora, st.corpus_ceiling);
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
@@ -1291,7 +1298,7 @@ fn step_ppr_struct_expand<'a, 'ctx>(
         // pipeline's latency contract wins over a slow expansion.
         const PPR_JOIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(4);
         let join = |handle: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
-                        what: &'static str| {
+                    what: &'static str| {
             let handle = handle?;
             Some(async move {
                 match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
@@ -1520,8 +1527,7 @@ fn step_cap_and_reserve<'a, 'ctx>(
         // legacy path is byte-identical when the flag is off. See
         // merge_select.rs for the objective and the bucket-1 receipts.
         if merge_select_enabled() {
-            st.chunks =
-                merge_demand_select(take(&mut st.chunks), &st.entities, KQ_MERGED_LIMIT);
+            st.chunks = merge_demand_select(take(&mut st.chunks), &st.entities, KQ_MERGED_LIMIT);
             audit_pipeline_stage(&st.chunks, "after_cap_and_reserve", st.message);
             return StepOutcome {
                 note: Some("merge_demand_select".to_string()),
@@ -1952,7 +1958,10 @@ fn deep_top_sources_expand<'a, 'ctx>(
             "retrieval_audit: expansion_decision"
         );
         let (expanded, sources_expanded, _total_fetched) = match strategy {
-            ExpansionStrategy::TopSources => rt.expand_from_top_sources(take(&mut st.chunks), st.message).await,
+            ExpansionStrategy::TopSources => {
+                rt.expand_from_top_sources(take(&mut st.chunks), st.message)
+                    .await
+            }
             // NoExpansion (< 2 source keys): the helper would return
             // the set unchanged — skip the call. DominantSource:
             // unreachable here, treated identically for totality.

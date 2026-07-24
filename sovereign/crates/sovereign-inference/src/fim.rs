@@ -66,7 +66,12 @@ pub const FIM_MARKER_TABLE: &[FimMarkers] = &[
         suffix: "<|fim_suffix|>",
         middle: "<|fim_middle|>",
         also_requires: &[],
-        stop_strings: &["<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>"],
+        stop_strings: &[
+            "<|endoftext|>",
+            "<|fim_pad|>",
+            "<|file_sep|>",
+            "<|repo_name|>",
+        ],
     },
     // Mellum BEFORE StarCoder2: identical marker spellings, so the
     // discriminator tokens do the disambiguation (`<|im_start|>` on
@@ -534,7 +539,9 @@ mod tests {
         let mut t = FimStopTracker::new(FimStyle::QwenCoder);
         // Holdback is max-stop-len-1 bytes; feed enough that text releases.
         let f1 = t.feed("let x = compute_the_thing(arg1, arg2, arg3);");
-        let Feed::Emit(s) = f1 else { panic!("expected Emit, got {f1:?}") };
+        let Feed::Emit(s) = f1 else {
+            panic!("expected Emit, got {f1:?}")
+        };
         assert!(s.starts_with("let x = compute"));
     }
 
@@ -598,7 +605,11 @@ mod tests {
             "x =>",
             "_ =>",
         ] {
-            assert_eq!(decide_mode(tail), FimMode::Multi, "{tail:?} should be Multi");
+            assert_eq!(
+                decide_mode(tail),
+                FimMode::Multi,
+                "{tail:?} should be Multi"
+            );
         }
     }
 
@@ -609,10 +620,14 @@ mod tests {
             "foo(bar",
             "return a +",
             "",
-            "};",         // closes, not opens
+            "};",           // closes, not opens
             "fn main() {}", // already closed
         ] {
-            assert_eq!(decide_mode(tail), FimMode::Single, "{tail:?} should be Single");
+            assert_eq!(
+                decide_mode(tail),
+                FimMode::Single,
+                "{tail:?} should be Single"
+            );
         }
     }
 
@@ -620,12 +635,8 @@ mod tests {
 
     #[test]
     fn single_mode_stops_at_newline_excluding_it() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Single,
-            "",
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Single, "");
         let f = t.feed("a + b;\nnext_line()");
         let Feed::Stop { text, outcome } = f else {
             panic!("expected Stop, got {f:?}")
@@ -637,17 +648,15 @@ mod tests {
 
     #[test]
     fn single_mode_ignores_brackets() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Single,
-            "",
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Single, "");
         // A close-bracket in single mode is just text (completing a
         // call expression), not a depth stop. (Feed exceeds the
         // holdback tail so the text actually releases.)
         let f = t.feed("let result = foo(bar, baz, quux)");
-        let Feed::Emit(s) = f else { panic!("expected Emit, got {f:?}") };
+        let Feed::Emit(s) = f else {
+            panic!("expected Emit, got {f:?}")
+        };
         assert!(s.contains("foo(bar"), "brackets pass through: {s:?}");
     }
 
@@ -655,29 +664,22 @@ mod tests {
 
     #[test]
     fn multi_mode_depth_close_emits_through_closer() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         let f = t.feed("\n    _ => a + b,\n}\nfn next() {");
         let Feed::Stop { text, outcome } = f else {
             panic!("expected Stop, got {f:?}")
         };
-        assert!(text.ends_with("\n}"), "closer kept, trailing fn dropped: {text:?}");
+        assert!(
+            text.ends_with("\n}"),
+            "closer kept, trailing fn dropped: {text:?}"
+        );
         assert!(!text.contains("fn next"));
         assert_eq!(outcome.rule, StopRule::DepthClose);
     }
 
     #[test]
     fn multi_mode_nested_brackets_do_not_stop_at_zero() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         // Model opens + closes its OWN brackets inside the body:
         // depth returns to 0 but never negative — must NOT stop.
         // (Prefix ended with `{`, so the user's opener is at −1.)
@@ -693,12 +695,7 @@ mod tests {
 
     #[test]
     fn multi_mode_depth_close_split_across_tokens() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         // Body arrives balanced, then the closer of the USER's
         // opener lands in a later token.
         let _ = t.feed("x,\n  y,\n");
@@ -712,12 +709,7 @@ mod tests {
 
     #[test]
     fn multi_mode_blank_line_stops() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         // Python-style body (prefix ended with ':'): no brackets, so
         // the blank line is the terminator.
         let f = t.feed("    total = sum(items)\n    return total\n\ndef next():");
@@ -731,14 +723,12 @@ mod tests {
 
     #[test]
     fn multi_mode_blank_line_split_across_tokens() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         let f1 = t.feed("return x\n");
-        assert!(matches!(f1, Feed::Emit(_)), "lone newline is not blank: {f1:?}");
+        assert!(
+            matches!(f1, Feed::Emit(_)),
+            "lone newline is not blank: {f1:?}"
+        );
         let f2 = t.feed("\nrest");
         let Feed::Stop { outcome, .. } = f2 else {
             panic!("expected blank-line Stop once the second newline arrived, got {f2:?}")
@@ -748,12 +738,7 @@ mod tests {
 
     #[test]
     fn multi_mode_max_lines_stops() {
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            "",
-        );
+        let mut t = FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, "");
         let mut last = Feed::Emit(String::new());
         for i in 0..FIM_DEFAULT_MAX_LINES {
             last = t.feed(&format!("line {i}\n"));
@@ -772,12 +757,8 @@ mod tests {
     #[test]
     fn suffix_duplication_trims_overlap() {
         let suffix = "    return total;\n}";
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Multi,
-            suffix,
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Multi, suffix);
         // Model finishes the body then starts REGENERATING the suffix.
         let f = t.feed("    for x in xs {\n        total += x;\n    }\n    return total;\n}\n");
         let Feed::Stop { text, outcome } = f else {
@@ -794,14 +775,13 @@ mod tests {
     #[test]
     fn suffix_probe_too_short_disables_dup_detection() {
         // Suffix "}" trims to 1 char — unsafe to probe, disabled.
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Single,
-            "}",
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Single, "}");
         let f = t.feed("x }");
-        assert!(matches!(f, Feed::Emit(_)), "trivial probe must not fire: {f:?}");
+        assert!(
+            matches!(f, Feed::Emit(_)),
+            "trivial probe must not fire: {f:?}"
+        );
     }
 
     // ── F1: cross-rule precedence ──────────────────────────────────
@@ -809,25 +789,21 @@ mod tests {
     #[test]
     fn earliest_position_wins_across_rules() {
         // Newline BEFORE the stop string → Newline.
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Single,
-            "",
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Single, "");
         let f = t.feed("abc\n<|endoftext|>");
-        let Feed::Stop { outcome, .. } = f else { panic!("got {f:?}") };
+        let Feed::Stop { outcome, .. } = f else {
+            panic!("got {f:?}")
+        };
         assert_eq!(outcome.rule, StopRule::Newline);
 
         // Stop string BEFORE the newline → StopString.
-        let mut t = FimStopTracker::new_with_extra(
-            FimStyle::QwenCoder,
-            vec![],
-            FimMode::Single,
-            "",
-        );
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Single, "");
         let f = t.feed("abc<|endoftext|>\n");
-        let Feed::Stop { outcome, .. } = f else { panic!("got {f:?}") };
+        let Feed::Stop { outcome, .. } = f else {
+            panic!("got {f:?}")
+        };
         assert_eq!(outcome.rule, StopRule::StopString);
     }
 
@@ -840,7 +816,9 @@ mod tests {
             "",
         );
         let f = t.feed("line one\n\nline two");
-        let Feed::Stop { text, outcome } = f else { panic!("got {f:?}") };
+        let Feed::Stop { text, outcome } = f else {
+            panic!("got {f:?}")
+        };
         assert!(text.ends_with("line one"), "text was {text:?}");
         assert_eq!(outcome.rule, StopRule::StopString);
     }

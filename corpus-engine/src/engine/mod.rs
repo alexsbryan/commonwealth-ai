@@ -2686,7 +2686,11 @@ mod tests {
         ));
         // Empty / other non-folder categories still route through the
         // conversation runner, so they resume too.
-        assert!(conversation_enrichment_is_resumable("", Some("tiered"), Persisting));
+        assert!(conversation_enrichment_is_resumable(
+            "",
+            Some("tiered"),
+            Persisting
+        ));
         assert!(conversation_enrichment_is_resumable(
             "reference",
             Some("tiered"),
@@ -2710,7 +2714,11 @@ mod tests {
             Some("atlas"),
             RaptorLeaves
         ));
-        assert!(!conversation_enrichment_is_resumable("conversation", None, RaptorLeaves));
+        assert!(!conversation_enrichment_is_resumable(
+            "conversation",
+            None,
+            RaptorLeaves
+        ));
         // Skip: terminal states — a clean finish or a deliberate failure
         // must never be auto-retried on boot.
         assert!(!conversation_enrichment_is_resumable(

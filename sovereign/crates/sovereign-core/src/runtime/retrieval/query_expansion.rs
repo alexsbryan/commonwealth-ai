@@ -229,7 +229,10 @@ impl Runtime {
         // SOVEREIGN_ATLAS_GROUNDING). Boxes without a reranker
         // no-op a few lines down.
         if let Ok(v) = std::env::var("SOVEREIGN_PPR_EXPAND") {
-            if matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no") {
+            if matches!(
+                v.to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "no"
+            ) {
                 return None;
             }
         }
@@ -256,10 +259,7 @@ impl Runtime {
             rerank_fn,
             gliner: self.gliner.clone(),
         };
-        let pool_titles: Vec<String> = chunks
-            .iter()
-            .filter_map(|c| c.title.clone())
-            .collect();
+        let pool_titles: Vec<String> = chunks.iter().filter_map(|c| c.title.clone()).collect();
         let message = message.to_string();
         let enabled = enabled_corpora.map(|s| s.to_vec());
         let ceiling = corpus_ceiling.map(|s| s.to_vec());
@@ -506,7 +506,10 @@ pub(crate) async fn fetch_entity_obligations(
                     };
                     let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
                         let body = c.content.to_lowercase();
-                        q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                        q_tokens
+                            .iter()
+                            .filter(|t| body.contains(t.as_str()))
+                            .count()
                     };
                     article.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
                     article.truncate(OBLIGATION_CHUNKS_PER_TITLE);
@@ -685,10 +688,9 @@ pub(crate) async fn ppr_propose_and_gate(
         // The wide pulls are independent Lance point-queries —
         // sequential they cost ~200ms × seeds (measured pulls=1042ms
         // of a 1222ms walk); concurrent, wall = the slowest one.
-        let pulled: Vec<Vec<corpus_engine::WikipediaNeighbor>> = futures::future::join_all(
-            live_seeds.iter().map(|s| graph.neighbors(s, PPR_SEED_PULL)),
-        )
-        .await;
+        let pulled: Vec<Vec<corpus_engine::WikipediaNeighbor>> =
+            futures::future::join_all(live_seeds.iter().map(|s| graph.neighbors(s, PPR_SEED_PULL)))
+                .await;
         for (i, (s, nbrs)) in live_seeds.iter().zip(pulled).enumerate() {
             for n in &nbrs {
                 if typed.len() >= PPR_TYPED_CAP {
@@ -731,8 +733,7 @@ pub(crate) async fn ppr_propose_and_gate(
             let mut frontier: Vec<(String, f64)> = mass.into_iter().collect();
             frontier.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             frontier.truncate(PPR_FRONTIER_CAP);
-            let mut next: std::collections::HashMap<String, f64> =
-                std::collections::HashMap::new();
+            let mut next: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
             // Frontier pulls are independent point-queries; fetch the
             // uncached ones concurrently (same rationale as the seed
             // pulls above).
@@ -750,10 +751,7 @@ pub(crate) async fn ppr_propose_and_gate(
                 .await;
             for (_title, m, nbrs) in fetched {
                 let push: Vec<_> = nbrs.into_iter().take(PPR_NEIGHBORS_PER_NODE).collect();
-                let total_w: f64 = push
-                    .iter()
-                    .map(|n| n.occurrence_count.max(1) as f64)
-                    .sum();
+                let total_w: f64 = push.iter().map(|n| n.occurrence_count.max(1) as f64).sum();
                 if total_w <= 0.0 {
                     continue;
                 }
@@ -795,7 +793,11 @@ pub(crate) async fn ppr_propose_and_gate(
         sub_hops_ms = t_sub.elapsed().as_millis() as u64;
         let walk_ms = t_walk.elapsed().as_millis() as u64;
         tracing::debug!(
-            sub_extract_ms, sub_gliner_ms, sub_record_ms, sub_pulls_ms, sub_hops_ms,
+            sub_extract_ms,
+            sub_gliner_ms,
+            sub_record_ms,
+            sub_pulls_ms,
+            sub_hops_ms,
             "ppr_walk sub-phase timing"
         );
         if candidates.is_empty() {
@@ -814,7 +816,9 @@ pub(crate) async fn ppr_propose_and_gate(
                 Ok(ts) if ts.len() == candidates.len() => {
                     let mut order: Vec<usize> = (0..candidates.len()).collect();
                     order.sort_by(|&a, &b| {
-                        ts[b].partial_cmp(&ts[a]).unwrap_or(std::cmp::Ordering::Equal)
+                        ts[b]
+                            .partial_cmp(&ts[a])
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     });
                     let picked: Vec<(String, f64)> = order
                         .into_iter()
@@ -889,7 +893,10 @@ pub(crate) async fn ppr_propose_and_gate(
                 // overlap; take the top few for the gate.
                 let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
                     let body = c.content.to_lowercase();
-                    q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                    q_tokens
+                        .iter()
+                        .filter(|t| body.contains(t.as_str()))
+                        .count()
                 };
                 article.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
                 article.truncate(PPR_CHUNKS_PER_ARTICLE);
@@ -987,7 +994,8 @@ pub(crate) async fn ppr_propose_and_gate(
                 .insert("injected_by".to_string(), "ppr_expand".to_string());
             c.metadata
                 .insert("ppr_ce_score".to_string(), format!("{:.4}", cand_scores[i]));
-            c.metadata.insert("ppr_bar".to_string(), format!("{bar:.4}"));
+            c.metadata
+                .insert("ppr_bar".to_string(), format!("{bar:.4}"));
             added.push(c);
         }
 
@@ -1047,7 +1055,12 @@ pub(crate) fn place_ppr_admitted(
         .unwrap_or(1.0);
     admitted
         .into_iter()
-        .filter(|c| !c.title.as_deref().map(|t| present.contains(t)).unwrap_or(false))
+        .filter(|c| {
+            !c.title
+                .as_deref()
+                .map(|t| present.contains(t))
+                .unwrap_or(false)
+        })
         .enumerate()
         .map(|(rank_pos, mut c)| {
             c.vector_distance = Some(anchor - 1e-4 - (rank_pos as f32) * 1e-5);
@@ -1188,10 +1201,16 @@ impl Runtime {
 
         let mut world = String::new();
         if !corpora.is_empty() {
-            world.push_str(&format!("Knowledge base being searched: {}.\n", corpora.join(", ")));
+            world.push_str(&format!(
+                "Knowledge base being searched: {}.\n",
+                corpora.join(", ")
+            ));
         }
         if !titles.is_empty() {
-            world.push_str(&format!("Source documents seen so far: {}.\n", titles.join("; ")));
+            world.push_str(&format!(
+                "Source documents seen so far: {}.\n",
+                titles.join("; ")
+            ));
         }
         if let Some(axis) = &axis_hint {
             world.push_str(&format!(

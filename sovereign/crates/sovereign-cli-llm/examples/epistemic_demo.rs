@@ -153,13 +153,14 @@ async fn demo_one(
     // Resolution runs on the raw question (mirroring production's
     // demand-text resolution); the statement above is display-only.
     let routes = acquisition::routes_for_gap(inference.as_ref(), &ctx, question).await;
-    println!(
-        "  verdict: cannot_know_from_here · gap: \"{gap_statement}\"",
-    );
+    println!("  verdict: cannot_know_from_here · gap: \"{gap_statement}\"",);
     if routes.is_empty() {
         println!("  conjecture: (resolver disabled or nothing ranked)");
     } else {
-        println!("  conjecture — where you could get this [{}ms]:", t2.elapsed().as_millis());
+        println!(
+            "  conjecture — where you could get this [{}ms]:",
+            t2.elapsed().as_millis()
+        );
         for (i, r) in routes.iter().enumerate() {
             let label = match r {
                 AcquisitionRoute::InstallRecipe { recipe_id, name } => {
@@ -171,7 +172,10 @@ async fn demo_one(
                     "Import your assistant conversation exports".into()
                 }
                 AcquisitionRoute::WebSearch { queries } => {
-                    format!("Search the web: {:?}", queries.first().map(|q| q.as_str()).unwrap_or(""))
+                    format!(
+                        "Search the web: {:?}",
+                        queries.first().map(|q| q.as_str()).unwrap_or("")
+                    )
                 }
                 AcquisitionRoute::ProvideDocument { kind } => format!("Provide: {kind}"),
             };

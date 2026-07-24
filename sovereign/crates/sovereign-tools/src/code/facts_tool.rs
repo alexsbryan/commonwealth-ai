@@ -395,8 +395,16 @@ mod tests {
     fn sample() -> Facts {
         Facts {
             fn_defs: vec![
-                FnDef { name: "export_changed".into(), file: "scip.rs".into(), line: 300 },
-                FnDef { name: "replace_files".into(), file: "graph.rs".into(), line: 1300 },
+                FnDef {
+                    name: "export_changed".into(),
+                    file: "scip.rs".into(),
+                    line: 300,
+                },
+                FnDef {
+                    name: "replace_files".into(),
+                    file: "graph.rs".into(),
+                    line: 1300,
+                },
             ],
             ctor_fields: vec![CtorField {
                 struct_type: "CodeWatcher".into(),
@@ -439,7 +447,10 @@ mod tests {
         let tool = FactsTool::new(tmp.path());
         let out = run(&tool, json!({ "query": "anything" })).await;
         assert_eq!(out["status"], "no_facts");
-        assert!(out["hint"].as_str().unwrap().contains("sovereign code facts"));
+        assert!(out["hint"]
+            .as_str()
+            .unwrap()
+            .contains("sovereign code facts"));
     }
 
     #[tokio::test]
@@ -447,7 +458,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         write_facts(tmp.path(), "demo", &sample());
         let tool = FactsTool::new(tmp.path());
-        let out = run(&tool, json!({ "query": "export_changed", "kind": "function" })).await;
+        let out = run(
+            &tool,
+            json!({ "query": "export_changed", "kind": "function" }),
+        )
+        .await;
         assert_eq!(out["status"], "ok");
         let fns = out["functions"].as_array().unwrap();
         assert_eq!(fns.len(), 1);

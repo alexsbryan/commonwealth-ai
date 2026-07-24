@@ -118,6 +118,18 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── Git hooks ────────────────────────────────────────────────────────────
+# The pre-push hook is this repo's PRIMARY correctness gate — CI is the
+# confirmation pass, not the thing that stops bad code (docs/CI_ECONOMY.md
+# explains why: a metered gate is a gate you eventually ration, and on
+# 2026-07-24 the Actions allowance ran out and every check silently stopped
+# running). Installing it is therefore part of bootstrap, not an optional
+# extra. Non-fatal: a failure here must not break a machine's setup.
+echo
+if ! "${WORKSPACE_DIR}/scripts/install-git-hooks.sh"; then
+    echo "⚠  Git hook install failed — run scripts/install-git-hooks.sh by hand."
+fi
+
 # ── Smoke ────────────────────────────────────────────────────────────────
 echo
 echo "Bootstrap complete. Smoke-test the regression gate:"

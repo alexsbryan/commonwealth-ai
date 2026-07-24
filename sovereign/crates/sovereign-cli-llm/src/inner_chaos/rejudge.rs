@@ -40,8 +40,8 @@ pub async fn run(
         );
         return 2;
     };
-    let daemon_base = super::get_flag(flags, "daemon")
-        .unwrap_or_else(|| "http://localhost:9741".to_string());
+    let daemon_base =
+        super::get_flag(flags, "daemon").unwrap_or_else(|| "http://localhost:9741".to_string());
 
     // Seed memories are the fabricated_memory ground truth; identical for
     // every turn (the live runner seeds the whole memories.toml set).

@@ -74,7 +74,10 @@ fn parent_dir(p: &std::path::Path) -> std::path::PathBuf {
 ///   `backend-error` instead of crashing.
 /// - Primary (lazy Slow slot): same, but a missing substitute is non-fatal
 ///   (Slow degrades to the fast slot / a mesh peer) — we unset it and log.
-pub fn apply_cpu_compat_policy(slots: &mut ResolvedModelSlots, app: &AppHandle) -> Result<(), String> {
+pub fn apply_cpu_compat_policy(
+    slots: &mut ResolvedModelSlots,
+    app: &AppHandle,
+) -> Result<(), String> {
     if !computes_on_cpu() {
         return Ok(()); // GPU backend is unaffected.
     }
@@ -131,11 +134,7 @@ pub fn apply_cpu_compat_policy(slots: &mut ResolvedModelSlots, app: &AppHandle) 
             ChatModelChoice::Keep => {}
             ChatModelChoice::Substitute { path, .. } => {
                 // Don't double-load the same file the fast slot now uses.
-                slots.primary = if path == slots.fast {
-                    None
-                } else {
-                    Some(path)
-                };
+                slots.primary = if path == slots.fast { None } else { Some(path) };
             }
             ChatModelChoice::NoSafeModel { unsafe_arch } => {
                 tracing::warn!(

@@ -562,5 +562,4 @@ mod tests {
         let picks = rank_starter_questions(&[], 0);
         assert!(picks.is_empty());
     }
-
 }

@@ -1134,14 +1134,20 @@ async fn run_question_prod(
         .insert_empty_conversation(&conversation_id, created_at, None)
         .await
     {
-        eprintln!("  warn: prod-pipeline seed (insert) failed for {}: {e}", q.id);
+        eprintln!(
+            "  warn: prod-pipeline seed (insert) failed for {}: {e}",
+            q.id
+        );
     } else if let Some(corpora) = isolate_corpora {
         if let Err(e) = session
             .store
             .set_conversation_enabled_corpora(&conversation_id, Some(corpora.to_vec()))
             .await
         {
-            eprintln!("  warn: prod-pipeline seed (scope) failed for {}: {e}", q.id);
+            eprintln!(
+                "  warn: prod-pipeline seed (scope) failed for {}: {e}",
+                q.id
+            );
         }
     }
 
@@ -1183,20 +1189,20 @@ async fn run_question_prod(
     // run_question step 3): conversation-history banks must not credit a
     // restatement as evidence.
     let attribution_mode = attribution::AttributionMode::from_str(&q.attribution_mode);
-    let hits_for_scoring: Vec<ScoredChunk> =
-        if attribution_mode == attribution::AttributionMode::Both {
-            all_hits.clone()
-        } else {
-            all_hits
-                .iter()
-                .map(|h| {
-                    let mut filtered = h.clone();
-                    filtered.content =
-                        attribution::filter_chunk_content(&h.content, attribution_mode);
-                    filtered
-                })
-                .collect()
-        };
+    let hits_for_scoring: Vec<ScoredChunk> = if attribution_mode
+        == attribution::AttributionMode::Both
+    {
+        all_hits.clone()
+    } else {
+        all_hits
+            .iter()
+            .map(|h| {
+                let mut filtered = h.clone();
+                filtered.content = attribution::filter_chunk_content(&h.content, attribution_mode);
+                filtered
+            })
+            .collect()
+    };
     let source_score: ScoreSnapshot = score_sources(&q.expected_sources, &hits_for_scoring).into();
     let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &hits_for_scoring).into();
     let corpora_hit: Vec<String> = {

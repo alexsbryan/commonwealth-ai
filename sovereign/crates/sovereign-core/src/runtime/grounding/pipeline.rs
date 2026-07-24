@@ -239,12 +239,20 @@ mod tests {
         // build() bypasses the env flag so the dispatch/collect logic is testable.
         let mut v = StreamingVerifier::build(&inf, &["some evidence passage".into()], posture());
         // Two complete sentences + an in-progress third.
-        v.ingest("Alyosha is the youngest brother here. Ivan wrote an article on courts. Dmitri is");
-        assert_eq!(v.dispatched, 2, "only the two COMPLETE sentences dispatch mid-stream");
+        v.ingest(
+            "Alyosha is the youngest brother here. Ivan wrote an article on courts. Dmitri is",
+        );
+        assert_eq!(
+            v.dispatched, 2,
+            "only the two COMPLETE sentences dispatch mid-stream"
+        );
         // Draft finishes; the third sentence completes and is checked too.
         let (unsupported, verified) =
             v.collect("Alyosha is the youngest brother here. Ivan wrote an article on courts. Dmitri is reckless and passionate.").await;
         assert_eq!(verified, 3, "all three sentences verified by draft-end");
-        assert_eq!(unsupported, 3, "NoProvider flags every sentence unsupported");
+        assert_eq!(
+            unsupported, 3,
+            "NoProvider flags every sentence unsupported"
+        );
     }
 }

@@ -194,9 +194,10 @@ async fn edit_sentence(
         // turn's sharding posture AND, with Speed::Fast, actually routes to the
         // fast slot. Inheriting base_request's SYNTHESIS envelope instead pins
         // the primary/35B and defeats the whole point of a small edit.
-        oicp: Some(crate::slot_policy::Workload::Judge.requirements(
-            crate::slot_policy::posture_of(base_request),
-        )),
+        oicp: Some(
+            crate::slot_policy::Workload::Judge
+                .requirements(crate::slot_policy::posture_of(base_request)),
+        ),
         max_tokens: Some(200),
         temperature: Some(0.0),
         think_budget: Some(0),
@@ -280,16 +281,14 @@ pub(super) async fn surgical_rewrite(
             }
         }
     }
-    let edited: Vec<(usize, Option<String>)> = futures::future::join_all(
-        fix_inputs
-            .iter()
-            .map(|(idx, sentence, evidence)| async move {
-                (
-                    *idx,
-                    edit_sentence(inference, base_request, sentence, evidence).await,
-                )
-            }),
-    )
+    let edited: Vec<(usize, Option<String>)> = futures::future::join_all(fix_inputs.iter().map(
+        |(idx, sentence, evidence)| async move {
+            (
+                *idx,
+                edit_sentence(inference, base_request, sentence, evidence).await,
+            )
+        },
+    ))
     .await;
     for (idx, result) in edited {
         let new = result?; // any edit failure → fall back to the full rewrite
@@ -410,7 +409,10 @@ mod tests {
         // No fixes (delete-only) → makes no inference calls.
         let out = surgical_rewrite(&inf, &base, draft, &failed).await.unwrap();
         assert!(!out.contains("hovercraft"), "unsupported sentence deleted");
-        assert!(out.contains("Alyosha") && out.contains("Dmitri"), "verified prose kept");
+        assert!(
+            out.contains("Alyosha") && out.contains("Dmitri"),
+            "verified prose kept"
+        );
     }
 
     #[tokio::test]
@@ -423,7 +425,9 @@ mod tests {
             "quantum chromodynamics governs gluon confinement".to_string(),
             vec!["some corrective passage".to_string()],
         )];
-        assert!(surgical_rewrite(&inf, &base, draft, &failed).await.is_none());
+        assert!(surgical_rewrite(&inf, &base, draft, &failed)
+            .await
+            .is_none());
     }
 
     #[tokio::test]
@@ -438,9 +442,12 @@ mod tests {
                      Smerdyakov secretly piloted an experimental hovercraft across the province and \
                      later transmitted the plans to a foreign power for profit.";
         let failed = vec![(
-            "Smerdyakov secretly piloted an experimental hovercraft across the province".to_string(),
+            "Smerdyakov secretly piloted an experimental hovercraft across the province"
+                .to_string(),
             Vec::<String>::new(),
         )];
-        assert!(surgical_rewrite(&inf, &base, draft, &failed).await.is_none());
+        assert!(surgical_rewrite(&inf, &base, draft, &failed)
+            .await
+            .is_none());
     }
 }

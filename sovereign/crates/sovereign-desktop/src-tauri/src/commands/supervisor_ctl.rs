@@ -21,9 +21,9 @@ pub async fn supervisor_reconnect(state: State<'_, Arc<AppState>>) -> Result<boo
     let guard = state.supervisor.read().await;
     match guard.as_ref() {
         Some(sup) => Ok(sup.request_reconnect()),
-        None => Err(
-            "no daemon supervisor in this session (in-process or attached daemon)".to_string(),
-        ),
+        None => {
+            Err("no daemon supervisor in this session (in-process or attached daemon)".to_string())
+        }
     }
 }
 

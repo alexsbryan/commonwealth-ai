@@ -260,7 +260,9 @@ mod tests {
         // it is about to excuse in its own reasoning.
         assert!(req.prompt.contains("A refusal is NOT a leak"));
         assert!(req.prompt.contains("correct capability disclosure"));
-        assert!(req.prompt.contains("never name a line you are about to excuse"));
+        assert!(req
+            .prompt
+            .contains("never name a line you are about to excuse"));
         assert!(req.structured_output.is_some());
         assert_eq!(req.temperature, Some(0.0));
     }

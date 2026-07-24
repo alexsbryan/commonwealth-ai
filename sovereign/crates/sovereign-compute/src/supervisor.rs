@@ -382,14 +382,10 @@ impl Supervisor {
             // `StdoutHandshake` it awaits the child's port announcement
             // (emitting `Warming`), or fails to local crash-accounting if
             // the child dies or never announces within the deadline.
-            let health_url = match self
-                .resolve_health_url(port_rx, pid, &mut child)
-                .await
-            {
+            let health_url = match self.resolve_health_url(port_rx, pid, &mut child).await {
                 Some(url) => url,
                 None => {
-                    let outcome =
-                        ExitOutcome::WaitError("child did not announce its port".into());
+                    let outcome = ExitOutcome::WaitError("child did not announce its port".into());
                     let crash_log = self.persist_crash_log(pid, &outcome).await;
                     if !self
                         .handle_crash(
@@ -626,7 +622,10 @@ impl Supervisor {
                         return None;
                     }
                 };
-                info!(pid, port, "supervisor: compute child announced port; warming");
+                info!(
+                    pid,
+                    port, "supervisor: compute child announced port; warming"
+                );
                 self.broadcast(SupervisorState::Warming { pid, port });
                 Some(format!("http://127.0.0.1:{port}{health_path}"))
             }
@@ -648,7 +647,10 @@ impl Supervisor {
         match tokio::time::timeout(TERMINATE_GRACE, child.wait()).await {
             Ok(_) => info!(pid, "supervisor: child exited gracefully after SIGTERM"),
             Err(_) => {
-                warn!(pid, "supervisor: child overran terminate grace; sending SIGKILL");
+                warn!(
+                    pid,
+                    "supervisor: child overran terminate grace; sending SIGKILL"
+                );
                 let _ = child.kill().await;
                 let _ = child.wait().await;
             }
@@ -1108,11 +1110,17 @@ mod tests {
             Some(54321)
         );
         // No `port` key → None (don't fire on a partial line).
-        assert_eq!(parse_handshake("SOVEREIGN_COMPUTE_LISTENING {\"pid\":99}"), None);
+        assert_eq!(
+            parse_handshake("SOVEREIGN_COMPUTE_LISTENING {\"pid\":99}"),
+            None
+        );
         // Not a handshake line at all.
         assert_eq!(parse_handshake("2026-07-20 INFO loading model"), None);
         // Prefix present but the payload isn't JSON.
-        assert_eq!(parse_handshake("SOVEREIGN_COMPUTE_LISTENING not-json"), None);
+        assert_eq!(
+            parse_handshake("SOVEREIGN_COMPUTE_LISTENING not-json"),
+            None
+        );
     }
 
     #[tokio::test]
@@ -1227,7 +1235,10 @@ mod tests {
         // kills `sleep`), NOT restart.
         assert!(supervisor.terminate());
         let joined = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
-        assert!(joined.is_ok(), "run loop did not exit within 5s of terminate()");
+        assert!(
+            joined.is_ok(),
+            "run loop did not exit within 5s of terminate()"
+        );
 
         let tail = drain_states(&mut states, 4, Duration::from_millis(200)).await;
         assert!(

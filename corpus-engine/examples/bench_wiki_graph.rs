@@ -16,9 +16,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map(PathBuf::from)
         .expect("usage: bench_wiki_graph <atlas-dir>");
-    let g = ColumnarWikipediaGraph::open(&dir).await.map_err(|e| format!("open: {e}"))?;
+    let g = ColumnarWikipediaGraph::open(&dir)
+        .await
+        .map_err(|e| format!("open: {e}"))?;
 
-    let seeds = ["Manhattan Project", "World War II", "Industrial Revolution", "Niels Bohr", "Buddhism"];
+    let seeds = [
+        "Manhattan Project",
+        "World War II",
+        "Industrial Revolution",
+        "Niels Bohr",
+        "Buddhism",
+    ];
     // Warm
     let _ = g.record("Manhattan Project").await;
 
@@ -26,19 +34,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for s in &seeds {
         let _ = g.record(s).await;
     }
-    println!("record x5:          {:>8.1?}  ({:.0?}/call)", t.elapsed(), t.elapsed() / 5);
+    println!(
+        "record x5:          {:>8.1?}  ({:.0?}/call)",
+        t.elapsed(),
+        t.elapsed() / 5
+    );
 
     let t = Instant::now();
     for s in &seeds {
         let n = g.neighbors(s, 512).await;
         assert!(!n.is_empty(), "no neighbors for {s}");
     }
-    println!("neighbors(512) x5:  {:>8.1?}  ({:.0?}/call)", t.elapsed(), t.elapsed() / 5);
+    println!(
+        "neighbors(512) x5:  {:>8.1?}  ({:.0?}/call)",
+        t.elapsed(),
+        t.elapsed() / 5
+    );
 
     let t = Instant::now();
     for s in &seeds {
         let _ = g.neighbors(s, 24).await;
     }
-    println!("neighbors(24) x5:   {:>8.1?}  ({:.0?}/call)", t.elapsed(), t.elapsed() / 5);
+    println!(
+        "neighbors(24) x5:   {:>8.1?}  ({:.0?}/call)",
+        t.elapsed(),
+        t.elapsed() / 5
+    );
     Ok(())
 }

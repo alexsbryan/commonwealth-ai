@@ -191,7 +191,11 @@ async fn mcp_post(
             },
             Err(_) => (
                 StatusCode::OK,
-                Json(JsonRpcResponse::error(Value::Null, -32600, "invalid request")),
+                Json(JsonRpcResponse::error(
+                    Value::Null,
+                    -32600,
+                    "invalid request",
+                )),
             )
                 .into_response(),
         },

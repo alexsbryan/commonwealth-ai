@@ -280,10 +280,7 @@ mod ts {
         let mut n = name_node;
         loop {
             if n.kind() == fn_node_kind {
-                return (
-                    n.start_position().row as i32,
-                    n.end_position().row as i32,
-                );
+                return (n.start_position().row as i32, n.end_position().row as i32);
             }
             match n.parent() {
                 Some(p) => n = p,
@@ -466,7 +463,10 @@ pub fn extract_facts(_repo: &Path, _roots: &[String]) -> Facts {
 #[cfg(feature = "treesitter")]
 pub fn extract_facts_for_file(rel: &str, src: &str) -> Facts {
     let mut f = Facts::default();
-    let ext = match std::path::Path::new(rel).extension().and_then(|e| e.to_str()) {
+    let ext = match std::path::Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+    {
         Some(e) => e,
         None => return f,
     };
@@ -478,7 +478,10 @@ pub fn extract_facts_for_file(rel: &str, src: &str) -> Facts {
 
 #[cfg(feature = "treesitter")]
 pub fn extract_symbol_defs(rel: &str, src: &str) -> Vec<corpus_engine_scip::ScipSymbolRecord> {
-    let ext = match std::path::Path::new(rel).extension().and_then(|e| e.to_str()) {
+    let ext = match std::path::Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+    {
         Some(e) => e,
         None => return Vec::new(),
     };
@@ -530,10 +533,15 @@ mod tests {
             "fn go() {\n    let c = Cfg { on: true };\n    let _ = \"hello world\";\n}\n",
         );
         assert!(f.fn_defs.iter().any(|d| d.name == "go"));
-        assert!(f.ctor_fields.iter().any(|c| c.struct_type == "Cfg" && c.field == "on"));
+        assert!(f
+            .ctor_fields
+            .iter()
+            .any(|c| c.struct_type == "Cfg" && c.field == "on"));
         assert!(f.str_lits.iter().any(|s| s.content.contains("hello world")));
         // Non-source file yields nothing.
-        assert!(extract_facts_for_file("README.md", "# hi").fn_defs.is_empty());
+        assert!(extract_facts_for_file("README.md", "# hi")
+            .fn_defs
+            .is_empty());
     }
 
     // ── extract_symbol_defs (structural watcher hot-path primitive) ──
@@ -557,8 +565,10 @@ mod tests {
     #[test]
     fn symbol_defs_multiple_functions() {
         let src = "fn a() {}\nfn b() {\n  let z=2;\n}\n";
-        let mut names: Vec<String> =
-            extract_symbol_defs("m.rs", src).into_iter().map(|d| d.name).collect();
+        let mut names: Vec<String> = extract_symbol_defs("m.rs", src)
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
         names.sort();
         assert_eq!(names, vec!["a", "b"]);
     }

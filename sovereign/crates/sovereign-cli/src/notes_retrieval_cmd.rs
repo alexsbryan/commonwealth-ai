@@ -226,16 +226,25 @@ fn load_injections(log_path: &Path) -> Vec<InjectionRecord> {
 /// Aggregate a session's injection records, then score each unique note against
 /// its downstream evidence. A note re-injected across N prompts is ONE note for
 /// hit-rate purposes (with `injections = N` retained as the frequency signal).
-fn audit_session(session_id: &str, records: &[InjectionRecord], evidence: Option<&Evidence>) -> SessionAudit {
+fn audit_session(
+    session_id: &str,
+    records: &[InjectionRecord],
+    evidence: Option<&Evidence>,
+) -> SessionAudit {
     // note_id -> accumulator. Preserve first-seen order for stable output.
     let mut order: Vec<String> = Vec::new();
-    let mut acc: BTreeMap<String, (String, u64, Vec<String>, Vec<String>, Vec<String>)> = BTreeMap::new();
+    let mut acc: BTreeMap<String, (String, u64, Vec<String>, Vec<String>, Vec<String>)> =
+        BTreeMap::new();
     for rec in records {
         for n in &rec.notes {
             // Fall back to a synthetic key when a note predates id logging, so
             // anchorless legacy records still aggregate rather than vanish.
             let key = n.id.clone().unwrap_or_else(|| {
-                format!("anon:{}:{}", n.kind, n.terms.first().cloned().unwrap_or_default())
+                format!(
+                    "anon:{}:{}",
+                    n.kind,
+                    n.terms.first().cloned().unwrap_or_default()
+                )
             });
             let entry = acc.entry(key.clone()).or_insert_with(|| {
                 order.push(key.clone());
@@ -400,13 +409,14 @@ pub async fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let transcript_dir = match resolve_transcript_dir(opts.project.as_deref(), opts.transcript_dir.as_deref()) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("retrieval-audit: {e}");
-            return 2;
-        }
-    };
+    let transcript_dir =
+        match resolve_transcript_dir(opts.project.as_deref(), opts.transcript_dir.as_deref()) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("retrieval-audit: {e}");
+                return 2;
+            }
+        };
     let log_files = match collect_log_files(&log_dir, opts.session.as_deref()) {
         Ok(f) => f,
         Err(e) => {
@@ -474,7 +484,11 @@ fn print_table(audits: &[SessionAudit]) {
         let anch = a.anchored();
         let strong = rate(a.anchor_used(), anch);
         let any = rate(a.used_any(), inj);
-        let flag = if a.transcript_found { "" } else { " (no transcript)" };
+        let flag = if a.transcript_found {
+            ""
+        } else {
+            " (no transcript)"
+        };
         if !a.transcript_found {
             missing += 1;
         }
@@ -657,7 +671,10 @@ mod tests {
             term_hits: 1,
         };
         assert!(!one.content_used(), "a single term is coincidence, not use");
-        let two = NoteUsage { term_hits: 2, ..one.clone() };
+        let two = NoteUsage {
+            term_hits: 2,
+            ..one.clone()
+        };
         assert!(two.content_used());
     }
 
@@ -677,7 +694,11 @@ mod tests {
         let records = vec![rec(()), rec(())];
         let ev = evidence_from("touching CorpusEngine today");
         let audit = audit_session("s", &records, Some(&ev));
-        assert_eq!(audit.injected(), 1, "one unique note despite two injections");
+        assert_eq!(
+            audit.injected(),
+            1,
+            "one unique note despite two injections"
+        );
         assert_eq!(audit.notes[0].injections, 2, "frequency preserved");
         assert!(audit.notes[0].symbol_hit);
         assert_eq!(audit.anchor_used(), 1);
@@ -698,7 +719,11 @@ mod tests {
         let audit = audit_session("s", &records, None);
         assert!(!audit.transcript_found);
         assert_eq!(audit.injected(), 1);
-        assert_eq!(audit.used_any(), 0, "no evidence => unknown => not counted used");
+        assert_eq!(
+            audit.used_any(),
+            0,
+            "no evidence => unknown => not counted used"
+        );
     }
 
     #[test]
@@ -746,7 +771,10 @@ mod tests {
             "{\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tell me about ReindexFile\"}]}}\n",
         );
         let ev = build_evidence(&tx).unwrap();
-        assert!(!ev.contains("reindexfile"), "user tokens are relevance, not use");
+        assert!(
+            !ev.contains("reindexfile"),
+            "user tokens are relevance, not use"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

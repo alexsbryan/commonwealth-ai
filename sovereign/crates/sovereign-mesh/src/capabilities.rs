@@ -82,12 +82,14 @@ pub async fn build_local_capabilities(
             if let Some(g0) = hardware.gpus.first_mut() {
                 g0.vram_gb += ggml_total - detected;
             } else {
-                hardware.gpus.push(commonwealth_core::capabilities::GpuInfo {
-                    name: "GPU".to_string(),
-                    vram_gb: ggml_total,
-                    compute_type: commonwealth_core::capabilities::ComputeType::Vulkan,
-                    estimated_tflops: 0.0,
-                });
+                hardware
+                    .gpus
+                    .push(commonwealth_core::capabilities::GpuInfo {
+                        name: "GPU".to_string(),
+                        vram_gb: ggml_total,
+                        compute_type: commonwealth_core::capabilities::ComputeType::Vulkan,
+                        estimated_tflops: 0.0,
+                    });
             }
         }
     }

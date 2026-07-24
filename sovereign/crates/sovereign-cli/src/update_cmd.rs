@@ -77,7 +77,10 @@ async fn fetch_latest() -> Result<String, String> {
 
     let mut best: Option<String> = None;
     for r in arr {
-        if r.get("draft").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+        if r.get("draft")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
             continue; // never roll out a partial cut
         }
         let Some(tag) = r.get("tag_name").and_then(serde_json::Value::as_str) else {

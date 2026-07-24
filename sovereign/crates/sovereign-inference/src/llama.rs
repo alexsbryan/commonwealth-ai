@@ -372,7 +372,10 @@ pub fn describe_model_load_failure(
     model_path: &std::path::Path,
     err: impl std::fmt::Display,
 ) -> String {
-    let mut s = format!("failed to load {role} model {}: {err}", model_path.display());
+    let mut s = format!(
+        "failed to load {role} model {}: {err}",
+        model_path.display()
+    );
     let size_gb = std::fs::metadata(model_path)
         .ok()
         .map(|m| m.len() as f64 / 1_000_000_000.0);

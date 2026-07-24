@@ -20,10 +20,10 @@ use std::time::Instant;
 
 use corpus_engine::index::CorpusIndex;
 use sovereign_core::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
-use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_gliner::gliner_ner::{
     self, GlinerExtractor, DEFAULT_LABELS, DEFAULT_MODEL_ID, DEFAULT_THRESHOLD,
 };
+use sovereign_store::sqlite::SqliteStateStore;
 
 /// Per-batch chunk count handed to GliNER. Smaller batches = more
 /// frequent progress updates; larger = better throughput. 8 keeps

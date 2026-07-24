@@ -636,10 +636,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             ids.join(",")
         );
         eprintln!("    Or, from the latest run file:");
-        eprintln!(
-            "      svrn enrich extract {} --retry-failed",
-            cfg.corpus_id
-        );
+        eprintln!("      svrn enrich extract {} --retry-failed", cfg.corpus_id);
         return 1;
     }
     0

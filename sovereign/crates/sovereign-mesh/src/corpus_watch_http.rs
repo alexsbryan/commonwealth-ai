@@ -1257,13 +1257,17 @@ async fn enrich_once_handler(
     // is the one that reads it to enrich. Doing the ingest in the desktop and
     // the enrich here deadlocked `enable_enrichment`'s index open on the
     // cross-process handoff — keeping writer and reader in one process is the fix.
-    let stats = match manager.ingest(&corpus_id, None, Some(ingest_progress)).await {
+    let stats = match manager
+        .ingest(&corpus_id, None, Some(ingest_progress))
+        .await
+    {
         Ok(s) => s,
         Err(e) => {
             // Don't strand the state file at Starting — surface Failed so the
             // UI stops spinning and can re-offer the build.
             let _ = EnrichmentStateFile::fail(&index_dir, &corpus_id, &format!("ingest: {e}"));
-            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}")).into_response()
+            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
+                .into_response();
         }
     };
     // Enrich in the background — RAPTOR is slow and reads the index we just
@@ -1280,7 +1284,8 @@ async fn enrich_once_handler(
                 tracing::warn!(corpus_id = %id, "enrich-once: enrichment did not start: {e}");
                 // The tiered sink never took over — mark Failed so status
                 // doesn't hang on the Starting stamp we wrote above.
-                let _ = EnrichmentStateFile::fail(&fail_dir, &fail_id, &format!("enrich start: {e}"));
+                let _ =
+                    EnrichmentStateFile::fail(&fail_dir, &fail_id, &format!("enrich start: {e}"));
             }
         }
     });
@@ -1316,9 +1321,7 @@ async fn enrich_reset_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => {
-            error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response()
-        }
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response(),
     }
 }
 

@@ -404,7 +404,10 @@ mod tests {
             normalise_for_match("Mrs Verloc\u{2019}s \u{201C}gaze\u{201D} \u{2014} steady"),
             "Mrs Verloc's \"gaze\" - steady"
         );
-        assert_eq!(normalise_for_match("**bold** and _italic_"), "bold and italic");
+        assert_eq!(
+            normalise_for_match("**bold** and _italic_"),
+            "bold and italic"
+        );
         assert_eq!(normalise_for_match("wait\u{2026} what"), "wait... what");
     }
 
@@ -443,8 +446,8 @@ mod tests {
 
     #[test]
     fn edge_ellipses_trimmed_interior_composites_still_fail() {
-        let source =
-            "Jolly lucky for Yundt that she had persisted in coming up time after time.".to_string();
+        let source = "Jolly lucky for Yundt that she had persisted in coming up time after time."
+            .to_string();
         // Edge elision: honest quoting, must verify.
         let edge = r#"As the text says, "...she had persisted in coming up time after time..." throughout."#;
         let r = verify_quotes(edge, &[source.clone()], &[], DEFAULT_MIN_QUOTE_CHARS);

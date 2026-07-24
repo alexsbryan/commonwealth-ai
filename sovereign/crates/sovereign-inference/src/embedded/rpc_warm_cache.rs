@@ -594,8 +594,7 @@ pub fn plan_shards_weighted(
     };
     let wsum: f64 = w.iter().sum::<f64>().max(f64::MIN_POSITIVE);
 
-    let have_mass =
-        block_bytes.len() == n_layer as usize && block_bytes.iter().any(|&b| b > 0);
+    let have_mass = block_bytes.len() == n_layer as usize && block_bytes.iter().any(|&b| b > 0);
 
     let counts: Vec<u32> = if !have_mass {
         // ── Count-based (largest-remainder) apportionment ──
@@ -916,7 +915,10 @@ mod tests {
     // ── byte-mass-aware split (plan_shards_weighted) ──
 
     fn assigned_blocks(plan: &[NodeShard]) -> u32 {
-        plan.iter().filter_map(|s| s.blocks).map(|(a, b)| b - a + 1).sum()
+        plan.iter()
+            .filter_map(|s| s.blocks)
+            .map(|(a, b)| b - a + 1)
+            .sum()
     }
     fn held_bytes(s: &NodeShard, block_bytes: &[u64]) -> u64 {
         s.blocks
@@ -933,7 +935,10 @@ mod tests {
         // count-based plan, so `plan_shards` stays a pure special-case of it.
         let w = [0.5, 0.5];
         assert_eq!(plan_shards_weighted(4, &w, &[], 0), plan_shards(4, &w));
-        assert_eq!(plan_shards_weighted(4, &w, &[1, 2, 3], 0), plan_shards(4, &w));
+        assert_eq!(
+            plan_shards_weighted(4, &w, &[1, 2, 3], 0),
+            plan_shards(4, &w)
+        );
     }
 
     #[test]
@@ -943,9 +948,15 @@ mod tests {
         // or uniform all-MoE models).
         let bb = vec![500u64; 12];
         let w = [0.5, 0.25, 0.25];
-        let byte: Vec<_> = plan_shards_weighted(12, &w, &bb, 0).iter().map(|s| s.blocks).collect();
+        let byte: Vec<_> = plan_shards_weighted(12, &w, &bb, 0)
+            .iter()
+            .map(|s| s.blocks)
+            .collect();
         let cnt: Vec<_> = plan_shards(12, &w).iter().map(|s| s.blocks).collect();
-        assert_eq!(byte, cnt, "uniform mass → byte-aware ranges == count ranges");
+        assert_eq!(
+            byte, cnt,
+            "uniform mass → byte-aware ranges == count ranges"
+        );
     }
 
     #[test]
@@ -1002,7 +1013,11 @@ mod tests {
         let bb = vec![100u64; 6];
         let plan = plan_shards_weighted(6, &[1.0, 0.0, 1.0], &bb, 0);
         assert!(plan[1].blocks.is_none(), "zero-VRAM device holds no blocks");
-        assert_eq!(assigned_blocks(&plan), 6, "the other two still tile all blocks");
+        assert_eq!(
+            assigned_blocks(&plan),
+            6,
+            "the other two still tile all blocks"
+        );
     }
 
     #[test]
@@ -1010,7 +1025,9 @@ mod tests {
         // Contiguity is load-bearing (hops stay D-1; override_patterns/tensor_device
         // assume it). Heterogeneous VRAM + skewed mass must still tile [0, n) with no
         // gap or overlap and ranges in ascending device order.
-        let mut bb: Vec<u64> = (0..40).map(|i| if i % 2 == 0 { 20 } else { 1200 }).collect();
+        let mut bb: Vec<u64> = (0..40)
+            .map(|i| if i % 2 == 0 { 20 } else { 1200 })
+            .collect();
         bb[0] = 5; // a lighter leading block for good measure
         let plan = plan_shards_weighted(40, &[4.0, 2.0, 2.0], &bb, 800);
         assert_eq!(assigned_blocks(&plan), 40);

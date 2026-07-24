@@ -266,14 +266,12 @@ impl MeshIrohAccess {
         // so cross-network hosts reach the raw-TCP rpc-server through the
         // mesh tunnel (task 6). Gated on the env so consumer nodes never
         // advertise an ALPN they can't forward.
-        let rpc_forward: Option<SocketAddr> =
-            rpc_serve_port().map(|p| ([127, 0, 0, 1], p).into());
+        let rpc_forward: Option<SocketAddr> = rpc_serve_port().map(|p| ([127, 0, 0, 1], p).into());
         let mut alpns = vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()];
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
         }
-        let endpoint = match build_mesh_endpoint(secret, alpns, relay_cfg).await
-        {
+        let endpoint = match build_mesh_endpoint(secret, alpns, relay_cfg).await {
             Ok(ep) => ep,
             Err(e) => {
                 tracing::error!(

@@ -1,29 +1,62 @@
-# Automated dependency updates so keeping current isn't manual work.
+# Automated dependency updates, budgeted.
 #
-# Minor + patch bumps are grouped into a single weekly PR per ecosystem to
-# avoid a flood of one-crate PRs across a 40-crate workspace. Major bumps come
-# as their own PRs (they can break, so they deserve individual review).
+# ## Why monthly, and why ONE PR per ecosystem
+#
+# Measured over 2026-07-01..24 (full audit in docs/CI_ECONOMY.md): dependabot's
+# own *update runs* — the resolution passes that produce the PRs, before any CI
+# touches them — cost **1,017 billed minutes, 19% of the repo's entire Actions
+# spend**. A single cargo resolution against this 40-crate workspace's lock
+# takes 32-35 minutes. Weekly scheduling paid that repeatedly, and then every
+# PR it opened dragged the full workspace compile gate behind it.
+#
+# The return on that spend was negative: of 23 dependabot PRs opened, most were
+# CLOSED rather than merged. We were paying a premium for review noise.
+#
+# So: **one grouped PR per ecosystem per month**, covering major bumps too.
+# Majors used to get individual PRs on the theory that they "deserve individual
+# review" — but in practice they were closed unread alongside the rest, so the
+# split bought nothing and cost an update run each. Reviewing one monthly batch
+# you actually read beats ignoring five weekly ones.
+#
+# If a specific major bump needs isolating, do it by hand: the grouped PR tells
+# you what moved, and `cargo update -p <crate>` on a branch is cheaper than a
+# standing schedule.
+#
+# ## What this does NOT cover
+#
+# Security advisories. Dependabot *security* updates are configured in the
+# repo's Settings → Code security, not here, and are deliberately left on their
+# own (immediate) cadence — a CVE should not wait for the monthly window. This
+# file governs routine version drift only.
 version: 2
 updates:
   # Rust crates — reads the root workspace Cargo.toml / Cargo.lock.
+  # `open-pull-requests-limit: 1` is a hard backstop: even if grouping somehow
+  # splits, dependabot cannot open a second PR — and therefore cannot trigger a
+  # second workspace compile — until the first is closed.
   - package-ecosystem: cargo
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 1
     groups:
-      cargo-minor-patch:
-        update-types: ["minor", "patch"]
+      cargo:
+        patterns: ["*"]
+        update-types: ["major", "minor", "patch"]
     commit-message:
       prefix: "chore(deps)"
 
   # GitHub Actions used by the workflows in .github/workflows/.
+  # Cheap to resolve (no lock solve), but each PR still costs a CI run, so it
+  # rides the same monthly cadence.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["major", "minor", "patch"]
     commit-message:
       prefix: "chore(ci)"

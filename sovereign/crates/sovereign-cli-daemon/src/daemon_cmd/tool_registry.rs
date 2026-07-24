@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_engine_notes::NoteStore;
+use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_core::ToolRegistry;
 
 pub(super) async fn build_tool_registry(
@@ -181,7 +181,9 @@ pub(super) async fn build_tool_registry(
     // config construction-fields / string literals), read from
     // `<indexes_dir>/<corpus>/facts.json`. Read-only and model-free, so it never
     // contends with agent inference; every response is freshness-stamped.
-    tools.register(Box::new(sovereign_tools::FactsTool::new(indexes_dir.clone())));
+    tools.register(Box::new(sovereign_tools::FactsTool::new(
+        indexes_dir.clone(),
+    )));
     // Capability-reconciliation freshness + findings — siblings to drift_*,
     // over the `enrich capability-reconcile` artifact.
     {

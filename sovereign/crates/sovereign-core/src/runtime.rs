@@ -116,8 +116,8 @@ pub(crate) use self::retrieval_helpers::{
     reweight_by_query_relevance,
 };
 pub use self::types::{
-    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistorySummaryProv,
-    MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle, TurnProvenance,
+    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistorySummaryProv, MetaAtlasHitRecord,
+    RecalledMemoryProv, StreamHandle, TurnProvenance,
 };
 pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 
@@ -130,9 +130,9 @@ pub mod acquisition;
 mod code_trace;
 mod collaboration;
 pub mod epistemic;
-mod gk_rescue;
 mod evidence;
 mod evidence_loop;
+mod gk_rescue;
 mod grounding;
 // The gold-free value-presence primitive — shared by the gate (decides) and the
 // chaos scorer (measures `blatant_confab_rate`). One implementation, one notion
@@ -154,9 +154,9 @@ mod intent_helpers;
 /// hand-labeled bank before they may ship (same discipline as the
 /// recall judge's `--calibrate-recall`).
 pub mod memory_grounding;
+mod merge_select;
 mod numeric_audit;
 mod prompt_budget;
-mod merge_select;
 mod question_analysis;
 mod retrieval;
 mod retrieval_helpers;

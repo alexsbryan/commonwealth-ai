@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 mod approval;
 mod atlas_commands;
+mod attach_watch;
 mod bootstrap;
+mod collaborate_commands;
 #[cfg(debug_assertions)]
 mod command_bridge;
 mod commands;
@@ -24,12 +26,10 @@ mod routing_events;
 mod setup_flow;
 mod smoketest;
 mod state;
-mod attach_watch;
 mod supervisor;
 mod supervisor_setup;
 mod tray;
 mod update_commands;
-mod collaborate_commands;
 mod watched_folder_commands;
 mod workflow_commands;
 
@@ -145,7 +145,11 @@ fn main() -> ExitCode {
                 // becomes diagnosable without a contrived repro (glassbox: instrument
                 // the real pipeline, don't hypothesize). Low volume: ~one line per
                 // grounded turn, so they stay on even in release.
-                let glassbox = if cfg!(debug_assertions) { "debug" } else { "info" };
+                let glassbox = if cfg!(debug_assertions) {
+                    "debug"
+                } else {
+                    "info"
+                };
                 format!(
                     "sovereign_desktop=info,\
                      sovereign_core={glassbox},\
@@ -363,9 +367,7 @@ fn main() -> ExitCode {
                     if !setup_done {
                         tracing::info!("First launch — waiting for setup wizard");
                     } else {
-                        tracing::warn!(
-                            "Model not found — returning to setup wizard"
-                        );
+                        tracing::warn!("Model not found — returning to setup wizard");
                         // Model paths live in SetupConfig now; clear only the
                         // desktop's setup flag so the wizard re-runs and
                         // rewrites config.toml's [models].

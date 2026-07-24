@@ -889,13 +889,14 @@ impl ModelSlot {
             }
         }
 
-        let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
-            Error::Inference(crate::llama::describe_model_load_failure(
-                "primary/fast",
-                model_path,
-                e,
-            ))
-        })?;
+        let model =
+            LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
+                Error::Inference(crate::llama::describe_model_load_failure(
+                    "primary/fast",
+                    model_path,
+                    e,
+                ))
+            })?;
 
         let model_id = model_path
             .file_stem()

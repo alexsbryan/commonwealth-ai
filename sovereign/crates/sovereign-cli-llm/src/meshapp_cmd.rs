@@ -122,9 +122,7 @@ fn run_new(args: &[String]) -> i32 {
     }
     println!("scaffolded mesh app `{app_id}` → {}", dir.display());
     println!("  next:");
-    println!(
-        "    svrn meshapp dev {app_id}      # serve it against your local `{corpus}` corpus"
-    );
+    println!("    svrn meshapp dev {app_id}      # serve it against your local `{corpus}` corpus");
     println!("  then, to ship it so others can one-click the data:");
     println!("    1. publish your corpus snapshot:  svrn corpus snapshot publish {corpus}");
     println!("    2. copy your recipe into the bundle as recipe.toml (it carries the [prebuilt] HF block)");

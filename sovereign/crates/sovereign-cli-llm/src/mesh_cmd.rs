@@ -449,7 +449,10 @@ async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
     if !resp.status().is_success() {
         return Err(format!("daemon returned HTTP {} from {url}", resp.status()));
     }
-    let body: serde_json::Value = resp.json().await.map_err(|e| format!("bad status JSON: {e}"))?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("bad status JSON: {e}"))?;
     let members = body
         .get("members")
         .and_then(|m| m.as_array())
@@ -459,10 +462,17 @@ async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
     let mut workers: Vec<(String, f64)> = Vec::new();
     let mut host: Option<(String, f64)> = None;
     for m in &members {
-        let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("?").to_string();
+        let name = m
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("?")
+            .to_string();
         let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
-        let can_anchor = m.get("can_anchor").and_then(|b| b.as_bool()).unwrap_or(false);
+        let can_anchor = m
+            .get("can_anchor")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(false);
         let vram = m.get("vram_gb").and_then(|v| v.as_f64()).unwrap_or(0.0);
         if is_self {
             host = Some((name, vram));
@@ -482,7 +492,9 @@ async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
     }
     eprintln!("  host    {host_name}: {host_vram:.0} GB VRAM  (holds the output head)");
     if workers.is_empty() {
-        eprintln!("  note: no online anchor workers — the plan will show a single-node (local) load.");
+        eprintln!(
+            "  note: no online anchor workers — the plan will show a single-node (local) load."
+        );
     }
     eprintln!();
 
@@ -527,7 +539,9 @@ async fn cmd_plan(args: &[String]) -> i32 {
             "--devices" => {
                 i += 1;
                 let Some(v) = args.get(i) else {
-                    eprintln!("--devices needs a value (per-node usable VRAM in GB, e.g. 64,32,32)");
+                    eprintln!(
+                        "--devices needs a value (per-node usable VRAM in GB, e.g. 64,32,32)"
+                    );
                     return 2;
                 };
                 match v
@@ -604,7 +618,9 @@ async fn cmd_plan(args: &[String]) -> i32 {
         return 2;
     }
     if devices_gb.iter().any(|&g| g <= 0.0) {
-        eprintln!("device VRAM must be > 0 (a member may advertise 0 GB — pass --devices manually)");
+        eprintln!(
+            "device VRAM must be > 0 (a member may advertise 0 GB — pass --devices manually)"
+        );
         return 2;
     }
 
@@ -666,7 +682,10 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // load uses, so the dry run matches reality.
     let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
     order.push(host);
-    let weights: Vec<f32> = order.iter().map(|&d| inf::quantize_vram(vram[d]) as f32).collect();
+    let weights: Vec<f32> = order
+        .iter()
+        .map(|&d| inf::quantize_vram(vram[d]) as f32)
+        .collect();
     // Byte-mass-aware split — apportion each device a contiguous block range whose
     // BYTES (not count) are proportional to its VRAM, folding the output head onto
     // the host. The IDENTICAL call the live load makes, so the preview matches it.
@@ -717,16 +736,27 @@ async fn cmd_plan(args: &[String]) -> i32 {
     let nz: Vec<u64> = block_bytes.iter().copied().filter(|&b| b > 0).collect();
     let bmin = nz.iter().copied().min().unwrap_or(0);
     let bmax = nz.iter().copied().max().unwrap_or(0);
-    let bmean = if nz.is_empty() { 0 } else { nz.iter().sum::<u64>() / nz.len() as u64 };
-    let spread = if bmin > 0 { bmax as f64 / bmin as f64 } else { 1.0 };
+    let bmean = if nz.is_empty() {
+        0
+    } else {
+        nz.iter().sum::<u64>() / nz.len() as u64
+    };
+    let spread = if bmin > 0 {
+        bmax as f64 / bmin as f64
+    } else {
+        1.0
+    };
     let uniform = spread <= 1.15;
 
     // MoE hot/cold split + node-count/hop advisor.
     let is_moe = routed_expert_bytes > 0;
     // Hot = resident mass touched every token: all block bytes minus the cold
     // routed experts, plus the output head (token_embd lives in host RAM).
-    let hot_bytes =
-        block_bytes.iter().sum::<u64>().saturating_sub(routed_expert_bytes) + output_bytes;
+    let hot_bytes = block_bytes
+        .iter()
+        .sum::<u64>()
+        .saturating_sub(routed_expert_bytes)
+        + output_bytes;
     // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
     // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
     // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
@@ -796,7 +826,11 @@ async fn cmd_plan(args: &[String]) -> i32 {
             "devices": devices_json,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
-        return if gate_pass && overflows.is_empty() { 0 } else { 1 };
+        return if gate_pass && overflows.is_empty() {
+            0
+        } else {
+            1
+        };
     }
 
     // Human report.
@@ -868,7 +902,10 @@ async fn cmd_plan(args: &[String]) -> i32 {
             gb(need)
         );
         if r.is_host && embd_bytes > 0 {
-            println!("       (+ token_embd {:.1} GB in host system RAM, not VRAM)", gb(embd_bytes));
+            println!(
+                "       (+ token_embd {:.1} GB in host system RAM, not VRAM)",
+                gb(embd_bytes)
+            );
         }
     }
 

@@ -19,8 +19,8 @@ use futures::StreamExt;
 use sovereign_contracts::{CompletionRequest, Error, InferenceProvider, StreamFrame};
 
 use crate::wire::{
-    self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse, HealthInfo,
-    WireError, NDJSON_CONTENT_TYPE, ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED,
+    self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse,
+    HealthInfo, WireError, NDJSON_CONTENT_TYPE, ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED,
     ROUTE_EMBED_BATCH, ROUTE_HEALTH,
 };
 

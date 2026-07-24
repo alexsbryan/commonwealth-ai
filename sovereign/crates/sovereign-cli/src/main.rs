@@ -29,9 +29,9 @@ mod amend_cmd;
 #[cfg(feature = "dev-tools")]
 mod archaeology_eval_cmd;
 mod audit_cmd;
-mod cache_audit_cmd;
 #[cfg(feature = "awareness")]
 mod awareness_cmd;
+mod cache_audit_cmd;
 mod charter_cmd;
 mod daemon_bin;
 mod design_cmd;

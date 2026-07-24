@@ -84,7 +84,14 @@ mod tests {
         // implementation, not a stub. `from_recipe` now returns
         // `UnknownEnrichmentDomain` for these, which is the graceful path.
         let reg = DomainRegistry::builtin();
-        for id in ["science", "policy", "legal", "community", "multi", "engineering"] {
+        for id in [
+            "science",
+            "policy",
+            "legal",
+            "community",
+            "multi",
+            "engineering",
+        ] {
             assert!(
                 reg.get(id).is_none(),
                 "stub domain {id} is registered again — implement it or leave it out"

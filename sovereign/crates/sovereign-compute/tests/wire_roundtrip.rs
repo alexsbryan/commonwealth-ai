@@ -69,9 +69,7 @@ impl InferenceProvider for EchoProvider {
 }
 
 /// Bind the child router on an ephemeral port and return a client for it.
-async fn spawn_child(
-    seen: Arc<Mutex<Option<CompletionRequest>>>,
-) -> ComputeChildClient {
+async fn spawn_child(seen: Arc<Mutex<Option<CompletionRequest>>>) -> ComputeChildClient {
     let provider: Arc<dyn InferenceProvider> = Arc::new(EchoProvider { seen });
     let ready = Arc::new(AtomicBool::new(true));
     let meta = ChildMeta {
@@ -128,7 +126,11 @@ async fn completion_request_roundtrips_losslessly() {
     let resp = client.complete(&sent).await.unwrap();
     assert_eq!(resp.text, "ok");
 
-    let received = seen.lock().unwrap().clone().expect("provider saw a request");
+    let received = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("provider saw a request");
 
     // Compare the FULL serde value: any dropped or mangled field — not
     // just the ones we set above — fails this assertion.
@@ -140,7 +142,10 @@ async fn completion_request_roundtrips_losslessly() {
     );
 
     // Spot-check the fields the OpenAI wire would have dropped.
-    assert_eq!(received.lark_grammar.as_deref(), Some("start: \"yes\" | \"no\""));
+    assert_eq!(
+        received.lark_grammar.as_deref(),
+        Some("start: \"yes\" | \"no\"")
+    );
     assert_eq!(received.assistant_prefix.as_deref(), Some("Assistant:"));
     assert_eq!(received.cmd_prefix.as_deref(), Some("/cmd"));
     assert_eq!(
@@ -181,7 +186,10 @@ async fn embed_roundtrips() {
     let seen = Arc::new(Mutex::new(None));
     let client = spawn_child(seen).await;
 
-    let v = client.embed("some text", EmbedMode::Document).await.unwrap();
+    let v = client
+        .embed("some text", EmbedMode::Document)
+        .await
+        .unwrap();
     assert_eq!(v, vec![0.1, 0.2, 0.3]);
 }
 

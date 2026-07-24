@@ -437,7 +437,10 @@ fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
 /// code over the (small) atom file — no model call, no embedding.
 /// Returns `(description, passage_previews, keyword_hits)` for atoms
 /// with ≥2 distinct keyword hits, best first, capped at 4.
-pub(crate) fn atlas_atom_matches(corpus_id: &str, keywords: &[String]) -> Vec<(String, Vec<String>, usize)> {
+pub(crate) fn atlas_atom_matches(
+    corpus_id: &str,
+    keywords: &[String],
+) -> Vec<(String, Vec<String>, usize)> {
     if keywords.len() < 2 {
         return Vec::new();
     }

@@ -733,9 +733,7 @@ impl CorpusIndex {
         self.table
             .create_index(
                 &["title"],
-                lancedb::index::Index::BTree(
-                    lancedb::index::scalar::BTreeIndexBuilder::default(),
-                ),
+                lancedb::index::Index::BTree(lancedb::index::scalar::BTreeIndexBuilder::default()),
             )
             .execute()
             .await

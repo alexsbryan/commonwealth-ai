@@ -137,7 +137,9 @@ async fn cmd_author(args: &[String]) -> i32 {
     }
     let Some(desc) = desc else {
         eprintln!("Usage: svrn workflow author \"<describe the workflow you want>\"");
-        eprintln!("Example: svrn workflow author \"fetch a web page and write a 3-sentence summary\"");
+        eprintln!(
+            "Example: svrn workflow author \"fetch a web page and write a 3-sentence summary\""
+        );
         return 1;
     };
 

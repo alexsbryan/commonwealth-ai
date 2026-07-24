@@ -471,7 +471,11 @@ impl MeshRpcShardWarmer {
             .await
             {
                 Ok(p) => {
-                    tracing::info!(model_id = name, base, "rpc-warm: fetched GGUF file for warming");
+                    tracing::info!(
+                        model_id = name,
+                        base,
+                        "rpc-warm: fetched GGUF file for warming"
+                    );
                     return Ok(p);
                 }
                 Err(e) => {
@@ -771,11 +775,7 @@ async fn orchestrate_warm(
         if raw_warm_fallback_allowed(&worker_ip) {
             let raw_url = format!("http://{worker_ip}:{internal_port}/internal/rpc-warm");
             if !candidates.iter().any(|(u, _, _)| *u == raw_url) {
-                candidates.push((
-                    raw_url,
-                    format!("raw:{worker_ip}:{internal_port}"),
-                    None,
-                ));
+                candidates.push((raw_url, format!("raw:{worker_ip}:{internal_port}"), None));
             }
         }
 

@@ -388,8 +388,16 @@ pub(crate) async fn gate_answer(
     base_request: &CompletionRequest,
     profile: &GroundingProfile,
 ) -> GateOutcome {
-    gate_answer_with_progress(inference, question, draft, evidence, base_request, profile, None)
-        .await
+    gate_answer_with_progress(
+        inference,
+        question,
+        draft,
+        evidence,
+        base_request,
+        profile,
+        None,
+    )
+    .await
 }
 
 /// `gate_answer` plus a live claim-check progress channel (see
@@ -681,10 +689,7 @@ pub(crate) async fn gate_answer_with_progress(
                         }
                     }
                     retried = true;
-                    emit_gate_progress(
-                        progress,
-                        NarrationPhase::ClaimRevisionStart { failed: 1 },
-                    );
+                    emit_gate_progress(progress, NarrationPhase::ClaimRevisionStart { failed: 1 });
                     let mut retry_req = base_request.clone();
                     let base_sys = retry_req.system_message.clone().unwrap_or_default();
                     retry_req.system_message = Some(format!(
@@ -1621,8 +1626,10 @@ async fn gate_longform(
                         Some(true) => Some(0.0),  // batch: supported → vp below tau
                         Some(false) => Some(1.0), // batch: unsupported → flagged (vp ≥ tau)
                         None => {
-                            claim_violation_joint(&inference, claim, &judged, cap, n_shared, posture)
-                                .await
+                            claim_violation_joint(
+                                &inference, claim, &judged, cap, n_shared, posture,
+                            )
+                            .await
                         }
                     }
                 };
@@ -1836,9 +1843,7 @@ async fn gate_longform(
     // 2026-07-17, CONFAB-LEAKED 0→1), so surgery now only changes HOW the
     // corrected text is produced, never the safety floor.
     let second: String = 'produce: {
-        if config::surgical_rewrite_enabled()
-            && !failed.is_empty()
-            && failed.len() <= surgical_cap
+        if config::surgical_rewrite_enabled() && !failed.is_empty() && failed.len() <= surgical_cap
         {
             let pairs: Vec<(String, Vec<String>)> = failed
                 .iter()
@@ -2030,7 +2035,10 @@ mod tests {
             } else if request.prompt.contains("List the SPECIFIC factual claims") {
                 // Longform per-claim extractor (gate_longform's audit).
                 "The shop is located on Crescent Lane.\nThe shop sells loose-leaf tea.".to_string()
-            } else if request.prompt.contains("Compare the ANSWER against the EVIDENCE") {
+            } else if request
+                .prompt
+                .contains("Compare the ANSWER against the EVIDENCE")
+            {
                 // Specifics scan: nothing unsupported — keeps the
                 // longform progress tests pinned to the claim loop.
                 "NONE".to_string()
@@ -2117,7 +2125,9 @@ mod tests {
             &self,
             _request: &crate::types::CompletionRequest,
         ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-            Err(Error::NotImplemented("RetryDeclineMock: no streaming".into()))
+            Err(Error::NotImplemented(
+                "RetryDeclineMock: no streaming".into(),
+            ))
         }
 
         async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
@@ -2166,7 +2176,9 @@ mod tests {
             &self,
             _request: &crate::types::CompletionRequest,
         ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-            Err(Error::NotImplemented("NoClaimGateMock: no streaming".into()))
+            Err(Error::NotImplemented(
+                "NoClaimGateMock: no streaming".into(),
+            ))
         }
 
         async fn embed(&self, _text: &str) -> Result<Vec<f32>> {

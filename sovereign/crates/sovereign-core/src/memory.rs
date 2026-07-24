@@ -2184,7 +2184,9 @@ mod tests {
     #[async_trait]
     impl InferenceProvider for CountingEmbed {
         async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
-            Err(Error::NotImplemented("CountingEmbed: complete unused".into()))
+            Err(Error::NotImplemented(
+                "CountingEmbed: complete unused".into(),
+            ))
         }
         async fn complete_stream(
             &self,
@@ -2249,7 +2251,10 @@ mod tests {
         // even though its vector is empty — the marker that stops the loop.
         let after = store.get_all_memories_for_scope(&scope).await.unwrap();
         let stored_empty = after.iter().find(|m| m.id == "empty").unwrap();
-        assert_eq!(stored_empty.embedding_model.as_deref(), Some("test-embed-v1"));
+        assert_eq!(
+            stored_empty.embedding_model.as_deref(),
+            Some("test-embed-v1")
+        );
 
         // Second recall: the real memory has a usable vector, the empty one
         // is recognised as attempted-but-unembeddable — so NEITHER is

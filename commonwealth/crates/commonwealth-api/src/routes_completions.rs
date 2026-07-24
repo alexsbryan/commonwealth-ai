@@ -199,7 +199,11 @@ async fn serve_fim_aggregated(
 /// Streaming: bridge frames to SSE chunks (`text_completion` object
 /// shape), a terminal chunk carrying the real `finish_reason` (+ the
 /// opt-in `sovereign_debug`), then the `[DONE]` sentinel.
-fn serve_fim_sse(start: FimStreamStart, debug_wanted: bool, model_echo: Option<String>) -> Response {
+fn serve_fim_sse(
+    start: FimStreamStart,
+    debug_wanted: bool,
+    model_echo: Option<String>,
+) -> Response {
     let id = completion_id();
     let created = unix_now();
     let model = model_echo.unwrap_or_else(|| start.model_id.clone());
@@ -282,9 +286,7 @@ fn serve_fim_sse(start: FimStreamStart, debug_wanted: bool, model_echo: Option<S
 mod tests {
     use super::*;
     use crate::openai_types::{FinishReason, StreamUsage};
-    use crate::state::{
-        test_app_state, FimStreamStart, FimSlotStatus, LocalInferenceService,
-    };
+    use crate::state::{test_app_state, FimSlotStatus, FimStreamStart, LocalInferenceService};
     use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::Request;
@@ -533,10 +535,22 @@ mod tests {
             .unwrap();
         let text = String::from_utf8(bytes.to_vec()).unwrap();
         // Token chunks, terminal finish_reason, debug chunk, [DONE].
-        assert!(text.contains("\"text\":\"x\""), "missing token chunk: {text}");
-        assert!(text.contains("\"text\":\" + 1\""), "missing 2nd chunk: {text}");
-        assert!(text.contains("\"finish_reason\":\"stop\""), "missing terminal: {text}");
-        assert!(text.contains("\"sovereign_debug\""), "missing debug chunk: {text}");
+        assert!(
+            text.contains("\"text\":\"x\""),
+            "missing token chunk: {text}"
+        );
+        assert!(
+            text.contains("\"text\":\" + 1\""),
+            "missing 2nd chunk: {text}"
+        );
+        assert!(
+            text.contains("\"finish_reason\":\"stop\""),
+            "missing terminal: {text}"
+        );
+        assert!(
+            text.contains("\"sovereign_debug\""),
+            "missing debug chunk: {text}"
+        );
         assert!(text.contains("[DONE]"), "missing [DONE]: {text}");
     }
 }

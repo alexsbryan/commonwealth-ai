@@ -122,7 +122,11 @@ fn facility_location_select(embs: &[Vec<f32>], rel: &[f32], k: usize) -> Vec<usi
             }
         }
     }
-    selected.sort_by(|a, b| rel[*b].partial_cmp(&rel[*a]).unwrap_or(std::cmp::Ordering::Equal));
+    selected.sort_by(|a, b| {
+        rel[*b]
+            .partial_cmp(&rel[*a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     selected
 }
 
@@ -236,7 +240,9 @@ impl CorpusIndex {
         static PARAMS: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
         *PARAMS.get_or_init(|| {
             let on = std::env::var("SOVEREIGN_COVERAGE_SELECT")
-                .map(|s| !(s == "0" || s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("off")))
+                .map(|s| {
+                    !(s == "0" || s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("off"))
+                })
                 .unwrap_or(true);
             if !on {
                 return None;
@@ -654,11 +660,9 @@ impl CorpusIndex {
             if pool_embs.iter().all(|e| e.is_some()) {
                 let t_select = std::time::Instant::now();
                 let embs: Vec<Vec<f32>> = pool_embs.iter().map(|e| e.clone().unwrap()).collect();
-                let (lo, hi) = scored
-                    .iter()
-                    .fold((f32::MAX, f32::MIN), |(lo, hi), c| {
-                        (lo.min(c.score), hi.max(c.score))
-                    });
+                let (lo, hi) = scored.iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| {
+                    (lo.min(c.score), hi.max(c.score))
+                });
                 let span = (hi - lo).max(f32::EPSILON);
                 let rel: Vec<f32> = scored.iter().map(|c| (c.score - lo) / span).collect();
                 let selected = facility_location_select(&embs, &rel, limit);

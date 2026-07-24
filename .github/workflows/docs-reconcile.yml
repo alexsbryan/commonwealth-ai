@@ -18,6 +18,18 @@ on:
   pull_request:
     branches: [main]
 
+# This workflow had NO concurrency control, so each of the 166 job-runs in
+# July survived even when a newer push had already obsoleted it. It is cheap
+# per run (~1.5 min) but the push cadence is bursty — seven pushes in one
+# four-hour stretch on 2026-07-24 — so cancellation is most of its cost.
+#
+# Deliberately NO path filter: a cited path can break because a CODE file was
+# renamed, not because a doc changed. Narrowing this gate to doc edits would
+# make it miss the failure mode it exists to catch.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

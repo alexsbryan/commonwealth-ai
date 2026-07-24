@@ -21,7 +21,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_inference::fim::build_fim_prompt;
 
 fn gated_gguf() -> Option<PathBuf> {
-    std::env::var("SOVEREIGN_FIM_TEST_GGUF").ok().map(PathBuf::from)
+    std::env::var("SOVEREIGN_FIM_TEST_GGUF")
+        .ok()
+        .map(PathBuf::from)
 }
 
 async fn run_fim(
@@ -91,7 +93,9 @@ async fn raw_fim_round_trip_and_lcp_second_request() {
     .await;
     assert!(!first.trim().is_empty(), "first completion empty");
     assert!(
-        !first.contains("<fim_") && !first.contains("<|endoftext|>") && !first.contains("<|im_end|>"),
+        !first.contains("<fim_")
+            && !first.contains("<|endoftext|>")
+            && !first.contains("<|im_end|>"),
         "marker leak: {first:?}"
     );
 

@@ -960,12 +960,19 @@ mod tests {
         ];
         let answer = "trained by Elias Warde [Source: lighthouse].";
         let r = attribute_citations(answer, &body, &labels);
-        assert_eq!(r.citations_stripped(), 1, "invented one-word cite must strip");
+        assert_eq!(
+            r.citations_stripped(),
+            1,
+            "invented one-word cite must strip"
+        );
         assert!(!r.cleaned.contains("lighthouse"));
         // A one-word cite whose word IS present (in the body) still survives —
         // the new strip fires only on FULL absence, exercising the Keep branch.
         let ok = "the design [Source: Finch].";
-        assert_eq!(attribute_citations(ok, &body, &labels).citations_stripped(), 0);
+        assert_eq!(
+            attribute_citations(ok, &body, &labels).citations_stripped(),
+            0
+        );
     }
 
     #[test]

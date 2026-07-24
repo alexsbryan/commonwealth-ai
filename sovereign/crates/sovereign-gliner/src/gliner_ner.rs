@@ -395,7 +395,10 @@ impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
     /// obligation lane just doesn't gain the concept articles this turn,
     /// exactly as when the model isn't installed.
     fn extract_concepts(&self, text: &str) -> Vec<String> {
-        dedup_mention_texts(self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD).ok())
+        dedup_mention_texts(
+            self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD)
+                .ok(),
+        )
     }
 }
 

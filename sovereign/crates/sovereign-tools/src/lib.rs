@@ -79,9 +79,8 @@ pub use attached_document_search::AttachedDocumentSearchTool;
 #[cfg(feature = "treesitter")]
 pub use code::drift_findings::DriftFindingsTool;
 pub use code::facts_tool::FactsTool;
-pub use code::AtosVerifyTool;
 pub use code::session_state::SessionStateTool;
-pub use code::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
+pub use code::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
@@ -107,6 +106,7 @@ pub use code::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
+pub use code::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
 #[cfg(feature = "treesitter")]
 pub use code::{ArchPostureTool, ArchReportTool};
 #[cfg(all(feature = "treesitter", feature = "atos"))]

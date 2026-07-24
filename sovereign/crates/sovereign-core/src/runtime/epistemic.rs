@@ -164,13 +164,15 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         gaps: inputs.gaps,
         verdict,
     };
-    let (n_corpus, n_memory) = state.holdings.iter().fold((0usize, 0usize), |acc, h| {
-        match h.provenance {
-            Provenance::Corpus { .. } => (acc.0 + 1, acc.1),
-            Provenance::Memory { .. } => (acc.0, acc.1 + 1),
-            _ => acc,
-        }
-    });
+    let (n_corpus, n_memory) =
+        state
+            .holdings
+            .iter()
+            .fold((0usize, 0usize), |acc, h| match h.provenance {
+                Provenance::Corpus { .. } => (acc.0 + 1, acc.1),
+                Provenance::Memory { .. } => (acc.0, acc.1 + 1),
+                _ => acc,
+            });
     // Claims that failed a first check and went through revision
     // before release — the retry/rewrite cost this turn actually paid.
     let revised = inputs
@@ -426,9 +428,7 @@ pub(crate) fn finish_demands(
             // (observed mis-route: ood-australia-capital gapped
             // ClaimUncovered over 10 distractor chunks, 2026-07-20).
             // No probe → the topic-in-sources default stands.
-            CoverageLevel::Retrieved if abstained => {
-                probe.unwrap_or(GapCoverage::ClaimUncovered)
-            }
+            CoverageLevel::Retrieved if abstained => probe.unwrap_or(GapCoverage::ClaimUncovered),
             _ => continue,
         };
         let statement = match d.facet {
@@ -642,7 +642,10 @@ mod tests {
             GateSurface::ComplexTask,
             GateSurface::SimpleQuery,
         ] {
-            assert!(ledger_site(s).is_some(), "answer surface {s:?} has no ledger site");
+            assert!(
+                ledger_site(s).is_some(),
+                "answer surface {s:?} has no ledger site"
+            );
         }
     }
 
@@ -672,7 +675,13 @@ mod tests {
     fn verdict_truth_table() {
         // Abstention dominates everything.
         assert_eq!(
-            derive_verdict(&[corpus_holding(Verification::Verified)], true, false, true, false),
+            derive_verdict(
+                &[corpus_holding(Verification::Verified)],
+                true,
+                false,
+                true,
+                false
+            ),
             TurnVerdict::CannotKnowFromHere
         );
         // All corpus-verified → Grounded.
@@ -705,7 +714,13 @@ mod tests {
         );
         // Memory-only → MemoryRecall regardless of verification.
         assert_eq!(
-            derive_verdict(&[memory_holding(Verification::FailOpen)], false, false, false, false),
+            derive_verdict(
+                &[memory_holding(Verification::FailOpen)],
+                false,
+                false,
+                false,
+                false
+            ),
             TurnVerdict::MemoryRecall
         );
         // Corpus + memory → Mixed.
@@ -872,7 +887,10 @@ mod tests {
         });
         assert!(matches!(
             &state.holdings[0].provenance,
-            Provenance::Corpus { corpus_id: None, .. }
+            Provenance::Corpus {
+                corpus_id: None,
+                ..
+            }
         ));
     }
 
@@ -981,9 +999,12 @@ mod tests {
             .iter()
             .any(|d| d.facet == DemandFacet::Section && d.text == "reception"));
         // Plan sub-query.
-        assert!(demands
-            .iter()
-            .any(|d| d.facet == DemandFacet::SubQuestion && d.text == "general relativity gravity"));
+        assert!(
+            demands
+                .iter()
+                .any(|d| d.facet == DemandFacet::SubQuestion
+                    && d.text == "general relativity gravity")
+        );
     }
 
     #[test]
@@ -1009,7 +1030,7 @@ mod tests {
         stamp_coverage(&mut demands, &chunks);
         assert_eq!(demands[0].covered, CoverageLevel::Retrieved); // stance pole present
         assert_eq!(demands[1].covered, CoverageLevel::Absent); // no "reception" text
-        // The uncovered Section facet emits a gap with its own statement.
+                                                               // The uncovered Section facet emits a gap with its own statement.
         let gaps = finish_demands(&mut demands, None, false, Some(GapCoverage::TopicUncovered));
         assert!(gaps
             .iter()
@@ -1110,7 +1131,10 @@ mod tests {
         assert_eq!(state.holdings[0].verification, Verification::FailOpen);
         assert!(matches!(
             &state.holdings[0].provenance,
-            Provenance::Memory { band: MemoryBand::Tentative, .. }
+            Provenance::Memory {
+                band: MemoryBand::Tentative,
+                ..
+            }
         ));
     }
 }
