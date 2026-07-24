@@ -80,6 +80,7 @@ pub use attached_document_search::AttachedDocumentSearchTool;
 pub use code::drift_findings::DriftFindingsTool;
 pub use code::facts_tool::FactsTool;
 pub use code::AtosVerifyTool;
+pub use code::session_state::SessionStateTool;
 pub use code::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;

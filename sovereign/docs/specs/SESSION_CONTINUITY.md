@@ -1,12 +1,11 @@
 # Session Continuity — the Session Frame, Zero-Friction Boot, and `session distill`
 
-**Status:** Schema v1 DEFINED + golden + grader shipped; write paths 2–3 and
-boot integration SHIPPED (2026-07-23). Split experiment PASSED the same day
-(§3a) — **red-SPLIT is the standing protocol**, conditioned on a fresh
-self-reported frame. Per `ARCH_PRINCIPLES.md §1.1`: §2 (schema), §3a (split
-protocol), and §5 (grading) are contracts; the `session_state` upsert tool in
-§3 path 1 remains a proposal (self-report is currently practiced by writing
-`frame.md` directly).
+**Status:** Schema v1 DEFINED + golden + grader shipped; ALL THREE write
+paths and boot integration SHIPPED (paths 2–3 + boot 2026-07-23; path 1's
+`session_state` tool 2026-07-24). Split experiment PASSED (§3a) —
+**red-SPLIT is the standing protocol**, conditioned on a fresh self-reported
+frame. Per `ARCH_PRINCIPLES.md §1.1`: §2 (schema), §3a (split protocol), and
+§5 (grading) are contracts.
 
 **Owner context:** part of the agent-efficiency ("bionic suit") initiative —
 see `sovereign cache-audit`, `scripts/agent-preflight.py`, and the `facts` MCP
@@ -98,9 +97,15 @@ Rules that keep frames honest:
 Three, in trust order — the frame must exist even when the agent never
 cooperated:
 
-1. **Self-report** — a `session_state` upsert call at transitions (task start,
-   plan step done, blocker hit). Cheapest and sharpest; discipline-dependent,
-   so never the only path. (Proposal.)
+1. **Self-report** — SHIPPED 2026-07-24 (MEMORY_MODEL.md E4a): the
+   `session_state` MCP tool (also `svrn tools call session_state`) is a
+   section-level upsert of `frame.md` called at transitions (task start,
+   plan step done, blocker hit). Provided sections replace their bodies,
+   others are preserved; every write re-stamps `provenance: self-reported`
+   (an encode-time write upgrades a distilled frame); over-budget writes
+   are REJECTED with per-section token counts. Cheapest and sharpest;
+   discipline-dependent, so never the only path — paths 2–3 remain the
+   suit-enforced floor.
 2. **Harness lifecycle hooks** — SHIPPED: `.claude/hooks/session-frame.sh`
    wired on `PreCompact` (snapshot before the window is destroyed) and
    `SessionEnd` (final flush). The hook exits in <100ms and runs distill

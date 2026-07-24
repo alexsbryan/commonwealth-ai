@@ -245,6 +245,17 @@ pub(super) async fn build_tool_registry(
         tools.register(Box::new(tool));
     }
 
+    // Encode-time session-frame upsert (SESSION_CONTINUITY write-path
+    // 1). Workspace optional — without it the frame just skips the
+    // head_at_end/branch git stamps.
+    {
+        let mut tool = sovereign_tools::SessionStateTool::new();
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
+
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
         &notes,

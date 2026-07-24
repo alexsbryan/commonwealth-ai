@@ -113,6 +113,12 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // agents and mid-session re-orientation don't depend on the
     // `svrn code brief` CLI sibling being on PATH.
     "briefing",
+    // Encode-time session-frame upsert (SESSION_CONTINUITY write-path
+    // 1 / MEMORY_MODEL E4a). Write-effectful but budget-gated and
+    // per-session — the agent banks its own gist at transitions so a
+    // successor can boot from it; the strong path vs. post-hoc
+    // distillation (100% vs 17% graded recall).
+    "session_state",
     // Code facts — the embed-free deterministic fact base (tree-sitter
     // fn defs / config construction-fields / string literals), cited to
     // file:line and freshness-stamped. The structural companion to

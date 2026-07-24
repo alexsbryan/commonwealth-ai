@@ -63,12 +63,14 @@ Long sessions pay cache-read ≈ avg_ctx × turns — ~50% of session cost is
 recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
 ≥90k, red "SPLIT" ≥140k) and `frame ✓<age>`.
 
-- **As the donor:** when the user asks to wrap up or split (or context is
-  red), write a session frame — schema and section budgets in
-  `sovereign/docs/specs/SESSION_CONTINUITY.md §2` — to
-  `~/.sovereign/sessions/<session-id>/frame.md` with `provenance:
-  self-reported`. You hold the state; your frame is the strong path
-  (auto-distilled frames recall ~17% and never authorize a split).
+- **As the donor:** keep your frame current AS YOU WORK — call the
+  `session_state` MCP tool (or `sovereign tools call session_state`) at
+  transitions: task start, plan step done, blocker hit. It upserts named
+  sections of `~/.sovereign/sessions/<session-id>/frame.md`, preserves the
+  rest, and rejects over-budget writes with per-section token counts. You
+  hold the state; your encode-time writes are the strong path
+  (auto-distilled frames recall ~17% and never authorize a split). A
+  wrap-up request should be a final small upsert, not a from-scratch write.
 - **As the successor:** the boot hook injects the newest frame. Work from it
   plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
   specs the frame summarizes. After your first work stretch, self-measure:
