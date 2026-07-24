@@ -1017,7 +1017,9 @@ fn print_help() {
          \x20 --no-llm           Stop after the spine (also the daemon-down fallback).\n\
          \x20 --model <id>       Chat model (default: primary).\n\
          \x20 --max-tokens <n>   Per-section answer budget (default 700).\n\
-         \x20 --stdout           Print the frame instead of only writing it.\n\n\
+         \x20 --stdout           Print the frame instead of only writing it.\n\
+         \x20 --force            Overwrite even a self-reported frame (default: a frame\n\
+         \x20                    banked via session_state is never clobbered by distill).\n\n\
          Output: ~/.sovereign/sessions/<session_id>/{{frame.md,spine.txt}}\n"
     );
 }
@@ -1126,6 +1128,31 @@ fn first_user_turn_hint(path: &Path) -> Option<String> {
     None
 }
 
+/// True when an existing frame at `path` carries `provenance: self-reported`
+/// in its frontmatter. The session banked its own state via `session_state`;
+/// that is the strong continuity path (spec §3) and distillation must not
+/// clobber it — a distilled overwrite demotes the frame to rescue-only in
+/// split-enforce even though the agent-authored content was better.
+fn frame_is_self_reported(path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let mut lines = text.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return false;
+    }
+    for line in lines {
+        let line = line.trim();
+        if line == "---" {
+            break;
+        }
+        if let Some(v) = line.strip_prefix("provenance:") {
+            return v.trim() == "self-reported";
+        }
+    }
+    false
+}
+
 async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> i32 {
     let path = match find_transcript(dir, id) {
         Ok(p) => p,
@@ -1179,6 +1206,16 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
 
     if flags.contains_key("no-llm") {
         println!("--no-llm: stopping after the spine (no frame synthesized).");
+        return 0;
+    }
+
+    let banked_frame = out_dir.join("frame.md");
+    if !flags.contains_key("force") && frame_is_self_reported(&banked_frame) {
+        println!(
+            "frame: skipped — {} is self-reported (banked via session_state); \
+             distill is the rescue path and does not overwrite it (--force to override)",
+            banked_frame.display()
+        );
         return 0;
     }
 
@@ -1395,7 +1432,7 @@ pub async fn run(args: &[String]) -> i32 {
             }
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
-            "--no-llm" | "--stdout" => {
+            "--no-llm" | "--stdout" | "--force" => {
                 flags.insert(arg.trim_start_matches('-').to_string(), String::new());
             }
             "--model" | "--max-tokens" | "--golden" | "--url" => {
@@ -1565,6 +1602,41 @@ mod tests {
         assert!(fm.contains("head_at_end: 71d7ac20\n"));
         assert!(fm.contains("provenance: distilled\n"));
         assert!(fm.trim_end().ends_with("---"));
+    }
+
+    #[test]
+    fn self_reported_frame_is_detected_and_others_are_not() {
+        let dir = std::env::temp_dir().join(format!("session_frame_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let banked = dir.join("banked.md");
+        std::fs::write(
+            &banked,
+            "---\nschema: session-frame/v1\nsession_id: s1\nprovenance: self-reported\n---\n\n## Goal\nx\n",
+        )
+        .unwrap();
+        assert!(frame_is_self_reported(&banked));
+
+        let distilled = dir.join("distilled.md");
+        std::fs::write(
+            &distilled,
+            "---\nschema: session-frame/v1\nsession_id: s1\nprovenance: distilled\n---\n\n## Goal\nx\n",
+        )
+        .unwrap();
+        assert!(!frame_is_self_reported(&distilled));
+
+        // provenance mentioned in the body must not count — frontmatter only
+        let body_only = dir.join("body.md");
+        std::fs::write(
+            &body_only,
+            "---\nschema: session-frame/v1\nsession_id: s1\n---\n\nprovenance: self-reported\n",
+        )
+        .unwrap();
+        assert!(!frame_is_self_reported(&body_only));
+
+        assert!(!frame_is_self_reported(&dir.join("missing.md")));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
