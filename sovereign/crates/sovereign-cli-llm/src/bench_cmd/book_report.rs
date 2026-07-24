@@ -378,6 +378,9 @@ struct Opts {
     /// Pin this when varying --answer-model/--enrich-model so the
     /// ruler doesn't move with the experiment.
     judge_model: Option<String>,
+    /// Force the LLM window pass for the T2 entity extraction even when
+    /// the GLiNER model is installed. The A/B control for the NER swap.
+    no_gliner: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -389,6 +392,7 @@ enum Transport {
 fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut cache_dir: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
+    let mut no_gliner = false;
     let mut refresh_source = false;
     let mut wire = false;
     let mut reuse_asset: Option<String> = None;
@@ -498,6 +502,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
                         .clone(),
                 );
             }
+            "--no-gliner" => no_gliner = true,
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -524,6 +529,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         enrich_model,
         answer_model,
         judge_model,
+        no_gliner,
     })
 }
 
@@ -578,8 +584,40 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         enrich_base,
         Arc::clone(&ledger),
     ));
-    let manager =
+    // T2 entity pass: prefer the local NER model over the LLM when it's
+    // installed. Loaded eagerly (not `LazyGlinerExtractor`) because the
+    // bench must measure the NER path, not race it — a lazy loader that
+    // isn't warm yet returns empty and silently falls back to the LLM,
+    // which would make a GLiNER run look like a no-op.
+    // `--no-gliner` forces the LLM path for A/B comparison.
+    let entity_extractor: Option<Arc<dyn sovereign_core::traits::EntityExtractor>> = if opts
+        .no_gliner
+    {
+        eprintln!("      T2 entity pass: LLM (--no-gliner)");
+        None
+    } else {
+        let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
+            match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
+                Ok(g) => {
+                    eprintln!("      T2 entity pass: GLiNER ({model_id})");
+                    Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+                }
+                Err(e) => {
+                    eprintln!("      T2 entity pass: LLM (GLiNER load failed: {e})");
+                    None
+                }
+            }
+        } else {
+            eprintln!("      T2 entity pass: LLM (GLiNER model {model_id} not installed)");
+            None
+        }
+    };
+    let mut manager =
         DocumentAssetManager::new(Arc::clone(&enrich_inference), Arc::clone(&session.store));
+    if let Some(g) = entity_extractor {
+        manager = manager.with_entity_extractor(g);
+    }
     let chat_model = Some(session.inference.model_id_for(Speed::Slow));
     let enrich_model = Some(enrich_inference.model_id_for(Speed::Slow));
 
@@ -739,6 +777,14 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
     eprintln!("      enrichment resource ledger:");
     for line in resources.render_table().lines() {
         eprintln!("      {line}");
+    }
+    let families = resources.render_call_families();
+    if !families.is_empty() {
+        eprintln!();
+        eprintln!("      call families (where the wall clock went):");
+        for line in families.lines() {
+            eprintln!("      {line}");
+        }
     }
 
     let report = BookReportRun {
@@ -2194,6 +2240,23 @@ fn render_markdown(r: &BookReportRun) -> String {
         let _ = writeln!(s, "```");
         let _ = write!(s, "{}", res.render_table());
         let _ = writeln!(s, "```\n");
+
+        let families = res.render_call_families();
+        if !families.is_empty() {
+            let _ = writeln!(s, "### Call families");
+            let _ = writeln!(
+                s,
+                "Per-call log rolled up by phase + prompt fingerprint. Several call \
+                 families share one phase label (the window skeleton and the RAPTOR \
+                 tree both run under `building_skeleton`), so this — not the phase \
+                 table — is what identifies the expensive work. `window` is a real \
+                 elapsed duration (first call start → last call end); the phase \
+                 table's `llm_s` sums concurrent calls and is not a duration.\n"
+            );
+            let _ = writeln!(s, "```");
+            let _ = write!(s, "{families}");
+            let _ = writeln!(s, "```\n");
+        }
     }
 
     if !r.tier_summary.is_empty() {

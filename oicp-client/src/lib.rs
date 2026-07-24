@@ -59,8 +59,76 @@ pub struct RemoteApiProvider {
 const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
 
 impl RemoteApiProvider {
+    /// Texts per `/embeddings` request in [`InferenceProvider::embed_batch`].
+    ///
+    /// Sized to keep one request's payload modest while giving the
+    /// daemon's embed slot several full multi-sequence decodes to chew
+    /// on (it packs 16 sequences per decode). Larger batches stop paying
+    /// — the slot's packing, not the request count, is the throughput
+    /// bound past this point.
+    pub const EMBED_BATCH_INPUTS: usize = 64;
+
     pub fn new(endpoint: &str, api_key: Option<String>, model_id: &str, context_size: u32) -> Self {
         Self::with_timeout(endpoint, api_key, model_id, context_size, DEFAULT_TIMEOUT)
+    }
+
+    /// One `/embeddings` call carrying every text as an array `input`.
+    ///
+    /// Rows come back with an `index` field; we sort by it rather than
+    /// trusting arrival order, and verify the count matches so a partial
+    /// response can never silently misalign embeddings with chunks —
+    /// that would corrupt retrieval in a way no test downstream would
+    /// catch.
+    async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let url = format!("{}/embeddings", self.endpoint);
+        let body = serde_json::json!({
+            "model": &self.model_id,
+            "input": texts,
+        });
+
+        let mut req = self.client.post(&url).json(&body);
+        if let Some(ref auth) = self.auth_header() {
+            req = req.header("Authorization", auth);
+        }
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("Batch embedding request failed: {e}")))?;
+
+        if !response.status().is_success() {
+            return Err(Error::NotImplemented(format!(
+                "Batch embedding not supported by this endpoint (status {})",
+                response.status()
+            )));
+        }
+
+        #[derive(Deserialize)]
+        struct EmbedResponse {
+            data: Vec<EmbedData>,
+        }
+        #[derive(Deserialize)]
+        struct EmbedData {
+            embedding: Vec<f32>,
+            #[serde(default)]
+            index: usize,
+        }
+
+        let parsed: EmbedResponse = response.json().await.map_err(|e| {
+            Error::Inference(format!("Failed to parse batch embedding response: {e}"))
+        })?;
+
+        if parsed.data.len() != texts.len() {
+            return Err(Error::Inference(format!(
+                "Batch embedding returned {} rows for {} inputs",
+                parsed.data.len(),
+                texts.len()
+            )));
+        }
+
+        let mut rows = parsed.data;
+        rows.sort_by_key(|d| d.index);
+        Ok(rows.into_iter().map(|d| d.embedding).collect())
     }
 
     /// Construct with an explicit request timeout. Use for tests or
@@ -776,6 +844,50 @@ impl InferenceProvider for RemoteApiProvider {
             ))
     }
 
+    /// Embed many texts with ONE request per chunk of
+    /// [`Self::EMBED_BATCH_INPUTS`], using the `/embeddings` endpoint's
+    /// array `input` form.
+    ///
+    /// Without this override the trait default loops `embed()` — one
+    /// HTTP round-trip and one single-sequence decode per text. Measured
+    /// on the 2026-07-24 book-ingest arc: the daemon had served 8959
+    /// consecutive embed calls at `sequences=1`, and a 301-chunk
+    /// document spent 78s of a 149s ingest embedding, ~250ms per chunk.
+    /// The server side was batch-capable the whole time
+    /// (`routes_inference::embeddings` → `LocalInferenceService::
+    /// embed_batch` → the embed slot's multi-sequence decode, 16
+    /// sequences per decode); only the client never asked for it.
+    ///
+    /// Chunks are sent sequentially on purpose: the embed slot
+    /// serializes on a single context lock, so overlapping requests
+    /// would queue inside the daemon rather than add throughput.
+    ///
+    /// Falls back to the sequential default if the endpoint rejects an
+    /// array payload — third-party OpenAI-compatible servers vary, and
+    /// an ingest must not fail over a request-shape difference.
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut out: Vec<Vec<f32>> = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(Self::EMBED_BATCH_INPUTS) {
+            match self.embed_many_one_request(chunk).await {
+                Ok(vectors) => out.extend(vectors),
+                Err(e) => {
+                    tracing::debug!(
+                        error = %e,
+                        inputs = chunk.len(),
+                        "embed_batch: array request failed; falling back to per-text embed"
+                    );
+                    for text in chunk {
+                        out.push(self.embed(text).await?);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Embed a *query* with this model's query-side instruction prefix.
     ///
     /// The OpenAI `/embeddings` endpoint has no query/document distinction, so
@@ -960,6 +1072,13 @@ impl InferenceProvider for SplitInferenceProvider {
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         self.embed.embed(text).await
+    }
+
+    /// Route to the embed provider's batch path. Without this the trait
+    /// default would loop `Self::embed` — the exact one-round-trip-per-
+    /// chunk behaviour that made corpus ingest embed-bound.
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.embed.embed_batch(texts).await
     }
 
     /// Route to the embed provider's `embed_query` so its model-specific

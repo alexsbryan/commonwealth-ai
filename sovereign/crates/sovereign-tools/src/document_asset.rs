@@ -25,7 +25,7 @@ use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::traits::{EntityExtractor, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
 use crate::rag::chunk::{chunk_text, TextChunk};
@@ -344,11 +344,39 @@ pub struct PreparedIngest {
 pub struct DocumentAssetManager {
     inference: Arc<dyn InferenceProvider>,
     store: Arc<dyn StateStore>,
+    /// Optional local NER model for the T2 entity pass. See
+    /// [`Self::with_entity_extractor`]. `None` keeps the LLM path.
+    entity_extractor: Option<Arc<dyn EntityExtractor>>,
 }
 
 impl DocumentAssetManager {
     pub fn new(inference: Arc<dyn InferenceProvider>, store: Arc<dyn StateStore>) -> Self {
-        Self { inference, store }
+        Self {
+            inference,
+            store,
+            entity_extractor: None,
+        }
+    }
+
+    /// Use a local NER model for the T2 entity pass instead of the LLM.
+    ///
+    /// The window pass asks a 4B generative model to do one job — "list
+    /// the named entities in this text" — which is what an NER model is
+    /// for. On the 301-chunk bench subset that pass was ~50.9k of 77.6k
+    /// total prompt tokens (66%), and token volume is what dominates
+    /// ingest cost on a CPU-only host, where there is no idle batch
+    /// capacity for scheduling tricks to harvest.
+    ///
+    /// Injected as `dyn EntityExtractor` rather than depending on
+    /// `sovereign-gliner` directly: this crate stays free of the ONNX
+    /// dependency, and hosts without the model installed simply don't
+    /// call this. Extraction still degrades to the LLM per-window when
+    /// the extractor returns nothing (see `build_skeleton`), so a
+    /// not-yet-warm `LazyGlinerExtractor` cannot silently empty the
+    /// skeleton.
+    pub fn with_entity_extractor(mut self, extractor: Arc<dyn EntityExtractor>) -> Self {
+        self.entity_extractor = Some(extractor);
+        self
     }
 
     /// Parse + chunk + create the `Pending` asset record. No inference,
@@ -583,6 +611,7 @@ impl DocumentAssetManager {
             let asset_id = asset_id.clone();
             let text_chunks = Arc::clone(&text_chunks);
             let on_progress = Arc::clone(&on_progress);
+            let entity_extractor = self.entity_extractor.clone();
 
             async move {
                 let doc_type = detect_document_type(&inference, &text_chunks).await;
@@ -605,6 +634,7 @@ impl DocumentAssetManager {
                     &text_chunks,
                     &doc_type,
                     &on_progress,
+                    entity_extractor.as_ref(),
                 )
                 .await?;
 
@@ -832,6 +862,7 @@ impl DocumentAssetManager {
             &text_chunks,
             &doc_type,
             &noop_progress,
+            self.entity_extractor.as_ref(),
         )
         .await?;
 
@@ -1700,8 +1731,21 @@ async fn build_skeleton(
     chunks: &[TextChunk],
     doc_type: &DocumentTypeTag,
     on_progress: &Arc<dyn Fn(IngestProgress) + Send + Sync>,
+    entity_extractor: Option<&Arc<dyn EntityExtractor>>,
 ) -> Result<DocumentSkeleton> {
     let chunk_count = chunks.len();
+
+    // Glassbox: which T2 entity path is this ingest taking? A local NER
+    // model (GLiNER) when one is wired, else the per-window LLM pass.
+    // Per-window fallback (empty NER result) is logged at the call site;
+    // this line records the intended path once, up front, so an operator
+    // reading logs can see the −70%-token swap is engaged without
+    // inferring it from the absence of "List the named entities" calls.
+    tracing::info!(
+        chunks = chunk_count,
+        entity_path = if entity_extractor.is_some() { "ner" } else { "llm" },
+        "build_skeleton — T2 entity extraction path"
+    );
 
     // Process chunks in 12-chunk windows (was batches of 4 until
     // 2026-07-24). Profiling on the turbocharge arc showed DECODE
@@ -1729,6 +1773,8 @@ async fn build_skeleton(
     let doc_type_owned = doc_type.clone();
     let chunk_count_for_progress = chunk_count;
 
+    let extractor_arc = entity_extractor.cloned();
+
     let batch_results: Vec<(usize, Option<Vec<SkeletonBatchEntry>>)> = stream::iter(batches)
         .map(|(batch_idx, batch)| {
             let inference = Arc::clone(&inference_arc);
@@ -1737,6 +1783,7 @@ async fn build_skeleton(
             let asset_id = asset_id_owned.clone();
             let doc_type = doc_type_owned.clone();
             let completed = Arc::clone(&completed);
+            let extractor = extractor_arc.clone();
             async move {
                 let batch_start = batch_idx * batch_size;
                 let passage: String = batch
@@ -1744,6 +1791,59 @@ async fn build_skeleton(
                     .map(|c| c.content.as_str())
                     .collect::<Vec<_>>()
                     .join("\n\n---\n\n");
+
+                // ── NER fast path.
+                //
+                // The LLM prompt below asks for exactly one thing: the
+                // named entities present in this window. A local NER
+                // model answers that directly, for zero LLM tokens.
+                //
+                // `extract_entities` is synchronous and CPU-bound (ONNX),
+                // so it goes on the blocking pool — running it inline
+                // would stall the executor driving the other windows.
+                //
+                // An empty result is NOT trusted: `LazyGlinerExtractor`
+                // returns empty until its background load finishes, and a
+                // model that whiffs on a window would silently erase that
+                // window's entities. Empty ⇒ fall through to the LLM, so
+                // the worst case is the previous behaviour.
+                let ner_names: Option<Vec<String>> = match extractor {
+                    Some(g) => {
+                        let text = passage.clone();
+                        match tokio::task::spawn_blocking(move || g.extract_entities(&text)).await {
+                            Ok(names) if !names.is_empty() => Some(names),
+                            Ok(_) => None,
+                            Err(e) => {
+                                tracing::debug!(
+                                    batch_idx,
+                                    error = %e,
+                                    "build_skeleton — NER task failed; falling back to LLM for this window"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    None => None,
+                };
+                if let Some(names) = ner_names {
+                    let entries = attribute_entity_names(names, batch_start, &batch);
+                    let done_now = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                    let chunks_done = (done_now * batch_size).min(chunk_count_for_progress);
+                    on_progress(IngestProgress::BuildingSkeleton {
+                        done: chunks_done,
+                        total: chunk_count_for_progress,
+                    });
+                    let _ = store
+                        .update_asset_state(
+                            &asset_id,
+                            &AssetState::BuildingSkeleton {
+                                chunks_done,
+                                chunks_total: chunk_count_for_progress,
+                            },
+                        )
+                        .await;
+                    return (batch_idx, Some(entries));
+                }
 
                 // Window entity schema with llguidance grammar
                 // enforcement: ONE deduped, comma-separated list of
@@ -2068,64 +2168,113 @@ async fn extract_segments(
         .map(|e| e.name.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    // Chunk the naming into calls of ≤64 segments: keeps each call's
-    // decode bounded (~1.5k tokens) AND covers every segment — the
-    // first cut of this pass clamped one call's budget at 2048 and
-    // silently placeholder-titled everything past segment ~85 on a
+    // Chunk the naming into calls of ≤14 segments, dispatched
+    // concurrently.
+    //
+    // Two separate lessons are baked into this number.
+    //
+    // The 64 ceiling came from a correctness bug: the first cut of this
+    // pass named all segments in ONE call clamped at 2048 output tokens
+    // and silently placeholder-titled everything past segment ~85 on a
     // full book (caught by the 2026-07-24 quality gate).
-    const PASS_B_CALL_SEGMENTS: usize = 64;
-    let mut titles: Vec<(String, SectionFunction)> = Vec::with_capacity(ranges.len());
-    for window in ranges.chunks(PASS_B_CALL_SEGMENTS) {
-        let n = window.len();
-        let base = titles.len();
-        let mut catalog = String::new();
-        for (i, (start, end)) in window.iter().enumerate() {
-            let opening: String = chunks
-                .get(*start)
-                .map(|c| c.content.chars().take(220).collect::<String>().replace('\n', " "))
-                .unwrap_or_default();
-            catalog.push_str(&format!("#{} [chunks {start}..={end}] {opening}\n", base + i));
-        }
-        let prompt = format!(
-            "You are naming {n} segments of a {doc_type} document. Main document \
-             entities: {entity_list}. For EACH segment below write one line: \
-             <index>|<short title in the document's own register>|<function>, where \
-             function is one of Introduces, Develops, Complicates, Resolves, \
-             Transitions, Evidences. Output EXACTLY {n} lines in order, nothing else.\n\n\
-             Segments (index, chunk range, opening snippet):\n{catalog}\nAnswer ({n} lines):",
-            doc_type = doc_type.label(),
-        );
-        let mut start_rhs = String::from("line");
-        for _ in 1..n {
-            start_rhs.push_str(" \"\\n\" line");
-        }
-        let lark_grammar = format!(
-            "start: {start_rhs}\n\
-             line: /[0-9]+/ \"|\" /[^|\\n]{{1,80}}/ \"|\" func\n\
-             func: \"Introduces\"|\"Develops\"|\"Complicates\"|\"Resolves\"|\"Transitions\"|\"Evidences\"\n",
-        );
-        // SLOT_POLICY §3 ExtractDurable: segment naming written to the
-        // durable skeleton.
-        let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
-            .with_output_budget((((n * 24) + 40) as u32).min(2048));
-        request.temperature = Some(0.1);
-        request.lark_grammar = Some(lark_grammar);
-        // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for
-        // P1 neutrality (bundle is None); P5 confirms.
-        request.think_budget = Some(0);
-        let mut call_titles: Vec<(String, SectionFunction)> =
-            match inference.complete(&request).await {
-                Ok(r) => parse_segment_title_lines(&r.text),
-                Err(_) => Vec::new(),
-            };
-        call_titles.truncate(n);
-        // Pad with placeholders so downstream position-matching stays
-        // aligned even if a call under-delivered.
-        while call_titles.len() < n {
-            call_titles.push((String::new(), SectionFunction::Develops));
-        }
-        titles.extend(call_titles);
-    }
+    //
+    // The drop from 64 to 14 came from the same arc's per-call ledger.
+    // Naming is the only *decode*-bound call in the pipeline: 52
+    // segments in one call meant 1288 completion tokens and 32.6s.
+    // Split into four, the calls dispatch together and retire in
+    // lockstep (three of them to the same millisecond) — measured
+    // evidence that this path gets a batched decode — and the block
+    // fell to 21.5s. Note the split does NOT bring the call inside the
+    // FastShort claim: `ExtractDurable` is `LatencyClass::Normal`, so
+    // gate 2 of `pick_slot` (`preferred_speed == Fast`) excludes it
+    // regardless of size. Whatever coalesces these, it isn't that.
+    //
+    // What this costs on a host that serves these serially: each call
+    // repeats the ~500-char instruction preamble, so total prompt grows
+    // ~12% (3660 → 4088 tokens on the bench subset) for the same total
+    // decode. That is the honest downside on a CPU-only box where
+    // nothing batches. It is worth paying anyway because smaller calls
+    // are also the fix for the truncation bug above — a short
+    // grammar-forced output can't run out of budget mid-document.
+    //
+    // Order is preserved: `buffered` yields in input order.
+    const PASS_B_CALL_SEGMENTS: usize = 14;
+    // Matches the FastShort lane's `n_seq_max=8`; more in flight than
+    // that cannot join a batch anywhere in the stack.
+    const PASS_B_CONCURRENCY: usize = 8;
+    let windows: Vec<(usize, Vec<(usize, usize)>)> = ranges
+        .chunks(PASS_B_CALL_SEGMENTS)
+        .enumerate()
+        .map(|(w, window)| (w * PASS_B_CALL_SEGMENTS, window.to_vec()))
+        .collect();
+    let titles: Vec<(String, SectionFunction)> = stream::iter(windows)
+        .map(|(base, window)| {
+            let entity_list = entity_list.clone();
+            let doc_type = doc_type.clone();
+            async move {
+                let n = window.len();
+                let mut catalog = String::new();
+                for (i, (start, end)) in window.iter().enumerate() {
+                    let opening: String = chunks
+                        .get(*start)
+                        .map(|c| {
+                            c.content
+                                .chars()
+                                .take(220)
+                                .collect::<String>()
+                                .replace('\n', " ")
+                        })
+                        .unwrap_or_default();
+                    catalog
+                        .push_str(&format!("#{} [chunks {start}..={end}] {opening}\n", base + i));
+                }
+                let prompt = format!(
+                    "You are naming {n} segments of a {doc_type} document. Main document \
+                     entities: {entity_list}. For EACH segment below write one line: \
+                     <index>|<short title in the document's own register>|<function>, where \
+                     function is one of Introduces, Develops, Complicates, Resolves, \
+                     Transitions, Evidences. Output EXACTLY {n} lines in order, nothing else.\n\n\
+                     Segments (index, chunk range, opening snippet):\n{catalog}\nAnswer ({n} lines):",
+                    doc_type = doc_type.label(),
+                );
+                let mut start_rhs = String::from("line");
+                for _ in 1..n {
+                    start_rhs.push_str(" \"\\n\" line");
+                }
+                let lark_grammar = format!(
+                    "start: {start_rhs}\n\
+                     line: /[0-9]+/ \"|\" /[^|\\n]{{1,80}}/ \"|\" func\n\
+                     func: \"Introduces\"|\"Develops\"|\"Complicates\"|\"Resolves\"|\"Transitions\"|\"Evidences\"\n",
+                );
+                // SLOT_POLICY §3 ExtractDurable: segment naming written to the
+                // durable skeleton.
+                let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+                    .with_output_budget((((n * 24) + 40) as u32).min(2048));
+                request.temperature = Some(0.1);
+                request.lark_grammar = Some(lark_grammar);
+                // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for
+                // P1 neutrality (bundle is None); P5 confirms.
+                request.think_budget = Some(0);
+                let mut call_titles: Vec<(String, SectionFunction)> =
+                    match inference.complete(&request).await {
+                        Ok(r) => parse_segment_title_lines(&r.text),
+                        Err(_) => Vec::new(),
+                    };
+                call_titles.truncate(n);
+                // Pad with placeholders so downstream position-matching stays
+                // aligned even if a call under-delivered.
+                while call_titles.len() < n {
+                    call_titles.push((String::new(), SectionFunction::Develops));
+                }
+                call_titles
+            }
+        })
+        .buffered(PASS_B_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
     let mut segments = Vec::new();
     for (i, (start, end)) in ranges.into_iter().enumerate() {
         let (title, function) = match titles.get(i) {
@@ -2776,6 +2925,15 @@ fn parse_window_skeleton_batch(
     batch_start: usize,
     batch: &[TextChunk],
 ) -> Vec<SkeletonBatchEntry> {
+    attribute_entity_names(parse_entity_name_list(response), batch_start, batch)
+}
+
+/// Split the LLM's one-line, comma-separated name list into names.
+///
+/// Separated from [`attribute_entity_names`] so the attribution half can
+/// be driven by a non-LLM extractor (GLiNER) that already returns names
+/// and never produces a string to parse.
+fn parse_entity_name_list(response: &str) -> Vec<String> {
     let trimmed = response.trim();
     let cleaned = trimmed
         .strip_prefix("Answer:")
@@ -2784,22 +2942,55 @@ fn parse_window_skeleton_batch(
     // Grammar forces a single line, but defend against a
     // grammar-compile fallback emitting several: fold them into one
     // name pool rather than desyncing.
-    let names: Vec<String> = cleaned
+    cleaned
         .lines()
         .flat_map(|l| l.split(','))
         .map(|n| n.trim())
         .filter(|n| !n.is_empty() && n.chars().any(|c| c.is_alphabetic()))
         .map(|n| n.to_string())
-        .collect();
+        .collect()
+}
 
+/// Attribute window-level entity names to individual chunks.
+///
+/// Each name is attributed to every window chunk whose text contains it
+/// (case-insensitive — canonical names are distinctive enough that case
+/// folding trades no precision for robustness to sentence-case drift).
+/// A name no chunk contains verbatim (a paraphrase or epithet) falls
+/// back to the window's first chunk so the entity still exists in the
+/// index at window granularity rather than vanishing.
+///
+/// **Casing is taken from the document, not from the caller.** The name
+/// a producer hands us may be cased arbitrarily — the `EntityExtractor`
+/// contract specifies lower-cased output, and an LLM renders names
+/// however it likes — but these strings end up in the briefing and in
+/// the segment-naming prompt, where "stevie" instead of "Stevie" is a
+/// visible quality loss. When a chunk contains the name we splice the
+/// matched span back out of the original text, so the stored form is
+/// whatever the document actually wrote.
+fn attribute_entity_names(
+    names: Vec<String>,
+    batch_start: usize,
+    batch: &[TextChunk],
+) -> Vec<SkeletonBatchEntry> {
     let lowered_chunks: Vec<String> = batch.iter().map(|c| c.content.to_lowercase()).collect();
     let mut per_chunk: Vec<Vec<(String, EntityKind)>> = vec![Vec::new(); batch.len()];
     for name in names {
         let needle = name.to_lowercase();
         let mut hit = false;
         for (i, chunk_lower) in lowered_chunks.iter().enumerate() {
-            if chunk_lower.contains(&needle) {
-                per_chunk[i].push((name.clone(), EntityKind::Concept));
+            if let Some(at) = chunk_lower.find(&needle) {
+                // `to_lowercase` can change byte length (e.g. 'İ'), so the
+                // lowered offset is only safe to reuse when it maps back
+                // to a char boundary in the original; otherwise keep the
+                // name as given rather than risk a panic or a garbled slice.
+                let cased = batch[i]
+                    .content
+                    .get(at..at + needle.len())
+                    .filter(|s| s.to_lowercase() == needle)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| name.clone());
+                per_chunk[i].push((cased, EntityKind::Concept));
                 hit = true;
             }
         }
@@ -2879,7 +3070,20 @@ async fn extract_action_atoms(
     main_entities: &[RankedEntity],
     entity_index: &std::collections::HashMap<String, EntityAppearances>,
 ) -> Vec<ActionAtom> {
-    let mut out: Vec<ActionAtom> = Vec::new();
+    // ── Build every entity's prompt first, then fan out.
+    //
+    // These six calls used to run in a sequential `for` loop: ~3s each,
+    // ~19s of the T2 tail, all of it on the critical path between
+    // rag_available and multi_hop_ready. They're independent — each
+    // entity's atoms depend only on that entity's sampled chunks — so
+    // the serialization bought nothing. Prompt construction stays here
+    // (it borrows `chunks`/`entity_index`); only the calls fan out.
+    struct AtomCall {
+        entity: String,
+        sample_indices: Vec<usize>,
+        prompt: String,
+    }
+    let mut calls: Vec<AtomCall> = Vec::new();
     // Top-6: covers the load-bearing characters/concepts in a typical
     // narrative; running the full top-30 would blow the budget for
     // marginal lift on peripheral entities.
@@ -2936,23 +3140,48 @@ async fn extract_action_atoms(
             name = ent.name,
         );
 
-        // SLOT_POLICY §3 Housekeep: per-entity action-atom extraction —
-        // advisory enrichment kept on the Fast slot (P1 neutrality).
-        // Housekeep's Some(0) think budget matches this site verbatim.
-        let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
-            // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 768 > 512 forfeits the
-            // batched FastShort claim; the JSON action array needs the room.
-            .with_output_budget(768);
-        request.temperature = Some(0.1);
-        let response = inference.complete(&request).await;
+        calls.push(AtomCall {
+            entity: ent.name.clone(),
+            sample_indices,
+            prompt,
+        });
+    }
 
-        let text = match response {
-            Ok(r) => r.text,
-            Err(e) => {
-                tracing::debug!(entity = %ent.name, error = %e, "extract_action_atoms — LLM call failed; skipping entity");
-                continue;
+    // Fan out. `buffered` yields in input order, so the atom list stays
+    // in main-entity rank order exactly as the sequential loop left it.
+    const ATOM_CONCURRENCY: usize = 6;
+    let responses: Vec<(AtomCall, Option<String>)> = stream::iter(calls)
+        .map(|call| {
+            let inference = Arc::clone(inference);
+            async move {
+                // SLOT_POLICY §3 Housekeep: per-entity action-atom extraction —
+                // advisory enrichment kept on the Fast slot (P1 neutrality).
+                // Housekeep's Some(0) think budget matches this site verbatim.
+                let mut request =
+                    CompletionRequest::for_workload(Workload::Housekeep, call.prompt.clone())
+                        // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 768 > 512 forfeits the
+                        // batched FastShort claim; the JSON action array needs the room.
+                        .with_output_budget(768);
+                request.temperature = Some(0.1);
+                let text = match inference.complete(&request).await {
+                    Ok(r) => Some(r.text),
+                    Err(e) => {
+                        tracing::debug!(entity = %call.entity, error = %e, "extract_action_atoms — LLM call failed; skipping entity");
+                        None
+                    }
+                };
+                (call, text)
             }
-        };
+        })
+        .buffered(ATOM_CONCURRENCY)
+        .collect()
+        .await;
+
+    let mut out: Vec<ActionAtom> = Vec::new();
+    for (call, text) in responses {
+        let Some(text) = text else { continue };
+        let ent_name = call.entity;
+        let sample_indices = call.sample_indices;
 
         // Tolerant JSON parse — the model sometimes wraps the array
         // in ```json fences or appends explanatory prose. Isolate
@@ -2968,7 +3197,7 @@ async fn extract_action_atoms(
             Ok(p) => p,
             Err(e) => {
                 tracing::debug!(
-                    entity = %ent.name,
+                    entity = %ent_name,
                     error = %e,
                     payload = %payload.chars().take(200).collect::<String>(),
                     "extract_action_atoms — parse failed; skipping entity"
@@ -2989,7 +3218,7 @@ async fn extract_action_atoms(
                 continue;
             }
             out.push(ActionAtom {
-                entity: ent.name.clone(),
+                entity: ent_name.clone(),
                 verb: draft.verb.trim().to_lowercase(),
                 object: draft.object.trim().to_string(),
                 chunk_index: draft.chunk_index,
@@ -3215,6 +3444,81 @@ fn parse_route_response(response: &str, original_request: &str) -> Result<Docume
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The property that makes the GLiNER swap safe: the extractor
+    /// contract returns LOWER-CASED names, but what we store must be
+    /// cased the way the document casts it — these strings reach the
+    /// briefing and the segment-naming prompt.
+    #[test]
+    fn attribution_recovers_document_casing_from_lowercased_names() {
+        let batch = [
+            chunk("Mr Verloc walked on. Stevie followed him."),
+            chunk("Later, Chief Inspector Heat considered the case."),
+        ];
+        // Exactly what `EntityExtractor::extract_entities` promises.
+        let names = vec![
+            "mr verloc".to_string(),
+            "stevie".to_string(),
+            "chief inspector heat".to_string(),
+        ];
+
+        let entries = attribute_entity_names(names, 0, &batch);
+        let first: Vec<&str> = entries[0]
+            .entity_names_and_kinds
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert!(first.contains(&"Mr Verloc"), "{first:?}");
+        assert!(first.contains(&"Stevie"), "{first:?}");
+        let second: Vec<&str> = entries[1]
+            .entity_names_and_kinds
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert_eq!(second, vec!["Chief Inspector Heat"], "{second:?}");
+    }
+
+    /// A name no chunk contains verbatim still lands somewhere rather
+    /// than vanishing from the index.
+    #[test]
+    fn attribution_falls_back_to_first_chunk_for_unmatched_names() {
+        let batch = [chunk("The shop was dim."), chunk("Rain fell.")];
+        let entries = attribute_entity_names(vec!["the Professor".to_string()], 7, &batch);
+        assert_eq!(entries[0].chunk_index, 7, "batch_start offset preserved");
+        assert_eq!(entries[0].entity_names_and_kinds.len(), 1);
+        // Unmatched keeps the caller's spelling — there's no document
+        // occurrence to recover casing from.
+        assert_eq!(entries[0].entity_names_and_kinds[0].0, "the Professor");
+        assert!(entries[1].entity_names_and_kinds.is_empty());
+    }
+
+    /// The LLM path must keep behaving exactly as before the split.
+    #[test]
+    fn llm_window_parse_still_attributes_across_chunks() {
+        let batch = [
+            chunk("Winnie said nothing."),
+            chunk("Winnie and Ossipon spoke."),
+        ];
+        let entries = parse_window_skeleton_batch("Winnie, Ossipon", 0, &batch);
+        let names0: Vec<&str> = entries[0]
+            .entity_names_and_kinds
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        let names1: Vec<&str> = entries[1]
+            .entity_names_and_kinds
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert_eq!(names0, vec!["Winnie"]);
+        assert_eq!(names1, vec!["Winnie", "Ossipon"]);
+    }
+
+    #[test]
+    fn entity_name_list_tolerates_answer_prefix_and_blank_items() {
+        let names = parse_entity_name_list("Answer: Stevie, , Mr Verloc,\n Winnie ");
+        assert_eq!(names, vec!["Stevie", "Mr Verloc", "Winnie"]);
+    }
 
     #[test]
     fn parse_route_response_parses_off_topic_with_reason() {
