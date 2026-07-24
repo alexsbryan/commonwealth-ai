@@ -150,12 +150,38 @@ pub async fn corpus_install(
             }),
         ));
     }
-    let spawned =
-        spawn_corpus_install_with_parameters(state, req.corpus_id.clone(), req.parameters).await;
-    Ok(Json(InstallResponse {
-        corpus_id: req.corpus_id,
-        spawned,
-    }))
+    // Map the typed outcome to an HTTP status. A recipe that can't be
+    // resolved or parameters that don't validate are real failures the
+    // caller must see (4xx) — NOT a `spawned:false` masquerading as
+    // success behind a 200. Only "already in flight" is a benign no-op.
+    match spawn_corpus_install_outcome(state, req.corpus_id.clone(), req.parameters).await {
+        InstallOutcome::Spawned => Ok(Json(InstallResponse {
+            corpus_id: req.corpus_id,
+            spawned: true,
+        })),
+        InstallOutcome::AlreadyActive => Ok(Json(InstallResponse {
+            corpus_id: req.corpus_id,
+            spawned: false,
+        })),
+        InstallOutcome::NoEngine => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
+        )),
+        InstallOutcome::RecipeNotFound(reason) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
+                error: format!("cannot install '{}': {reason}", req.corpus_id),
+            }),
+        )),
+        InstallOutcome::InvalidParameters(reason) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: format!("invalid parameters for '{}': {reason}", req.corpus_id),
+            }),
+        )),
+    }
 }
 
 /// GET /internal/corpus/progress — snapshot of the latest progress
@@ -632,31 +658,30 @@ pub async fn spawn_corpus_install(state: AppState, corpus_id: String) -> bool {
     spawn_corpus_install_with_parameters(state, corpus_id, std::collections::BTreeMap::new()).await
 }
 
-/// Like [`spawn_corpus_install`] but also threads recipe parameters
-/// (the values the CLI / desktop prompts the user for, validated
-/// against `[recipe.parameters]`). When `parameters` is empty, this
-/// behaves exactly like the legacy `spawn_corpus_install`.
+/// Like [`spawn_corpus_install`] but threads recipe parameters and
+/// returns the full [`InstallOutcome`] instead of a bool — the HTTP
+/// handler needs to distinguish a failure from a benign no-op. Most
+/// callers want the bool projection [`spawn_corpus_install_with_parameters`].
 ///
-/// When non-empty, the recipe is fetched up front, its parameter
-/// schema validated via [`Recipe::resolve_parameters`], and the
-/// stamped recipe is passed to `engine.ingest` via
-/// [`CorpusSpec::Inline`] so the runtime carries the resolved values
-/// into `http_api` URL/body interpolation. Mismatched / missing
-/// parameters surface as a synchronous failure here, *before* the
-/// background task spawns — so the desktop sees a 4xx response on
-/// the install POST instead of a silent "ingest failed" three
-/// minutes later.
-pub async fn spawn_corpus_install_with_parameters(
+/// The recipe is fetched up front, its parameter schema validated via
+/// [`Recipe::resolve_parameters`], and the stamped recipe passed to
+/// `engine.ingest` via [`CorpusSpec::Inline`] so the runtime carries the
+/// resolved values into `http_api` URL/body interpolation. Mismatched /
+/// missing parameters — and an unresolvable recipe — surface as a
+/// typed failure here, *before* the background task spawns, so the
+/// caller sees a 4xx on the install POST instead of a silent "ingest
+/// failed" three minutes later.
+pub async fn spawn_corpus_install_outcome(
     state: AppState,
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
-) -> bool {
+) -> InstallOutcome {
     let Some(engine) = state.inner.corpus_engine.clone() else {
         tracing::warn!(
             corpus = %corpus_id,
             "spawn_corpus_install: no corpus engine — ignoring"
         );
-        return false;
+        return InstallOutcome::NoEngine;
     };
 
     {
@@ -666,7 +691,7 @@ pub async fn spawn_corpus_install_with_parameters(
                 corpus = %corpus_id,
                 "spawn_corpus_install: already active — not spawning a second task"
             );
-            return false;
+            return InstallOutcome::AlreadyActive;
         }
         active.insert(corpus_id.clone());
     }
@@ -685,7 +710,7 @@ pub async fn spawn_corpus_install_with_parameters(
             // Roll back the active_ingests insert so a subsequent
             // retry isn't blocked.
             state.inner.active_ingests.write().await.remove(&corpus_id);
-            return false;
+            return InstallOutcome::RecipeNotFound(e.to_string());
         }
     };
 
@@ -703,7 +728,7 @@ pub async fn spawn_corpus_install_with_parameters(
                 "spawn_corpus_install: parameter coercion failed"
             );
             state.inner.active_ingests.write().await.remove(&corpus_id);
-            return false;
+            return InstallOutcome::InvalidParameters(e);
         }
     };
     let resolved = match recipe.resolve_parameters(&toml_params) {
@@ -715,7 +740,7 @@ pub async fn spawn_corpus_install_with_parameters(
                 "spawn_corpus_install: parameter validation failed"
             );
             state.inner.active_ingests.write().await.remove(&corpus_id);
-            return false;
+            return InstallOutcome::InvalidParameters(e.to_string());
         }
     };
     let recipe = recipe.with_resolved_parameters(resolved);
@@ -1076,7 +1101,23 @@ pub async fn spawn_corpus_install_with_parameters(
             ),
         }
     });
-    true
+    InstallOutcome::Spawned
+}
+
+/// Bool projection of [`spawn_corpus_install_outcome`]: `true` only when
+/// a new task was spawned, `false` for every no-op or failure. Kept for
+/// the mesh auto-ingest / OICP callers that only need "did we start
+/// work?" and don't map failures to HTTP status codes. The HTTP install
+/// handler uses the outcome variant directly so it can surface 4xx.
+pub async fn spawn_corpus_install_with_parameters(
+    state: AppState,
+    corpus_id: String,
+    parameters: std::collections::BTreeMap<String, serde_json::Value>,
+) -> bool {
+    matches!(
+        spawn_corpus_install_outcome(state, corpus_id, parameters).await,
+        InstallOutcome::Spawned
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1149,6 +1190,30 @@ pub struct InstallResponse {
     /// True when a new task was spawned, false when an ingest for
     /// this corpus was already running on this node.
     pub spawned: bool,
+}
+
+/// The outcome of an install attempt, richer than the `bool` the
+/// mesh/OICP callers consume. It exists so the HTTP handler can tell a
+/// *benign* idempotent no-op (`AlreadyActive`) apart from a *genuine
+/// failure* (`RecipeNotFound` / `InvalidParameters`) — the former is a
+/// 200 with `spawned:false`, the latter a 4xx with a reason. Before this
+/// split, every non-spawn collapsed to `spawned:false` + HTTP 200, so a
+/// mistyped corpus id or a private recipe the daemon can't resolve looked
+/// identical to "already running" and the CLI printed "Install requested"
+/// over a silent failure. Glassbox: the caller now sees why nothing ran.
+pub enum InstallOutcome {
+    /// A new background ingest task was started.
+    Spawned,
+    /// An ingest for this corpus was already in flight — no new task.
+    AlreadyActive,
+    /// No corpus engine is wired on this node.
+    NoEngine,
+    /// The recipe could not be resolved: no local override, no catalog
+    /// entry, and no bundled fallback. Carries the resolver's message.
+    RecipeNotFound(String),
+    /// Supplied parameters failed JSON→TOML coercion or schema
+    /// validation against the recipe's `[recipe.parameters]` block.
+    InvalidParameters(String),
 }
 
 #[derive(Debug, Serialize)]

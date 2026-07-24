@@ -31,6 +31,44 @@ use corpus_engine::extractors::Extractor;
 
 const CORPUS_ID: &str = "alignment";
 
+/// The canonical alignment recipe, embedded at compile time from the
+/// single source of truth (`sovereign-recipes/alignment/recipe.toml`).
+///
+/// `alignment` is deliberately kept OUT of the public recipe catalog
+/// (`sovereign-recipes/registry.toml`) and the bundled-enum
+/// (`corpus_engine::recipe_builtin`): it syncs the author's own
+/// `~/.claude`, so it must not surface in `sovereign corpus list` or be
+/// installable by strangers who happen to run the binary. The trade-off
+/// is that the daemon's `fetch_recipe("alignment")` has no catalog entry
+/// and no bundled fallback to resolve — it errors `No registry entry for
+/// corpus 'alignment'`. We close that gap the way the resolver's tier-1
+/// override path is designed for: stage this recipe into the daemon's
+/// override dir (`~/.sovereign/recipes/alignment/recipe.toml`) before
+/// submitting the install, so `fetch_recipe` resolves it locally without
+/// ever needing a public catalog row. The command that owns the
+/// alignment workflow owns its recipe — no shared-registry surface area.
+const BUNDLED_RECIPE: &str =
+    include_str!("../../../../sovereign-recipes/alignment/recipe.toml");
+
+/// Write the embedded alignment recipe into the daemon's tier-1 recipe
+/// override directory so `fetch_recipe(CORPUS_ID)` resolves it before it
+/// reaches the (deliberately absent) registry entry. Idempotent: rewrites
+/// on every migrate so a recipe.toml edit ships without a manual copy.
+///
+/// Path shape matches the resolver's subdir layout
+/// (`<overrides_dir>/<id>/recipe.toml`, `registry.rs::fetch_recipe` step
+/// 1) — the daemon builds `overrides_dir` as `~/.sovereign/recipes`
+/// (`CorpusEngine::new(recipes_dir=data_dir.join("recipes"))`).
+fn stage_recipe(home: &Path) -> Result<PathBuf, String> {
+    let recipe_dir = home.join(".sovereign").join("recipes").join(CORPUS_ID);
+    std::fs::create_dir_all(&recipe_dir)
+        .map_err(|e| format!("mkdir {}: {e}", recipe_dir.display()))?;
+    let recipe_path = recipe_dir.join("recipe.toml");
+    std::fs::write(&recipe_path, BUNDLED_RECIPE)
+        .map_err(|e| format!("write {}: {e}", recipe_path.display()))?;
+    Ok(recipe_path)
+}
+
 pub async fn run_alignment(args: &[String]) -> i32 {
     if args.is_empty() {
         sovereign_cli_shared::help::print(&HELP);
@@ -145,6 +183,25 @@ async fn cmd_migrate(args: &[String]) -> i32 {
         }
     };
     println!("✓ backup at {}", backup.display());
+
+    // Stage the recipe into the daemon's override dir first. `alignment`
+    // has no public catalog entry by design (see BUNDLED_RECIPE), so the
+    // daemon can only resolve it from this local override — skip this and
+    // the install returns `spawned:false` with `No registry entry for
+    // corpus 'alignment'` in the daemon log.
+    let staged = match stage_recipe(&home) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to stage the alignment recipe: {e}");
+            eprintln!(
+                "Aborting — the daemon cannot resolve the `{CORPUS_ID}` recipe \
+                 without it. Backup at {} is intact.",
+                backup.display()
+            );
+            return 2;
+        }
+    };
+    println!("✓ recipe staged at {}", staged.display());
 
     println!("→ submitting corpus install for `{CORPUS_ID}`");
     let install_code =

@@ -145,12 +145,30 @@ pub(crate) async fn submit_install_request(
     };
     match client.post(url).json(&body).send().await {
         Ok(resp) if resp.status().is_success() => {
-            // The endpoint is fire-and-forget; surface the success
-            // shape so users know the daemon picked it up.
+            // The endpoint is fire-and-forget, but its 200 body carries a
+            // `spawned` flag: true = a new ingest task started, false = an
+            // ingest for this corpus was already in flight (idempotent
+            // no-op). Distinguish them so an already-running corpus doesn't
+            // read as a fresh "Install requested" — the daemon returns 4xx
+            // (handled below) for genuine failures, so a 200 here is never
+            // a silent error, only "started" vs "already going".
             let body_text = resp.text().await.unwrap_or_default();
-            println!("Install requested: {id}");
-            if !body_text.is_empty() {
-                println!("{body_text}");
+            let spawned = serde_json::from_str::<serde_json::Value>(&body_text)
+                .ok()
+                .and_then(|v| v.get("spawned").and_then(|s| s.as_bool()));
+            match spawned {
+                Some(false) => {
+                    println!("Already in progress: {id} (ingest already running — not re-spawned)");
+                }
+                _ => {
+                    // spawned:true, or a body we couldn't parse — treat as
+                    // a fresh request and still show the raw body for
+                    // observability.
+                    println!("Install requested: {id}");
+                    if !body_text.is_empty() {
+                        println!("{body_text}");
+                    }
+                }
             }
             println!("Watch progress: svrn corpus status");
             0
