@@ -1,16 +1,19 @@
 # Session Continuity — the Session Frame, Zero-Friction Boot, and `session distill`
 
-**Status:** Schema v1 DEFINED + first golden frame hand-written (2026-07-23,
-from session `e09c5e3d` — the FactStore/watcher-revival marathon). `sovereign
-session distill` is the build in flight; write-path hooks and boot integration
-are planned. Per `ARCH_PRINCIPLES.md §1.1`: §2 (schema) and §5 (grading) are
-contracts once the golden lands; §3–§4 are proposals until their build logs say
-otherwise.
+**Status:** Schema v1 DEFINED + golden + grader shipped; write paths 2–3 and
+boot integration SHIPPED (2026-07-23). Split experiment PASSED the same day
+(§3a) — **red-SPLIT is the standing protocol**, conditioned on a fresh
+self-reported frame. Per `ARCH_PRINCIPLES.md §1.1`: §2 (schema), §3a (split
+protocol), and §5 (grading) are contracts; the `session_state` upsert tool in
+§3 path 1 remains a proposal (self-report is currently practiced by writing
+`frame.md` directly).
 
 **Owner context:** part of the agent-efficiency ("bionic suit") initiative —
 see `sovereign cache-audit`, `scripts/agent-preflight.py`, and the `facts` MCP
-tool. The measured problem: 10 audited sessions, $8.7k, 190k–379k raw-read
-tokens each, zero code-intel calls; and every session that dies at ~500k–1M
+tool. The measured problem: 10 audited sessions, 190k–379k raw-read
+tokens each, zero code-intel calls (the original $8.7k figure predates the
+`fresh_usage` message.id dedup, `a3e7e8bf` — pre-dedup dollar totals are
+~2.5x inflated; ratios survive); and every session that dies at ~500k–1M
 context takes its task state with it, forcing hand-written wrap-up messages
 (the FactStore session literally booted from one pasted into turn 1).
 
@@ -127,6 +130,37 @@ atlas (`node.default_privacy`; private frames structurally never gossip).
 
 ---
 
+## 3a. Split protocol — STANDING (CONTRACT, 2026-07-23)
+
+The live experiment passed: a successor session (`3fabc9ed`) booted from a
+self-reported frame and worked a real backlog item cold — ramp **3,585 raw +
+2,362 intel tokens, 0 repeated reads** (gate ≤5k/0; cold baseline 10–55k with
+up to 6 repeats), first edit at request 6/38, zero re-reads of docs the frame
+summarized, zero user re-explanation. Quality cost: none measurable — the
+successor's first work stretch found and fixed a real bug in the donor's own
+tooling (`a3e7e8bf`). Counterfactual pricing puts the split habit at ~50% of
+session cost, nearly threshold-insensitive (46.5–51.4% across 100k–200k).
+
+The protocol:
+
+1. **Statusline red `SPLIT` (ctx ≥140k)** → the operator (or the agent, when
+   asked to wrap up) gets a frame written NOW, then forks (`/clear` or new
+   session). Yellow (≥90k) means: write/refresh the frame at the next natural
+   boundary.
+2. **Only self-reported or hand-written frames authorize a split.** The agent
+   holding the state writes 100%-fidelity frames; distilled frames grade at
+   17% recall (§5) and exist to rescue sessions that died uncooperatively —
+   never split *onto* one. If the freshest frame is `provenance: distilled`,
+   refresh it via self-report before forking.
+3. **The successor works from the frame + code-intel** (`symbols`/`callers`/
+   `facts`/`notes`), does not re-read `SYSTEM_OVERVIEW`/specs the frame
+   already summarizes, and self-measures after its first work stretch:
+   `sovereign cache-audit --ramp --session <id>` — gate: ≤5k raw tokens,
+   0 repeated reads. A FAIL is reported with the section of the frame that
+   failed to carry, and feeds §5 iteration.
+
+---
+
 ## 4. `sovereign session distill` (build in flight)
 
 Two stages, deliberately separable:
@@ -187,16 +221,17 @@ the 16k window); that number is the iteration target.
 
 ---
 
-## 6. Boot integration (proposal — the zero-friction payoff)
+## 6. Boot integration (SHIPPED 2026-07-23 — the zero-friction payoff)
 
 The frame is Tier 2 of the boot brief (`sovereign code brief` grown into the
 assembler): Tier 0 = brain health + watcher/index freshness + atlas overlaps
 (~200 tokens, always); Tier 1 = task-relevant notes + conventions + drift
 headlines (~800, conditioned on the prompt); Tier 2 = the session frame
-(conditioned on a token/claim match). Delivered as a SessionStart hook for
-Claude Code and a `briefing` MCP tool for every other harness — one assembler,
-one budget, every consumer. Replaces the read-two-docs-plus-seven-calls
-session-start ritual.
+(the newest frame for this repo, injected automatically). Delivered as the
+`session-boot.sh` SessionStart hook for Claude Code and the `briefing` MCP
+tool for every other harness — one assembler, one budget, every consumer.
+Replaces the read-two-docs-plus-seven-calls session-start ritual; the §3a
+experiment ran over exactly this path (frame injected at boot, no pasting).
 
 ## 7. Open questions
 

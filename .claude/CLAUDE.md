@@ -57,6 +57,24 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 6. `work_in_flight(scope="<task area>", match_mode="file")` — **when the task names a file or symbol**, check whether a peer agent or human on the mesh is already there. A non-empty result means another node is active; surface that to the user before proceeding rather than silently colliding. See the "Coordination — work atlas" section below for grades and what to do on overlap.
 7. `arch_posture()` — **when the task moves boundaries** (new crate deps, splitting/merging modules, touching a hub crate): the architectural headlines (top god-crate, hubs, layer violations, hidden temporal coupling) + whether the persisted report is stale. Refresh with `sovereign code arch-report`; the layer map itself is `quality/ARCH_LAYERS.toml` (ARCH_PRINCIPLES §8.6).
 
+### Session splitting — standing protocol (proven 2026-07-23)
+
+Long sessions pay cache-read ≈ avg_ctx × turns — ~50% of session cost is
+recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
+≥90k, red "SPLIT" ≥140k) and `frame ✓<age>`.
+
+- **As the donor:** when the user asks to wrap up or split (or context is
+  red), write a session frame — schema and section budgets in
+  `sovereign/docs/specs/SESSION_CONTINUITY.md §2` — to
+  `~/.sovereign/sessions/<session-id>/frame.md` with `provenance:
+  self-reported`. You hold the state; your frame is the strong path
+  (auto-distilled frames recall ~17% and never authorize a split).
+- **As the successor:** the boot hook injects the newest frame. Work from it
+  plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
+  specs the frame summarizes. After your first work stretch, self-measure:
+  `sovereign cache-audit --ramp --session <your-id>` — gate ≤5k raw tokens,
+  0 repeated reads.
+
 ### Precision tools — use these instead of reading files
 
 **DO NOT read an entire file to find a type definition, method signature, or field list.** Call `symbols("TypeName")` first. It returns the exact definition with file path and line number in one round-trip. Only fall back to Read when you need the full surrounding context.
