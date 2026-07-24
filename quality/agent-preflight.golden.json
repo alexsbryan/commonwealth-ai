@@ -13,6 +13,14 @@
     "tools": ["project_context", "recent_changes"]
   },
 
+  "continuity": {
+    "_comment": "Session-continuity stack (frames, split protocol, distill guard). Local checks catch binary/hook skew on THIS machine; `peers` are same-mesh daemons verified remotely over read-only HTTP (:9741) — unreachable is WARN, reachable-but-stale is FAIL. Add --peer <host> for ad-hoc checks, --no-peers to skip.",
+    "expected_mcp_tools": ["session_state"],
+    "hook_files": ["session-boot.sh", "inject-notes.sh", "split-enforce.py", "prefer-code-intel.py", "session-frame.sh"],
+    "sessions_dir": "~/.sovereign/sessions",
+    "peers": [{ "host": "100.98.69.28", "name": "LittleMac" }]
+  },
+
   "golden": {
     "_comment": "Round-trips that must return real answers on this repo. Stable, load-bearing names chosen so a miss means the index/store regressed, not that the code changed.",
     "symbols": [{ "name": "ToolRegistry" }],
