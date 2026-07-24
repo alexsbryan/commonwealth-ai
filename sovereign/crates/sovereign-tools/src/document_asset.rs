@@ -33,11 +33,14 @@ use crate::rag::parse::parse_file;
 use crate::raptor_atlas::ChunkInput;
 
 /// Concurrency cap for parallel per-batch LLM calls in the T2 entity
-/// extraction phase. The mesh load balancer sees `buffered(6)` simultaneous
-/// requests and fans them across peers; on single-machine deployments the
-/// Slow slot queues them. 6 was tuned earlier in the RAPTOR work where the
-/// same value showed good throughput without overwhelming a 2-peer mesh.
-const T2_BATCH_CONCURRENCY: usize = 6;
+/// extraction phase. The mesh load balancer sees this many simultaneous
+/// requests and fans them across peers; on single-machine deployments
+/// the skeleton batches are Fast-class (EnrichBulk since 2026-07-24) so
+/// the fan-out lands on the FastShort continuous-batching companion —
+/// 12 keeps its per-sequence KV slices fed without queueing beyond the
+/// slot's n_seq. (Historical: 6, tuned for a 2-peer mesh when the
+/// batches were Normal-class and a single local slot serialized them.)
+const T2_BATCH_CONCURRENCY: usize = 12;
 
 // ─── Self-reference detection ────────────────────────────────
 
@@ -636,11 +639,28 @@ impl DocumentAssetManager {
 
                 // Segments (TextTiling) + overview run concurrently —
                 // both touch all chunks, neither depends on the other.
+                // T1's persisted per-chunk embeddings are fetched and
+                // reused for TextTiling (same model, same texts) — the
+                // fetch is a local store read, the re-embed it replaces
+                // was ~30s of embed-slot time per 300 chunks.
+                let stored_embeddings: Option<Vec<Vec<f32>>> = {
+                    let source_key = format!("asset:{asset_id}");
+                    match store.get_chunks_by_source(&source_key).await {
+                        Ok(mut docs) if docs.len() == text_chunks.len() => {
+                            docs.sort_by_key(|d| d.chunk_index);
+                            let embs: Vec<Vec<f32>> =
+                                docs.into_iter().filter_map(|d| d.embedding).collect();
+                            (embs.len() == text_chunks.len()).then_some(embs)
+                        }
+                        _ => None,
+                    }
+                };
                 let segments_future = extract_segments(
                     &inference,
                     &text_chunks,
                     &skeleton.main_entities,
                     doc_type.clone(),
+                    stored_embeddings,
                 );
                 let overview_future = generate_overview(&inference, &text_chunks, &doc_type);
                 let (segments, overview) = tokio::join!(segments_future, overview_future);
@@ -1683,11 +1703,17 @@ async fn build_skeleton(
 ) -> Result<DocumentSkeleton> {
     let chunk_count = chunks.len();
 
-    // Process chunks in batches of 4 for coherence. Each batch produces
-    // a `Vec<SkeletonBatchEntry>` (defined in the lean parser). After
-    // the parallel stream completes, we merge entries sequentially into
-    // the shared accumulators — merge is cheap (HashMap insertion).
-    let batch_size = 4;
+    // Process chunks in 12-chunk windows (was batches of 4 until
+    // 2026-07-24). Profiling on the turbocharge arc showed DECODE
+    // volume is the enrichment wall on this hardware (batched decode
+    // doesn't amortize on Vulkan/LPDDR5), and per-chunk entity lines
+    // re-emit the same recurring names ~N times per window. The window
+    // schema emits ONE deduped name list per window (~3.5× less
+    // decode, 3× fewer calls) and chunk-level attribution is
+    // recovered DETERMINISTICALLY by scanning each window chunk for
+    // each name (`parse_window_skeleton_batch`) — exact where the
+    // model's per-line alignment was merely grammar-constrained.
+    let batch_size = 12;
     let batches: Vec<(usize, Vec<TextChunk>)> = chunks
         .chunks(batch_size)
         .enumerate()
@@ -1719,37 +1745,41 @@ async fn build_skeleton(
                     .collect::<Vec<_>>()
                     .join("\n\n---\n\n");
 
-                // Lean entity-only schema with llguidance grammar
-                // enforcement (May-21 wire-format landing). Model
-                // emits exactly batch.len() newline-separated lines,
-                // each an optional comma-separated capitalized name
-                // list. Grammar guarantees alignment.
+                // Window entity schema with llguidance grammar
+                // enforcement: ONE deduped, comma-separated list of
+                // canonical names for the whole window. Chunk-level
+                // attribution happens in the parser by scanning each
+                // window chunk for each name — the model only has to
+                // NAME the entities, never to align them.
                 let prompt = format!(
-                    "Extract named entities mentioned in each of the {batch_size} chunks below \
-                     from this {doc_type} document — characters, organizations, places, key \
-                     concepts — using their canonical names as they appear in the text. \
-                     Output EXACTLY {batch_size} lines, one per chunk in order. Each line is a \
-                     comma-separated list of names. Use an empty line for a chunk with no \
-                     notable named entities. No prose, no JSON, no headers, no chunk indices.\n\n\
-                     Chunks (starting at section {batch_start}):\n\n{passage}\n\nAnswer ({batch_size} lines):",
+                    "List the named entities mentioned in the passage below from this \
+                     {doc_type} document — characters, organizations, places, key \
+                     concepts — using their canonical names EXACTLY as they appear in \
+                     the text. Output ONE comma-separated list with each name once. \
+                     No prose, no JSON, no headers.\n\n\
+                     Passage (sections from {batch_start}):\n\n{passage}\n\nAnswer (one line):",
                     doc_type = doc_type.label(),
-                    batch_size = batch.len(),
                 );
-                let mut start_rhs = String::from("line");
-                for _ in 1..batch.len() {
-                    start_rhs.push_str(" \"\\n\" line");
-                }
-                let lark_grammar = format!(
-                    "start: {start_rhs}\n\
+                let lark_grammar = "start: line\n\
                      line: (entity (\",\" \" \"? entity)*)?\n\
-                     entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
-                );
+                     entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n"
+                    .to_string();
 
-                // SLOT_POLICY §3 ExtractDurable: skeleton entity extraction
-                // written to the durable document skeleton; corruption
-                // outlives the session.
+                // SLOT_POLICY §3 EnrichBulk: high-volume, small-output,
+                // grammar-constrained extraction — the Fast-class bundle
+                // whose 512-token cap this fits with 4× headroom.
+                // Changed from ExtractDurable 2026-07-24 (enrichment
+                // turbocharge arc): Normal-class routing serialized all
+                // ~250 batches through the single primary slot, making
+                // `buffered(N)` fan-out a no-op locally; Fast-class
+                // routing engages the FastShort continuous-batching
+                // companion under fan-out, which is REAL concurrency.
+                // Durability is protected by the llguidance grammar
+                // (shape cannot desync) + the 4B-parity result from the
+                // 2026-07-23 enrichment-model ladder (skeleton quality
+                // is not model-bound above 4B).
                 let mut request =
-                    CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+                    CompletionRequest::for_workload(Workload::EnrichBulk, prompt)
                         .with_output_budget(120);
                 request.temperature = Some(0.1);
                 // Grammar constraint preserved verbatim (see lark_grammar above).
@@ -1760,7 +1790,7 @@ async fn build_skeleton(
                 let response = inference.complete(&request).await;
                 let parsed = response
                     .ok()
-                    .map(|resp| parse_lean_skeleton_batch(&resp.text, batch_start, batch.len()));
+                    .map(|resp| parse_window_skeleton_batch(&resp.text, batch_start, &batch));
 
                 // Per-batch progress tick. Atomic counter is the only
                 // way to give the UI monotonic progress when batches
@@ -1943,6 +1973,7 @@ async fn extract_segments(
     chunks: &[TextChunk],
     main_entities: &[RankedEntity],
     doc_type: DocumentTypeTag,
+    stored_embeddings: Option<Vec<Vec<f32>>>,
 ) -> Vec<DocumentSegment> {
     if chunks.len() < 2 {
         return Vec::new();
@@ -1966,17 +1997,26 @@ async fn extract_segments(
     // store. The per-document-type cue is gone because the
     // similarity signal is doc-type-agnostic; doc-type-aware
     // naming still happens in Pass B.
-    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-    let embeddings = match inference.embed_batch(&texts).await {
-        Ok(e) if e.len() == chunks.len() => e,
+    // Reuse T1's stored embeddings when the caller has them (they are
+    // the SAME model + same chunk texts — re-embedding was pure waste,
+    // ~30s per 300-chunk document, caught by the 2026-07-24 turbocharge
+    // profile). Fall back to a fresh embed_batch when absent.
+    let embeddings = match stored_embeddings {
+        Some(e) if e.len() == chunks.len() => e,
         _ => {
-            // Embedding failure or count mismatch — fall back to one
-            // segment per chunk so the rest of the pipeline still
-            // makes progress.
-            tracing::warn!(
-                "extract_segments — embed_batch failed or returned wrong count; treating doc as one segment per chunk"
-            );
-            vec![]
+            let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+            match inference.embed_batch(&texts).await {
+                Ok(e) if e.len() == chunks.len() => e,
+                _ => {
+                    // Embedding failure or count mismatch — fall back to one
+                    // segment per chunk so the rest of the pipeline still
+                    // makes progress.
+                    tracing::warn!(
+                        "extract_segments — embed_batch failed or returned wrong count; treating doc as one segment per chunk"
+                    );
+                    vec![]
+                }
+            }
         }
     };
     let breaks: Vec<bool> = if embeddings.is_empty() {
@@ -2010,64 +2050,89 @@ async fn extract_segments(
         return Vec::new();
     }
 
-    // ── Pass B — name each segment ─────────────────────────
-    let mut segments = Vec::new();
+    // ── Pass B — name ALL segments in one batched call ─────
+    //
+    // (2026-07-24 turbocharge arc.) The prior per-segment loop made
+    // ~25-30 sequential ExtractDurable calls whose decode (~3k
+    // tokens of title+summary+key_entities JSON) was the measured
+    // wall of the T3 "silent block" (135s of a 285s subset build).
+    // The briefing's scene map consumes ONLY `title` (+ chunk
+    // range), so the batched schema emits `index|title|function`
+    // lines — one call, ~15 tokens per segment, grammar-enforced
+    // line count so alignment can't desync. `summary`/`key_entities`
+    // are left empty (never read on the retrieval path; segments
+    // carry structure, not content).
     let entity_list = main_entities
         .iter()
         .take(8)
         .map(|e| e.name.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    for (start, end) in ranges {
-        // Compose segment body — clip each chunk to keep prompt
-        // bounded for very long segments.
-        let mut body = String::new();
-        for j in start..=end {
-            if let Some(c) = chunks.get(j) {
-                let snippet: String = c.content.chars().take(400).collect();
-                body.push_str(&format!("[chunk {j}] {snippet}\n\n"));
-            }
-            // Cap body size at ~6 chunks worth to keep prefill
-            // bounded; longer segments still get title+summary
-            // but from a clipped view (acceptable for naming).
-            if body.len() > 2400 {
-                break;
-            }
+    // Chunk the naming into calls of ≤64 segments: keeps each call's
+    // decode bounded (~1.5k tokens) AND covers every segment — the
+    // first cut of this pass clamped one call's budget at 2048 and
+    // silently placeholder-titled everything past segment ~85 on a
+    // full book (caught by the 2026-07-24 quality gate).
+    const PASS_B_CALL_SEGMENTS: usize = 64;
+    let mut titles: Vec<(String, SectionFunction)> = Vec::with_capacity(ranges.len());
+    for window in ranges.chunks(PASS_B_CALL_SEGMENTS) {
+        let n = window.len();
+        let base = titles.len();
+        let mut catalog = String::new();
+        for (i, (start, end)) in window.iter().enumerate() {
+            let opening: String = chunks
+                .get(*start)
+                .map(|c| c.content.chars().take(220).collect::<String>().replace('\n', " "))
+                .unwrap_or_default();
+            catalog.push_str(&format!("#{} [chunks {start}..={end}] {opening}\n", base + i));
         }
         let prompt = format!(
-            "You are naming a segment of a {doc_type} document. The segment spans \
-             chunks {start}..={end}. Main document entities (subset may appear here): \
-             {entity_list}. Respond with a JSON object only — no prose:\n\
-             {{\"title\":\"<short, in document's own register>\", \
-             \"summary\":\"<1-2 sentences, neutral>\", \
-             \"function\":\"Introduces|Develops|Complicates|Resolves|Transitions|Evidences\", \
-             \"key_entities\":[\"name1\",\"name2\"]}}\n\n\
-             Segment content:\n{body}\nJSON:",
+            "You are naming {n} segments of a {doc_type} document. Main document \
+             entities: {entity_list}. For EACH segment below write one line: \
+             <index>|<short title in the document's own register>|<function>, where \
+             function is one of Introduces, Develops, Complicates, Resolves, \
+             Transitions, Evidences. Output EXACTLY {n} lines in order, nothing else.\n\n\
+             Segments (index, chunk range, opening snippet):\n{catalog}\nAnswer ({n} lines):",
             doc_type = doc_type.label(),
         );
-        // SLOT_POLICY §3 ExtractDurable: segment naming (title/summary/
-        // function/entities) written to the durable skeleton.
+        let mut start_rhs = String::from("line");
+        for _ in 1..n {
+            start_rhs.push_str(" \"\\n\" line");
+        }
+        let lark_grammar = format!(
+            "start: {start_rhs}\n\
+             line: /[0-9]+/ \"|\" /[^|\\n]{{1,80}}/ \"|\" func\n\
+             func: \"Introduces\"|\"Develops\"|\"Complicates\"|\"Resolves\"|\"Transitions\"|\"Evidences\"\n",
+        );
+        // SLOT_POLICY §3 ExtractDurable: segment naming written to the
+        // durable skeleton.
         let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
-            .with_output_budget(180);
+            .with_output_budget((((n * 24) + 40) as u32).min(2048));
         request.temperature = Some(0.1);
+        request.lark_grammar = Some(lark_grammar);
         // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for
         // P1 neutrality (bundle is None); P5 confirms.
         request.think_budget = Some(0);
-        let resp = inference.complete(&request).await;
-        let (title, summary, function, key_entities) = match resp {
-            Ok(r) => parse_segment_naming(&r.text).unwrap_or_else(|| {
-                (
-                    format!("Segment chunks {start}..={end}"),
-                    String::new(),
-                    SectionFunction::Develops,
-                    Vec::new(),
-                )
-            }),
-            Err(_) => (
+        let mut call_titles: Vec<(String, SectionFunction)> =
+            match inference.complete(&request).await {
+                Ok(r) => parse_segment_title_lines(&r.text),
+                Err(_) => Vec::new(),
+            };
+        call_titles.truncate(n);
+        // Pad with placeholders so downstream position-matching stays
+        // aligned even if a call under-delivered.
+        while call_titles.len() < n {
+            call_titles.push((String::new(), SectionFunction::Develops));
+        }
+        titles.extend(call_titles);
+    }
+    let mut segments = Vec::new();
+    for (i, (start, end)) in ranges.into_iter().enumerate() {
+        let (title, function) = match titles.get(i) {
+            Some((t, f)) if !t.is_empty() => (t.clone(), f.clone()),
+            _ => (
                 format!("Segment chunks {start}..={end}"),
-                String::new(),
                 SectionFunction::Develops,
-                Vec::new(),
             ),
         };
         segments.push(DocumentSegment {
@@ -2075,13 +2140,39 @@ async fn extract_segments(
             chunk_start: start,
             chunk_end: end,
             title,
-            summary,
-            key_entities,
+            summary: String::new(),
+            key_entities: Vec::new(),
             function,
         });
     }
 
     segments
+}
+
+/// Parse the batched Pass-B `index|title|function` lines. Position in
+/// the output is authoritative (the grammar forces one line per
+/// segment, in order); the leading index is advisory and ignored.
+fn parse_segment_title_lines(text: &str) -> Vec<(String, SectionFunction)> {
+    text.trim()
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '|');
+            let _idx = parts.next()?;
+            let title = parts.next()?.trim();
+            if title.is_empty() {
+                return None;
+            }
+            let function = match parts.next().map(str::trim).unwrap_or("Develops") {
+                "Introduces" => SectionFunction::Introduces,
+                "Complicates" => SectionFunction::Complicates,
+                "Resolves" => SectionFunction::Resolves,
+                "Transitions" => SectionFunction::Transitions,
+                "Evidences" => SectionFunction::Evidences,
+                _ => SectionFunction::Develops,
+            };
+            Some((title.to_string(), function))
+        })
+        .collect()
 }
 
 /// Build the RAPTOR atlas + motif index for an asset and persist them.
@@ -2146,6 +2237,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
 
     // RAPTOR tree — the long sub-phase. Errors propagate so callers
     // can transition state to Failed.
+    let t_tree = std::time::Instant::now();
     let nodes = crate::raptor_atlas::build_raptor_atlas_with_checkpoint(
         inference,
         chunks,
@@ -2157,9 +2249,11 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     )
     .await
     .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
+    let tree_s = t_tree.elapsed().as_secs_f32();
 
     // Motif index — best-effort. Convert ChunkInput → TextChunk for
     // the existing motif extractor.
+    let t_motifs = std::time::Instant::now();
     let text_chunks: Vec<TextChunk> = chunks
         .iter()
         .map(|c| TextChunk {
@@ -2171,6 +2265,15 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     // rare-but-distinctive scene markers reach the LLM classifier.
     let candidates = extract_motif_candidates(&text_chunks, 200);
     let motifs = classify_motifs(inference, candidates, doc_type).await;
+    // [t3-profile] turbocharge-arc phase split (2026-07-24) — stderr on
+    // the driving process; promote to allowlisted tracing spans when the
+    // arc lands.
+    eprintln!(
+        "      [t3-profile] raptor_tree={tree_s:.1}s motifs={:.1}s (nodes={}, motif_candidates→{})",
+        t_motifs.elapsed().as_secs_f32(),
+        nodes.len(),
+        motifs.len(),
+    );
 
     Ok((nodes, motifs))
 }
@@ -2656,6 +2759,65 @@ fn parse_lean_skeleton_batch(
         });
     }
     entries
+}
+
+/// Parse the WINDOW entity schema (2026-07-24): one comma-separated,
+/// deduped list of canonical names for a 12-chunk window. Chunk-level
+/// attribution is recovered here, deterministically: each name is
+/// attributed to every window chunk whose text contains it
+/// (case-insensitive — canonical names are distinctive enough that
+/// case folding trades no precision for robustness to sentence-case
+/// drift). A name the model extracted but no chunk contains verbatim
+/// (paraphrase, e.g. an epithet) falls back to the window's first
+/// chunk so the entity still exists in the index at window
+/// granularity rather than vanishing.
+fn parse_window_skeleton_batch(
+    response: &str,
+    batch_start: usize,
+    batch: &[TextChunk],
+) -> Vec<SkeletonBatchEntry> {
+    let trimmed = response.trim();
+    let cleaned = trimmed
+        .strip_prefix("Answer:")
+        .map(|s| s.trim())
+        .unwrap_or(trimmed);
+    // Grammar forces a single line, but defend against a
+    // grammar-compile fallback emitting several: fold them into one
+    // name pool rather than desyncing.
+    let names: Vec<String> = cleaned
+        .lines()
+        .flat_map(|l| l.split(','))
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty() && n.chars().any(|c| c.is_alphabetic()))
+        .map(|n| n.to_string())
+        .collect();
+
+    let lowered_chunks: Vec<String> = batch.iter().map(|c| c.content.to_lowercase()).collect();
+    let mut per_chunk: Vec<Vec<(String, EntityKind)>> = vec![Vec::new(); batch.len()];
+    for name in names {
+        let needle = name.to_lowercase();
+        let mut hit = false;
+        for (i, chunk_lower) in lowered_chunks.iter().enumerate() {
+            if chunk_lower.contains(&needle) {
+                per_chunk[i].push((name.clone(), EntityKind::Concept));
+                hit = true;
+            }
+        }
+        if !hit && !per_chunk.is_empty() {
+            per_chunk[0].push((name, EntityKind::Concept));
+        }
+    }
+
+    per_chunk
+        .into_iter()
+        .enumerate()
+        .map(|(i, entity_names_and_kinds)| SkeletonBatchEntry {
+            chunk_index: batch_start + i,
+            function: SectionFunction::Develops,
+            entity_names_and_kinds,
+            moment_description: None,
+        })
+        .collect()
 }
 
 /// Parse the Pass-B segment-naming JSON response. Returns None for

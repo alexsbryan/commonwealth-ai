@@ -149,17 +149,32 @@ impl RemoteApiProvider {
             "content": &request.prompt,
         }));
 
-        // Pin the OpenAI `model` field only when the caller asked
-        // for a specific model. The runtime sets
-        // `request.model_id = None` for slot-routed calls (router
-        // classifier, synthesis, etc.) to let the daemon's OICP
-        // picker decide. Hardcoding `self.model_id` here would defeat
-        // that — `embedded::select_slot_for_request` matches the
-        // model field against fast/primary slot file stems and routes
-        // by name, bypassing OICP. With None we send an empty model
-        // and the picker uses the OICP envelope (latency_class)
-        // we attached below.
-        let model_field = request.model_id.as_deref().unwrap_or("");
+        // Pin the OpenAI `model` field when the caller asked for a
+        // specific model — and, since 2026-07-23, ALSO for slot-routed
+        // Medium/Slow requests, pinned to this provider's resolved
+        // chat model. The previous behaviour (empty model + auto
+        // latency envelope, "the daemon's local pick maps Normal and
+        // Extended to the same primary slot") was wrong in practice:
+        // the daemon's Priority-1 OICP routing claim-scores EVERY
+        // loaded model against the envelope, its scheduler-side claims
+        // are synthesized with a hardcoded 32k context (feasibility
+        // gates never bind), and capability-profile affinities tie
+        // across model sizes — so Normal-class traffic was routed by
+        // plan-iteration order and consistently served by the FAST 4B
+        // slot while callers believed they were on the primary
+        // (observed 2026-07-23: all 496 enrichment calls of a
+        // book-report run attributed to Qwen3.5-4B).
+        //
+        // Fast requests keep the empty-model + envelope form: a
+        // fast-class pick is the desired outcome there, and the
+        // FastShort overflow lane still engages daemon-side.
+        let model_field = match request.model_id.as_deref() {
+            Some(mid) => mid,
+            None => match request.preferred_speed {
+                Speed::Fast => "",
+                Speed::Medium | Speed::Slow => self.model_id.as_str(),
+            },
+        };
         let mut body = serde_json::json!({
             "model": model_field,
             "messages": messages,
@@ -187,13 +202,13 @@ impl RemoteApiProvider {
         // local_inference rather than rejecting it.
         let oicp_val = if let Some(ref oicp) = request.oicp {
             serde_json::to_value(oicp).ok()
-        } else {
+        } else if model_field.is_empty() {
             // Canonical Speed→LatencyClass map (SLOT_POLICY §8). Slow
-            // derives Normal, not Extended (rule 4.4). No routing effect
-            // on this path: the auto-derived envelope carries no privacy
-            // (effective LocalOnly, never scored against peers), and the
-            // daemon's local pick maps Normal and Extended to the same
-            // primary slot.
+            // derives Normal, not Extended (rule 4.4). Attached ONLY
+            // when no model is pinned above: the daemon's Priority-1
+            // OICP routing treats any envelope as an explicit routing
+            // opinion and would override the pinned model name — the
+            // 2026-07-23 fast-slot hijack described at `model_field`.
             let class = sovereign_contracts::slot_policy::speed_to_latency(request.preferred_speed);
             let mut req =
                 sovereign_contracts::oicp::InferenceRequirements::new().with_latency_class(class);
@@ -201,6 +216,8 @@ impl RemoteApiProvider {
                 req = req.with_max_output_tokens(n as u32);
             }
             serde_json::to_value(&req).ok()
+        } else {
+            None
         };
         if let Some(v) = oicp_val {
             body["oicp"] = v;
@@ -1008,13 +1025,24 @@ mod tests {
     }
 
     #[test]
-    fn build_request_default_model_id_is_empty_for_oicp_slot_routing() {
+    fn build_request_slow_pins_provider_model_fast_stays_slot_routed() {
         let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
-        // CompletionRequest::new defaults model_id = None — the wire
-        // `model` field is empty so the daemon picks via OICP envelope.
+
+        // Default (Slow) with model_id = None: pinned to the provider's
+        // resolved chat model, and NO auto OICP envelope — the daemon's
+        // Priority-1 envelope routing would override the pin (the
+        // 2026-07-23 fast-slot hijack; see `build_request` docs).
         let request = CompletionRequest::new("Hello");
         let body = provider.build_request(&request);
+        assert_eq!(body["model"], "test-model");
+        assert!(body.get("oicp").is_none());
+
+        // Fast with model_id = None keeps the empty model + envelope
+        // form so the daemon routes it to a fast-class slot.
+        let fast = CompletionRequest::new("Hello").with_speed(Speed::Fast);
+        let body = provider.build_request(&fast);
         assert_eq!(body["model"], "");
+        assert_eq!(body["oicp"]["latency_class"], "fast");
     }
 
     #[test]

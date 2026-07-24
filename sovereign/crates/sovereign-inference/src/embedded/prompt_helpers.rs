@@ -172,6 +172,25 @@ pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
     context_size.next_multiple_of(256)
 }
 
+/// Micro-batch size (`n_ubatch`) for chat slots — the kernel-tiling
+/// width that governs PREFILL throughput. Default 512 (llama.cpp's
+/// own default; conservative on VRAM-tight deployments — the compute
+/// buffer scales with it). `SOVEREIGN_N_UBATCH` overrides, clamped to
+/// [128, 4096].
+///
+/// Why it exists (2026-07-24, enrichment turbocharge arc): bulk
+/// enrichment prefills ~114k tokens per 320-chunk document slice and
+/// the measured skeleton batches were prefill-bound at ~700-1000
+/// tok/s with ubatch=512 on Strix Halo Vulkan — larger micro-batches
+/// lift exactly this. FastShort already ran 2048 for the same reason.
+pub(crate) fn chat_slot_n_ubatch() -> u32 {
+    std::env::var("SOVEREIGN_N_UBATCH")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .map(|n| n.clamp(128, 4096))
+        .unwrap_or(512)
+}
+
 /// BOS policy for prompt tokenization. Raw-shaped requests
 /// (`PromptShape::Raw` — the FIM path) tokenize with `AddBos::Never`:
 /// Qwen-Coder declares `add_bos=false` (its BPE config adds no BOS),

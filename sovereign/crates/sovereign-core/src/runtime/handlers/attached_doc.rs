@@ -365,6 +365,34 @@ impl Runtime {
                 continue;
             }
 
+            // ── Malformed tool call: retry, never surface ────────
+            //
+            // A response containing `<tool_call>` that didn't parse
+            // (invalid JSON — unquoted values, missing fields) is an
+            // attempted SEARCH, not an answer. Surfacing it verbatim
+            // was observed on the 2026-07-23 bench: a raw 139-char
+            // `<tool_call>` fragment shipped as the final answer and
+            // scored 0. Push a corrective gate and let the model
+            // retry; at the cap, the strip in the final path below
+            // keeps scaffolding out of the user-visible text.
+            if response_text.contains("<tool_call>") && iterations < MAX_ITERATIONS {
+                tracing::warn!(
+                    iterations,
+                    "attached_doc: malformed <tool_call> in response — forcing a retry"
+                );
+                conversation_segments.push(AttachedDocSegment::Gate {
+                    thinking: response_text.trim().to_string(),
+                    gate_text:
+                        "Your last tool call was malformed and was NOT executed. Emit exactly one \
+                         well-formed call — <tool_call>{\"tool\":\"<id>\",\"query\":\"<search terms>\"}</tool_call> — \
+                         with valid JSON (double-quoted strings, both fields present), or give \
+                         your final answer without any <tool_call> markup."
+                            .to_string(),
+                });
+                iterations += 1;
+                continue;
+            }
+
             // ── No tool call: this is the model's final answer ──
             //
             // Two structural gates run here. Each addresses a different
@@ -444,9 +472,12 @@ impl Runtime {
                 continue;
             }
 
-            // Grounding gate first (may rewrite the answer), quote
+            // Scaffolding strip (cap-hit answers can still carry a
+            // stray marker the retry gate above no longer catches),
+            // then grounding gate (may rewrite the answer), then quote
             // verification on the released text — same order as the
             // streaming KQ path.
+            let response_text = strip_dangling_tool_calls(&response_text);
             let (gated_text, grounding_gate_meta, gate_claims) = self
                 .gate_attached_doc_answer(
                     conversation_id,
@@ -493,7 +524,7 @@ impl Runtime {
         let final_request =
             self.synthesis_request(final_conversation, self.build_oicp(&Intent::ComplexTask));
         let final_completion = self.inference.complete(&final_request).await?;
-        let mut final_text = final_completion.text.trim().to_string();
+        let mut final_text = strip_dangling_tool_calls(final_completion.text.trim());
         // Last-resort honesty gate. If the iteration cap was hit
         // without a single successful retrieval, the model is about
         // to produce an answer drawn entirely from pretraining

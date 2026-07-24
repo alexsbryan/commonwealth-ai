@@ -1027,7 +1027,7 @@ impl ModelSlot {
                 // so memory pressure is unchanged — only the Rust-side assertion
                 // limit moves.
                 .with_n_batch(ctx_n_batch(context_size))
-                .with_n_ubatch(512);
+                .with_n_ubatch(chat_slot_n_ubatch());
             if is_mtp_model {
                 // Only the target context type stays Default here; the
                 // draft context flips to Mtp below. `n_rs_seq` is what
@@ -1142,7 +1142,7 @@ impl ModelSlot {
             // Cover the padded n_ctx — see ctx_n_batch (a prompt in the
             // n_ctx padding gap otherwise SIGABRTs the daemon in decode).
             n_batch: ctx_n_batch(context_size),
-            n_ubatch: 512,
+            n_ubatch: chat_slot_n_ubatch(),
             n_rs_seq: if is_mtp_model {
                 Some(mtp_n_rs_seq)
             } else {
@@ -1156,7 +1156,7 @@ impl ModelSlot {
                 .with_ctx_type(LlamaContextType::Mtp)
                 .with_n_rs_seq(mtp_n_rs_seq)
                 .with_n_batch(ctx_n_batch(context_size))
-                .with_n_ubatch(512)
+                .with_n_ubatch(chat_slot_n_ubatch())
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(used_gpu);

@@ -58,10 +58,18 @@ pub struct VerificationResult {
 /// in addition to `source_chunks` so a verified verbatim span that
 /// happens to span a chunk boundary still passes.
 ///
-/// Normalisation: both the quote and the source are whitespace-folded
-/// (runs of whitespace collapsed to a single space) before substring
-/// comparison. This handles markdown line breaks vs source line wraps
-/// without false-flagging legitimate quotes.
+/// Normalisation: both the quote and the source are folded before
+/// substring comparison — whitespace runs collapse to a single space,
+/// typographic characters fold to ASCII (curly quotes/apostrophes,
+/// em/en dashes, `…`), and markdown emphasis markers (`*`, `` ` ``,
+/// `_`) are stripped. This handles markdown line breaks vs source
+/// line wraps, models quoting `’`-apostrophe source text with `'`,
+/// bold-face inside quotes, and Gutenberg `_italics_` markers —
+/// each observed as a false demotion on the 2026-07-23 eye test.
+/// Leading/trailing ellipses on the quote are trimmed (edge elision
+/// is honest quoting); interior ellipses still fail verification —
+/// the composite-quote policy is unchanged, because a spliced quote
+/// is non-contiguous in the source under any normalisation.
 ///
 /// Quote detection: handles straight double quotes (`"..."`) and
 /// curly/smart double quotes (`"..."`). Single-quote spans are not
@@ -80,7 +88,7 @@ pub fn verify_quotes(
     let normalised_sources: Vec<String> = source_chunks
         .iter()
         .chain(extra_verbatim_spans.iter())
-        .map(|s| normalise_whitespace(s))
+        .map(|s| normalise_for_match(s))
         .collect();
 
     let mut out = String::with_capacity(answer.len());
@@ -98,10 +106,11 @@ pub fn verify_quotes(
             if let Some(close) = find_double_quote_close(&chars, i + 1) {
                 let inner: String = chars[i + 1..close].iter().collect();
                 if inner.chars().count() >= min_chars {
-                    let normalised_quote = normalise_whitespace(&inner);
-                    let verified = normalised_sources
-                        .iter()
-                        .any(|src| src.contains(&normalised_quote));
+                    let normalised_quote = trim_edge_ellipses(&normalise_for_match(&inner));
+                    let verified = !normalised_quote.is_empty()
+                        && normalised_sources
+                            .iter()
+                            .any(|src| src.contains(&normalised_quote));
                     if verified {
                         // Keep as-is: re-emit `"inner"`.
                         out.push(c);
@@ -166,24 +175,63 @@ pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> Verificat
     verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
 }
 
-/// Collapse runs of whitespace to a single space. Both quotes and
-/// sources are run through this before substring comparison so line
-/// breaks in markdown vs the source don't cause false negatives.
-fn normalise_whitespace(s: &str) -> String {
+/// Fold text for substring comparison. Applied symmetrically to
+/// quotes and sources:
+/// - whitespace runs collapse to a single space;
+/// - typographic characters fold to ASCII: `‘ ’ ʼ` → `'`, `“ ”` → `"`,
+///   `– —` → `-`, `…` → `...` — models routinely restyle these when
+///   quoting, and Gutenberg sources use the typographic forms;
+/// - markdown emphasis markers `*`, `` ` ``, `_` are dropped: models
+///   bold spans inside quotes, and Gutenberg renders italics as
+///   `_underscores_`. Dropping them on BOTH sides keeps the
+///   comparison symmetric, so a source's literal `_` can still match
+///   a quote that omitted it.
+///
+/// Deliberately NOT folded: letter case (a case-mismatched "quote" is
+/// not verbatim) and interior punctuation (a spliced composite must
+/// keep failing).
+fn normalise_for_match(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut prev_was_space = false;
     for c in s.chars() {
-        if c.is_whitespace() {
-            if !prev_was_space {
-                out.push(' ');
-                prev_was_space = true;
+        let mapped: Option<char> = match c {
+            '\u{2018}' | '\u{2019}' | '\u{02BC}' => Some('\''),
+            '\u{201C}' | '\u{201D}' => Some('"'),
+            '\u{2013}' | '\u{2014}' => Some('-'),
+            '*' | '`' | '_' => None,
+            '\u{2026}' => {
+                out.push_str("...");
+                prev_was_space = false;
+                continue;
             }
-        } else {
-            out.push(c);
-            prev_was_space = false;
+            c => Some(c),
+        };
+        match mapped {
+            Some(c) if c.is_whitespace() => {
+                if !prev_was_space {
+                    out.push(' ');
+                    prev_was_space = true;
+                }
+            }
+            Some(c) => {
+                out.push(c);
+                prev_was_space = false;
+            }
+            None => {}
         }
     }
     out.trim().to_string()
+}
+
+/// Trim leading/trailing ellipsis runs (plus surrounding whitespace)
+/// from a normalised quote. `"...the spectre took its crawl..."` is
+/// honest edge-elision, not a composite — the elided part is OUTSIDE
+/// the quoted span. Interior ellipses are untouched, so spliced
+/// composites keep failing verification.
+fn trim_edge_ellipses(s: &str) -> String {
+    s.trim_matches(|c: char| c == '.' || c.is_whitespace())
+        .trim()
+        .to_string()
 }
 
 /// `true` if `c` is a double-quote character that opens a span we
@@ -345,12 +393,66 @@ mod tests {
     }
 
     #[test]
-    fn normalise_whitespace_collapses_runs() {
-        assert_eq!(normalise_whitespace("a  b\t\nc"), "a b c");
+    fn normalise_for_match_folds() {
+        assert_eq!(normalise_for_match("a  b\t\nc"), "a b c");
         assert_eq!(
-            normalise_whitespace("  leading and trailing  "),
+            normalise_for_match("  leading and trailing  "),
             "leading and trailing"
         );
-        assert_eq!(normalise_whitespace(""), "");
+        assert_eq!(normalise_for_match(""), "");
+        assert_eq!(
+            normalise_for_match("Mrs Verloc\u{2019}s \u{201C}gaze\u{201D} \u{2014} steady"),
+            "Mrs Verloc's \"gaze\" - steady"
+        );
+        assert_eq!(normalise_for_match("**bold** and _italic_"), "bold and italic");
+        assert_eq!(normalise_for_match("wait\u{2026} what"), "wait... what");
+    }
+
+    #[test]
+    fn curly_apostrophe_in_source_matches_straight_in_quote() {
+        // Gutenberg text uses U+2019; models quote with '. Observed
+        // false demotion class #1 on the 2026-07-23 eye test.
+        let source =
+            "Winnie\u{2019}s philosophy consisted in not taking notice of the inside of facts."
+                .to_string();
+        let answer = r#"The narrator notes that "Winnie's philosophy consisted in not taking notice of the inside of facts.""#;
+        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r.demoted_count, 0);
+        assert_eq!(r.verified_count, 1);
+    }
+
+    #[test]
+    fn markdown_bold_inside_quote_matches_plain_source() {
+        let source =
+            "where that spectre took its constitutional crawl every fine morning.".to_string();
+        let answer = r#"Conrad writes "that spectre took its **constitutional crawl** every fine morning" of Yundt."#;
+        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r.demoted_count, 0);
+        assert_eq!(r.verified_count, 1);
+    }
+
+    #[test]
+    fn gutenberg_underscore_italics_match_unmarked_quote() {
+        let source = "He read the _Morning Post_ with an air of complete detachment.".to_string();
+        let answer =
+            r#"He is seen reading: "He read the Morning Post with an air of complete detachment.""#;
+        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r.verified_count, 1);
+        assert_eq!(r.demoted_count, 0);
+    }
+
+    #[test]
+    fn edge_ellipses_trimmed_interior_composites_still_fail() {
+        let source =
+            "Jolly lucky for Yundt that she had persisted in coming up time after time.".to_string();
+        // Edge elision: honest quoting, must verify.
+        let edge = r#"As the text says, "...she had persisted in coming up time after time..." throughout."#;
+        let r = verify_quotes(edge, &[source.clone()], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r.verified_count, 1, "edge ellipses are not composites");
+        assert_eq!(r.demoted_count, 0);
+        // Interior splice: still a composite, still demoted.
+        let spliced = r#"As the text says, "Jolly lucky for Yundt... coming up time after time again and again.""#;
+        let r2 = verify_quotes(spliced, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r2.demoted_count, 1, "interior splices must keep failing");
     }
 }

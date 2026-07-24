@@ -117,34 +117,43 @@ impl Tool for AttachedDocumentSearchTool {
 
         // ── Resolve the attached asset ───────────────────────────
         //
-        // V1 stub: pick the most-recently-ingested Ready document
-        // asset. This works for single-user single-doc cases (the
-        // book-report bench, the desktop user with one attachment
-        // open). For multi-asset / multi-conversation cases the
-        // right shape is to extend `DocumentSession` with an
-        // `asset_id: Option<String>` field (or thread asset_id
-        // through `ToolContext`) so the tool can resolve by
-        // conversation deterministically. Both options are
-        // additive — captured as TODO on sovereign decision
-        // 7693f16b. The bench's reuse-asset path produces exactly
-        // one Ready asset at a time, so the stub is correct in
-        // practice while we keep moving.
+        // By conversation, deterministically: the turn's
+        // `DocumentSession.source` carries the asset id (the same
+        // contract `handle_attached_doc_turn` reads). This closes the
+        // TODO on sovereign decision 7693f16b — the prior V1 stub
+        // ("most-recently-ingested Ready asset") searched whichever
+        // document was attached LAST anywhere in the store, so a
+        // conversation pinned to asset A silently retrieved from
+        // asset B once anything newer reached Ready (observed
+        // 2026-07-23: every book-report question against the Conrad
+        // asset retrieved the meridian-postmortem fixture).
         //
-        // `ctx.conversation_id` is intentionally unused in the
-        // stub but kept in scope to signal the right field for
-        // future plumbing.
-        let _ = &ctx.conversation_id;
-        let assets = self.store.list_document_assets().await?;
-        let asset = match assets
-            .into_iter()
-            .filter(|a| matches!(a.state, AssetState::Ready))
-            .max_by_key(|a| a.ingested_at)
+        // The stub survives only as a fallback for tool invocations
+        // with no document session on the conversation.
+        let session_asset = match self
+            .store
+            .get_document_session_by_conversation(&ctx.conversation_id)
+            .await
         {
+            Ok(Some(session)) => self.store.get_document_asset(&session.source).await?,
+            _ => None,
+        };
+        let asset = match session_asset {
             Some(a) => a,
             None => {
-                return Ok(StepOutput::Text(
-                    "No Ready document is attached to this conversation.".to_string(),
-                ));
+                let assets = self.store.list_document_assets().await?;
+                match assets
+                    .into_iter()
+                    .filter(|a| matches!(a.state, AssetState::Ready))
+                    .max_by_key(|a| a.ingested_at)
+                {
+                    Some(a) => a,
+                    None => {
+                        return Ok(StepOutput::Text(
+                            "No Ready document is attached to this conversation.".to_string(),
+                        ));
+                    }
+                }
             }
         };
 

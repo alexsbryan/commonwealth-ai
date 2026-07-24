@@ -780,10 +780,14 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 "#
     .to_string();
 
-    // SLOT_POLICY §3 ExtractDurable: RAPTOR cluster summary written to
-    // the durable atlas store; corruption outlives the session.
+    // SLOT_POLICY §3 EnrichBulk (was ExtractDurable until 2026-07-24,
+    // turbocharge arc): high-volume grammar-constrained summarization —
+    // Fast-class routing lets `summarize_clusters_buffered`'s fan-out
+    // ride the FastShort batching lane instead of serializing on the
+    // pinned chat slot. Durability is protected by the grammar (shape
+    // cannot drift) and the 500-token budget fits the bundle's 512 cap.
     let mut req =
-        CompletionRequest::for_workload(Workload::ExtractDurable, prompt).with_output_budget(500);
+        CompletionRequest::for_workload(Workload::EnrichBulk, prompt).with_output_budget(500);
     req.temperature = Some(0.2);
     // Grammar constraint preserved verbatim (see the lark_grammar above):
     // enforces the JSON shape AND forbids the `\"` byte inside the summary

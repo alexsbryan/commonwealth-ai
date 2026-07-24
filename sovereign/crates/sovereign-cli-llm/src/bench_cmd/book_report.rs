@@ -29,7 +29,8 @@ use sovereign_core::types::{
 };
 use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
 
-use crate::chat_cmd::bootstrap::build_session;
+use crate::bench_cmd::resource_meter::{MeteredInference, ResourceLedger, ResourceReport};
+use crate::chat_cmd::bootstrap::{build_session, SplitInferenceProvider};
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -47,7 +48,7 @@ const HELP: Help = Help {
     command: "svrn bench book-report",
     summary: "Attach-document benchmark on Conrad's The Secret Agent. Fetch → attach → state-stream → tier dispatch → mechanical + LLM-judge scoring.",
     sections: &[
-        HelpSection::Usage("svrn bench book-report [--transport direct|desktop-bridge] [--bridge-url <url>] [--compare <timings.json>] [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
+        HelpSection::Usage("svrn bench book-report [--transport direct|desktop-bridge] [--bridge-url <url>] [--compare <timings.json>] [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--enrich-model <id>] [--answer-model <id>] [--judge-model <id>] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
         HelpSection::Flags(&[
             (
                 "--transport <direct|desktop-bridge>",
@@ -101,6 +102,23 @@ const HELP: Help = Help {
                 "Force re-download of the Gutenberg text even if cached. Use when the bench.toml \
                  SHA-256 pin is being updated.",
             ),
+            (
+                "--enrich-model <id>",
+                "Model id that serves the ENRICHMENT pipeline (ingest, skeleton, RAPTOR). \
+                 Default: the daemon's primary. Direct transport only. All enrichment calls are \
+                 metered into the per-phase resource ledger regardless of this flag.",
+            ),
+            (
+                "--answer-model <id>",
+                "Model id that answers the bench questions (the session's chat model). \
+                 Default: the daemon's primary. Direct transport only.",
+            ),
+            (
+                "--judge-model <id>",
+                "Model id for the Tier 2-5 LLM-judge. Default: the daemon's primary. Pin this \
+                 to a strong model when varying --answer-model/--enrich-model so scores stay \
+                 comparable across runs.",
+            ),
         ]),
         HelpSection::Notes(
             "Requires a running daemon at the configured client port. The bench process builds its \
@@ -134,6 +152,12 @@ pub struct BookReportRun {
     pub source: SourceInfo,
     pub asset_id: String,
     pub chat_model: Option<String>,
+    /// Model that served the enrichment pipeline (ingest, skeleton,
+    /// RAPTOR). Differs from `chat_model` only under `--enrich-model`.
+    pub enrich_model: Option<String>,
+    /// Model that served the Tier 2-5 LLM-judge. Differs from
+    /// `chat_model` only under `--judge-model`.
+    pub judge_model: Option<String>,
     /// Wall-clock from CLI start to ingest call return.
     pub attach_ms: u64,
     /// Wall-clock from attach to first RagAvailable transition.
@@ -146,6 +170,11 @@ pub struct BookReportRun {
     pub questions: Vec<QuestionResult>,
     /// Aggregate rollup for v1.1 — Tier 1 mean score + mean latency.
     pub tier_summary: Vec<TierSummary>,
+    /// Per-phase enrichment resource ledger (LLM calls, token split,
+    /// embed counts). `None` on the desktop-bridge transport, where
+    /// enrichment runs in the desktop process and can't be metered
+    /// from here.
+    pub resources: Option<ResourceReport>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -337,6 +366,18 @@ struct Opts {
     bridge_url: String,
     /// Prior run's timings.json to diff against after this run.
     compare: Option<PathBuf>,
+    /// Model id served the ENRICHMENT pipeline (ingest, skeleton,
+    /// RAPTOR). Default: the daemon's primary — same as the answer
+    /// model. The tiny-model ladder varies this while the judge stays
+    /// pinned.
+    enrich_model: Option<String>,
+    /// Model id that answers the bench questions (the session's chat
+    /// model). Default: daemon primary.
+    answer_model: Option<String>,
+    /// Model id for the Tier 2-5 LLM-judge. Default: daemon primary.
+    /// Pin this when varying --answer-model/--enrich-model so the
+    /// ruler doesn't move with the experiment.
+    judge_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -359,6 +400,9 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut transport = Transport::Direct;
     let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
     let mut compare: Option<PathBuf> = None;
+    let mut enrich_model: Option<String> = None;
+    let mut answer_model: Option<String> = None;
+    let mut judge_model: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -430,6 +474,30 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--wire" => wire = true,
             "--rebuild-skeleton" => rebuild_skeleton = true,
             "--rebuild-raptor" => rebuild_raptor = true,
+            "--enrich-model" => {
+                i += 1;
+                enrich_model = Some(
+                    args.get(i)
+                        .ok_or("--enrich-model requires a model id")?
+                        .clone(),
+                );
+            }
+            "--answer-model" => {
+                i += 1;
+                answer_model = Some(
+                    args.get(i)
+                        .ok_or("--answer-model requires a model id")?
+                        .clone(),
+                );
+            }
+            "--judge-model" => {
+                i += 1;
+                judge_model = Some(
+                    args.get(i)
+                        .ok_or("--judge-model requires a model id")?
+                        .clone(),
+                );
+            }
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -453,6 +521,9 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         transport,
         bridge_url,
         compare,
+        enrich_model,
+        answer_model,
+        judge_model,
     })
 }
 
@@ -479,13 +550,49 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
 
     // ── Bootstrap: build the Runtime that talks to the daemon ──
     eprintln!("[2/3] bootstrap — connecting to daemon, building DocumentAssetManager");
-    let globals = default_globals_for_voice_eval();
+    let globals = {
+        let mut g = default_globals_for_voice_eval();
+        // --answer-model swaps the session's chat model — the model that
+        // answers bench questions. The judge is pinned separately below.
+        if opts.answer_model.is_some() {
+            g.chat_model = opts.answer_model.clone();
+        }
+        g
+    };
     let session = build_session(&globals)
         .await
         .map_err(|e| format!("daemon bootstrap failed: {e}. Is the daemon running?"))?;
+
+    // Enrichment provider: same as the session's unless --enrich-model
+    // splits it, then wrapped in the metering decorator so every
+    // skeleton/RAPTOR/embed call lands in the per-phase resource ledger.
+    let ledger = Arc::new(ResourceLedger::new());
+    let enrich_base: Arc<dyn InferenceProvider> = match &opts.enrich_model {
+        Some(model) => {
+            eprintln!("      enrich model override: {model}");
+            provider_for_model(&globals.daemon_base, model, &session.embed_model).await
+        }
+        None => Arc::clone(&session.inference),
+    };
+    let enrich_inference: Arc<dyn InferenceProvider> = Arc::new(MeteredInference::new(
+        enrich_base,
+        Arc::clone(&ledger),
+    ));
     let manager =
-        DocumentAssetManager::new(Arc::clone(&session.inference), Arc::clone(&session.store));
+        DocumentAssetManager::new(Arc::clone(&enrich_inference), Arc::clone(&session.store));
     let chat_model = Some(session.inference.model_id_for(Speed::Slow));
+    let enrich_model = Some(enrich_inference.model_id_for(Speed::Slow));
+
+    // Tier 2-5 judge: pinned via --judge-model so quality scores stay
+    // comparable when the answer/enrich model varies underneath.
+    let judge_inference: Arc<dyn InferenceProvider> = match &opts.judge_model {
+        Some(model) => {
+            eprintln!("      judge model pinned: {model}");
+            provider_for_model(&globals.daemon_base, model, &session.embed_model).await
+        }
+        None => Arc::clone(&session.inference),
+    };
+    let judge_model = Some(judge_inference.model_id_for(Speed::Slow));
 
     // ── --list-assets exits here ───────────────────────────────
     if opts.list_assets {
@@ -514,6 +621,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
                 );
                 let asset_to_use = if opts.rebuild_skeleton {
                     eprintln!("      --rebuild-skeleton: re-running skeleton extraction (uses current build_skeleton speed)");
+                    ledger.set_phase("rebuild_skeleton");
                     let rebuild_start = std::time::Instant::now();
                     match manager.rebuild_skeleton(reuse_id).await {
                         Ok(new_skeleton) => {
@@ -542,6 +650,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
                 };
                 if opts.rebuild_raptor {
                     eprintln!("      --rebuild-raptor: populating RAPTOR atlas + motif index on the existing asset");
+                    ledger.set_phase("rebuild_raptor");
                     let raptor_start = std::time::Instant::now();
                     match manager.rebuild_raptor_atlas(reuse_id).await {
                         Ok(()) => {
@@ -586,9 +695,12 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
             Err(e) => return Err(format!("lookup asset {reuse_id}: {e}")),
         }
     } else {
-        attach_and_stream(&manager, &source).await
+        attach_and_stream(&manager, &source, &ledger).await
     };
     let asset_id = asset.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+    // Any enrich-provider calls after ingest (none expected) get their
+    // own bucket rather than polluting the last pipeline phase.
+    ledger.set_phase("post_ingest");
 
     let time_to_rag_ready_ms = transitions_vec
         .iter()
@@ -615,12 +727,19 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
     let (questions, tier_summary) = run_questions(
         Arc::clone(&session.runtime),
         Arc::clone(&session.store),
-        Arc::clone(&session.inference),
+        Arc::clone(&judge_inference),
         asset.as_ref(),
         &source_text,
         &filtered_questions,
     )
     .await;
+
+    let resources = ledger.snapshot();
+    eprintln!();
+    eprintln!("      enrichment resource ledger:");
+    for line in resources.render_table().lines() {
+        eprintln!("      {line}");
+    }
 
     let report = BookReportRun {
         bench_id,
@@ -628,6 +747,8 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         source,
         asset_id,
         chat_model,
+        enrich_model,
+        judge_model,
         attach_ms,
         time_to_rag_ready_ms,
         time_to_ready_ms,
@@ -635,10 +756,40 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         terminated_at_phase: terminal_phase,
         questions,
         tier_summary,
+        resources: Some(resources),
     };
 
     persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
     Ok(report)
+}
+
+/// Build a daemon-backed provider pinned to an explicit chat model id.
+/// Mirrors `chat_cmd::bootstrap`'s provider construction (manifest-aware
+/// context window when the daemon serves OICP capabilities, 8192
+/// fallback otherwise) — the difference is the caller names the chat
+/// model instead of resolving the daemon's default. Used by
+/// `--enrich-model` / `--judge-model` to split roles across models.
+async fn provider_for_model(
+    base: &str,
+    chat_model: &str,
+    embed_model: &str,
+) -> Arc<dyn InferenceProvider> {
+    let v1 = format!("{base}/v1");
+    match sovereign_inference::remote::fetch_manifest(base, None).await {
+        Some(manifest) => Arc::new(SplitInferenceProvider::from_manifest(
+            &v1,
+            &manifest,
+            chat_model.to_string(),
+            embed_model.to_string(),
+        )),
+        None => Arc::new(SplitInferenceProvider::new(
+            &v1,
+            chat_model.to_string(),
+            embed_model.to_string(),
+            8192,
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(embed_model),
+        )),
+    }
 }
 
 /// `--transport desktop-bridge`: dispatch the bank through a REAL
@@ -918,6 +1069,10 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         chat_model: judge_session
             .as_ref()
             .map(|s| s.inference.model_id_for(Speed::Slow)),
+        enrich_model: None,
+        judge_model: judge_session
+            .as_ref()
+            .map(|s| s.inference.model_id_for(Speed::Slow)),
         attach_ms,
         time_to_rag_ready_ms: None,
         time_to_ready_ms: None,
@@ -929,6 +1084,7 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         terminated_at_phase: terminal_phase,
         questions: results,
         tier_summary,
+        resources: None,
     };
     persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
     Ok(report)
@@ -1283,7 +1439,12 @@ async fn run_llm_judge(
             "You are a literary-eval grader. Return only the JSON object requested.".to_string(),
         ),
         preferred_speed: Speed::Slow,
-        max_tokens: Some(256),
+        // Thinking off + headroom: with thinking enabled a reasoning
+        // model burns the whole output budget inside `<think>` and
+        // never reaches the JSON — every judge call on the 2026-07-23
+        // baseline failed with "no `{` in judge response".
+        enable_thinking: Some(false),
+        max_tokens: Some(512),
         temperature: Some(0.0),
         ..Default::default()
     };
@@ -1722,19 +1883,25 @@ fn truncate(s: &str, max: usize) -> String {
 async fn attach_and_stream(
     manager: &DocumentAssetManager,
     source: &SourceInfo,
+    ledger: &Arc<ResourceLedger>,
 ) -> (Option<DocumentAsset>, u64, Vec<StateTransition>, String) {
     let attach_at = Instant::now();
     let transitions: Arc<Mutex<Vec<StateTransition>>> = Arc::new(Mutex::new(Vec::new()));
     let callback_transitions = Arc::clone(&transitions);
     let callback_attach_at = attach_at;
+    let callback_ledger = Arc::clone(ledger);
 
     eprintln!("[3/3] attach — DocumentAssetManager::ingest()");
     eprintln!("      transitions stream below; rag_available unblocks Tier-1+2 questions");
+    ledger.set_phase("attach_ingest");
 
     let ingest_result = manager
         .ingest(source.local_path.as_path(), move |progress| {
             let elapsed = callback_attach_at.elapsed().as_millis() as u64;
             let (phase, detail) = render_progress(&progress);
+            // The pipeline is sequential; the live progress phase is
+            // the correct attribution bucket for resource accounting.
+            callback_ledger.set_phase(phase);
             eprintln!("      t+{:>6}ms  {}", elapsed, phase);
             if let Ok(mut log) = callback_transitions.lock() {
                 log.push(StateTransition {
@@ -1805,6 +1972,8 @@ fn stub_report(
         source,
         asset_id: String::new(),
         chat_model,
+        enrich_model: None,
+        judge_model: None,
         attach_ms: 0,
         time_to_rag_ready_ms: None,
         time_to_ready_ms: None,
@@ -1812,6 +1981,7 @@ fn stub_report(
         terminated_at_phase: "list_only".to_string(),
         questions: Vec::new(),
         tier_summary: Vec::new(),
+        resources: None,
     }
 }
 
@@ -1969,8 +2139,18 @@ fn render_markdown(r: &BookReportRun) -> String {
     let _ = writeln!(s, "- **URL:** {}", r.source.url);
     let _ = writeln!(
         s,
-        "- **Chat model:** `{}`\n",
+        "- **Chat model:** `{}`",
         r.chat_model.as_deref().unwrap_or("<unknown>")
+    );
+    let _ = writeln!(
+        s,
+        "- **Enrich model:** `{}`",
+        r.enrich_model.as_deref().unwrap_or("<unknown>")
+    );
+    let _ = writeln!(
+        s,
+        "- **Judge model:** `{}`\n",
+        r.judge_model.as_deref().unwrap_or("<unknown>")
     );
 
     let _ = writeln!(s, "## Timings");
@@ -2001,6 +2181,19 @@ fn render_markdown(r: &BookReportRun) -> String {
             let _ = writeln!(s, "| {} | `{}` |", t.ms_since_attach, t.phase);
         }
         let _ = writeln!(s);
+    }
+
+    if let Some(res) = &r.resources {
+        let _ = writeln!(s, "## Enrichment resources");
+        let _ = writeln!(
+            s,
+            "Per-phase LLM/embed accounting from the metered enrichment provider. \
+             Wall columns are seconds spent inside provider calls (excludes \
+             orchestration between calls).\n"
+        );
+        let _ = writeln!(s, "```");
+        let _ = write!(s, "{}", res.render_table());
+        let _ = writeln!(s, "```\n");
     }
 
     if !r.tier_summary.is_empty() {
