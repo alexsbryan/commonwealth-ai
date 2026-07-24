@@ -473,14 +473,23 @@ async fn run_exporters_collect(
                 })
                 .collect();
 
-            let output = tokio::process::Command::new(exporter.command)
-                .args(&args)
+            let mut cmd = tokio::process::Command::new(exporter.command);
+            cmd.args(&args)
                 .current_dir(run_dir)
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::piped())
-                .output()
-                .await
-                .map_err(Error::Io)?;
+                .stderr(std::process::Stdio::piped());
+            // A full export is an O(workspace) CPU burn for minutes. Run
+            // it niced so it yields to whatever the operator (or the
+            // daemon's inference slots) is doing mid-flow; on an idle box
+            // nice+10 still gets every core.
+            #[cfg(unix)]
+            unsafe {
+                cmd.pre_exec(|| {
+                    let _ = libc::nice(10);
+                    Ok(())
+                });
+            }
+            let output = cmd.output().await.map_err(Error::Io)?;
 
             // Config file is deleted when `config_file` drops at end of loop iteration.
             let status = output.status;

@@ -61,18 +61,18 @@ pub(super) async fn build_tool_registry(
     let graph_handle = merged_graph_handle;
 
     // Code intelligence — scoped to discovered corpora under indexes_dir.
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph_handle),
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+        &graph_handle,
     )));
+    tools.register(Box::new(
+        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
     tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
         &engine,
     ))));
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&engine),
-    )));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-        &graph_handle,
     )));
     tools.register(Box::new(
         sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))

@@ -358,19 +358,45 @@ mod tests {
         assert_eq!(resp.status(), 404);
     }
 
-    /// Serializes the tests that repoint $HOME. `Registry::load/save`
-    /// resolve `~` per call, so two parallel tests each setting HOME
-    /// to their own tempdir read each other's (empty) registries —
-    /// observed as the nested-root test's final 409 flaking to 200.
+    /// Serializes the tests that repoint $HOME and restores the prior
+    /// value on drop. `Registry::load/save` resolve `~` per call, so two
+    /// parallel tests each setting HOME to their own tempdir read each
+    /// other's (empty) registries — observed as the nested-root test's
+    /// final 409 flaking to 200. Restoring matters just as much as
+    /// locking: other tests in this binary read $HOME (tool_profile,
+    /// rpc_warm_http), and leaving it pointed at a dropped tempdir
+    /// would poison whichever of them runs after us.
     static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct HomeGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+
+    impl HomeGuard {
+        fn set(home: &std::path::Path) -> Self {
+            let lock = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = std::env::var_os("HOME");
+            std::env::set_var("HOME", home);
+            Self { _lock: lock, prev }
+        }
+    }
+
+    impl Drop for HomeGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
 
     #[tokio::test]
     async fn register_rejects_empty_corpus_id() {
         // Use an isolated $HOME so Registry::load/save don't touch
         // the developer's real ~/.sovereign.
-        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (tmp, rex) = make_reindexer();
-        std::env::set_var("HOME", tmp.path());
+        let _home = HomeGuard::set(tmp.path());
         let base = spawn(rex).await;
 
         let resp = reqwest::Client::new()
@@ -387,9 +413,8 @@ mod tests {
         // Isolated $HOME so Registry::load/save don't touch the
         // developer's real ~/.sovereign (same pattern as the
         // empty-corpus-id test above).
-        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (tmp, rex) = make_reindexer();
-        std::env::set_var("HOME", tmp.path());
+        let _home = HomeGuard::set(tmp.path());
         let base = spawn(rex).await;
         let client = reqwest::Client::new();
 

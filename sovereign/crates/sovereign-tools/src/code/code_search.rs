@@ -29,6 +29,10 @@ use corpus_engine::CorpusEngine;
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
 
 /// Semantic search over installed code corpora.
+/// A code corpus whose chunk index is at least this many days old gets
+/// an "aging" posture note appended to results (see execute()).
+const CHUNK_STALE_DAYS: u64 = 7;
+
 pub struct CodeSearchTool {
     engine: Arc<CorpusEngine>,
     inference: Option<Arc<dyn InferenceProvider>>,
@@ -198,9 +202,23 @@ impl Tool for CodeSearchTool {
         // vanish into a `tracing::debug!`).
         let code_corpora = indexes.iter().filter(|i| i.kind == CorpusKind::Code).count();
         let mut opened_ok = 0usize;
+        // Chunk-index age per code corpus: `last_updated` is stamped by
+        // `sovereign code index`, so a corpus nobody re-indexes keeps
+        // opening fine while silently omitting everything newer than the
+        // stamp (observed: a workspace chunk index 28 days behind the
+        // live SCIP graph). Surface it past CHUNK_STALE_DAYS.
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let mut aging_corpora: Vec<(String, u64)> = Vec::new();
         for info in &indexes {
             if info.kind != CorpusKind::Code {
                 continue;
+            }
+            let age_days = now_secs.saturating_sub(info.last_updated) / 86_400;
+            if info.last_updated > 0 && age_days >= CHUNK_STALE_DAYS {
+                aging_corpora.push((info.corpus_id.clone(), age_days));
             }
             let Ok(index) = self.engine.open_index(&info.path).await else {
                 continue;
@@ -286,6 +304,22 @@ impl Tool for CodeSearchTool {
                  but not appear here. Do not conclude the code is absent. Rebuild with \
                  `sovereign project refresh`. For an exact name, `symbols` reads the SCIP graph \
                  directly and is unaffected by this."
+            ));
+        } else if !aging_corpora.is_empty() {
+            aging_corpora.sort_by(|a, b| b.1.cmp(&a.1));
+            let worst = aging_corpora
+                .iter()
+                .take(3)
+                .map(|(id, days)| format!("{id} ({days}d)"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            text.push_str(&format!(
+                "\n\n---\nIndex: aging | {n} of {code_corpora} code corpora stale: {worst}\n\
+                 These chunk indexes predate recent edits — results omit anything newer than \
+                 the last index run. For an exact name, `symbols` reads the live SCIP graph \
+                 and is unaffected. Refresh with \
+                 `sovereign code index <repo-root> --corpus-id=<id>`.",
+                n = aging_corpora.len()
             ));
         }
 

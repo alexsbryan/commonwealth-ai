@@ -124,7 +124,9 @@ cooperated:
 **Splitting signal (SHIPPED 2026-07-23):** the statusline
 (`.claude/scripts/read-budget-statusline.py`) renders `ctx <N>k` from the
 last assistant `usage` record (actual context, not a heuristic) — yellow
-"split soon" ≥90k, red "SPLIT" ≥140k — plus `frame ✓<age>` for this
+"split soon" ≥90k, red "SPLIT" ≥250k (raised from 140k on 2026-07-24;
+operator call — the 140k line fired too early in practice) — plus
+`frame ✓<age>` for this
 session's frame freshness. The thresholds are deliberately ABSOLUTE, not
 window-relative: the lever is cache-read cost (≈ avg_ctx × turns), which a
 1M window does not change. Red ctx + fresh frame = split is safe right now.
@@ -148,7 +150,7 @@ session cost, nearly threshold-insensitive (46.5–51.4% across 100k–200k).
 
 The protocol:
 
-1. **Statusline red `SPLIT` (ctx ≥140k)** → the operator (or the agent, when
+1. **Statusline red `SPLIT` (ctx ≥250k)** → the operator (or the agent, when
    asked to wrap up) gets a frame written NOW, then forks (`/clear` or new
    session). Yellow (≥90k) means: write/refresh the frame at the next natural
    boundary.

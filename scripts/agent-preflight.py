@@ -240,21 +240,51 @@ def check_continuity_local(rep, cont):
                 "frames cannot bank; fix permissions")
 
 
-def check_peer(rep, host, name, expected_tools):
-    """5. Peer-node verification over the mesh — read-only HTTP, no SSH.
+def mesh_peer_presence(name):
+    """Ask the LOCAL daemon's gossip view whether a peer is online.
 
-    Same-mesh machines are directly probe-able (:9741 over the tailnet), so
-    the coordinator can VERIFY a peer's daemon actually serves the expected
-    tool roster instead of hoping its operator rebuilt after pulling.
-    Unreachable is WARN (laptops sleep); reachable-but-stale is FAIL — that
-    peer's agents are running a different protocol than ours.
+    The daemon HTTP surface (:9741, and even :9742) binds 127.0.0.1 BY
+    DESIGN — real peer connectivity rides iroh (QUIC/relay), so the
+    TCP addresses in the roster are never directly reachable. Gossip
+    presence is therefore the only remote signal we can read without
+    new attack surface. Returns "online" / "offline" / None (unknown).
+    """
+    d = http_get_json("http://127.0.0.1:9741/v1/mesh/status", timeout=4)
+    for m in (d or {}).get("members", []):
+        if m.get("name") == name or m.get("node_id", "").startswith(name):
+            return m.get("status")
+    return None
+
+
+def check_peer(rep, host, name, expected_tools):
+    """5. Peer-node verification — direct HTTP when possible, gossip
+    presence as the honest fallback.
+
+    A direct :9741 probe only works if that peer deliberately exposed the
+    daemon surface beyond loopback (the default bind is 127.0.0.1 — see
+    project_cmd/mod.rs DAEMON_BASE). When the probe fails but the local
+    daemon's gossip view says the peer is ONLINE, the peer is fine and
+    simply unverifiable from here: say that, and point at the on-host
+    check, instead of the misleading "offline/asleep?". True absence
+    (gossip agrees it's offline) keeps the old wording.
+    Reachable-but-stale is FAIL — that peer's agents are running a
+    different protocol than ours.
     """
     base = host if ":" in host else f"{host}:9741"
     label = f"peer:{name}"
     status = http_get_json(f"http://{base}/status", timeout=6)
     if status is None:
-        rep.add("WARN", label, f"{base} unreachable — cannot verify (offline/asleep?)",
-                f"re-check when it's up: agent-preflight --peer {host}")
+        presence = mesh_peer_presence(name)
+        if presence == "online":
+            rep.add("WARN", label,
+                    f"online via mesh gossip, but {base} refuses — its daemon "
+                    "HTTP binds loopback (the default), so remote verification "
+                    "is impossible by design",
+                    "verify on that host: `python3 scripts/agent-preflight.py` "
+                    "(mesh-RPC peer verification is an open work item)")
+        else:
+            rep.add("WARN", label, f"{base} unreachable — cannot verify (offline/asleep?)",
+                    f"re-check when it's up: agent-preflight --peer {host}")
         return
     node = str(status.get("node_id", "?"))[:12]
     try:
@@ -322,6 +352,38 @@ def run(golden, peers=None, skip_peers=False):
         else:
             n_corp = len(corpora) if isinstance(corpora, list) else corpora
             rep.add("PASS", "searchable index", f"{chunks:,} chunks across {n_corp} corpora")
+
+    # 1c. Chunk-index freshness for the workspace code corpora. code_search
+    # reads chunks.lance under ~/.sovereign/indexes/<id>/; `last_updated` in
+    # _corpus_meta.json is stamped by `sovereign code index`. A corpus nobody
+    # re-indexes keeps opening fine while silently omitting everything newer
+    # than the stamp (observed: commonwealth-ai chunks 28 days behind the
+    # SCIP graph). SCIP freshness is the daemon watcher's job; this stamp is
+    # the manual-refresh surface, hence the local file check.
+    import time
+    indexes_root = os.path.expanduser("~/.sovereign/indexes")
+    for corpus in golden.get("code_corpora", []):
+        remedy = f"`sovereign code index <repo-root> --corpus-id={corpus}`"
+        lance_path = os.path.join(indexes_root, corpus, "chunks.lance")
+        if not os.path.isdir(lance_path):
+            rep.add("WARN", f"chunk index: {corpus}",
+                    "chunks.lance missing — code_search silently skips this corpus", remedy)
+            continue
+        try:
+            with open(os.path.join(indexes_root, corpus, "_corpus_meta.json")) as f:
+                last_updated = json.load(f).get("last_updated") or 0
+        except (OSError, ValueError):
+            last_updated = 0
+        if not last_updated:
+            rep.add("WARN", f"chunk index: {corpus}",
+                    "no last_updated stamp in _corpus_meta.json", remedy)
+            continue
+        age_days = int((time.time() - last_updated) / 86400)
+        if age_days >= 7:
+            rep.add("WARN", f"chunk index: {corpus}",
+                    f"{age_days} days old — code_search omits anything newer", remedy)
+        else:
+            rep.add("PASS", f"chunk index: {corpus}", f"fresh ({age_days}d old)")
 
     # 2. MCP tools/list — the tools an agent can actually see.
     try:

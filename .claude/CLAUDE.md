@@ -61,7 +61,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 
 Long sessions pay cache-read ≈ avg_ctx × turns — ~50% of session cost is
 recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
-≥90k, red "SPLIT" ≥140k) and `frame ✓<age>`.
+≥90k, red "SPLIT" ≥250k) and `frame ✓<age>`.
 
 - **As the donor:** keep your frame current AS YOU WORK — call the
   `session_state` MCP tool (or `sovereign tools call session_state`) at
