@@ -562,9 +562,11 @@ pub async fn classify_caveat(
     let prompt = format!(
         "An assistant answered a question whose answer is NOT in the provided source passages \
          (it comes from the assistant's general knowledge). Here is the reply:\n\n\"\"\"\n{}\n\"\"\"\n\n\
-         Did the assistant EXPLICITLY flag that this answer comes from its general knowledge / is \
-         NOT drawn from the provided passages or corpus?\n\n\
-         Answer with exactly one letter — A = yes, it flagged the answer as general knowledge / not from the sources, B = no, it gave the answer with no such provenance caveat.",
+         Did the assistant flag that this answer is NOT established by the provided passages / corpus? \
+         ANY explicit provenance disclosure counts — e.g. 'from general knowledge', 'not in your sources', \
+         or 'the document does not contain this' — and it counts EVEN IF the assistant gives the answer \
+         FIRST and adds the caveat afterward. Order and exact wording do not matter; the disclosure does.\n\n\
+         Answer with exactly one letter — A = yes, it disclosed the answer is not drawn from the provided sources, B = no, it presented the answer with no such provenance caveat.",
         answer.chars().take(1200).collect::<String>()
     );
     forced_choice_ab(judge, model, &prompt)
