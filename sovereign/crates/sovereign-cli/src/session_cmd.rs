@@ -462,6 +462,333 @@ async fn daemon_complete(
         .ok_or_else(|| "response had no choices[0].message.content".to_string())
 }
 
+// ── Grading (spec §5) ────────────────────────────────────────────────────
+
+/// Section weight: `## Next` and `## Invariants` are what a successor
+/// acts on first and what protects it from repeating pain (spec §5).
+fn section_weight(heading: &str) -> usize {
+    match heading {
+        "## Next" | "## Invariants" => 2,
+        _ => 1,
+    }
+}
+
+/// The body of one `## `-section (text between the heading and the next
+/// heading), or `None` when the heading is absent.
+pub(crate) fn section_body(frame: &str, heading: &str) -> Option<String> {
+    let lines: Vec<&str> = frame.lines().collect();
+    let start = lines.iter().position(|l| l.trim() == heading)?;
+    let end = lines[start + 1..]
+        .iter()
+        .position(|l| l.trim_start().starts_with("## "))
+        .map(|off| start + 1 + off)
+        .unwrap_or(lines.len());
+    Some(lines[start + 1..end].join("\n").trim().to_string())
+}
+
+/// A golden section's load-bearing items: its bullets (`- `, `* `, or
+/// `1.`-style). A bullet-less but non-empty section counts as one item.
+/// Empty / "none recorded" sections grade nothing.
+pub(crate) fn golden_items(body: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    for line in body.lines() {
+        let t = line.trim_start();
+        let is_bullet = t.starts_with("- ")
+            || t.starts_with("* ")
+            || (t.split('.').next().is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty())
+                && t.contains(". "));
+        if is_bullet {
+            let stripped = t.trim_start_matches(['-', '*']).trim_start();
+            // Numbered bullets: drop the "<digits>. " prefix too, so the
+            // judge sees the item text once, not "1. 1. <text>".
+            let stripped = match stripped.split_once(". ") {
+                Some((num, rest))
+                    if !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()) =>
+                {
+                    rest
+                }
+                _ => stripped,
+            };
+            items.push(stripped.to_string());
+        } else if let Some(last) = items.last_mut() {
+            // Continuation line of a wrapped bullet.
+            if !t.is_empty() {
+                last.push(' ');
+                last.push_str(t);
+            }
+        }
+    }
+    if items.is_empty() {
+        let t = body.trim();
+        if !t.is_empty() && t != "none recorded" {
+            items.push(t.to_string());
+        }
+    }
+    items
+}
+
+fn judge_system_prompt() -> &'static str {
+    // Structured to survive a small local model: the contradiction field
+    // is REQUIRED and machine-checked. The first live run showed the
+    // model flagging candidate detail merely ABSENT from the reference
+    // as hallucination despite a prose instruction not to — so instead
+    // of asking it not to, we make every hallucination cite the
+    // reference item it contradicts and drop entries that cannot.
+    "You grade one section of a session frame against reference items.\n\
+     Task 1 — captured: for each numbered reference item, decide whether the \
+     candidate text conveys it. Judge wording leniently, facts strictly: a wrong \
+     number, commit sha, count, file name, or symbol name means NOT captured.\n\
+     Task 2 — contradictions: list candidate claims that state the OPPOSITE of a \
+     specific reference item (a different number, sha, name, or outcome for the \
+     same fact). Each entry must name the reference item it contradicts.\n\
+     Reply with ONLY this JSON, no other text:\n\
+     {\"captured\": [<item numbers>], \
+      \"contradictions\": [{\"claim\": \"<candidate claim>\", \"contradicts_item\": <number>}]}"
+}
+
+/// Extract the first JSON object from a model reply (models under
+/// instruction pressure still sometimes wrap JSON in prose).
+fn first_json_object(s: &str) -> Option<serde_json::Value> {
+    let start = s.find('{')?;
+    let mut depth = 0usize;
+    for (i, c) in s[start..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return serde_json::from_str(&s[start..start + i + 1]).ok();
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+struct SectionGrade {
+    heading: &'static str,
+    weight: usize,
+    items: usize,
+    captured: usize,
+    hallucinations: Vec<String>,
+}
+
+/// Grade a candidate frame against a golden (spec §5): per-section recall
+/// of the golden's load-bearing items, judged by the local daemon model;
+/// `## Next`/`## Invariants` weighted double; −1 per hallucination; pass
+/// at ≥70% weighted recall AND zero Verification-section hallucinations.
+async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
+    // Candidate: an explicit path, or a session-id prefix resolved to
+    // ~/.sovereign/sessions/<sid>/frame.md.
+    let candidate_path = {
+        let p = Path::new(id_or_path);
+        if p.is_file() {
+            p.to_path_buf()
+        } else {
+            let Some(root) = sessions_root() else {
+                eprintln!("grade: cannot resolve home directory");
+                return 2;
+            };
+            let matches: Vec<PathBuf> = std::fs::read_dir(&root)
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|e| e.path())
+                        .filter(|d| {
+                            d.file_name()
+                                .and_then(|n| n.to_str())
+                                .is_some_and(|n| n.starts_with(id_or_path))
+                                && d.join("frame.md").is_file()
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            match matches.len() {
+                1 => matches[0].join("frame.md"),
+                0 => {
+                    eprintln!(
+                        "grade: `{id_or_path}` is neither a file nor a session with a frame under {}",
+                        root.display()
+                    );
+                    return 2;
+                }
+                n => {
+                    eprintln!("grade: `{id_or_path}` is ambiguous ({n} session matches)");
+                    return 2;
+                }
+            }
+        }
+    };
+    let golden_path = flags
+        .get("golden")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("quality/session-frame.golden.md"));
+
+    let candidate = match std::fs::read_to_string(&candidate_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("grade: read {}: {e}", candidate_path.display());
+            return 2;
+        }
+    };
+    let golden = match std::fs::read_to_string(&golden_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "grade: read golden {}: {e} (pass --golden <path>)",
+                golden_path.display()
+            );
+            return 2;
+        }
+    };
+
+    let base_url = flags
+        .get("url")
+        .cloned()
+        .unwrap_or_else(|| "http://localhost:9741".to_string());
+    let model = flags.get("model").cloned().unwrap_or_else(|| "primary".into());
+
+    let mut grades: Vec<SectionGrade> = Vec::new();
+    for heading in FRAME_SECTIONS {
+        // Working set is CLI-assembled on both sides — machine-comparable,
+        // no judge needed, and its paths would dominate hallucination
+        // counts for no signal. Skip.
+        if *heading == "## Working set" {
+            continue;
+        }
+        let g_body = section_body(&golden, heading).unwrap_or_default();
+        let items = golden_items(&g_body);
+        if items.is_empty() {
+            continue;
+        }
+        let c_body = section_body(&candidate, heading).unwrap_or_default();
+
+        let numbered: String = items
+            .iter()
+            .enumerate()
+            .map(|(i, it)| format!("{}. {}\n", i + 1, it))
+            .collect();
+        let user = format!(
+            "REFERENCE ITEMS ({heading}):\n{numbered}\nCANDIDATE TEXT:\n{}",
+            if c_body.is_empty() { "(section missing)" } else { &c_body }
+        );
+        let reply = match daemon_complete(&base_url, &model, judge_system_prompt(), &user, 600).await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("grade: judge call failed on {heading}: {e}");
+                return 2;
+            }
+        };
+        let Some(verdict) = first_json_object(&reply) else {
+            eprintln!("grade: judge reply on {heading} had no JSON: {}", cap_chars(&reply, 200));
+            return 2;
+        };
+        let captured: std::collections::HashSet<usize> = verdict["captured"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_u64())
+                    .map(|n| n as usize)
+                    .filter(|n| (1..=items.len()).contains(n))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // A hallucination only counts when the judge names a real
+        // reference item it contradicts AND did not also mark that item
+        // captured (both = the judge arguing with itself; trust the
+        // capture). Anything else is detail absent from the golden,
+        // which the spec does not penalize.
+        let hallucinations: Vec<String> = verdict["contradictions"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|v| {
+                        v["contradicts_item"]
+                            .as_u64()
+                            .map(|n| n as usize)
+                            .is_some_and(|n| {
+                                (1..=items.len()).contains(&n) && !captured.contains(&n)
+                            })
+                    })
+                    .filter_map(|v| v["claim"].as_str())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        grades.push(SectionGrade {
+            heading,
+            weight: section_weight(heading),
+            items: items.len(),
+            captured: captured.len(),
+            hallucinations,
+        });
+    }
+
+    if grades.is_empty() {
+        eprintln!("grade: golden has no gradeable sections at {}", golden_path.display());
+        return 2;
+    }
+
+    let denom: usize = grades.iter().map(|g| g.weight * g.items).sum();
+    let raw: usize = grades.iter().map(|g| g.weight * g.captured).sum();
+    let halluc_total: usize = grades.iter().map(|g| g.hallucinations.len()).sum();
+    let numer = raw.saturating_sub(halluc_total);
+    let score = numer as f64 / denom as f64;
+    let verification_hallucinated = grades
+        .iter()
+        .any(|g| g.heading == "## Verification" && !g.hallucinations.is_empty());
+    let pass = score >= 0.70 && !verification_hallucinated;
+
+    println!(
+        "grading {} against {}\n",
+        candidate_path.display(),
+        golden_path.display()
+    );
+    for g in &grades {
+        let h = if g.hallucinations.is_empty() {
+            String::new()
+        } else {
+            format!(" · {} hallucination(s)", g.hallucinations.len())
+        };
+        println!(
+            "  {:<16} {}/{} (w{}){}",
+            g.heading.trim_start_matches("## "),
+            g.captured,
+            g.items,
+            g.weight,
+            h
+        );
+        for claim in &g.hallucinations {
+            println!("      ! {}", cap_chars(claim, 120));
+        }
+    }
+    println!(
+        "\n  weighted recall {numer}/{denom} = {:.0}%{}",
+        score * 100.0,
+        if halluc_total > 0 {
+            format!(" (after −{halluc_total} hallucination penalty)")
+        } else {
+            String::new()
+        }
+    );
+    println!(
+        "  {}",
+        if pass {
+            "PASS (bar: ≥70% weighted recall, zero hallucinated verification claims)"
+        } else if verification_hallucinated {
+            "FAIL — hallucinated verification claim (automatic fail regardless of recall)"
+        } else {
+            "FAIL (bar: ≥70% weighted recall)"
+        }
+    );
+    if pass {
+        0
+    } else {
+        1
+    }
+}
+
 // ── CLI plumbing ─────────────────────────────────────────────────────────
 
 fn sessions_root() -> Option<PathBuf> {
@@ -476,7 +803,12 @@ fn print_help() {
          Subcommands:\n\
          \x20 list               Recent transcripts for this project (newest first).\n\
          \x20 distill <id>       Extract the spine and synthesize a frame; <id> is a\n\
-         \x20                    session-id prefix from `list`.\n\n\
+         \x20                    session-id prefix from `list`.\n\
+         \x20 grade <id|path>    Grade a frame against the golden (spec §5): per-section\n\
+         \x20                    recall judged by the daemon model, Next/Invariants x2,\n\
+         \x20                    -1 per hallucination; PASS at >=70% and zero hallucinated\n\
+         \x20                    verification claims. Exit 0 pass / 1 fail / 2 error.\n\
+         \x20                    --golden <path> overrides quality/session-frame.golden.md.\n\n\
          Options (distill):\n\
          \x20 --project <path>   Project working dir (default: cwd).\n\
          \x20 --dir <path>       Explicit transcript directory (overrides --project).\n\
@@ -747,7 +1079,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--no-llm" | "--stdout" => {
                 flags.insert(arg.trim_start_matches('-').to_string(), String::new());
             }
-            "--model" | "--max-tokens" => {
+            "--model" | "--max-tokens" | "--golden" | "--url" => {
                 if let Some(v) = it.next() {
                     flags.insert(arg.trim_start_matches('-').to_string(), v.clone());
                 }
@@ -778,6 +1110,13 @@ pub async fn run(args: &[String]) -> i32 {
                 2
             }
         },
+        Some("grade") => match id {
+            Some(id) => run_grade(&id, &flags).await,
+            None => {
+                eprintln!("session: grade needs a frame path or session id");
+                2
+            }
+        },
         _ => {
             print_help();
             2
@@ -788,6 +1127,35 @@ pub async fn run(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn section_body_extracts_between_headings() {
+        let f = "---\nx: y\n---\n\n## Goal\nShip it.\n\n## State\n- done\n- more\n\n## Next\nnone recorded\n";
+        assert_eq!(section_body(f, "## Goal").as_deref(), Some("Ship it."));
+        assert_eq!(section_body(f, "## State").as_deref(), Some("- done\n- more"));
+        assert_eq!(section_body(f, "## Missing"), None);
+    }
+
+    #[test]
+    fn golden_items_bullets_wrapping_and_fallbacks() {
+        // Bullets with a wrapped continuation line join into one item.
+        let items = golden_items("- first item\n  continues here\n- second\n1. third numbered");
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0], "first item continues here");
+        assert_eq!(items[2], "third numbered");
+        // Bullet-less prose = one item; empty / none recorded = zero.
+        assert_eq!(golden_items("just a paragraph").len(), 1);
+        assert!(golden_items("").is_empty());
+        assert!(golden_items("none recorded").is_empty());
+    }
+
+    #[test]
+    fn first_json_object_tolerates_prose_wrapping() {
+        let v = first_json_object("Sure! {\"captured\": [1, 2], \"hallucinations\": []} done")
+            .unwrap();
+        assert_eq!(v["captured"][1], 2);
+        assert!(first_json_object("no json here").is_none());
+    }
 
     #[test]
     fn strip_reminders_removes_blocks_keeps_text() {
