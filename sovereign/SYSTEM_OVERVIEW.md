@@ -1299,7 +1299,12 @@ Verbs by sibling binary:
   synthesizes a schema-v1 session frame via one daemon chat call —
   see `sovereign/docs/specs/SESSION_CONTINUITY.md` and the graded
   golden at `quality/session-frame.golden.md`. Frames + spines land
-  under `~/.sovereign/sessions/<session_id>/`.
+  under `~/.sovereign/sessions/<session_id>/`. The initiative-level
+  design compass for all of this (context = working memory holding
+  pointers/gists; notes/frames/facts/code-graph = external long-term
+  store; eviction and forgetting policies) is
+  `docs/specs/MEMORY_MODEL.md` — `cache-audit --counterfactual`
+  prices its levers H1–H5.
 - `sovereign-cli-daemon` — `daemon` (owns :9741), `setup`,
   `install-service`, `doctor`.
 - `sovereign-cli-dev` — `atos`, `project`, `code`, `tools`.
