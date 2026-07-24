@@ -368,11 +368,87 @@ impl Registry {
         let idx = self.entries.iter().position(|e| e.corpus_id == corpus_id)?;
         Some(self.entries.remove(idx))
     }
+
+    /// Find an existing entry (under a different `corpus_id`) whose root
+    /// nests with `root` — either an ancestor or a descendant of it.
+    ///
+    /// Nested registrations are how the freshness pipeline collapses:
+    /// every save inside the shared subtree dirties all overlapping
+    /// projects, each queues its own full-workspace SCIP export on the
+    /// global rebuild permit, and on a busy day the queue never drains
+    /// (observed 2026-07-23: 4 nested projects, all permanently
+    /// `[rebuilding]`, one never built at all). Registration refuses
+    /// this shape unless explicitly forced.
+    ///
+    /// Paths are canonicalized when possible so symlinked spellings of
+    /// the same tree still collide; a path that can't be canonicalized
+    /// (not yet on disk) is compared as spelled.
+    pub fn nested_conflict(&self, corpus_id: &str, root: &Path) -> Option<&ProjectEntry> {
+        fn canon(p: &Path) -> PathBuf {
+            p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+        }
+        let new_root = canon(root);
+        self.entries.iter().find(|e| {
+            if e.corpus_id == corpus_id {
+                return false; // re-registering yourself is an update, not a conflict
+            }
+            let existing = canon(&e.root);
+            new_root.starts_with(&existing) || existing.starts_with(&new_root)
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(corpus_id: &str, root: &str) -> ProjectEntry {
+        ProjectEntry {
+            corpus_id: corpus_id.into(),
+            root: PathBuf::from(root),
+            registered_at: "2026-01-01T00:00:00Z".into(),
+            watchers: WatcherToggles::default(),
+        }
+    }
+
+    #[test]
+    fn nested_conflict_flags_descendant_and_ancestor() {
+        let mut r = Registry::default();
+        r.upsert(entry("parent", "/repo/monorepo"));
+
+        // Descendant of an existing root collides.
+        let c = r
+            .nested_conflict("child", Path::new("/repo/monorepo/sub"))
+            .expect("descendant should conflict");
+        assert_eq!(c.corpus_id, "parent");
+
+        // Ancestor of an existing root collides too.
+        let c = r
+            .nested_conflict("grandparent", Path::new("/repo"))
+            .expect("ancestor should conflict");
+        assert_eq!(c.corpus_id, "parent");
+
+        // Identical root under a different name is nested (equal paths
+        // start_with each other).
+        assert!(r
+            .nested_conflict("alias", Path::new("/repo/monorepo"))
+            .is_some());
+    }
+
+    #[test]
+    fn nested_conflict_allows_siblings_and_self_update() {
+        let mut r = Registry::default();
+        r.upsert(entry("a", "/repo/a"));
+
+        // Disjoint sibling is fine.
+        assert!(r.nested_conflict("b", Path::new("/repo/b")).is_none());
+        // Sibling whose name shares a prefix is NOT nested — the
+        // comparison is component-wise, not string-prefix.
+        assert!(r.nested_conflict("a2", Path::new("/repo/a-extras")).is_none());
+        // Re-registering the same corpus_id at the same root is an
+        // update, never a conflict.
+        assert!(r.nested_conflict("a", Path::new("/repo/a")).is_none());
+    }
 
     #[tokio::test]
     async fn status_defaults_to_pending_for_unknown_kinds() {

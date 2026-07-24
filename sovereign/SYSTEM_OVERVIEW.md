@@ -1185,6 +1185,22 @@ Cross-file call edges and qualified names therefore lag one full export
 and appends a `macro_hints` text scan for references SCIP doesn't
 capture.
 
+**One project owns one workspace (nested-root guard).** Project
+registration (`POST /v1/projects/register`, used by both `project
+register` and `project init`) refuses a root that is an ancestor or
+descendant of an already-registered project's root
+(`Registry::nested_conflict`, 409 with the conflicting corpus named;
+`--force` overrides). Nested registrations are how the freshness
+pipeline collapses: every save inside the shared subtree dirties all
+overlapping projects, each queues its own full-workspace
+rust-analyzer export on the single global rebuild permit, and the
+queue never drains (observed 2026-07-23: four nested projects —
+monorepo root + three subtree projects — all permanently
+`[rebuilding]`, one never built). The monorepo is one cargo workspace,
+so subtree projects buy no smaller export anyway. Canonical
+registration for this repo: the single `commonwealth-ai` project at
+the repo root.
+
 **Capability docs (derived architecture).** A pipeline that derives
 *what the codebase does* from the SCIP call graph and reconciles it
 against the prose docs. `code capability-map` clusters entry points

@@ -18,6 +18,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
                 "svrn project register",
                 "svrn project register --root /path/to/repo",
                 "svrn project register --name my-monorepo",
+                "svrn project register --force   # override the nested-root guard",
             ],
         );
         return 0;
@@ -25,6 +26,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
 
     let mut root: Option<PathBuf> = None;
     let mut name: Option<String> = None;
+    let mut force = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -36,6 +38,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
                 i += 1;
                 name = args.get(i).cloned();
             }
+            "--force" => force = true,
             _ => {}
         }
         i += 1;
@@ -51,6 +54,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
     let body = serde_json::json!({
         "corpus_id": corpus_id,
         "root": root.display().to_string(),
+        "force": force,
     });
     match daemon_post("/v1/projects/register", body).await {
         Ok(resp) => {
