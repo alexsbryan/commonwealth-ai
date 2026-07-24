@@ -57,7 +57,6 @@ use super::Runtime;
 mod anchoring;
 pub(crate) use anchoring::*;
 
-
 /// `SOVEREIGN_AGENTIC_KQ=1` (or `true`) turns the loop on. Default off
 /// so benches A/B cleanly and nothing changes for existing surfaces.
 pub(crate) fn agentic_kq_enabled() -> bool {

@@ -24,8 +24,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine_watchers::{LintResult, LintResultStore, LintRunSummary};
 use corpus_engine_watchers::WatcherHeartbeat;
+use corpus_engine_watchers::{LintResult, LintResultStore, LintRunSummary};
 
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,

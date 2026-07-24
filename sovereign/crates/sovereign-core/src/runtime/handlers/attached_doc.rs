@@ -686,8 +686,8 @@ impl Runtime {
         )
         .await;
         drop(progress_tx); // close the channel → the reader task ends
-        // I2-A: retain the gate's per-claim records so the finalize step
-        // can assemble the epistemic ledger (previously dropped here).
+                           // I2-A: retain the gate's per-claim records so the finalize step
+                           // can assemble the epistemic ledger (previously dropped here).
         (outcome.text, Some(outcome.meta), Some(outcome.claims))
     }
 

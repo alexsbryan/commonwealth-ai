@@ -1026,7 +1026,10 @@ async fn conv_content_hash_marker_roundtrips_and_upserts() {
 
     // Never enriched → None, so the runner re-enriches (fail-safe).
     assert_eq!(
-        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        store
+            .get_conv_content_hash("corpus-a", "note-1")
+            .await
+            .unwrap(),
         None
     );
 
@@ -1036,7 +1039,10 @@ async fn conv_content_hash_marker_roundtrips_and_upserts() {
         .await
         .unwrap();
     assert_eq!(
-        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        store
+            .get_conv_content_hash("corpus-a", "note-1")
+            .await
+            .unwrap(),
         Some("hash-v1".to_string())
     );
 
@@ -1047,13 +1053,19 @@ async fn conv_content_hash_marker_roundtrips_and_upserts() {
         .await
         .unwrap();
     assert_eq!(
-        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        store
+            .get_conv_content_hash("corpus-a", "note-1")
+            .await
+            .unwrap(),
         Some("hash-v2".to_string())
     );
 
     // Scoped: a sibling conv and a sibling corpus keep their own state.
     assert_eq!(
-        store.get_conv_content_hash("corpus-a", "note-2").await.unwrap(),
+        store
+            .get_conv_content_hash("corpus-a", "note-2")
+            .await
+            .unwrap(),
         None
     );
     store
@@ -1061,7 +1073,10 @@ async fn conv_content_hash_marker_roundtrips_and_upserts() {
         .await
         .unwrap();
     assert_eq!(
-        store.get_conv_content_hash("corpus-a", "note-1").await.unwrap(),
+        store
+            .get_conv_content_hash("corpus-a", "note-1")
+            .await
+            .unwrap(),
         Some("hash-v2".to_string())
     );
 }
@@ -1319,7 +1334,14 @@ async fn summary_correction_ledger_roundtrips_and_flips_status() {
 
     // Re-flagging supersedes: status back to pending, applied_at cleared.
     store
-        .upsert_summary_correction("vault", "Note.md", Some("still wrong"), None, "pending", 2000)
+        .upsert_summary_correction(
+            "vault",
+            "Note.md",
+            Some("still wrong"),
+            None,
+            "pending",
+            2000,
+        )
         .await
         .unwrap();
     let c = store

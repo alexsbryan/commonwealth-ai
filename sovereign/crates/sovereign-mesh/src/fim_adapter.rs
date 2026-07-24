@@ -336,8 +336,7 @@ mod tests {
         async fn complete_stream(
             &self,
             _r: &CompletionRequest,
-        ) -> CoreResult<Pin<Box<dyn futures::Stream<Item = CoreResult<String>> + Send>>>
-        {
+        ) -> CoreResult<Pin<Box<dyn futures::Stream<Item = CoreResult<String>> + Send>>> {
             unimplemented!("with_finish-only stub")
         }
         async fn complete_stream_with_finish(
@@ -419,9 +418,8 @@ mod tests {
         // the 100-X input) + 8 suffix bytes (head of the 100-Y input).
         let expected_prefix = "X".repeat(40);
         let expected_suffix = "Y".repeat(8);
-        let want = format!(
-            "<|fim_prefix|>{expected_prefix}<|fim_suffix|>{expected_suffix}<|fim_middle|>"
-        );
+        let want =
+            format!("<|fim_prefix|>{expected_prefix}<|fim_suffix|>{expected_suffix}<|fim_middle|>");
         assert_eq!(seen.prompt, want);
     }
 
@@ -452,7 +450,13 @@ mod tests {
         // the model's own EOG — usage is None on this path).
         let terminal = frames.last().expect("terminal frame");
         assert!(
-            matches!(terminal, wire::StreamFrame::Finish { reason: wire::FinishReason::Stop, .. }),
+            matches!(
+                terminal,
+                wire::StreamFrame::Finish {
+                    reason: wire::FinishReason::Stop,
+                    ..
+                }
+            ),
             "terminal should be Finish/Stop: {terminal:?}"
         );
         // A Debug frame rides just before the terminal one, with the

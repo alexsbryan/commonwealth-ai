@@ -134,11 +134,7 @@ pub(crate) async fn load_inference(
                     match &outcome {
                         crate::smoketest::SmokeResult::Ok => {
                             tracing::info!("smoketest: GPU path ok — proceeding");
-                            crate::smoketest::record_ok(
-                                &slots.fast,
-                                smoke_gpu_layers,
-                                smoke_ctx,
-                            );
+                            crate::smoketest::record_ok(&slots.fast, smoke_gpu_layers, smoke_ctx);
                         }
                         other if other.suggests_cpu_fallback() => {
                             tracing::error!(
@@ -153,11 +149,10 @@ pub(crate) async fn load_inference(
                                 crate::smoketest::SmokeResult::Crashed { signal } => Some(*signal),
                                 _ => None,
                             };
-                            let arch = sovereign_inference::gguf_meta::read_architecture(
-                                &slots.fast,
-                            )
-                            .ok()
-                            .flatten();
+                            let arch =
+                                sovereign_inference::gguf_meta::read_architecture(&slots.fast)
+                                    .ok()
+                                    .flatten();
                             crate::crash_report::record_native_crash(
                                 format!(
                                     "a model's GPU probe crashed ({other}); fell back to CPU \
@@ -217,8 +212,7 @@ pub(crate) async fn load_inference(
 
             emit(BootstrapPhase::LoadingModel);
             // Honour any GPU-probe-crash CPU-fallback substitution decided above.
-            let chat_path: &std::path::Path =
-                cpu_fallback_chat.as_deref().unwrap_or(&slots.fast);
+            let chat_path: &std::path::Path = cpu_fallback_chat.as_deref().unwrap_or(&slots.fast);
             // If we substituted for a CPU fallback, a recurrent PRIMARY (Slow)
             // model would crash on the first synthesis turn — drop it (Slow then
             // routes to the fast slot or a mesh peer), mirroring `model_compat`.

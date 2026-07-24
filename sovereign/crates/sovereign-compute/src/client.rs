@@ -18,8 +18,9 @@ use sovereign_contracts::{CompletionRequest, CompletionResponse, Error, Result, 
 use tokio::sync::mpsc;
 
 use crate::wire::{
-    self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse, HealthInfo,
-    WireError, ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED, ROUTE_EMBED_BATCH, ROUTE_HEALTH,
+    self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse,
+    HealthInfo, WireError, ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED, ROUTE_EMBED_BATCH,
+    ROUTE_HEALTH,
 };
 
 /// A typed HTTP client for one compute child at `http://127.0.0.1:{port}`.
@@ -189,10 +190,9 @@ impl ComputeChildClient {
         if !resp.status().is_success() {
             return Err(error_from_response(resp).await);
         }
-        let body: EmbedBatchResponse = resp
-            .json()
-            .await
-            .map_err(|e| Error::Inference(format!("compute child embed_batch decode failed: {e}")))?;
+        let body: EmbedBatchResponse = resp.json().await.map_err(|e| {
+            Error::Inference(format!("compute child embed_batch decode failed: {e}"))
+        })?;
         Ok(body.embeddings)
     }
 

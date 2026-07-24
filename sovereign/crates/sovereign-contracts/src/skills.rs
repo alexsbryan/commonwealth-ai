@@ -1171,8 +1171,14 @@ privacy = "{}"
     #[test]
     fn background_skill_id_ignores_workspace_prefers_background_local_only() {
         let mut reg = SkillRegistry::new();
-        reg.register(workspace_skill("recipe-author", ShardingPrivacy::MeshAllowed));
-        reg.register(skill_with_privacy("auto-memory", ShardingPrivacy::LocalOnly));
+        reg.register(workspace_skill(
+            "recipe-author",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.register(skill_with_privacy(
+            "auto-memory",
+            ShardingPrivacy::LocalOnly,
+        ));
         reg.register(skill_with_privacy(
             "research-analyst",
             ShardingPrivacy::MeshAllowed,
@@ -1249,10 +1255,7 @@ privacy = "{}"
         ));
 
         // Simulate a polluted persisted config that lists both.
-        reg.activate_configured(&[
-            "recipe-author".to_string(),
-            "research-analyst".to_string(),
-        ]);
+        reg.activate_configured(&["recipe-author".to_string(), "research-analyst".to_string()]);
 
         let active_ids: Vec<&str> = reg.active_skills().iter().map(|s| s.id.as_str()).collect();
         assert_eq!(

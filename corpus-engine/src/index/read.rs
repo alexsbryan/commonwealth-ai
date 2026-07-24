@@ -199,9 +199,7 @@ impl CorpusIndex {
                 if metadatas.is_null(i) {
                     continue;
                 }
-                let Ok(meta) =
-                    serde_json::from_str::<serde_json::Value>(metadatas.value(i))
-                else {
+                let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadatas.value(i)) else {
                     continue;
                 };
                 let Some(section_id) = meta
@@ -493,9 +491,7 @@ impl CorpusIndex {
     /// fan out into a per-`source_doc_id` query each: `source_doc_id` is not
     /// indexed, so each such query is a full table scan — thousands of them cost
     /// tens of seconds. This is a single pass. Order is Lance's scan order.
-    pub async fn all_chunks_with_embeddings(
-        &self,
-    ) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
+    pub async fn all_chunks_with_embeddings(&self) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
         self.select_chunks_with_embeddings(None).await
     }
 

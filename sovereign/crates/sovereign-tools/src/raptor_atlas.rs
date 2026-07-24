@@ -425,13 +425,26 @@ async fn build_raptor_atlas_impl(
     // same set of calls — and safe because results are merged back by
     // `cluster_idx`, not by position.
     to_summarize.sort_by_key(|(_, inp)| {
-        std::cmp::Reverse(inp.member_descriptors.iter().map(|d| d.len()).sum::<usize>())
+        std::cmp::Reverse(
+            inp.member_descriptors
+                .iter()
+                .map(|d| d.len())
+                .sum::<usize>(),
+        )
     });
     if let (Some((_, biggest)), Some((_, smallest))) = (to_summarize.first(), to_summarize.last()) {
         tracing::debug!(
             clusters = to_summarize.len(),
-            largest_chars = biggest.member_descriptors.iter().map(|d| d.len()).sum::<usize>(),
-            smallest_chars = smallest.member_descriptors.iter().map(|d| d.len()).sum::<usize>(),
+            largest_chars = biggest
+                .member_descriptors
+                .iter()
+                .map(|d| d.len())
+                .sum::<usize>(),
+            smallest_chars = smallest
+                .member_descriptors
+                .iter()
+                .map(|d| d.len())
+                .sum::<usize>(),
             "raptor_atlas: leaf prompt-size spread (dispatching longest-first)"
         );
     }
@@ -1247,7 +1260,13 @@ mod tests {
             })
             .collect();
         let embeddings: Vec<Vec<f32>> = (0..40)
-            .map(|i| if i % 2 == 0 { vec![1.0, 0.0] } else { vec![0.0, 1.0] })
+            .map(|i| {
+                if i % 2 == 0 {
+                    vec![1.0, 0.0]
+                } else {
+                    vec![0.0, 1.0]
+                }
+            })
             .collect();
         let members: Vec<usize> = (0..40).collect();
         let centroid = vec![1.0, 0.0];

@@ -369,7 +369,13 @@ impl PrefixStateCache {
         self.commit_sized(key, prefix_tokens, path, bytes);
     }
 
-    fn commit_sized(&mut self, key: u64, prefix_tokens: Vec<LlamaToken>, path: PathBuf, bytes: u64) {
+    fn commit_sized(
+        &mut self,
+        key: u64,
+        prefix_tokens: Vec<LlamaToken>,
+        path: PathBuf,
+        bytes: u64,
+    ) {
         if bytes > self.max_bytes {
             tracing::warn!(
                 target: "prefix_state",
@@ -580,7 +586,12 @@ mod tests {
             let mut a = toks(fam + 1, &core);
             a.extend([LlamaToken(1)]);
             let key = PrefixStateCache::key(&a);
-            cache.commit_sized(key, a[..PROBE_TOKENS + 100].to_vec(), cache.state_path(key), 400);
+            cache.commit_sized(
+                key,
+                a[..PROBE_TOKENS + 100].to_vec(),
+                cache.state_path(key),
+                400,
+            );
             keys.push(key);
         }
         assert!(!cache.entries.contains_key(&keys[0]), "oldest evicted");
@@ -596,13 +607,23 @@ mod tests {
         let core: Vec<i32> = (0..200).collect();
         let small = toks(1, &core);
         let k_small = PrefixStateCache::key(&small);
-        cache.commit_sized(k_small, small[..PROBE_TOKENS + 100].to_vec(), cache.state_path(k_small), 400);
+        cache.commit_sized(
+            k_small,
+            small[..PROBE_TOKENS + 100].to_vec(),
+            cache.state_path(k_small),
+            400,
+        );
 
         // A pin bigger than the WHOLE budget: refused, and the resident
         // small pin survives (admitting would have flushed everything).
         let big = toks(2, &core);
         let k_big = PrefixStateCache::key(&big);
-        cache.commit_sized(k_big, big[..PROBE_TOKENS + 100].to_vec(), cache.state_path(k_big), 5_000);
+        cache.commit_sized(
+            k_big,
+            big[..PROBE_TOKENS + 100].to_vec(),
+            cache.state_path(k_big),
+            5_000,
+        );
         assert!(!cache.entries.contains_key(&k_big));
         assert!(cache.entries.contains_key(&k_small));
     }

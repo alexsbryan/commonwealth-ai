@@ -316,7 +316,7 @@ async fn mesh_status(
                     peer_inflight_ceiling,
                     fanout_inflight_current,
                     active_corpus_ingests,
-                    iroh_transport: vec![], // no mesh → no peers
+                    iroh_transport: vec![],     // no mesh → no peers
                     founder_reachability: None, // no mesh → no founder endpoint
                 })
                 .unwrap(),

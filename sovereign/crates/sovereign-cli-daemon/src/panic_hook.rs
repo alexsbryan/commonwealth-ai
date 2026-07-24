@@ -196,7 +196,8 @@ mod tests {
             let t = std::time::SystemTime::UNIX_EPOCH
                 + std::time::Duration::from_secs(1_000_000 + i as u64);
             let f = std::fs::File::options().write(true).open(&p).unwrap();
-            f.set_times(std::fs::FileTimes::new().set_modified(t)).unwrap();
+            f.set_times(std::fs::FileTimes::new().set_modified(t))
+                .unwrap();
         }
         prune_records(&crashes);
         let mut left: Vec<String> = std::fs::read_dir(&crashes)

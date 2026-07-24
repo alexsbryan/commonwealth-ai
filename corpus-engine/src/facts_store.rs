@@ -494,9 +494,7 @@ fn scoped_sql(base: &str, corpus: Option<&str>) -> (String, bool) {
     }
 }
 
-fn collect<T>(
-    rows: impl Iterator<Item = rusqlite::Result<T>>,
-) -> Result<Vec<T>> {
+fn collect<T>(rows: impl Iterator<Item = rusqlite::Result<T>>) -> Result<Vec<T>> {
     let mut out = Vec::new();
     for r in rows {
         out.push(r.map_err(db_err)?);
@@ -544,7 +542,11 @@ mod tests {
     use super::*;
 
     fn fnd(name: &str, file: &str, line: usize) -> FnDef {
-        FnDef { name: name.into(), file: file.into(), line }
+        FnDef {
+            name: name.into(),
+            file: file.into(),
+            line,
+        }
     }
     fn ctor(struct_type: &str, field: &str, value: &str, file: &str) -> CtorField {
         CtorField {
@@ -557,29 +559,55 @@ mod tests {
         }
     }
     fn strl(content: &str, file: &str) -> StrLit {
-        StrLit { content: content.into(), enclosing_fn: "f".into(), file: file.into(), line: 1 }
+        StrLit {
+            content: content.into(),
+            enclosing_fn: "f".into(),
+            file: file.into(),
+            line: 1,
+        }
     }
 
     #[tokio::test]
     async fn replace_all_then_query() {
         let s = FactStore::open_in_memory().unwrap();
         let facts = Facts {
-            fn_defs: vec![fnd("export_changed", "scip.rs", 300), fnd("replace_files", "g.rs", 10)],
+            fn_defs: vec![
+                fnd("export_changed", "scip.rs", 300),
+                fnd("replace_files", "g.rs", 10),
+            ],
             ctor_fields: vec![ctor("CodeWatcher", "debounce", "800", "watch.rs")],
             str_lits: vec![strl("never_run", "lint.rs")],
         };
         s.replace_all("demo", &facts).await.unwrap();
 
-        assert_eq!(s.find_fn_defs(Some("demo"), "export_changed", 10).await.unwrap().len(), 1);
-        assert_eq!(s.find_ctor_fields(Some("demo"), "debounce", 10).await.unwrap()[0].value, "800");
-        assert_eq!(s.find_str_lits(None, "never_run", 10).await.unwrap().len(), 1);
+        assert_eq!(
+            s.find_fn_defs(Some("demo"), "export_changed", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            s.find_ctor_fields(Some("demo"), "debounce", 10)
+                .await
+                .unwrap()[0]
+                .value,
+            "800"
+        );
+        assert_eq!(
+            s.find_str_lits(None, "never_run", 10).await.unwrap().len(),
+            1
+        );
         assert_eq!(s.corpora().await.unwrap(), vec!["demo".to_string()]);
     }
 
     #[tokio::test]
     async fn replace_all_is_idempotent_not_appending() {
         let s = FactStore::open_in_memory().unwrap();
-        let facts = Facts { fn_defs: vec![fnd("a", "a.rs", 1)], ..Default::default() };
+        let facts = Facts {
+            fn_defs: vec![fnd("a", "a.rs", 1)],
+            ..Default::default()
+        };
         s.replace_all("c", &facts).await.unwrap();
         s.replace_all("c", &facts).await.unwrap();
         // Rebuilt, not doubled.
@@ -603,12 +631,19 @@ mod tests {
         s.replace_files(
             "c",
             &["a.rs".to_string()],
-            &Facts { fn_defs: vec![fnd("a2", "a.rs", 5)], ..Default::default() },
+            &Facts {
+                fn_defs: vec![fnd("a2", "a.rs", 5)],
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
 
-        assert!(s.find_fn_defs(Some("c"), "a1", 10).await.unwrap().is_empty());
+        assert!(s
+            .find_fn_defs(Some("c"), "a1", 10)
+            .await
+            .unwrap()
+            .is_empty());
         assert_eq!(s.find_fn_defs(Some("c"), "a2", 10).await.unwrap().len(), 1);
         assert_eq!(s.find_fn_defs(Some("c"), "b1", 10).await.unwrap().len(), 1);
     }
@@ -627,25 +662,54 @@ mod tests {
         .await
         .unwrap();
         // Empty re-index of x.rs (file deleted) drops every kind.
-        s.replace_files("c", &["x.rs".to_string()], &Facts::default()).await.unwrap();
+        s.replace_files("c", &["x.rs".to_string()], &Facts::default())
+            .await
+            .unwrap();
         assert!(s.find_fn_defs(Some("c"), "f", 10).await.unwrap().is_empty());
-        assert!(s.find_ctor_fields(Some("c"), "fld", 10).await.unwrap().is_empty());
-        assert!(s.find_str_lits(Some("c"), "lit", 10).await.unwrap().is_empty());
+        assert!(s
+            .find_ctor_fields(Some("c"), "fld", 10)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(s
+            .find_str_lits(Some("c"), "lit", 10)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
     async fn corpus_scoping_isolates() {
         let s = FactStore::open_in_memory().unwrap();
-        s.replace_all("A", &Facts { fn_defs: vec![fnd("shared", "a.rs", 1)], ..Default::default() })
-            .await
-            .unwrap();
-        s.replace_all("B", &Facts { fn_defs: vec![fnd("shared", "a.rs", 1)], ..Default::default() })
-            .await
-            .unwrap();
+        s.replace_all(
+            "A",
+            &Facts {
+                fn_defs: vec![fnd("shared", "a.rs", 1)],
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        s.replace_all(
+            "B",
+            &Facts {
+                fn_defs: vec![fnd("shared", "a.rs", 1)],
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
         // Rebuilding A leaves B intact.
         s.replace_all("A", &Facts::default()).await.unwrap();
-        assert!(s.find_fn_defs(Some("A"), "shared", 10).await.unwrap().is_empty());
-        assert_eq!(s.find_fn_defs(Some("B"), "shared", 10).await.unwrap().len(), 1);
+        assert!(s
+            .find_fn_defs(Some("A"), "shared", 10)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            s.find_fn_defs(Some("B"), "shared", 10).await.unwrap().len(),
+            1
+        );
         // Cross-corpus search still finds B's.
         assert_eq!(s.find_fn_defs(None, "shared", 10).await.unwrap().len(), 1);
     }
@@ -671,13 +735,26 @@ mod tests {
         let s = FactStore::open_in_memory().unwrap();
         s.replace_all(
             "c",
-            &Facts { str_lits: vec![strl("100%_done", "a.rs"), strl("nope", "b.rs")], ..Default::default() },
+            &Facts {
+                str_lits: vec![strl("100%_done", "a.rs"), strl("nope", "b.rs")],
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
         // The `%` and `_` must be treated literally, not as wildcards.
-        assert_eq!(s.find_str_lits(Some("c"), "100%_done", 10).await.unwrap().len(), 1);
-        assert!(s.find_str_lits(Some("c"), "100Xdone", 10).await.unwrap().is_empty());
+        assert_eq!(
+            s.find_str_lits(Some("c"), "100%_done", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(s
+            .find_str_lits(Some("c"), "100Xdone", 10)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]

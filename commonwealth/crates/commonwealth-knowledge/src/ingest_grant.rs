@@ -239,7 +239,10 @@ mod tests {
 
         let dead = store.drain_dead(T0 + 120_000);
         let ids: HashSet<String> = dead.into_iter().map(|g| g.corpus_id).collect();
-        assert_eq!(ids, HashSet::from(["expired".to_string(), "revoked".to_string()]));
+        assert_eq!(
+            ids,
+            HashSet::from(["expired".to_string(), "revoked".to_string()])
+        );
         // The live grant survives the sweep.
         assert!(store.live("live", T0 + 120_000).is_some());
     }

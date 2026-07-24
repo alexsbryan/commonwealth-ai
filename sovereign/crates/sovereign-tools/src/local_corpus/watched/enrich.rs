@@ -584,10 +584,9 @@ impl EnrichmentDriver {
             // the provider's terminal Complete/Failed stamp has already landed,
             // and the heartbeat never touches a terminal state, so it cannot
             // race that stamp.
-            let _build_heartbeat =
-                corpus_engine::enrichment::state::EnrichmentHeartbeat::spawn(
-                    index_path_owned.clone(),
-                );
+            let _build_heartbeat = corpus_engine::enrichment::state::EnrichmentHeartbeat::spawn(
+                index_path_owned.clone(),
+            );
 
             // T1 is already on disk (corpus-engine ingest stamps
             // embeddings into Lance). The first explicit tier

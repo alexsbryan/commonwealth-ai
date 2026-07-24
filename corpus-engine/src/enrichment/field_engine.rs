@@ -1101,7 +1101,14 @@ domain = "{domain}"
     fn from_recipe_rejects_deleted_stub_domains() {
         // The deleted stubs must fail at selection with a clean error — never a
         // `todo!()` panic mid-enrichment. This is the whole point of removing them.
-        for domain in ["science", "policy", "legal", "community", "multi", "engineering"] {
+        for domain in [
+            "science",
+            "policy",
+            "legal",
+            "community",
+            "multi",
+            "engineering",
+        ] {
             let recipe = recipe_with_domain(domain);
             let (embed, inference) = test_embed_infer();
             let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);

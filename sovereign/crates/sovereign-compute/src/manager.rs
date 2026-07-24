@@ -274,7 +274,11 @@ fn spawn_managed(spec: &ChildSpec, binary: &Path, crash_log_dir: &Path) -> Manag
 
     let supervisor = Arc::new(Supervisor::new(config));
     let (tx, rx) = watch::channel(ChildRuntimeState::starting());
-    let collector = tokio::spawn(collect_lifecycle(spec.name.clone(), Arc::clone(&supervisor), tx));
+    let collector = tokio::spawn(collect_lifecycle(
+        spec.name.clone(),
+        Arc::clone(&supervisor),
+        tx,
+    ));
     let run = {
         let s = Arc::clone(&supervisor);
         tokio::spawn(async move { s.run().await })
@@ -315,7 +319,12 @@ async fn collect_lifecycle(
             SupervisorState::Starting => {
                 port = None;
                 pid = None;
-                (ChildLifecycle::Starting, "starting".to_string(), false, None)
+                (
+                    ChildLifecycle::Starting,
+                    "starting".to_string(),
+                    false,
+                    None,
+                )
             }
             SupervisorState::Warming {
                 pid: child_pid,

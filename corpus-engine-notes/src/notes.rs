@@ -3495,7 +3495,6 @@ impl NoteStore {
 /// or column means writing one new migration constant — never
 /// editing this schema twice.
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 use corpus_engine_yield::time::unix_now;
 
 fn sqlite_err(e: rusqlite::Error) -> Error {
@@ -3826,7 +3825,7 @@ mod tests {
         assert!(!q.contains('('));
         assert!(q.contains("\"good\""));
         assert!(q.contains("\"NEAR\"")); // operator word demoted to a term
-        // Underscored identifiers survive as one term.
+                                         // Underscored identifiers survive as one term.
         assert_eq!(fts5_user_query("reindex_file"), "\"reindex_file\"");
         // Punctuation-only input yields empty — callers must skip FTS.
         assert_eq!(fts5_user_query("(((+++)))"), "");

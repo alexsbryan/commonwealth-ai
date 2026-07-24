@@ -389,11 +389,7 @@ const FULL_REBUILD_MAX_DEFER: Duration = Duration::from_secs(600);
 /// in the meantime, so a deferred full rebuild only delays precise cross-file
 /// edges, never symbol existence. Returns whether a rebuild was actually
 /// spawned (so the caller can stamp its cooldown only when one started).
-fn spawn_full_rebuild(
-    ctx: &RebuildCtx,
-    req: RebuildRequest,
-    in_flight: &Arc<AtomicBool>,
-) -> bool {
+fn spawn_full_rebuild(ctx: &RebuildCtx, req: RebuildRequest, in_flight: &Arc<AtomicBool>) -> bool {
     // Acquire the single-rebuild slot; if already taken, coalesce.
     if in_flight.swap(true, Ordering::AcqRel) {
         ctx.state.mark_dirty();
@@ -428,7 +424,9 @@ async fn run_overlay_merge(
     root: &Path,
     changed: &[PathBuf],
 ) -> (usize, usize) {
-    use corpus_engine::facts::{extract_facts_for_file, extract_symbol_defs, pack_for_extension, Facts};
+    use corpus_engine::facts::{
+        extract_facts_for_file, extract_symbol_defs, pack_for_extension, Facts,
+    };
 
     let mut files: Vec<String> = Vec::new();
     let mut symbols = Vec::new();
@@ -1234,19 +1232,32 @@ mod tests {
     #[tokio::test]
     async fn overlay_merge_refreshes_symbol_defs_from_disk() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("lib.rs"), "fn hello() {}\nfn world() {\n  let x=1;\n}\n")
-            .unwrap();
+        std::fs::write(
+            tmp.path().join("lib.rs"),
+            "fn hello() {}\nfn world() {\n  let x=1;\n}\n",
+        )
+        .unwrap();
         let graph = mem_graph();
 
-        let (files, syms) =
-            run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("lib.rs")]).await;
+        let (files, syms) = run_overlay_merge(
+            &graph,
+            "overlay-test",
+            tmp.path(),
+            tmp.path(),
+            &[PathBuf::from("lib.rs")],
+        )
+        .await;
         assert_eq!(files, 1);
         assert_eq!(syms, 2);
 
         // The end-to-end proof: symbols() finds functions that only exist on
         // disk, with NO rust-analyzer, purely via the tree-sitter overlay.
         let g = graph.load();
-        assert!(!g.find_symbols_by_name("hello", None, 8).await.unwrap().is_empty());
+        assert!(!g
+            .find_symbols_by_name("hello", None, 8)
+            .await
+            .unwrap()
+            .is_empty());
         let world = g.find_symbols_by_name("world", None, 8).await.unwrap();
         assert_eq!(world.len(), 1);
         assert_eq!(world[0].file_path, "lib.rs");
@@ -1265,7 +1276,10 @@ mod tests {
             &[PathBuf::from("README.md"), PathBuf::from("Cargo.toml")],
         )
         .await;
-        assert_eq!(files, 0, "non-source paths belong to the full export, not the overlay");
+        assert_eq!(
+            files, 0,
+            "non-source paths belong to the full export, not the overlay"
+        );
         assert_eq!(syms, 0);
     }
 
@@ -1275,16 +1289,42 @@ mod tests {
         let graph = mem_graph();
         // Seed a def for gone.rs, then "delete" it (never write the file).
         std::fs::write(tmp.path().join("gone.rs"), "fn ghost() {}").unwrap();
-        run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("gone.rs")]).await;
-        assert!(!graph.load().find_symbols_by_name("ghost", None, 8).await.unwrap().is_empty());
+        run_overlay_merge(
+            &graph,
+            "overlay-test",
+            tmp.path(),
+            tmp.path(),
+            &[PathBuf::from("gone.rs")],
+        )
+        .await;
+        assert!(!graph
+            .load()
+            .find_symbols_by_name("ghost", None, 8)
+            .await
+            .unwrap()
+            .is_empty());
 
         std::fs::remove_file(tmp.path().join("gone.rs")).unwrap();
-        let (files, syms) =
-            run_overlay_merge(&graph, "overlay-test", tmp.path(), tmp.path(), &[PathBuf::from("gone.rs")]).await;
-        assert_eq!(files, 1, "deleted source file is still processed (to drop its rows)");
+        let (files, syms) = run_overlay_merge(
+            &graph,
+            "overlay-test",
+            tmp.path(),
+            tmp.path(),
+            &[PathBuf::from("gone.rs")],
+        )
+        .await;
+        assert_eq!(
+            files, 1,
+            "deleted source file is still processed (to drop its rows)"
+        );
         assert_eq!(syms, 0);
         assert!(
-            graph.load().find_symbols_by_name("ghost", None, 8).await.unwrap().is_empty(),
+            graph
+                .load()
+                .find_symbols_by_name("ghost", None, 8)
+                .await
+                .unwrap()
+                .is_empty(),
             "deleted file's defs must be gone"
         );
     }

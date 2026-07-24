@@ -1025,7 +1025,10 @@ pub async fn corpus_eligible_peers(
         let (eligible, reason) = if !online {
             (false, "offline")
         } else {
-            match (local_embed_model.as_ref(), m.capabilities.embed_model.as_ref()) {
+            match (
+                local_embed_model.as_ref(),
+                m.capabilities.embed_model.as_ref(),
+            ) {
                 (_, None) => (false, "no_embed_model"),
                 (Some(local), Some(em)) if em == local => (true, "ok"),
                 (Some(_), Some(_)) => (false, "embed_model_mismatch"),

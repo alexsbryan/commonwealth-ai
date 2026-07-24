@@ -31,3 +31,13 @@ models/
 # prunes vendored trees (same skip list as target/.git), so the gate
 # structurally cannot resolve it.
 vendor/
+
+# The regression-gate section cites the cargo build tree `target/` (and
+# `target/sovereign-test-scoped`) when explaining why scoped runs share the
+# workspace target dir rather than paying for a second cold one. Same
+# structural reason as `vendor/` above: build_path_index prunes target/, so
+# the gate can never resolve it — and it is gitignored, so it is absent from
+# a clean checkout regardless. Added 2026-07-24, when the docs-gate failure
+# it caused was found by the new pre-push hook (scripts/pre-push.sh) rather
+# than by CI, which had stopped running on a billing hard-stop.
+target/

@@ -18,8 +18,6 @@
 
 mod amend;
 mod arch_report_cmd;
-mod suggest_seams_cmd;
-mod dry_report_cmd;
 mod atos_cmd;
 mod atos_plugin;
 mod audit_extract;
@@ -31,6 +29,7 @@ mod design_onboarding;
 mod design_session;
 mod doc_fetcher;
 mod drift_cmd_orchestrator;
+mod dry_report_cmd;
 mod found;
 mod honesty;
 mod observation;
@@ -39,6 +38,7 @@ mod plan_composer;
 mod plan_enricher;
 mod project_cmd;
 mod project_toml;
+mod suggest_seams_cmd;
 mod tools_cmd;
 
 use sovereign_cli_shared::tracing_init::init_tracing;

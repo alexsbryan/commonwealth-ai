@@ -45,11 +45,7 @@ impl MeshState {
                         NodeStatus::Offline => MemberStatus::Offline,
                     },
                     vram_gb: m.capabilities.hardware.gpus.iter().map(|g| g.vram_gb).sum(),
-                    can_anchor: m
-                        .capabilities
-                        .anchor
-                        .as_ref()
-                        .is_some_and(|a| a.can_anchor),
+                    can_anchor: m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor),
                     contribution_level: 0, // Populated from ledger
                     contribution_label: String::new(),
                     // SocketAddrs render as host:port. Surfaced for

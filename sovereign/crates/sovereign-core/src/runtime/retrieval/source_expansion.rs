@@ -223,7 +223,10 @@ impl Runtime {
             // grounding budget (measured: preemption displaced the
             // Copenhagen-interpretation grounding chunk — an expected
             // source — to seat a Wigner admission; −2 src net).
-            if c.metadata.get("injected_by").map(|v| v == "ppr_expand").unwrap_or(false)
+            if c.metadata
+                .get("injected_by")
+                .map(|v| v == "ppr_expand")
+                .unwrap_or(false)
                 && seen_contents.insert(c.content.clone())
             {
                 grounding.push(c.clone());
@@ -429,7 +432,10 @@ impl Runtime {
                     );
                     let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
                         let body = c.content.to_lowercase();
-                        q_tokens.iter().filter(|t| body.contains(t.as_str())).count()
+                        q_tokens
+                            .iter()
+                            .filter(|t| body.contains(t.as_str()))
+                            .count()
                     };
                     group_chunks.sort_by_key(|c| std::cmp::Reverse(overlap(c)));
                     let mut added_this_group = 0usize;

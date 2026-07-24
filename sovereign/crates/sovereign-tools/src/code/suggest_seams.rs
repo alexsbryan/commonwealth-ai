@@ -177,9 +177,8 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
         .map(|(_, a, b, _)| (*a, *b))
         .max_by_key(|(a, b)| b - a)
         .filter(|(a, b)| (b - a + 1) * 10 >= file_lines * 6); // ≥60% coverage
-    let strictly_contains = |c: (i32, i32), s: (i32, i32)| {
-        c.0 <= s.0 && s.1 <= c.1 && (c.1 - c.0) > (s.1 - s.0)
-    };
+    let strictly_contains =
+        |c: (i32, i32), s: (i32, i32)| c.0 <= s.0 && s.1 <= c.1 && (c.1 - c.0) > (s.1 - s.0);
     let container_count = |s: (i32, i32)| {
         items
             .iter()
@@ -205,7 +204,9 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
         if container_count((*start, *end)) != target_depth {
             continue;
         }
-        let is_fn = pkg_and_desc(qual).map(|(_, d)| is_function(d)).unwrap_or(false);
+        let is_fn = pkg_and_desc(qual)
+            .map(|(_, d)| is_function(d))
+            .unwrap_or(false);
         let lines = (end - start + 1).max(0) as usize;
         file_quals.insert(qual.clone());
         if is_fn {
@@ -223,7 +224,12 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
             },
         );
     }
-    let short = |q: &str| by_qual.get(q).map(|m| m.name.clone()).unwrap_or_else(|| q.to_string());
+    let short = |q: &str| {
+        by_qual
+            .get(q)
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| q.to_string())
+    };
 
     // ── Edges: intra-file function call graph + fan-in + external entry + data refs ──
     let edges = graph
@@ -254,8 +260,13 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
         if fn_quals.contains(callee) {
             if caller_top_level {
                 if caller != callee {
-                    adj.entry(caller.clone()).or_default().insert(callee.clone());
-                    in_fanin.entry(callee.clone()).or_default().insert(caller.clone());
+                    adj.entry(caller.clone())
+                        .or_default()
+                        .insert(callee.clone());
+                    in_fanin
+                        .entry(callee.clone())
+                        .or_default()
+                        .insert(caller.clone());
                 }
             } else if !file_all.contains(caller.as_str()) {
                 ext_entered.insert(callee.clone()); // truly from outside the file
@@ -263,7 +274,10 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
             // else: caller is in-file but not top-level (test/nested) → ignore
         } else if caller_top_level {
             // function → in-file const/struct (data ref, drives placement)
-            data_referrers.entry(callee.clone()).or_default().insert(caller.clone());
+            data_referrers
+                .entry(callee.clone())
+                .or_default()
+                .insert(caller.clone());
         }
     }
 
@@ -285,7 +299,12 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
         .iter()
         .max_by_key(|q| (ext_fanout(q), out_deg(q)))
         .filter(|q| ext_fanout(q) >= DISPATCHER_MIN_FANOUT)
-        .filter(|q| by_qual.get(*q).map(|m| m.lines <= DISPATCHER_MAX_LINES).unwrap_or(false))
+        .filter(|q| {
+            by_qual
+                .get(*q)
+                .map(|m| m.lines <= DISPATCHER_MAX_LINES)
+                .unwrap_or(false)
+        })
         .cloned();
 
     let mut seeds: BTreeSet<String> = ext_entered.iter().cloned().collect();
@@ -314,7 +333,9 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
         visited.insert(seed.clone());
         queue.push_back(seed.clone());
         while let Some(cur) = queue.pop_front() {
-            let Some(callees) = adj.get(&cur) else { continue };
+            let Some(callees) = adj.get(&cur) else {
+                continue;
+            };
             for c in callees {
                 if visited.contains(c) {
                     continue;
@@ -420,7 +441,10 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
             merge_map.entry(key).or_default().insert(short(f));
         }
         if let Some(m) = member_of(f) {
-            shared.push(SharedMember { member: m, owners: owner_names });
+            shared.push(SharedMember {
+                member: m,
+                owners: owner_names,
+            });
         }
     }
     for d in &shared_data {
@@ -435,7 +459,10 @@ pub async fn build_seam_report(inputs: SeamInputs<'_>) -> Result<SeamReport> {
                         .collect()
                 })
                 .unwrap_or_default();
-            shared.push(SharedMember { member: m, owners: owner_names });
+            shared.push(SharedMember {
+                member: m,
+                owners: owner_names,
+            });
         }
     }
     shared.sort_by(|a, b| b.member.lines.cmp(&a.member.lines));
@@ -480,7 +507,9 @@ pub fn render_seam_report(r: &SeamReport) -> String {
     ));
     match &r.dispatcher {
         Some(d) => out.push_str(&format!("Dispatcher: `{d}` (stays in mod.rs).\n\n")),
-        None => out.push_str("No dispatcher detected (seeds = externally-called functions only).\n\n"),
+        None => {
+            out.push_str("No dispatcher detected (seeds = externally-called functions only).\n\n")
+        }
     }
 
     let extractable: Vec<&Cluster> = r.clusters.iter().filter(|c| c.members.len() > 1).collect();
@@ -552,7 +581,9 @@ pub fn render_seam_report(r: &SeamReport) -> String {
         "## Shared — stay in mod.rs ({})\n\n",
         r.shared.len()
     ));
-    out.push_str("Reached from ≥2 clusters; extracting them would create cross-module coupling.\n\n");
+    out.push_str(
+        "Reached from ≥2 clusters; extracting them would create cross-module coupling.\n\n",
+    );
     for s in &r.shared {
         out.push_str(&format!(
             "- `{}` ({} lines) — used by {}\n",

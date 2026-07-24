@@ -580,39 +580,36 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         }
         None => Arc::clone(&session.inference),
     };
-    let enrich_inference: Arc<dyn InferenceProvider> = Arc::new(MeteredInference::new(
-        enrich_base,
-        Arc::clone(&ledger),
-    ));
+    let enrich_inference: Arc<dyn InferenceProvider> =
+        Arc::new(MeteredInference::new(enrich_base, Arc::clone(&ledger)));
     // T2 entity pass: prefer the local NER model over the LLM when it's
     // installed. Loaded eagerly (not `LazyGlinerExtractor`) because the
     // bench must measure the NER path, not race it — a lazy loader that
     // isn't warm yet returns empty and silently falls back to the LLM,
     // which would make a GLiNER run look like a no-op.
     // `--no-gliner` forces the LLM path for A/B comparison.
-    let entity_extractor: Option<Arc<dyn sovereign_core::traits::EntityExtractor>> = if opts
-        .no_gliner
-    {
-        eprintln!("      T2 entity pass: LLM (--no-gliner)");
-        None
-    } else {
-        let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
-            match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-                Ok(g) => {
-                    eprintln!("      T2 entity pass: GLiNER ({model_id})");
-                    Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
-                }
-                Err(e) => {
-                    eprintln!("      T2 entity pass: LLM (GLiNER load failed: {e})");
-                    None
-                }
-            }
-        } else {
-            eprintln!("      T2 entity pass: LLM (GLiNER model {model_id} not installed)");
+    let entity_extractor: Option<Arc<dyn sovereign_core::traits::EntityExtractor>> =
+        if opts.no_gliner {
+            eprintln!("      T2 entity pass: LLM (--no-gliner)");
             None
-        }
-    };
+        } else {
+            let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
+            if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
+                match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
+                    Ok(g) => {
+                        eprintln!("      T2 entity pass: GLiNER ({model_id})");
+                        Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+                    }
+                    Err(e) => {
+                        eprintln!("      T2 entity pass: LLM (GLiNER load failed: {e})");
+                        None
+                    }
+                }
+            } else {
+                eprintln!("      T2 entity pass: LLM (GLiNER model {model_id} not installed)");
+                None
+            }
+        };
     let mut manager =
         DocumentAssetManager::new(Arc::clone(&enrich_inference), Arc::clone(&session.store));
     if let Some(g) = entity_extractor {

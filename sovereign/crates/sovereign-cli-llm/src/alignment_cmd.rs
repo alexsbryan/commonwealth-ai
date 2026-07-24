@@ -343,9 +343,15 @@ async fn cmd_status(_args: &[String]) -> i32 {
         }
         Ok(Some(progress)) => {
             println!();
-            println!("⏳ Ingest in progress — {}", render_ingest_progress(&progress));
+            println!(
+                "⏳ Ingest in progress — {}",
+                render_ingest_progress(&progress)
+            );
             println!("   Re-run `svrn alignment status` to refresh.");
-            println!("   Live log: tail -f {} | grep '[alignment]'", daemon_log_path());
+            println!(
+                "   Live log: tail -f {} | grep '[alignment]'",
+                daemon_log_path()
+            );
         }
         Ok(None) => {
             if !have_local {

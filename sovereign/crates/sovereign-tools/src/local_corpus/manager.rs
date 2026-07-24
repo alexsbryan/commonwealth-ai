@@ -814,9 +814,8 @@ impl LocalCorpusManager {
         if let Ok(mut guard) = self.enrichment_progress.write() {
             guard.remove(corpus_id);
         }
-        let state_path = corpus_engine::enrichment::state::EnrichmentStateFile::path(
-            &index_dir.join(corpus_id),
-        );
+        let state_path =
+            corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir.join(corpus_id));
         if state_path.exists() {
             if let Err(e) = std::fs::remove_file(&state_path) {
                 tracing::warn!(

@@ -36,7 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .unwrap_or_else(|| "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string());
     eprintln!("loading reranker: {path}");
-    let reranker = StandaloneReranker::load(std::path::Path::new(&path), ModelFamily::Reranker, None)?;
+    let reranker =
+        StandaloneReranker::load(std::path::Path::new(&path), ModelFamily::Reranker, None)?;
     eprintln!("loaded.\n");
 
     // Scenario A — the real prerank use case: many short title-like
@@ -44,18 +45,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // short trailing wave, so cross-wave prefix survival is exercised.
     let title_query = "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?";
     let titles: Vec<String> = [
-        "Werner Heisenberg", "Uncertainty principle", "Determinism", "Free will",
-        "Quantum mechanics", "Niels Bohr", "Albert Einstein", "Hidden-variable theory",
-        "Copenhagen interpretation", "Wave function collapse", "Laplace's demon", "Causality",
-        "Indeterminism", "Philosophy of physics", "Bell's theorem", "Schrödinger equation",
-        "Compatibilism", "Classical mechanics", "Measurement problem", "Observer effect (physics)",
-        "Pierre-Simon Laplace", "Erwin Schrödinger", "Max Born", "Wolfgang Pauli",
-        "Photosynthesis", "French Revolution", "Roman Empire", "Baroque music",
-        "Mount Everest", "Pacific Ocean", "Cellular respiration", "Great Barrier Reef",
-        "Industrial Revolution", "Renaissance art", "Plate tectonics", "Jazz",
-        "Amazon rainforest", "Byzantine Empire", "Gothic architecture", "Continental drift",
-        "Impressionism", "Ottoman Empire", "Coral bleaching", "Feudalism",
-        "Volcanology", "Surrealism", "Meiji Restoration", "Photoelectric effect",
+        "Werner Heisenberg",
+        "Uncertainty principle",
+        "Determinism",
+        "Free will",
+        "Quantum mechanics",
+        "Niels Bohr",
+        "Albert Einstein",
+        "Hidden-variable theory",
+        "Copenhagen interpretation",
+        "Wave function collapse",
+        "Laplace's demon",
+        "Causality",
+        "Indeterminism",
+        "Philosophy of physics",
+        "Bell's theorem",
+        "Schrödinger equation",
+        "Compatibilism",
+        "Classical mechanics",
+        "Measurement problem",
+        "Observer effect (physics)",
+        "Pierre-Simon Laplace",
+        "Erwin Schrödinger",
+        "Max Born",
+        "Wolfgang Pauli",
+        "Photosynthesis",
+        "French Revolution",
+        "Roman Empire",
+        "Baroque music",
+        "Mount Everest",
+        "Pacific Ocean",
+        "Cellular respiration",
+        "Great Barrier Reef",
+        "Industrial Revolution",
+        "Renaissance art",
+        "Plate tectonics",
+        "Jazz",
+        "Amazon rainforest",
+        "Byzantine Empire",
+        "Gothic architecture",
+        "Continental drift",
+        "Impressionism",
+        "Ottoman Empire",
+        "Coral bleaching",
+        "Feudalism",
+        "Volcanology",
+        "Surrealism",
+        "Meiji Restoration",
+        "Photoelectric effect",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -110,7 +147,11 @@ async fn run_scenario(
     let seq_ms = t1.elapsed().as_secs_f64() * 1e3;
 
     assert_eq!(batched.len(), docs.len(), "batched returned wrong count");
-    assert_eq!(sequential.len(), docs.len(), "sequential returned wrong count");
+    assert_eq!(
+        sequential.len(),
+        docs.len(),
+        "sequential returned wrong count"
+    );
 
     // Per-doc divergence + signed bias. The oracle re-decodes the
     // prefix WITH each doc's tail in one pass; the batched path decodes
@@ -154,7 +195,11 @@ async fn run_scenario(
     let topk = 8.min(docs.len());
     let order = |scores: &[f32]| -> Vec<usize> {
         let mut idx: Vec<usize> = (0..scores.len()).collect();
-        idx.sort_by(|&a, &b| scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal));
+        idx.sort_by(|&a, &b| {
+            scores[b]
+                .partial_cmp(&scores[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         idx
     };
     let ob = order(&batched);
@@ -179,12 +224,27 @@ async fn run_scenario(
         .max()
         .unwrap_or(0);
 
-    eprintln!("  latency:   batched {batched_ms:>7.1}ms   sequential {seq_ms:>7.1}ms   speedup {:.2}×", seq_ms / batched_ms.max(1e-9));
+    eprintln!(
+        "  latency:   batched {batched_ms:>7.1}ms   sequential {seq_ms:>7.1}ms   speedup {:.2}×",
+        seq_ms / batched_ms.max(1e-9)
+    );
     eprintln!("  score fidelity vs oracle: mean|Δ| {mean_abs:.4}  p90 {p90:.4}  max {max_diff:.4} (#{worst} {:?})", &docs[worst][..docs[worst].len().min(28)]);
     eprintln!("  systematic bias (signed mean Δ): {mean_signed:+.4}   [>0.05: {over_05}/{}, >0.10: {over_10}/{}]", docs.len(), docs.len());
     eprintln!("  ranking: top-{topk} overlap {overlap}/{topk}, max rank shift {max_rank_shift}");
-    eprintln!("  batched top-3:    {:?}", ob[..3.min(docs.len())].iter().map(|&i| &docs[i][..docs[i].len().min(28)]).collect::<Vec<_>>());
-    eprintln!("  sequential top-3: {:?}", os[..3.min(docs.len())].iter().map(|&i| &docs[i][..docs[i].len().min(28)]).collect::<Vec<_>>());
+    eprintln!(
+        "  batched top-3:    {:?}",
+        ob[..3.min(docs.len())]
+            .iter()
+            .map(|&i| &docs[i][..docs[i].len().min(28)])
+            .collect::<Vec<_>>()
+    );
+    eprintln!(
+        "  sequential top-3: {:?}",
+        os[..3.min(docs.len())]
+            .iter()
+            .map(|&i| &docs[i][..docs[i].len().min(28)])
+            .collect::<Vec<_>>()
+    );
 
     // Acceptance: what the pipeline actually consumes must be preserved.
     // (1) RANKING — the prerank/admission order (top-k overlap + bounded

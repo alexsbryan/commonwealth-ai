@@ -292,13 +292,9 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
     ) -> Result<EvidenceRetrieval> {
-        let context = crate::context::build_context(
-            self.store.as_ref(),
-            conversation_id,
-            message,
-            None,
-        )
-        .await?;
+        let context =
+            crate::context::build_context(self.store.as_ref(), conversation_id, message, None)
+                .await?;
         let intent = self
             .router
             .classify(message, &context, &[])
@@ -1581,8 +1577,7 @@ impl Runtime {
             && !plan.gate_entity_anchored
         {
             if let Some(rescued) =
-                crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message)
-                    .await
+                crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message).await
             {
                 tracing::info!(
                     target: "epistemic.ledger",

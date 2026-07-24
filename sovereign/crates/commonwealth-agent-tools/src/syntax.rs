@@ -305,9 +305,7 @@ impl SyntaxValidator for PythonSyntaxValidator {
                     // rather than fail-open on the first hiccup.
                     last_err = e;
                     if attempt < MAX_ATTEMPTS {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            20 * attempt as u64,
-                        ));
+                        std::thread::sleep(std::time::Duration::from_millis(20 * attempt as u64));
                     }
                     continue;
                 }

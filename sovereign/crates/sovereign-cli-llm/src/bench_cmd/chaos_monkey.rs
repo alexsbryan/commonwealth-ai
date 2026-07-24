@@ -453,19 +453,18 @@ async fn run(rest: &[String]) -> i32 {
             // quality lever — GLiNER freed the token budget, so the atlas-
             // building calls can go back onto the 35B primary while the answer
             // path stays on the session's chat model.
-            let enrich_inference: std::sync::Arc<dyn InferenceProvider> =
-                match &args.enrich_model {
-                    Some(model) => {
-                        eprintln!("[chaos] enrich model override: {model}");
-                        super::book_report::provider_for_model(
-                            &globals.daemon_base,
-                            model,
-                            &session.embed_model,
-                        )
-                        .await
-                    }
-                    None => std::sync::Arc::clone(&session.inference),
-                };
+            let enrich_inference: std::sync::Arc<dyn InferenceProvider> = match &args.enrich_model {
+                Some(model) => {
+                    eprintln!("[chaos] enrich model override: {model}");
+                    super::book_report::provider_for_model(
+                        &globals.daemon_base,
+                        model,
+                        &session.embed_model,
+                    )
+                    .await
+                }
+                None => std::sync::Arc::clone(&session.inference),
+            };
             // T2 entity pass: prefer the local NER model over the LLM when
             // installed, so the holdout measures the SHIPPED stack (GLiNER).
             // Eager load (not lazy) so we measure the NER path, not race it —
@@ -483,7 +482,9 @@ async fn run(rest: &[String]) -> i32 {
                         Ok(g) => {
                             eprintln!("[chaos] T2 entity pass: GLiNER ({model_id})");
                             Some(std::sync::Arc::new(g)
-                                as std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>)
+                                as std::sync::Arc<
+                                    dyn sovereign_core::traits::EntityExtractor,
+                                >)
                         }
                         Err(e) => {
                             eprintln!("[chaos] T2 entity pass: LLM (GLiNER load failed: {e})");
@@ -781,8 +782,8 @@ async fn score_question(
     // §8) — structural, same underlying gate action. Ledger-less transcripts
     // fall back to legacy. (Caveat is NOT derived from this — see below.)
     let ledger_verdict = sovereign_eval::chaos_monkey::score::verdict_from_metadata(&metadata);
-    let typed_verdict = crate::bench_cmd::live_runner::typed_verdict_enabled()
-        && ledger_verdict.is_some();
+    let typed_verdict =
+        crate::bench_cmd::live_runner::typed_verdict_enabled() && ledger_verdict.is_some();
 
     // External grounding-verifier (--grounding-verify gates, --gv-shadow only
     // records). The Critic returns a continuous violation probability which is
@@ -823,9 +824,7 @@ async fn score_question(
         // gate-action string prefix. `cannot_know_from_here` is the
         // abstention verdict (derived from the same gate action, but as a
         // typed contract); an empty reply is still the degenerate decline.
-        if ledger_verdict.as_deref() == Some("cannot_know_from_here")
-            || visible.trim().is_empty()
-        {
+        if ledger_verdict.as_deref() == Some("cannot_know_from_here") || visible.trim().is_empty() {
             AgentAction::Abstained
         } else {
             AgentAction::Answered

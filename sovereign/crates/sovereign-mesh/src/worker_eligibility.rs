@@ -266,8 +266,10 @@ impl WorkerEligibility {
     /// `(state, present, now)`.
     pub fn observe(&self, present: &[DiscoveredWorker], now: Instant) {
         let present_ids: HashSet<NodeId> = present.iter().map(|w| w.node_id).collect();
-        let addresses: HashMap<NodeId, &str> =
-            present.iter().map(|w| (w.node_id, w.endpoint.as_str())).collect();
+        let addresses: HashMap<NodeId, &str> = present
+            .iter()
+            .map(|w| (w.node_id, w.endpoint.as_str()))
+            .collect();
         let mut map = self.workers.lock().unwrap_or_else(|e| e.into_inner());
 
         // Ensure every currently-present worker has an entry to update.
@@ -578,6 +580,9 @@ mod tests {
         assert_eq!(views.len(), 1, "one worker tracked, not two");
         assert_eq!(views[0].node_id, node.to_hex());
         assert_eq!(views[0].status, WorkerStatus::Eligible);
-        assert_eq!(views[0].flaps_in_window, 0, "an address change is not a flap");
+        assert_eq!(
+            views[0].flaps_in_window, 0,
+            "an address change is not a flap"
+        );
     }
 }

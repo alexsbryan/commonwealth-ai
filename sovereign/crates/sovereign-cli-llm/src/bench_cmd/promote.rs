@@ -250,10 +250,11 @@ async fn run(args_in: &[String]) -> i32 {
         .chat_model
         .clone()
         .unwrap_or_else(|| "primary".to_string());
-    let model_id = super::model_resolve::resolve_model_attribution(&args.base_url, &requested_alias)
-        .await
-        .map(|a| a.file_stem)
-        .unwrap_or(requested_alias);
+    let model_id =
+        super::model_resolve::resolve_model_attribution(&args.base_url, &requested_alias)
+            .await
+            .map(|a| a.file_stem)
+            .unwrap_or(requested_alias);
 
     // ── Seed-only mode: capture the current-settings Dev baseline + exit ──
     if args.update_baseline {

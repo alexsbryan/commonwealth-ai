@@ -1743,7 +1743,11 @@ async fn build_skeleton(
     // inferring it from the absence of "List the named entities" calls.
     tracing::info!(
         chunks = chunk_count,
-        entity_path = if entity_extractor.is_some() { "ner" } else { "llm" },
+        entity_path = if entity_extractor.is_some() {
+            "ner"
+        } else {
+            "llm"
+        },
         "build_skeleton — T2 entity extraction path"
     );
 

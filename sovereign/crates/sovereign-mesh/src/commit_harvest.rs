@@ -452,7 +452,10 @@ mod tests {
         // when several registered projects watch one monorepo, or a
         // poll re-covers the range — writes nothing new.
         let rewrote = harvest_between(repo, &old_head, &new_head, &store, "harvest-other").await;
-        assert_eq!(rewrote, 0, "re-harvest of the same range must dedup to zero");
+        assert_eq!(
+            rewrote, 0,
+            "re-harvest of the same range must dedup to zero"
+        );
 
         // The new note exists with source='committed'.
         let rows = store

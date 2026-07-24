@@ -246,12 +246,16 @@ mod real_main {
                 eprintln!("--relay-only: dial string has no relay URL target");
                 std::process::exit(2);
             }
-            println!("relay-only: seeding relay target(s) only ({})", relays.join(","));
+            println!(
+                "relay-only: seeding relay target(s) only ({})",
+                relays.join(",")
+            );
             format!("{id}@{}", relays.join(","))
         } else {
             dial_str
         };
-        let target = parse_dial_string(&dial_str).unwrap_or_else(|e| panic!("bad dial string: {e}"));
+        let target =
+            parse_dial_string(&dial_str).unwrap_or_else(|e| panic!("bad dial string: {e}"));
         let target_id = target.id;
 
         let mut key_bytes = [0u8; 32];
@@ -267,7 +271,11 @@ mod real_main {
         let bridge = HttpBridge::spawn(endpoint.clone(), target, BENCH_ALPN)
             .await
             .expect("bridge spawn");
-        println!("mode=iroh bridge={} target={}", bridge.local_addr(), target_id);
+        println!(
+            "mode=iroh bridge={} target={}",
+            bridge.local_addr(),
+            target_id
+        );
         let sock = TcpStream::connect(bridge.local_addr())
             .await
             .expect("connect to bridge");
@@ -369,10 +377,7 @@ mod real_main {
         let mut to_read = want_len;
         while to_read > 0 {
             let chunk = to_read.min(sink.len());
-            let n = sock
-                .read(&mut sink[..chunk])
-                .await
-                .expect("read response");
+            let n = sock.read(&mut sink[..chunk]).await.expect("read response");
             assert!(n > 0, "server closed mid-response");
             to_read -= n;
         }

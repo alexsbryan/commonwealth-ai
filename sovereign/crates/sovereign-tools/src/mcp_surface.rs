@@ -453,8 +453,7 @@ pub fn invalidate_all_spec_caches() {
 /// again and everything else it adds (structured output, elicitation,
 /// OAuth for non-local servers) is optional — our servers are
 /// loopback-only.
-pub const MCP_SUPPORTED_PROTOCOL_VERSIONS: [&str; 3] =
-    ["2025-06-18", "2025-03-26", "2024-11-05"];
+pub const MCP_SUPPORTED_PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Spec-conformant `initialize` version negotiation: echo the client's
 /// requested revision when we support it; otherwise answer with our

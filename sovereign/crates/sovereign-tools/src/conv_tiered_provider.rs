@@ -1265,7 +1265,8 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
     /// became a "conversation". This is the wiring that makes newly-added
     /// vault notes actually enrich incrementally.
     async fn reenrich_sources(&self, corpus_id: &str, source_doc_ids: &[String]) -> Result<()> {
-        self.reenrich_changed_sources(corpus_id, source_doc_ids).await
+        self.reenrich_changed_sources(corpus_id, source_doc_ids)
+            .await
     }
 
     /// Skip-already-built: the folder runner calls this before dispatching
@@ -1467,9 +1468,19 @@ mod tests {
         // conversation that re-chunks to the SAME count. chunk_count alone
         // would wrongly skip it; the content hash must differ so it
         // re-enriches.
-        let before = vec![mk_chunk(1, "the cat sat", None), mk_chunk(2, "on the mat", None)];
-        let after = vec![mk_chunk(1, "the cat sat", None), mk_chunk(2, "on the RUG", None)];
-        assert_eq!(before.len(), after.len(), "same chunk count by construction");
+        let before = vec![
+            mk_chunk(1, "the cat sat", None),
+            mk_chunk(2, "on the mat", None),
+        ];
+        let after = vec![
+            mk_chunk(1, "the cat sat", None),
+            mk_chunk(2, "on the RUG", None),
+        ];
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "same chunk count by construction"
+        );
         assert_ne!(
             conv_content_hash(&before),
             conv_content_hash(&after),

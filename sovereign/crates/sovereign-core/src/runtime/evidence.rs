@@ -401,9 +401,7 @@ pub(crate) fn compute_evidence_shape(chunks: &[ScoredChunk], query: &str) -> Evi
         .iter()
         .filter_map(|c| c.vector_distance)
         .map(|d| (1.0 - d).clamp(-1.0, 1.0))
-        .fold(None::<f32>, |acc, s| {
-            Some(acc.map_or(s, |a| a.max(s)))
-        });
+        .fold(None::<f32>, |acc, s| Some(acc.map_or(s, |a| a.max(s))));
 
     EvidenceShape {
         count: chunks.len(),
@@ -1448,8 +1446,11 @@ mod expansion_strategy_tests {
         // collapsing onto a single dense SEP article and scoring 0 of
         // the compared wiki sources. See RERANK_EXPERIMENT.md.
         let shape = build_test_evidence_shape(10, 3, true, 4);
-        let (strategy, reason) =
-            decide_expansion_strategy(&Intent::ComparisonQuery, SynthesisRoute::FastFocused, &shape);
+        let (strategy, reason) = decide_expansion_strategy(
+            &Intent::ComparisonQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
         assert_eq!(strategy, ExpansionStrategy::TopSources);
         assert_eq!(reason, "comparison_breadth");
     }
@@ -1474,8 +1475,11 @@ mod expansion_strategy_tests {
         // Only one distinct source present — no breadth to spread over.
         // Better to expand nothing than to collapse depth-first.
         let shape = build_test_evidence_shape(6, 1, true, 4);
-        let (strategy, reason) =
-            decide_expansion_strategy(&Intent::ComparisonQuery, SynthesisRoute::FastFocused, &shape);
+        let (strategy, reason) = decide_expansion_strategy(
+            &Intent::ComparisonQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
         assert_eq!(reason, "comparison_single_source_pool");
     }

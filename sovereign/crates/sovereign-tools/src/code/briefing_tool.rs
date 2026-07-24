@@ -178,10 +178,7 @@ impl OverlapAccumulator {
     pub fn add_observation(&mut self, o: &serde_json::Value) {
         let file_path = o["file_path"].as_str().unwrap_or_default().to_string();
         let session = o["session_id"].as_str().unwrap_or_default().to_string();
-        if !self
-            .seen_observations
-            .insert((session, file_path.clone()))
-        {
+        if !self.seen_observations.insert((session, file_path.clone())) {
             return;
         }
         let age_min = o["last_observed_at"]
@@ -280,8 +277,8 @@ impl Tool for BriefingTool {
                 "required": []
             }),
             examples: vec![ToolExample {
-                situation: "Session start — orient on what changed recently and who else is active."
-                    .into(),
+                situation:
+                    "Session start — orient on what changed recently and who else is active.".into(),
                 call: json!({ "strategy": "recent", "hours": 48 }),
             }],
             effect: Effect::Read,

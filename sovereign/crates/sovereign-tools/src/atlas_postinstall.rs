@@ -871,11 +871,8 @@ pub async fn launch_tier2_extraction_with_advice(
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .output();
-        let init_status = match tokio::time::timeout(
-            std::time::Duration::from_secs(300),
-            init_fut,
-        )
-        .await
+        let init_status = match tokio::time::timeout(std::time::Duration::from_secs(300), init_fut)
+            .await
         {
             Ok(res) => res,
             Err(_) => {
@@ -1326,10 +1323,9 @@ mod tests {
 
         // The failure is machine-readable on the workspace state file.
         let ws_index_dir = indexes_dir.join(format!("{corpus}{TIER2_WORKSPACE_SUFFIX}"));
-        let state =
-            corpus_engine::enrichment::state::EnrichmentStateFile::read(&ws_index_dir)
-                .unwrap()
-                .expect("workspace _enrichment_state.json must exist after a launch failure");
+        let state = corpus_engine::enrichment::state::EnrichmentStateFile::read(&ws_index_dir)
+            .unwrap()
+            .expect("workspace _enrichment_state.json must exist after a launch failure");
         assert_eq!(
             state.phase,
             corpus_engine::enrichment::state::EnrichmentPhase::Failed

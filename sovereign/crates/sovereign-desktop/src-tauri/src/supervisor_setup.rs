@@ -284,7 +284,10 @@ pub async fn maybe_restart_into_supervised(app_handle: &AppHandle) -> bool {
 /// and support triage needs to know which mode a session ran in. The
 /// frontend renders `supervisor-fallback` as a dismissible notice.
 fn surface_fallback(app_handle: &AppHandle, reason: &str) {
-    warn!(reason, "supervisor: falling back to IN-PROCESS daemon (crash isolation off)");
+    warn!(
+        reason,
+        "supervisor: falling back to IN-PROCESS daemon (crash isolation off)"
+    );
     let _ = app_handle.emit(
         "supervisor-fallback",
         serde_json::json!({ "reason": reason }),

@@ -11,7 +11,14 @@ name: Mesh Soak (nightly)
 
 on:
   schedule:
-    - cron: "0 7 * * *" # 07:00 UTC nightly
+    # WEEKLY, not nightly (2026-07-24 economy pass). At 122 billed minutes over
+    # 24 days this was not a major line item, but it is a soak: it looks for
+    # slow-accumulating faults, and a weekly sample finds those about as well
+    # as a nightly one while costing a seventh as much. It is also `continue-
+    # on-error: true`, so nobody was reading six of every seven results anyway.
+    # Restore the nightly cadence (`0 7 * * *`) when the mesh is under active
+    # change and the extra samples are actually being read.
+    - cron: "0 7 * * 6" # Saturdays 07:00 UTC
   workflow_dispatch:
     inputs:
       minutes:

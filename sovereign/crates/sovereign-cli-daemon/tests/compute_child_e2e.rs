@@ -84,11 +84,7 @@ async fn crash_and_recover(signal: &str) {
         "child never reached serving"
     );
     let pid = mgr.statuses()[0].pid.expect("a serving child has a pid");
-    let child = mgr
-        .routes()
-        .get("crashslot")
-        .expect("route exists")
-        .clone();
+    let child = mgr.routes().get("crashslot").expect("route exists").clone();
 
     // Start a streaming completion and read one token to be genuinely mid-stream.
     let mut req = CompletionRequest::default();

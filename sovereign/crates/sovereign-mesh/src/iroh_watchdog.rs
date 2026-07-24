@@ -302,7 +302,9 @@ async fn run(
             .filter(|r| r.is_connected())
             .map(|r| r.url().to_string())
             .collect();
-        let last_error = relays.iter().find_map(|r| r.last_error().map(|e| e.to_string()));
+        let last_error = relays
+            .iter()
+            .find_map(|r| r.last_error().map(|e| e.to_string()));
 
         // ── 2. self-discovery probe (periodic) ─────────────────────
         if cfg.self_probe && Instant::now() >= next_probe {
@@ -486,7 +488,8 @@ mod tests {
             Box::pin(async move {
                 rebuilds_c.fetch_add(1, Ordering::SeqCst);
                 Ok(minimal_endpoint(2).await)
-            }) as Pin<Box<dyn std::future::Future<Output = Result<Endpoint, String>> + Send>>
+            })
+                as Pin<Box<dyn std::future::Future<Output = Result<Endpoint, String>> + Send>>
         });
 
         let cfg = WatchdogConfig {
@@ -503,7 +506,10 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         let snap = handle.status_arc().read().await.clone();
-        assert!(snap.degraded, "a never-relay-homed endpoint must read degraded");
+        assert!(
+            snap.degraded,
+            "a never-relay-homed endpoint must read degraded"
+        );
         assert!(
             rebuilds.load(Ordering::SeqCst) >= 1,
             "watchdog should have escalated through nudge + bounce to at least one rebuild"

@@ -183,10 +183,7 @@ pub fn publish(args: &[String]) -> i32 {
     );
     println!("  sha256 {sha}");
     println!("  size   {:.1} KB", size as f64 / 1024.0);
-    println!(
-        "\ninstall locally:  svrn meshapp install {}",
-        manifest.id
-    );
+    println!("\ninstall locally:  svrn meshapp install {}", manifest.id);
     println!("to publish to the CURATED registry (so others can install + one-click data):");
     println!("  1. upload the tar to a URL or HuggingFace");
     println!("  2. add an [[apps]] entry to {CURATED_REGISTRY} (PR for review) with:");

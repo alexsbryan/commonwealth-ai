@@ -354,9 +354,14 @@ pub async fn export_all(
     // Run every available exporter and COLLECT all parsed rows (no graph
     // mutation yet) — shared with `export_changed` so the exporter plumbing
     // lives in exactly one place.
-    let (all_symbols, all_refs) =
-        run_exporters_collect(&exporters, resolved_roots, output_dir, progress, &mut summary)
-            .await?;
+    let (all_symbols, all_refs) = run_exporters_collect(
+        &exporters,
+        resolved_roots,
+        output_dir,
+        progress,
+        &mut summary,
+    )
+    .await?;
 
     // ── Viability gate — the "never wipe on failure" contract ──
     // Only now, with the full export collected, do we decide whether it is safe
@@ -635,9 +640,14 @@ pub async fn export_changed(
     std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
     let mut summary = ExportSummary::default();
-    let (collected_syms, collected_refs) =
-        run_exporters_collect(&exporters, resolved_roots, output_dir, progress, &mut summary)
-            .await?;
+    let (collected_syms, collected_refs) = run_exporters_collect(
+        &exporters,
+        resolved_roots,
+        output_dir,
+        progress,
+        &mut summary,
+    )
+    .await?;
 
     // Keep only rows for the changed files (exact match on the shared
     // relative form — see the invariant above).

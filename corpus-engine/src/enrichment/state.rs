@@ -737,7 +737,7 @@ mod tests {
         s.error = Some("stalled — no progress for 3371s".into());
         assert!(s.phase == EnrichmentPhase::Starting);
         assert!(s.is_stale(now)); // fresh clock, but error present → stale
-        // A terminal phase with an error is a normal Failed — not "stale".
+                                  // A terminal phase with an error is a normal Failed — not "stale".
         s.phase = EnrichmentPhase::Failed;
         assert!(!s.is_stale(now));
     }
@@ -754,7 +754,10 @@ mod tests {
         let stale_ts = now_secs() - STALL_THRESHOLD_SECS - 60;
         s.last_progress_at = stale_ts;
         EnrichmentStateFile::write(tmp.path(), &s).unwrap();
-        assert!(s.is_stale(now_secs()), "precondition: backdated build is stale");
+        assert!(
+            s.is_stale(now_secs()),
+            "precondition: backdated build is stale"
+        );
 
         EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
 
@@ -763,12 +766,18 @@ mod tests {
             after.last_progress_at > stale_ts,
             "heartbeat must advance last_progress_at"
         );
-        assert!(!after.is_stale(now_secs()), "heartbeat must clear staleness");
+        assert!(
+            !after.is_stale(now_secs()),
+            "heartbeat must clear staleness"
+        );
         // Phase / step / message are preserved — only the clock moves.
         assert_eq!(after.phase, EnrichmentPhase::EntityExtraction);
         assert_eq!(after.step_current, 3);
         assert_eq!(after.step_total, 10);
-        assert_eq!(after.message.as_deref(), Some("Finding people, places, and ideas"));
+        assert_eq!(
+            after.message.as_deref(),
+            Some("Finding people, places, and ideas")
+        );
     }
 
     #[test]
@@ -806,8 +815,14 @@ mod tests {
         EnrichmentStateFile::heartbeat(tmp.path()).unwrap();
 
         let after = EnrichmentStateFile::read(tmp.path()).unwrap().unwrap();
-        assert_eq!(after.last_progress_at, ts, "errored state must stay untouched");
-        assert!(after.is_stale(now_secs()), "errored state stays stale after heartbeat");
+        assert_eq!(
+            after.last_progress_at, ts,
+            "errored state must stay untouched"
+        );
+        assert!(
+            after.is_stale(now_secs()),
+            "errored state stays stale after heartbeat"
+        );
     }
 
     #[test]

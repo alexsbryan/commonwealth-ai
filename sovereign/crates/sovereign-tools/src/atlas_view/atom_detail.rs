@@ -319,8 +319,7 @@ fn build_detail(
     // 1000+ edges, so the old `atoms.iter().find()` per neighbour was
     // O(neighbours × atoms) — ~20s for a hub node even with edges cached.
     // Keyed by the id's string form to avoid requiring Hash on AtomId.
-    let by_id: HashMap<&str, &AtomEnvelope> =
-        atoms.iter().map(|a| (a.id().as_str(), a)).collect();
+    let by_id: HashMap<&str, &AtomEnvelope> = atoms.iter().map(|a| (a.id().as_str(), a)).collect();
     let Some(atom) = by_id.get(target.as_str()).copied() else {
         return Ok(None);
     };

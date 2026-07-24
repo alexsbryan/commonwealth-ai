@@ -31,9 +31,9 @@
 
 pub mod brief;
 pub mod briefing_tool;
-pub mod session_state;
 pub mod code_search;
 pub mod recent_changes;
+pub mod session_state;
 pub mod working_set;
 
 #[cfg(feature = "treesitter")]

@@ -1598,7 +1598,10 @@ pub async fn bootstrap_with_progress(
             // same warmed model. Stash before the move into the runtime.
             *state.entity_extractor.write().await = Some(Arc::clone(&arc));
             runtime = runtime.with_gliner(arc);
-            tracing::info!(model = model_id, "desktop: GLiNER entity extractor installed (background warm)");
+            tracing::info!(
+                model = model_id,
+                "desktop: GLiNER entity extractor installed (background warm)"
+            );
         } else {
             tracing::debug!(
                 model = model_id,

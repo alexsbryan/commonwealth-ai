@@ -139,9 +139,8 @@ impl LaneBaseline {
             return;
         };
         self.model = Some(stem.to_string());
-        self.model_attribution = Some(
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.attribution_for_file(stem),
-        );
+        self.model_attribution =
+            Some(sovereign_core::models_manifest::DEFAULT_MANIFEST.attribution_for_file(stem));
     }
     pub fn with(mut self, name: impl Into<String>, metric: LaneMetric) -> Self {
         self.metrics.insert(name.into(), metric);
@@ -475,7 +474,10 @@ mod tests {
         assert!(b.model_attribution.is_none());
 
         b.attribute(Some("commonwealth/primary"));
-        assert!(b.model_attribution.is_none(), "namespaced alias also refused");
+        assert!(
+            b.model_attribution.is_none(),
+            "namespaced alias also refused"
+        );
 
         // A concrete stem sets both the legible field and the structured
         // attribution, enriched from the bundled manifest.
@@ -491,6 +493,9 @@ mod tests {
         for a in ["primary", "fast", "embed", "code", "commonwealth/primary"] {
             assert!(is_alias_marker(a), "{a} is an alias");
         }
-        assert!(!is_alias_marker("Qwen3.5-4B-Q4_K_M"), "a real stem is not an alias");
+        assert!(
+            !is_alias_marker("Qwen3.5-4B-Q4_K_M"),
+            "a real stem is not an alias"
+        );
     }
 }

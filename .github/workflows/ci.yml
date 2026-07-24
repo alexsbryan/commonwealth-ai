@@ -3,31 +3,55 @@
 #
 # Why this lives at the repo root: GitHub Actions only executes workflows in
 # the *root* `.github/workflows/`. `commonwealth/.github/workflows/ci.yml` is a
-# leftover from when commonwealth was its own repo and NEVER runs — this file
-# replaces it. Before this landed the only active workflow was desktop-release,
-# i.e. there was no continuous check/test gate at all.
+# leftover from when commonwealth was its own repo and NEVER runs.
 #
-# Gate policy (2026-07-14 — deliberately minimal): a PR/main build goes green
-# on THREE legible, blocking gates:
-#   1. Build + Test — one job, one compile: `cargo check --all-targets` then
-#      `cargo test` reuse the same target/ tree, so tests never rebuild the
-#      monorepo from scratch. (The "Build" and "test" of Build/lint/test.)
-#   2. Lint (rustfmt) — `cargo fmt --all --check`. Seconds, no compilation,
-#      deterministic, cannot flake. (The "lint" of Build/lint/test.)
-#   3. Desktop frontend — `npm run check` (svelte-check --fail-on-warnings)
-#      + `npm run test` (vitest). Node-only, ~1 min, no Rust compile. Guards
-#      the Svelte/TS surface the Rust gates can't see — including runtime
-#      render bugs like each_key_duplicate that no static checker catches
-#      (added 2026-07-14 after an atom_id-keyed {#each} aborted AtomDetail's
-#      render and looked like an infinite spinner).
-#   (docs-gate — cited-path resolution — stays blocking in docs-reconcile.yml.)
+# ===================================================================
+# GATE POLICY (rewritten 2026-07-24 — the economy pass)
+# ===================================================================
+#
+# The 2026-07-14 pass cut the gate LIST. It did not cut the gate BILL, and on
+# 2026-07-24 the repo hard-stopped: every job began aborting in 4 seconds with
+# "The job was not started because recent account payments have failed or your
+# spending limit needs to be increased." A gate that cannot run is not a
+# lenient gate — it is no gate, and dependabot PRs sailed through looking
+# unblocked. The full audit is docs/CI_ECONOMY.md; the four numbers that
+# drove this rewrite:
+#
+#   * ~6,600 billed min/month projected against a 3,000-min private-repo
+#     allowance — 2.2x over.
+#   * The Actions cache was measured EMPTY (0 bytes, 0 entries), so every run
+#     was a cold build of the whole workspace incl. llama.cpp/ggml.
+#     `Check + Test (workspace)` median: 56.7 minutes.
+#   * `Cargo.lock` changed 29 times in July; `llama-cpp-sys-4`'s version has
+#     changed 4 times EVER. Keying the C++ cache on the lock hash threw away a
+#     ~20-minute build 29 times for nothing.
+#   * Seven pushes to main in one four-hour stretch, each starting a full
+#     workspace build that nothing cancelled.
+#
+# The policy that follows from that:
+#
+#   1. NEVER PAY FOR A BUILD NOBODY IS WAITING ON. `cancel-in-progress` now
+#      applies to main as well as PRs (see the concurrency block).
+#   2. NEVER PAY FOR A BUILD THAT CANNOT FAIL. The `changes` job decides which
+#      gates a diff can actually break; a docs-only commit skips the compile.
+#   3. NEVER THROW AWAY THE C++ BUILD. The llama cache is keyed on the thing
+#      that invalidates it (llama-cpp-sys-4's version + the toolchain), not on
+#      an unrelated hash that churns weekly.
+#   4. ONE DEFINITION OF "TESTS PASS". The compile gate runs
+#      `scripts/sovereign-test.sh` — the same script the pre-push hook and the
+#      daemon's `test_status` watcher run. CI previously ran a bare
+#      `cargo test --workspace`, which resolves a DIFFERENT feature set than
+#      the local gate (no `sovereign-cli/dev-tools`), so the dev-verb suites
+#      had never been tested in CI at all.
+#
+# Blocking gates: `fmt`, `test`, `desktop`. `ci-ok` aggregates them into a
+# single check — make THAT the required status check if branch protection is
+# ever turned on, so that a legitimately-skipped job can never wedge a PR in
+# "expected" forever.
 #
 # The heavier gates (mesh-dst fault-injection, boundary/arch/layer/lock,
-# cargo-deny supply-chain, clippy count-ratchet) are SHELVED, not deleted —
-# commented out at the bottom of this file. They cost real wall-clock /
-# advisory-noise out of proportion to a small team, so they wait until there's
-# time to babysit the longer pipeline. Re-enable any block by stripping the
-# leading "# " from its lines. Their local equivalents still run on demand:
+# cargo-deny supply-chain, clippy count-ratchet) remain SHELVED, commented out
+# at the bottom. Their local equivalents still run on demand:
 #     cargo xtask quality                                   # boundary/arch/layer/lock
 #     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
 #     cargo deny check licenses bans sources
@@ -44,12 +68,21 @@ on:
   # trigger now makes enabling one a settings flip, not a workflow PR.
   merge_group:
 
-# Cancel superseded runs of the same PR (a force-push mid-run otherwise
-# burns a full workspace build). Never cancel main's post-merge runs —
-# they are the sole writers of the shared caches.
+# Cancel superseded runs of the same ref.
+#
+# This now includes main. The previous policy exempted main on the grounds
+# that its runs "are the sole writers of the shared caches" — but the measured
+# push cadence is bursty (seven pushes in four hours on 2026-07-24), so that
+# exemption was buying six redundant full workspace builds per burst to
+# preserve a cache write that the SEVENTH run performs anyway. The newest run
+# on a ref still writes the cache; only the ones already obsolete get killed.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -61,11 +94,115 @@ env:
   # per-repo cache budget.
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
+  # The tail of this build links dozens of integration-test binaries, each
+  # statically linking the llama+ggml-vulkan archives — four parallel mold
+  # links can OOM the 16 GB runner hard enough to kill the runner agent itself
+  # (the "log just stops, no artifacts" failure, 2026-07-02). This is the env
+  # form of the old `cargo test -j 3`, so it constrains the build regardless
+  # of which executor runs the tests.
+  CARGO_BUILD_JOBS: "3"
 
 jobs:
+  # Decide which gates this diff can actually break. One ~20-second job that
+  # routinely saves a 20-40 minute workspace compile: this repo commits
+  # narrative docs, notes and .claude/ config constantly, and none of that can
+  # break `cargo test`.
+  #
+  # Deliberately NOT implemented as workflow-level `paths-ignore`: that would
+  # suppress the whole workflow, including `ci-ok`, leaving a required check
+  # permanently "expected" if branch protection is ever enabled. A skipped job
+  # behind an always-running aggregator does not have that failure mode.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - 'vendor/**'
+              - 'scripts/sovereign-test.sh'
+              - 'scripts/lib/**'
+              - 'sovereign/crates/sovereign-tools/src/code/test_adapters/**'
+              - '.github/workflows/ci.yml'
+            desktop:
+              - 'sovereign/crates/sovereign-desktop/**'
+              - '.github/workflows/ci.yml'
+
+  # ---------------------------------------------------------------
+  # Tier 0 — deterministic, no workspace compile, seconds to a minute.
+  # ---------------------------------------------------------------
+
+  fmt:
+    name: Lint (rustfmt)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # rust-toolchain.toml pins the exact version + carries the rustfmt
+      # component; the bare install command reads it.
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      # BLOCKING since the 2026-07-02 `cargo fmt --all` sweep (404 files,
+      # listed in .git-blame-ignore-revs) zeroed the format debt. Runs in
+      # seconds (no compilation); a failure diff is now one contributor's
+      # change, small and actionable.
+      - run: cargo fmt --all --check
+
+  # Node-only gate for the Svelte/TS desktop frontend. No Rust toolchain, no
+  # llama.cpp, no native stack — just the webview code the workspace
+  # `cargo check` is blind to. `npm run check` is svelte-check
+  # --fail-on-warnings (the tree is warning-clean, so a failure is one PR's
+  # regression); `npm run test` is vitest, which renders components under
+  # jsdom and so catches runtime render faults — the class of bug
+  # (each_key_duplicate) that motivated this gate. The generated meshapp
+  # catalog is a runtime public/ asset fetched at load time, not a build-time
+  # import, so neither check nor test needs the predev hook.
+  desktop:
+    name: Desktop frontend (svelte-check + vitest)
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sovereign/crates/sovereign-desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test
+
+  # ---------------------------------------------------------------
+  # Tier 1 — the workspace compile. This job IS the CI budget; every
+  # optimisation in this file exists to keep it from running needlessly
+  # or from rebuilding what it already built.
+  # ---------------------------------------------------------------
+
   test:
     name: Build + Test (workspace)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    # A hung link or a runaway test must not bill an open-ended job. Cold
+    # builds measured ~57 min; 75 leaves headroom without leaving a zombie
+    # burning the monthly allowance.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       # The workspace build + restored cache + apt stack don't fit in the
@@ -95,27 +232,57 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: workspace
+          # Only main writes the dependency cache. PRs restore it read-only.
+          #
+          # Previously every run on every ref saved, which put multiple
+          # multi-GB writers against GitHub's 10 GB per-repo cache budget —
+          # each save evicting the others by LRU. That is the mechanism behind
+          # the measured 0-byte cache, and therefore behind the 57-minute cold
+          # builds. One writer, many readers, is the configuration that lets a
+          # cache of this size actually survive.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           # Seed the cache even on a red run — otherwise a failing test
           # keeps every subsequent run cold (rust-cache skips its save
           # step on failure by default; that is exactly how this CI
           # stayed cold for weeks).
           cache-on-failure: true
-      # rust-cache's save-time cleanup prunes unrecognized dirs under
-      # target/ — which would delete target/llama-cmake-cache (the shared
-      # CMake tree llama-cpp-sys links against) while KEEPING the crate's
-      # "already built" fingerprint: a poisoned cache that link-fails on
-      # every warm run. Cache the tree separately. Restore/save are split
-      # so the save (an explicit step below, `if: always()`) seeds the
-      # cache even when check/test fail — while CI is stabilizing, a red
-      # run must still bank the 20-minute C++ build. The C++ is
-      # CMAKE_BUILD_TYPE=Release regardless of cargo profile, so this key
-      # also serves the release workflows.
+      # THE cache-key fix. `llama-cpp-sys-4` builds llama.cpp+ggml from C++:
+      # ~20 minutes, and it is the single largest fixed cost in this job.
+      #
+      # The key used to be `hashFiles('Cargo.lock')`. Measured: Cargo.lock
+      # changed 29 times in July 2026; llama-cpp-sys-4's version has changed
+      # 4 times in the repo's entire history. So 29 dependency bumps — most of
+      # them dependabot's — each discarded a perfectly good C++ tree and paid
+      # 20 minutes to rebuild bit-identical output.
+      #
+      # Key on what actually invalidates the artifact: the sys-crate version
+      # and the toolchain that compiled it.
+      - name: Resolve llama-cpp-sys-4 version (cache key input)
+        id: llama-ver
+        shell: bash
+        run: |
+          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
+          if [ -z "$ver" ]; then
+            echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2
+            exit 1
+          fi
+          echo "Resolved llama-cpp-sys-4 = $ver"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      # rust-cache's save-time cleanup prunes unrecognized dirs under target/
+      # — which would delete target/llama-cmake-cache (the shared CMake tree
+      # llama-cpp-sys links against) while KEEPING the crate's "already built"
+      # fingerprint: a poisoned cache that link-fails on every warm run. Cache
+      # the tree separately. Restore/save are split so the save (an explicit
+      # step below, `if: always()`) seeds the cache even when the tests fail —
+      # a red run must still bank the 20-minute C++ build. The C++ is
+      # CMAKE_BUILD_TYPE=Release regardless of cargo profile, so this key also
+      # serves the release workflows.
       - name: Restore llama.cpp CMake tree
         id: llama-cache
         uses: actions/cache/restore@v6
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
       # Belt: if the tree is missing while the fingerprint survived
       # (partial restore / LRU eviction), force the build script to rerun
       # rather than link against nothing.
@@ -149,24 +316,58 @@ jobs:
             protobuf-compiler libprotobuf-dev cmake mold clang \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
-      # check first: fails fast on type errors (rmeta only, covers benches
-      # via --all-targets); test then reuses the same dependency artifacts.
-      - run: cargo check --workspace --all-targets
-      # Tests are CI-safe by contract (no GPU / network / model weights —
-      # ARCH_PRINCIPLES §12.4): DeterministicInference + in-memory SQLite + FTS5.
-      # (The Vulkan SDK above is a BUILD dep of ggml; tests still run CPU-only.)
-      # -j 3: the tail of this build links dozens of integration-test binaries,
-      # each statically linking the llama+ggml-vulkan archives — four parallel
-      # mold links can OOM the 16 GB runner hard enough to kill the runner
-      # agent itself (the "log just stops, no artifacts" failure, 2026-07-02).
-      - run: cargo test --workspace -j 3
+      # cargo-nextest runs the workspace's 178 test binaries in PARALLEL;
+      # `cargo test` runs them serially. Measured on this workspace:
+      # 59.4s vs 125.9s. sovereign-test.sh picks nextest automatically when
+      # it's on PATH (`--engine auto`) and falls back to cargo otherwise, so
+      # this install is a speed input, not a correctness dependency.
+      # Version-pinned to match scripts/bootstrap.sh — the fleet and CI should
+      # not silently run different executors.
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.140
+      # ONE definition of "the tests pass", shared by CI, the pre-push hook,
+      # and the daemon's `test_status` watcher.
+      #
+      # This replaces a bare `cargo check --workspace --all-targets` +
+      # `cargo test --workspace`. Two things change:
+      #   * COVERAGE GOES UP. The script resolves the repo's real feature
+      #     contract (`corpus-engine/treesitter,sovereign-cli/dev-tools`).
+      #     Plain `cargo test --workspace` leaves dev-tools OFF, so the
+      #     feature-gated dev-verb suites (aliases, phase3 serve/init, phase6
+      #     retirement) had never run in CI.
+      #   * THE REDUNDANT PASS GOES AWAY. `cargo check --all-targets` emits
+      #     rmeta; the test build then re-does the same crates with full
+      #     codegen. Nothing was reused between them. Benches — the one target
+      #     class the test build does not cover — get their own cheap
+      #     incremental check below.
+      - name: Test workspace (scripts/sovereign-test.sh)
+        run: ./scripts/sovereign-test.sh --human
+      # Benches are the only --all-targets class `cargo test` does not build,
+      # and bench code rots silently. Incremental against the artifacts the
+      # test build just produced, so this is seconds, not a second compile.
+      - name: Check benches
+        run: cargo check --workspace --benches --features corpus-engine/treesitter,sovereign-cli/dev-tools
+      # Glassbox: the script already writes per-run adapter logs. Publishing
+      # them means triaging a CI failure does not require re-running cargo —
+      # which, at ~57 min cold, is the difference between a diagnosis and
+      # another day of burned allowance.
+      - name: Upload test adapter logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sovereign-test-logs
+          path: target/sovereign-test/latest/
+          retention-days: 7
+          if-no-files-found: ignore
       # Bank the C++ build even on a red run (see the restore step's comment).
       - name: Save llama.cpp CMake tree
         if: always() && steps.llama-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
       # When something dies, say WHICH resource died — the ENOSPC failure
       # (2026-07-02) surfaced as a bare "error writing /tmp/…: No space left"
       # deep in a C++ trace.
@@ -174,52 +375,50 @@ jobs:
         if: failure()
         run: df -h; echo; free -h; echo; du -sh target 2>/dev/null || true
 
-  fmt:
-    name: Lint (rustfmt)
+  # ---------------------------------------------------------------
+  # The single check to require in branch protection.
+  # ---------------------------------------------------------------
+  #
+  # `skipped` counts as success here, ON PURPOSE. The `changes` job skips
+  # gates a diff cannot break, and GitHub reports a skipped job as neither
+  # success nor failure — so requiring `test` directly would leave a
+  # docs-only PR stuck at "Expected — waiting for status" forever. Requiring
+  # this job instead keeps path filtering and branch protection compatible.
+  #
+  # `cancelled` is NOT success: a cancelled run has proven nothing. (The
+  # concurrency block cancels superseded runs, but those belong to a
+  # superseded commit, whose ci-ok result nothing is waiting on.)
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [changes, fmt, desktop, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      # rust-toolchain.toml pins the exact version + carries the rustfmt
-      # component; the bare install command reads it.
-      - name: Install pinned toolchain (rust-toolchain.toml)
-        run: rustup toolchain install
-      # BLOCKING since the 2026-07-02 `cargo fmt --all` sweep (404 files,
-      # listed in .git-blame-ignore-revs) zeroed the format debt. Runs in
-      # seconds (no compilation); a failure diff is now one contributor's
-      # change, small and actionable.
-      - run: cargo fmt --all --check
-
-  # Node-only gate for the Svelte/TS desktop frontend. No Rust toolchain,
-  # no llama.cpp, no native stack — just the webview code the workspace
-  # `cargo check` is blind to. `npm run check` is svelte-check
-  # --fail-on-warnings (the tree is warning-clean as of 2026-07-14, so a
-  # failure is one PR's regression); `npm run test` is vitest, which renders
-  # components under jsdom and so catches runtime render faults — the class
-  # of bug (each_key_duplicate) that motivated this gate. The generated
-  # meshapp catalog is a runtime public/ asset fetched at load time, not a
-  # build-time import, so neither check nor test needs the predev hook.
-  desktop-frontend:
-    name: Desktop frontend (svelte-check + vitest)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: sovereign/crates/sovereign-desktop
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm run test
+      - name: Verify every gate passed or was legitimately skipped
+        shell: bash
+        run: |
+          fail=0
+          check() {
+            case "$2" in
+              success|skipped) printf '  ok       %-24s %s\n' "$1" "$2" ;;
+              *)               printf '  FAILED   %-24s %s\n' "$1" "$2"; fail=1 ;;
+            esac
+          }
+          echo "Gate results:"
+          check changes '${{ needs.changes.result }}'
+          check fmt     '${{ needs.fmt.result }}'
+          check desktop '${{ needs.desktop.result }}'
+          check test    '${{ needs.test.result }}'
+          exit "$fail"
 
   # ===================================================================
   # SHELVED GATES (2026-07-14) — commented out to keep PR/main checks
-  # legible: only 'Build + Test' and 'Lint (rustfmt)' gate merges now.
-  # Re-enable a block by stripping the leading '# ' from its lines (and
-  # confirm branch protection's required checks match). Local equivalents:
+  # legible AND affordable: mesh-dst and clippy were measured at ~29 min
+  # billed EACH per run (598 and 581 minutes over July), i.e. together they
+  # cost more than every non-CI workflow in the repo combined. Re-enable a
+  # block by stripping the leading '# ' from its lines — and add it to
+  # ci-ok's `needs` + `check` list, or it will not actually gate anything.
+  # Local equivalents:
   #     cargo xtask quality                                   # gates job
   #     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
   #     cargo deny check licenses bans sources                # deny job
@@ -238,18 +437,12 @@ jobs:
 #             /usr/local/.ghcup /opt/hostedtoolcache \
 #             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
 #           sudo docker image prune --all --force >/dev/null 2>&1 || true
-#           # The hosted runner has a second, mostly-empty ~65 GB scratch disk
-#           # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
-#           # a plain dir) and point TMPDIR there too, so neither the build tree
-#           # nor compiler scratch can fill the root disk again.
 #           sudo mkdir -p /mnt/target /mnt/tmp
 #           sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
 #           mkdir -p target
 #           sudo mount --bind /mnt/target target
 #           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
 #           df -h / /mnt | tail -2
-#       # rust-toolchain.toml pins the exact version; the bare install
-#       # command reads it (no version strings in workflow YAML).
 #       - name: Install pinned toolchain (rust-toolchain.toml)
 #         run: rustup toolchain install
 #       - uses: Swatinem/rust-cache@v2
@@ -260,14 +453,19 @@ jobs:
 #           # this feature-skewed tree never overwrites the canonical cache.
 #           shared-key: workspace
 #           save-if: false
-#       # See the test job: the CMake tree is cached separately from
-#       # rust-cache (whose cleanup would delete it), and the guard forces a
-#       # rebuild instead of a link failure if the tree is missing.
+#       # Keep this key in sync with the test job's (llama-cpp-sys-4 version +
+#       # toolchain, NOT the Cargo.lock hash — see that job's comment).
+#       - name: Resolve llama-cpp-sys-4 version (cache key input)
+#         id: llama-ver
+#         shell: bash
+#         run: |
+#           ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
+#           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 #       - name: Cache llama.cpp CMake tree
 #         uses: actions/cache@v6
 #         with:
 #           path: target/llama-cmake-cache
-#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
 #       - name: Guard llama fingerprint vs missing CMake tree
 #         shell: bash
 #         run: |
@@ -311,8 +509,6 @@ jobs:
 #     runs-on: ubuntu-latest
 #     steps:
 #       - uses: actions/checkout@v7
-#       # rust-toolchain.toml pins the exact version; the bare install
-#       # command reads it (no version strings in workflow YAML).
 #       - name: Install pinned toolchain (rust-toolchain.toml)
 #         run: rustup toolchain install
 #       - uses: Swatinem/rust-cache@v2
@@ -375,18 +571,12 @@ jobs:
 #             /usr/local/.ghcup /opt/hostedtoolcache \
 #             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
 #           sudo docker image prune --all --force >/dev/null 2>&1 || true
-#           # The hosted runner has a second, mostly-empty ~65 GB scratch disk
-#           # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
-#           # a plain dir) and point TMPDIR there too, so neither the build tree
-#           # nor compiler scratch can fill the root disk again.
 #           sudo mkdir -p /mnt/target /mnt/tmp
 #           sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
 #           mkdir -p target
 #           sudo mount --bind /mnt/target target
 #           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
 #           df -h / /mnt | tail -2
-#       # rust-toolchain.toml pins the exact version + carries the clippy
-#       # component; the bare install command reads it.
 #       - name: Install pinned toolchain (rust-toolchain.toml)
 #         run: rustup toolchain install
 #       - uses: Swatinem/rust-cache@v2
@@ -396,21 +586,24 @@ jobs:
 #           # and hit the cache). Read-only: advisory lanes never write.
 #           shared-key: workspace
 #           save-if: false
-#       # See the test job: the CMake tree is cached separately from
-#       # rust-cache (whose cleanup would delete it), and the guard forces a
-#       # rebuild instead of a link failure if the tree is missing.
+#       - name: Resolve llama-cpp-sys-4 version (cache key input)
+#         id: llama-ver
+#         shell: bash
+#         run: |
+#           ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
+#           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 #       - name: Cache llama.cpp CMake tree
 #         uses: actions/cache@v6
 #         with:
 #           path: target/llama-cmake-cache
-#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
 #       - name: Guard llama fingerprint vs missing CMake tree
 #         shell: bash
 #         run: |
 #           if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
 #             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
 #           fi
-#       # Same native stack as the check+test job (see its comment) — keep in sync.
+#       # Same native stack as the test job (see its comment) — keep in sync.
 #       - name: System deps
 #         run: |
 #           sudo apt-get update

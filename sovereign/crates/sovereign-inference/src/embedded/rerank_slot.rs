@@ -189,13 +189,12 @@ impl RerankSlot {
         };
         let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
 
-        let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
-            Error::Inference(crate::llama::describe_model_load_failure(
-                "reranker",
-                model_path,
-                e,
-            ))
-        })?;
+        let model =
+            LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
+                Error::Inference(crate::llama::describe_model_load_failure(
+                    "reranker", model_path, e,
+                ))
+            })?;
 
         // The reranker emits one scalar per sequence — n_embd is
         // typically 1 in this mode but we don't read it; we just
@@ -486,9 +485,8 @@ impl RerankSlot {
         let ctx = &mut guard.ctx;
 
         let (query_tokens, query_budget, doc_budget) = self.split_budget(query)?;
-        let mut head: Vec<LlamaToken> = Vec::with_capacity(
-            self.prefix_tokens.len() + query_budget + self.middle_tokens.len(),
-        );
+        let mut head: Vec<LlamaToken> =
+            Vec::with_capacity(self.prefix_tokens.len() + query_budget + self.middle_tokens.len());
         head.extend_from_slice(&self.prefix_tokens);
         head.extend(query_tokens.iter().take(query_budget).copied());
         head.extend_from_slice(&self.middle_tokens);
@@ -558,9 +556,8 @@ impl RerankSlot {
         // The last prefix token requests logits purely as decode
         // insurance (some backends reject zero-logit batches); the
         // value is never read.
-        let mut shared: Vec<LlamaToken> = Vec::with_capacity(
-            self.prefix_tokens.len() + query_budget + self.middle_tokens.len(),
-        );
+        let mut shared: Vec<LlamaToken> =
+            Vec::with_capacity(self.prefix_tokens.len() + query_budget + self.middle_tokens.len());
         shared.extend_from_slice(&self.prefix_tokens);
         shared.extend(query_tokens.iter().take(query_budget).copied());
         shared.extend_from_slice(&self.middle_tokens);
@@ -650,19 +647,19 @@ impl RerankSlot {
                         "rerank wave decode failed — sequential fallback"
                     );
                     for tail in wave {
-                        let _ =
-                            ctx.clear_kv_cache_seq(Some(0), Some(shared_len as u32), None);
+                        let _ = ctx.clear_kv_cache_seq(Some(0), Some(shared_len as u32), None);
                         let last = tail.len() - 1;
                         let mut b = LlamaBatch::new(tail.len(), 1);
                         for (i, &tok) in tail.iter().enumerate() {
                             b.add(tok, (shared_len + i) as i32, &[0], i == last)
-                                .map_err(|e| {
-                                    Error::Inference(format!("Rerank batch add: {e}"))
-                                })?;
+                                .map_err(|e| Error::Inference(format!("Rerank batch add: {e}")))?;
                         }
                         ctx.decode(&mut b)
                             .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
-                        out.push(Self::read_score(self.protocol, ctx.get_logits_ith(last as i32))?);
+                        out.push(Self::read_score(
+                            self.protocol,
+                            ctx.get_logits_ith(last as i32),
+                        )?);
                     }
                 }
             }
@@ -676,7 +673,6 @@ impl RerankSlot {
 /// bookkeeping small while collapsing a 48-title prerank from 48
 /// decode calls to 4.
 const RERANK_BATCH_SEQS: u32 = 16;
-
 
 /// `SOVEREIGN_RERANK_SEQUENTIAL=1` forces `score_batch` down the
 /// fully-independent `score_sequential` path — the A/B valve and

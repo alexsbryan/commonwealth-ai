@@ -49,16 +49,51 @@ impl Pricing {
         let m = model.to_ascii_lowercase();
         // Order matters: check the more specific families first.
         if m.contains("haiku") {
-            Pricing { input: 1.0, output: 5.0, cache_write_5m: 1.25, cache_write_1h: 2.0, cache_read: 0.10, assumed: false }
+            Pricing {
+                input: 1.0,
+                output: 5.0,
+                cache_write_5m: 1.25,
+                cache_write_1h: 2.0,
+                cache_read: 0.10,
+                assumed: false,
+            }
         } else if m.contains("sonnet") {
-            Pricing { input: 3.0, output: 15.0, cache_write_5m: 3.75, cache_write_1h: 6.0, cache_read: 0.30, assumed: false }
+            Pricing {
+                input: 3.0,
+                output: 15.0,
+                cache_write_5m: 3.75,
+                cache_write_1h: 6.0,
+                cache_read: 0.30,
+                assumed: false,
+            }
         } else if m.contains("fable") || m.contains("mythos") {
-            Pricing { input: 10.0, output: 50.0, cache_write_5m: 12.5, cache_write_1h: 20.0, cache_read: 1.0, assumed: false }
+            Pricing {
+                input: 10.0,
+                output: 50.0,
+                cache_write_5m: 12.5,
+                cache_write_1h: 20.0,
+                cache_read: 1.0,
+                assumed: false,
+            }
         } else if m.contains("opus") {
-            Pricing { input: 5.0, output: 25.0, cache_write_5m: 6.25, cache_write_1h: 10.0, cache_read: 0.50, assumed: false }
+            Pricing {
+                input: 5.0,
+                output: 25.0,
+                cache_write_5m: 6.25,
+                cache_write_1h: 10.0,
+                cache_read: 0.50,
+                assumed: false,
+            }
         } else {
             // Unknown model — assume Opus rates but flag it in the output.
-            Pricing { input: 5.0, output: 25.0, cache_write_5m: 6.25, cache_write_1h: 10.0, cache_read: 0.50, assumed: true }
+            Pricing {
+                input: 5.0,
+                output: 25.0,
+                cache_write_5m: 6.25,
+                cache_write_1h: 10.0,
+                cache_read: 0.50,
+                assumed: true,
+            }
         }
     }
 }
@@ -99,10 +134,26 @@ impl Bucket {
 /// modern short names and the deprecated aliases). Matched case-insensitively,
 /// and also against the suffix of any `mcp__<server>__<tool>` name.
 const CODE_INTEL_TOOLS: &[&str] = &[
-    "symbols", "callers", "callees", "code_search", "notes", "note", "blast",
-    "project_context", "recent_changes", "drift_findings", "drift_posture",
-    "symbol_lookup", "find_callers", "find_callees", "blast_radius", "read_notes",
-    "write_note", "work_in_flight", "arch_report", "arch_posture",
+    "symbols",
+    "callers",
+    "callees",
+    "code_search",
+    "notes",
+    "note",
+    "blast",
+    "project_context",
+    "recent_changes",
+    "drift_findings",
+    "drift_posture",
+    "symbol_lookup",
+    "find_callers",
+    "find_callees",
+    "blast_radius",
+    "read_notes",
+    "write_note",
+    "work_in_flight",
+    "arch_report",
+    "arch_posture",
 ];
 
 fn classify(name: &str) -> Bucket {
@@ -116,7 +167,9 @@ fn classify(name: &str) -> Bucket {
     let lower = name.to_ascii_lowercase();
     // `mcp__<server>__<tool>` → compare the trailing tool segment.
     let tool_seg = lower.rsplit("__").next().unwrap_or(lower.as_str());
-    if CODE_INTEL_TOOLS.iter().any(|t| *t == lower || *t == tool_seg)
+    if CODE_INTEL_TOOLS
+        .iter()
+        .any(|t| *t == lower || *t == tool_seg)
         || lower.contains("sovereign")
     {
         return Bucket::CodeIntel;
@@ -148,9 +201,7 @@ fn is_sovereign_cli(cmd: &str) -> bool {
     cmd.split(|c| c == ';' || c == '|' || c == '&')
         .filter(|seg| !seg.trim().is_empty())
         .any(|seg| {
-            let first = seg
-                .split_whitespace()
-                .find(|tok| !tok.contains('=')); // skip VAR=val prefixes
+            let first = seg.split_whitespace().find(|tok| !tok.contains('=')); // skip VAR=val prefixes
             match first {
                 Some(tok) => {
                     tok == "sovereign"
@@ -237,10 +288,7 @@ fn result_text(v: &serde_json::Value) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        serde_json::Value::Object(_) => v
-            .get("content")
-            .map(result_text)
-            .unwrap_or_default(),
+        serde_json::Value::Object(_) => v.get("content").map(result_text).unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -307,15 +355,31 @@ fn analyze(path: &Path) -> Option<SessionReport> {
 
         // ---- usage / cost ----
         if let Some(usage) = fresh_usage(msg, &mut last_usage_id) {
-            let a = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let o = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cr = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cw = usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let a = usage
+                .get("input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let o = usage
+                .get("output_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cr = usage
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cw = usage
+                .get("cache_creation_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             // Precise 5m/1h split when the transcript carries it.
             let (this_5m, this_1h) = match usage.get("cache_creation").filter(|c| c.is_object()) {
                 Some(c) => (
-                    c.get("ephemeral_5m_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-                    c.get("ephemeral_1h_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                    c.get("ephemeral_5m_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
+                    c.get("ephemeral_1h_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
                 ),
                 None => (cw, 0), // unknown TTL -> price as 5m (the cheaper write)
             };
@@ -345,9 +409,17 @@ fn analyze(path: &Path) -> Option<SessionReport> {
             for block in content {
                 match block.get("type").and_then(|t| t.as_str()) {
                     Some("tool_use") => {
-                        let mut name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?").to_string();
+                        let mut name = block
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("?")
+                            .to_string();
                         if name == "Bash" {
-                            if let Some(cmd) = block.get("input").and_then(|i| i.get("command")).and_then(|c| c.as_str()) {
+                            if let Some(cmd) = block
+                                .get("input")
+                                .and_then(|i| i.get("command"))
+                                .and_then(|c| c.as_str())
+                            {
                                 if is_sovereign_cli(cmd) {
                                     // CLI-path brain calls are code-intel, and
                                     // their result tokens must route there too
@@ -370,8 +442,14 @@ fn analyze(path: &Path) -> Option<SessionReport> {
                         }
                     }
                     Some("tool_result") => {
-                        let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
-                        let name = tool_id_name.get(tid).cloned().unwrap_or_else(|| "?".to_string());
+                        let tid = block
+                            .get("tool_use_id")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("");
+                        let name = tool_id_name
+                            .get(tid)
+                            .cloned()
+                            .unwrap_or_else(|| "?".to_string());
                         let toks = block
                             .get("content")
                             .map(result_text)
@@ -408,7 +486,11 @@ fn analyze(path: &Path) -> Option<SessionReport> {
     top_tools.truncate(8);
 
     Some(SessionReport {
-        file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
+        file: path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string(),
         turns,
         max_ctx,
         model,
@@ -435,7 +517,13 @@ fn analyze(path: &Path) -> Option<SessionReport> {
 /// every character that is not `[A-Za-z0-9-]` becomes `-`.
 fn encode_project_path(path: &str) -> String {
     path.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
 }
 
@@ -542,14 +630,16 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
                     } else {
                         None
                     };
-                    if let (Some(raw), Some(id)) =
-                        (kind, block.get("id").and_then(|i| i.as_str()))
+                    if let (Some(raw), Some(id)) = (kind, block.get("id").and_then(|i| i.as_str()))
                     {
                         pending.insert(id.to_string(), raw);
                     }
                 }
                 Some("tool_result") if first_edit_req.is_none() => {
-                    let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                    let tid = block
+                        .get("tool_use_id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("");
                     if let Some(raw) = pending.remove(tid) {
                         let toks = block
                             .get("content")
@@ -573,7 +663,11 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
         return None;
     }
     Some(RampReport {
-        file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
+        file: path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string(),
         requests,
         first_edit_req,
         raw_tokens,
@@ -719,10 +813,22 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
         };
 
         if let Some(usage) = fresh_usage(msg, &mut last_usage_id) {
-            let a = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let o = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cr = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cw = usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let a = usage
+                .get("input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let o = usage
+                .get("output_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cr = usage
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cw = usage
+                .get("cache_creation_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             let model = msg.get("model").and_then(|m| m.as_str()).unwrap_or("");
             if !model.is_empty() {
                 *model_counts.entry(model.to_string()).or_default() += 1;
@@ -733,7 +839,11 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
                 + (cr as f64) / 1e6 * p.cache_read
                 + (cw as f64) / 1e6 * p.cache_write_5m;
             actual_cr_cost += (cr as f64) / 1e6 * p.cache_read;
-            points.push(ReqPoint { ctx: a + cr + cw, cache_read: cr, price_cr: p.cache_read });
+            points.push(ReqPoint {
+                ctx: a + cr + cw,
+                cache_read: cr,
+                price_cr: p.cache_read,
+            });
             // NO `continue` — assistant records carry BOTH usage and the
             // tool_use blocks; skipping their content scan would leave the
             // id→raw map empty and silently zero H4 (the first fleet run
@@ -768,7 +878,10 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
                         }
                     }
                     Some("tool_result") => {
-                        let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                        let tid = block
+                            .get("tool_use_id")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("");
                         if tool_id_raw.get(tid).copied().unwrap_or(false) {
                             let toks = block
                                 .get("content")
@@ -776,14 +889,20 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
                                 .map(|s| approx_tokens(&s))
                                 .unwrap_or(0);
                             if toks > 0 {
-                                raw_acq.push(TimedTokens { req_index, tokens: toks });
+                                raw_acq.push(TimedTokens {
+                                    req_index,
+                                    tokens: toks,
+                                });
                             }
                         }
                     }
                     Some("text") => {
                         let t = block.get("text").and_then(|t| t.as_str()).unwrap_or("");
                         if INJECTION_MARKERS.iter().any(|m| t.contains(m)) {
-                            injections.push(TimedTokens { req_index, tokens: approx_tokens(t) });
+                            injections.push(TimedTokens {
+                                req_index,
+                                tokens: approx_tokens(t),
+                            });
                         }
                     }
                     _ => {}
@@ -903,15 +1022,18 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
                     closed += 1;
                     evictions += 1;
                     offset = pt.ctx - retained;
-                    evict_saved -=
-                        (retained as f64) / 1e6 * dominant_price.cache_write_5m;
+                    evict_saved -= (retained as f64) / 1e6 * dominant_price.cache_write_5m;
                 }
             }
         }
     }
 
     Some(CfReport {
-        file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
+        file: path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string(),
         actual_total_cost: actual_total,
         actual_cr_cost,
         preamble0,
@@ -937,23 +1059,35 @@ fn print_counterfactual(reports: &[CfReport]) {
     );
 
     let lever = |label: String, saved: f64| {
-        println!("  {label:<44} ${saved:>9.2}   {:>5.1}%", saved / total * 100.0);
+        println!(
+            "  {label:<44} ${saved:>9.2}   {:>5.1}%",
+            saved / total * 100.0
+        );
     };
 
     for (idx, k) in [100_000u64, 140_000, 200_000].iter().enumerate() {
         let saved: f64 = reports.iter().map(|r| r.splits[idx].2).sum();
         let splits: u64 = reports.iter().map(|r| r.splits[idx].1).sum();
-        lever(format!("H1 split sessions at {}k ({splits} splits)", k / 1000), saved);
+        lever(
+            format!("H1 split sessions at {}k ({splits} splits)", k / 1000),
+            saved,
+        );
     }
     let avg_preamble: u64 =
         reports.iter().map(|r| r.preamble0).sum::<u64>() / reports.len().max(1) as u64;
     lever(
-        format!("H2a halve turn-0 preamble (avg {}k tok)", avg_preamble / 1000),
+        format!(
+            "H2a halve turn-0 preamble (avg {}k tok)",
+            avg_preamble / 1000
+        ),
         reports.iter().map(|r| r.halve_preamble_saved).sum(),
     );
     let inj_total: u64 = reports.iter().map(|r| r.injection_tokens).sum();
     lever(
-        format!("H2b cap hook injections at {INJECTION_CAP} tok ({}k injected)", inj_total / 1000),
+        format!(
+            "H2b cap hook injections at {INJECTION_CAP} tok ({}k injected)",
+            inj_total / 1000
+        ),
         reports.iter().map(|r| r.cap_injections_saved).sum(),
     );
     lever(
@@ -962,7 +1096,10 @@ fn print_counterfactual(reports: &[CfReport]) {
     );
     let raw_total: u64 = reports.iter().map(|r| r.raw_tokens).sum();
     lever(
-        format!("H4 route raw reads via code-intel ({}k raw)", raw_total / 1000),
+        format!(
+            "H4 route raw reads via code-intel ({}k raw)",
+            raw_total / 1000
+        ),
         reports.iter().map(|r| r.route_raw_saved).sum(),
     );
     let evict_total: u64 = reports.iter().map(|r| r.evictions).sum();
@@ -996,15 +1133,24 @@ fn print_counterfactual_detail(r: &CfReport) {
         r.actual_cr_cost
     );
     for (k, splits, saved) in &r.splits {
-        println!("  H1 split at {:>4}k   {splits:>3} split(s)   ${saved:>8.2}", k / 1000);
+        println!(
+            "  H1 split at {:>4}k   {splits:>3} split(s)   ${saved:>8.2}",
+            k / 1000
+        );
     }
-    println!("  H2a halve preamble               ${:>8.2}", r.halve_preamble_saved);
+    println!(
+        "  H2a halve preamble               ${:>8.2}",
+        r.halve_preamble_saved
+    );
     println!(
         "  H2b cap injections ({:>4}k tok)   ${:>8.2}",
         r.injection_tokens / 1000,
         r.cap_injections_saved
     );
-    println!("  H3 batch small turns (UPPER)     ${:>8.2}", r.batch_upper_bound_saved);
+    println!(
+        "  H3 batch small turns (UPPER)     ${:>8.2}",
+        r.batch_upper_bound_saved
+    );
     println!(
         "  H4 route raw reads ({:>4}k tok)   ${:>8.2}",
         r.raw_tokens / 1000,
@@ -1051,7 +1197,10 @@ fn print_help() {
 }
 
 /// Shared with `session_cmd` — both read the same transcript layout.
-pub(crate) fn resolve_transcript_dir(project: Option<&str>, dir: Option<&str>) -> Result<PathBuf, String> {
+pub(crate) fn resolve_transcript_dir(
+    project: Option<&str>,
+    dir: Option<&str>,
+) -> Result<PathBuf, String> {
     if let Some(d) = dir {
         return Ok(PathBuf::from(d));
     }
@@ -1063,7 +1212,11 @@ pub(crate) fn resolve_transcript_dir(project: Option<&str>, dir: Option<&str>) -
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| p.to_string())
         })
-        .or_else(|| std::env::current_dir().ok().map(|p| p.display().to_string()))
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.display().to_string())
+        })
         .ok_or_else(|| "could not determine the current working directory".to_string())?;
     let home = dirs::home_dir().ok_or_else(|| "could not locate the home directory".to_string())?;
     let encoded = encode_project_path(&cwd);
@@ -1109,7 +1262,11 @@ fn print_table(reports: &[SessionReport]) {
         let total = r.total_cost();
         tot += total;
         tot_saved += r.counterfactual_no_cache_read() - r.cost_cache_read;
-        let cache_pct = if total > 0.0 { r.cost_cache_read / total * 100.0 } else { 0.0 };
+        let cache_pct = if total > 0.0 {
+            r.cost_cache_read / total * 100.0
+        } else {
+            0.0
+        };
         let model = r.model.split('[').next().unwrap_or(&r.model);
         println!(
             "{:<10} {:>6} {:>10} {:>7.1}% {:>10.2} {:>12}  {}{}",
@@ -1146,12 +1303,21 @@ fn print_detail(r: &SessionReport) {
         r.turns,
         r.max_ctx,
         model,
-        if r.model_assumed { " (pricing assumed)" } else { "" },
+        if r.model_assumed {
+            " (pricing assumed)"
+        } else {
+            ""
+        },
     );
     println!("\ntokens:");
     println!("  fresh input   {:>14}", r.input);
     println!("  cache read    {:>14}", r.cache_read);
-    println!("  cache create  {:>14}  (5m {} / 1h {})", r.cache_write_5m + r.cache_write_1h, r.cache_write_5m, r.cache_write_1h);
+    println!(
+        "  cache create  {:>14}  (5m {} / 1h {})",
+        r.cache_write_5m + r.cache_write_1h,
+        r.cache_write_5m,
+        r.cache_write_1h
+    );
     println!("  output        {:>14}", r.output);
 
     println!("\ncost breakdown (total ${:.2}):", total);
@@ -1181,9 +1347,15 @@ fn print_detail(r: &SessionReport) {
             stat.ctx_tokens as f64 / tot_ctx as f64 * 100.0
         );
     }
-    println!("  [Bash cat/head/grep-style raw reads: {}]", r.bash_read_like);
+    println!(
+        "  [Bash cat/head/grep-style raw reads: {}]",
+        r.bash_read_like
+    );
 
-    println!("\nraw-acquisition ratio: {} raw-read tokens : {} code-intelligence calls", r.raw_acq_tokens, r.code_intel_calls);
+    println!(
+        "\nraw-acquisition ratio: {} raw-read tokens : {} code-intelligence calls",
+        r.raw_acq_tokens, r.code_intel_calls
+    );
     if r.code_intel_calls == 0 && r.raw_acq_tokens > 0 {
         println!("  ^ 0 code-intel calls. This session acquired codebase context entirely via raw");
         println!("    reads; every one rides the cache-read tail for the rest of the session.");
@@ -1207,7 +1379,11 @@ fn print_json(reports: &[SessionReport]) {
         if i > 0 {
             out.push(',');
         }
-        let cache_pct = if r.total_cost() > 0.0 { r.cost_cache_read / r.total_cost() * 100.0 } else { 0.0 };
+        let cache_pct = if r.total_cost() > 0.0 {
+            r.cost_cache_read / r.total_cost() * 100.0
+        } else {
+            0.0
+        };
         out.push_str(&format!(
             "{{\"session\":{},\"file\":{},\"model\":{},\"model_assumed\":{},\
              \"turns\":{},\"peak_ctx\":{},\"tokens\":{{\"input\":{},\"cache_read\":{},\
@@ -1305,7 +1481,10 @@ pub async fn run(args: &[String]) -> i32 {
     };
 
     if reports.is_empty() {
-        eprintln!("cache-audit: no sessions with usage data in {}", target_dir.display());
+        eprintln!(
+            "cache-audit: no sessions with usage data in {}",
+            target_dir.display()
+        );
         return 1;
     }
 
@@ -1372,7 +1551,10 @@ pub async fn run(args: &[String]) -> i32 {
             .collect();
         match matches.as_slice() {
             [] => {
-                eprintln!("cache-audit: no session matching `{sel}` in {}", target_dir.display());
+                eprintln!(
+                    "cache-audit: no session matching `{sel}` in {}",
+                    target_dir.display()
+                );
                 return 1;
             }
             [one] => {
@@ -1380,7 +1562,10 @@ pub async fn run(args: &[String]) -> i32 {
                 return 0;
             }
             many => {
-                eprintln!("cache-audit: `{sel}` is ambiguous ({} matches):", many.len());
+                eprintln!(
+                    "cache-audit: `{sel}` is ambiguous ({} matches):",
+                    many.len()
+                );
                 for m in many {
                     eprintln!("  {}", short_session_id(&m.file));
                 }
@@ -1399,7 +1584,9 @@ pub async fn run(args: &[String]) -> i32 {
             rb.partial_cmp(&ra).unwrap_or(std::cmp::Ordering::Equal)
         }),
         "cost" => reports.sort_by(|a, b| {
-            b.total_cost().partial_cmp(&a.total_cost()).unwrap_or(std::cmp::Ordering::Equal)
+            b.total_cost()
+                .partial_cmp(&a.total_cost())
+                .unwrap_or(std::cmp::Ordering::Equal)
         }),
         other => {
             eprintln!("cache-audit: unknown --sort key `{other}` (cost | recent | ratio)");
@@ -1454,10 +1641,16 @@ mod tests {
     fn sovereign_cli_detected_by_command_position_only() {
         assert!(is_sovereign_cli("sovereign tools call symbols --name=Foo"));
         assert!(is_sovereign_cli("svrn notes add --kind decision -m x"));
-        assert!(is_sovereign_cli("SOVEREIGN_NO_STALE_WARN=1 sovereign cache-audit"));
-        assert!(is_sovereign_cli("cd /repo && sovereign tools call callers --symbol=f"));
+        assert!(is_sovereign_cli(
+            "SOVEREIGN_NO_STALE_WARN=1 sovereign cache-audit"
+        ));
+        assert!(is_sovereign_cli(
+            "cd /repo && sovereign tools call callers --symbol=f"
+        ));
         assert!(is_sovereign_cli("target/debug/sovereign-cli session list"));
-        assert!(is_sovereign_cli("sovereign tools call lint_status 2>&1 | head -5"));
+        assert!(is_sovereign_cli(
+            "sovereign tools call lint_status 2>&1 | head -5"
+        ));
         // Argument/pattern positions must NOT match.
         assert!(!is_sovereign_cli("cargo build -p sovereign-cli"));
         assert!(!is_sovereign_cli("rg sovereign src/"));
@@ -1475,7 +1668,8 @@ mod tests {
             r#"{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#,
             "\n"
         );
-        let dir = std::env::temp_dir().join(format!("cache_audit_svrn_test_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("cache_audit_svrn_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("dcba4321-session.jsonl");
         std::fs::write(&path, body).unwrap();
@@ -1509,8 +1703,7 @@ mod tests {
             mk(r#"{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/b.rs"}}"#),
         ]
         .join("\n");
-        let dir =
-            std::env::temp_dir().join(format!("cache_audit_dup_test_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cache_audit_dup_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("dupe5678-session.jsonl");
         std::fs::write(&path, body).unwrap();
@@ -1539,13 +1732,15 @@ mod tests {
         };
         let text_block = r#"{"type":"text","text":"working"}"#;
         let commit_block = r#"{"type":"tool_use","id":"tc","name":"Bash","input":{"command":"git add -A && git commit -m 'done'"}}"#;
-        let mut lines = vec![mk("m1", 50_000, 0, text_block), mk("m2", 200_000, 0, commit_block)];
+        let mut lines = vec![
+            mk("m1", 50_000, 0, text_block),
+            mk("m2", 200_000, 0, commit_block),
+        ];
         for i in 0..6 {
             lines.push(mk(&format!("m{}", i + 3), 10_000, 200_000, text_block));
         }
         let body = lines.join("\n");
-        let dir =
-            std::env::temp_dir().join(format!("cache_audit_h5_test_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cache_audit_h5_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("h5evict99-session.jsonl");
         std::fs::write(&path, body).unwrap();

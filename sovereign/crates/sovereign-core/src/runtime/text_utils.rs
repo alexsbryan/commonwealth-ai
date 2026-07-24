@@ -10,7 +10,6 @@
 //! incident (see `truncate_does_not_panic_inside_multibyte_char`) is
 //! the pinned regression.
 
-
 use crate::types::{Message, Role};
 
 /// Per-chunk content budget inside the prompt-context block. 600

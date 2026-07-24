@@ -23,8 +23,8 @@ use std::io::IsTerminal as _;
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_engine_notes::NoteStore;
+use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;

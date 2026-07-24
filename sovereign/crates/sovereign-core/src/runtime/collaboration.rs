@@ -228,8 +228,7 @@ pub(crate) async fn run_collaboration(
     // text; catalog embeddings are disk-cached. Any failure ships the
     // card without routes — never blocks the request.
     if let Some(ctx) = route_ctx {
-        req.routes =
-            crate::runtime::acquisition::routes_for_gap(inference, &ctx, &req.gap).await;
+        req.routes = crate::runtime::acquisition::routes_for_gap(inference, &ctx, &req.gap).await;
     }
 
     tracing::info!(
@@ -444,14 +443,22 @@ async fn phrase_gap_question(
          fact, document, or source that would settle the question. Output the \
          line only — no preface, no quotes."
     );
-    let mut request =
-        crate::types::CompletionRequest::for_workload(crate::slot_policy::Workload::Housekeep, prompt)
-            .with_system("You phrase information requests precisely. Output one line only.")
-            .with_output_budget(PHRASE_MAX_TOKENS);
+    let mut request = crate::types::CompletionRequest::for_workload(
+        crate::slot_policy::Workload::Housekeep,
+        prompt,
+    )
+    .with_system("You phrase information requests precisely. Output one line only.")
+    .with_output_budget(PHRASE_MAX_TOKENS);
     request.temperature = Some(0.0);
     let resp = inference.complete(&request).await.ok()?;
     let cleaned = crate::title::strip_think_blocks(&resp.text);
-    let line = cleaned.trim().lines().next()?.trim().trim_matches('"').trim();
+    let line = cleaned
+        .trim()
+        .lines()
+        .next()?
+        .trim()
+        .trim_matches('"')
+        .trim();
     if line.is_empty() || line.chars().count() > 240 {
         return None;
     }

@@ -2164,17 +2164,33 @@ mod integrity_tests {
         assert_eq!(g.symbol_count().await, 2);
 
         // Full replace with a different set — old rows gone, new rows present.
-        g.replace_all(vec![sym("new_c", "c.rs")], vec![]).await.unwrap();
+        g.replace_all(vec![sym("new_c", "c.rs")], vec![])
+            .await
+            .unwrap();
         assert_eq!(g.symbol_count().await, 1);
-        assert!(g.find_symbols_by_name("old_a", None, 8).await.unwrap().is_empty(), "replace_all must clear prior rows");
-        assert!(!g.find_symbols_by_name("new_c", None, 8).await.unwrap().is_empty());
+        assert!(
+            g.find_symbols_by_name("old_a", None, 8)
+                .await
+                .unwrap()
+                .is_empty(),
+            "replace_all must clear prior rows"
+        );
+        assert!(!g
+            .find_symbols_by_name("new_c", None, 8)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
     async fn replace_files_merges_only_named_files() {
         let g = ScipGraph::open_in_memory("alpha").unwrap();
         g.ingest_symbols_and_refs(
-            vec![sym("a_one", "a.rs"), sym("a_two", "a.rs"), sym("b_one", "b.rs")],
+            vec![
+                sym("a_one", "a.rs"),
+                sym("a_two", "a.rs"),
+                sym("b_one", "b.rs"),
+            ],
             vec![],
         )
         .await
@@ -2186,10 +2202,32 @@ mod integrity_tests {
             .await
             .unwrap();
 
-        assert_eq!(g.symbol_count().await, 2, "a.rs replaced (2→1), b.rs kept (1)");
-        assert!(g.find_symbols_by_name("a_one", None, 8).await.unwrap().is_empty(), "old a.rs rows gone");
-        assert!(!g.find_symbols_by_name("a_new", None, 8).await.unwrap().is_empty(), "new a.rs row present");
-        assert!(!g.find_symbols_by_name("b_one", None, 8).await.unwrap().is_empty(), "b.rs untouched");
+        assert_eq!(
+            g.symbol_count().await,
+            2,
+            "a.rs replaced (2→1), b.rs kept (1)"
+        );
+        assert!(
+            g.find_symbols_by_name("a_one", None, 8)
+                .await
+                .unwrap()
+                .is_empty(),
+            "old a.rs rows gone"
+        );
+        assert!(
+            !g.find_symbols_by_name("a_new", None, 8)
+                .await
+                .unwrap()
+                .is_empty(),
+            "new a.rs row present"
+        );
+        assert!(
+            !g.find_symbols_by_name("b_one", None, 8)
+                .await
+                .unwrap()
+                .is_empty(),
+            "b.rs untouched"
+        );
     }
 
     #[tokio::test]
@@ -2219,8 +2257,18 @@ mod integrity_tests {
             .unwrap();
 
         // Symbol def updated...
-        assert!(g.find_symbols_by_name("a_renamed", None, 8).await.unwrap().len() == 1);
-        assert!(g.find_symbols_by_name("a_one", None, 8).await.unwrap().is_empty());
+        assert!(
+            g.find_symbols_by_name("a_renamed", None, 8)
+                .await
+                .unwrap()
+                .len()
+                == 1
+        );
+        assert!(g
+            .find_symbols_by_name("a_one", None, 8)
+            .await
+            .unwrap()
+            .is_empty());
         // ...but the ref edge is LEFT for the full rebuild to correct.
         assert_eq!(g.ref_count().await, 1, "overlay must not delete ref edges");
     }
@@ -2230,21 +2278,39 @@ mod integrity_tests {
         // A "merged"-style graph whose rows belong to other corpora. The overlay
         // writes under the PROJECT's corpus_id, not the graph's own "merged" id.
         let g = ScipGraph::open_in_memory("merged").unwrap();
-        g.replace_file_symbols_for("projA", &["src/a.rs".to_string()], vec![sym("fn_a", "src/a.rs")])
-            .await
-            .unwrap();
+        g.replace_file_symbols_for(
+            "projA",
+            &["src/a.rs".to_string()],
+            vec![sym("fn_a", "src/a.rs")],
+        )
+        .await
+        .unwrap();
         // Findable (name lookup is corpus-agnostic) and stored under projA.
         let hits = g.find_symbols_by_name("fn_a", None, 8).await.unwrap();
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].corpus_id, "projA", "row must carry the project's corpus_id, not 'merged'");
+        assert_eq!(
+            hits[0].corpus_id, "projA",
+            "row must carry the project's corpus_id, not 'merged'"
+        );
 
         // A second corpus's same-path file is independent — updating projA does
         // not disturb projB's row.
-        g.replace_file_symbols_for("projB", &["src/a.rs".to_string()], vec![sym("fn_b", "src/a.rs")])
-            .await
-            .unwrap();
-        assert_eq!(g.find_symbols_by_name("fn_a", None, 8).await.unwrap().len(), 1, "projA untouched");
-        assert_eq!(g.find_symbols_by_name("fn_b", None, 8).await.unwrap().len(), 1);
+        g.replace_file_symbols_for(
+            "projB",
+            &["src/a.rs".to_string()],
+            vec![sym("fn_b", "src/a.rs")],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            g.find_symbols_by_name("fn_a", None, 8).await.unwrap().len(),
+            1,
+            "projA untouched"
+        );
+        assert_eq!(
+            g.find_symbols_by_name("fn_b", None, 8).await.unwrap().len(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -2263,8 +2329,14 @@ mod integrity_tests {
             .unwrap();
 
         let stale = g.stale_files_snapshot().await;
-        assert!(!stale.contains(&"a.rs".to_string()), "merged file left the stale set");
-        assert!(stale.contains(&"b.rs".to_string()), "unmerged file stays stale");
+        assert!(
+            !stale.contains(&"a.rs".to_string()),
+            "merged file left the stale set"
+        );
+        assert!(
+            stale.contains(&"b.rs".to_string()),
+            "unmerged file stays stale"
+        );
     }
 
     /// Two source DBs with different corpus_ids must coexist in

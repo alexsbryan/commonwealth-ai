@@ -901,8 +901,14 @@ mod tests {
     #[test]
     fn sample_stratified_deterministic() {
         let mk = || vec![q("a1", "x"), q("b1", "y"), q("a2", "x"), q("b2", "y")];
-        let one: Vec<String> = sample_stratified(mk(), 3).iter().map(|q| q.id.clone()).collect();
-        let two: Vec<String> = sample_stratified(mk(), 3).iter().map(|q| q.id.clone()).collect();
+        let one: Vec<String> = sample_stratified(mk(), 3)
+            .iter()
+            .map(|q| q.id.clone())
+            .collect();
+        let two: Vec<String> = sample_stratified(mk(), 3)
+            .iter()
+            .map(|q| q.id.clone())
+            .collect();
         assert_eq!(one, two, "same bank + N must yield the same sample");
         assert_eq!(one, vec!["a1", "b1", "a2"]);
     }
@@ -950,7 +956,15 @@ mod tests {
     fn cap_threads_by_turns_noop_at_bounds() {
         let mk = || vec![thr("a", 5), thr("b", 6)];
         assert_eq!(cap_threads_by_turns(mk(), 0).len(), 2, "0 → unchanged");
-        assert_eq!(cap_threads_by_turns(mk(), 11).len(), 2, "==total → unchanged");
-        assert_eq!(cap_threads_by_turns(mk(), 99).len(), 2, ">total → unchanged");
+        assert_eq!(
+            cap_threads_by_turns(mk(), 11).len(),
+            2,
+            "==total → unchanged"
+        );
+        assert_eq!(
+            cap_threads_by_turns(mk(), 99).len(),
+            2,
+            ">total → unchanged"
+        );
     }
 }

@@ -444,7 +444,9 @@ mod tests {
         assert!(r.nested_conflict("b", Path::new("/repo/b")).is_none());
         // Sibling whose name shares a prefix is NOT nested — the
         // comparison is component-wise, not string-prefix.
-        assert!(r.nested_conflict("a2", Path::new("/repo/a-extras")).is_none());
+        assert!(r
+            .nested_conflict("a2", Path::new("/repo/a-extras"))
+            .is_none());
         // Re-registering the same corpus_id at the same root is an
         // update, never a conflict.
         assert!(r.nested_conflict("a", Path::new("/repo/a")).is_none());

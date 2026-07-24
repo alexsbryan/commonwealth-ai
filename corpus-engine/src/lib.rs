@@ -27,11 +27,11 @@ pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod facts;
+#[cfg(feature = "treesitter")]
+pub mod facts_check;
 /// SQLite-backed, per-file-patchable home for the fact base (rusqlite → `stores`).
 #[cfg(feature = "stores")]
 pub mod facts_store;
-#[cfg(feature = "treesitter")]
-pub mod facts_check;
 pub mod filters;
 pub mod freshness;
 pub mod harness;
@@ -102,6 +102,7 @@ pub mod notes_sync;
 
 // ─── Public API Re-exports ──────────────────────────────
 
+pub use corpus_engine_yield::YieldHook;
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
     CustomExtractorFn,
@@ -159,7 +160,6 @@ pub use types::{
     IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
     ShardInfo, DEFAULT_EMBED_DIM,
 };
-pub use corpus_engine_yield::YieldHook;
 
 // SCIP call graph + exporter dispatch live in `corpus-engine-scip`
 // (carved out 2026-05-23). corpus-engine itself still uses scip via

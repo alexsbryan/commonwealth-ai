@@ -120,7 +120,10 @@ async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
     );
     // SAFETY: same contract as the SIGTERM above — signalling a pid we
     // identified as the daemon (pidfile owner or :9741 listener).
-    if unsafe { libc_kill(pid, 9 /* SIGKILL */) } != 0 {
+    if unsafe {
+        libc_kill(pid, 9 /* SIGKILL */)
+    } != 0
+    {
         // Either it exited between the poll and the kill (a win), or we
         // lack permission (EPERM — another user's daemon).
         if unsafe { libc_kill(pid, 0) } != 0 {
@@ -569,7 +572,11 @@ pub(super) fn daemon_pid_path() -> std::path::PathBuf {
 /// it — the lock file is per data dir).
 #[cfg(unix)]
 pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
-    if std::env::var("SOVEREIGN_ALLOW_MULTIPLE_DAEMONS").ok().as_deref() == Some("1") {
+    if std::env::var("SOVEREIGN_ALLOW_MULTIPLE_DAEMONS")
+        .ok()
+        .as_deref()
+        == Some("1")
+    {
         return Ok(None);
     }
     let dir = home_dir_buf().join(".sovereign");

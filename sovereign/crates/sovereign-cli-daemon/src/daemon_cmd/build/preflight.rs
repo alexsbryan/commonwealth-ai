@@ -47,7 +47,10 @@ enum VramAction {
 impl VramAction {
     /// The daemon proceeds unless this is a refusal.
     fn proceeds(self) -> bool {
-        !matches!(self, VramAction::RefuseUnreadable | VramAction::RefuseStrict)
+        !matches!(
+            self,
+            VramAction::RefuseUnreadable | VramAction::RefuseStrict
+        )
     }
 }
 
@@ -190,8 +193,14 @@ mod tests {
     #[test]
     fn unreadable_file_refuses_in_default_and_strict() {
         // A missing/renamed GGUF is a hard error, not fussy capacity.
-        assert_eq!(decide(false, true, false, false), VramAction::RefuseUnreadable);
-        assert_eq!(decide(false, true, false, true), VramAction::RefuseUnreadable);
+        assert_eq!(
+            decide(false, true, false, false),
+            VramAction::RefuseUnreadable
+        );
+        assert_eq!(
+            decide(false, true, false, true),
+            VramAction::RefuseUnreadable
+        );
         assert!(!decide(false, true, false, false).proceeds());
     }
 

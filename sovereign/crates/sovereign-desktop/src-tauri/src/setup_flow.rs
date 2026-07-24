@@ -177,95 +177,98 @@ pub async fn run(
     // Also yield a `SlotConfig` for the primary in every case — real from the
     // manifest, or synthetic for a BYOM pick — so the setup report (step 7b)
     // describes all three slots with one uniform shape.
-    let (primary_path, primary_download, primary_slot): (PathBuf, Option<PrimaryDownload>, SlotConfig) =
-        match &primary_source {
-            Some(PrimarySource::LocalPath { path }) => {
-                let p = PathBuf::from(path.trim());
-                if !is_valid_gguf_at(&p) {
-                    return Err(failed(
+    let (primary_path, primary_download, primary_slot): (
+        PathBuf,
+        Option<PrimaryDownload>,
+        SlotConfig,
+    ) = match &primary_source {
+        Some(PrimarySource::LocalPath { path }) => {
+            let p = PathBuf::from(path.trim());
+            if !is_valid_gguf_at(&p) {
+                return Err(failed(
+                    &app,
+                    false,
+                    format!(
+                        "the model you chose isn't a readable GGUF file: {}",
+                        p.display()
+                    ),
+                ));
+            }
+            let name = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| "your model".to_string());
+            let slot = SlotConfig {
+                file: name.clone(),
+                base_name: name,
+                quant: "custom (local)".to_string(),
+                ..Default::default()
+            };
+            (p, None, slot)
+        }
+        Some(PrimarySource::Url { url }) => {
+            let (dl_url, file) = resolve_byom_url(url).map_err(|e| failed(&app, false, e))?;
+            let slot = SlotConfig {
+                file: file.clone(),
+                base_name: file.clone(),
+                quant: "custom (url)".to_string(),
+                hf_url: dl_url.clone(),
+                ..Default::default()
+            };
+            (
+                models_dir.join(&file),
+                Some(PrimaryDownload {
+                    url: dl_url,
+                    // Unknown ahead of time for BYOM; the downloader still
+                    // enforces the GGUF magic + 1 MB sentinel floor.
+                    size_gb: 0.0,
+                    mb_total: None,
+                    sentence: "Downloading your model.",
+                }),
+                slot,
+            )
+        }
+        None => {
+            let primary_slot = preferred_primary_file
+                .as_deref()
+                .and_then(|file| {
+                    build_primary_catalog(&profile)
+                        .into_iter()
+                        .find(|opt| opt.slot.file == file)
+                        .map(|opt| opt.slot)
+                })
+                .or_else(|| recommended_primary(&profile))
+                .ok_or_else(|| {
+                    failed(
                         &app,
                         false,
-                        format!(
-                            "the model you chose isn't a readable GGUF file: {}",
-                            p.display()
-                        ),
-                    ));
-                }
-                let name = p
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| "your model".to_string());
-                let slot = SlotConfig {
-                    file: name.clone(),
-                    base_name: name,
-                    quant: "custom (local)".to_string(),
-                    ..Default::default()
-                };
-                (p, None, slot)
-            }
-            Some(PrimarySource::Url { url }) => {
-                let (dl_url, file) =
-                    resolve_byom_url(url).map_err(|e| failed(&app, false, e))?;
-                let slot = SlotConfig {
-                    file: file.clone(),
-                    base_name: file.clone(),
-                    quant: "custom (url)".to_string(),
-                    hf_url: dl_url.clone(),
-                    ..Default::default()
-                };
-                (
-                    models_dir.join(&file),
-                    Some(PrimaryDownload {
-                        url: dl_url,
-                        // Unknown ahead of time for BYOM; the downloader still
-                        // enforces the GGUF magic + 1 MB sentinel floor.
-                        size_gb: 0.0,
-                        mb_total: None,
-                        sentence: "Downloading your model.",
-                    }),
-                    slot,
-                )
-            }
-            None => {
-                let primary_slot = preferred_primary_file
-                    .as_deref()
-                    .and_then(|file| {
-                        build_primary_catalog(&profile)
-                            .into_iter()
-                            .find(|opt| opt.slot.file == file)
-                            .map(|opt| opt.slot)
-                    })
-                    .or_else(|| recommended_primary(&profile))
-                    .ok_or_else(|| {
-                        failed(
-                            &app,
-                            false,
-                            "bundled manifest has no primary candidate for this hardware"
-                                .into(),
-                        )
-                    })?;
-                let path = pick_path(
-                    existing_slots.primary.as_deref(),
-                    models_dir.join(&primary_slot.file),
-                    primary_slot.size_gb,
-                );
-                let dl = PrimaryDownload {
-                    url: hf_download_url(&primary_slot),
-                    size_gb: primary_slot.size_gb,
-                    mb_total: Some((primary_slot.size_gb * 1024.0).round() as u64),
-                    sentence: "Downloading the main responder.",
-                };
-                (path, Some(dl), primary_slot)
-            }
-        };
+                        "bundled manifest has no primary candidate for this hardware".into(),
+                    )
+                })?;
+            let path = pick_path(
+                existing_slots.primary.as_deref(),
+                models_dir.join(&primary_slot.file),
+                primary_slot.size_gb,
+            );
+            let dl = PrimaryDownload {
+                url: hf_download_url(&primary_slot),
+                size_gb: primary_slot.size_gb,
+                mb_total: Some((primary_slot.size_gb * 1024.0).round() as u64),
+                sentence: "Downloading the main responder.",
+            };
+            (path, Some(dl), primary_slot)
+        }
+    };
     let fast_path = pick_path(
         (!existing_slots.fast.as_os_str().is_empty()).then(|| existing_slots.fast.as_path()),
         models_dir.join(&fast_slot.file),
         fast_slot.size_gb,
     );
     let embed_path = pick_path(
-        existing_slots.has_embed().then(|| existing_slots.embed.as_path()),
+        existing_slots
+            .has_embed()
+            .then(|| existing_slots.embed.as_path()),
         models_dir.join(&embed_slot.file),
         embed_slot.size_gb,
     );
@@ -332,7 +335,13 @@ pub async fn run(
         existing_slots.code.clone(),
         data_dir.clone(),
     )
-    .map_err(|e| failed(&app, false, format!("write model slots to config.toml: {e}")))?;
+    .map_err(|e| {
+        failed(
+            &app,
+            false,
+            format!("write model slots to config.toml: {e}"),
+        )
+    })?;
 
     {
         let mut config = state.config.write().await;

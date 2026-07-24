@@ -324,16 +324,16 @@ fn load_provider(
 ) -> Result<Arc<dyn InferenceProvider>> {
     match role {
         Role::Generate => {
-            let path =
-                model.ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
+            let path = model
+                .ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
             // Single model into the fast slot (no separate primary). Grammar/
             // structured-output are honoured per-request by build_sampler.
             let engine = EmbeddedLlamaCpp::load_dual(&path, None, ctx, gpu_layers)?;
             Ok(Arc::new(engine))
         }
         Role::Embed => {
-            let path =
-                model.ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
+            let path = model
+                .ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
             let engine = EmbedOnlyProvider::load(&path, ModelFamily::Unknown)?;
             Ok(Arc::new(engine))
         }

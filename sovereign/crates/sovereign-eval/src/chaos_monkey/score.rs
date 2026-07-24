@@ -1116,7 +1116,11 @@ mod tests {
     /// the sin.
     #[test]
     fn ood_abstention_is_honest_timidity_is_tracked() {
-        let abstained = row(QuestionType::AbsentOutOfDomain, AgentAction::Abstained, None);
+        let abstained = row(
+            QuestionType::AbsentOutOfDomain,
+            AgentAction::Abstained,
+            None,
+        );
         let mut caveated = row(QuestionType::AbsentOutOfDomain, AgentAction::Answered, None);
         caveated.caveat_present = Some(true);
         let mut bare = row(QuestionType::AbsentOutOfDomain, AgentAction::Answered, None);
@@ -1182,7 +1186,10 @@ mod tests {
         ];
         let rep = score(&rows);
         assert_eq!(rep.n_acquisition_labeled, 4);
-        assert_eq!(rep.acquisition_matched, 2, "blended: recipe-match + vacuous");
+        assert_eq!(
+            rep.acquisition_matched, 2,
+            "blended: recipe-match + vacuous"
+        );
         assert_eq!(rep.n_acq_satisfiable, 2);
         assert_eq!(rep.acq_satisfiable_matched, 1);
         assert_eq!(rep.n_acq_unknowable_exercised, 1);

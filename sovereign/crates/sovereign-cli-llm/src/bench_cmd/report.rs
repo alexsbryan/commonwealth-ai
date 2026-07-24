@@ -415,7 +415,11 @@ pub fn headline_for(b: &LaneBaseline) -> String {
         clauses.push(i.phrase.replace("{}", &pct(m.value)));
         if let Some((thr, at_least)) = i.gate {
             any_gate = true;
-            all_pass &= if at_least { m.value >= thr } else { m.value <= thr };
+            all_pass &= if at_least {
+                m.value >= thr
+            } else {
+                m.value <= thr
+            };
         }
     }
 
@@ -655,11 +659,7 @@ pub fn cmd_report(args: &[String]) -> i32 {
             return 1;
         }
 
-        let mut quants: Vec<String> = r
-            .quants
-            .iter()
-            .filter_map(|q| q.quant.clone())
-            .collect();
+        let mut quants: Vec<String> = r.quants.iter().filter_map(|q| q.quant.clone()).collect();
         quants.sort();
         quants.dedup();
         let mut suites: Vec<String> = r
@@ -703,11 +703,7 @@ pub fn cmd_report(args: &[String]) -> i32 {
         root.display()
     );
     for r in &reports {
-        let quants: Vec<&str> = r
-            .quants
-            .iter()
-            .filter_map(|q| q.quant.as_deref())
-            .collect();
+        let quants: Vec<&str> = r.quants.iter().filter_map(|q| q.quant.as_deref()).collect();
         eprintln!(
             "  · {} [{}] — {} suite(s)",
             r.model_key,
@@ -728,10 +724,17 @@ pub fn cmd_report(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::models_manifest::ModelAttribution;
     use crate::bench_cmd::lane_baseline::LaneMetric;
+    use sovereign_core::models_manifest::ModelAttribution;
 
-    fn chaos_baseline(stem: &str, base: &str, quant: &str, comp: f64, hon: f64, hall: f64) -> LaneBaseline {
+    fn chaos_baseline(
+        stem: &str,
+        base: &str,
+        quant: &str,
+        comp: f64,
+        hon: f64,
+        hall: f64,
+    ) -> LaneBaseline {
         let mut b = LaneBaseline::new("chaos-monkey", "2026-07-18T00:00:00Z");
         b.corpus = Some("chaos-secret-agent".into());
         b.model_attribution = Some(ModelAttribution {
@@ -742,18 +745,38 @@ mod tests {
             size_gb: Some(24.0),
             alias: Some("primary".into()),
         });
-        b.metrics.insert("competence".into(), LaneMetric::higher_is_better(comp, 0.15));
-        b.metrics.insert("honesty".into(), LaneMetric::higher_is_better(hon, 0.18));
+        b.metrics.insert(
+            "competence".into(),
+            LaneMetric::higher_is_better(comp, 0.15),
+        );
         b.metrics
-            .insert("hallucination_rate".into(), LaneMetric::lower_is_better(hall, 0.18));
+            .insert("honesty".into(), LaneMetric::higher_is_better(hon, 0.18));
+        b.metrics.insert(
+            "hallucination_rate".into(),
+            LaneMetric::lower_is_better(hall, 0.18),
+        );
         b
     }
 
     #[test]
     fn groups_quants_under_one_model_but_keeps_rows_distinct() {
         let bls = vec![
-            chaos_baseline("Qwen3.5-4B-Q6_K_XL", "Qwen3.5-4B", "Q6_K_XL", 0.69, 0.73, 0.0),
-            chaos_baseline("Qwen3.5-4B-IQ4_NL", "Qwen3.5-4B", "IQ4_NL", 0.66, 0.68, 0.02),
+            chaos_baseline(
+                "Qwen3.5-4B-Q6_K_XL",
+                "Qwen3.5-4B",
+                "Q6_K_XL",
+                0.69,
+                0.73,
+                0.0,
+            ),
+            chaos_baseline(
+                "Qwen3.5-4B-IQ4_NL",
+                "Qwen3.5-4B",
+                "IQ4_NL",
+                0.66,
+                0.68,
+                0.02,
+            ),
         ];
         let (reports, unattr) = build_reports(&bls, "2026-07-18T00:00:00Z");
         assert!(unattr.is_empty());
@@ -771,9 +794,14 @@ mod tests {
         let mut legacy = LaneBaseline::new("chaos-monkey", "2026-07-16T00:00:00Z");
         legacy.corpus = Some("chaos-secret-agent".into());
         legacy.model = Some("primary".into()); // the alias — must NOT attribute
-        legacy.metrics.insert("honesty".into(), LaneMetric::higher_is_better(0.72, 0.18));
+        legacy
+            .metrics
+            .insert("honesty".into(), LaneMetric::higher_is_better(0.72, 0.18));
         let (reports, unattr) = build_reports(&[legacy], "now");
-        assert!(reports.is_empty(), "an alias-only baseline attributes to no model");
+        assert!(
+            reports.is_empty(),
+            "an alias-only baseline attributes to no model"
+        );
         assert_eq!(unattr, vec!["chaos-monkey/chaos-secret-agent".to_string()]);
     }
 
@@ -783,7 +811,8 @@ mod tests {
         // e.g. mechanism-fidelity — still rolls up via the fallback.
         let mut b = LaneBaseline::new("mechanism-fidelity", "2026-07-01T00:00:00Z");
         b.model = Some("Qwen3.5-4B-Q4_K_M".into());
-        b.metrics.insert("control_witness".into(), LaneMetric::near_zero(0.01, 0.05));
+        b.metrics
+            .insert("control_witness".into(), LaneMetric::near_zero(0.01, 0.05));
         let (reports, unattr) = build_reports(&[b], "now");
         assert!(unattr.is_empty());
         assert_eq!(reports.len(), 1);
@@ -792,12 +821,28 @@ mod tests {
 
     #[test]
     fn headline_reads_as_prose_with_pass_verdict() {
-        let b = chaos_baseline("Qwen3.5-4B-Q6_K_XL", "Qwen3.5-4B", "Q6_K_XL", 0.69, 0.73, 0.0);
+        let b = chaos_baseline(
+            "Qwen3.5-4B-Q6_K_XL",
+            "Qwen3.5-4B",
+            "Q6_K_XL",
+            0.69,
+            0.73,
+            0.0,
+        );
         let h = headline_for(&b);
         assert!(h.starts_with("[PASS]"), "gate verdict prefix, got: {h}");
-        assert!(h.contains("answered 69% of answerable questions correctly"), "got: {h}");
-        assert!(h.contains("correctly declined 73% of unanswerable questions"), "got: {h}");
-        assert!(h.contains("fabricated an answer 0% of the time"), "got: {h}");
+        assert!(
+            h.contains("answered 69% of answerable questions correctly"),
+            "got: {h}"
+        );
+        assert!(
+            h.contains("correctly declined 73% of unanswerable questions"),
+            "got: {h}"
+        );
+        assert!(
+            h.contains("fabricated an answer 0% of the time"),
+            "got: {h}"
+        );
     }
 
     #[test]

@@ -216,11 +216,10 @@ pub(super) fn build_corpus_engine(
         // `ConvTieredProvider`) is deliberate — its `finalize_corpus`
         // override runs the vault-wide synthesis pass needed for
         // `vault_themes`; see the builder's docs.
-        let tiered_provider =
-            sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
-                data_dir,
-                Arc::clone(&provider),
-            );
+        let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
+            data_dir,
+            Arc::clone(&provider),
+        );
         // GliNER per-chunk entity extractor loaded once in the outer scope
         // (above) so the engine and the folder driver share the same
         // Arc<dyn> handle. Clone here to reuse.
@@ -409,109 +408,111 @@ pub(super) fn spawn_rpc_worker_discovery(
             let snapshot = Arc::clone(&snapshot);
             let eligibility = std::sync::Arc::clone(&eligibility);
             async move {
-            // `last_loaded` = worker set the resident primary was loaded across;
-            // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
-            // to stop changing before paying a reload).
-            let mut last_loaded: Vec<String> = Vec::new();
-            let mut current: Vec<String> = Vec::new();
-            let mut stable_since = std::time::Instant::now();
-            const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
-            // Designated-host pin (parsed once). When present + eligible it wins;
-            // otherwise the host role is the elected leader of the anchors.
-            let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
-                .ok()
-                .and_then(|s| commonwealth_core::ids::NodeId::from_hex(&s));
-            let mut was_host = false;
-            loop {
-                // Raw discovery → eligibility gate → only PROVEN-STABLE workers
-                // reach the provider + the reload decision. A flapping worker stays
-                // out of `workers`, so the set the debounce compares never
-                // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
-                let raw = daemon_for_disco.discover_rpc_workers().await;
-                let now = std::time::Instant::now();
-                eligibility.observe(&raw, now);
-                let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
-                if let Ok(mut w) = snapshot.write() {
-                    *w = workers.clone();
-                }
-                if workers != current {
-                    tracing::info!(
-                        eligible = workers.len(),
-                        discovered = raw.len(),
-                        workers = ?workers,
-                        "mesh RPC eligible-worker set changed"
-                    );
-                    current = workers.clone();
-                    stable_since = std::time::Instant::now();
-                }
-                // Host-role decision, re-evaluated every tick over gossiped
-                // membership — this is the failover mechanism. A non-host anchor
-                // still discovers + keeps its eligibility warm above, but does NOT
-                // distribute below, so at most the elected leader assembles the
-                // split. `should_host` is deterministic over the anchor set, so
-                // all anchors converge without coordination; a minority that can't
-                // see quorum still won't load (the quorum gate holds it "forming").
-                let anchors = daemon_for_disco.eligible_anchors().await;
-                let am_host = match daemon_for_disco.self_node_id().await {
-                    Some(me) => commonwealth_core::partition::should_host(me, host_pin, &anchors),
-                    None => false, // identity not ready yet → don't host
-                };
-                if am_host != was_host {
-                    tracing::info!(
-                        am_host,
-                        anchors = anchors.len(),
-                        pinned = host_pin.is_some(),
-                        "shared-model: host-role transition"
-                    );
-                    // Publish for `/v1/mesh/status` so the mesh soak can assert
-                    // the no-split-brain invariant (≤1 host across the fleet).
-                    sovereign_mesh::mesh_http::set_shared_model_host(am_host);
-                    was_host = am_host;
-                }
-
-                // Reload when the worker set CHANGES (grow or shrink) vs what's
-                // loaded, once it's been stable briefly. A shrink prunes the dead
-                // worker's device on reload (live_device_list_if_pruning_needed).
-                let changed = current != last_loaded;
-                // Shrink-fast-prune: if a worker the resident primary is loaded
-                // ACROSS dropped out of the eligible set, reload IMMEDIATELY — the
-                // dead worker must be pruned (live_device_list_if_pruning_needed)
-                // before it GGML_ABORTs the host mid-compute, and survivors' warm
-                // caches make the re-plan fast. A pure grow (new workers, all loaded
-                // ones still present) keeps the anti-thrash STABLE debounce.
-                let shrank = last_loaded.iter().any(|w| !current.contains(w));
-                // Only the host distributes. A non-host anchor keeps its worker
-                // discovery + eligibility warm (above) so that, the moment it's
-                // elected host, `changed` vs its empty `last_loaded` triggers an
-                // immediate assemble on the already-settled survivors.
-                if am_host && changed && (shrank || stable_since.elapsed() >= STABLE) {
-                    if shrank {
-                        let lost: Vec<&String> = last_loaded
-                            .iter()
-                            .filter(|w| !current.contains(*w))
-                            .collect();
+                // `last_loaded` = worker set the resident primary was loaded across;
+                // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
+                // to stop changing before paying a reload).
+                let mut last_loaded: Vec<String> = Vec::new();
+                let mut current: Vec<String> = Vec::new();
+                let mut stable_since = std::time::Instant::now();
+                const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
+                // Designated-host pin (parsed once). When present + eligible it wins;
+                // otherwise the host role is the elected leader of the anchors.
+                let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
+                    .ok()
+                    .and_then(|s| commonwealth_core::ids::NodeId::from_hex(&s));
+                let mut was_host = false;
+                loop {
+                    // Raw discovery → eligibility gate → only PROVEN-STABLE workers
+                    // reach the provider + the reload decision. A flapping worker stays
+                    // out of `workers`, so the set the debounce compares never
+                    // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
+                    let raw = daemon_for_disco.discover_rpc_workers().await;
+                    let now = std::time::Instant::now();
+                    eligibility.observe(&raw, now);
+                    let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
+                    if let Ok(mut w) = snapshot.write() {
+                        *w = workers.clone();
+                    }
+                    if workers != current {
                         tracing::info!(
+                            eligible = workers.len(),
+                            discovered = raw.len(),
+                            workers = ?workers,
+                            "mesh RPC eligible-worker set changed"
+                        );
+                        current = workers.clone();
+                        stable_since = std::time::Instant::now();
+                    }
+                    // Host-role decision, re-evaluated every tick over gossiped
+                    // membership — this is the failover mechanism. A non-host anchor
+                    // still discovers + keeps its eligibility warm above, but does NOT
+                    // distribute below, so at most the elected leader assembles the
+                    // split. `should_host` is deterministic over the anchor set, so
+                    // all anchors converge without coordination; a minority that can't
+                    // see quorum still won't load (the quorum gate holds it "forming").
+                    let anchors = daemon_for_disco.eligible_anchors().await;
+                    let am_host = match daemon_for_disco.self_node_id().await {
+                        Some(me) => {
+                            commonwealth_core::partition::should_host(me, host_pin, &anchors)
+                        }
+                        None => false, // identity not ready yet → don't host
+                    };
+                    if am_host != was_host {
+                        tracing::info!(
+                            am_host,
+                            anchors = anchors.len(),
+                            pinned = host_pin.is_some(),
+                            "shared-model: host-role transition"
+                        );
+                        // Publish for `/v1/mesh/status` so the mesh soak can assert
+                        // the no-split-brain invariant (≤1 host across the fleet).
+                        sovereign_mesh::mesh_http::set_shared_model_host(am_host);
+                        was_host = am_host;
+                    }
+
+                    // Reload when the worker set CHANGES (grow or shrink) vs what's
+                    // loaded, once it's been stable briefly. A shrink prunes the dead
+                    // worker's device on reload (live_device_list_if_pruning_needed).
+                    let changed = current != last_loaded;
+                    // Shrink-fast-prune: if a worker the resident primary is loaded
+                    // ACROSS dropped out of the eligible set, reload IMMEDIATELY — the
+                    // dead worker must be pruned (live_device_list_if_pruning_needed)
+                    // before it GGML_ABORTs the host mid-compute, and survivors' warm
+                    // caches make the re-plan fast. A pure grow (new workers, all loaded
+                    // ones still present) keeps the anti-thrash STABLE debounce.
+                    let shrank = last_loaded.iter().any(|w| !current.contains(w));
+                    // Only the host distributes. A non-host anchor keeps its worker
+                    // discovery + eligibility warm (above) so that, the moment it's
+                    // elected host, `changed` vs its empty `last_loaded` triggers an
+                    // immediate assemble on the already-settled survivors.
+                    if am_host && changed && (shrank || stable_since.elapsed() >= STABLE) {
+                        if shrank {
+                            let lost: Vec<&String> = last_loaded
+                                .iter()
+                                .filter(|w| !current.contains(*w))
+                                .collect();
+                            tracing::info!(
                             ?lost,
                             "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
                         );
-                    }
-                    match &engine_for_reload {
-                        Some(engine) => {
-                            tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
-                            match engine.reload_primary().await {
-                                Ok(()) => last_loaded = current.clone(),
-                                Err(e) => {
-                                    tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
+                        }
+                        match &engine_for_reload {
+                            Some(engine) => {
+                                tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
+                                match engine.reload_primary().await {
+                                    Ok(()) => last_loaded = current.clone(),
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
+                                    }
                                 }
                             }
+                            // No primary handle (provider build failed) — keep the
+                            // snapshot fresh so a later manual load still picks workers up.
+                            None => last_loaded = current.clone(),
                         }
-                        // No primary handle (provider build failed) — keep the
-                        // snapshot fresh so a later manual load still picks workers up.
-                        None => last_loaded = current.clone(),
                     }
+                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-            }
             }
         });
     }
@@ -544,45 +545,46 @@ pub(super) fn spawn_slot_alias_push(
         let daemon_for_alias_push = Arc::clone(&daemon_for_alias_push);
         let mesh_for_alias_push = mesh_for_alias_push.clone();
         async move {
-        // Poll briefly for the AppState to be available. The
-        // setup transition usually completes within a few
-        // hundred ms; cap at 30s so a stuck setup never hangs
-        // this spawn.
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-        let mut publisher_installed = false;
-        loop {
-            if let Some(state) = daemon_for_alias_push.app_state().await {
-                if !publisher_installed {
-                    state.install_in_flight_publisher(mesh_for_alias_push.in_flight_publisher());
-                    publisher_installed = true;
-                    tracing::info!(
-                        "daemon_cmd: installed in-flight publisher on AppState \
+            // Poll briefly for the AppState to be available. The
+            // setup transition usually completes within a few
+            // hundred ms; cap at 30s so a stuck setup never hangs
+            // this spawn.
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut publisher_installed = false;
+            loop {
+                if let Some(state) = daemon_for_alias_push.app_state().await {
+                    if !publisher_installed {
+                        state
+                            .install_in_flight_publisher(mesh_for_alias_push.in_flight_publisher());
+                        publisher_installed = true;
+                        tracing::info!(
+                            "daemon_cmd: installed in-flight publisher on AppState \
                              — gossip will now advertise this node's actual load"
-                    );
+                        );
+                    }
+                    let snapshot = state.inner.slot_aliases.load();
+                    let map: std::collections::HashMap<String, String> = snapshot
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    if !map.is_empty() {
+                        tracing::info!(
+                            count = map.len(),
+                            "daemon_cmd: pushing slot aliases into mesh provider"
+                        );
+                        mesh_for_alias_push.set_slot_aliases(map);
+                        break;
+                    }
                 }
-                let snapshot = state.inner.slot_aliases.load();
-                let map: std::collections::HashMap<String, String> = snapshot
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-                if !map.is_empty() {
-                    tracing::info!(
-                        count = map.len(),
-                        "daemon_cmd: pushing slot aliases into mesh provider"
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        "daemon_cmd: slot-alias push timed out after 30s — \
+                         mesh layer will serve aliases as plain model ids"
                     );
-                    mesh_for_alias_push.set_slot_aliases(map);
                     break;
                 }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
-            if tokio::time::Instant::now() >= deadline {
-                tracing::warn!(
-                    "daemon_cmd: slot-alias push timed out after 30s — \
-                         mesh layer will serve aliases as plain model ids"
-                );
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
         }
     });
 }
@@ -699,36 +701,36 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
     crate::supervise::spawn_supervised("notes_ttl_sweep", move || {
         let notes_for_ttl = Arc::clone(&notes_for_ttl);
         async move {
-        let ttl_days: i64 = std::env::var("SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(30);
-        if ttl_days <= 0 {
-            tracing::info!(
-                target = "notes",
-                "notes: ephemeral TTL sweep disabled (ttl_days<=0)"
-            );
-            return;
-        }
-        let ttl_secs = ttl_days * 86_400;
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-            match notes_for_ttl.purge_expired_ephemeral(ttl_secs).await {
-                Ok(n) if n > 0 => tracing::info!(
+            let ttl_days: i64 = std::env::var("SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(30);
+            if ttl_days <= 0 {
+                tracing::info!(
                     target = "notes",
-                    swept = n,
-                    ttl_days,
-                    "notes: TTL sweep tombstoned expired ephemeral notes"
-                ),
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::warn!(target = "notes", error = %e, "notes: TTL sweep failed")
+                    "notes: ephemeral TTL sweep disabled (ttl_days<=0)"
+                );
+                return;
+            }
+            let ttl_secs = ttl_days * 86_400;
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                match notes_for_ttl.purge_expired_ephemeral(ttl_secs).await {
+                    Ok(n) if n > 0 => tracing::info!(
+                        target = "notes",
+                        swept = n,
+                        ttl_days,
+                        "notes: TTL sweep tombstoned expired ephemeral notes"
+                    ),
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!(target = "notes", error = %e, "notes: TTL sweep failed")
+                    }
                 }
             }
-        }
         }
     });
 }
@@ -760,64 +762,64 @@ pub(super) fn spawn_notes_ingest_poller(
         let notes_for_poller = Arc::clone(&notes_for_poller);
         let self_id_for_poller = self_id_for_poller;
         async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-            let entries = match mesh_for_poller.scan("notes", "") {
-                Ok(e) => e,
-                Err(err) => {
-                    tracing::debug!(
-                        target = "notes",
-                        error = %err,
-                        "notes: ingest poller scan failed"
-                    );
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let entries = match mesh_for_poller.scan("notes", "") {
+                    Ok(e) => e,
+                    Err(err) => {
+                        tracing::debug!(
+                            target = "notes",
+                            error = %err,
+                            "notes: ingest poller scan failed"
+                        );
+                        continue;
+                    }
+                };
+                let mut events: Vec<NotePropagationEvent> = Vec::new();
+                for entry in entries {
+                    if entry.origin == self_id_for_poller {
+                        continue;
+                    }
+                    match serde_json::from_slice::<NotePropagationEvent>(&entry.value) {
+                        Ok(ev) => events.push(ev),
+                        Err(e) => {
+                            tracing::warn!(
+                                target = "notes",
+                                key = %entry.key,
+                                error = %e,
+                                "notes: ingest poller could not decode entry; skipping"
+                            );
+                        }
+                    }
+                }
+                if events.is_empty() {
                     continue;
                 }
-            };
-            let mut events: Vec<NotePropagationEvent> = Vec::new();
-            for entry in entries {
-                if entry.origin == self_id_for_poller {
-                    continue;
-                }
-                match serde_json::from_slice::<NotePropagationEvent>(&entry.value) {
-                    Ok(ev) => events.push(ev),
+                match notes_for_poller.ingest_remote_notes(events).await {
+                    Ok(report) => {
+                        if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
+                            tracing::info!(
+                                target = "notes",
+                                inserted = report.inserted,
+                                tombstoned = report.tombstoned,
+                                forked = report.forked,
+                                deduplicated = report.deduplicated,
+                                rejected = report.rejected,
+                                "notes: ingest poller converged batch"
+                            );
+                        }
+                    }
                     Err(e) => {
                         tracing::warn!(
                             target = "notes",
-                            key = %entry.key,
                             error = %e,
-                            "notes: ingest poller could not decode entry; skipping"
+                            "notes: ingest_remote_notes failed"
                         );
                     }
                 }
             }
-            if events.is_empty() {
-                continue;
-            }
-            match notes_for_poller.ingest_remote_notes(events).await {
-                Ok(report) => {
-                    if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
-                        tracing::info!(
-                            target = "notes",
-                            inserted = report.inserted,
-                            tombstoned = report.tombstoned,
-                            forked = report.forked,
-                            deduplicated = report.deduplicated,
-                            rejected = report.rejected,
-                            "notes: ingest poller converged batch"
-                        );
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        target = "notes",
-                        error = %e,
-                        "notes: ingest_remote_notes failed"
-                    );
-                }
-            }
-        }
         }
     });
 }
@@ -858,40 +860,40 @@ pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
         let enrich_dir = enrich_dir.clone();
         let idx_dir = idx_dir.clone();
         async move {
-        let cli_binary =
-            std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
-        tracing::info!(
-            enrichment_dir = %enrich_dir.display(),
-            "tier-2 resume: scanning for unfinished workspaces"
-        );
-        let outcomes = sovereign_tools::atlas_postinstall::resume_inflight_tier2(
-            enrich_dir, idx_dir, cli_binary,
-        )
-        .await;
-        for o in outcomes {
-            use sovereign_tools::atlas_postinstall::Tier2LaunchOutcome;
-            match o {
-                Tier2LaunchOutcome::Spawned {
-                    workspace_id,
-                    log_path,
-                    pid,
-                } => tracing::info!(
-                    workspace = %workspace_id,
-                    log = %log_path.display(),
-                    pid,
-                    "tier-2 resume: re-spawned"
-                ),
-                Tier2LaunchOutcome::AlreadyComplete { .. } => {}
-                // Resume scan never passes peer advice — this
-                // arm is unreachable in practice but the
-                // exhaustiveness check requires us to cover it.
-                Tier2LaunchOutcome::DeferredToPeer { .. } => {}
-                Tier2LaunchOutcome::InitFailed { reason }
-                | Tier2LaunchOutcome::SpawnFailed { reason } => {
-                    tracing::warn!(reason, "tier-2 resume: re-spawn failed")
+            let cli_binary =
+                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
+            tracing::info!(
+                enrichment_dir = %enrich_dir.display(),
+                "tier-2 resume: scanning for unfinished workspaces"
+            );
+            let outcomes = sovereign_tools::atlas_postinstall::resume_inflight_tier2(
+                enrich_dir, idx_dir, cli_binary,
+            )
+            .await;
+            for o in outcomes {
+                use sovereign_tools::atlas_postinstall::Tier2LaunchOutcome;
+                match o {
+                    Tier2LaunchOutcome::Spawned {
+                        workspace_id,
+                        log_path,
+                        pid,
+                    } => tracing::info!(
+                        workspace = %workspace_id,
+                        log = %log_path.display(),
+                        pid,
+                        "tier-2 resume: re-spawned"
+                    ),
+                    Tier2LaunchOutcome::AlreadyComplete { .. } => {}
+                    // Resume scan never passes peer advice — this
+                    // arm is unreachable in practice but the
+                    // exhaustiveness check requires us to cover it.
+                    Tier2LaunchOutcome::DeferredToPeer { .. } => {}
+                    Tier2LaunchOutcome::InitFailed { reason }
+                    | Tier2LaunchOutcome::SpawnFailed { reason } => {
+                        tracing::warn!(reason, "tier-2 resume: re-spawn failed")
+                    }
                 }
             }
-        }
         }
     });
 }
@@ -1734,7 +1736,8 @@ pub(super) fn setup_watchers_and_work_atlas(
                 watchers.push(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
             }
             if let Some(ref obs) = work_atlas_observer {
-                watchers.push(Arc::clone(obs) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
+                watchers
+                    .push(Arc::clone(obs) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
             }
 
             // The supervisor performs the initial start AND self-heals:

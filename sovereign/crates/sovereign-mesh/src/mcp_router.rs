@@ -400,11 +400,9 @@ async fn mcp_handle(
                             responses.push(response);
                         }
                     }
-                    Err(_) => responses.push(JsonRpcResponse::err(
-                        Value::Null,
-                        -32600,
-                        "invalid request",
-                    )),
+                    Err(_) => {
+                        responses.push(JsonRpcResponse::err(Value::Null, -32600, "invalid request"))
+                    }
                 }
             }
             if responses.is_empty() {
@@ -432,11 +430,7 @@ async fn mcp_handle(
             },
             Err(_) => (
                 StatusCode::OK,
-                Json(JsonRpcResponse::err(
-                    Value::Null,
-                    -32600,
-                    "invalid request",
-                )),
+                Json(JsonRpcResponse::err(Value::Null, -32600, "invalid request")),
             )
                 .into_response(),
         },

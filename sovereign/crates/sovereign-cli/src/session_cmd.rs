@@ -207,8 +207,7 @@ pub(crate) fn extract_spine(path: &Path) -> Option<Spine> {
                             }
                         }
                         Some("tool_use") => {
-                            let name =
-                                b.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                            let name = b.get("name").and_then(|n| n.as_str()).unwrap_or("?");
                             *spine.tool_calls.entry(name.to_string()).or_default() += 1;
                             if matches!(name, "Edit" | "Write" | "NotebookEdit") {
                                 if let Some(fp) = b
@@ -289,9 +288,10 @@ pub(crate) fn cap_spine_middle(spine: &mut Spine, char_cap: usize) -> usize {
     }
     if dropped > 0 {
         let mid = spine.assistant_texts.len() / 2;
-        spine
-            .assistant_texts
-            .insert(mid, format!("[… {dropped} mid-session assistant texts omitted for budget …]"));
+        spine.assistant_texts.insert(
+            mid,
+            format!("[… {dropped} mid-session assistant texts omitted for budget …]"),
+        );
     }
     dropped
 }
@@ -310,8 +310,7 @@ const MINED_SECTIONS: &[&str] = &["## Next", "## Decisions", "## Invariants", "#
 /// `char_cap` once rendered alongside the header and all user turns.
 /// Returns `(lo, hi)` index ranges over `spine.assistant_texts`.
 pub(crate) fn chunk_ranges(spine: &Spine, char_cap: usize) -> Vec<(usize, usize)> {
-    let overhead: usize =
-        200 + spine.user_turns.iter().map(|t| t.len() + 24).sum::<usize>();
+    let overhead: usize = 200 + spine.user_turns.iter().map(|t| t.len() + 24).sum::<usize>();
     let budget = char_cap.saturating_sub(overhead).max(8_000);
     let mut out = Vec::new();
     let mut lo = 0usize;
@@ -417,7 +416,11 @@ fn head_at_end_of(cwd: &str, ended_at: &str) -> String {
     match out {
         Ok(o) if o.status.success() => {
             let sha = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if sha.is_empty() { "unknown".to_string() } else { sha }
+            if sha.is_empty() {
+                "unknown".to_string()
+            } else {
+                sha
+            }
         }
         _ => "unknown".to_string(),
     }
@@ -542,7 +545,8 @@ pub(crate) fn parse_cited_bullets(reply: &str, n_user: usize, n_assistant: usize
         if t.is_empty() {
             continue;
         }
-        let bullet_text = if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+        let bullet_text = if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* "))
+        {
             Some(rest.trim_start().to_string())
         } else {
             t.split_once(". ").and_then(|(num, rest)| {
@@ -585,7 +589,8 @@ fn strip_valid_citations(text: &str, n_user: usize, n_assistant: usize) -> (Stri
         if let Some(n) = tok.strip_prefix('u') {
             n.parse::<usize>().is_ok_and(|i| (1..=n_user).contains(&i))
         } else if let Some(n) = tok.strip_prefix('a') {
-            n.parse::<usize>().is_ok_and(|i| (1..=n_assistant).contains(&i))
+            n.parse::<usize>()
+                .is_ok_and(|i| (1..=n_assistant).contains(&i))
         } else {
             false
         }
@@ -598,7 +603,10 @@ fn strip_valid_citations(text: &str, n_user: usize, n_assistant: usize) -> (Stri
             break;
         };
         let inner = &rest[start + 1..start + off];
-        let toks: Vec<&str> = inner.split([',', ';', ' ']).filter(|s| !s.is_empty()).collect();
+        let toks: Vec<&str> = inner
+            .split([',', ';', ' '])
+            .filter(|s| !s.is_empty())
+            .collect();
         if !toks.is_empty() && toks.iter().all(|t| token_ok(t)) {
             cited = true;
             out.push_str(&rest[..start]);
@@ -697,16 +705,17 @@ pub(crate) fn golden_items(body: &str) -> Vec<String> {
         let t = line.trim_start();
         let is_bullet = t.starts_with("- ")
             || t.starts_with("* ")
-            || (t.split('.').next().is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty())
+            || (t
+                .split('.')
+                .next()
+                .is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty())
                 && t.contains(". "));
         if is_bullet {
             let stripped = t.trim_start_matches(['-', '*']).trim_start();
             // Numbered bullets: drop the "<digits>. " prefix too, so the
             // judge sees the item text once, not "1. 1. <text>".
             let stripped = match stripped.split_once(". ") {
-                Some((num, rest))
-                    if !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()) =>
-                {
+                Some((num, rest)) if !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()) => {
                     rest
                 }
                 _ => stripped,
@@ -848,7 +857,10 @@ async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
         .get("url")
         .cloned()
         .unwrap_or_else(|| "http://localhost:9741".to_string());
-    let model = flags.get("model").cloned().unwrap_or_else(|| "primary".into());
+    let model = flags
+        .get("model")
+        .cloned()
+        .unwrap_or_else(|| "primary".into());
 
     let mut grades: Vec<SectionGrade> = Vec::new();
     for heading in FRAME_SECTIONS {
@@ -872,18 +884,25 @@ async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
             .collect();
         let user = format!(
             "REFERENCE ITEMS ({heading}):\n{numbered}\nCANDIDATE TEXT:\n{}",
-            if c_body.is_empty() { "(section missing)" } else { &c_body }
-        );
-        let reply = match daemon_complete(&base_url, &model, judge_system_prompt(), &user, 600).await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("grade: judge call failed on {heading}: {e}");
-                return 2;
+            if c_body.is_empty() {
+                "(section missing)"
+            } else {
+                &c_body
             }
-        };
+        );
+        let reply =
+            match daemon_complete(&base_url, &model, judge_system_prompt(), &user, 600).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("grade: judge call failed on {heading}: {e}");
+                    return 2;
+                }
+            };
         let Some(verdict) = first_json_object(&reply) else {
-            eprintln!("grade: judge reply on {heading} had no JSON: {}", cap_chars(&reply, 200));
+            eprintln!(
+                "grade: judge reply on {heading} had no JSON: {}",
+                cap_chars(&reply, 200)
+            );
             return 2;
         };
         let captured: std::collections::HashSet<usize> = verdict["captured"]
@@ -928,7 +947,10 @@ async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
     }
 
     if grades.is_empty() {
-        eprintln!("grade: golden has no gradeable sections at {}", golden_path.display());
+        eprintln!(
+            "grade: golden has no gradeable sections at {}",
+            golden_path.display()
+        );
         return 2;
     }
 
@@ -1025,8 +1047,8 @@ fn print_help() {
 }
 
 fn find_transcript(dir: &Path, id: &str) -> Result<PathBuf, String> {
-    let entries = std::fs::read_dir(dir)
-        .map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
     let mut matches: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
@@ -1089,7 +1111,10 @@ fn run_list(dir: &Path) -> i32 {
         return 1;
     }
     rows.sort_by(|a, b| b.0.cmp(&a.0));
-    println!("{:<10} {:>9} {:>12}  first user turn", "session", "size", "modified");
+    println!(
+        "{:<10} {:>9} {:>12}  first user turn",
+        "session", "size", "modified"
+    );
     println!("{}", "-".repeat(78));
     for (mtime, size, id, hint) in rows {
         println!(
@@ -1257,7 +1282,11 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
         if chunks.len() > 1 {
             println!(
                 "  mined sections ({}) sweep the full spine in {} chunks",
-                MINED_SECTIONS.iter().map(|h| h.trim_start_matches("## ")).collect::<Vec<_>>().join(", "),
+                MINED_SECTIONS
+                    .iter()
+                    .map(|h| h.trim_start_matches("## "))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 chunks.len()
             );
         }
@@ -1304,8 +1333,14 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
                 let mut attempts = 0;
                 let parsed = loop {
                     attempts += 1;
-                    match daemon_complete(&base_url, &model, retrieval_system_prompt(), user, max_tokens)
-                        .await
+                    match daemon_complete(
+                        &base_url,
+                        &model,
+                        retrieval_system_prompt(),
+                        user,
+                        max_tokens,
+                    )
+                    .await
                     {
                         Ok(reply) => {
                             let parsed = parse_cited_bullets(&reply, *n_user, *n_assistant);
@@ -1403,7 +1438,11 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
         println!("\n{frame}");
     }
     if missing.is_empty() {
-        println!("frame: valid (all {} sections) → {}", FRAME_SECTIONS.len(), frame_path.display());
+        println!(
+            "frame: valid (all {} sections) → {}",
+            FRAME_SECTIONS.len(),
+            frame_path.display()
+        );
         0
     } else {
         eprintln!(
@@ -1488,7 +1527,10 @@ mod tests {
     fn section_body_extracts_between_headings() {
         let f = "---\nx: y\n---\n\n## Goal\nShip it.\n\n## State\n- done\n- more\n\n## Next\nnone recorded\n";
         assert_eq!(section_body(f, "## Goal").as_deref(), Some("Ship it."));
-        assert_eq!(section_body(f, "## State").as_deref(), Some("- done\n- more"));
+        assert_eq!(
+            section_body(f, "## State").as_deref(),
+            Some("- done\n- more")
+        );
         assert_eq!(section_body(f, "## Missing"), None);
     }
 
@@ -1507,8 +1549,8 @@ mod tests {
 
     #[test]
     fn first_json_object_tolerates_prose_wrapping() {
-        let v = first_json_object("Sure! {\"captured\": [1, 2], \"hallucinations\": []} done")
-            .unwrap();
+        let v =
+            first_json_object("Sure! {\"captured\": [1, 2], \"hallucinations\": []} done").unwrap();
         assert_eq!(v["captured"][1], 2);
         assert!(first_json_object("no json here").is_none());
     }
@@ -1526,9 +1568,13 @@ mod tests {
     fn keep_user_turn_filters_harness_noise() {
         assert!(keep_user_turn("Fix the P0 first"));
         assert!(!keep_user_turn(""));
-        assert!(!keep_user_turn("<local-command-stdout>x</local-command-stdout>"));
+        assert!(!keep_user_turn(
+            "<local-command-stdout>x</local-command-stdout>"
+        ));
         assert!(!keep_user_turn("<command-name>/clear</command-name>"));
-        assert!(!keep_user_turn("<task-notification>done</task-notification>"));
+        assert!(!keep_user_turn(
+            "<task-notification>done</task-notification>"
+        ));
     }
 
     fn synthetic_transcript() -> String {
@@ -1572,7 +1618,9 @@ mod tests {
     #[test]
     fn cap_spine_middle_drops_middle_keeps_ends() {
         let mut spine = Spine {
-            assistant_texts: (0..40).map(|i| format!("text-{i} {}", "x".repeat(400))).collect(),
+            assistant_texts: (0..40)
+                .map(|i| format!("text-{i} {}", "x".repeat(400)))
+                .collect(),
             ..Default::default()
         };
         let dropped = cap_spine_middle(&mut spine, 6_000);
@@ -1651,14 +1699,15 @@ mod tests {
         assert!(ws.starts_with("## Working set\n"));
         assert!(ws.contains("- src/a.rs (5 edits)"));
         assert!(ws.contains("- /elsewhere/b.rs (1 edits)")); // outside cwd stays absolute
-
     }
 
     #[test]
     fn chunks_cover_all_items_with_global_ids() {
         let spine = Spine {
             user_turns: vec!["fix the bug".into()],
-            assistant_texts: (0..30).map(|i| format!("text-{i} {}", "x".repeat(900))).collect(),
+            assistant_texts: (0..30)
+                .map(|i| format!("text-{i} {}", "x".repeat(900)))
+                .collect(),
             ..Default::default()
         };
         let chunks = chunk_ranges(&spine, 12_000);
@@ -1673,7 +1722,10 @@ mod tests {
         let (lo, hi) = chunks[1];
         let rendered = render_spine_chunk(&spine, lo, hi, 2, chunks.len());
         assert!(rendered.contains(&format!("--- [a{}] assistant ---", lo + 1)));
-        assert!(rendered.contains("[u1] user turn"), "user turns ride every chunk");
+        assert!(
+            rendered.contains("[u1] user turn"),
+            "user turns ride every chunk"
+        );
         assert!(rendered.contains(&format!("(part 2/{})", chunks.len())));
 
         // A tiny spine is one chunk covering everything.
@@ -1706,7 +1758,10 @@ mod tests {
         assert_eq!(parsed.kept.len(), 3);
         assert_eq!(parsed.dropped, 2);
         assert_eq!(parsed.kept[0], "suite went 7888 to 7928 tests");
-        assert_eq!(parsed.kept[1], "wrapped bullet about the export fail-closed guard");
+        assert_eq!(
+            parsed.kept[1],
+            "wrapped bullet about the export fail-closed guard"
+        );
         assert_eq!(parsed.kept[2], "numbered bullet with mid-cite and a tail");
     }
 

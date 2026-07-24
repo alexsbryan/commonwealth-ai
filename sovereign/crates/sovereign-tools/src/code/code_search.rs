@@ -200,7 +200,10 @@ impl Tool for CodeSearchTool {
         // code doesn't exist" when the real cause is a missing/stale chunk
         // index (the silent-degradation trap — a skipped corpus used to
         // vanish into a `tracing::debug!`).
-        let code_corpora = indexes.iter().filter(|i| i.kind == CorpusKind::Code).count();
+        let code_corpora = indexes
+            .iter()
+            .filter(|i| i.kind == CorpusKind::Code)
+            .count();
         let mut opened_ok = 0usize;
         // Chunk-index age per code corpus: `last_updated` is stamped by
         // `sovereign code index`, so a corpus nobody re-indexes keeps

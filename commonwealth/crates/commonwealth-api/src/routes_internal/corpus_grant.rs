@@ -106,10 +106,11 @@ pub async fn corpus_grant_issue(
 
     let ttl_secs = req.ttl_secs.unwrap_or(DEFAULT_GRANT_TTL_SECS);
     let now_ms = commonwealth_core::clock::unix_now_millis();
-    let grant = state
-        .inner
-        .grant_store
-        .issue(req.corpus_id.clone(), allowed_peers, ttl_secs, now_ms);
+    let grant =
+        state
+            .inner
+            .grant_store
+            .issue(req.corpus_id.clone(), allowed_peers, ttl_secs, now_ms);
 
     tracing::info!(
         corpus = %grant.corpus_id,

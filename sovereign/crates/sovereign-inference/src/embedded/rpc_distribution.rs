@@ -839,7 +839,10 @@ fn summarize_placement(placement: &LoadPlacement) -> sovereign_core::traits::Slo
             let (mut total, mut local) = (0u32, 0u32);
             let mut workers = Vec::new();
             for shard in &dist.plan {
-                let n = shard.blocks.map(|(f, l)| l.saturating_sub(f) + 1).unwrap_or(0);
+                let n = shard
+                    .blocks
+                    .map(|(f, l)| l.saturating_sub(f) + 1)
+                    .unwrap_or(0);
                 total += n;
                 match ep.get(&shard.device_index) {
                     Some(e) => workers.push(WorkerPlacement {

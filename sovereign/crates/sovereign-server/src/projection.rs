@@ -374,10 +374,7 @@ mod tests {
         let ledger = project_epistemic_state(&Some(meta)).expect("ledger present");
         assert_eq!(ledger.version, 1);
         assert_eq!(ledger.holdings.len(), 1);
-        assert_eq!(
-            ledger.verdict,
-            sovereign_core::types::TurnVerdict::Grounded
-        );
+        assert_eq!(ledger.verdict, sovereign_core::types::TurnVerdict::Grounded);
     }
 
     #[test]

@@ -3488,7 +3488,7 @@ mod tests {
         // returns at all instead of underflowing.
         assert_eq!(levenshtein_capped("abcd", "𝕏𝕏", 2), 4);
         assert_eq!(levenshtein_capped("𝕏𝕏", "abcd", 2), 4); // symmetric
-        // Sanity: ordinary ASCII behaviour unchanged.
+                                                            // Sanity: ordinary ASCII behaviour unchanged.
         assert_eq!(levenshtein_capped("kitten", "sitting", 10), 3);
         assert_eq!(levenshtein_capped("abc", "abc", 5), 0);
     }

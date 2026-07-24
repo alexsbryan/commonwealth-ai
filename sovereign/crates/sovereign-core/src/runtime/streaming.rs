@@ -455,7 +455,9 @@ fn top_passage_titles(chunks: &[corpus_engine::ScoredChunk], cap: usize) -> Vec<
     let mut seen = std::collections::HashSet::new();
     let mut out: Vec<String> = Vec::new();
     for c in chunks {
-        let Some(t) = c.title.as_deref() else { continue };
+        let Some(t) = c.title.as_deref() else {
+            continue;
+        };
         let t = t.trim();
         if t.is_empty() || !seen.insert(t.to_lowercase()) {
             continue;
@@ -533,9 +535,9 @@ fn gate_progress_text(phase: &NarrationPhase) -> String {
                 format!("Checking {} claims against your sources.", claims.len())
             }
         }
-        NarrationPhase::ClaimRevisionStart { failed } => format!(
-            "Couldn't confirm {failed} — revising from the sources.",
-        ),
+        NarrationPhase::ClaimRevisionStart { failed } => {
+            format!("Couldn't confirm {failed} — revising from the sources.",)
+        }
         NarrationPhase::ClaimCheckComplete { confirmed, flagged } => {
             if *flagged == 0 {
                 format!("{confirmed} claims confirmed.")
@@ -1526,16 +1528,16 @@ impl Runtime {
             // grounding::gate_answer (shared with the non-streaming
             // path). Runs on the HELD answer before anything
             // reaches the user; fail-open on judge failure.
-            let gate_progress_wiring = match (collab_routing_events.clone(), collab_session_id.clone())
-            {
-                (Some(events), Some(session_id)) => Some(GateProgressWiring {
-                    events,
-                    session_id,
-                    conversation_id: conversation_id_owned.clone(),
-                    started,
-                }),
-                _ => None,
-            };
+            let gate_progress_wiring =
+                match (collab_routing_events.clone(), collab_session_id.clone()) {
+                    (Some(events), Some(session_id)) => Some(GateProgressWiring {
+                        events,
+                        session_id,
+                        conversation_id: conversation_id_owned.clone(),
+                        started,
+                    }),
+                    _ => None,
+                };
             let gate_result = gate_held_answer(
                 &inference,
                 gate_on,
@@ -1766,8 +1768,7 @@ impl Runtime {
                     .and_then(|a| a.as_str())
                     .map(|a| a.starts_with("abstained"))
                     .unwrap_or(false);
-                let gap_turn =
-                    documents_found == 0 || abstained || general_knowledge.is_some();
+                let gap_turn = documents_found == 0 || abstained || general_knowledge.is_some();
                 // The probe already ran above the held release (hoisted
                 // for the OOD rescue) — reuse its verdict, never probe
                 // twice.
@@ -2565,16 +2566,18 @@ impl Runtime {
 
             // Production grounding gate (deep): held answer → shared
             // ladder. Long-form deep answers take the per-claim audit.
-            let gate_progress_wiring =
-                match (routing_events_for_spawn.clone(), session_id_for_spawn.clone()) {
-                    (Some(events), Some(session_id)) => Some(GateProgressWiring {
-                        events,
-                        session_id,
-                        conversation_id: conversation_id_owned.clone(),
-                        started,
-                    }),
-                    _ => None,
-                };
+            let gate_progress_wiring = match (
+                routing_events_for_spawn.clone(),
+                session_id_for_spawn.clone(),
+            ) {
+                (Some(events), Some(session_id)) => Some(GateProgressWiring {
+                    events,
+                    session_id,
+                    conversation_id: conversation_id_owned.clone(),
+                    started,
+                }),
+                _ => None,
+            };
             let gate_result = gate_held_answer(
                 &inference,
                 deep_gate_on,

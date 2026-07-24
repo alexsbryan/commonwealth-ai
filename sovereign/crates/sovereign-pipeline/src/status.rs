@@ -6,7 +6,6 @@
 //! runs; `pipeline status` is for after-the-fact triage and for the
 //! daytime check-in when the night job has paused.
 
-
 use crate::worklist::Worklist;
 
 #[derive(Debug, Clone)]

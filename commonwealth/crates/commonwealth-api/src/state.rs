@@ -168,7 +168,8 @@ pub struct FimSlotStatus {
 /// locally. The standalone Commonwealth daemon leaves this `None`
 /// and uses the orchestrator-spawned llama-server path instead.
 #[async_trait]
-pub trait LocalInferenceService: Send + Sync {    /// One-shot chat completion (non-streaming). Called when the
+pub trait LocalInferenceService: Send + Sync {
+    /// One-shot chat completion (non-streaming). Called when the
     /// incoming request did NOT set `stream: true`.
     async fn chat_completion(
         &self,
@@ -291,9 +292,11 @@ pub trait LocalInferenceService: Send + Sync {    /// One-shot chat completion (
         request: FimCompletionRequest,
     ) -> Result<FimStreamStart, String> {
         let _ = request;
-        Err("this local inference service does not serve FIM completions \
+        Err(
+            "this local inference service does not serve FIM completions \
              — only the embedded llama.cpp service does"
-            .to_string())
+                .to_string(),
+        )
     }
 
     /// Static FIM slot description for `/status.inference.fim`.

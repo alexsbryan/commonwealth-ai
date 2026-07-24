@@ -262,8 +262,10 @@ impl FastShortCoalescer {
                         aggregate_tok_per_s = format!("{aggregate_tok_per_s:.1}"),
                         completion_min,
                         completion_max,
-                        head_of_line_ratio =
-                            format!("{:.1}", completion_max as f64 / completion_min.max(1) as f64),
+                        head_of_line_ratio = format!(
+                            "{:.1}",
+                            completion_max as f64 / completion_min.max(1) as f64
+                        ),
                         "FastShort batched inference complete"
                     );
                     for (job, (text, prompt_tokens, completion_tokens)) in

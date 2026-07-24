@@ -94,7 +94,10 @@ pub fn attribution_from_models_json(v: &Value, alias: &str) -> Option<ModelAttri
     if concrete.is_none() && is_alias_marker(alias) {
         for m in arr {
             let id = m.get("id").and_then(Value::as_str).unwrap_or_default();
-            let ob = m.get("owned_by").and_then(Value::as_str).unwrap_or_default();
+            let ob = m
+                .get("owned_by")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if ob == "mesh" && !id.is_empty() && !is_embed_id(id) {
                 concrete = Some(id.to_string());
                 break;
@@ -128,7 +131,10 @@ pub async fn resolve_model_attribution(base_url: &str, alias: &str) -> Option<Mo
     let resp = match client.get(&url).send().await {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
-            eprintln!("[bench] WARN: GET {url} returned {} — recording unattributed baseline", r.status());
+            eprintln!(
+                "[bench] WARN: GET {url} returned {} — recording unattributed baseline",
+                r.status()
+            );
             return None;
         }
         Err(e) => {
