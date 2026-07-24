@@ -423,6 +423,175 @@ pub(crate) fn short_session_id(file: &str) -> String {
     stem.chars().take(8).collect()
 }
 
+// ── Ramp-up cost ─────────────────────────────────────────────────────────
+//
+// What a session spent getting oriented before its first productive action
+// (first Edit/Write): acquisition tokens by kind, plus repeated file Reads
+// (the "re-familiarizing with the monorepo" tax). This is the split-safety
+// gauge: a successor session that boots from a good frame should ramp on
+// a few k tokens (measured benchmark: 2.3k for the hand-written-handoff
+// FactStore session); a cold session burns 15–56k (fleet measurements,
+// 2026-07-23). Upper bound by construction — pre-implementation research
+// on a genuinely new task also lands in the window.
+
+struct RampReport {
+    file: String,
+    requests: u64,
+    first_edit_req: Option<u64>,
+    raw_tokens: u64,
+    raw_calls: u64,
+    intel_tokens: u64,
+    intel_calls: u64,
+    /// Read calls during ramp whose file_path was already Read in ramp.
+    repeat_reads: u64,
+}
+
+fn analyze_ramp(path: &Path) -> Option<RampReport> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut requests = 0u64;
+    let mut first_edit_req: Option<u64> = None;
+    let (mut raw_tokens, mut raw_calls) = (0u64, 0u64);
+    let (mut intel_tokens, mut intel_calls) = (0u64, 0u64);
+    let mut repeat_reads = 0u64;
+    let mut read_paths: std::collections::HashSet<String> = Default::default();
+    // tool_use_id -> true=raw, false=intel (ramp window only)
+    let mut pending: BTreeMap<String, bool> = BTreeMap::new();
+
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let obj: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let msg = match obj.get("message") {
+            Some(m) if m.is_object() => m,
+            _ => continue,
+        };
+        if msg.get("usage").filter(|u| u.is_object()).is_some() {
+            requests += 1;
+        }
+        let Some(content) = msg.get("content").and_then(|c| c.as_array()) else {
+            continue;
+        };
+        for block in content {
+            match block.get("type").and_then(|t| t.as_str()) {
+                Some("tool_use") => {
+                    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                    if matches!(name, "Edit" | "Write" | "NotebookEdit") && first_edit_req.is_none()
+                    {
+                        first_edit_req = Some(requests);
+                    }
+                    if first_edit_req.is_some() {
+                        continue;
+                    }
+                    if name == "Read" {
+                        if let Some(fp) = block
+                            .get("input")
+                            .and_then(|i| i.get("file_path"))
+                            .and_then(|f| f.as_str())
+                        {
+                            if !read_paths.insert(fp.to_string()) {
+                                repeat_reads += 1;
+                            }
+                        }
+                    }
+                    let kind = if name == "Bash" {
+                        block
+                            .get("input")
+                            .and_then(|i| i.get("command"))
+                            .and_then(|c| c.as_str())
+                            .and_then(|cmd| {
+                                if is_sovereign_cli(cmd) {
+                                    Some(false)
+                                } else if is_bash_read_like(cmd) {
+                                    Some(true)
+                                } else {
+                                    None
+                                }
+                            })
+                    } else if classify(name) == Bucket::RawFileSearch {
+                        Some(true)
+                    } else if classify(name) == Bucket::CodeIntel {
+                        Some(false)
+                    } else {
+                        None
+                    };
+                    if let (Some(raw), Some(id)) =
+                        (kind, block.get("id").and_then(|i| i.as_str()))
+                    {
+                        pending.insert(id.to_string(), raw);
+                    }
+                }
+                Some("tool_result") if first_edit_req.is_none() => {
+                    let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                    if let Some(raw) = pending.remove(tid) {
+                        let toks = block
+                            .get("content")
+                            .map(result_text)
+                            .map(|s| approx_tokens(&s))
+                            .unwrap_or(0);
+                        if raw {
+                            raw_tokens += toks;
+                            raw_calls += 1;
+                        } else {
+                            intel_tokens += toks;
+                            intel_calls += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if requests == 0 {
+        return None;
+    }
+    Some(RampReport {
+        file: path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string(),
+        requests,
+        first_edit_req,
+        raw_tokens,
+        raw_calls,
+        intel_tokens,
+        intel_calls,
+        repeat_reads,
+    })
+}
+
+fn print_ramp(reports: &[RampReport]) {
+    println!(
+        "{:<10} {:>6} {:>11} {:>10} {:>11} {:>10} {:>7}",
+        "session", "reqs", "1stEdit@req", "ramp raw", "ramp intel", "calls r:i", "repeats"
+    );
+    println!("{}", "-".repeat(72));
+    for r in reports {
+        let fe = r
+            .first_edit_req
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        println!(
+            "{:<10} {:>6} {:>11} {:>9}t {:>10}t {:>7}:{:<3} {:>5}",
+            short_session_id(&r.file),
+            r.requests,
+            fe,
+            r.raw_tokens,
+            r.intel_tokens,
+            r.raw_calls,
+            r.intel_calls,
+            r.repeat_reads
+        );
+    }
+    println!(
+        "\nramp = acquisition before the first Edit/Write (upper bound: includes genuine\n\
+         pre-implementation research). Split-safety gate: a frame-booted successor should\n\
+         ramp ≤5k tokens with 0 repeats; measured cold baseline 15–56k; hand-written\n\
+         handoff benchmark 2.3k."
+    );
+}
+
 // ── Counterfactual replay ────────────────────────────────────────────────
 //
 // Re-prices existing transcripts under four independent cost levers so the
@@ -783,6 +952,10 @@ fn print_help() {
          \x20 --last <N>         Show the N most recent sessions (default 10).\n\
          \x20 --sort <key>       cost | recent | ratio  (default cost).\n\
          \x20 --json             Machine-readable output.\n\
+         \x20 --ramp             Ramp-up cost per session: acquisition tokens + calls\n\
+         \x20                    before the first Edit/Write, and repeated file Reads.\n\
+         \x20                    The split-safety gauge (successor should ramp <=5k, 0\n\
+         \x20                    repeats). Combine with --session <id> for one session.\n\
          \x20 --counterfactual   Replay sessions under four independent cost levers\n\
          \x20                    (splitting, preamble/injection overhead, turn\n\
          \x20                    batching, acquisition routing) and price each —\n\
@@ -990,6 +1163,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut sort = "cost".to_string();
     let mut json = false;
     let mut counterfactual = false;
+    let mut ramp = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -1000,6 +1174,7 @@ pub async fn run(args: &[String]) -> i32 {
             }
             "--json" => json = true,
             "--counterfactual" => counterfactual = true,
+            "--ramp" => ramp = true,
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
             "--session" => session = it.next().cloned(),
@@ -1045,6 +1220,28 @@ pub async fn run(args: &[String]) -> i32 {
     if reports.is_empty() {
         eprintln!("cache-audit: no sessions with usage data in {}", target_dir.display());
         return 1;
+    }
+
+    // -------- ramp-up cost --------
+    if ramp {
+        reports.sort_by(|a, b| b.mtime_unix.cmp(&a.mtime_unix));
+        let selected: Vec<&SessionReport> = match &session {
+            Some(sel) => reports
+                .iter()
+                .filter(|r| r.file.starts_with(sel.as_str()) || short_session_id(&r.file) == *sel)
+                .collect(),
+            None => reports.iter().take(last).collect(),
+        };
+        let ramps: Vec<RampReport> = selected
+            .iter()
+            .filter_map(|r| analyze_ramp(&target_dir.join(&r.file)))
+            .collect();
+        if ramps.is_empty() {
+            eprintln!("cache-audit: no ramp data for the selection");
+            return 1;
+        }
+        print_ramp(&ramps);
+        return 0;
     }
 
     // -------- counterfactual replay --------
