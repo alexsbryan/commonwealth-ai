@@ -41,7 +41,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow]",
+            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow] [--attached <doc.txt> | --attached-asset <id>] [--enrich-model <stem>] [--no-gliner]",
         ),
         HelpSection::Subcommands(&[
             (
@@ -151,6 +151,16 @@ struct Args {
     /// (SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS / _INCLUDE_CLAIMS). Direct
     /// transport only (naked bypasses the Runtime; bridge has no session).
     warm_atlas: bool,
+    /// Attached-doc lane only: split the ENRICHMENT provider (skeleton /
+    /// RAPTOR / action atoms) to a named model, leaving the answer path on
+    /// the session's chat model. Mirrors `bench book-report --enrich-model`.
+    /// The prime quality lever now that GLiNER freed the token budget:
+    /// route the atlas-building calls back onto the 35B primary.
+    enrich_model: Option<String>,
+    /// Attached-doc lane only: force the LLM entity path (skip GLiNER) for an
+    /// A/B against the shipped NER fast-path. Default: GLiNER when installed —
+    /// so the holdout measures the stack the product actually ships.
+    no_gliner: bool,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -179,6 +189,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut custom_instructions: Option<String> = None;
     let mut pin_intent: Option<Intent> = None;
     let mut warm_atlas = false;
+    let mut enrich_model: Option<String> = None;
+    let mut no_gliner = false;
 
     let mut i = 0;
     macro_rules! val {
@@ -224,6 +236,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--bridge-url" => bridge_url = val!("--bridge-url"),
             "--attached" => attached = Some(PathBuf::from(val!("--attached"))),
             "--attached-asset" => attached_asset = Some(val!("--attached-asset")),
+            "--enrich-model" => enrich_model = Some(val!("--enrich-model")),
+            "--no-gliner" => no_gliner = true,
             "--custom-instructions" => custom_instructions = Some(val!("--custom-instructions")),
             "--pin-intent" => {
                 let v = val!("--pin-intent");
@@ -265,6 +279,13 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     if attached.is_some() && attached_asset.is_some() {
         return Err("--attached and --attached-asset are mutually exclusive".into());
     }
+    if (enrich_model.is_some() || no_gliner) && attached.is_none() {
+        return Err(
+            "--enrich-model / --no-gliner only apply to the --attached ingest lane (they tune \
+             skeleton/RAPTOR enrichment; there is no ingest on the corpus or --attached-asset paths)"
+                .into(),
+        );
+    }
     Ok(Args {
         bank: bank.ok_or("--bank is required")?,
         corpus,
@@ -285,6 +306,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         custom_instructions,
         pin_intent,
         warm_atlas,
+        enrich_model,
+        no_gliner,
     })
 }
 
@@ -425,10 +448,62 @@ async fn run(rest: &[String]) -> i32 {
             }
         } else {
             let path = args.attached.as_ref().unwrap();
-            let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
-                std::sync::Arc::clone(&session.inference),
+            // Enrichment provider: session default unless --enrich-model splits
+            // the skeleton/RAPTOR/atom calls onto a named model. The prime
+            // quality lever — GLiNER freed the token budget, so the atlas-
+            // building calls can go back onto the 35B primary while the answer
+            // path stays on the session's chat model.
+            let enrich_inference: std::sync::Arc<dyn InferenceProvider> =
+                match &args.enrich_model {
+                    Some(model) => {
+                        eprintln!("[chaos] enrich model override: {model}");
+                        super::book_report::provider_for_model(
+                            &globals.daemon_base,
+                            model,
+                            &session.embed_model,
+                        )
+                        .await
+                    }
+                    None => std::sync::Arc::clone(&session.inference),
+                };
+            // T2 entity pass: prefer the local NER model over the LLM when
+            // installed, so the holdout measures the SHIPPED stack (GLiNER).
+            // Eager load (not lazy) so we measure the NER path, not race it —
+            // a not-yet-warm lazy loader returns empty and silently falls back
+            // to the LLM. `--no-gliner` forces the LLM path for A/B.
+            let entity_extractor: Option<
+                std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>,
+            > = if args.no_gliner {
+                eprintln!("[chaos] T2 entity pass: LLM (--no-gliner)");
+                None
+            } else {
+                let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
+                if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
+                    match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
+                        Ok(g) => {
+                            eprintln!("[chaos] T2 entity pass: GLiNER ({model_id})");
+                            Some(std::sync::Arc::new(g)
+                                as std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>)
+                        }
+                        Err(e) => {
+                            eprintln!("[chaos] T2 entity pass: LLM (GLiNER load failed: {e})");
+                            None
+                        }
+                    }
+                } else {
+                    eprintln!(
+                        "[chaos] T2 entity pass: LLM (GLiNER model {model_id} not installed)"
+                    );
+                    None
+                }
+            };
+            let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+                enrich_inference,
                 std::sync::Arc::clone(&session.store),
             );
+            if let Some(g) = entity_extractor {
+                manager = manager.with_entity_extractor(g);
+            }
             match manager.ingest(path.as_path(), |_| {}).await {
                 Ok(a) => a,
                 Err(e) => {

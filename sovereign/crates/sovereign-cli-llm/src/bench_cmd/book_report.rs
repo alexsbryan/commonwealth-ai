@@ -815,7 +815,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
 /// fallback otherwise) — the difference is the caller names the chat
 /// model instead of resolving the daemon's default. Used by
 /// `--enrich-model` / `--judge-model` to split roles across models.
-async fn provider_for_model(
+pub(crate) async fn provider_for_model(
     base: &str,
     chat_model: &str,
     embed_model: &str,
