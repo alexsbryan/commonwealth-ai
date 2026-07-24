@@ -77,6 +77,8 @@ The /context audit on 2026-05-12 attributed 74.3k tokens to file reads, with ~22
 
 When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the returned site. The combined cost beats a blind Read every time.
 
+**Batch independent tool calls into one message.** Every extra serial request re-bills the entire cached context. Measured fleet-wide (2026-07-23): about 1 in 7 small serial calls needed nothing from the call before it — different files Read back-to-back, unrelated greps, separate `symbols` lookups. If the next call's inputs don't depend on the previous call's output, send both calls in the same message.
+
 **See your own context spend — `sovereign cache-audit`.** This parses the local Claude Code transcripts and reports, per session, where the token/cache budget went plus the **raw-acquisition ratio**: raw file/grep tokens pulled into context vs. code-intelligence / RAG calls made. `cache-audit --sort ratio` ranks the worst offenders; `cache-audit --session <id>` deep-dives one. It exists because a fleet agent spent ~70% of its budget on cache-read (re-sending a large context every turn) — and every session audited so far shows hundreds of thousands of raw-read tokens against **zero** `symbols`/`callers`/`code_search`/`notes` calls. That is the leak this whole section is trying to prevent; the tool makes it measurable. Run it on yourself when a task ran long.
 
 ### When to use which tool

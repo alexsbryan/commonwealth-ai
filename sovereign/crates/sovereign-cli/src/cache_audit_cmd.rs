@@ -246,6 +246,27 @@ fn result_text(v: &serde_json::Value) -> String {
 }
 
 /// Parse and analyze one transcript file. Returns None if it carries no usage.
+/// Claude Code writes one transcript line per content block, and every line
+/// of the same API response repeats the SAME `usage` object (same
+/// `message.id`). Counting per line inflates request counts and token totals
+/// ~2.5x (measured fleet-wide, 2026-07-23) and — worse — the duplicate points
+/// have identical ctx, so growth=0 between them manufactures fake
+/// "small-growth runs" in the H3 batching counterfactual. Returns the usage
+/// object only for the FIRST line of each message; duplicates get None while
+/// leaving content-block scanning to the caller.
+fn fresh_usage<'a>(
+    msg: &'a serde_json::Value,
+    last_id: &mut Option<String>,
+) -> Option<&'a serde_json::Value> {
+    let usage = msg.get("usage").filter(|u| u.is_object())?;
+    let mid = msg.get("id").and_then(|i| i.as_str());
+    if mid.is_some() && mid == last_id.as_deref() {
+        return None;
+    }
+    *last_id = mid.map(str::to_string);
+    Some(usage)
+}
+
 fn analyze(path: &Path) -> Option<SessionReport> {
     let text = std::fs::read_to_string(path).ok()?;
     let mtime_unix = std::fs::metadata(path)
@@ -268,6 +289,7 @@ fn analyze(path: &Path) -> Option<SessionReport> {
     let mut code_intel_calls = 0u64;
     let mut raw_acq_tokens = 0u64;
     let mut bash_read_like = 0u64;
+    let mut last_usage_id: Option<String> = None;
 
     for line in text.lines() {
         let line = line.trim();
@@ -284,7 +306,7 @@ fn analyze(path: &Path) -> Option<SessionReport> {
         };
 
         // ---- usage / cost ----
-        if let Some(usage) = msg.get("usage").filter(|u| u.is_object()) {
+        if let Some(usage) = fresh_usage(msg, &mut last_usage_id) {
             let a = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
             let o = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
             let cr = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -456,6 +478,7 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
     let mut read_paths: std::collections::HashSet<String> = Default::default();
     // tool_use_id -> true=raw, false=intel (ramp window only)
     let mut pending: BTreeMap<String, bool> = BTreeMap::new();
+    let mut last_usage_id: Option<String> = None;
 
     for line in text.lines() {
         let line = line.trim();
@@ -470,7 +493,7 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
             Some(m) if m.is_object() => m,
             _ => continue,
         };
-        if msg.get("usage").filter(|u| u.is_object()).is_some() {
+        if fresh_usage(msg, &mut last_usage_id).is_some() {
             requests += 1;
         }
         let Some(content) = msg.get("content").and_then(|c| c.as_array()) else {
@@ -669,6 +692,7 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
     let mut tool_id_raw: BTreeMap<String, bool> = BTreeMap::new();
     let (mut actual_total, mut actual_cr_cost) = (0.0_f64, 0.0_f64);
     let mut model_counts: BTreeMap<String, u64> = BTreeMap::new();
+    let mut last_usage_id: Option<String> = None;
 
     for line in text.lines() {
         let line = line.trim();
@@ -684,7 +708,7 @@ fn analyze_counterfactual(path: &Path) -> Option<CfReport> {
             _ => continue,
         };
 
-        if let Some(usage) = msg.get("usage").filter(|u| u.is_object()) {
+        if let Some(usage) = fresh_usage(msg, &mut last_usage_id) {
             let a = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
             let o = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
             let cr = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -1400,6 +1424,40 @@ mod tests {
         let intel = r.buckets.get(&Bucket::CodeIntel).expect("intel bucket");
         assert_eq!(intel.calls, 1);
         assert!(intel.ctx_tokens > 0, "result tokens route to CodeIntel");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn duplicate_usage_lines_of_one_message_count_once() {
+        // Claude Code writes one transcript line per content block; every
+        // line of the same API response repeats the SAME usage object under
+        // the same message.id. Per-line counting inflated fleet cost ~2.5x
+        // and, because duplicate points have identical ctx (growth=0),
+        // manufactured fake small-growth runs in the H3 batching lever.
+        let mk = |block: &str| {
+            format!(
+                r#"{{"message":{{"id":"msg_dup1","role":"assistant","model":"claude-opus-4-8","usage":{{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":200000,"cache_creation_input_tokens":0}},"content":[{block}]}}}}"#
+            )
+        };
+        let body = [
+            mk(r#"{"type":"text","text":"a text block"}"#),
+            mk(r#"{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.rs"}}"#),
+            mk(r#"{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/b.rs"}}"#),
+        ]
+        .join("\n");
+        let dir =
+            std::env::temp_dir().join(format!("cache_audit_dup_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("dupe5678-session.jsonl");
+        std::fs::write(&path, body).unwrap();
+
+        let r = analyze(&path).expect("has usage");
+        assert_eq!(r.turns, 1, "3 lines, 1 message.id => 1 request");
+        assert_eq!(r.cache_read, 200_000, "usage totals counted once");
+
+        let cf = analyze_counterfactual(&path).expect("has usage");
+        assert_eq!(cf.n_requests, 1, "counterfactual points deduped too");
 
         std::fs::remove_dir_all(&dir).ok();
     }
