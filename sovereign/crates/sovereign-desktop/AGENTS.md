@@ -192,3 +192,39 @@ uncaught exceptions. Measure latency inside the page via
   signals, add a chaos spec asserting (a) unknown peer / phantom
   event renders zero ghost rows and (b) no `pageerror` fires.
   See `mesh-health.spec.ts` for the canonical pattern.
+
+### The three configs
+
+| Config | World | Meaning of red |
+|---|---|---|
+| `playwright.config.ts` | mocked Tauri, `vite dev` | logic regression |
+| `playwright.real.config.ts` | real app + fixture-scoped daemon (2B, 3 toy docs) | integration regression |
+| `playwright.demo.config.ts` | real app + the operator's **live** daemon (real corpora, real primary) | *don't ship this footage* |
+
+- **Demo capture** — `tests/e2e/demo/` is the product reel encoded as an
+  acceptance suite: `npm run demo` captures, `npm run demo:export` cuts
+  the mp4/webm/poster/gif ladder. Every beat drives real surfaces and
+  asserts the claim it's making, so a beat that fails exports **no clip** —
+  there is no override flag. Spec: `tests/e2e/demo/DEMO_BEATS.md`.
+  Reuses the real-mode fixture (so the pageerror + fatal-Svelte gates
+  apply to every filmed frame) in attach mode, and skips fixture plants
+  via `SOVEREIGN_DEMO=1` so the operator's index is never mutated by a
+  capture run.
+- **Adding a beat** — write the claim first, then the assertions that make
+  it non-fictional, then the choreography. If you can't state what would
+  make the clip a lie, the beat isn't ready.
+- **Two capture invariants that are easy to get wrong, and silent when you do:**
+  - *The demo profile must link the host's index dir.* The desktop resolves
+    the CorpusEngine's `indexes`/`recipes` from `dirs::home_dir()`
+    (`state.rs`), **not** from `config.toml`'s `[data] dir`. Under the
+    scratch HOME that's an empty dir, so `notebook_list` returns nothing
+    and the Library films as `library-empty` — while every *query* still
+    works, because attach mode routes those at the live daemon. Real-mode
+    setup symlinks host `~/.sovereign/{indexes,recipes,local-corpora}` in
+    under `SOVEREIGN_DEMO=1`.
+  - *Video size must equal the viewport.* Playwright's screencast captures
+    **CSS** pixels and only ever scales the picture **down** to fit `size`.
+    `size: viewport × deviceScaleFactor` therefore letterboxes the page
+    into the top-left quadrant and pads the rest with dead grey — it does
+    not produce a 2× master. `deviceScaleFactor` still earns its keep for
+    `page.screenshot()`, which *is* device-pixel.
