@@ -163,9 +163,15 @@ priority ordered by P2:
   current and SessionEnd needs no LLM at all. Budget-gated (over-2k writes
   rejected with per-section counts), provenance always re-stamped
   self-reported, dogfooded on its own build session (838-token frame,
-  8/8 sections). Gate STILL OPEN: frames graded ≥70% with zero
-  hallucinated verification claims, produced without a wrap-up prompt —
-  needs a golden for a live session that used the tool mid-work.
+  8/8 sections). **Gate CLOSED 2026-07-24:** the self-reported frame of
+  session `2fa2ddbb` (written mid-work via `session_state`, no wrap-up
+  prompt) graded **78% weighted recall, zero hallucinated verification
+  claims** against an independent golden hand-authored from that
+  session's transcript spine (`quality/session-frame.2fa2ddbb.golden.md`;
+  `svrn session grade`, exit 0). The successor-critical double-weighted
+  sections carried (Next 3/3, Invariants 2/3); the weak spot was
+  Decisions (2/4 — encode-time compression dropped two rationale
+  bullets). P2 confirmed at the artifact level.
 - **E4b (retrieval practice, weak path):** restructure the distill stage-2
   prompt from "summarize the spine" to "answer the eight section-questions,
   citing spine evidence per item" (testing effect / elaborative

@@ -231,6 +231,16 @@ across chunk answers.
 Versioned like `agent-preflight.golden.json`: when the schema or the grading
 bar moves, the golden moves in the same PR.
 
+A second golden, `quality/session-frame.2fa2ddbb.golden.md`, is the E4a
+reference (MEMORY_MODEL §5): hand-authored from `2fa2ddbb`'s transcript spine
+to grade the encode-time write path independently. That session's
+*self-reported* frame — written mid-work via `session_state`, no wrap-up
+prompt — grades **78% weighted recall, zero hallucinated verification**
+against it (Next 3/3, Invariants 2/3, weak on Decisions 2/4). This is the
+artifact-level confirmation that a banked frame authorizes a split: the
+strong path clears the bar without the successor ever paying for a
+reconstruction.
+
 Grading a distilled frame against a golden is per-section recall of
 *load-bearing items* (each golden section's bullet is one item; a distilled
 frame scores by how many it captures, judged leniently on wording, strictly on
