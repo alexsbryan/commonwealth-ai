@@ -12,7 +12,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const REPO_ROOT = path.resolve(CRATE_ROOT, "../../..");
 const PID_FILE = path.join(CRATE_ROOT, "test-artifacts/real-app.pid");
-const HOME = path.join(CRATE_ROOT, "test-artifacts/real-profile/home");
+// Same override as global-setup's PROFILE (demo mode owns `demo-profile`).
+// Only read on the managed-daemon stop below, which attach/demo mode skips —
+// but keeping the two in lockstep avoids a future stop against the wrong HOME.
+const HOME = path.join(
+  CRATE_ROOT,
+  "test-artifacts",
+  process.env.SOVEREIGN_REAL_PROFILE_DIR ?? "real-profile",
+  "home",
+);
 const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
 
 function alive(pid: number): boolean {

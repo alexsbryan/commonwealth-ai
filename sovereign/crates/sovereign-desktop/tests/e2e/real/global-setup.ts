@@ -36,7 +36,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const REPO_ROOT = path.resolve(CRATE_ROOT, "../../..");
 const RESULTS = path.join(CRATE_ROOT, "test-artifacts");
-const PROFILE = path.join(RESULTS, "real-profile");
+// Overridable so a sibling suite can own a SEPARATE scratch profile in the
+// same artifacts dir. Demo mode (tests/e2e/demo) uses this: sharing
+// `real-profile` would carry the real suite's local corpus registrations
+// ("E2E Fixture Corpus", "Maple House (E2E)") onto the Library shelf — i.e.
+// into frame — even though demo mode skips planting them.
+const PROFILE = path.join(RESULTS, process.env.SOVEREIGN_REAL_PROFILE_DIR ?? "real-profile");
 const HOME = path.join(PROFILE, "home");
 const APP_BIN = path.join(REPO_ROOT, "target/debug/sovereign-desktop");
 const APP_LOG = path.join(RESULTS, "real-app.log");
@@ -305,6 +310,42 @@ async function plantGovernanceCorpus(): Promise<void> {
   console.log(`[real-setup] governance atlas overlaid ✓ (${atlasDir})`);
 }
 
+/** The operator's `[[meshapp_installs]]` blocks, verbatim, from the host
+ *  desktop.toml — or "" when there are none / the file is unreadable.
+ *
+ *  Sliced textually rather than parsed: these blocks are the tail of the
+ *  file and TOML round-tripping would need a dependency the harness does
+ *  not otherwise have. Anchored on the first `[[meshapp_installs]]` header,
+ *  so anything above it (models, consent, window state) stays out. */
+function hostMeshAppInstalls(): string {
+  const candidates = [
+    path.join(os.homedir(), "Library/Application Support/sovereign/desktop.toml"),
+    path.join(os.homedir(), "Library/Application Support/svrnmesh/desktop.toml"),
+    path.join(os.homedir(), ".config/sovereign/desktop.toml"),
+    path.join(os.homedir(), ".config/svrnmesh/desktop.toml"),
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    let text: string;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const at = text.indexOf("[[meshapp_installs]]");
+    if (at < 0) continue;
+    const blocks = text.slice(at).trimEnd();
+    const ids = [...blocks.matchAll(/^app_id\s*=\s*"([^"]+)"/gm)].map((m) => m[1]);
+    console.log(`[real-setup] demo: mirrored mesh-app grants from ${file} — ${ids.join(", ")}`);
+    return `${blocks}\n`;
+  }
+  console.warn(
+    "[real-setup] demo: no host [[meshapp_installs]] found — mesh-app beats (B3) " +
+      "will deny with `app is not installed`",
+  );
+  return "";
+}
+
 function bakeProfile(): void {
   if (!process.env.SOVEREIGN_REAL_KEEP_PROFILE) {
     fs.rmSync(PROFILE, { recursive: true, force: true });
@@ -340,6 +381,32 @@ function bakeProfile(): void {
   const modelsLink = path.join(sovDir, "models");
   if (!fs.existsSync(modelsLink)) {
     fs.symlinkSync(path.join(REPO_ROOT, "sovereign/models"), modelsLink);
+  }
+
+  // Demo mode films the OPERATOR'S real shelf, so the Library has to see the
+  // operator's real corpora. Attach mode routes every *query* at the live
+  // daemon, but the desktop resolves the CorpusEngine's index/recipe dirs from
+  // `dirs::home_dir()` (state.rs: `home.join(".sovereign").join("indexes")`) —
+  // NOT from config.toml's `[data] dir`. Under the scratch HOME that dir is
+  // empty, so `notebook_list` (which spines off `engine.installed_indexes()`)
+  // returns nothing and the shelf renders `library-empty`. Symlink the host
+  // dirs in so the engine's read path is the real one, exactly as it is in a
+  // normal install. Safe because SOVEREIGN_DEMO also skips every fixture
+  // plant below — demo mode reads the shelf, it never ingests into it.
+  if (process.env.SOVEREIGN_DEMO === "1") {
+    const hostSov = path.join(os.homedir(), ".sovereign");
+    const linked: string[] = [];
+    for (const name of ["indexes", "recipes", "local-corpora"]) {
+      const target = path.join(hostSov, name);
+      const link = path.join(sovDir, name);
+      if (!fs.existsSync(target)) {
+        console.warn(`[real-setup] demo: host ${target} missing — shelf may be thin`);
+        continue;
+      }
+      if (!fs.existsSync(link)) fs.symlinkSync(target, link);
+      linked.push(name);
+    }
+    console.log(`[real-setup] demo: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME`);
   }
 
   // Attach mode reads `~/.sovereign/config.toml` (SetupConfig) to learn which
@@ -397,6 +464,13 @@ function bakeProfile(): void {
     `setup_complete = true`,
     `auto_collaborate = false`,
     ``,
+    // Mesh-app grants are per-profile config, and every `meshapp_*` command is
+    // fail-closed on them (`authorize`: not-a-mesh-app-window → not-installed →
+    // permission-not-granted). A profile without them denies every mesh-app op,
+    // which surfaces to a beat as "this corpus has no atlas" — the atlas is
+    // fine, the CALLER was never granted read. Carry the operator's grants in
+    // for demo mode; the real suite keeps its hermetic empty set.
+    ...(process.env.SOVEREIGN_DEMO === "1" ? [hostMeshAppInstalls()] : []),
   ].join("\n");
   for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
 }
@@ -576,6 +650,15 @@ export default async function globalSetup(): Promise<void> {
     throw new Error(
       `real-mode setup: backend-ready never fired within 180s — see ${APP_LOG}`,
     );
+  }
+  // Demo mode (tests/e2e/demo) attaches to the operator's REAL daemon to
+  // film real corpora. Planting the fixture + governance corpora there
+  // would both pollute that index and put "E2E Fixture Corpus" / "Maple
+  // House (E2E)" on camera in the Library shelf. Skip them; no demo beat
+  // reads either fixture.
+  if (process.env.SOVEREIGN_DEMO === "1") {
+    console.log("[real-setup] SOVEREIGN_DEMO=1 — skipping fixture + governance corpus plants");
+    return;
   }
   // Outside the readiness retry loop: an ingest failure is a hard
   // setup error, never silently retried.

@@ -11,7 +11,9 @@ Within this project you consult with SYSTEM_OVERVIEW.md to understand the system
 
 A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MCP transport exposes 6 modern tools (plus 6 deprecated aliases — see below); the CLI surface (`sovereign tools list`) exposes more (~26 in total) including watcher-only tools (`lint_status`, `test_status`, `get_lint_output`, `get_run_output`, `build`), persistent code-intel (`code_search`, `recent_changes`, `project_context`), and ATOS feature lifecycle.
 
-**The CLI binary is `sovereign-cli`.** A symlink at `~/.local/bin/sovereign` lets you type `sovereign …`; if it's missing, run `sovereign-cli` directly or `ln -sf $(realpath sovereign/target/release/sovereign-cli) ~/.local/bin/sovereign`. When the daemon isn't reachable, `sovereign doctor` is the first stop.
+**The CLI binary is `sovereign-cli`.** A symlink at `~/.local/bin/sovereign` lets you type `sovereign …`; if it's missing, run `sovereign-cli` directly or `ln -sf $(realpath target/debug/sovereign-cli) ~/.local/bin/sovereign`. When the daemon isn't reachable, `sovereign doctor` is the first stop.
+
+**Build DEBUG, not `--release`.** `cargo build -p <crate>` and invoke `target/debug/<bin>`. The deployed symlink points at `target/debug/sovereign-cli`, so a release-only build is invisible to the toolchain you are actually running — and `--release` costs minutes per iteration. The `--release` flag appears below only where a specific path genuinely requires it (OCR, and `scripts/dev-release.sh` for the deployed daemon); everywhere else the examples name **which crate** to build, not which profile. The dispatcher's own error text ("Build it with `cargo build -p X --release`") is likewise wrong about the profile on this host — drop the flag.
 
 **`sovereign-cli` is a thin dispatcher that `exec`s into sibling binaries — rebuild the sibling that owns the verb you changed, or your change won't run.** Editing a command's code and rebuilding only `sovereign-cli` is a silent no-op: the dispatcher just execs the stale sibling. Map of verb → owning crate/binary:
 
@@ -22,7 +24,7 @@ A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MC
 | `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
-So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build --release -p sovereign-cli -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --release --bins`). The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `dev-toolbox` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
+So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --bins`). Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `dev-toolbox` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
 When the MCP server is running (the common case), prefer the MCP path — it's faster and native to Claude Code. The same tools are also exposed as a CLI:
 
