@@ -60,11 +60,60 @@ const NONLEAF_TARGET_FANOUT: usize = 5;
 /// nodes) and we don't summarize over it.
 const ROOT_BRANCHING_CEILING: usize = 4;
 
-/// Concurrency for the Slow-slot summary calls. Empirically tuned for
-/// a 2-peer mesh; the load balancer self-regulates depth via its
-/// in-flight tracker, so setting this slightly higher than peer count
-/// keeps each peer warm without queue-thrashing.
-const SUMMARIZE_BUFFER: usize = 6;
+/// Concurrency for the summary calls. On a mesh the load balancer
+/// spreads these across peers; on a solo node this is how many
+/// summaries ride one continuous-batched decode together.
+///
+/// **8 because that is the batching lane's width.** The FastShort slot
+/// is built with `n_seq_max=8` (`ModelSlot::from_existing_model`), so a
+/// 9th concurrent call cannot join the batch — it waits for a seq slot
+/// to retire. Raising this past 8 buys nothing and costs held memory
+/// and queue depth; it was briefly 12 during the 2026-07-24 tuning arc
+/// before that bound was checked. Lowering it below 8 leaves the lane
+/// half-empty, which is what the original 6 did: the bench's per-call
+/// log showed 15 leaf summaries dispatching in three visible waves as
+/// slots freed, a 53.6s leaf level made of calls whose own median
+/// latency was 7.7s.
+///
+/// If the batching lane is unavailable — `SOVEREIGN_FAST_SHORT_DISABLE`,
+/// a vetoed arch (see `fast_short_gate`), or any host that serves these
+/// on a single-sequence slot — the calls simply queue and this constant
+/// stops mattering. It is a ceiling, never an assumption of parallelism.
+const SUMMARIZE_BUFFER: usize = 8;
+
+/// Hard cap on how many member previews are shown to the leaf
+/// summarizer.
+///
+/// This bounds *the prompt*, not the node. Every member still lands in
+/// `direct_member_chunk_ids` / `evidence_chunk_ids`, and `quote_spans`
+/// are still extracted across all members — the retrieval-facing and
+/// grounding-facing surfaces are untouched, which is the invariant that
+/// matters (quote spans must stay verbatim-true; see the module docs).
+///
+/// **13 is sized against the batching lane's input gate, not against
+/// any one machine's throughput.** A request whose prompt exceeds
+/// `FAST_SHORT_MAX_INPUT_CHARS` (6000) is refused by the batched
+/// FastShort lane and served on the single-sequence Fast slot instead.
+/// 13 previews × 280 chars ≈ 3.6k, plus ~600 chars of instructions and
+/// doc-type cue, leaves comfortable headroom under that gate. Budget
+/// arithmetic to redo if either constant moves:
+/// `MAX × preview_len + prompt_overhead < FAST_SHORT_MAX_INPUT_CHARS`.
+///
+/// What went wrong without it (2026-07-24): k-means gives a nominal 20
+/// members per leaf but a real range of 1–65, so the biggest clusters
+/// built ~18k-char prompts — 3× over the gate. Those leaves silently
+/// fell off the batched lane and serialized one at a time, which is why
+/// the leaf level's stragglers ran 30–45s while its small clusters
+/// finished in 4–7s. Capping the prompt is what puts every leaf back on
+/// the same lane; the prefill saving is the smaller half of the win.
+///
+/// Quality rationale for capping rather than shrinking `preview()`: a
+/// 65-preview prompt is not 5× more informative than a 13-preview one.
+/// Each preview is already clipped to 280 chars, so a huge cluster
+/// contributes a long tail of near-duplicate fragments that wash the
+/// summary out rather than sharpen it. Members are ranked by cosine to
+/// the centroid, so what survives is the cluster's core, not a prefix.
+const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 
 /// Hard cap on quote spans per node — keeps briefing budget bounded
 /// even for very tight clusters where many sentences match the
@@ -336,11 +385,12 @@ async fn build_raptor_atlas_impl(
             cluster_idx,
             ClusterSummarizationInput {
                 level: 0,
-                member_descriptors: inp
-                    .member_indices
-                    .iter()
-                    .filter_map(|&i| chunks.get(i).map(|c| c.preview()))
-                    .collect(),
+                member_descriptors: descriptors_for_prompt(
+                    &inp.member_indices,
+                    &inp.centroid,
+                    chunks,
+                    embeddings,
+                ),
                 direct_member_chunk_ids: inp
                     .member_indices
                     .iter()
@@ -359,6 +409,33 @@ async fn build_raptor_atlas_impl(
             },
         ));
     }
+    // ── Longest-processing-time-first dispatch.
+    //
+    // K-means on text embeddings produces badly unbalanced clusters: on
+    // the 301-chunk bench subset the leaf prompts ranged from 204 to
+    // 4590 tokens — a 22× spread around a nominal 20-members-per-leaf
+    // target. Summarization cost is prefill-dominated, so that spread is
+    // a spread in call latency (4.3s to 30.0s measured). Dispatched in
+    // cluster_idx order, a big cluster that happens to sort late starts
+    // only after a buffer slot frees, and the level's makespan becomes
+    // queue-wait + the straggler rather than just the straggler.
+    //
+    // LPT is the classic fix: start the longest jobs first so the short
+    // ones fill the tail. Purely a scheduling change — same prompts,
+    // same set of calls — and safe because results are merged back by
+    // `cluster_idx`, not by position.
+    to_summarize.sort_by_key(|(_, inp)| {
+        std::cmp::Reverse(inp.member_descriptors.iter().map(|d| d.len()).sum::<usize>())
+    });
+    if let (Some((_, biggest)), Some((_, smallest))) = (to_summarize.first(), to_summarize.last()) {
+        tracing::debug!(
+            clusters = to_summarize.len(),
+            largest_chars = biggest.member_descriptors.iter().map(|d| d.len()).sum::<usize>(),
+            smallest_chars = smallest.member_descriptors.iter().map(|d| d.len()).sum::<usize>(),
+            "raptor_atlas: leaf prompt-size spread (dispatching longest-first)"
+        );
+    }
+
     let already_cached = total_clusters - to_summarize.len();
     if already_cached > 0 {
         tracing::info!(
@@ -996,6 +1073,49 @@ fn kmeans_cluster(embeddings: &[Vec<f32>], k: usize, max_iters: usize) -> Vec<us
     assignments
 }
 
+/// The member previews shown to the leaf summarizer: at most
+/// [`MAX_MEMBERS_IN_SUMMARY_PROMPT`], the ones closest to the cluster
+/// centroid, returned in document order.
+///
+/// Document order matters for a narrative: the summarizer is asked
+/// "what happens, what shifts", and reading the retained previews in
+/// the order they occur in the text preserves that. Selection is by
+/// centrality; presentation is chronological.
+fn descriptors_for_prompt(
+    member_indices: &[usize],
+    centroid: &[f32],
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+) -> Vec<String> {
+    let mut kept: Vec<usize> = if member_indices.len() <= MAX_MEMBERS_IN_SUMMARY_PROMPT {
+        member_indices.to_vec()
+    } else {
+        let mut ranked: Vec<(usize, f32)> = member_indices
+            .iter()
+            .map(|&i| {
+                let sim = embeddings
+                    .get(i)
+                    .map(|e| cosine_sim(e, centroid))
+                    .unwrap_or(f32::MIN);
+                (i, sim)
+            })
+            .collect();
+        // Descending similarity; ties broken by index so the choice is
+        // deterministic across runs (checkpoint resume must reproduce it).
+        ranked.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.0.cmp(&b.0))
+        });
+        ranked.truncate(MAX_MEMBERS_IN_SUMMARY_PROMPT);
+        ranked.into_iter().map(|(i, _)| i).collect()
+    };
+    kept.sort_unstable();
+    kept.iter()
+        .filter_map(|&i| chunks.get(i).map(|c| c.preview()))
+        .collect()
+}
+
 /// Element-wise mean of a slice of references to vectors. Returns
 /// an empty vec if input is empty.
 fn mean_vector(vecs: &[&Vec<f32>]) -> Vec<f32> {
@@ -1111,6 +1231,61 @@ mod tests {
         let b = vec![3.0, 2.0, 1.0];
         let m = mean_vector(&[&a, &b]);
         assert_eq!(m, vec![2.0, 2.0, 2.0]);
+    }
+
+    /// A cluster larger than the prompt cap keeps only its most-central
+    /// members in the prompt — and keeps them in document order.
+    #[test]
+    fn descriptors_for_prompt_caps_by_centrality_and_reorders_chronologically() {
+        // 40 chunks. Even indices sit on the centroid; odd indices are
+        // orthogonal to it. 20 evens > the cap, so centrality alone
+        // decides and no odd member can slip in to fill a spare slot.
+        let chunks: Vec<ChunkInput> = (0..40)
+            .map(|i| ChunkInput {
+                chunk_id: i as u32,
+                content: format!("chunk {i} body text"),
+            })
+            .collect();
+        let embeddings: Vec<Vec<f32>> = (0..40)
+            .map(|i| if i % 2 == 0 { vec![1.0, 0.0] } else { vec![0.0, 1.0] })
+            .collect();
+        let members: Vec<usize> = (0..40).collect();
+        let centroid = vec![1.0, 0.0];
+
+        let out = descriptors_for_prompt(&members, &centroid, &chunks, &embeddings);
+        assert_eq!(out.len(), MAX_MEMBERS_IN_SUMMARY_PROMPT);
+        // Only central (even) chunks survive…
+        for d in &out {
+            let n: usize = d
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse().ok())
+                .expect("preview starts `chunk <n>`");
+            assert_eq!(n % 2, 0, "kept an off-centroid member: {d}");
+        }
+        // …and they read in document order, not similarity order.
+        let order: Vec<usize> = out
+            .iter()
+            .map(|d| d.split_whitespace().nth(1).unwrap().parse().unwrap())
+            .collect();
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        assert_eq!(order, sorted, "previews must stay chronological");
+    }
+
+    /// Small clusters are untouched — the cap is a ceiling, not a quota.
+    #[test]
+    fn descriptors_for_prompt_leaves_small_clusters_whole() {
+        let chunks: Vec<ChunkInput> = (0..4)
+            .map(|i| ChunkInput {
+                chunk_id: i as u32,
+                content: format!("chunk {i} body text"),
+            })
+            .collect();
+        let embeddings: Vec<Vec<f32>> = (0..4).map(|_| vec![1.0, 0.0]).collect();
+        let members: Vec<usize> = (0..4).collect();
+        let out = descriptors_for_prompt(&members, &[1.0, 0.0], &chunks, &embeddings);
+        assert_eq!(out.len(), 4);
     }
 
     #[test]

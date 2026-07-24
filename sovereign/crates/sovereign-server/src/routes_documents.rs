@@ -81,8 +81,18 @@ pub fn document_router() -> Router {
 
 /// Build a DocumentAssetManager from the Runtime's shared resources.
 /// This is cheap — it just clones Arcs.
+///
+/// When the Runtime carries a GLiNER entity extractor (installed for
+/// retrieval), reuse it for the ingest skeleton's T2 entity pass — the
+/// same −70%-token NER-for-LLM swap the desktop uses. Absent/not-warm
+/// falls back to the LLM per window, so this is safe unconditionally.
 fn manager_from_runtime(runtime: &Runtime) -> DocumentAssetManager {
-    DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(&runtime.store))
+    let manager =
+        DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(&runtime.store));
+    match &runtime.gliner {
+        Some(extractor) => manager.with_entity_extractor(Arc::clone(extractor)),
+        None => manager,
+    }
 }
 
 // ─── Handlers ────────────────────────────────────────────────

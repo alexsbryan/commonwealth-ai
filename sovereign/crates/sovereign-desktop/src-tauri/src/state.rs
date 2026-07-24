@@ -123,6 +123,20 @@ pub struct AppState {
     /// `mcp_list_servers`; the live HTTP transports are owned by the tools it
     /// registered into the Runtime's registry. `None` until bootstrap runs.
     pub mcp_servers: RwLock<Option<Arc<sovereign_tools::mcp::McpServerManager>>>,
+    /// Local NER model (GLiNER) for document-ingest entity extraction.
+    ///
+    /// The same `Arc` handed to `Runtime::with_gliner` for retrieval, kept
+    /// here so the document-ingest commands can drive it too: the T2
+    /// skeleton entity pass swaps a 4B LLM call for this NER model
+    /// (−70% of ingest prompt tokens; see `DocumentAssetManager::
+    /// with_entity_extractor`). `None` when the model isn't installed —
+    /// ingest then falls back to the LLM path, exactly as before.
+    ///
+    /// It's a `LazyGlinerExtractor`: empty until its background load
+    /// finishes (~1s post-boot), which `build_skeleton` treats as
+    /// fall-through-to-LLM per window — so a document attached in that
+    /// first second degrades gracefully rather than losing entities.
+    pub entity_extractor: RwLock<Option<Arc<dyn sovereign_core::traits::EntityExtractor>>>,
 }
 
 impl AppState {
@@ -247,6 +261,7 @@ impl AppState {
             supervisor: RwLock::new(supervisor),
             mobile_host_supervisor: RwLock::new(None),
             mcp_servers: RwLock::new(None),
+            entity_extractor: RwLock::new(None),
         }
     }
 }
@@ -1578,6 +1593,10 @@ pub async fn bootstrap_with_progress(
             // within ~1s, before the first query. See `LazyGlinerExtractor`.
             let arc: Arc<dyn sovereign_core::traits::EntityExtractor> =
                 Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred());
+            // Share the one handle: retrieval (via the Runtime) and
+            // document ingest (via `state.entity_extractor`) drive the
+            // same warmed model. Stash before the move into the runtime.
+            *state.entity_extractor.write().await = Some(Arc::clone(&arc));
             runtime = runtime.with_gliner(arc);
             tracing::info!(model = model_id, "desktop: GLiNER entity extractor installed (background warm)");
         } else {

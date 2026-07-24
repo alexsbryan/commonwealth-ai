@@ -79,8 +79,16 @@ pub async fn upload_document_asset(
     // events fired under the second, and the banner sat on "Queued…"
     // for the entire ingest while a duplicate record progressed to
     // Ready unseen.)
-    let manager =
+    // Swap the T2 skeleton entity pass from a 4B LLM call to the local
+    // NER model when it's installed (−70% of ingest prompt tokens; gated
+    // 2026-07-24, PROBE-6 held with both canaries and stevie 57→71%).
+    // `build_skeleton` falls back to the LLM per-window if the extractor
+    // is absent or not-yet-warm, so this is safe to attach unconditionally.
+    let mut manager =
         sovereign_tools::document_asset::DocumentAssetManager::new(inference, Arc::clone(&store));
+    if let Some(extractor) = state.entity_extractor.read().await.as_ref() {
+        manager = manager.with_entity_extractor(Arc::clone(extractor));
+    }
     let prepared = manager
         .prepare(path)
         .await
@@ -187,8 +195,12 @@ pub async fn ask_document(
         let s = store.clone();
         let aid = asset_id.clone();
         let app = app_handle.clone();
+        let extractor = state.entity_extractor.read().await.as_ref().map(Arc::clone);
         tokio::spawn(async move {
-            let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inf, s);
+            let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(inf, s);
+            if let Some(g) = extractor {
+                manager = manager.with_entity_extractor(g);
+            }
             match manager.rebuild_skeleton(&aid).await {
                 Ok(skeleton) => {
                     tracing::info!(
@@ -471,10 +483,13 @@ pub async fn rebuild_document_skeleton(
             .ok_or("Inference not ready")?
     };
 
-    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+    let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(
         Arc::clone(&inference),
         store.clone(),
     );
+    if let Some(extractor) = state.entity_extractor.read().await.as_ref() {
+        manager = manager.with_entity_extractor(Arc::clone(extractor));
+    }
 
     manager
         .rebuild_skeleton(&asset_id)
