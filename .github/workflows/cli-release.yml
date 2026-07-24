@@ -20,10 +20,21 @@ name: CLI release
 # and run from the terminal is NOT quarantined by Gatekeeper, so notarization
 # isn't needed for this path (the desktop .app is a separate, signed path).
 
+# ===================================================================
+# THIS IS THE FALLBACK PATH, NOT THE PRIMARY ONE (2026-07-24).
+#
+# Releases are cut LOCALLY with `scripts/release-all.sh` (which wraps
+# `scripts/release-cli-local.sh`), publishing to `alexsbryan/svrnmesh-releases`
+# at zero Actions cost. This workflow is for verification and disaster
+# recovery. See docs/CI_ECONOMY.md.
+#
+# THE TAG TRIGGER IS DELIBERATELY GONE. `push: tags: cli-v*` fired this
+# automatically, so every local release — which requires the tag at HEAD
+# before `release-all.sh` will run — also started a redundant hosted build of
+# the same artifacts, publishing them to a different repo than the local path
+# uses. Start it deliberately: the "Run workflow" button, or release.yml.
+# ===================================================================
 on:
-  push:
-    tags:
-      - "cli-v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -31,8 +42,9 @@ on:
         required: false
   # Callable by the manual "Release (manual)" orchestrator (release.yml) so one
   # button ships CLI + desktop together. `inputs.tag` is populated for both
-  # workflow_dispatch and workflow_call; on a plain tag push it's empty and the
-  # version-check / resolve-tag steps fall back to GITHUB_REF.
+  # workflow_dispatch and workflow_call; left blank, the version-check /
+  # resolve-tag steps fall back to GITHUB_REF and a branch ref degrades to a
+  # build-only run rather than tagging a Release after the build.
   workflow_call:
     inputs:
       tag:
@@ -40,6 +52,13 @@ on:
         required: false
         type: string
         default: ""
+
+# There was no concurrency control here either. The macos-arm64 leg bills at
+# 10x, so a duplicate or superseded run is real money for artifacts nobody
+# will use. Serialise per ref and cancel the older run.
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write # create / upload to a GitHub Release
@@ -124,13 +143,23 @@ jobs:
       # runs this workflow on the MAIN ref, so its cache save is
       # main-scoped and every future release — tag or button — restores
       # it. One button-release seeds the cache for good.
-      - name: Cache cargo
+      # READ-ONLY (2026-07-24 economy pass). The tag-scoping problem described
+      # above is now moot in the other direction: this hosted path is the
+      # FALLBACK, not the primary — releases are cut locally by
+      # scripts/release-all.sh (see this file's header) — so warming a
+      # release-scoped cache is not worth what it costs.
+      #
+      # And it did cost. GitHub caps a repo at 10 GB of Actions cache, total.
+      # Roughly 9 multi-GB rust-cache keys were competing for it, LRU-evicting
+      # each other until the measured cache size was 0 bytes and CI cold-built
+      # the workspace on every run. `save-if: false` makes releases pure cache
+      # CONSUMERS: they restore whatever CI has warmed and can never evict it.
+      - name: Cache cargo (restore only)
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "." # single workspace at the repo root
           key: cli-release-${{ matrix.platform.target }}
-          # Seed even when a release attempt fails mid-build.
-          cache-on-failure: true
+          save-if: false
       # See ci.yml's test job for the full story: rust-cache's cleanup
       # deletes target/llama-cmake-cache while keeping the sys crate's
       # fingerprint (poisoned cache → link failure). Cache the tree
@@ -138,11 +167,27 @@ jobs:
       # profile, so this key is SHARED with CI — a release restores the
       # C++ built by main's CI runs. (Windows uses a LOCALAPPDATA path
       # instead of this dir; the steps are harmless no-ops there.)
-      - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v6
+      #
+      # KEY FIX (2026-07-24): this was `hashFiles('Cargo.lock')`, which
+      # changed 29 times in July against 4 lifetime changes to
+      # llama-cpp-sys-4's version — so a ~20-minute C++ rebuild was discarded
+      # and repaid on nearly every release for bit-identical output. On the
+      # macOS legs that is billed at 10x.
+      - name: Resolve llama-cpp-sys-4 version (cache key input)
+        id: llama-ver
+        shell: bash
+        run: |
+          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
+          if [ -z "$ver" ]; then
+            echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2
+            exit 1
+          fi
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - name: Restore llama.cpp CMake tree
+        uses: actions/cache/restore@v6
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
