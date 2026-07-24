@@ -364,6 +364,21 @@ struct RebuildCtx {
 /// while a commit refreshes precisely and immediately (git-HEAD path).
 const FULL_REBUILD_COOLDOWN: Duration = Duration::from_secs(300);
 
+/// How long the FS-save stream must stay quiet before a due full export
+/// actually launches. The export is a multi-minute whole-workspace
+/// rust-analyzer pass; starting it between two keystrokes contends with
+/// the operator's own builds mid-flow. Gating on a short quiescence
+/// window shifts it into the natural pauses. Commit-triggered and
+/// startup/explicit rebuilds are NOT gated — a commit is the operator
+/// saying "done here".
+const FULL_REBUILD_QUIESCENCE: Duration = Duration::from_secs(30);
+
+/// Upper bound on how long the quiescence gate may defer a due full
+/// export during continuous editing. Without a cap, a long uninterrupted
+/// editing session would starve precise cross-file edges indefinitely
+/// (the tree-sitter overlay only keeps symbol *defs* fresh).
+const FULL_REBUILD_MAX_DEFER: Duration = Duration::from_secs(600);
+
 /// Spawn the heavy full rust-analyzer rebuild as a DETACHED task instead of
 /// awaiting it inline in the select loop. This is what keeps the overlay (and
 /// FS-event collection) responsive while a multi-minute export runs — the loop
@@ -535,6 +550,14 @@ async fn run_worker(ctx: WorkerCtx) {
 
     let mut pending_fs = false;
     let mut last_fs_event: Option<Instant> = None;
+    // Last save seen, NOT cleared at the debounce flush — feeds the
+    // quiescence gate for the demoted full export.
+    let mut last_save: Option<Instant> = None;
+    // Set when a full export comes due at a debounce flush; the export
+    // launches once the save stream has been quiet for
+    // FULL_REBUILD_QUIESCENCE, or unconditionally after
+    // FULL_REBUILD_MAX_DEFER. Holds the instant it came due.
+    let mut export_due_since: Option<Instant> = None;
     // Structural watcher — tree-sitter overlay hot path.
     // `changed_files` accumulates the workspace-relative paths touched since the
     // last debounce flush; on flush we re-parse just those with tree-sitter and
@@ -561,6 +584,21 @@ async fn run_worker(ctx: WorkerCtx) {
             }
             _ => Duration::from_secs(3600),
         };
+        // Second wake source: a quiescence-gated full export. Fires at
+        // last_save + QUIESCENCE or export_due_since + MAX_DEFER,
+        // whichever comes first.
+        let export_sleep = match export_due_since {
+            Some(due_at) => {
+                let quiet_in = match last_save {
+                    Some(s) => FULL_REBUILD_QUIESCENCE.saturating_sub(s.elapsed()),
+                    None => Duration::from_millis(0),
+                };
+                let force_in = FULL_REBUILD_MAX_DEFER.saturating_sub(due_at.elapsed());
+                quiet_in.min(force_in)
+            }
+            None => Duration::from_secs(3600),
+        };
+        let wake_sleep = debounce_sleep.min(export_sleep);
 
         tokio::select! {
             biased;
@@ -593,6 +631,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     }
                     pending_fs = true;
                     last_fs_event = Some(Instant::now());
+                    last_save = Some(Instant::now());
                 }
                 // `None` = watcher task dropped the sender;
                 // git_poll + lazy + explicit keep the worker useful.
@@ -661,8 +700,13 @@ async fn run_worker(ctx: WorkerCtx) {
                     }
                 }
             }
-            _ = tokio::time::sleep(debounce_sleep) => {
-                if pending_fs {
+            _ = tokio::time::sleep(wake_sleep) => {
+                // The timer serves two schedules; check each condition
+                // explicitly rather than assuming which one fired.
+                let debounce_elapsed = last_fs_event
+                    .map(|t| t.elapsed() >= debounce)
+                    .unwrap_or(false);
+                if pending_fs && debounce_elapsed {
                     pending_fs = false;
                     last_fs_event = None;
 
@@ -699,22 +743,54 @@ async fn run_worker(ctx: WorkerCtx) {
                         .map(|t| t.elapsed() >= FULL_REBUILD_COOLDOWN)
                         .unwrap_or(true);
                     if due {
-                        let req = RebuildRequest {
-                            reason: RebuildReason::FsChange,
-                            enqueued_at: Instant::now(),
-                        };
-                        // Spawned, not awaited: the loop stays live for the next
-                        // save's overlay while rust-analyzer runs in the
-                        // background. Only stamp the cooldown if one actually
-                        // started (else a rebuild is already in flight).
-                        if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
-                            last_full_rebuild = Some(Instant::now());
+                        // Don't launch yet — arm the quiescence gate so the
+                        // export starts in an editing pause, not between two
+                        // keystrokes. Keep the earliest due-instant so
+                        // MAX_DEFER caps total deferral, not per-save.
+                        if export_due_since.is_none() {
+                            export_due_since = Some(Instant::now());
                         }
                     } else {
                         tracing::debug!(
                             corpus_id = %rebuild_ctx.entry.corpus_id,
                             "full rust-analyzer export deferred (within cooldown); overlay keeps defs fresh"
                         );
+                    }
+                }
+
+                // Quiescence gate for the demoted full export.
+                if let Some(due_at) = export_due_since {
+                    let quiet = last_save
+                        .map(|t| t.elapsed() >= FULL_REBUILD_QUIESCENCE)
+                        .unwrap_or(true);
+                    let forced = due_at.elapsed() >= FULL_REBUILD_MAX_DEFER;
+                    if quiet || forced {
+                        export_due_since = None;
+                        // Re-check the cooldown: a commit- or explicit-
+                        // triggered rebuild may have refreshed the graph
+                        // while we waited, making this export redundant.
+                        let still_due = last_full_rebuild
+                            .map(|t| t.elapsed() >= FULL_REBUILD_COOLDOWN)
+                            .unwrap_or(true);
+                        if still_due {
+                            if forced && !quiet {
+                                tracing::debug!(
+                                    corpus_id = %rebuild_ctx.entry.corpus_id,
+                                    "full export quiescence deferral hit MAX_DEFER; launching despite active editing"
+                                );
+                            }
+                            let req = RebuildRequest {
+                                reason: RebuildReason::FsChange,
+                                enqueued_at: Instant::now(),
+                            };
+                            // Spawned, not awaited: the loop stays live for the
+                            // next save's overlay while rust-analyzer runs in
+                            // the background. Only stamp the cooldown if one
+                            // actually started (else one is already in flight).
+                            if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
+                                last_full_rebuild = Some(Instant::now());
+                            }
+                        }
                     }
                 }
             }

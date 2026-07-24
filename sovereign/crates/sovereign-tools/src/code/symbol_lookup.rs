@@ -28,6 +28,7 @@ use corpus_engine::CorpusEngine;
 use corpus_engine_scip::scip_graph::SymbolRow;
 
 use super::callees::ScipGraphHandle;
+use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
 
 /// Look up a symbol by exact name across every corpus in the merged
@@ -36,11 +37,21 @@ pub struct SymbolLookupTool {
     #[allow(dead_code)]
     engine: Arc<CorpusEngine>,
     graph: ScipGraphHandle,
+    checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl SymbolLookupTool {
     pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
-        Self { engine, graph }
+        Self {
+            engine,
+            graph,
+            checker: None,
+        }
+    }
+
+    pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
+        self.checker = Some(checker);
+        self
     }
 }
 
@@ -166,7 +177,23 @@ impl Tool for SymbolLookupTool {
             )));
         }
 
-        Ok(StepOutput::Text(format_symbol_rows(&rows).await))
+        let mut out = format_symbol_rows(&rows).await;
+        // Index posture trailer (same shape as callers/callees): a hit
+        // against an aging graph should say so — the symbol may have
+        // moved or changed since the last export.
+        if let Some(checker) = &self.checker {
+            let health = checker.check().await;
+            if let Some(hint) = &health.hint {
+                out.push_str(&format!(
+                    "\n\n---\nIndex: {} | {} symbols | {} stale files\n{}",
+                    format!("{:?}", health.staleness).to_lowercase(),
+                    health.symbol_count,
+                    health.stale_file_count,
+                    hint
+                ));
+            }
+        }
+        Ok(StepOutput::Text(out))
     }
 }
 

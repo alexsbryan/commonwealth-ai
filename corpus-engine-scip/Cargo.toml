@@ -56,6 +56,12 @@ which = "7"
 glob = "0.3"
 tempfile = "3"
 
+# Exporter niceness (unix): `libc::nice` in the pre_exec hook drops the
+# exporter subprocess priority so a multi-minute rust-analyzer pass
+# yields to interactive work. See scip_export.rs.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"

@@ -157,10 +157,10 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
 
     // Code index (LanceDB-backed): identical construction to
     // project_cmd so ids, descriptors, examples all match.
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&merged_graph),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
     tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
         &engine,
     ))));

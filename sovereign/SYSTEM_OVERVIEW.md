@@ -1174,16 +1174,28 @@ debounced save the reindexer runs a **tree-sitter overlay**
 embed-free, no rust-analyzer, symbol *defs* fresh in milliseconds and
 never contending with inference. The heavy whole-workspace
 rust-analyzer export is **demoted** — spawned (never blocking the watch
-loop) and rate-limited to at most once per `FULL_REBUILD_COOLDOWN`
-(300s) of active editing plus on git-HEAD (commit) — so it no longer
-fires on every save (the contention that had the watcher disabled).
+loop), rate-limited to at most once per `FULL_REBUILD_COOLDOWN`
+(300s) of active editing plus on git-HEAD (commit), and **quiescence-gated**
+(2026-07-24): an FS-due export waits for `FULL_REBUILD_QUIESCENCE` (30s)
+of no saves before launching (capped by `FULL_REBUILD_MAX_DEFER`, 600s,
+so continuous editing can't starve it; commit/explicit rebuilds are not
+gated). The exporter subprocess itself runs `nice +10`
+(`scip_export.rs` pre_exec) so a multi-minute pass yields to interactive
+work. So it no longer fires on every save (the contention that had the
+watcher disabled).
 Cross-file call edges and qualified names therefore lag one full export
 (accepted eventual-consistency); overlay rows carry `qualified_name=""`,
 `kind="function"`. Staleness levels still carry calibrated confidence:
 `None` / `SomeCallSitesMayBeStale` / `GraphIsAging` / `GraphIsStale`
 / `LanguageNotIndexed`. `blast_radius` does BFS over the call graph
 and appends a `macro_hints` text scan for references SCIP doesn't
-capture.
+capture. Index posture is surfaced in-band (2026-07-24): `symbols`
+appends the same `IndexHealth` trailer `callers`/`callees`/`blast`
+carry, and `code_search` appends a chunk-index posture note — absent /
+degraded (unreadable) / aging (`IndexInfo.last_updated` ≥7 days) — so a
+stale chunk index can no longer masquerade as "no matches";
+`agent-preflight.py` checks the same stamp for the corpora in
+`quality/agent-preflight.golden.json::code_corpora`.
 
 **One project owns one workspace (nested-root guard).** Project
 registration (`POST /v1/projects/register`, used by both `project

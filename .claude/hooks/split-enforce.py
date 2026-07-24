@@ -13,7 +13,7 @@ prompt arrives while context is past threshold.
 
 Behaviour
 ---------
-- ctx >= RED (140k): inject a hard directive every prompt.
+- ctx >= RED (250k): inject a hard directive every prompt.
   - frame fresh (<= FRAME_FRESH_S) AND provenance is self-reported or
     hand-written -> "finish step, final upsert, tell the operator to split".
   - otherwise -> "upsert your frame NOW via session_state, then split".
@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 YELLOW = int(os.environ.get("SPLIT_YELLOW_TOKENS", "90000"))
-RED = int(os.environ.get("SPLIT_RED_TOKENS", "140000"))
+RED = int(os.environ.get("SPLIT_RED_TOKENS", "250000"))
 # A frame older than this is stale for split purposes: the spec wants the
 # donor's LAST state, and 15 minutes of red-zone work invalidates a frame
 # faster than an hour of steady state.
@@ -167,7 +167,7 @@ def render(ctx: int, age_s: int | None, provenance: str, level: str, directive: 
         frame_desc = f"fresh ({age_s // 60}m old, {provenance})"
         return (
             f"<split-protocol level=red>\n"
-            f"Context is {ctx_k} (>= 140k red threshold) and your session frame is "
+            f"Context is {ctx_k} (>= {RED // 1000}k red threshold) and your session frame is "
             f"{frame_desc}. Per SESSION_CONTINUITY §3a: finish the current step — do "
             f"not start new work — make a final small session_state upsert if anything "
             f"changed since the last one, then tell the operator to split now "
@@ -184,7 +184,7 @@ def render(ctx: int, age_s: int | None, provenance: str, level: str, directive: 
         )
         return (
             f"<split-protocol level=red>\n"
-            f"Context is {ctx_k} (>= 140k red threshold) but {frame_desc} — not fresh "
+            f"Context is {ctx_k} (>= {RED // 1000}k red threshold) but {frame_desc} — not fresh "
             f"enough to authorize a split (spec §3a: only a recent self-reported or "
             f"hand-written frame does; a distilled frame is rescue-only). Call the "
             f"session_state tool NOW with your current goal/state/next/decisions/"
@@ -193,7 +193,7 @@ def render(ctx: int, age_s: int | None, provenance: str, level: str, directive: 
         )
     return (
         f"<split-protocol level=yellow>\n"
-        f"Context is {ctx_k} (>= 90k). At the next natural boundary (step done, "
+        f"Context is {ctx_k} (>= {YELLOW // 1000}k). At the next natural boundary (step done, "
         f"blocker hit), upsert your session frame via session_state so a red-zone "
         f"split stays cheap. This nudge fires once per session.\n"
         f"</split-protocol>"

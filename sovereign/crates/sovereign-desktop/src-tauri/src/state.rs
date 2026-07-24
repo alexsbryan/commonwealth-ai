@@ -1014,18 +1014,21 @@ pub async fn bootstrap_with_progress(
                 let graph_handle: sovereign_mesh::reindexer::ScipGraphHandle =
                     Arc::new(arc_swap::ArcSwap::from_pointee(initial_graph));
                 // Code-intel tools — reuse the already-loaded CorpusEngine.
-                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-                    Arc::clone(&corpus_engine),
-                    Arc::clone(&graph_handle),
+                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+                    &graph_handle,
                 )));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::SymbolLookupTool::new(
+                        Arc::clone(&corpus_engine),
+                        Arc::clone(&graph_handle),
+                    )
+                    .with_health_checker(Arc::clone(&hc)),
+                ));
                 mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
                     &corpus_engine,
                 ))));
                 mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
                     Arc::clone(&corpus_engine),
-                )));
-                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-                    &graph_handle,
                 )));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCallersTool::new(

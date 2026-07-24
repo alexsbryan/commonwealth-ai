@@ -63,10 +63,10 @@ SOFT_BUDGET_TOKENS = 15_000
 # cache-read ≈ avg_ctx × turns, so the earlier a fat session splits, the
 # cheaper every subsequent turn). Context size comes from the LAST
 # assistant `usage` record in the transcript — the actual tokens the
-# previous request carried, not a chars/4 guess. Thresholds assume a
-# ~200k window; revisit for 1M-window models.
+# previous request carried, not a chars/4 guess. Red raised 140k -> 250k
+# on 2026-07-24 (operator call: the 140k line fired too early in practice).
 CTX_YELLOW = 90_000   # "split at the next natural boundary"
-CTX_RED = 140_000     # "split now — frame is being kept fresh by hooks"
+CTX_RED = 250_000     # "split now — frame is being kept fresh by hooks"
 
 
 def main() -> int:

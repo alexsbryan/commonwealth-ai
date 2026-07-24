@@ -3,6 +3,8 @@
   "status_url": "http://localhost:9741/status",
   "mcp_url": "http://localhost:9741/mcp",
 
+  "code_corpora": ["commonwealth-ai"],
+
   "expected_mcp_tools": [
     "symbols", "callers", "callees", "blast",
     "notes", "note", "drift_findings", "facts", "work_in_flight"
@@ -18,7 +20,10 @@
     "expected_mcp_tools": ["session_state"],
     "hook_files": ["session-boot.sh", "inject-notes.sh", "split-enforce.py", "prefer-code-intel.py", "session-frame.sh"],
     "sessions_dir": "~/.sovereign/sessions",
-    "peers": [{ "host": "100.98.69.28", "name": "LittleMac" }]
+    "peers": [
+      { "host": "100.98.69.28", "name": "LittleMac" },
+      { "host": "100.115.12.21", "name": "RuggedFox" }
+    ]
   },
 
   "golden": {
