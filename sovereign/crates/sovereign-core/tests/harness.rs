@@ -35,24 +35,15 @@ impl InferenceProvider for DeterministicInference {
             // Must be checked BEFORE the "categories:" router pattern, since
             // detect_document_type prompts also contain "Categories:".
             "Argument".to_string()
-        } else if prompt_lower.contains("extract named entities mentioned in each of the") {
-            // build_skeleton batch — lean lines format (May 2026 rewrite).
-            // The grammar enforces N comma-separated capitalized names,
-            // one line per chunk in the batch. Repeat "Test Entity" so
-            // every chunk in the batch surfaces it; parser dedupes
-            // entity mentions across chunks.
-            let batch_size = if prompt_lower.contains("output exactly 4 lines") {
-                4
-            } else if prompt_lower.contains("output exactly 3 lines") {
-                3
-            } else if prompt_lower.contains("output exactly 2 lines") {
-                2
-            } else {
-                1
-            };
-            std::iter::repeat_n("Test Entity", batch_size)
-                .collect::<Vec<_>>()
-                .join("\n")
+        } else if prompt_lower.contains("list the named entities mentioned in the passage below") {
+            // build_skeleton window (2026-07-24 enrichment-turbo rewrite,
+            // document_asset.rs:1854): the prompt now asks for ONE deduped,
+            // comma-separated list of canonical names for the whole window
+            // (was N lines, one per chunk, pre-rewrite). The parser attributes
+            // names to chunks by scanning each window chunk for each name, so
+            // a single "Test Entity" surfaces on every seeded chunk. The lark
+            // grammar (line: entity ("," " "? entity)*) accepts one entity.
+            "Test Entity".to_string()
         } else if prompt_lower.contains("write a single paragraph")
             && prompt_lower.contains("overview")
         {
