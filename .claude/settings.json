@@ -10,7 +10,7 @@
       {
         "hooks": [
           {
-            "command": "sh .claude/hooks/session-boot.sh",
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-boot.sh",
             "type": "command"
           }
         ]
@@ -20,11 +20,11 @@
       {
         "hooks": [
           {
-            "command": "sh .claude/hooks/inject-notes.sh",
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/inject-notes.sh",
             "type": "command"
           },
           {
-            "command": "python3 .claude/hooks/split-enforce.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/split-enforce.py",
             "type": "command",
             "timeout": 5
           }
@@ -36,7 +36,7 @@
         "matcher": "Read|Grep|Bash",
         "hooks": [
           {
-            "command": "python3 .claude/hooks/prefer-code-intel.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/prefer-code-intel.py",
             "type": "command"
           }
         ]
@@ -46,7 +46,7 @@
       {
         "hooks": [
           {
-            "command": "sh .claude/hooks/session-frame.sh",
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-frame.sh",
             "type": "command",
             "timeout": 15,
             "statusMessage": "Snapshotting session frame before compaction"
@@ -58,7 +58,7 @@
       {
         "hooks": [
           {
-            "command": "sh .claude/hooks/session-frame.sh",
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-frame.sh",
             "type": "command",
             "timeout": 15
           }
