@@ -57,7 +57,7 @@ New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack.
 
 ## Contributing
 
-A bug report, a fix, or a doc correction — start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public tracker.
+One steward now, opening toward a commons — the code's AGPL and yours to fork, but I'm not merging outside PRs yet: the architecture and principles are still settling, and I want that foundation solid before I start adjudicating what merges. So a bug report or an idea is the best way in right now, always welcome; code contribution opens as the ground firms up and the team grows. [CONTRIBUTING.md](./CONTRIBUTING.md) is how, [GOVERNANCE.md](./GOVERNANCE.md) is who decides and where it's headed. Security or privacy: [SECURITY.md](./SECURITY.md), not the tracker.
 
 ---
 

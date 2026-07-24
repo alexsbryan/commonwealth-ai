@@ -1,26 +1,51 @@
 # Contributing to Commonwealth AI
 
-Thanks for being here. Commonwealth AI has been a single-maintainer project so
-far, and it's now opening up. The contribution paths are still young — if
-something here is unclear or the process gets in your way, open an issue and
-it'll get fixed.
+Thanks for being here — genuinely. This started as one person building AI tools
+for people, by people, and the whole point is that it gets better together. So
+first, the honest version: the most useful thing you can do right now probably
+isn't a pull request. Let me explain how this works, because being straight
+about it up front saves us both time.
 
 The short version: the assistant runs on your own machine, nothing phones home,
 and every answer traces back to a source. Changes that hold that line and come
 with a test proving they work are the easiest to merge.
 
-## Ways to help
+## How contribution works right now
+
+The code is AGPL — yours to run, read, fork, and change, forever. That door's
+open and stays open. But I want to be completely straight with you, because it
+saves everyone the wasted effort: **for now, I'm not merging pull requests from
+outside the core team. Not the big ones, not the one-liners — not yet.**
+
+Here's the honest why. The architecture and the principles this thing is built
+on are still settling; `sovereign/SYSTEM_OVERVIEW.md` and
+`sovereign/ARCH_PRINCIPLES.md` are living documents right now, not stone. Until
+that foundation is solid, I have no fair way to decide what belongs and what
+doesn't — and I'd rather say that out loud than accept your PR today and turn
+away an identical one next month for reasons I couldn't put into words. Settle
+the ground first, open the gates second. It isn't aloofness and it isn't
+forever; it's the difference between pouring a foundation and hosting a hundred
+contractors in the framing. [GOVERNANCE.md](./GOVERNANCE.md) tells the rest of
+the story.
+
+None of that means go away — it means the useful energy goes here:
 
 - **Report a bug.** Use the bug template — it asks for your version and platform
-  up front. If the bug involves the running daemon, mesh, or models, the output
-  of `svrn doctor` helps too.
-- **Suggest something.** Feature ideas go through the issue template too.
-  Describe what you're trying to do, not only the fix you have in mind.
-- **Send a change.** Small, focused pull requests are far easier to review than
-  large ones. Planning something big? Open an issue first so we can agree on the
-  shape before you spend the effort.
-- **Improve the docs.** If a guide sent you the wrong way, a PR that fixes it is
-  genuinely valuable.
+  up front; `svrn doctor` output helps if the daemon, mesh, or models are
+  involved.
+- **Float an idea or a feature request.** Through the issue template. Describe
+  what you're trying to do, not just the fix you have in mind. A thumbs-up on
+  someone else's is a vote (see [GOVERNANCE.md](./GOVERNANCE.md)).
+- **Spot a wrong turn in the docs?** Tell me in an issue and I'll fix it fast —
+  yes, even the typos. For now the reliable path is an issue, not a PR.
+- **Want to actually build?** That's the whole goal, and it opens as the
+  foundation firms up and the team grows. Show up in the issues and discussions,
+  share what you learn running a real mesh, and when there's real trust and real
+  room, you get pulled in — a seat at the table, and the CLA that comes with it.
+  The alpha-collaborator signup on the site is how you knock.
+
+Same refrain as everywhere else: be patient, be constructive, then when this
+actually works, demand the best.
 
 For anything security- or privacy-related — including a way data could leave a
 machine unexpectedly — don't open a public issue. See [SECURITY.md](./SECURITY.md).
