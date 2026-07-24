@@ -44,6 +44,7 @@ mod llm_bin;
 mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;
+mod notes_retrieval_cmd;
 mod plan_cmd;
 mod reflect_cmd;
 mod refresh_cmd;

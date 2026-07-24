@@ -149,6 +149,30 @@ relevance match + the punted TTL policy. Requires retrieval logging first —
 measure before tuning. Gate: injection hit-rate (injected note actually used
 by the session) improves against the current hook's baseline.
 
+- **Retrieval logging + audit: SHIPPED 2026-07-24 (the measure-first half).**
+  `inject-notes.sh` now appends one record per injection to
+  `~/.sovereign/retrieval-log/<session>.jsonl` — the notes that entered
+  context (id, kind, symbols, files, hook-extracted distinctive `terms`,
+  retrieval frequency). `sovereign notes retrieval-audit` joins that log
+  against the Claude Code transcript (pure local read, no daemon) and reports
+  whether each injected note reappeared in the agent's OWN downstream actions
+  (assistant text + tool-call inputs; tool *results* excluded). Two honest
+  rates: **strong** = anchor(symbol|file) matches ÷ anchored notes; **any** =
+  (anchor|content) matches ÷ all injected. The `injections` count per note is
+  the recency×frequency raw signal the ranker will consume.
+- **First baseline finding — `any%` saturates on-topic.** On a session
+  working squarely on a note's topic, the note's distinctive terms flood the
+  transcript and `any%` pegs at ~100% (measured: session 2fa2ddbb-lineage,
+  20 notes, strong 75% / any 100%). A saturated metric can't show a ranker
+  improving, so **`strong%` (anchor-based) is the gate metric** until the
+  content signal is rarity/IDF-weighted (discount terms shared across the
+  injected set — topic, not note-specific use). That calibration is itself
+  deferred until fleet logs reveal the `any%` distribution — measure before
+  tuning applies to the metric too. The tool prints this caveat inline when
+  it detects saturation.
+- **Remaining E2 work:** accumulate fleet logs → calibrate content matching →
+  build the need-probability ranker → re-run the audit and compare `strong%`.
+
 **E3 — Live eviction mechanics.** Harness-side: on work-item close, replace
 verbatim tool results with one-line gist + pointer. Blocked on E1's number.
 Design constraint from the suit principle: hook/harness-enforced, never

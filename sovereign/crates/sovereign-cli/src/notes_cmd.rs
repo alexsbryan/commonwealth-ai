@@ -33,6 +33,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     match args.first().map(String::as_str) {
         Some("add") => cmd_add(&args[1..]).await,
+        Some("retrieval-audit") => crate::notes_retrieval_cmd::run(&args[1..]).await,
         Some("promote") => crate::dev_bin::exec("atos-status-promote", &args[1..]),
         Some("migrate-from") => cmd_migrate_from(&args[1..]).await,
         Some("rationalize") => cmd_rationalize(&args[1..]).await,
@@ -367,6 +368,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn notes rationalize --distill     Preview the LLM-written survivors/verdicts (no writes)\n\
              svrn notes rationalize --apply --yes Write survivors + retire-with-pointer links\n\
              svrn notes gc [--days 30]            TTL sweep: tombstone expired telemetry (daemon runs this daily)\n\
+             svrn notes retrieval-audit           Injected-note hit-rate: did injected notes get used? (E2/P4 baseline)\n\
              svrn notes --since 7d --tool <name>  Reflection filters",
         ),
         crate::util::help::HelpSection::Notes(

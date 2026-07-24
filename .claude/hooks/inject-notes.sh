@@ -26,16 +26,91 @@ export SOVEREIGN_HOOK_INPUT="$(cat)"
 export SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}"
 
 exec python3 - <<'PY' 2>/dev/null
-import os, json, hashlib, urllib.request, urllib.error, socket
+import os, re, json, time, hashlib, pathlib, urllib.request, urllib.error, socket
 
 PORT = os.environ.get("SOVEREIGN_PORT", "9741")
 BASE = f"http://localhost:{PORT}"
+
+# Retrieval log — the encode-time half of the E2/P4 rational-forgetting
+# instrument (MEMORY_MODEL §5 E2). Every injection appends ONE record naming
+# exactly which notes entered context this turn; the `sovereign notes
+# retrieval-audit` command later joins these against the session transcript to
+# measure whether an injected note was actually USED downstream. Measure before
+# tuning: this log is the baseline the need-probability ranker must beat.
+RETRIEVAL_LOG_DIR = pathlib.Path.home() / ".sovereign" / "retrieval-log"
 
 
 def status(msg):
     # Honest, single-line status — becomes agent context. Prefixed so the agent
     # can tell a hook-level diagnostic from an actual note.
     print(f"_(sovereign brain: {msg})_")
+
+
+def sha16(s):
+    return hashlib.sha256((s or "").encode()).hexdigest()[:16]
+
+
+def distinctive_terms(content, cap=15):
+    # Extract identifier-like tokens the audit can match against the session's
+    # downstream actions WITHOUT re-reading the note store (keeps the audit a
+    # pure log+transcript join). "Distinctive" = carries a code/path shape
+    # (snake_case, CamelCase, dotted, slashed) or is simply long — the classes
+    # of token unlikely to co-occur by chance in generic prose. Anchorless notes
+    # (empty symbols/files, ~5 of every 8 observed) are only measurable through
+    # these terms, so this is what gives the hit-rate coverage.
+    out, seen = [], set()
+    for t in re.findall(r"[A-Za-z_][A-Za-z0-9_./-]{4,}", content or ""):
+        tl = t.lower()
+        if tl in seen:
+            continue
+        distinctive = (
+            "_" in t or "." in t or "/" in t
+            or any(c.isupper() for c in t[1:])
+            or len(t) >= 8
+        )
+        if not distinctive:
+            continue
+        seen.add(tl)
+        out.append(t)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def log_injection(session_id, query, label, notes):
+    # Append-only, fail-silent side effect. The injection is this hook's primary
+    # duty (see the dependability contract above) — logging must NEVER interfere
+    # with it, so every failure here is swallowed. No session_id => no join key
+    # for the audit, so skip rather than write an unattributable record.
+    if not session_id:
+        return
+    try:
+        RETRIEVAL_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": int(time.time()),
+            "session_id": session_id,
+            "prompt_sha": sha16(query),
+            "query": (query or "")[:200],
+            "label": label,
+            "count": len(notes),
+            "notes": [
+                {
+                    "rank": i,
+                    "id": n.get("id"),
+                    "kind": n.get("kind", "note"),
+                    "content_sha": sha16((n.get("content") or "").strip()),
+                    "symbols": n.get("symbols") or [],
+                    "files": n.get("files") or [],
+                    "terms": distinctive_terms(n.get("content") or ""),
+                    "approx_tokens": len((n.get("content") or "")) // 4,
+                }
+                for i, n in enumerate(notes)
+            ],
+        }
+        with (RETRIEVAL_LOG_DIR / f"{session_id}.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except (OSError, TypeError, ValueError):
+        pass
 
 
 def is_timeout(e):
@@ -82,6 +157,7 @@ def main():
     except Exception:
         payload = {}
     query = (payload.get("prompt") or "").strip()[:400]
+    session_id = (payload.get("session_id") or "").strip()
 
     # 1) Liveness probe — separates "daemon is genuinely down" from "the notes
     #    call itself failed". These are different truths.
@@ -141,6 +217,10 @@ def main():
 
     if not uniq:
         return  # daemon healthy, simply nothing relevant — stay silent
+
+    # Record exactly what enters context, BEFORE printing — the log describes the
+    # injected set (`uniq`), which is what the audit will test for downstream use.
+    log_injection(session_id, query, label, uniq)
 
     print(f"## Sovereign notes ({label}, injected by hook)\n")
     for n in uniq:
