@@ -19,6 +19,7 @@ Exit codes: 0 = all green (WARN/DEGRADED allowed), 1 = at least one FAIL,
 
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -158,13 +159,142 @@ def check_harness_config(rep):
         rep.add("WARN", "harness settings.json", f"unparseable: {e}", "fix the JSON")
 
 
-def run(golden):
+def check_continuity_local(rep, cont):
+    """4. Session-continuity stack, local half — filesystem + CLI, daemon-independent.
+
+    The continuity protocol (frames, split-enforce, distill) is repo-committed
+    config calling machine-local binaries. A teammate who pulls the hooks but
+    runs stale binaries degrades SILENTLY: session-frame.sh logs-and-exits-0,
+    frames never bank, and an old distill clobbers self-reported frames. These
+    checks catch the skew loudly, per machine.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, ".."))
+
+    # a. Binary new enough — the distill provenance guard ships --force.
+    try:
+        out = subprocess.run(["sovereign", "session", "distill", "--help"],
+                             capture_output=True, text=True, timeout=10)
+        if "--force" in (out.stdout + out.stderr):
+            rep.add("PASS", "distill guard", "self-reported frames are protected (--force present)")
+        else:
+            rep.add("FAIL", "distill guard", "sovereign binary predates the provenance guard — "
+                    "SessionEnd distill will CLOBBER banked frames",
+                    "(cd sovereign && cargo build --features sovereign-cli/dev-tools -p sovereign-cli) "
+                    "and re-point the ~/.local/bin/sovereign symlink")
+    except FileNotFoundError:
+        rep.add("FAIL", "sovereign on PATH", "`sovereign` not found — every hook is a silent no-op",
+                "ln -sf $(realpath sovereign/target/*/sovereign-cli) ~/.local/bin/sovereign")
+    except Exception as e:
+        rep.add("WARN", "distill guard", f"could not probe the CLI: {e}")
+
+    # b. Hook files present (repo-committed; missing means partial checkout).
+    hooks_dir = os.path.join(root, ".claude", "hooks")
+    missing = [h for h in cont.get("hook_files", [])
+               if not os.path.isfile(os.path.join(hooks_dir, h))]
+    if missing:
+        rep.add("FAIL", "continuity hooks", f"missing from .claude/hooks: {', '.join(missing)}",
+                "git pull / restore — the split+frame protocol is off without them")
+    elif cont.get("hook_files"):
+        rep.add("PASS", "continuity hooks", f"{len(cont['hook_files'])} hook files present")
+
+    # c. Hook + statusline commands must be cwd-independent. A cwd-relative
+    # path wedges every Bash call the moment the shell cwd drifts off the
+    # repo root (observed live 2026-07-24).
+    settings_path = os.path.join(root, ".claude", "settings.json")
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+        cmds = []
+        for entries in (settings.get("hooks") or {}).values():
+            for entry in entries if isinstance(entries, list) else []:
+                for h in entry.get("hooks", []):
+                    cmds.append(h.get("command", ""))
+        sl = (settings.get("statusLine") or {}).get("command")
+        if sl:
+            cmds.append(sl)
+        rel = [c for c in cmds
+               if ".claude/" in c and "$CLAUDE_PROJECT_DIR" not in c and not c.strip().startswith("/")]
+        if rel:
+            rep.add("WARN", "cwd-relative commands", f"{len(rel)} hook/statusline command(s) not "
+                    "anchored — wedge Bash when shell cwd leaves the repo root",
+                    'prefix with "$CLAUDE_PROJECT_DIR"/ in .claude/settings.json')
+        elif cmds:
+            rep.add("PASS", "hook path anchoring", f"{len(cmds)} command(s) cwd-independent")
+    except FileNotFoundError:
+        pass  # already reported by check_harness_config
+    except Exception:
+        pass
+
+    # d. Frame store writable — where session_state banks and boot injection reads.
+    sessions_dir = os.path.expanduser(cont.get("sessions_dir", "~/.sovereign/sessions"))
+    probe = os.path.join(sessions_dir, ".preflight-probe")
+    try:
+        os.makedirs(sessions_dir, exist_ok=True)
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        rep.add("PASS", "frame store", f"{sessions_dir} writable")
+    except OSError as e:
+        rep.add("FAIL", "frame store", f"{sessions_dir} not writable: {e}",
+                "frames cannot bank; fix permissions")
+
+
+def check_peer(rep, host, name, expected_tools):
+    """5. Peer-node verification over the mesh — read-only HTTP, no SSH.
+
+    Same-mesh machines are directly probe-able (:9741 over the tailnet), so
+    the coordinator can VERIFY a peer's daemon actually serves the expected
+    tool roster instead of hoping its operator rebuilt after pulling.
+    Unreachable is WARN (laptops sleep); reachable-but-stale is FAIL — that
+    peer's agents are running a different protocol than ours.
+    """
+    base = host if ":" in host else f"{host}:9741"
+    label = f"peer:{name}"
+    status = http_get_json(f"http://{base}/status", timeout=6)
+    if status is None:
+        rep.add("WARN", label, f"{base} unreachable — cannot verify (offline/asleep?)",
+                f"re-check when it's up: agent-preflight --peer {host}")
+        return
+    node = str(status.get("node_id", "?"))[:12]
+    try:
+        result, error = mcp_call(f"http://{base}/mcp", "tools/list", {}, timeout=10)
+    except Exception as e:
+        rep.add("FAIL", label, f"node {node}: /status OK but MCP dead: {e}",
+                "daemon half-up on the peer; its operator should `sovereign daemon restart`")
+        return
+    if error:
+        rep.add("FAIL", label, f"node {node}: tools/list error: {error}",
+                "peer daemon unhealthy; its operator should check `sovereign doctor`")
+        return
+    present = {t.get("name") for t in (result or {}).get("tools", [])}
+    missing = [t for t in expected_tools if t not in present]
+    if missing:
+        rep.add("FAIL", label, f"node {node}: missing {', '.join(missing)} — daemon is STALE",
+                "peer must rebuild + `sovereign daemon restart` (no SSH from here; "
+                "ask that machine's operator)")
+    else:
+        rep.add("PASS", label, f"node {node}: {len(expected_tools)} expected tools live")
+
+
+def run(golden, peers=None, skip_peers=False):
     rep = Report()
     status_url = golden["status_url"]
     mcp_url = golden["mcp_url"]
+    cont = golden.get("continuity", {})
 
     # 0. Agent-side toolbox config — independent of daemon liveness.
     check_harness_config(rep)
+
+    # 4. Continuity stack, local half — also daemon-independent; run it before
+    # any early return below so a down daemon doesn't hide binary/hook skew.
+    check_continuity_local(rep, cont)
+
+    # 5. Peer verification — network-only, independent of the local daemon.
+    if not skip_peers:
+        peer_expected = golden["expected_mcp_tools"] + cont.get("expected_mcp_tools", [])
+        for p in (peers if peers is not None else cont.get("peers", [])):
+            check_peer(rep, p["host"], p.get("name", p["host"]), peer_expected)
 
     # 1. Daemon reachable — the whole surface lives behind :9741.
     status = http_get_json(status_url)
@@ -211,6 +341,14 @@ def run(golden):
                 "deployed daemon is stale (rebuild + restart), or it was removed from MCP")
     else:
         rep.add("PASS", "expected MCP tools", f"{len(golden['expected_mcp_tools'])} present")
+
+    cont_missing = [t for t in cont.get("expected_mcp_tools", []) if t not in present]
+    if cont_missing:
+        rep.add("FAIL", "continuity MCP tools",
+                f"missing: {', '.join(cont_missing)} — encode-time frames cannot bank",
+                "local daemon predates the tool; rebuild + `sovereign daemon restart`")
+    elif cont.get("expected_mcp_tools"):
+        rep.add("PASS", "continuity MCP tools", f"{', '.join(cont['expected_mcp_tools'])} live")
 
     cli_only = [t for t in golden.get("known_cli_only", {}).get("tools", []) if t not in present]
     if cli_only:
@@ -290,10 +428,14 @@ def main(argv):
     strict = "--strict" in argv
     as_json = "--json" in argv
     color = sys.stdout.isatty() and "--no-color" not in argv
+    skip_peers = "--no-peers" in argv
     golden_path = None
+    extra_peers = []
     for i, a in enumerate(argv):
         if a == "--golden" and i + 1 < len(argv):
             golden_path = argv[i + 1]
+        if a == "--peer" and i + 1 < len(argv):
+            extra_peers.append({"host": argv[i + 1], "name": argv[i + 1]})
     if golden_path is None:
         here = os.path.dirname(os.path.abspath(__file__))
         golden_path = os.path.join(here, "..", "quality", "agent-preflight.golden.json")
@@ -304,7 +446,10 @@ def main(argv):
         print(f"agent-preflight: cannot load golden set {golden_path}: {e}", file=sys.stderr)
         return 2
 
-    rep = run(golden)
+    peers = None
+    if extra_peers:
+        peers = golden.get("continuity", {}).get("peers", []) + extra_peers
+    rep = run(golden, peers=peers, skip_peers=skip_peers)
     if as_json:
         print(rep.to_json())
     else:

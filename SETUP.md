@@ -137,6 +137,28 @@ missing component — `rustup component add rust-analyzer`, then `svrn
 project refresh` again. (Both bootstrap paths above install it, so this only
 bites if you set Rust up entirely by hand.)
 
+## Agent continuity — after every pull that touches it
+
+The agent protocol (session frames, split-enforce, `/fleet-report`) travels
+with the repo, but the binaries it calls live on your machine. If a pull
+touched `sovereign-cli`, `sovereign-tools`, or anything under `.claude/`,
+rebuild and restart, then run the readiness gate:
+
+```sh
+(cd sovereign && cargo build --features sovereign-cli/dev-tools -p sovereign-cli)
+svrn daemon restart                 # picks up new MCP tools (e.g. session_state)
+python3 scripts/agent-preflight.py  # verifies the whole surface, loudly
+```
+
+The gate checks this machine (binary new enough, hooks present and anchored,
+frame store writable, `session_state` on the MCP surface) **and the other
+mesh nodes** — same-mesh daemons are probed read-only over `:9741`, so a
+teammate's stale daemon shows up as a named FAIL here instead of as silent
+protocol drift on their machine. `--peer <host>` adds an ad-hoc node,
+`--no-peers` skips the network half. The failure mode this prevents is
+invisible otherwise: hooks log-and-exit-0 by design, so on a stale machine
+frames simply stop banking and nobody notices until a split loses state.
+
 ## If something breaks
 
 - **`'memory' file not found` (macOS)** — `SDKROOT` isn't set for this shell.
