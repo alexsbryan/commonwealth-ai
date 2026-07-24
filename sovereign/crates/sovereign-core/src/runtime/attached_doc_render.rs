@@ -104,17 +104,84 @@ pub(crate) fn render_attached_doc_conversation(
 /// Mirrors `executor::parse_tool_call` — see comment there. Kept
 /// runtime-local rather than pub-cratifying so the executor's tool-call
 /// shape can evolve independently if needed.
+///
+/// Lenient about a MISSING `</tool_call>` close tag: models frequently
+/// stop generation right after the JSON (observed 2026-07-23: the
+/// bench surfaced a raw `<tool_call>{…}` fragment as the final answer
+/// because the strict parse returned `None`). When the close tag is
+/// absent, the JSON object is recovered by balanced-brace scan from
+/// the first `{` after the marker. Invalid JSON still returns `None` —
+/// the handler owns that case with a corrective gate, not a guess.
 pub(crate) fn parse_tool_call_inline(text: &str) -> Option<(String, String)> {
     let start = text.find("<tool_call>")?;
-    let end = text.find("</tool_call>")?;
-    if end <= start {
-        return None;
-    }
-    let json_str = &text[start + "<tool_call>".len()..end];
+    let after = &text[start + "<tool_call>".len()..];
+    let json_str = match text[start..].find("</tool_call>") {
+        Some(rel_end) if rel_end > "<tool_call>".len() => {
+            &text[start + "<tool_call>".len()..start + rel_end]
+        }
+        _ => balanced_json_object(after)?,
+    };
     let v: serde_json::Value = serde_json::from_str(json_str.trim()).ok()?;
     let tool_id = v.get("tool")?.as_str()?.to_string();
     let query = v.get("query")?.as_str()?.to_string();
     Some((tool_id, query))
+}
+
+/// Extract the first balanced `{…}` object from `s`, respecting JSON
+/// string literals (braces inside `"…"` don't count; `\"` doesn't end
+/// a string). Returns `None` when no opening brace exists or the
+/// object never closes (truncated generation).
+fn balanced_json_object(s: &str) -> Option<&str> {
+    let open = s.find('{')?;
+    let bytes = s.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate().skip(open) {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&s[open..=i]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Remove every `<tool_call>…</tool_call>` block — and any trailing
+/// unclosed `<tool_call>…` fragment — from `text`. Last-resort
+/// sanitation for the final-answer path: tool scaffolding must never
+/// reach the user as prose, even when the model mixes an answer with
+/// a stray call at the iteration cap.
+pub(crate) fn strip_dangling_tool_calls(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("<tool_call>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</tool_call>") {
+            Some(rel_end) => rest = &rest[start + rel_end + "</tool_call>".len()..],
+            None => {
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out.trim().to_string()
 }
 
 /// Best-effort truncation for narration chips — clamps `s` to `max`

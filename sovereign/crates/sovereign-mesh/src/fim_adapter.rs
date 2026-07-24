@@ -145,15 +145,52 @@ pub(crate) async fn fim_completion_stream(
         .fim_slot_info()
         .ok_or_else(|| FIM_NOT_CONFIGURED.to_string())?;
 
-    let prefix = tail_chars(&request.prefix, info.max_prefix_chars);
-    let suffix = head_chars(&request.suffix, info.max_suffix_chars);
+    // Interop: some clients (JetBrains AI Assistant's "prompt schema"
+    // flow) assemble the FIM string CLIENT-side and send it whole.
+    // Detect a pre-assembled prompt BEFORE clamping (a tail-clamp
+    // would decapitate the opening marker) — pass it through
+    // verbatim; the client owns its structure, clamps and all.
+    let family_prefix_marker = sovereign_inference::fim::markers_for(info.fim_style).prefix;
+    let pre_assembled = request.prefix.starts_with(family_prefix_marker);
+    let (prefix, suffix) = if pre_assembled {
+        tracing::info!(
+            target: "fim",
+            prompt_chars = request.prefix.len(),
+            "fim: pre-assembled prompt from client — passing through verbatim"
+        );
+        (request.prefix.as_str(), "")
+    } else {
+        (
+            tail_chars(&request.prefix, info.max_prefix_chars),
+            head_chars(&request.suffix, info.max_suffix_chars),
+        )
+    };
     let prompt_chars = prefix.len() + suffix.len();
-    let fim_prompt = sovereign_inference::fim::build_fim_prompt(info.fim_style, prefix, suffix);
+    let fim_prompt = if pre_assembled {
+        prefix.to_string()
+    } else {
+        sovereign_inference::fim::build_fim_prompt(info.fim_style, prefix, suffix)
+    };
     // Single vs multi-line is decided HERE, not by the model (§3.3):
     // the text immediately before the cursor tells us which shape
-    // the completion should take. Uses the clamped prefix's tail —
-    // the last line is what matters.
-    let mode = decide_mode(prefix);
+    // the completion should take. For a pre-assembled prompt the
+    // cursor context is the code BETWEEN the prefix and suffix
+    // markers — decide from that, and feed the embedded suffix code
+    // to the tracker's duplication probe.
+    let (mode, probe_suffix) = if pre_assembled {
+        let markers = sovereign_inference::fim::markers_for(info.fim_style);
+        let body = prefix.strip_prefix(family_prefix_marker).unwrap_or(prefix);
+        let mut parts = body.split(markers.suffix);
+        let code_before = parts.next().unwrap_or(body);
+        let after_suffix_marker = parts.next().unwrap_or("");
+        let embedded_suffix = after_suffix_marker
+            .split(markers.middle)
+            .next()
+            .unwrap_or("");
+        (decide_mode(code_before), embedded_suffix)
+    } else {
+        (decide_mode(prefix), suffix)
+    };
 
     let max_tokens = request.max_tokens.unwrap_or(info.max_tokens);
     let temperature = request.temperature.unwrap_or(info.temperature);
@@ -186,7 +223,7 @@ pub(crate) async fn fim_completion_stream(
         info.fim_style,
         request.stop.clone(),
         mode,
-        suffix,
+        probe_suffix,
     ));
     let combined = inner.scan(state, move |st, frame| {
         if st.done {
@@ -429,6 +466,35 @@ mod tests {
         assert_eq!(debug["model_id"], "qwen-coder-1.5b");
         assert_eq!(debug["slot"], "fim");
         assert!(debug["timings_ms"]["total"].is_number());
+    }
+
+    #[tokio::test]
+    async fn pre_assembled_prompt_passes_through_verbatim() {
+        let stub = Arc::new(StubFimProvider::new());
+        let provider: Arc<dyn InferenceProvider> = stub.clone();
+        // JetBrains-style: the client assembled the FIM string itself.
+        let assembled = "<|fim_prefix|>fn main() {\n<|fim_suffix|>\n}\n<|fim_middle|>";
+        let req = FimCompletionRequest {
+            prefix: assembled.to_string(),
+            suffix: String::new(),
+            path: None,
+            language: None,
+            max_tokens: None,
+            temperature: None,
+            stop: vec![],
+            debug: false,
+        };
+        let start = fim_completion_stream(&provider, req)
+            .await
+            .expect("stream starts");
+        let frames: Vec<_> = start.stream.collect().await;
+        assert!(!frames.is_empty());
+        let seen = stub.seen.lock().unwrap().clone().expect("request seen");
+        assert_eq!(
+            seen.prompt, assembled,
+            "pre-assembled prompt must pass through verbatim — no double-wrap, no clamp"
+        );
+        assert_eq!(seen.prompt.matches("<|fim_prefix|>").count(), 1);
     }
 
     #[tokio::test]

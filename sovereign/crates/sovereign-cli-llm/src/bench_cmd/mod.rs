@@ -43,6 +43,7 @@ mod obsidian;
 mod parity_compare;
 mod promote;
 mod report;
+mod resource_meter;
 mod proxy_bench;
 mod redteam;
 mod render;
