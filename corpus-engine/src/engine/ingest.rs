@@ -209,7 +209,11 @@ impl CorpusEngine {
             // the corpus. Without this flip the index is invisible to
             // every downstream surface despite being semantically
             // installed; chunks=0 is the steady state, not a partial.
-            let idx = if !canonical.exists() {
+            // Metadata presence, not directory presence — the enrichment
+            // sink can have created this directory before any index
+            // exists in it, and `open()` on that would fail with
+            // "Missing metadata". See `CorpusIndex::exists_at`.
+            let idx = if !CorpusIndex::exists_at(&canonical) {
                 std::fs::create_dir_all(canonical.parent().unwrap_or(&self.index_dir))?;
                 let idx = CorpusIndex::create_with_sharing(
                     &canonical,
@@ -480,7 +484,13 @@ impl CorpusEngine {
 
         let corpus_id = recipe.corpus.id.clone();
         let canonical = self.index_dir.join(&corpus_id);
-        let idx = if !canonical.exists() {
+        // Ask whether an INDEX is there, not whether the directory is:
+        // the enrichment-progress sink writes `_enrichment_state.json`
+        // into this directory before the first ingest, so a plain
+        // `canonical.exists()` would route a metadata-less directory to
+        // `open()` — the "Missing metadata" error this whole function
+        // exists to repair. See `CorpusIndex::exists_at`.
+        let idx = if !CorpusIndex::exists_at(&canonical) {
             std::fs::create_dir_all(canonical.parent().unwrap_or(&self.index_dir))?;
             CorpusIndex::create_with_sharing(
                 &canonical,

@@ -2,17 +2,20 @@
 // J3 (Tier 1) — scope retrieval to a selected corpus, and prove the
 // allow-list is enforced.
 //
-// The hermetic profile installs exactly the fixture corpus, so this
-// journey asserts scoping with the levers a single-corpus setup offers
-// (deterministic, model-independent — assertions are on
-// retrieved_chunks[].corpus_id and on the send affordance, not prose):
+// The hermetic profile installs MORE THAN ONE corpus (the fixture corpus
+// plus the governance fixture), so this journey drives the strip as a
+// user would with a real shelf (deterministic, model-independent —
+// assertions are on retrieved_chunks[].corpus_id and on the send
+// affordance, not prose):
 //   • Enabled (default): retrieval pulls from the fixture corpus.
-//   • Disabled (the only source): the app refuses an empty-scope query —
-//     Send goes disabled with "enable at least one source" — i.e. the
-//     empty allow-list is enforced, not silently widened to "all". Seal
+//   • All sources muted: the app refuses an empty-scope query — Send goes
+//     disabled with "enable at least one source" — i.e. the empty
+//     allow-list is enforced, not silently widened to "all". Seal
 //     semantics: sovereign-core/src/context.rs (Some([]) → zero corpora).
-//   • Re-enabled: Send returns and retrieval is scoped to the fixture.
-// (Selective A-vs-B scoping wants a 2+ corpus fixture — a follow-up.)
+//   • Only the fixture re-enabled: Send returns AND retrieval is scoped
+//     to that one corpus while its neighbour stays muted — the selective
+//     A-vs-B scoping this journey could only gesture at while the
+//     profile held a single corpus.
 import fs from "node:fs";
 import { FIXTURE_INFO } from "../global-setup";
 import { expect, journeyTest, realBootToChat } from "./journey";
@@ -66,17 +69,28 @@ journeyTest(J_CORPUS_FILTER, async ({ page, run }) => {
   const byName = strip.locator(".kb-tag", { hasText: fixture.display_name });
   const fixtureChip = (await byName.count()) > 0 ? byName.first() : chips.first();
 
-  await fixtureChip.click();
-  await expect(fixtureChip, "the muted chip must reflect disabled state").toHaveClass(
-    /disabled/,
-  );
+  // Mute EVERY chip: "no source enabled" is a property of the whole
+  // shelf, and the profile carries more than one corpus. Muting only the
+  // fixture would leave a neighbour enabled and prove nothing about the
+  // empty allow-list. Each click is confirmed before the next so the
+  // strip's in-flight guard (`toggleInFlight`) can't swallow one.
+  const chipCount = await chips.count();
+  for (let i = 0; i < chipCount; i++) {
+    const chip = chips.nth(i);
+    if (((await chip.getAttribute("class")) ?? "").includes("disabled")) continue;
+    await chip.click();
+    await expect(chip, "a muted chip must reflect its disabled state").toHaveClass(
+      /disabled/,
+    );
+  }
   await expect(
     sendBtn,
     "with no source enabled the app must refuse the query (allow-list enforced)",
   ).toBeDisabled();
   await expect(sendBtn).toHaveAttribute("title", /enable at least one source/i);
 
-  // ── Re-enable: Send returns and retrieval is scoped to the fixture ──
+  // ── Re-enable ONLY the fixture: Send returns and retrieval is scoped
+  // to it, with every other corpus still muted ──
   await fixtureChip.click();
   await expect(fixtureChip, "re-enabling must clear the disabled state").not.toHaveClass(
     /disabled/,

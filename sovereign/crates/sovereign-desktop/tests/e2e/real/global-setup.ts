@@ -472,11 +472,21 @@ export default async function globalSetup(): Promise<void> {
     console.log("[real-setup] dist/ missing — npm run build");
     execSync("npm run build", { cwd: CRATE_ROOT, stdio: "inherit" });
   }
-  console.log("[real-setup] cargo build -p sovereign-desktop (debug)");
-  execSync("cargo build -p sovereign-desktop", {
+  // Managed mode ALSO runs `target/debug/sovereign-cli-daemon`, and that
+  // process — not the desktop — owns ingest+enrich. Building only the
+  // desktop let a stale daemon binary serve the fixture ingests: a fixed
+  // engine bug reproduced verbatim on the next run, with the error text
+  // pointing at source that no longer existed (2026-07-24). Build both,
+  // in one invocation so cargo resolves one feature set for the shared
+  // deps instead of thrashing the target dir between two narrow builds.
+  const buildPkgs = MANAGED_DAEMON
+    ? "-p sovereign-desktop -p sovereign-cli-daemon"
+    : "-p sovereign-desktop";
+  console.log(`[real-setup] cargo build ${buildPkgs} (debug)`);
+  execSync(`cargo build ${buildPkgs}`, {
     cwd: REPO_ROOT,
     stdio: "inherit",
-    timeout: 15 * 60 * 1000,
+    timeout: 20 * 60 * 1000,
   });
 
   bakeProfile();
