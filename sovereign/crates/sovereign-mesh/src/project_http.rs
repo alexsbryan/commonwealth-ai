@@ -72,6 +72,12 @@ pub struct RegisterRequest {
     pub root: String,
     #[serde(default)]
     pub watchers: Option<WatcherToggles>,
+    /// Override the nested-root guard. A root that nests with an
+    /// already-registered project is refused with 409 unless this is
+    /// set — nested watchers each re-export the shared workspace and
+    /// starve the rebuild queue (see `Registry::nested_conflict`).
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -164,6 +170,33 @@ async fn register_project(
                 .into_response();
         }
     };
+    // Refuse nested registrations (ancestor or descendant of an
+    // existing project's root) unless forced — overlapping watchers
+    // each queue a full-workspace SCIP export per save and the
+    // rebuild queue never drains.
+    if !req.force {
+        if let Some(conflict) = registry.nested_conflict(&entry.corpus_id, &entry.root) {
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": format!(
+                        "root {} nests with already-registered project \"{}\" ({}). \
+                         Nested projects re-export the same workspace on every save and \
+                         starve the rebuild queue. Unregister one side \
+                         (`sovereign project unregister {}`) or pass --force to override.",
+                        entry.root.display(),
+                        conflict.corpus_id,
+                        conflict.root.display(),
+                        conflict.corpus_id,
+                    ),
+                    "conflict_corpus_id": conflict.corpus_id,
+                    "conflict_root": conflict.root.display().to_string(),
+                })),
+            )
+                .into_response();
+        }
+    }
+
     let created = registry.upsert(entry.clone());
     if let Err(e) = registry.save() {
         return (
@@ -325,10 +358,17 @@ mod tests {
         assert_eq!(resp.status(), 404);
     }
 
+    /// Serializes the tests that repoint $HOME. `Registry::load/save`
+    /// resolve `~` per call, so two parallel tests each setting HOME
+    /// to their own tempdir read each other's (empty) registries —
+    /// observed as the nested-root test's final 409 flaking to 200.
+    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[tokio::test]
     async fn register_rejects_empty_corpus_id() {
         // Use an isolated $HOME so Registry::load/save don't touch
         // the developer's real ~/.sovereign.
+        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (tmp, rex) = make_reindexer();
         std::env::set_var("HOME", tmp.path());
         let base = spawn(rex).await;
@@ -340,6 +380,85 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 400);
+    }
+
+    #[tokio::test]
+    async fn register_refuses_nested_root_unless_forced() {
+        // Isolated $HOME so Registry::load/save don't touch the
+        // developer's real ~/.sovereign (same pattern as the
+        // empty-corpus-id test above).
+        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (tmp, rex) = make_reindexer();
+        std::env::set_var("HOME", tmp.path());
+        let base = spawn(rex).await;
+        let client = reqwest::Client::new();
+
+        // Watchers all off: keep the spawned worker from running
+        // exporters against the throwaway roots.
+        let watchers_off = serde_json::json!({
+            "scip": false, "test": false, "lint": false,
+        });
+        let parent_root = tmp.path().join("repo");
+        let child_root = parent_root.join("sub");
+        std::fs::create_dir_all(&child_root).unwrap();
+
+        // Parent registers cleanly.
+        let resp = client
+            .post(format!("{base}/v1/projects/register"))
+            .json(&serde_json::json!({
+                "corpus_id": "parent",
+                "root": parent_root.display().to_string(),
+                "watchers": watchers_off,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        // Nested child is refused with 409 + the conflicting corpus.
+        let resp = client
+            .post(format!("{base}/v1/projects/register"))
+            .json(&serde_json::json!({
+                "corpus_id": "child",
+                "root": child_root.display().to_string(),
+                "watchers": watchers_off,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 409);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["conflict_corpus_id"], "parent");
+
+        // --force overrides.
+        let resp = client
+            .post(format!("{base}/v1/projects/register"))
+            .json(&serde_json::json!({
+                "corpus_id": "child",
+                "root": child_root.display().to_string(),
+                "watchers": watchers_off,
+                "force": true,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        // After a forced overlap exists, even the parent's own
+        // re-register collides (with "child" this time). Intended:
+        // every further write into an overlapping set must be
+        // deliberate — pass --force or unregister one side.
+        let resp = client
+            .post(format!("{base}/v1/projects/register"))
+            .json(&serde_json::json!({
+                "corpus_id": "parent",
+                "root": parent_root.display().to_string(),
+                "watchers": watchers_off,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 409);
     }
 
     #[tokio::test]
