@@ -59,6 +59,16 @@ CHARS_PER_TOKEN = 4
 SOFT_BUDGET_TOKENS = 15_000
 
 
+# Session-splitting thresholds (SESSION_CONTINUITY.md; the cost lever is
+# cache-read ≈ avg_ctx × turns, so the earlier a fat session splits, the
+# cheaper every subsequent turn). Context size comes from the LAST
+# assistant `usage` record in the transcript — the actual tokens the
+# previous request carried, not a chars/4 guess. Thresholds assume a
+# ~200k window; revisit for 1M-window models.
+CTX_YELLOW = 90_000   # "split at the next natural boundary"
+CTX_RED = 140_000     # "split now — frame is being kept fresh by hooks"
+
+
 def main() -> int:
     try:
         envelope = json.load(sys.stdin)
@@ -68,14 +78,65 @@ def main() -> int:
 
     transcript_path = envelope.get("transcript_path")
     model = (envelope.get("model") or {}).get("display_name") or "?"
+    session_id = envelope.get("session_id") or ""
 
     if not transcript_path or not Path(transcript_path).exists():
         print(fmt_minimal(model))
         return 0
 
     read_count, read_token_estimate = scan_reads(Path(transcript_path))
-    print(fmt(model, read_count, read_token_estimate))
+    ctx_tokens = last_context_size(Path(transcript_path))
+    frame = frame_status(session_id)
+    print(fmt(model, read_count, read_token_estimate, ctx_tokens, frame))
     return 0
+
+
+def last_context_size(transcript_path: Path) -> int:
+    """Actual context size of the most recent request: input_tokens +
+    cache_read + cache_creation from the last assistant record carrying
+    `usage`. Reads only the transcript tail — the statusline refreshes
+    constantly and must stay O(1) in transcript size."""
+    try:
+        size = transcript_path.stat().st_size
+        with transcript_path.open("rb") as f:
+            f.seek(max(0, size - 262_144))
+            tail = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return 0
+    for line in reversed(tail.splitlines()):
+        if '"usage"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        usage = (rec.get("message") or {}).get("usage") or {}
+        total = (
+            (usage.get("input_tokens") or 0)
+            + (usage.get("cache_read_input_tokens") or 0)
+            + (usage.get("cache_creation_input_tokens") or 0)
+        )
+        if total:
+            return total
+    return 0
+
+
+def frame_status(session_id: str) -> str:
+    """Session-frame freshness for THIS session: `✓Nm` when the
+    PreCompact/SessionEnd hooks (or a manual distill) have written
+    ~/.sovereign/sessions/<sid>/frame.md, `—` when no frame exists yet.
+    The signal a handoff needs: red context + fresh frame = split is
+    safe right now."""
+    if not session_id:
+        return "—"
+    frame = Path.home() / ".sovereign" / "sessions" / session_id / "frame.md"
+    try:
+        age_s = max(0, int(__import__("time").time() - frame.stat().st_mtime))
+    except OSError:
+        return "—"
+    if age_s < 3600:
+        return f"✓{age_s // 60}m"
+    return f"✓{age_s // 3600}h"
 
 
 def scan_reads(transcript_path: Path) -> tuple[int, int]:
@@ -149,10 +210,12 @@ def content_length(body) -> int:
     return 0
 
 
-def fmt(model: str, count: int, tokens: int) -> str:
+def fmt(model: str, count: int, tokens: int, ctx_tokens: int, frame: str) -> str:
     """Render the statusline. ANSI colors: cyan model, dim count, then
     the budget number coloured by threshold so the agent can scan it
-    at a glance."""
+    at a glance. The ctx segment is the session-splitting cue: yellow
+    past CTX_YELLOW, red + SPLIT past CTX_RED; `frame ✓Nm` next to it
+    says the handoff artifact is fresh enough to split on."""
     bg_color = budget_color(tokens)
     reset = "\033[0m"
     cyan = "\033[36m"
@@ -162,11 +225,24 @@ def fmt(model: str, count: int, tokens: int) -> str:
     else:
         tk = str(tokens)
     budget = f"{SOFT_BUDGET_TOKENS // 1000}k"
+
+    ctx_segment = ""
+    if ctx_tokens:
+        ctx_k = f"{ctx_tokens / 1000:.0f}k"
+        if ctx_tokens >= CTX_RED:
+            ctx_segment = f" {dim}·{reset} ctx \033[31m{ctx_k} SPLIT{reset}"
+        elif ctx_tokens >= CTX_YELLOW:
+            ctx_segment = f" {dim}·{reset} ctx \033[33m{ctx_k} split soon{reset}"
+        else:
+            ctx_segment = f" {dim}·{reset} ctx \033[32m{ctx_k}{reset}"
+
     return (
         f"{cyan}{model}{reset} "
         f"{dim}·{reset} "
         f"📖 Reads: {dim}{count}{reset} "
         f"({bg_color}{tk}{reset}/{budget})"
+        f"{ctx_segment}"
+        f" {dim}· frame {frame}{reset}"
     )
 
 

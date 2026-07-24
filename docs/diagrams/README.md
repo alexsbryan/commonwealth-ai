@@ -1,6 +1,6 @@
 # Hand-drawn architecture diagrams
 
-The flip-book. Eight hand-drawn figures that walk a newcomer from "what is this?"
+The flip-book. Eight figures that walk through "what is this?"
 to "I see how the pieces fit" — the same story [`ARCHITECTURE_TOUR.md`](../ARCHITECTURE_TOUR.md)
 tells in prose, drawn so you can *see* it. They render natively on GitHub (plain
 `.svg`, no external assets), and each carries its own paper background so it reads
