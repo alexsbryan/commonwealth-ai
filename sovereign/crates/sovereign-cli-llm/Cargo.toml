@@ -71,7 +71,7 @@ tar = "0.4"
 zstd = "0.13"
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
+which = "8"
 hostname = { workspace = true }
 hex = "0.4"
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }

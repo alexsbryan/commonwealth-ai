@@ -61,7 +61,7 @@ dirs = "5"
 chrono = { workspace = true }
 sha2 = { workspace = true }
 hostname = { workspace = true }
-which = "7"
+which = "8"
 tempfile = "3"
 
 [dev-dependencies]
