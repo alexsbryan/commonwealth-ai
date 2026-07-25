@@ -223,6 +223,43 @@ pub async fn build_code_trace_block(chunks: &[ScoredChunk]) -> String {
     out
 }
 
+/// The `Call-graph trace for `X`` handles present in a rendered trace block.
+///
+/// The grounding gate verifies a released answer against a sealed evidence
+/// universe built from the retrieved CHUNKS. The call-graph block is injected
+/// into the synthesis prompt but was never added to that universe, so every
+/// fact the model took from it — the callers, their file:line sites, the
+/// dyn-dispatch boundaries — came back flagged *"could not be confirmed against
+/// your sources"*. That is exactly backwards: SCIP edges are compiler-resolved
+/// ground truth, the most reliable evidence in the turn, while the thing the
+/// gate DID trust was prose. (Contrast the deliberate RAPTOR exclusion in
+/// `gate_evidence_chunks`: that excludes *abstractive LLM paraphrase*. A call
+/// graph is the opposite kind of artifact.)
+///
+/// Callers pair these labels with the block body so a `[Source: Call-graph
+/// trace for `X`]` citation resolves and the claims verify.
+pub fn trace_source_labels(block: &str) -> Vec<String> {
+    block
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("Call-graph trace for ")?;
+            let sym = rest.trim_end_matches(':').trim().trim_matches('`');
+            if sym.is_empty() {
+                None
+            } else {
+                // Both spellings: the backticked handle as rendered, and the
+                // bare symbol, because models cite it either way (observed:
+                // `[Source: Call-graph trace for gate_answer]`, no backticks).
+                Some([
+                    format!("Call-graph trace for `{sym}`"),
+                    format!("Call-graph trace for {sym}"),
+                ])
+            }
+        })
+        .flatten()
+        .collect()
+}
+
 /// Load the v2 code atlas for a corpus — the Lance store (`atoms.lance` +
 /// `edges.csr`) that records the `ScipStructural` edge provenance `call_chain`
 /// needs. `load_from_disk` returns `Ok` only for a v2 store, so a successful
@@ -311,6 +348,28 @@ fn format_chain_block(symbol: &str, result: &CallChainResult) -> Option<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The gate seals the trace into its evidence universe using these labels;
+    /// if they don't match what the model actually cites, every call-graph
+    /// fact comes back "could not be confirmed".
+    #[test]
+    fn trace_labels_cover_both_citation_spellings() {
+        let block = "CODE CALL-GRAPH (resolved from the indexed source):\n\n\
+                     Call-graph trace for `gate_answer`:\n  callers: handle_simple\n\
+                     Call-graph trace for `gate_held_answer`:\n  callers: stream_turn\n";
+        let labels = trace_source_labels(block);
+        assert!(labels.contains(&"Call-graph trace for `gate_answer`".to_string()));
+        // Observed live: the model drops the backticks when citing.
+        assert!(labels.contains(&"Call-graph trace for gate_answer".to_string()));
+        assert!(labels.contains(&"Call-graph trace for `gate_held_answer`".to_string()));
+        assert_eq!(labels.len(), 4);
+    }
+
+    #[test]
+    fn trace_labels_empty_for_a_non_code_turn() {
+        assert!(trace_source_labels("").is_empty());
+        assert!(trace_source_labels("just some prose about gating").is_empty());
+    }
     use crate::atlas_context::CallChainNode;
     use std::collections::HashMap;
 

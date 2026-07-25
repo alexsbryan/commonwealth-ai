@@ -416,6 +416,21 @@ pub(crate) async fn gate_answer_with_progress(
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let entity_anchored = evidence.entity_anchored;
+    // Glassbox: whether the call-graph block reached the sealed universe. A
+    // code-intel answer whose caller facts land in the verification note is
+    // either "the trace was never sealed" or "the judge rejected it" — these
+    // two counts tell you which, from any entry path.
+    tracing::info!(
+        target: "grounding_gate",
+        evidence_chunks = chunks.len(),
+        has_code_trace = chunks.iter().any(|c| c.contains("Call-graph trace for")),
+        trace_labels = evidence
+            .source_labels
+            .iter()
+            .filter(|l| l.starts_with("Call-graph trace for"))
+            .count(),
+        "gate entry: sealed evidence universe"
+    );
     // Verify-correct pivot. gate_longform is the BS-catcher: it extracts each
     // asserted claim, RE-SEARCHES the sealed corpus for that claim's evidence,
     // and REWRITES the ones the corpus won't support — catching the load-bearing-

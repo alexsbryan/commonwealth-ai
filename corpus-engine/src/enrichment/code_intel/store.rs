@@ -28,6 +28,26 @@ use super::SymbolEnrichment;
 /// path) and can be swept as a group.
 const SOURCE_PREFIX: &str = "codeintel:";
 
+/// Bump whenever [`render_for_index`] changes the text it produces for an
+/// otherwise-unchanged symbol. v2 added the `Defined in <file>:<line>` anchor.
+const RENDER_VERSION: u32 = 2;
+
+/// The upsert identity stored as the summary chunk's `content_hash`.
+///
+/// It combines the symbol's body hash with the renderer version, because the
+/// gate has to describe **the artifact we indexed**, not just its input. Keyed
+/// on `body_hash` alone, an improvement to `render_for_index` was invisible:
+/// every existing summary kept its old text forever, and no re-run could
+/// dislodge it (the bodies hadn't changed, so every symbol "skipped"). The only
+/// recovery was to hand-delete rows from LanceDB, which is not a thing an
+/// operator should ever have to know. Folding the renderer version in makes the
+/// upgrade automatic and exactly-once — and it stays cheap, because the summary
+/// text itself is cached in `code_intel_cache.json` by body hash, so a
+/// renderer bump re-embeds without re-running the model.
+pub fn index_identity(e: &SymbolEnrichment) -> String {
+    format!("{}/r{RENDER_VERSION}", e.body_hash)
+}
+
 /// Glassbox counts for one indexing pass (per-commit cost = `upserted`).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct IndexReport {
@@ -55,11 +75,29 @@ pub fn symbol_source_key(meta: &super::SymbolMeta) -> String {
 /// followed by the questions it answers. Both are load-bearing — the scale run
 /// showed `summary + asks` is the most robust retrieval signal (spec §5).
 pub fn render_for_index(e: &SymbolEnrichment) -> String {
-    if e.asks.is_empty() {
-        e.summary.clone()
-    } else {
-        format!("{}\n{}", e.summary, e.asks.join("\n"))
+    let mut out = e.summary.clone();
+    if !e.asks.is_empty() {
+        out.push('\n');
+        out.push_str(&e.asks.join("\n"));
     }
+    // Anchor the symbol to its definition site IN THE INDEXED TEXT.
+    //
+    // The file path was only ever in the chunk's code metadata, which the
+    // synthesis prompt never shows — so a model asked "where is X
+    // implemented?" had no grounded path and invented one (observed: it
+    // placed `gate_answer` in `src/citation.rs`; it lives in
+    // `runtime/grounding/mod.rs`). Worse, the grounding gate had nothing to
+    // check the claim against either, so the fabrication only surfaced as a
+    // vague "could not be confirmed" note. One line of ground truth in the
+    // body fixes both: the model cites the real path, and the gate can verify
+    // it. Also a mild retrieval win for path-flavoured questions.
+    if !e.meta.file_path.is_empty() {
+        out.push_str(&format!(
+            "\nDefined in {}:{}",
+            e.meta.file_path, e.meta.line_start
+        ));
+    }
+    out
 }
 
 fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertChunk {
@@ -74,7 +112,7 @@ fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertC
         title: Some(e.meta.name.clone()),
         url: None,
         metadata: Some(metadata),
-        content_hash: Some(e.body_hash.clone()),
+        content_hash: Some(index_identity(e)),
         source_doc_id: Some(key.to_string()),
         source_file: None,
         // Carry the symbol identity so a retrieval hit on the summary traces
@@ -97,7 +135,7 @@ fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertC
 async fn index_one(index: &CorpusIndex, embed: &EmbedFn, e: &SymbolEnrichment) -> Result<bool> {
     let key = symbol_source_key(&e.meta);
     let committed = index.committed_chunks_for_doc(&key).await?;
-    if committed.iter().any(|c| c.content_hash == e.body_hash) {
+    if committed.iter().any(|c| c.content_hash == index_identity(e)) {
         return Ok(false);
     }
     let content = render_for_index(e);
@@ -208,8 +246,37 @@ mod tests {
         let e = enr("f", "h", "It decides the route.");
         assert_eq!(
             render_for_index(&e),
-            "It decides the route.\nWhat does it do?"
+            "It decides the route.\nWhat does it do?\nDefined in src/x.rs:1"
         );
+    }
+
+    /// The definition site must be IN THE BODY, not just the code metadata:
+    /// the synthesis prompt shows the body only, so without it a "where is X
+    /// implemented?" answer has no grounded path to cite and the gate has
+    /// nothing to verify a path claim against.
+    /// A row written before the renderer changed must NOT be treated as
+    /// current. Keyed on `body_hash` alone it was — which is how an
+    /// improvement to `render_for_index` could never reach an existing corpus.
+    #[test]
+    fn index_identity_is_renderer_versioned_not_just_the_body_hash() {
+        let e = enr("f", "bodyhash", "s");
+        let id = index_identity(&e);
+        assert_ne!(id, e.body_hash, "identity must not be the bare body hash");
+        assert!(id.starts_with(&e.body_hash), "body hash stays the prefix");
+        // Same body, same renderer ⇒ same identity (the skip path still works).
+        assert_eq!(index_identity(&enr("f", "bodyhash", "s")), id);
+    }
+
+    #[test]
+    fn render_anchors_the_definition_site() {
+        let e = enr("f", "h", "It decides the route.");
+        assert!(render_for_index(&e).contains("Defined in src/x.rs:1"));
+
+        // No path known (shouldn't happen via SCIP, but the renderer must not
+        // emit a dangling "Defined in :0" that reads as ground truth).
+        let mut bare = enr("g", "h", "Summary.");
+        bare.meta.file_path = String::new();
+        assert!(!render_for_index(&bare).contains("Defined in"));
     }
 
     #[tokio::test]

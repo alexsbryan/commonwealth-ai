@@ -276,6 +276,62 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
         }
     }
 
+    // Watched — is anything actually KEEPING the two lines above fresh?
+    //
+    // Without this, `status` stats the artifacts and reports ✓/✓ for an
+    // index nobody has maintained in weeks: freshness is owned by the
+    // daemon's Reindexer, which builds one ProjectHandle (FS watcher, git
+    // HEAD poll, rebuild queue) per REGISTERED project. An empty
+    // `projects.json` means zero watchers, and every stat above still
+    // reads green because the files are sitting right there. Observed
+    // 2026-07-24: a 27-day-old chunk index and an 11-day-old call graph
+    // both reporting ✓ on a repo that had been unregistered since June.
+    // Same failure the lint/test surface fixed with `watcher.live` /
+    // `watcher_down`; the code-intel surface never got it.
+    match sovereign_mesh::projects::Registry::load() {
+        Ok(registry) => match registry
+            .entries()
+            .iter()
+            .find(|e| e.corpus_id == corpus_id)
+        {
+            Some(entry) if entry.root == repo_root => {
+                let mut on: Vec<&str> = Vec::new();
+                if entry.watchers.scip {
+                    on.push("scip");
+                }
+                if entry.watchers.lint {
+                    on.push("lint");
+                }
+                if entry.watchers.test {
+                    on.push("test");
+                }
+                let watchers = if on.is_empty() {
+                    "all watchers disabled".to_string()
+                } else {
+                    on.join(", ")
+                };
+                println!("  Watched       \u{2713} registered ({watchers})");
+            }
+            Some(entry) => {
+                println!(
+                    "  Watched       \u{26a0} registered under a different root: {}",
+                    entry.root.display()
+                );
+                println!("                  Nothing is watching {}", repo_root.display());
+                println!("                  Run: sovereign project register");
+            }
+            None => {
+                println!("  Watched       \u{2717} NOT registered — nothing refreshes this");
+                println!("                  The Index/Call graph above are whatever was");
+                println!("                  last built by hand; no watcher maintains them.");
+                println!("                  Run: sovereign project register");
+            }
+        },
+        Err(e) => {
+            println!("  Watched       \u{2717} cannot read project registry: {e}");
+        }
+    }
+
     // MCP server
     let mcp_url = format!("http://localhost:{port}/mcp");
     if check_mcp_server(&mcp_url).await {

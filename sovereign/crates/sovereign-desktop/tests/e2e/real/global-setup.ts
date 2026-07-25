@@ -409,6 +409,41 @@ function bakeProfile(): void {
     console.log(`[real-setup] demo: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME`);
   }
 
+  // Attach mode has the SAME split-brain, in the write direction: the harness's
+  // ingests and the authoring tools' writes are served by the REAL daemon, which
+  // resolves its data dir from ITS config (`[data] dir`, the host ~/.sovereign) —
+  // while the fixtures and specs assert paths under the scratch HOME. That
+  // mismatch is why the attach path could never reach a spec: `plantGovernanceCorpus`
+  // died asserting `<scratch>/.sovereign/indexes/<id>` for a corpus the daemon had
+  // just written to `<host>/.sovereign/indexes/<id>`, and the workflow-author spec
+  // watched a `workflows/` dir nothing would ever write to. Link the two dirs the
+  // daemon OWNS (it writes them; the desktop and the specs only read them) so both
+  // sides name the same bytes.
+  //
+  // Deliberately NOT linked: `local-corpora` (the desktop-side registry). Keeping
+  // it scratch means an attach run never registers "E2E Fixture Corpus" /
+  // "Maple House (E2E)" onto the operator's real Library shelf — the cost is
+  // re-ingesting the two tiny fixture folders per run, which is the right trade.
+  // Attach mode is already declared non-hermetic for exactly this kind of state.
+  if (!MANAGED_DAEMON && process.env.SOVEREIGN_DEMO !== "1") {
+    const hostSov = path.join(os.homedir(), ".sovereign");
+    const linked: string[] = [];
+    for (const name of ["indexes", "workflows"]) {
+      const target = path.join(hostSov, name);
+      const link = path.join(sovDir, name);
+      // `workflows/` may not exist yet on a machine that has never authored one —
+      // create it host-side rather than skipping, or the authoring spec's write
+      // lands in a dir the harness isn't watching.
+      if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+      if (!fs.existsSync(link)) fs.symlinkSync(target, link);
+      linked.push(name);
+    }
+    console.log(
+      `[real-setup] attach: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME ` +
+        `— ingests and authored artifacts land in the REAL daemon's data dir (non-hermetic, by design)`,
+    );
+  }
+
   // Attach mode reads `~/.sovereign/config.toml` (SetupConfig) to learn which
   // model ids to route to the running daemon (state/builders/inference.rs). The
   // hermetic profile only bakes desktop.toml (Local-mode config), so attach boot

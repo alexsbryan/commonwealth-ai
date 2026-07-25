@@ -272,6 +272,10 @@ impl Runtime {
         let folder_meta = self.folder_metadata_snapshot().await;
 
         let history = format_history_as_prompt(context, 10);
+        // Declared out here because the trace is BUILT inside the prompt
+        // assembly below but CONSUMED by the DeepQuery grounding gate, which
+        // only sees what rides out on the KnowledgeContext.
+        let mut code_trace_out = String::new();
         let prompt = if !all_chunks.is_empty() {
             // Conv-tiered briefing — surface per-conversation RAPTOR
             // signposts ahead of the raw chunks when retrieval hit a
@@ -361,14 +365,15 @@ impl Runtime {
             // call-graph trace must be appended at this site too, not only at
             // knowledge_query.rs. Empty string (zero overhead) for non-code
             // corpora, so it is safe to run unconditionally. Twin injection.
-            let doc_context = {
-                let code_trace =
-                    crate::runtime::code_trace::build_code_trace_block(&all_chunks).await;
-                if code_trace.is_empty() {
-                    doc_context
-                } else {
-                    format!("{doc_context}\n\n{code_trace}")
-                }
+            // Kept in scope (not consumed inline) so it can ride out on the
+            // KnowledgeContext and reach the DeepQuery gate — see
+            // `code_trace::trace_source_labels`.
+            code_trace_out =
+                crate::runtime::code_trace::build_code_trace_block(&all_chunks).await;
+            let doc_context = if code_trace_out.is_empty() {
+                doc_context
+            } else {
+                format!("{doc_context}\n\n{}", code_trace_out)
             };
             let knowledge_block = if conv_briefing.is_empty() {
                 doc_context
@@ -485,6 +490,7 @@ impl Runtime {
         KnowledgeContext {
             chunks: all_chunks,
             prompt,
+            code_trace: code_trace_out,
             system,
             speed,
             search_method,

@@ -1238,6 +1238,7 @@ impl Runtime {
             chunks,
             gate_entity_anchored,
             doc_context,
+            code_trace,
             shape,
             route,
             gap_check_enabled,
@@ -1318,25 +1319,62 @@ impl Runtime {
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is
         // sealed to the conversation's corpora.
+        // Seal the call-graph block into the evidence universe alongside the
+        // chunks. It is injected into the synthesis prompt upstream, so without
+        // this the gate reports every compiler-resolved caller fact the model
+        // took from it as unconfirmed — see `code_trace::trace_source_labels`.
+        let trace_labels = if gate_on && !code_trace.is_empty() {
+            crate::runtime::code_trace::trace_source_labels(&code_trace)
+        } else {
+            Vec::new()
+        };
+        let seal_trace = gate_on && !trace_labels.is_empty();
+        tracing::info!(
+            target: "grounding_gate",
+            gate_on,
+            trace_chars = code_trace.len(),
+            trace_labels = trace_labels.len(),
+            seal_trace,
+            "streaming gate: call-graph trace sealing decision"
+        );
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if gate_on {
-                crate::runtime::grounding::gate_evidence_chunks(&chunks)
+                let mut v = crate::runtime::grounding::gate_evidence_chunks(&chunks);
+                if seal_trace {
+                    v.push(code_trace.clone());
+                }
+                v
             } else {
                 Vec::new()
             },
             chunk_labels: if gate_on {
-                crate::runtime::grounding::gate_evidence_chunk_labels(&chunks)
+                let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&chunks);
+                // PARALLEL to `chunks` — push exactly one entry for the block
+                // appended above, or the citation-alignment check mis-maps.
+                if seal_trace {
+                    v.push(trace_labels.clone());
+                }
+                v
             } else {
                 Vec::new()
             },
             source_labels: if gate_on {
-                crate::runtime::grounding::gate_evidence_source_labels(&chunks)
+                let mut v = crate::runtime::grounding::gate_evidence_source_labels(&chunks);
+                if seal_trace {
+                    v.extend(trace_labels.iter().cloned());
+                }
+                v
             } else {
                 Vec::new()
             },
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
-                    self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks),
+                    self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
+                        .with_pinned(if seal_trace {
+                            vec![code_trace.clone()]
+                        } else {
+                            Vec::new()
+                        }),
                 ) as _)
             } else {
                 None
@@ -2415,28 +2453,63 @@ impl Runtime {
         // usually long-form). Built pre-spawn; claim search sealed to
         // the conversation's corpora. entity_anchored=false — the
         // agentic loop (and its atlas gazetteer verdict) is KQ-only.
+        // Seal the call-graph block in alongside the chunks. Code questions
+        // route to DeepQuery, so THIS is the gate a code-intel answer actually
+        // meets — without it every compiler-resolved caller fact the model took
+        // from the trace came back in the "could not be confirmed" note.
+        let deep_trace_labels = if deep_gate_on && !kc.code_trace.is_empty() {
+            crate::runtime::code_trace::trace_source_labels(&kc.code_trace)
+        } else {
+            Vec::new()
+        };
+        let deep_seal_trace = !deep_trace_labels.is_empty();
         let deep_gate_evidence =
             crate::runtime::grounding::EvidenceContext {
                 chunks: if deep_gate_on {
-                    crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
+                    let mut v = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
+                    if deep_seal_trace {
+                        v.push(kc.code_trace.clone());
+                    }
+                    v
                 } else {
                     Vec::new()
                 },
                 chunk_labels: if deep_gate_on {
-                    crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks)
+                    let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
+                    // PARALLEL to `chunks` — exactly one entry for the block
+                    // pushed above, or citation alignment mis-maps.
+                    if deep_seal_trace {
+                        v.push(deep_trace_labels.clone());
+                    }
+                    v
                 } else {
                     Vec::new()
                 },
                 source_labels: if deep_gate_on {
-                    crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks)
+                    let mut v = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
+                    if deep_seal_trace {
+                        v.extend(deep_trace_labels.iter().cloned());
+                    }
+                    v
                 } else {
                     Vec::new()
                 },
                 searcher: if deep_gate_on {
-                    Some(std::sync::Arc::new(self.claim_searcher(
-                        context.conversation.enabled_corpora.as_deref(),
-                        &kc.chunks,
-                    )) as _)
+                    Some(std::sync::Arc::new(
+                        self.claim_searcher(
+                            context.conversation.enabled_corpora.as_deref(),
+                            &kc.chunks,
+                        )
+                        // The claim audit RE-SEARCHES the corpus per claim; the
+                        // call-graph block lives only in this turn, so pin it or
+                        // the audit re-derives evidence without it and flags
+                        // facts that are verbatim in the sealed universe.
+                        .with_pinned(if deep_seal_trace {
+                            vec![kc.code_trace.clone()]
+                        } else {
+                            Vec::new()
+                        }),
+                    ) as _)
                 } else {
                     None
                 },

@@ -176,20 +176,25 @@ impl CorpusEngine {
         }
 
         // Map added TextChunk back to its source ExtractedChunk so we
-        // recover the symbol metadata. Match by content hash —
-        // `chunk_delta` did not return the source ExtractedChunk
-        // because the primitive is chunker-shape-agnostic.
-        use std::collections::HashMap;
-        let by_hash: HashMap<String, &_> =
-            chunks.iter().map(|c| (c.content_hash.clone(), c)).collect();
-
+        // recover the symbol metadata. Match POSITIONALLY: `new_text_chunks`
+        // was built by `chunks.iter().enumerate()`, so `TextChunk::index` is
+        // exactly the source chunk's offset, and `chunk_delta` carries the
+        // TextChunk through to `added` untouched.
+        //
+        // This used to match by content hash, which silently destroyed data
+        // whenever two chunks of one file shared content. That is not exotic:
+        // the code extractor pads each symbol with `context_lines`, so a file
+        // whose functions sit on adjacent lines yields several chunks with
+        // IDENTICAL text. Collecting those into a `HashMap<content_hash, _>`
+        // kept only the last, every added chunk then resolved to that same
+        // entry, and — because the count still matched — the safety fallback
+        // below never fired. Result: N copies of the last symbol written, the
+        // other N-1 symbols gone from the index. Reproduced with a 4-function
+        // file (2026-07-24); positional mapping cannot collapse this way.
         let added_extracted: Vec<_> = diff
             .added
             .iter()
-            .filter_map(|tc| {
-                let h = blake3::hash(tc.content.as_bytes()).to_hex().to_string();
-                by_hash.get(&h).copied()
-            })
+            .filter_map(|tc| chunks.get(tc.index))
             .collect();
         if added_extracted.len() != diff.added.len() {
             // Hash collision or extractor edge case — fall back to a

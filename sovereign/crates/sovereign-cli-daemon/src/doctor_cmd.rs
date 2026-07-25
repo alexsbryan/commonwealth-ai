@@ -1320,6 +1320,128 @@ async fn fetch_project_liveness() -> std::collections::HashMap<String, ProjectLi
 /// (toolchain). Together they answer the "is the SCIP graph
 /// honestly reflecting reality?" question that the byte-threshold
 /// version of `scip_indexed` was lying about.
+/// Corpus ids under `~/.sovereign/indexes` that carry a SCIP graph — i.e.
+/// things a project watcher OUGHT to be maintaining. Mirrors the daemon's
+/// `warn_orphaned_indexes` scan; used to tell "nothing registered because
+/// there's nothing to register" apart from "nothing registered and four
+/// code indexes are quietly rotting".
+fn orphaned_index_ids() -> Vec<String> {
+    let mut ids: Vec<String> = orphaned_indexes().into_iter().map(|(id, _)| id).collect();
+    ids.sort();
+    ids
+}
+
+/// The same scan, paired with each corpus's originating repo root.
+///
+/// The daemon's `warn_orphaned_indexes` says it "can't safely auto-register
+/// those — we don't know which filesystem path each one came from". For a
+/// code corpus we usually DO know: the code-ingest pipeline stamps
+/// `source_path` into `_corpus_meta.json` (`CorpusIndex::set_source_path`),
+/// which is precisely the repo root `project register --root` wants. That
+/// turns doctor's advice from "go figure out the path" into an exact,
+/// copy-pasteable command.
+fn orphaned_indexes() -> Vec<(String, Option<String>)> {
+    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(String, Option<String>)> = entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().join("scip_graph.db").exists())
+        .filter_map(|e| {
+            let id = e.file_name().to_str()?.to_string();
+            let root = std::fs::read_to_string(e.path().join("_corpus_meta.json"))
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.get("source_path")?.as_str().map(str::to_string));
+            Some((id, root))
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Do the code tools actually SEE any corpus?
+///
+/// Every other code check verifies an ingredient — the SCIP db exists,
+/// `CorpusIndex::open` succeeds — and all of them passed on 2026-07-24
+/// while `code_search` returned "0 code corpora" on a healthy 36k-chunk
+/// index. The corpus was screened out one layer further in, by a
+/// `kind == CorpusKind::Code` filter that repo corpora deliberately don't
+/// satisfy. No amount of ingredient-checking catches that; only asking the
+/// question the tool asks does.
+///
+/// So this check runs the REAL predicate the code tools run
+/// (`sovereign_tools::code::has_code_graph`) over the REAL corpus list and
+/// reports the count. If a corpus has a graph but the tools would skip it,
+/// that discrepancy IS the finding.
+async fn check_code_tools_see_corpora() -> CheckResult {
+    let name = "code_tools_visibility";
+    let on_disk = orphaned_index_ids();
+    if on_disk.is_empty() {
+        return CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no code corpora indexed".into(),
+            repair: Repair::None,
+        };
+    }
+
+    // Open each index and ask the REAL predicate about the REAL `IndexInfo`
+    // — same `kind` derivation, same `has_code_graph` rule the tools use. No
+    // corpus engine (and so no EmbedFn) is needed to answer this.
+    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let mut visible: Vec<String> = Vec::new();
+    for id in &on_disk {
+        let Ok(index) = corpus_engine::CorpusIndex::open(&indexes_dir.join(id)).await else {
+            // `code_indexed` already reports an unreadable Lance table.
+            continue;
+        };
+        let Ok(info) = index.info().await else {
+            continue;
+        };
+        if sovereign_tools::code::has_code_graph(&info) {
+            visible.push(info.corpus_id);
+        }
+    }
+
+    if visible.is_empty() {
+        return CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} code corpus(es) on disk ({}) but the code tools can see NONE \
+                 of them — symbols / code_search / recent_changes will return \
+                 empty while every other check reports green.",
+                on_disk.len(),
+                on_disk.join(", ")
+            ),
+            repair: Repair::Manual(
+                "A corpus is visible to the code tools when it is tagged \
+                 CorpusKind::Code OR has a scip_graph.db beside its chunk table \
+                 (sovereign_tools::code::has_code_graph). Check that the index \
+                 dir and _corpus_meta.json agree."
+                    .into(),
+            ),
+        };
+    }
+
+    CheckResult {
+        name,
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: format!(
+            "code tools can see {} corpus(es): {}",
+            visible.len(),
+            visible.join(", ")
+        ),
+        repair: Repair::None,
+    }
+}
+
 async fn check_watcher_freshness() -> CheckResult {
     let registry = match sovereign_mesh::projects::Registry::load() {
         Ok(r) => r,
@@ -1335,11 +1457,54 @@ async fn check_watcher_freshness() -> CheckResult {
     };
     let entries = registry.entries();
     if entries.is_empty() {
+        // An empty registry is only a non-event when there is nothing to
+        // keep fresh. If code indexes exist on disk, this is the ORPHAN
+        // state and it is the single most misleading condition doctor can
+        // encounter: freshness is owned by the Reindexer, which builds one
+        // ProjectHandle per REGISTERED project, so zero registrations means
+        // zero watchers — while `scip_indexed` / `code_indexed` keep
+        // reporting green off the stale files sitting right there, and
+        // `svrn status` prints ✓/✓ for both.
+        //
+        // Reported as Skipped ("no projects registered"), it rendered as a
+        // neutral dash and cost a full debugging session on 2026-07-24 to
+        // rediscover by hand — on a box whose chunk index was 27 days old
+        // and whose call graph was 11. The daemon already logs this via
+        // `warn_orphaned_indexes`, but into a log nobody reads. Fail loudly
+        // instead; the fix is one command.
+        let orphans = orphaned_indexes();
+        if !orphans.is_empty() {
+            let ids: Vec<&str> = orphans.iter().map(|(id, _)| id.as_str()).collect();
+            // `source_path` gives an exact command; without it the operator
+            // has to supply the root, so say that rather than guess.
+            let repairs: Vec<String> = orphans
+                .iter()
+                .map(|(id, root)| match root {
+                    Some(r) => format!("svrn project register --root {r} --name {id}"),
+                    None => format!("svrn project register --root <repo> --name {id}"),
+                })
+                .collect();
+            return CheckResult {
+                name: "watcher_freshness",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Failed,
+                message: format!(
+                    "NO projects registered, but {} code index(es) exist on disk \
+                     ({}). Nothing is watching them: no FS watcher, no git-HEAD \
+                     poll, no rebuild queue. The index/call-graph checks above \
+                     pass off whatever was last built BY HAND and will keep \
+                     passing as the code drifts away from them.",
+                    orphans.len(),
+                    ids.join(", ")
+                ),
+                repair: Repair::MultiExecutable(repairs),
+            };
+        }
         return CheckResult {
             name: "watcher_freshness",
             layer: Layer::Sovereign,
             status: CheckStatus::Skipped,
-            message: "no projects registered".into(),
+            message: "no projects registered (and no code indexes to watch)".into(),
             repair: Repair::None,
         };
     }
@@ -1772,6 +1937,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_scip_exporters());
     results.push(check_watcher_freshness().await);
     results.push(check_code_indexed().await);
+    results.push(check_code_tools_see_corpora().await);
     results.push(check_project_indexed());
     results.push(check_notes_db());
     results.push(check_test_runner(sovereign_dir));

@@ -43,6 +43,27 @@ use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_fo
 /// write → validate → test → checkpoint.
 const MAX_TOOL_ITERATIONS: usize = 12;
 
+/// Does this tool call, on success, put an authored artifact on disk?
+///
+/// Both authoring modes share this loop (`skill_id` picks the prompt), so the
+/// predicate spans both tool families. Matching only `recipe_*` left the
+/// workflow path reporting "no recipe was written this turn" on turns where it
+/// had just written a perfectly good workflow.
+fn is_artifact_write_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "recipe_write"
+            | "recipe_write_structured"
+            | "workflow_write"
+            | "workflow_write_structured"
+    )
+}
+
+/// Does this tool call report a pass/fail verdict on the authored artifact?
+fn is_artifact_validate_tool(name: &str) -> bool {
+    matches!(name, "recipe_validate" | "workflow_validate")
+}
+
 /// Per-iteration `max_tokens`. Generous enough for the model to emit
 /// a multi-block tool envelope plus the prose explanation it owes
 /// the partner.
@@ -160,6 +181,14 @@ impl Runtime {
         let prior_messages: Vec<Message> = context.conversation.messages.clone();
         let message_owned = message.to_string();
         let lark_grammar_for_loop = lark_grammar_string;
+        // What this skill authors, for partner-facing copy. The loop is shared
+        // by both authoring modes, so the noun has to follow `skill_id` rather
+        // than being hard-coded to "Recipe".
+        let artifact_label = if skill_id.contains("workflow") {
+            "Workflow"
+        } else {
+            "Recipe"
+        };
 
         tokio::spawn(async move {
             let loop_start = std::time::Instant::now();
@@ -169,13 +198,25 @@ impl Runtime {
             let mut last_model_id: Option<String> = None;
             let mut error_for_user: Option<String> = None;
             let mut completed_cleanly = false;
-            // Surface artifacts back to the partner when the loop
-            // doesn't terminate cleanly: the last recipe path the
-            // agent wrote and the last validation result. The
-            // fallback message includes both so the partner has a
-            // concrete next step (open the path, edit the TOML) even
-            // when the agent didn't summarise.
-            let mut last_recipe_path: Option<String> = None;
+            // Surface artifacts back to the partner: the last artifact
+            // path the agent wrote and the last validation result. Two
+            // consumers, and the second is why these are tracked even on
+            // a clean exit:
+            //
+            //  1. The iteration-cap fallback message, so the partner has
+            //     a concrete next step (open the path, edit the TOML)
+            //     even when the agent didn't summarise.
+            //  2. The turn METADATA (`artifact_path` / `artifact_status`
+            //     below). A clean exit reports only what the model SAID,
+            //     and the model will happily say "your workflow is ready"
+            //     on a turn where it wrote nothing at all. The metadata
+            //     records what actually landed on disk, so a surface can
+            //     show the difference instead of trusting the prose. The
+            //     check is deliberately NOT "0 tool calls means failure":
+            //     the alternation grammar carries a legitimate plain-text
+            //     exit branch, so a tool-free turn is often a perfectly
+            //     correct clarifying question.
+            let mut last_artifact_path: Option<String> = None;
             let mut last_validation_summary: Option<String> = None;
 
             for iter in 0..MAX_TOOL_ITERATIONS {
@@ -305,22 +346,25 @@ impl Runtime {
                         .to_string(),
                     };
 
-                    // Track artifacts so a stuck loop's fallback
-                    // message can surface concrete next steps (recipe
-                    // path + validation status) instead of just "I
-                    // gave up". Inspecting StepOutput::Json keeps this
-                    // transparent without bolting tool-specific
-                    // signalling onto the Tool trait.
+                    // Track artifacts so the fallback message and the turn
+                    // metadata can report what actually landed on disk.
+                    // Inspecting StepOutput::Json keeps this transparent
+                    // without bolting tool-specific signalling onto the
+                    // Tool trait.
+                    //
+                    // BOTH authoring modes are matched here. This handler is
+                    // generalized over `skill_id` (recipe-author and
+                    // workflow-author share the loop), so matching only the
+                    // `recipe_*` tools left the workflow path permanently
+                    // blind: it wrote a workflow and still reported "No
+                    // recipe was written this turn".
                     if let Ok(StepOutput::Json(ref v)) = exec_result {
-                        if matches!(
-                            call.name.as_str(),
-                            "recipe_write" | "recipe_write_structured"
-                        ) {
+                        if is_artifact_write_tool(&call.name) {
                             if let Some(p) = v.get("path").and_then(|p| p.as_str()) {
-                                last_recipe_path = Some(p.to_string());
+                                last_artifact_path = Some(p.to_string());
                             }
                         }
-                        if call.name == "recipe_validate" {
+                        if is_artifact_validate_tool(&call.name) {
                             let passed = v.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
                             let err_count = v
                                 .get("errors")
@@ -372,27 +416,31 @@ impl Runtime {
                      stop this turn (iteration cap = {MAX_TOOL_ITERATIONS}). Here's \
                      what's on disk so you can take it from here:\n\n"
                 );
-                match (&last_recipe_path, &last_validation_summary) {
+                match (&last_artifact_path, &last_validation_summary) {
                     (Some(path), Some(val)) => {
-                        msg.push_str(&format!("- Recipe: `{path}` ({val})\n"));
+                        msg.push_str(&format!("- {artifact_label}: `{path}` ({val})\n"));
                     }
                     (Some(path), None) => {
-                        msg.push_str(&format!("- Recipe: `{path}` (not validated this turn)\n"));
+                        msg.push_str(&format!(
+                            "- {artifact_label}: `{path}` (not validated this turn)\n"
+                        ));
                     }
                     (None, Some(val)) => {
                         msg.push_str(&format!("- Last action: {val}\n"));
                     }
                     (None, None) => {
-                        msg.push_str(
-                            "- No recipe was written this turn — try a more \
-                             focused ask like \"draft the recipe from the charter\".\n",
-                        );
+                        msg.push_str(&format!(
+                            "- No {} was written this turn — try a more \
+                             focused ask like \"draft it now\".\n",
+                            artifact_label.to_lowercase(),
+                        ));
                     }
                 }
-                msg.push_str(
-                    "\nThe recipe TOML is yours to edit directly. Tell me what \
+                msg.push_str(&format!(
+                    "\nThe {} TOML is yours to edit directly. Tell me what \
                      to fix or paste your edits and I'll re-validate.",
-                );
+                    artifact_label.to_lowercase(),
+                ));
                 if !final_text.trim().is_empty() {
                     msg.push_str("\n\n---\nAgent's last words this turn:\n");
                     msg.push_str(final_text.trim());
@@ -408,6 +456,10 @@ impl Runtime {
                 conversation_id = %conv_id_owned,
                 tool_calls = tool_calls_total,
                 completed_cleanly,
+                artifact_path = last_artifact_path.as_deref().unwrap_or("<none this turn>"),
+                artifact_status = last_validation_summary
+                    .as_deref()
+                    .unwrap_or("<not validated this turn>"),
                 final_chars = final_content.len(),
                 total_latency_ms = loop_start.elapsed().as_millis() as u64,
                 "recipe_author_loop: turn end"
@@ -434,6 +486,15 @@ impl Runtime {
                     "tool_calls": tool_calls_total,
                     "completed_cleanly": completed_cleanly,
                     "model": last_model_id,
+                    // Ground truth about the turn, independent of what the
+                    // model claimed in prose. `artifact_path` is null when
+                    // nothing was written this turn — which is CORRECT and
+                    // expected for a clarifying-question turn, and a red flag
+                    // only when the reply asserts an artifact exists. A
+                    // surface that renders "created X" should key off this,
+                    // not off the assistant text.
+                    "artifact_path": last_artifact_path,
+                    "artifact_status": last_validation_summary,
                 })),
                 version: now(),
             };
@@ -738,5 +799,45 @@ mod tests {
         assert!(grammar.contains(r"<\/tool_call>"));
         // %json embedded with the schema body.
         assert!(grammar.contains(r#"%json {"type":"object"}"#));
+    }
+
+    /// The loop is shared by recipe- and workflow-authoring, so artifact
+    /// tracking must recognise BOTH tool families. When it only knew the
+    /// `recipe_*` names, a workflow-authoring turn that wrote a valid
+    /// workflow still reported "no recipe was written this turn" — and the
+    /// turn metadata carried a null `artifact_path`, which is precisely the
+    /// signal a surface uses to tell a real write from a model that merely
+    /// claimed one.
+    #[test]
+    fn artifact_tracking_covers_both_authoring_modes() {
+        for tool in [
+            "recipe_write",
+            "recipe_write_structured",
+            "workflow_write",
+            "workflow_write_structured",
+        ] {
+            assert!(is_artifact_write_tool(tool), "{tool} should be a write tool");
+            assert!(
+                !is_artifact_validate_tool(tool),
+                "{tool} is a write, not a validate"
+            );
+        }
+        for tool in ["recipe_validate", "workflow_validate"] {
+            assert!(
+                is_artifact_validate_tool(tool),
+                "{tool} should be a validate tool"
+            );
+            assert!(
+                !is_artifact_write_tool(tool),
+                "{tool} is a validate, not a write"
+            );
+        }
+        // A read-only authoring tool must move neither signal: tracking a
+        // lookup as a "write" would make an artifact-less turn look
+        // productive, which is the failure this tracking exists to prevent.
+        for tool in ["recipe_read", "corpus_search", "done"] {
+            assert!(!is_artifact_write_tool(tool));
+            assert!(!is_artifact_validate_tool(tool));
+        }
     }
 }

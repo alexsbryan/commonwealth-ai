@@ -288,6 +288,15 @@ The script writes adapter logs to `target/sovereign-test/latest/cargo.{jsonl,raw
 
 The daemon owns freshness via per-project watchers (`sovereign project list` shows their status). `sovereign project refresh` nudges a manual SCIP rebuild. If `symbols` returns "no symbol named X found in any installed code corpus" but you know it exists, the LanceDB chunk index for that project may be missing — check `sovereign project status` and re-index with `sovereign code index <path> --corpus-id=<id>` if the SCIP graph is healthy but the chunk corpus is gone.
 
+**When code intelligence looks dead, run `sovereign doctor` FIRST — do not debug it by hand.** Two checks answer the whole question in one command, and both were added because this cost a full session to rediscover manually on 2026-07-24:
+
+- **`watcher_freshness` = Failed, "NO projects registered"** — the registry (`~/.sovereign/projects.json`) is empty, so the Reindexer built zero `ProjectHandle`s and **nothing is watching anything**: no FS watcher, no git-HEAD poll, no rebuild queue. Every other surface still reports green, because they stat the files: `svrn status` prints `Index ✓ / Call graph ✓` off artifacts last built by hand, and doctor's own `scip_indexed` / `code_indexed` pass for the same reason. The repair is one command per orphan, printed by doctor: `svrn project register --corpus-id <id>`.
+- **`code_tools_visibility` = Failed** — a code corpus exists on disk but the code tools screen it out, so `symbols` / `code_search` / `recent_changes` return empty against a perfectly healthy index. Visibility is `CorpusKind::Code` **OR** an on-disk `scip_graph.db` (`sovereign_tools::code::has_code_graph`).
+
+`svrn status` also now carries a **`Watched`** line — the answer to "is anything maintaining this?", which the `Index`/`Call graph` ✓ marks do not tell you.
+
+**Do not "fix" a repo corpus that reports `kind: "knowledge"`.** That is deliberate, not a mis-tag. Chat retrieval admits only `Knowledge | Catalog` (`runtime/retrieval/corpus_search.rs:95`) and CODE_INTEL_CHAT.md routes code questions *through* the knowledge path, so promoting a repo to `CorpusKind::Code` silently deletes it from chat. Code-ness is detected from the SCIP graph, never from the tag.
+
 ### When MCP tools add less value
 
 For greenfield additions (new types, new files), MCP doesn't write the code — but `symbols` still validates the patterns you're matching. The writing is new; the patterns are not.

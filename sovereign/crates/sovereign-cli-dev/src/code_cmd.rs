@@ -1370,7 +1370,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage("svrn code <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
-            ("index <path>", "Index a local repository with tree-sitter"),
+            (
+                "index <path>",
+                "Index a local repository with tree-sitter — incremental by default, --full to rebuild",
+            ),
             (
                 "finalize <id>",
                 "Promote a stranded <id>-partition-local/ to canonical",
@@ -1425,6 +1428,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
+             `index` refreshes INCREMENTALLY when the corpus already exists and the root is a\n\
+             git repo — only files changed since the last run are re-embedded. --full forces a\n\
+             from-scratch rebuild; --incremental forces the delta path past the large-delta\n\
+             guard. Either way the mode and the reason are printed before any work starts.\n\
              `mcp-status` accepts --url <url> to override http://localhost:9741/mcp.",
         ),
     ],
@@ -1436,10 +1443,14 @@ async fn cmd_index(args: &[String]) -> i32 {
     let mut path_arg: Option<PathBuf> = None;
     let mut corpus_id: Option<String> = None;
     let mut data_dir: Option<PathBuf> = None;
+    let mut force_full = false;
+    let mut force_incremental = false;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--full" => force_full = true,
+            "--incremental" => force_incremental = true,
             "--corpus-id" => {
                 i += 1;
                 corpus_id = args.get(i).cloned();
@@ -1491,27 +1502,214 @@ async fn cmd_index(args: &[String]) -> i32 {
         .or_else(default_data_dir)
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
-    match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir).await {
-        Ok(stats) => {
-            eprintln!();
+    if force_full && force_incremental {
+        eprintln!("error: --full and --incremental are mutually exclusive");
+        return 1;
+    }
+
+    // ── Choose the mode, out loud ─────────────────────────────
+    // Before this existed, `code index` had exactly one behaviour — clear the
+    // LanceDB artifacts and re-embed the whole repository — and no way to tell
+    // from the invocation that that is what you were about to pay for. The
+    // decision is now explicit, printed, and overridable in both directions.
+    use crate::code_index_incremental as inc;
+    let index_dir = data_dir.join(&corpus_id);
+    let head_now = inc::git_head(&abs_path);
+    let is_git = head_now.is_some();
+    let dirty_now = inc::git_dirty_paths(&abs_path);
+
+    // Prefer the stamp; fall back to the corpus's own last_updated + file
+    // mtimes. The fallback is what makes this useful on day one: no corpus
+    // anywhere has a stamp yet, and without it every one of them would owe a
+    // full rebuild before incremental could ever engage.
+    let resolved = match inc::IndexState::load(&index_dir) {
+        Some(state) => inc::resolve_from_stamp(&state, &abs_path, is_git),
+        None => inc::resolve_from_mtime(
+            inc::corpus_last_updated(&index_dir),
+            inc::source_files_with_mtime(&abs_path),
+        ),
+    };
+
+    let plan = inc::decide(
+        index_dir.exists(),
+        resolved,
+        &dirty_now,
+        force_full,
+        force_incremental,
+    );
+
+    match plan {
+        inc::Plan::UpToDate { base } => {
+            // `base` is already a partner-facing label ("commit a1b2c3d4" /
+            // "the last index run") — re-truncating it here printed "commit 2".
             eprintln!(
-                "✓ Indexed {} chunks in {}s",
-                stats.chunks_created, stats.duration_secs
+                "✓ Corpus '{corpus_id}' is already current as of {base} — nothing changed since \
+                 the last index."
             );
-            eprintln!(
-                "  Corpus: {}  ({} KB on disk)",
-                stats.corpus_id,
-                stats.index_size_bytes / 1024,
-            );
-            eprintln!("  Location: {}/{}", data_dir.display(), stats.corpus_id);
+            eprintln!("  Pass --full to rebuild from scratch anyway.");
             0
         }
-        Err(e) => {
-            eprintln!();
-            eprintln!("✗ Indexing failed: {e}");
-            1
+        inc::Plan::Incremental { files, base } => {
+            eprintln!(
+                "Incremental refresh of '{corpus_id}': {} changed file(s) since {base}",
+                files.len(),
+            );
+            run_incremental(&abs_path, &corpus_id, &data_dir, &files, &head_now, &dirty_now).await
+        }
+        inc::Plan::Full { reason } => {
+            eprintln!("Full rebuild of '{corpus_id}' — {reason}.");
+            eprintln!("Every chunk will be re-embedded; this is the slow path.");
+            match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir).await {
+                Ok(stats) => {
+                    eprintln!();
+                    eprintln!(
+                        "✓ Indexed {} chunks in {}s",
+                        stats.chunks_created, stats.duration_secs
+                    );
+                    eprintln!(
+                        "  Corpus: {}  ({} KB on disk)",
+                        stats.corpus_id,
+                        stats.index_size_bytes / 1024,
+                    );
+                    eprintln!("  Location: {}/{}", data_dir.display(), stats.corpus_id);
+                    stamp_index_state(&index_dir, &abs_path, &head_now, &dirty_now);
+                    0
+                }
+                Err(e) => {
+                    eprintln!();
+                    eprintln!("✗ Indexing failed: {e}");
+                    1
+                }
+            }
         }
     }
+}
+
+/// Write the stamp that makes the NEXT run incremental. Called after both
+/// modes — a full rebuild that forgets to stamp condemns the following run to
+/// another full rebuild, which is how the corpus got 28 days stale in the
+/// first place.
+fn stamp_index_state(
+    index_dir: &Path,
+    root: &Path,
+    head: &Option<String>,
+    dirty: &[String],
+) {
+    let Some(head) = head else {
+        // Not a git repo: no baseline to diff against, so deliberately leave
+        // no stamp rather than one that would be treated as usable.
+        return;
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    crate::code_index_incremental::IndexState::new(
+        head.clone(),
+        dirty.to_vec(),
+        root.display().to_string(),
+        now,
+    )
+    .save(index_dir);
+}
+
+/// Drive `CorpusEngine::reindex_file` over the changed set.
+///
+/// Embeds through the daemon exactly as `rebuild_code_corpus` does — NOT the
+/// zero-vector `EmbedFn` that `cmd_watch` installs. Writing zero vectors into a
+/// vector-searchable corpus silently destroys semantic search for those chunks
+/// (cosine similarity against a zero vector is meaningless), so this path
+/// refuses to run rather than fall back to it.
+async fn run_incremental(
+    root: &Path,
+    corpus_id: &str,
+    data_dir: &Path,
+    files: &[String],
+    head: &Option<String>,
+    dirty: &[String],
+) -> i32 {
+    let (embed, embed_model_name) = match build_daemon_embed_fn().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("✗ {e}");
+            eprintln!(
+                "\nIncremental indexing embeds through the daemon so the changed chunks land in \
+                 the same embedding space as the rest of the corpus. Start it with \
+                 `svrn daemon run` and re-run."
+            );
+            return 1;
+        }
+    };
+    let engine = CorpusEngine::new(data_dir.to_path_buf(), data_dir.to_path_buf(), embed)
+        .with_embedding_model(&embed_model_name);
+
+    let started = std::time::Instant::now();
+    let (mut updated, mut unchanged, mut deleted, mut skipped, mut failed) = (0, 0, 0, 0, 0);
+    let mut chunks_written = 0usize;
+
+    for (n, rel) in files.iter().enumerate() {
+        let abs = root.join(rel);
+        match engine.reindex_file(corpus_id, &abs, root).await {
+            Ok(corpus_engine::engine::reindex::ReindexResult::Updated {
+                chunks_written: w,
+                ..
+            }) => {
+                // `reindex_file` reports 0 written when every chunk hash-matched
+                // a committed row — the whole point of the delta path. Counting
+                // that as "updated" would overstate the work done.
+                if w == 0 {
+                    unchanged += 1;
+                } else {
+                    updated += 1;
+                    chunks_written += w;
+                }
+            }
+            Ok(corpus_engine::engine::reindex::ReindexResult::Deleted { .. }) => deleted += 1,
+            Ok(corpus_engine::engine::reindex::ReindexResult::Skipped) => skipped += 1,
+            Err(e) => {
+                failed += 1;
+                eprintln!("  ! {rel}: {e}");
+            }
+        }
+        if files.len() > 20 && (n + 1) % 20 == 0 {
+            eprintln!("  … {}/{} files", n + 1, files.len());
+        }
+    }
+
+    eprintln!();
+    if failed > 0 {
+        // A partial refresh must not stamp: the next run has to revisit the
+        // files that failed, and a stamp would move the baseline past them.
+        eprintln!(
+            "✗ {failed} file(s) failed to re-index — leaving the index stamp untouched so the \
+             next run retries them."
+        );
+        eprintln!(
+            "  {updated} updated ({chunks_written} chunks), {unchanged} unchanged, {deleted} \
+             deleted, {skipped} skipped"
+        );
+        return 1;
+    }
+
+    eprintln!(
+        "✓ Incremental refresh complete in {}s",
+        started.elapsed().as_secs()
+    );
+    // Both counters are FILE counts. Within an updated file the engine's
+    // chunk-level hash gate embeds only the chunks that actually differ, so
+    // `chunks_written` is routinely far below the file's total chunk count —
+    // don't read it as "the file was re-embedded whole".
+    eprintln!("  {updated} file(s) changed — {chunks_written} chunk(s) embedded");
+    eprintln!("  {unchanged} file(s) already current (every chunk hash-matched)");
+    if deleted > 0 {
+        eprintln!("  {deleted} removed from the index");
+    }
+    if skipped > 0 {
+        eprintln!("  {skipped} skipped (not a recognised source language)");
+    }
+    eprintln!("  Location: {}/{}", data_dir.display(), corpus_id);
+    stamp_index_state(&data_dir.join(corpus_id), root, head, dirty);
+    0
 }
 
 /// Full rebuild of a code corpus's LanceDB index. Shared between
@@ -1567,6 +1765,11 @@ pub async fn rebuild_code_corpus(
 id = "{corpus_id}"
 name = "{corpus_id}"
 description = "Local code corpus generated by `svrn code index`"
+# NOTE: deliberately NOT `kind = "code"`. Retrieval admits only
+# `Knowledge | Catalog`, and CODE_INTEL_CHAT.md routes code questions
+# through the knowledge path — so tagging this `code` would remove the
+# repo from chat. Code-ness is detected from the on-disk `scip_graph.db`
+# (`sovereign_tools::code::has_code_graph`), not from this field.
 license = "private"
 mesh_sharing = false
 size_compressed_gb = 0
@@ -1715,19 +1918,39 @@ async fn cmd_watch(args: &[String]) -> i32 {
     }
     drop(index); // Watcher owns its own CorpusIndex handle via the engine.
 
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
-        })
-    });
+    // The watcher WRITES: every debounced file event runs `reindex_file`,
+    // which embeds the changed chunks and inserts them. So it needs the real
+    // embedder, exactly as `code index` does.
+    //
+    // This used to install a stub `EmbedFn` returning `vec![0.0; DEFAULT_EMBED_DIM]`.
+    // That silently poisoned the corpus: cosine similarity against a zero
+    // vector is meaningless, so semantic search quietly died for precisely the
+    // files being actively edited — the ones most likely to be searched. There
+    // was no error and no warning; the corpus just got worse the longer the
+    // watcher ran. `rebuild_code_corpus` already refuses to run rather than
+    // fall back to zero vectors; this path now holds the same line.
+    let (embed, embed_model_name) = match build_daemon_embed_fn().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: {e}");
+            eprintln!(
+                "\n`svrn code watch` embeds every changed chunk through the daemon so the \
+                 watcher's writes land in the same embedding space as the rest of the corpus. \
+                 Start it with `svrn daemon run` and re-run — the watcher will not run with a \
+                 stub embedder, because that would silently degrade the index it is meant to \
+                 keep current."
+            );
+            return 1;
+        }
+    };
     let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        recipes_dir,
-        data_dir.clone(),
-        embed,
-    ));
+    let engine = Arc::new(
+        corpus_engine::CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
+            .with_embedding_model(&embed_model_name),
+    );
 
     eprintln!("Watching {} for corpus '{corpus_id}'", root.display());
+    eprintln!("Embedding via the daemon ({embed_model_name}).");
     eprintln!("Press Ctrl-C to stop.");
 
     let watcher = corpus_engine::update::watch::CodeWatcher::new(
