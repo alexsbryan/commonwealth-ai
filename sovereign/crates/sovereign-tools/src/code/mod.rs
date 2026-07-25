@@ -22,8 +22,11 @@
 //!
 //! None of these tools return results when no code corpora are indexed.
 //! Non-code corpora (Wikipedia, SEP, etc.) are skipped explicitly by the
-//! `info.kind == CorpusKind::Code` filter in [`query_all_code_indexes`]
-//! and the parallel loop in `code_search`. The earlier design relied on
+//! [`has_code_graph`] screen in [`query_all_code_indexes`] and the
+//! parallel loop in `code_search` — which accepts a `CorpusKind::Code`
+//! tag OR an on-disk `scip_graph.db`, because repo corpora are
+//! deliberately tagged `knowledge` (see [`has_code_graph`] for the full
+//! reasoning). The earlier design relied on
 //! `symbol_name IS NULL` to implicitly filter prose rows, but that only
 //! works when the prose schema *has* a `symbol_name` column with NULLs;
 //! prose-only chunk tables don't include the typed code columns at all,
@@ -323,6 +326,32 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
             .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '$')
 }
 
+/// Is this corpus one the code tools should query?
+///
+/// The honest answer is **not** `kind == CorpusKind::Code`. That tag is
+/// unreliable-by-design for repos: `Recipe.corpus.kind` is a non-`Option`
+/// field defaulting to `Knowledge`, and the two recipes that build code
+/// corpora deliberately leave it that way, because retrieval admits only
+/// `Knowledge | Catalog` and CODE_INTEL_CHAT.md routes code questions
+/// through the knowledge path — a repo tagged `Code` would vanish from
+/// chat. `commonwealth-ai` ships as `kind:"knowledge"` with 36k code
+/// chunks and a full SCIP graph.
+///
+/// So the code tools screened on `kind == Code` and silently matched
+/// nothing: `code_search` reported "0 code corpora" on a machine whose
+/// repo index was perfectly healthy. The robust signal — already chosen
+/// by `handlers/code_query.rs` and `code_trace.rs` for this exact reason
+/// — is an on-disk `scip_graph.db` beside the chunk table.
+///
+/// Accepting either keeps the original safety property intact: a prose
+/// corpus (Wikipedia, SEP) has neither a `Code` tag nor a graph, so it is
+/// still skipped before any Lance call, which matters because its chunk
+/// table lacks the typed code columns entirely and the query would error
+/// at column resolution rather than return zero rows.
+pub fn has_code_graph(info: &corpus_engine::IndexInfo) -> bool {
+    info.kind == CorpusKind::Code || info.path.join("scip_graph.db").exists()
+}
+
 /// Run a filter-pushdown query against every installed *code* corpus and
 /// collect the matching rows into `CodeRow` values. Used by
 /// `SymbolLookupTool` and `RecentChangesTool` — both are exact predicates
@@ -331,6 +360,7 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
 /// Non-code corpora (Wikipedia, SEP, …) are skipped before any Lance call
 /// because their chunk tables lack the typed code columns entirely; the
 /// query would error at column resolution rather than return zero rows.
+/// See [`has_code_graph`] for why that screen is not a `kind` check.
 pub(crate) async fn query_all_code_indexes(
     engine: &Arc<CorpusEngine>,
     filter: &str,
@@ -342,7 +372,7 @@ pub(crate) async fn query_all_code_indexes(
     };
 
     for info in &indexes {
-        if info.kind != CorpusKind::Code {
+        if !has_code_graph(info) {
             continue;
         }
         let Ok(index) = engine.open_index(&info.path).await else {
@@ -520,6 +550,67 @@ mod tests {
         assert!(is_valid_symbol_name("Module::sub"));
         assert!(is_valid_symbol_name("_internal"));
         assert!(is_valid_symbol_name("$special"));
+    }
+
+    /// Build an `IndexInfo` for `path` with the given kind. Goes through
+    /// serde because `IndexInfo` has ~30 fields and no `Default`; every
+    /// field this test doesn't name carries `#[serde(default)]`.
+    fn index_info(path: &std::path::Path, kind: &str) -> corpus_engine::IndexInfo {
+        serde_json::from_value(serde_json::json!({
+            "corpus_id": "some-repo",
+            "corpus_name": "some-repo",
+            "path": path,
+            "chunk_count": 36_541,
+            "index_size_bytes": 1,
+            "created_at": 1,
+            "last_updated": 1,
+            "embedding_model": "test-model",
+            "embedding_dimensions": 1024,
+            "mesh_sharing": false,
+            "is_shard": false,
+            "chunk_range": null,
+            "kind": kind,
+        }))
+        .expect("IndexInfo fixture")
+    }
+
+    /// The regression this whole predicate exists for: a repo corpus tagged
+    /// `knowledge` (the shape `svrn code index` actually writes, and the one
+    /// CODE_INTEL_CHAT.md depends on) must still be searched for code. Under
+    /// the old `kind == Code` screen this returned false and `code_search`
+    /// reported "0 code corpora" against a healthy 36k-chunk index.
+    #[test]
+    fn knowledge_tagged_repo_with_scip_graph_is_a_code_corpus() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("scip_graph.db"), b"").unwrap();
+
+        assert!(
+            has_code_graph(&index_info(dir.path(), "knowledge")),
+            "a knowledge-tagged corpus with a scip_graph.db is still code"
+        );
+    }
+
+    /// A `Code` tag alone is enough — a repo indexed but not yet SCIP-exported
+    /// must not drop out of symbol lookup.
+    #[test]
+    fn code_tagged_corpus_without_graph_is_a_code_corpus() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert!(has_code_graph(&index_info(dir.path(), "code")));
+    }
+
+    /// The safety property the old screen provided is preserved: a prose
+    /// corpus has neither signal, so it is skipped before any Lance call —
+    /// its chunk table lacks the typed code columns and would error at
+    /// column resolution.
+    #[test]
+    fn prose_corpus_is_not_a_code_corpus() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert!(
+            !has_code_graph(&index_info(dir.path(), "knowledge")),
+            "no Code tag and no scip_graph.db → skip, as before"
+        );
     }
 
     #[test]

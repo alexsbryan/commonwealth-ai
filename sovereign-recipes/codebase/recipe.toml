@@ -16,6 +16,11 @@ recipe under `~/.sovereign/recipes/codebase/` with `path` pointing at their \
 repo, or run `sovereign code index <path>` which generates an ephemeral \
 recipe over the supplied path.
 """
+# NOTE: deliberately NOT `kind = "code"`. Retrieval admits only
+# `Knowledge | Catalog`, and CODE_INTEL_CHAT.md routes code questions
+# through the knowledge path — so tagging this `code` would remove the
+# repo from chat. Code-ness is detected from the on-disk `scip_graph.db`
+# (`sovereign_tools::code::has_code_graph`), not from this field.
 license = "private"
 mesh_sharing = false
 size_compressed_gb = 0

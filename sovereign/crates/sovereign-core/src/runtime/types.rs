@@ -27,6 +27,12 @@ use super::{EvidenceShape, SynthesisRoute};
 pub(crate) struct KnowledgeContext {
     pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
     pub(crate) prompt: String,
+    /// The call-graph block appended to `prompt` for code-intel hits, kept
+    /// separately so the DeepQuery grounding gate can seal it into the turn's
+    /// evidence universe. Same rationale as `KnowledgeQueryPlan::code_trace`:
+    /// injected-but-unsealed meant every compiler-resolved caller fact came
+    /// back "could not be confirmed". Empty on non-code turns.
+    pub(crate) code_trace: String,
     pub(crate) system: String,
     pub(crate) speed: Speed,
     pub(crate) search_method: Option<String>,
@@ -161,6 +167,14 @@ pub(crate) struct KnowledgeQueryPlan {
     /// Formatted chunk text used as evidence for the gap check.
     /// Empty string on the parametric path.
     pub(crate) doc_context: String,
+    /// The call-graph block injected into `doc_context` for code-intel hits
+    /// (`code_trace::build_code_trace_block`), kept separately so the
+    /// grounding gate can seal it into the turn's evidence universe. Without
+    /// it the gate verifies the answer against prose chunks only and reports
+    /// every compiler-resolved caller fact as unconfirmed. Empty for the
+    /// common non-code turn — the plan carries a `String`, not an `Option`,
+    /// because "no trace" and "empty trace" are the same thing here.
+    pub(crate) code_trace: String,
     pub(crate) shape: EvidenceShape,
     pub(crate) route: SynthesisRoute,
     pub(crate) gap_check_enabled: bool,

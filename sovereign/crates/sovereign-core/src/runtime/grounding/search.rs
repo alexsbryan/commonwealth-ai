@@ -24,7 +24,13 @@ pub(crate) trait SealedEvidenceSearch: Send + Sync {
 #[async_trait::async_trait]
 impl SealedEvidenceSearch for ClaimSearcher {
     async fn search(&self, claim: &str) -> Vec<String> {
-        self.search_corpus(claim).await
+        // Pinned passages FIRST, and unconditionally — `search_corpus` bails
+        // early when there's no engine or no allowed corpus, and a turn-local
+        // passage must survive those paths too. They are part of the sealed
+        // universe, so including them widens the EVIDENCE, never the scope.
+        let mut out = self.pinned.clone();
+        out.extend(self.search_corpus(claim).await);
+        out
     }
 }
 
@@ -115,6 +121,14 @@ pub(crate) struct ClaimSearcher {
     /// (sealed errs restrictive, same contract as the round-2 mesh
     /// seal in evidence_loop.rs).
     allowed_corpora: Vec<String>,
+    /// Sealed passages that exist ONLY in this turn, not in any corpus —
+    /// today the code-intel call-graph block. `search_corpus` re-searches the
+    /// installed indexes, so a turn-local passage is structurally invisible to
+    /// it: the claim audit would re-derive its evidence from the corpus and
+    /// find nothing, then flag facts that were sitting verbatim in the sealed
+    /// universe. These ride along with every claim's results so the audit sees
+    /// the same evidence the synthesis did. Empty on every non-code turn.
+    pinned: Vec<String>,
 }
 
 impl Runtime {
@@ -145,11 +159,18 @@ impl Runtime {
             inference: Arc::clone(&self.inference),
             engine: self.corpus_engine.clone(),
             allowed_corpora: allowed,
+            pinned: Vec::new(),
         }
     }
 }
 
 impl ClaimSearcher {
+    /// Attach turn-local sealed passages (see [`ClaimSearcher::pinned`]).
+    pub(crate) fn with_pinned(mut self, pinned: Vec<String>) -> Self {
+        self.pinned = pinned.into_iter().filter(|p| !p.trim().is_empty()).collect();
+        self
+    }
+
     /// Sealed hybrid search for ONE audited claim. Returns chunk
     /// contents, interleaved per corpus (cross-corpus scores don't
     /// compose — `ScoredChunk`'s own caveat), capped at

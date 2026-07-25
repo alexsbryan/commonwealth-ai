@@ -802,12 +802,24 @@ impl CorpusIndex {
         // `source_path` is only set by the code-ingest pipeline
         // (`CorpusIndex::set_source_path`, called from `sovereign
         // code index`) — every other ingest path leaves it `None`.
-        // That makes it the authoritative signal for "is this a
-        // code corpus?" without needing a schema migration on
-        // already-written `_corpus_meta.json` files.
         // Prefer the explicit `kind` written at ingest time. Fall back
         // to source_path-based derivation for indexes written before
         // the field existed (Some → Code, None → Knowledge).
+        //
+        // DO NOT "fix" a repo corpus tagged `knowledge` by making
+        // source_path win here. That tag is load-bearing, not a bug:
+        // retrieval admits only `Knowledge | Catalog`
+        // (`runtime/retrieval/corpus_search.rs:95`) and `GET
+        // /v1/corpora` only `Knowledge` (`sovereign-server
+        // routes.rs:494`), so promoting a repo to `Code` silently
+        // removes it from chat — and CODE_INTEL_CHAT.md deliberately
+        // routes code questions THROUGH the knowledge path
+        // (`handlers/code_query.rs` narrows to the graph-bearing
+        // corpora, then delegates). `commonwealth-ai` is
+        // `kind:"knowledge"` with a `scip_graph.db` by design.
+        // Consumers that want "is this a code corpus?" must ask the
+        // robust question — an on-disk `scip_graph.db` — via
+        // `sovereign_tools::code::has_code_graph`.
         let kind = meta.kind.unwrap_or_else(|| {
             if meta.source_path.is_some() {
                 crate::types::CorpusKind::Code
@@ -1627,6 +1639,48 @@ mod tests {
         assert!(info.index_size_bytes > 0);
         assert!(info.created_at > 0);
         assert!(info.last_updated >= info.created_at);
+    }
+
+    /// An explicit `knowledge` tag SURVIVES a `source_path`.
+    ///
+    /// This looks like a mis-tag and is not. A repo corpus must stay
+    /// `Knowledge` to remain visible to chat retrieval (which admits only
+    /// `Knowledge | Catalog`), because CODE_INTEL_CHAT.md routes code
+    /// questions through the knowledge path. Promoting it to `Code` here
+    /// silently deletes the repo from chat. `commonwealth-ai` ships in
+    /// exactly this shape. Consumers wanting "is this a code corpus?" ask
+    /// `sovereign_tools::code::has_code_graph` instead.
+    #[tokio::test]
+    async fn info_kind_keeps_explicit_knowledge_tag_despite_source_path() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.set_kind_and_parent(Some(crate::types::CorpusKind::Knowledge), None)
+            .unwrap();
+        idx.set_source_path(Path::new("/home/dev/some-repo")).unwrap();
+
+        assert_eq!(
+            idx.info().await.unwrap().kind,
+            crate::types::CorpusKind::Knowledge,
+            "a repo corpus stays Knowledge so chat retrieval still sees it; \
+             code-ness is detected from scip_graph.db, not from this tag"
+        );
+    }
+
+    /// Legacy indexes written before the `kind` field existed still derive
+    /// `Code` from `source_path` — that fallback is untouched.
+    #[tokio::test]
+    async fn info_kind_derives_code_from_source_path_when_untagged() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.set_source_path(Path::new("/home/dev/some-repo")).unwrap();
+
+        assert_eq!(
+            idx.info().await.unwrap().kind,
+            crate::types::CorpusKind::Code,
+            "no explicit kind → source_path derivation still applies"
+        );
     }
 
     #[tokio::test]

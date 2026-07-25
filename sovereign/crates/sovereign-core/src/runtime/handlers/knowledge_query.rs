@@ -513,6 +513,8 @@ impl Runtime {
                 chunks: Vec::new(),
                 gate_entity_anchored: false,
                 doc_context: String::new(),
+                // No chunks retrieved ⇒ no code-intel hits ⇒ no trace.
+                code_trace: String::new(),
                 shape: compute_evidence_shape(&[], message),
                 route: SynthesisRoute::FastFocused,
                 // Empty retrieval is the strongest case for asking the
@@ -709,6 +711,8 @@ impl Runtime {
                 chunks: Vec::new(),
                 gate_entity_anchored: false,
                 doc_context: String::new(),
+                // No chunks retrieved ⇒ no code-intel hits ⇒ no trace.
+                code_trace: String::new(),
                 // The REAL measured shape rides along so streaming's
                 // EvidenceCheck narration frame and turn metadata can show
                 // the user exactly what was found and why it was withheld.
@@ -1029,13 +1033,13 @@ impl Runtime {
         // the real graph, not prose. Reads the corpus's `scip_graph.db` via the
         // lean `corpus-engine-scip` crate — no tree-sitter grammars. Empty string
         // (zero overhead) for the common non-code corpus, so it is unconditional.
-        let doc_context = {
-            let code_trace = crate::runtime::code_trace::build_code_trace_block(&chunks).await;
-            if code_trace.is_empty() {
-                doc_context
-            } else {
-                format!("{doc_context}\n\n{code_trace}")
-            }
+        // Kept in scope (not consumed inline) so the gate can seal it into the
+        // turn's evidence universe below — see `trace_source_labels`.
+        let code_trace = crate::runtime::code_trace::build_code_trace_block(&chunks).await;
+        let doc_context = if code_trace.is_empty() {
+            doc_context
+        } else {
+            format!("{doc_context}\n\n{code_trace}")
         };
         let knowledge_block = if conv_briefing.is_empty() {
             doc_context.clone()
@@ -1428,6 +1432,7 @@ impl Runtime {
             chunks,
             gate_entity_anchored,
             doc_context,
+            code_trace,
             shape,
             route,
             gap_check_enabled,
@@ -1511,14 +1516,52 @@ impl Runtime {
         let completion_text = if gate_surface.enabled() && !plan.chunks.is_empty() {
             // The turn's sealed evidence universe; claim search
             // sealed to the conversation's corpora.
+            // The call-graph block joins the sealed universe as one more
+            // evidence chunk, carrying its own `Call-graph trace for `X``
+            // labels. Without this the gate verified the answer against the
+            // prose chunks only and reported every compiler-resolved caller
+            // fact as unconfirmed — see `code_trace::trace_source_labels`.
+            let mut gate_chunks = crate::runtime::grounding::gate_evidence_chunks(&plan.chunks);
+            let mut gate_labels =
+                crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks);
+            let mut gate_chunk_labels =
+                crate::runtime::grounding::gate_evidence_chunk_labels(&plan.chunks);
+            if !plan.code_trace.is_empty() {
+                let trace_labels =
+                    crate::runtime::code_trace::trace_source_labels(&plan.code_trace);
+                gate_chunks.push(plan.code_trace.clone());
+                gate_labels.extend(trace_labels.iter().cloned());
+                // chunk_labels is PARALLEL to chunks — one entry for the block
+                // we just pushed, or the citation-alignment check mis-maps.
+                if gate_chunk_labels.len() + 1 == gate_chunks.len() {
+                    gate_chunk_labels.push(trace_labels.clone());
+                }
+                // Glassbox: without this you cannot tell "the trace wasn't
+                // sealed" from "the judge didn't accept it" when a call-graph
+                // fact still lands in the verification note.
+                tracing::info!(
+                    target: "grounding_gate",
+                    trace_chars = plan.code_trace.len(),
+                    trace_labels = trace_labels.len(),
+                    evidence_chunks = gate_chunks.len(),
+                    "sealed call-graph trace into the gate's evidence universe"
+                );
+            }
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: crate::runtime::grounding::gate_evidence_chunks(&plan.chunks),
-                source_labels: crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks),
-                chunk_labels: crate::runtime::grounding::gate_evidence_chunk_labels(&plan.chunks),
-                searcher: Some(std::sync::Arc::new(self.claim_searcher(
-                    context.conversation.enabled_corpora.as_deref(),
-                    &plan.chunks,
-                )) as _),
+                chunks: gate_chunks,
+                source_labels: gate_labels,
+                chunk_labels: gate_chunk_labels,
+                searcher: Some(std::sync::Arc::new(
+                    self.claim_searcher(
+                        context.conversation.enabled_corpora.as_deref(),
+                        &plan.chunks,
+                    )
+                    .with_pinned(if plan.code_trace.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![plan.code_trace.clone()]
+                    }),
+                ) as _),
                 entity_anchored: plan.gate_entity_anchored,
                 // The real nearest-chunk cosine from retrieval — arms the
                 // gate's SOVEREIGN_KQ_RETRY_FLOOR guard, which was a silent

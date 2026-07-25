@@ -23,7 +23,6 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
-use corpus_engine::types::CorpusKind;
 use corpus_engine::CorpusEngine;
 
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
@@ -202,7 +201,7 @@ impl Tool for CodeSearchTool {
         // vanish into a `tracing::debug!`).
         let code_corpora = indexes
             .iter()
-            .filter(|i| i.kind == CorpusKind::Code)
+            .filter(|i| super::has_code_graph(i))
             .count();
         let mut opened_ok = 0usize;
         // Chunk-index age per code corpus: `last_updated` is stamped by
@@ -216,7 +215,7 @@ impl Tool for CodeSearchTool {
             .unwrap_or(0);
         let mut aging_corpora: Vec<(String, u64)> = Vec::new();
         for info in &indexes {
-            if info.kind != CorpusKind::Code {
+            if !super::has_code_graph(info) {
                 continue;
             }
             let age_days = now_secs.saturating_sub(info.last_updated) / 86_400;

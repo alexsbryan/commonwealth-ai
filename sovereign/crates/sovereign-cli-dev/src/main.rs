@@ -24,6 +24,7 @@ mod audit_extract;
 mod audit_recover;
 mod code_capability_graph;
 mod code_cmd;
+mod code_index_incremental;
 mod code_map;
 mod design_onboarding;
 mod design_session;

@@ -367,6 +367,96 @@ async fn reindex_file_updates_and_deletes() {
     assert!(!has_symbol(&idx, "probe_direct_reindex").await);
 }
 
+/// Regression: a file whose symbols sit on ADJACENT lines must not lose
+/// symbols when reindexed.
+///
+/// The extractor pads each symbol with `context_lines`, so tightly-packed
+/// functions produce several chunks with byte-identical content — and
+/// therefore one shared content hash. `reindex_file` used to map its added
+/// chunks back to extractor output through a `HashMap<content_hash, _>`,
+/// which kept only the last of those chunks; every added chunk then resolved
+/// to that same entry. The count still matched, so the "could not resolve"
+/// fallback never fired, and the file's rows were replaced by N copies of its
+/// LAST symbol — the others silently vanished from the index.
+///
+/// Observed in the wild via `svrn code watch`: appending one function to a
+/// 3-function file left four identical rows and destroyed the other three
+/// symbols. The mapping is positional now, which cannot collapse.
+#[tokio::test]
+async fn reindex_preserves_every_symbol_when_chunks_share_content() {
+    let fx = Fixture::new("adjacent").await;
+    fx.initial_index().await;
+
+    // Adjacent definitions — no blank lines. With context padding every
+    // chunk here expands to the same text.
+    let packed = fx.root.join("src/packed.rs");
+    std::fs::write(
+        &packed,
+        "pub fn packed_one() {}\npub fn packed_two() {}\npub fn packed_three() {}\n",
+    )
+    .unwrap();
+    let engine = fx.engine();
+    engine
+        .reindex_file(fx.corpus_id(), &packed, &fx.root)
+        .await
+        .expect("initial reindex of packed.rs");
+
+    let idx = fx.open().await;
+    for s in ["packed_one", "packed_two", "packed_three"] {
+        assert!(has_symbol(&idx, s).await, "{s} missing after first index");
+    }
+    drop(idx);
+
+    // Append a fourth. Every prior symbol must survive.
+    std::fs::write(
+        &packed,
+        "pub fn packed_one() {}\npub fn packed_two() {}\npub fn packed_three() {}\n\
+         pub fn packed_four() {}\n",
+    )
+    .unwrap();
+    engine
+        .reindex_file(fx.corpus_id(), &packed, &fx.root)
+        .await
+        .expect("reindex after append");
+
+    let idx = fx.open().await;
+    for s in [
+        "packed_one",
+        "packed_two",
+        "packed_three",
+        "packed_four",
+    ] {
+        assert!(
+            has_symbol(&idx, s).await,
+            "{s} was lost by reindex_file — identical-content chunks collapsed again"
+        );
+    }
+    assert_eq!(
+        symbol_row_count(&idx, "packed_four").await,
+        1,
+        "packed_four duplicated — added chunks resolved to the same extractor entry"
+    );
+}
+
+/// How many rows carry `name` as their `symbol_name`.
+async fn symbol_row_count(index: &CorpusIndex, name: &str) -> usize {
+    use futures::TryStreamExt;
+    use lancedb::query::{ExecutableQuery, QueryBase};
+
+    let safe = name.replace('\'', "''");
+    let batches: Vec<_> = index
+        .table()
+        .query()
+        .only_if(format!("symbol_name = '{safe}'"))
+        .execute()
+        .await
+        .expect("query")
+        .try_collect()
+        .await
+        .expect("collect");
+    batches.iter().map(|b| b.num_rows()).sum()
+}
+
 // ─── source_path round-trip (CLI watch relies on this) ────────
 
 #[tokio::test]
