@@ -26,22 +26,49 @@
 //      be something you read off the run, not something you discover in
 //      the edit.
 //
-// Hand-recorded beats (B7, the Pi) go through the SAME ladder: drop a
-// .mov/.mp4 at test-artifacts/demo/raw/<beat-id>.<ext> and it is encoded
-// with identical settings so it cuts into the reel without looking
-// pasted in.
+// Hand-recorded beats (B3's mesh-app windows, B7's Pi) go through the
+// SAME contract and the SAME ladder:
+//
+//   · A raw take is encoded ONLY if its gate — a real test in the same
+//     run, see beat.ts `rawBeatTest` — passed. A .mov sitting in raw/
+//     with no passing gate this run is refused and listed, because "a
+//     human dropped a file in" is not evidence and the rest of the reel
+//     is held to evidence.
+//   · It is normalized to the reel's geometry and frame rate, and its
+//     lower-thirds are burned in using the SAME chip the live beats draw
+//     (tests/e2e/demo/reel-style.mjs, rasterized through Chromium). The
+//     cue times come from raw/<beat-id>.captions.json, which the gate
+//     seeds with the beat's scripted lines; only the operator can know
+//     the times, so only the times are theirs to fill in.
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromium } from "@playwright/test";
+import { CAPTION, REEL, captionOverlayHtml } from "../demo/reel-style.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
-const DEMO_DIR = path.join(CRATE_ROOT, "test-artifacts/demo");
+// Overridable so the exporter can be exercised against a scratch
+// artifacts tree (a sample take, a regression fixture) without touching
+// the operator's real ledger.
+const DEMO_DIR = process.env.SOVEREIGN_DEMO_ARTIFACTS ?? path.join(CRATE_ROOT, "test-artifacts/demo");
 const LEDGER = path.join(DEMO_DIR, "ledger.jsonl");
 const RAW_DIR = path.join(DEMO_DIR, "raw");
 const OUT_DIR = path.join(DEMO_DIR, "out");
 const MANIFEST = path.join(DEMO_DIR, "MANIFEST.md");
+/** Normalized + captioned masters for raw takes. Kept on disk so a
+ *  re-export doesn't re-render, and so you can eyeball what the ladder
+ *  was actually fed when a clip looks wrong. */
+const MASTER_DIR = path.join(RAW_DIR, ".master");
+/** The variable font the app itself loads (src/main.ts). Inlined into
+ *  the caption plate so the burned-in type is the app's type and not
+ *  whatever Chromium falls back to. */
+const FONT_FILE = path.join(
+  CRATE_ROOT,
+  "node_modules/@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2",
+);
+const RAW_EXT = /\.(mov|mp4|m4v|webm|mkv)$/i;
 
 // ── args ─────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -60,6 +87,13 @@ const OPTS = {
   gifMaxMb: Number(flag("gif-max-mb", 5)),
   leadInSec: Number(flag("lead-in", 0.6)),
   noGif: has("no-gif"),
+  /** Skip the frosted backdrop behind burned-in captions (the live chip
+   *  gets it from CSS `backdrop-filter`). Escape hatch for an ffmpeg
+   *  build where the mask composite misbehaves — the caption still
+   *  renders, just flat. */
+  noCaptionBlur: has("no-caption-blur"),
+  /** Re-render raw masters even when one is already on disk. */
+  freshMasters: has("fresh-masters"),
 };
 
 // ── tool discovery ───────────────────────────────────────────────────
@@ -279,6 +313,231 @@ function encodeGif(src, stem, startSec, lenSec) {
   return null;
 }
 
+// ── raw takes: the operator's footage, the machine's contract ────────
+
+/** The take the operator recorded for `id`, or null. */
+function findRawTake(id) {
+  if (!fs.existsSync(RAW_DIR)) return null;
+  const hit = fs
+    .readdirSync(RAW_DIR)
+    .filter((f) => RAW_EXT.test(f))
+    .find((f) => f.replace(/\.[^.]+$/, "") === id);
+  return hit ? path.join(RAW_DIR, hit) : null;
+}
+
+/** Cue sheet for a raw take: trim handles + caption times. The gate
+ *  seeds it; the operator fills in the numbers against their recording.
+ *  Absent or malformed is not fatal — the clip still exports, and the
+ *  manifest says what it went out without. */
+function readCaptionSheet(id) {
+  const file = path.join(RAW_DIR, `${id}.captions.json`);
+  const empty = { file, trimInSec: null, trimOutSec: null, captions: [], notes: [] };
+  if (!fs.existsSync(file)) {
+    return { ...empty, notes: [`no cue sheet at ${path.basename(file)} — no lower-thirds burned in`] };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    return { ...empty, notes: [`cue sheet ${path.basename(file)} is not valid JSON (${e.message}) — ignored`] };
+  }
+  const notes = [];
+  const captions = [];
+  for (const c of parsed.captions ?? []) {
+    if (typeof c?.at !== "number" || !Number.isFinite(c.at)) {
+      notes.push(`caption "${String(c?.text ?? "").slice(0, 48)}…" has no \`at\` time — not burned in`);
+      continue;
+    }
+    captions.push({ at: c.at, text: String(c.text ?? ""), holdMs: Number(c.holdMs ?? CAPTION.holdMs) });
+  }
+  captions.sort((a, b) => a.at - b.at);
+  return {
+    file,
+    trimInSec: typeof parsed.trimInSec === "number" ? parsed.trimInSec : null,
+    trimOutSec: typeof parsed.trimOutSec === "number" ? parsed.trimOutSec : null,
+    captions,
+    notes,
+  };
+}
+
+/** Rasterize each caption to a full-frame RGBA plate through the SAME
+ *  CSS the live overlay sets. One browser for the whole export. */
+async function renderCaptionPlates(jobs) {
+  if (jobs.length === 0) return;
+  let fontDataUri = null;
+  if (fs.existsSync(FONT_FILE)) {
+    fontDataUri = `data:font/woff2;base64,${fs.readFileSync(FONT_FILE).toString("base64")}`;
+  } else {
+    console.warn(
+      `  ! ${path.relative(CRATE_ROOT, FONT_FILE)} is missing — burned-in captions will fall\n` +
+        `    back to a system font and will NOT match the live beats. \`npm install\`.`,
+    );
+  }
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({
+      viewport: { width: REEL.width, height: REEL.height },
+      deviceScaleFactor: 1,
+    });
+    for (const job of jobs) {
+      // Two plates per cue: the chip as it looks, and its SHAPE. The
+      // shape is what `backdrop-filter` blurs — masking the blur with
+      // the chip's own 82%-opaque paint composites the frost at 82% and
+      // reads darker than the live caption.
+      for (const [file, maskPlate] of [
+        [job.png, false],
+        [job.maskPng, true],
+      ]) {
+        await page.setContent(captionOverlayHtml(job.text, { fontDataUri, maskPlate }), {
+          waitUntil: "load",
+        });
+        await page.evaluate(() => document.fonts.ready);
+        await page.screenshot({ path: file, omitBackground: true });
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Normalize a raw take to the reel's frame and burn its captions in.
+ *
+ * Geometry: scaled to fit and centered on the reel background rather
+ * than stretched — a take shot at the wrong aspect gets framed, not
+ * distorted, and the manifest says it was padded so it can be reshot.
+ *
+ * Captions: each plate is a full-length RGBA stream that is transparent
+ * except during its cue (fade drives the alpha directly on the clip's
+ * timeline, so no PTS juggling). The frosted backdrop is the blurred
+ * frame carrying the plate's own alpha — which reproduces CSS
+ * `backdrop-filter` including the chip's rounded corners, instead of
+ * approximating it with a rectangle.
+ */
+async function buildRawMaster(src, id, sheet) {
+  const master = path.join(MASTER_DIR, `${id}.mp4`);
+  if (fs.existsSync(master) && !OPTS.freshMasters) return { master, reused: true, notes: [] };
+  fs.mkdirSync(MASTER_DIR, { recursive: true });
+
+  const notes = [];
+  const srcDur = durationSec(src);
+  const trimIn = Math.max(0, sheet.trimInSec ?? 0);
+  const trimOut =
+    sheet.trimOutSec !== null && sheet.trimOutSec > trimIn ? sheet.trimOutSec : srcDur;
+  const clipDur = Math.max(0.1, trimOut - trimIn);
+
+  const probe = JSON.parse(
+    sh("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "json",
+      src,
+    ]).toString(),
+  );
+  const sw = Number(probe.streams?.[0]?.width ?? 0);
+  const sh_ = Number(probe.streams?.[0]?.height ?? 0);
+  if (sw && sh_) {
+    const srcAspect = sw / sh_;
+    const reelAspect = REEL.width / REEL.height;
+    if (Math.abs(srcAspect - reelAspect) > 0.01) {
+      notes.push(
+        `recorded at ${sw}×${sh_} (${srcAspect.toFixed(2)}:1), padded onto the reel's ` +
+          `${REEL.width}×${REEL.height} frame — reshoot at ${REEL.width}×${REEL.height} (or any 16:10) ` +
+          `to fill it`,
+      );
+    }
+  }
+
+  // Caption plates.
+  const cues = sheet.captions.map((c, i) => ({
+    ...c,
+    png: path.join(MASTER_DIR, `.cap-${id}-${i}.png`),
+    maskPng: path.join(MASTER_DIR, `.capmask-${id}-${i}.png`),
+  }));
+
+  await renderCaptionPlates(cues);
+
+  // Input order: [0] the take, then per cue the chip plate and (unless
+  // captions are flat) its shape plate.
+  const perCue = OPTS.noCaptionBlur ? 1 : 2;
+  const inputs = ["-ss", String(trimIn), "-t", String(clipDur), "-i", src];
+  for (const c of cues) {
+    inputs.push("-loop", "1", "-t", String(clipDur), "-i", c.png);
+    if (!OPTS.noCaptionBlur) inputs.push("-loop", "1", "-t", String(clipDur), "-i", c.maskPng);
+  }
+
+  const fi = CAPTION.fadeInMs / 1000;
+  const fo = CAPTION.fadeOutMs / 1000;
+  const chain = [];
+  chain.push(
+    `[0:v]scale=${REEL.width}:${REEL.height}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+      `pad=${REEL.width}:${REEL.height}:(ow-iw)/2:(oh-ih)/2:color=${REEL.bg},` +
+      `setsar=1,fps=${REEL.fps}[base]`,
+  );
+
+  let cursor = "base";
+  if (cues.length && !OPTS.noCaptionBlur) {
+    chain.push(`[base]split=2[base_k][base_b]`);
+    chain.push(`[base_b]gblur=sigma=${CAPTION.blurPx}[blurred]`);
+    chain.push(`[blurred]split=${cues.length}${cues.map((_, i) => `[bl${i}]`).join("")}`);
+    cursor = "base_k";
+  }
+
+  // Each plate is a full-length RGBA stream that fade drives to
+  // transparent outside its cue — the alpha animates on the CLIP's
+  // timeline, so no PTS shifting and no chance of the frosted backdrop
+  // sampling the wrong moment.
+  cues.forEach((c, i) => {
+    const outSt = c.at + Math.max(0.1, c.holdMs / 1000);
+    const fades =
+      `fade=t=in:st=${c.at.toFixed(3)}:d=${fi}:alpha=1,` +
+      `fade=t=out:st=${outSt.toFixed(3)}:d=${fo}:alpha=1`;
+    const chipIn = i * perCue + 1;
+    chain.push(`[${chipIn}:v]format=rgba,${fades}[cap${i}]`);
+    if (OPTS.noCaptionBlur) {
+      chain.push(`[${cursor}][cap${i}]overlay=0:0:format=auto[v${i}]`);
+    } else {
+      chain.push(`[${chipIn + 1}:v]format=rgba,${fades},alphaextract[capm${i}]`);
+      chain.push(`[bl${i}]format=rgba[blr${i}]`);
+      chain.push(`[blr${i}][capm${i}]alphamerge[frost${i}]`);
+      chain.push(`[${cursor}][frost${i}]overlay=0:0:format=auto[vf${i}]`);
+      chain.push(`[vf${i}][cap${i}]overlay=0:0:format=auto[v${i}]`);
+    }
+    cursor = `v${i}`;
+  });
+
+  // Visually lossless intermediate: the shipping ladder re-encodes from
+  // this, and one generation at CRF 16 costs nothing you can see.
+  sh("ffmpeg", [
+    "-y",
+    ...inputs,
+    "-filter_complex", chain.join(";"),
+    "-map", `[${cursor}]`,
+    "-c:v", "libx264", "-crf", "16", "-preset", "medium",
+    "-pix_fmt", "yuv420p",
+    "-r", String(REEL.fps),
+    "-an",
+    master,
+  ]);
+
+  for (const c of cues) {
+    fs.rmSync(c.png, { force: true });
+    fs.rmSync(c.maskPng, { force: true });
+  }
+  if (cues.length) {
+    notes.push(
+      `${cues.length} lower-third(s) burned in at ` +
+        cues.map((c) => `${c.at.toFixed(1)}s`).join(", ") +
+        (OPTS.noCaptionBlur ? " (flat — --no-caption-blur)" : ""),
+    );
+  }
+  if (trimIn > 0 || trimOut < srcDur - 0.01) {
+    notes.push(`trimmed to ${trimIn.toFixed(1)}s–${trimOut.toFixed(1)}s of ${srcDur.toFixed(1)}s`);
+  }
+  return { master, reused: false, notes, cues };
+}
+
 // ── main ─────────────────────────────────────────────────────────────
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.mkdirSync(RAW_DIR, { recursive: true });
@@ -289,6 +548,7 @@ const problems = [];
 
 for (const b of beats) {
   if (OPTS.beat && b.id !== OPTS.beat) continue;
+  if (b.capture === "raw") continue; // handled below, against its take
 
   if (b.status !== "passed") {
     problems.push({
@@ -350,32 +610,98 @@ for (const b of beats) {
   results.push({ ...b, produced, gif, gifNotes, clipSec: dur - start });
 }
 
-// ── hand-recorded beats (B7 and anything else out-of-band) ───────────
-const rawFiles = fs
-  .readdirSync(RAW_DIR)
-  .filter((f) => /\.(mov|mp4|m4v|webm)$/i.test(f))
-  .filter((f) => !OPTS.beat || f.startsWith(OPTS.beat));
+// ── hand-recorded beats (B3's mesh-app windows, B7's Pi) ─────────────
+//
+// The gate authorizes the take; nothing else does. In particular a file
+// that appears in raw/ with no passing gate in THIS run is refused —
+// silently encoding it would reintroduce exactly the "ships without
+// proof" hole the rest of this script exists to close.
+const rawBeats = beats.filter((b) => b.capture === "raw" && (!OPTS.beat || b.id === OPTS.beat));
+const gatedIds = new Set(rawBeats.filter((b) => b.status === "passed").map((b) => b.id));
 
-for (const f of rawFiles) {
-  const src = path.join(RAW_DIR, f);
-  const stem = f.replace(/\.[^.]+$/, "");
-  const dur = durationSec(src);
-  process.stdout.write(`▸ ${stem} (hand-recorded, ${dur.toFixed(1)}s) … `);
-  const produced = encodeLadder(src, stem, 0, dur);
-  const gif = OPTS.noGif
-    ? null
-    : encodeGif(src, stem, 0, Math.min(OPTS.gifMaxSec, dur));
-  process.stdout.write(`ok${gif ? ` · gif ${gif.mbytes.toFixed(1)} MB` : ""}\n`);
+for (const b of rawBeats) {
+  if (b.status !== "passed") {
+    problems.push({
+      id: b.id,
+      title: b.title,
+      why:
+        (b.status === "skipped"
+          ? `GATE SKIPPED — ${b.skipReason ?? "no reason recorded"}`
+          : `GATE FAILED — ${(b.error ?? "").split("\n")[0] || "assertion failed"}`) +
+        ` (the take, if any, is not authorized)`,
+    });
+    continue;
+  }
+  const src = findRawTake(b.id);
+  if (!src) {
+    problems.push({
+      id: b.id,
+      title: b.title,
+      why:
+        `gate PASSED but there is no take at raw/${b.id}.{mov,mp4,m4v,webm,mkv}. ` +
+        `Record it:\n` +
+        (b.recordingGuide ?? []).map((s) => `    - ${s}`).join("\n"),
+    });
+    continue;
+  }
+
+  const sheet = readCaptionSheet(b.id);
+  process.stdout.write(`▸ ${b.id} (hand-recorded) … `);
+  const built = await buildRawMaster(src, b.id, sheet);
+  const dur = durationSec(built.master);
+  const produced = encodeLadder(built.master, b.id, 0, dur);
+
+  // Short-form loop: raw takes have no marks, so cut on the first cue
+  // (the operator's own idea of where the beat lands) or the head.
+  let gif = null;
+  const gifNotes = [];
+  if (!OPTS.noGif) {
+    const pad = Number(b.gifPadSec ?? 1.2);
+    const anchor = sheet.captions[0]?.at ?? 0;
+    const gStart = Math.max(0, anchor - pad);
+    gif = encodeGif(built.master, b.id, gStart, Math.min(OPTS.gifMaxSec, Math.max(2, dur - gStart)));
+    if (gif?.downgrades?.length) gifNotes.push(...gif.downgrades);
+    if (gif) {
+      gifNotes.unshift(
+        sheet.captions.length
+          ? `cut on the first cue at ${anchor.toFixed(1)}s (+${pad}s lead-in)`
+          : `no cues on the sheet — cut from the head`,
+      );
+    }
+  }
+
+  process.stdout.write(
+    `ok${built.reused ? " (reused master)" : ""}${gif ? ` · gif ${gif.mbytes.toFixed(1)} MB` : ""}\n`,
+  );
   results.push({
-    id: stem,
-    title: "(hand-recorded)",
-    claim: "",
-    status: "passed",
-    notes: ["captured out-of-band; correctness is human-attested, not asserted"],
+    ...b,
     produced,
     gif,
-    gifNotes: [],
+    gifNotes,
     clipSec: dur,
+    notes: [
+      `hand-recorded from ${path.relative(DEMO_DIR, src)}; the CLAIM was gated by the ` +
+        `\`${b.id}\` test in this run, the PIXELS are human-attested`,
+      ...(b.notes ?? []),
+      ...built.notes,
+      ...sheet.notes,
+    ],
+  });
+}
+
+// Footage with no gate at all. Named, not ignored.
+for (const f of fs.existsSync(RAW_DIR) ? fs.readdirSync(RAW_DIR) : []) {
+  if (!RAW_EXT.test(f)) continue;
+  const stem = f.replace(/\.[^.]+$/, "");
+  if (gatedIds.has(stem)) continue;
+  if (OPTS.beat && stem !== OPTS.beat) continue;
+  problems.push({
+    id: stem,
+    title: "(unrecognized raw take)",
+    why:
+      `raw/${f} has no raw beat with a passing gate in this run, so it was NOT encoded. ` +
+      `Hand-recorded footage ships only behind a gate — add a \`rawBeatTest\` whose id is ` +
+      `\`${stem}\`, or rename the file to match an existing one.`,
   });
 }
 

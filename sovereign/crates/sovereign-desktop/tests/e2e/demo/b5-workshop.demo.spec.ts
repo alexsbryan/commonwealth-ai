@@ -34,21 +34,35 @@ const WORKFLOWS_DIR = path.join(
   `test-artifacts/${PROFILE_DIR}/home/.sovereign/workflows`,
 );
 
-function listWorkflowTomls(): string[] {
+/** Every workflow `.toml` in the profile, with the mtime it had when looked at. */
+function listWorkflowTomls(): Map<string, number> {
+  const out = new Map<string, number>();
   try {
-    return fs
-      .readdirSync(WORKFLOWS_DIR)
-      .filter((f) => f.endsWith(".toml"))
-      .map((f) => path.join(WORKFLOWS_DIR, f));
+    for (const f of fs.readdirSync(WORKFLOWS_DIR)) {
+      if (!f.endsWith(".toml")) continue;
+      const p = path.join(WORKFLOWS_DIR, f);
+      out.set(p, fs.statSync(p).mtimeMs);
+    }
   } catch {
-    return [];
+    /* dir not created until the first authored workflow */
   }
+  return out;
 }
 
-/** A fresh, parseable workflow ([workflow] header + ≥1 [[step]]) not in `before`. */
-function newAuthoredWorkflow(before: Set<string>): string | null {
-  for (const p of listWorkflowTomls()) {
-    if (before.has(p)) continue;
+/** A parseable workflow ([workflow] header + ≥1 [[step]]) that THIS BEAT caused
+ *  to be written — either a path that did not exist before, or one whose mtime
+ *  moved.
+ *
+ *  Identity is deliberately not "a path not in `before`". The authored file is
+ *  named after the project title, so it is `folder-summaries.toml` on every run;
+ *  demo mode defaults to `SOVEREIGN_REAL_KEEP_PROFILE=1`, so the second run finds
+ *  its own filename already there, calls it "not new", and fails the beat *while
+ *  the agent is authoring correctly* — which is exactly what it did on
+ *  2026-07-24 and 2026-07-25. A write is a write; an overwrite is a write too. */
+function newAuthoredWorkflow(before: Map<string, number>): string | null {
+  for (const [p, mtime] of listWorkflowTomls()) {
+    const prior = before.get(p);
+    if (prior !== undefined && mtime <= prior) continue;
     const t = fs.readFileSync(p, "utf8");
     if (t.includes("[workflow]") && /\[\[step\]\]/.test(t)) return p;
   }
@@ -91,7 +105,7 @@ beatTest(
         "skip, the attach guard didn't take.",
     );
 
-    const before = new Set(listWorkflowTomls());
+    const before = listWorkflowTomls();
 
     await realBootToChat(page);
     await demoClick(page, page.getByTestId("nav-workshop"), { settleMs: 600 });
@@ -167,14 +181,18 @@ beatTest(
     expect(
       authored,
       `the agent must write a workflow .toml into ${WORKFLOWS_DIR} — this beat films ` +
-        "the authoring loop, so an unauthored workflow is a failed beat, not a soft note",
+        "the authoring loop, so an unauthored workflow is a failed beat, not a soft note. " +
+        `Present now: ${[...listWorkflowTomls().keys()].map((p) => path.basename(p)).join(", ") || "(none)"}`,
     ).not.toBeNull();
 
     const toml = fs.readFileSync(authored as string, "utf8");
     expect(toml).toContain("[workflow]");
     expect(toml).toMatch(/\[\[step\]\]/);
     expect(toml).toMatch(/uses\s*=\s*"/);
-    run.note(`authored ${path.basename(authored as string)} (${toml.length} bytes)`);
+    run.note(
+      `authored ${path.basename(authored as string)} (${toml.length} bytes` +
+        `${before.has(authored as string) ? ", overwriting a prior run's file" : ""})`,
+    );
     run.mark("authored");
 
     // ── The reveal: it wrote a recipe, and it will show you exactly what

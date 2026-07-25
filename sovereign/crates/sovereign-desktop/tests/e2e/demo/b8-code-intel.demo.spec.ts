@@ -119,9 +119,25 @@ function sourceBasenames(): Set<string> {
 //
 // "Where is … handed off … and what calls that path" mirrors the shape the
 // spec validated ("Where is answer gating implemented, and what calls it?").
+//
+// 2026-07-25: that shape was still not enough. The trailing subordinate clause
+// ("when the local model is too small") pulled the k-NN nearest neighbour back
+// into the general-knowledge cluster: the turn routed to `KnowledgeQuery`
+// (routing_log row 9627, coarse_intent LOOKUP), so `reweight_by_query_relevance`
+// never fired, the 279 code-intel summaries lost to the raw chunks, and the
+// grounding gate declined — "I couldn't confirm an answer to this against the
+// 12 passages your sources turned up." A decline is the CORRECT behaviour for
+// unsupported context; the defect was upstream, at the route.
+//
+// So the question now mirrors the spec's validated skeleton exactly —
+// "Where is <plain-English noun phrase> implemented, and what calls it?" — and
+// the route is ASSERTED below rather than inferred from the answer's shape.
+// This is not tuning until green: the beat films a documented capability whose
+// supported phrasing is code-structural, and it now fails at the routing step,
+// with the reason, when that capability isn't reached.
 const QUESTION =
-  "In this codebase, where is a chat request handed off to another machine when " +
-  "the local model is too small, and what calls that path?";
+  "In this codebase, where is the handoff of a chat request to another machine " +
+  "implemented, and what calls it?";
 
 // Symbols the answer is expected to reach. Naming any of them in the
 // question would hand over the bridge the feature is supposed to build.
@@ -206,12 +222,65 @@ beatTest(
     await card.scrollIntoViewIfNeeded();
     await run.dwell(900);
     await demoClick(page, card.getByTestId("notebook-ask"), { settleMs: 900 });
+
+    // ── Start on an EMPTY thread. Load-bearing twice over. ──
+    //
+    // `openAsk()` reopens the notebook's most recent thread when one exists
+    // (NotebookDetail.svelte), and demo mode keeps the scratch profile between
+    // runs. So the default is: the take opens on the previous run's question,
+    // and — the part that actually breaks the beat — the router's pre-check -2
+    // `inherits_prior_knowledge_intent` keys off the PRIOR assistant turn's
+    // intent and returns before the embed router runs (routing_log shows
+    // `KNOWLEDGE_THREAD_INHERIT`, latency 0). On an inherited thread
+    // `Intent::CodeQuery` is unreachable by construction, whatever the question
+    // says. Measured 2026-07-25: inherited DeepQuery, code-intel bridge never
+    // engaged.
+    //
+    // The conversation menu renders lazily (`notebookConvs.length > 0` resolves
+    // after mount), so a short probe silently no-ops — which is how this hid.
+    // Wait properly, then ASSERT the thread is empty: a stale thread must fail
+    // the beat, not quietly re-pin the route.
+    const convMenu = page.getByTestId("notebook-conv-menu");
+    if (await convMenu.isVisible({ timeout: 15_000 }).catch(() => false)) {
+      await demoClick(page, convMenu, { settleMs: 300 });
+      await demoClick(page, page.getByTestId("notebook-ask-new"), { settleMs: 900 });
+      run.note("minted a fresh conversation (notebook had prior threads)");
+    }
+    await expect(
+      page.locator(".sv-ai-msg"),
+      "B8 must open on an empty thread — a prior assistant turn makes the router " +
+        "inherit that turn's intent (pre-check -2) and CodeQuery becomes unreachable",
+    ).toHaveCount(0);
     run.mark("scoped");
     await run.dwell(1200);
 
     await run.caption("Asked in English. Scoped to the code.", 3000);
     const facts = await run.turn(QUESTION, { requireCitations: true, charDelayMs: 26 });
     run.mark("code-answer");
+
+    // ── The route, asserted before anything downstream of it. ──
+    // `Intent::CodeQuery` is what narrows retrieval to corpora with a
+    // `scip_graph.db` AND lifts the code-intel summaries over the raw chunks
+    // (`reweight_by_query_relevance`, CODE_INTEL_CHAT.md). Miss the route and
+    // every later assertion fails for a reason that isn't the real one: the
+    // answer is prose, or the gate declines outright. Checking it here means a
+    // router regression reads as a router regression.
+    const routed =
+      facts.complete.metadata?.intent ?? facts.complete.metadata?.provenance?.intent ?? null;
+    if (routed === null) {
+      run.note("route not reported by this build — falling through to the answer-shape gates");
+    } else {
+      run.note(`routed as: ${routed}`);
+      expect(
+        routed,
+        `the turn must route to code_query, got \`${routed}\`. Intent is k-NN over ` +
+          "exemplars and only reclassifies when a CODE-STRUCTURAL exemplar is nearest " +
+          '("what calls X", "where is Y implemented"). On the knowledge route the ' +
+          "code-intel summaries are never reweighted, so retrieval returns raw chunks " +
+          "and the answer is architecture prose — or an honest decline. Rephrase " +
+          "QUESTION toward the structural shape, or check the exemplar set.",
+      ).toBe("code_query");
+    }
 
     // ── Grounded in code, not in the model's memory of Rust. ──
     const cited = [...new Set(facts.citations.map((c) => c.corpus_id))];
@@ -232,10 +301,20 @@ beatTest(
     const answer = facts.complete.full_text;
     const paths = [...new Set(answer.match(/\b[\w.\-/]+\.rs\b/g) ?? [])];
     run.note(`answer names ${paths.length} .rs path(s): ${paths.slice(0, 8).join(", ")}`);
+    // On a zero, the ledger has to say whether the model wrote prose or the
+    // harness read the wrong text — those have opposite fixes, and "0 paths"
+    // alone cannot tell them apart.
+    if (paths.length === 0) {
+      run.note(
+        `answer text (${answer.length} chars) as the gate saw it: ` +
+          `${JSON.stringify(answer.slice(0, 400))}`,
+      );
+    }
     expect(
       paths.length,
       "a code-level answer must name at least one source file — prose about " +
-        "architecture is what every other tool already gives you",
+        `architecture is what every other tool already gives you. Answer was ` +
+        `${answer.length} chars: ${JSON.stringify(answer.slice(0, 300))}`,
     ).toBeGreaterThan(0);
 
     // Resolve loosely: the model may quote a repo-relative path, a
