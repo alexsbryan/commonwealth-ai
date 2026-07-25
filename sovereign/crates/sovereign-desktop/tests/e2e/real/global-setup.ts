@@ -346,6 +346,175 @@ function hostMeshAppInstalls(): string {
   return "";
 }
 
+/** System-3 ("tiered") enrichment tables — RAPTOR trees, skeletons, GLiNER
+ *  entity mentions, vault themes. Every one is keyed by `corpus_id`, which is
+ *  what makes a per-corpus projection possible at all.
+ *
+ *  A WHITELIST, deliberately. The daemon's `sovereign.db` also holds the
+ *  operator's 4k conversations / 12k messages / memories / insights; a
+ *  blacklist would leak them into frame the first time a table was added. */
+const TIERED_TABLES = [
+  "conv_skeletons",
+  "conv_raptor_nodes",
+  "conv_motifs",
+  "conv_content_hash",
+  "vault_themes",
+  "chunk_entities",
+  "chunk_entity_progress",
+  "chunk_ner_processed",
+] as const;
+
+/** `[data] dir` from the host `~/.sovereign/config.toml` — the directory the
+ *  attached daemon actually opens its `sovereign.db` in. Line-scanned for the
+ *  same reason `hostModel()` in demo/global-setup.ts is. */
+function hostDaemonDataDir(): string {
+  const fallback = path.join(os.homedir(), ".sovereign");
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(fallback, "config.toml"), "utf8");
+  } catch {
+    return fallback;
+  }
+  let inData = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("[")) {
+      inData = line === "[data]";
+      continue;
+    }
+    if (!inData || line.startsWith("#")) continue;
+    const m = line.match(/^dir\s*=\s*"([^"]+)"/);
+    if (m) return m[1].replace(/^~/, os.homedir());
+  }
+  return fallback;
+}
+
+/** Where the DESKTOP opens its store: `DesktopConfig::data_dir`, whose default
+ *  is `dirs::data_dir()/sovereign` under the (scratch) HOME. */
+function desktopDataDir(): string {
+  return process.platform === "darwin"
+    ? path.join(HOME, "Library/Application Support/sovereign")
+    : path.join(process.env.XDG_DATA_HOME ?? path.join(HOME, ".local/share"), "sovereign");
+}
+
+/** Project the daemon's tiered enrichment for the filmed corpora into the
+ *  scratch profile's `sovereign.db`.
+ *
+ *  WHY THIS EXISTS. In attach mode the desktop still opens its OWN store at
+ *  `config.data_dir/sovereign.db`, and `data_dir` is only ever pointed at the
+ *  CLI's `[data] dir` by `save_setup` — i.e. by walking the setup flow, which
+ *  a baked profile never does. (The operator's real install DID walk it: its
+ *  desktop.toml carries `data_dir = ~/.sovereign`, which is why the real app
+ *  shows the vault's 322 enriched notes and the demo profile shows none.) The
+ *  six `atlas_*conv*` commands read that store directly with no attach-mode
+ *  branch, and the daemon exposes no atlas route to branch to — so under a
+ *  scratch profile the Explore surface for a tiered corpus is structurally
+ *  empty no matter how enriched the corpus is.
+ *
+ *  The obvious shortcut — bake `data_dir = ~/.sovereign` — is rejected: that
+ *  file is also the conversation store, so the reel would film the operator's
+ *  4,277 real threads AND write its own into them. §1 Posture in DEMO_BEATS.md
+ *  is explicit that conversations stay scratch.
+ *
+ *  So: same idiom as the `indexes/` symlink above (host knowledge, scratch
+ *  profile), at the granularity the shared-file conflation forces — table-and-
+ *  corpus scoped rows, copied. The DATA is the daemon's real enrichment output,
+ *  unmodified; only its location is projected. Retires when the desktop can
+ *  read the daemon's tiered map over HTTP in attach mode.
+ *
+ *  Idempotent (rows are deleted then re-inserted per corpus), and a no-op with
+ *  a warning if anything is missing — B4 then skips with its own honest gate
+ *  message rather than filming an empty tree. */
+function projectHostTieredMap(): void {
+  const corpora = (
+    process.env.SOVEREIGN_DEMO_TIERED_CORPORA ??
+    process.env.SOVEREIGN_DEMO_ATLAS_CORPUS ??
+    "obsidian-vault-959ee8a8f330"
+  )
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (corpora.length === 0) return;
+
+  try {
+    execSync("command -v sqlite3", { stdio: "ignore" });
+  } catch {
+    console.warn("[real-setup] demo: sqlite3 not on PATH — tiered map not projected (B4 will skip)");
+    return;
+  }
+
+  const hostDb = path.join(hostDaemonDataDir(), "sovereign.db");
+  if (!fs.existsSync(hostDb)) {
+    console.warn(`[real-setup] demo: daemon store ${hostDb} missing — tiered map not projected`);
+    return;
+  }
+  const targetDir = desktopDataDir();
+  fs.mkdirSync(targetDir, { recursive: true });
+  const targetDb = path.join(targetDir, "sovereign.db");
+
+  const sq = (db: string, sql: string): string =>
+    execSync(`sqlite3 ${JSON.stringify(db)}`, { input: sql, encoding: "utf8" }).trim();
+  const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const inList = corpora.map(lit).join(",");
+
+  try {
+    // Only tables this daemon build actually has — a stale/newer store must
+    // degrade to "fewer tables projected", never to a failed transaction.
+    const present = new Set(
+      sq(hostDb, "SELECT name FROM sqlite_master WHERE type='table';").split("\n").map((s) => s.trim()),
+    );
+    const tables = TIERED_TABLES.filter((t) => present.has(t));
+    if (tables.length === 0) {
+      console.warn(`[real-setup] demo: no tiered tables in ${hostDb} — is the corpus enriched?`);
+      return;
+    }
+
+    // The desktop's own migrations create these on first open, but the profile
+    // may be brand new (bake runs before launch). Carry the DDL over, made
+    // re-runnable — `.schema` also emits the indexes, which are not.
+    // `sql || ';'` so each row is already a terminated statement — the DDL is
+    // multi-line, so neither splitting on ';' nor on '\n' would survive it.
+    const ddl = sq(
+      hostDb,
+      tables
+        .map((t) => `SELECT sql || ';' FROM sqlite_master WHERE tbl_name=${lit(t)} AND sql IS NOT NULL;`)
+        .join("\n"),
+    )
+      .replace(/^CREATE TABLE (?!IF NOT EXISTS)/gim, "CREATE TABLE IF NOT EXISTS ")
+      .replace(/^CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS)/gim, "CREATE $1INDEX IF NOT EXISTS ");
+    sq(targetDb, ddl);
+
+    sq(
+      targetDb,
+      [
+        `ATTACH DATABASE ${lit(hostDb)} AS src;`,
+        "BEGIN;",
+        ...tables.flatMap((t) => [
+          `DELETE FROM main.${t} WHERE corpus_id IN (${inList});`,
+          `INSERT INTO main.${t} SELECT * FROM src.${t} WHERE corpus_id IN (${inList});`,
+        ]),
+        "COMMIT;",
+      ].join("\n"),
+    );
+
+    const counts = sq(
+      targetDb,
+      tables
+        .map((t) => `SELECT ${lit(t)} || '=' || count(*) FROM ${t} WHERE corpus_id IN (${inList});`)
+        .join("\n"),
+    )
+      .split("\n")
+      .filter((l) => !l.endsWith("=0"))
+      .join(" ");
+    console.log(
+      `[real-setup] demo: projected daemon tiered map for {${corpora.join(",")}} → ` +
+        `${targetDb}\n[real-setup]   ${counts}`,
+    );
+  } catch (e) {
+    console.warn(`[real-setup] demo: tiered-map projection failed (${e}) — B4 will skip`);
+  }
+}
+
 function bakeProfile(): void {
   if (!process.env.SOVEREIGN_REAL_KEEP_PROFILE) {
     fs.rmSync(PROFILE, { recursive: true, force: true });
@@ -407,6 +576,12 @@ function bakeProfile(): void {
       linked.push(name);
     }
     console.log(`[real-setup] demo: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME`);
+
+    // The symlinks above cover the FILESYSTEM half of the daemon's knowledge
+    // (indexes, recipes, corpus registry). The tiered enrichment half lives in
+    // SQLite, in the same file as the operator's conversations, so it can't be
+    // symlinked wholesale — see projectHostTieredMap().
+    projectHostTieredMap();
   }
 
   // Attach mode has the SAME split-brain, in the write direction: the harness's

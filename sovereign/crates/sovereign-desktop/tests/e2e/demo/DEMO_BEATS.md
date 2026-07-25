@@ -21,6 +21,7 @@ it, the run goes red before the footage goes stale.
 |---|---|---|
 | Backend | **Attach mode** — the operator's live daemon on `:9741` | The demo needs the real corpora (`sep`, `enron-sample-multi-wide`, `wikipedia-newsworthy`, `commonwealth-ai`) and the real 35B primary. The managed fixture daemon has 3 toy documents and a 2B model. |
 | Profile | Scratch `HOME` (`test-artifacts/demo-profile/`) | Conversations/config are scratch, so no personal thread history leaks into frame. Knowledge + inference are the real daemon's. |
+| Knowledge bridge | Host `indexes/`, `recipes/`, `local-corpora/` symlinked in; tiered enrichment rows **projected** per corpus | The daemon's knowledge is half filesystem, half SQLite — and the SQLite half shares one file with the operator's 4,277 conversations, so it cannot be symlinked wholesale. `projectHostTieredMap()` copies the eight `corpus_id`-keyed tiered tables for `SOVEREIGN_DEMO_TIERED_CORPORA` only. Real enrichment output, relocated; personal state left behind. See §6. |
 | Fixtures | **Skipped** (`SOVEREIGN_DEMO=1`) | The real suite plants "E2E Fixture Corpus" and "Maple House (E2E)" into the daemon index. Neither belongs on camera, and neither belongs in the operator's real index. |
 | Capture | Playwright `recordVideo` at 2× | Deterministic framing across takes without hand-choreographing a cursor. See §5. |
 | Cursor | Synthetic overlay, eased motion | Playwright's video has no OS cursor. The overlay is drawn in-page and moved with easing — the "cursor smoothing" a paid recorder sells, for free, and repeatable. |
@@ -38,6 +39,60 @@ what `demo-export.mjs` cuts the short-form GIFs on.
 Each beat below states four things: **the claim** (what a viewer should walk away
 believing), **the choreography** (what happens on screen), **the proof** (the
 assertions that make the claim non-fictional), and **preconditions**.
+
+---
+
+### 2.1 Raw beats — footage a human shoots, a claim the machine still proves
+
+Two beats cannot be filmed by Playwright: **B3**, because a mesh app only sees
+real data inside its own labelled native window, and **B7**, because the machine
+is a Raspberry Pi across the room. The obvious move — "drop a `.mov` in and run
+it through the ladder" — would make those the one place in the reel where a claim
+ships on trust. They are also the two most impressive clips, which is exactly
+where a viewer's scepticism goes.
+
+So a raw beat is still a test. `rawBeatTest` (in `beat.ts`) runs a **gate**
+against the live daemon and the live app; `demo-export.mjs` encodes
+`raw/<beat-id>.<ext>` **only** if that gate passed **in the same run**. A file in
+`raw/` with no passing gate is refused and named in MANIFEST.md — "a human
+dropped a file in" is not evidence, and the rest of the reel is held to evidence.
+There is no override flag, for the same reason there isn't one for screencast
+beats.
+
+**The loop.**
+
+1. `npm run demo -- --grep b3-enron` — the gate runs. On a pass it prints the
+   recording guide and seeds `raw/b3-enron.captions.json`; on a skip it prints
+   exactly what is missing and how to fix it.
+2. Shoot the take. Save it as `raw/b3-enron.mov` (`.mp4`/`.m4v`/`.webm`/`.mkv`
+   also work). **Record at 1280×800**, or any 16:10 — see below.
+3. Fill in the cue sheet: `at` (seconds into the raw file) per caption, and
+   optionally `trimInSec`/`trimOutSec` to cut the handles. A caption with
+   `at: null` is skipped and reported, never guessed at.
+4. `npm run demo:export`.
+
+**One visual language.** A hand-shot clip that merely *shares a codec* with the
+automated beats still reads as pasted in. So the exporter:
+
+- **normalizes geometry** — scaled to fit and centred on the reel background at
+  `REEL.width×REEL.height`, and re-timed to `REEL.fps`. A take at the wrong
+  aspect is *framed*, not stretched, and the manifest says it was padded so you
+  can reshoot;
+- **burns the captions in using the same chip the live beats draw.**
+  `reel-style.mjs` holds the geometry, the type and the chip once, and both
+  renderers read it: `BeatRun.caption()` sets that CSS in the page, and the
+  exporter rasterizes the *same* CSS through Chromium into an RGBA plate (with
+  the app's own IBM Plex Sans Variable inlined, so the type cannot silently fall
+  back). The frosted backdrop is the blurred frame carrying the chip's shape,
+  which reproduces CSS `backdrop-filter` including the rounded corners.
+
+  Verified rather than asserted: a burned-in caption measured **44.8 dB PSNR**
+  against the live DOM render of the same frame, where the untouched video
+  measured 41.2 dB against its own source. The caption survives the round trip
+  better than the picture does.
+
+  (Note for anyone tempted to simplify this to `drawtext`: this machine's ffmpeg
+  build does not ship that filter at all.)
 
 ---
 
@@ -130,61 +185,108 @@ pixel dereferences to a source document.
 2. **Today** (`wikipedia-newsworthy`): the current-events lens over the same
    machinery, on your machine, with no feed and no server.
 
-**Proof.**
-- The mesh app runs against the **real** host bridge, not a mock: `meshapp_shim.js`
-  over `__TAURI_INTERNALS__` → the real command bridge → the real daemon. (The
-  existing synthetic specs mock this deliberately; the demo must not.)
-- **Numeric honesty:** every headline number rendered in the scale banner is
-  re-read from `meshapp_corpus_stats` over the bridge and compared. A demo that
-  displays a number the backend doesn't report is a failed beat.
-- The drill-down chunk resolves through `meshapp_read_chunk` to non-empty source text.
-- Reconciliation surfaces ≥1 merge group with ≥2 surface forms.
+**Capture: RAW (§2.1).** A mesh app only sees real data from inside a window
+labelled `meshapp-<app_id>`. `meshapp.rs authorize()` derives the calling app
+from the webview label and is fail-closed on anything else; `command_bridge.rs`
+always invokes as `MAIN_WINDOW_LABEL` ("main"). So every host op a bundle makes
+through the test bridge is denied — including from a page Playwright navigated to
+`/meshapp/enron/index.html` with the shipped shim injected, because the shim's
+only transport **is** that bridge. Playwright's screencast is per-page and cannot
+see the native window either. The operator records it; the gate proves it.
 
-**Preconditions.** `enron-sample-multi-wide` and `wikipedia-newsworthy` hosted
-*with atlases built* (stats/graph/timeline ops require the atlas, not just chunks).
+> An earlier version of this beat filmed the bundle in Chromium and could never
+> have shown a real number. It only ever *skipped*, at a preflight that used the
+> equally-gated `meshapp_corpus_stats` and read the denial as "no atlas". The
+> other direction — teaching the test bridge to assert a mesh-app label — was
+> considered and rejected: that label **is** the security boundary
+> (`capabilities/meshapp.json` scopes the bridge commands to `windows:
+> ["meshapp-*"]`), and a test-only hole through it is a production-shaped hole
+> that exists so a demo can be convenient.
 
-**Exports.** `b3-enron`, `b3-today`. GIF on the `reconciliation-reveal` mark.
+**What the gate proves** (`b3-meshapps.demo.spec.ts`):
+- the corpus is hosted, and for Enron has a **built atlas** — read via the
+  ungated `atlas_list_corpora`, the host-side reader of the same store;
+- the app is **installed** and **granted** `mesh_store_read` (`meshapp_list_installs`);
+- `meshapp_open(appId)` **succeeds** — the real labelled window builds, which is
+  the one check the Chromium route could never make;
+- for Today, freshness: the newest ingested day from `_doc_freshness.json` is
+  within `SOVEREIGN_DEMO_FRESH_DAYS` (default 3). Deliberately **not** an atlas
+  gate — Today resolves through `document_feed`, which reads documents, so
+  `wikipedia-newsworthy`'s empty `atlas/` dir is correct and an atlas gate would
+  skip a working app.
+
+**Numeric honesty.** It was an assertion when this beat filmed the bundle; it
+can't be now, so it is not quietly dropped. The gate writes the atlas counts into
+the ledger and MANIFEST.md, and the recording guide says to check the scale
+banner against them before keeping the take. Weaker than an assertion, much
+stronger than a habit.
+
+**Preconditions.** `enron-sample-multi-wide` hosted with an atlas built;
+`wikipedia-newsworthy` hosted and freshly ingested; both apps installed. `enron`
+ships in `public/meshapp/` but is **not** in the host's `[[meshapp_installs]]` —
+installing it is itself a good on-camera gesture.
+
+**Exports.** `b3-enron`, `b3-today`, from `raw/<id>.mov`. GIF cut on the first cue.
 
 ---
 
 ### B4 — Atlas: explore your own notes on the commons
 
-**Claim.** Point it at your Obsidian vault and it doesn't just search it — it
-*reads* it. Entities, claims, the positions a text takes and what opposes them,
-every one dereferenced back to the paragraph it came from. Your own thinking,
-navigable.
+**Claim.** Point it at your Obsidian vault and it doesn't just index it — it
+*reads* every note into a summary tree, with the entities it found, on your
+laptop; and every cluster is built from paragraphs still in the index.
 
 **Choreography.**
 1. Library → the vault notebook → **Explore**.
-2. The atlas index: entities, events, claims, questions, positions, oppositions —
-   with counts.
-3. Search/scroll to **Elinor Ostrom**. Open the atom detail: the description the
-   pass wrote *from the vault*, not from the model's priors —
-   *"Nobel-winning economist whose career documented that real commons are not
-   doomed by rationality."*
-4. Walk the graph: the Nobel event, the states around it, the relation to the
-   economics discipline that treated the finding as a curiosity.
-5. Open a **Claim** about the commons and dereference it to the source passage.
-6. "Ask about this" — carry the atom into a chat turn scoped to the vault.
+2. The note map: every note in the vault, read — with its state, chunk count and
+   salience-ranked entity chips.
+3. Type **Ostrom** into the note search; the list narrows to the anchor note.
+4. Open it: the summary tree — level-0 topic clusters, each with the summary the
+   enrichment pass wrote, its coherence and its evidence count.
+5. Park on the money frame and let the summary be read.
 
 **Proof.**
-- The atlas surface renders ≥1 atom row and the atom detail is non-empty.
-- The entity's on-screen description matches the atom record read over the bridge —
-  the panel is showing the corpus, not paraphrasing it.
-- The claim's evidence dereferences to a real chunk with non-empty text.
-- The "Ask about" turn passes the full invariant pack and cites the vault corpus.
+- The Explore tab mounts the tiered note map (`.conv-corpus-view`) and renders
+  ≥1 note row.
+- The anchor note has ≥1 *substantive* cluster (not synthetic-tiny, summary
+  >80 chars) — otherwise the pane renders "too short to break into topic
+  clusters", a true sentence over an empty frame, and the beat skips.
+- The summary on screen matches one `atlas_get_conv_detail` returned — the panel
+  is showing the stored tree, not paraphrasing it.
+- **Dereference gate (off-camera).** This surface shows an evidence *count* with
+  no click-through, so provenance is machine-checked instead of filmed: a sample
+  of the clusters' member chunk ids must each resolve, through *this* corpus, to
+  non-empty text (`read_get_chunk`). That is what catches a tree built against a
+  different ingest. The sample cap is reported, never silent.
 
-**Preconditions.** A vault corpus that is **hosted AND has a built atlas**.
-`SOVEREIGN_DEMO_ATLAS_CORPUS` selects it; default `obsidian-vault`.
+**Preconditions.** A vault corpus with a **tiered (System 3) map the desktop can
+see**, that is **on the shelf as an explorable notebook**, holding a note whose
+title matches the anchor. `SOVEREIGN_DEMO_ATLAS_CORPUS` /
+`SOVEREIGN_DEMO_ATLAS_ANCHOR` select them; defaults
+`obsidian-vault-959ee8a8f330` / `Ostrom`. Each precondition skips with its own
+remediation — they have different fixes.
 
-> **Known gap (2026-07-24).** On this machine the two halves are split: the
-> hosted vault (`obsidian-vault-959ee8a8f330`) has chunks but no atlas, and the
-> Ostrom-rich atlas (`obsidian-vault`) has no `chunks.lance` and so isn't hosted.
-> The beat preflights both halves and **skips with that exact remediation**
-> rather than filming half a surface. Fix by enriching the hosted vault
-> (`sovereign enrich …`) — do NOT hand-overlay the old atlas onto the new corpus:
-> the chunk ids are from a different ingest and the "dereferences to source"
-> claim, which is the whole point of the beat, would silently be false.
+> **What this beat films, and does not.** An Obsidian vault is a **System 3**
+> corpus *by design* (`corpus-engine/ENRICHMENT.md`: the System-2 `obsidian_atlas`
+> pipeline was removed when vaults moved onto the tiered path, and System 3 is
+> called the gold standard for user-facing corpora). So the surface here is the
+> RAPTOR note map, not the typed atom graph — those two things share the word
+> "atlas" and **do not interoperate**. Do not reach for `sovereign enrich
+> init|build` to fix a skip: that builds the atom map, a different artifact on a
+> different surface. What it costs, stated plainly: no entity/claim/opposition
+> graph and no click-through to a source passage, because System 3 renders
+> neither.
+
+> **Known trap (2026-07-25).** In attach mode the desktop reads its OWN tiered
+> store at `config.data_dir/sovereign.db`, and a baked profile's `data_dir` is
+> the scratch default — the daemon's map at `~/.sovereign/sovereign.db` is
+> invisible to it, because none of the six `atlas_*conv*` commands has an
+> attach-mode branch and the daemon exposes no atlas route to branch to. (The
+> operator's real install is unaffected: it walked the setup flow, which adopts
+> the CLI's `[data] dir`.) Global setup bridges it by projecting the daemon's
+> tiered rows for the filmed corpus into the scratch store — §1 Posture. The
+> gate reads the *bridge*, never the daemon's sqlite, precisely so a projection
+> that did not land skips the beat instead of filming an empty tree.
 
 ---
 
@@ -244,22 +346,41 @@ skipped, not faked, when the peer is down.**
 
 ---
 
-### B7 — Lights out: the Pi (out-of-band)
+### B7 — The Pi writes the code
 
-**Claim.** This runs on a $80 computer with no internet. Cut the lights, cut the
-network, it keeps answering.
+**Claim.** The model on the Pi doesn't autocomplete — it reads a spec, writes a
+program, and the held-out tests it never saw pass. On a $80 computer, with no
+cloud.
 
-**Status.** **Not Playwright-drivable** — the payload is physical (a Pi, a
-switch, a dark room). This beat is captured by hand with the same encode
-pipeline: record with `Cmd+Shift+5` (Show Mouse Pointer on, DND on), drop the
-`.mov` at `test-artifacts/demo/raw/b6-pi-lights-out.mov`, and `demo:export`
-processes it identically to the automated beats — same scale, same codec ladder,
-same GIF settings — so it cuts into the reel without looking pasted in.
+**Capture: RAW (§2.1).** Physics, not architecture: the machine in frame is
+across the room and no browser automation reaches it.
 
-Framing to match the automated beats: 1280×800 at 2×, so the crop math in §5
-applies unchanged.
+**What the gate proves** (`b7-pi-coding.demo.spec.ts`), against the battery's own
+`--report` JSON:
 
-**Proof.** Human. Stated as such rather than dressed up as a test.
+```bash
+sovereign agent-bench run --problems 3.2 \
+  --report sovereign/crates/sovereign-desktop/test-artifacts/demo/raw/b7-pi-coding.bench.json
+```
+
+- the report is **recent** (≤ `SOVEREIGN_DEMO_BENCH_MAX_AGE_DAYS`, default 14) —
+  a receipt from three months ago does not describe the build being filmed;
+- the run **completed** on its own terms: `exit_reason.kind == "completed"` and
+  not scored partial (a timeout or token-budget kill is not this claim);
+- the **held-out fixtures** are green: `witness_summary.verify_exit_ok`,
+  `failed == 0`, `passed > 0`;
+- **correctness is absolute** — `dim_a` (auto-scored from those fixtures) must be
+  a full 3/3. The claim is that the program *works*, not that it nearly worked;
+- **total ≥ 7/9** (`SOVEREIGN_DEMO_BENCH_FLOOR`). Correctness alone can pass while
+  approach (`dim_b`: GF(2) vs brute force) and efficiency (`dim_c`) are weak, and
+  the clip implies a good solution rather than merely a passing one.
+
+`3.2-lights-out` is the hardest tier the battery ships, which is the point: a
+passing receipt is worth showing. Override the problem with
+`SOVEREIGN_DEMO_BENCH_PROBLEM` if you film a different one.
+
+**Proof.** The claim is machine-checked; the pixels are human-attested. Both are
+stated on the record in MANIFEST.md rather than blurred together.
 
 ---
 
@@ -316,11 +437,11 @@ typed into a design file. If the caption says it, the machine reported it.
 |---|---|---|
 | B1 | Ask + reading surface | Model may not emit an inline `[Source:]` marker → click-through unavailable |
 | B2 | Inner Work | Witness prose is nondeterministic; only structure is assertable |
-| B3 | Mesh apps | Requires built atlases, not just ingested chunks |
+| B3 | Mesh apps | Unfilmable by Playwright (§2.1); the numbers on screen are checked by a human against gate-printed atlas counts |
 | B4 | Library → Explore | Atlas and chunks must belong to the SAME ingest, or drill-down lies |
 | B5 | Workshop | Agentic authoring loop needs a capable primary |
 | B6 | Mesh assist | Depends on another physical machine being up |
-| B7 | Pi | Out-of-band by nature |
+| B7 | Pi | Hand-recorded by physics (§2.1); the claim rides on the bench report, not on the footage |
 | B8 | Ask (code) | Retrieval must land on code, not on tests describing code |
 | B9 | Library | Nothing — but the caption numbers must stay live-read |
 
@@ -389,9 +510,9 @@ enforces this and re-encodes down the ladder automatically rather than shipping 
 ## 6. Before you shoot
 
 Demo mode isolates *conversations and desktop config* into a scratch profile,
-but the desktop's data dir comes from the host `~/.sovereign/config.toml`
-(that's how it reads the real corpora at all). So **the Library shelf is your
-real shelf** — including anything test runs have left there.
+but global setup symlinks the host's `~/.sovereign/{indexes,recipes,local-corpora}`
+into it (that's how it reads the real corpora at all). So **the Library shelf is
+your real shelf** — including anything test runs have left there.
 
 Check it before filming B9's shelf pan and B4's notebook lookup:
 
@@ -407,6 +528,20 @@ attach runs and both visible on camera:
 
 Remove what you don't want in frame. `SOVEREIGN_DEMO=1` stops the capture run
 from adding *more*, but it cannot retroactively clean what earlier runs left.
+
+**The tiered map is projected, not shared.** The other half of the daemon's
+knowledge — RAPTOR trees, skeletons, entity mentions, vault themes — lives in
+`~/.sovereign/sovereign.db`, the same file as the operator's 4k conversations, so
+it is copied per corpus rather than symlinked (§1 Posture, B4's known trap).
+`SOVEREIGN_DEMO_TIERED_CORPORA` is the comma-separated whitelist; it defaults to
+`SOVEREIGN_DEMO_ATLAS_CORPUS`, so pointing B4 at a different vault carries its map
+across automatically. Setup logs the row counts it projected — if a beat that
+needs a map skips, read that line first:
+
+```
+[real-setup] demo: projected daemon tiered map for {obsidian-vault-…} → …/sovereign.db
+[real-setup]   conv_skeletons=322 conv_raptor_nodes=606 vault_themes=2 chunk_entities=19819
+```
 
 ---
 
@@ -426,7 +561,17 @@ Artifacts land in `test-artifacts/demo/`:
 test-artifacts/demo/
   ledger.jsonl        # one record per beat: status, marks, video path, skip reason
   video/              # raw Playwright webm, one per beat
-  raw/                # hand-recorded beats (B6) dropped in by the operator
+  raw/                # RAW beats (§2.1) — the operator's takes
+    <beat>.mov            the take itself
+    <beat>.captions.json  cue sheet: caption times + trim handles (gate-seeded)
+    b7-pi-coding.bench.json  B7's receipt from `sovereign agent-bench run --report`
+    .master/              normalized + captioned intermediates the ladder encodes
   out/                # the ladder — mp4 / webm / poster / gif
   MANIFEST.md         # what got produced, what didn't, and why
 ```
+
+Useful knobs on the exporter beyond §5's: `--fresh-masters` re-renders raw
+intermediates after a cue-sheet edit, `--no-caption-blur` drops the frosted
+backdrop behind burned-in captions, and `SOVEREIGN_DEMO_ARTIFACTS=<dir>` points
+the whole thing at a scratch tree so you can exercise it without touching the
+real ledger.

@@ -56,25 +56,153 @@ export async function hasCorpus(id: string): Promise<boolean> {
   return (await hostedCorpora()).has(id);
 }
 
+export type Bridge = {
+  invoke<T = unknown>(c: string, a?: Record<string, unknown>): Promise<T>;
+};
+
+export interface AtlasCorpus {
+  corpus_id: string;
+  display_name: string;
+  total_atoms: number;
+  atom_counts?: Record<string, number>;
+}
+
 /** A corpus can be hosted (chunks indexed) and still be useless to a
  *  mesh app, which reads the ATLAS (entities/edges/timeline), not the
- *  chunk index. `meshapp_corpus_stats` is the honest probe: it goes
- *  through the exact op the bundle calls. Returns null when the atlas
- *  isn't there. */
-export async function atlasStats(
-  bridge: { invoke<T = unknown>(c: string, a?: Record<string, unknown>): Promise<T> },
+ *  chunk index.
+ *
+ *  This deliberately does NOT probe via `meshapp_corpus_stats`, which
+ *  looks like the more honest choice — it is the exact op the bundle
+ *  calls — but cannot work from a test. Every `meshapp_*` command runs
+ *  `authorize(installs, webview.label(), …)`, and the test command
+ *  bridge always invokes as the MAIN window, so the probe returns
+ *  "denied: caller is not a mesh-app window" for a fully-built atlas.
+ *  A gate built on it reports "no atlas" about a corpus with 3,722
+ *  documents in it. `atlas_list_corpora` is the host-side reader of the
+ *  same data and is not label-gated. */
+export async function atlasCorpora(bridge: Bridge): Promise<AtlasCorpus[]> {
+  return bridge.invoke<AtlasCorpus[]>("atlas_list_corpora").catch(() => [] as AtlasCorpus[]);
+}
+
+/** The built atlas for `corpusId`, or null when there isn't one. */
+export async function atlasBuilt(
+  bridge: Bridge,
   corpusId: string,
-): Promise<Record<string, number> | null> {
+): Promise<AtlasCorpus | null> {
+  const all = await atlasCorpora(bridge);
+  const found = all.find((c) => c.corpus_id === corpusId);
+  return found && found.total_atoms > 0 ? found : null;
+}
+
+export interface ConvCorpus {
+  corpus_id: string;
+  display_name: string;
+  conv_count: number;
+  state_counts?: Record<string, number>;
+}
+
+/** The TIERED map — `conv_skeletons` + `conv_raptor_nodes` in SQLite,
+ *  the artifact a vault or watched folder actually gets. Distinct from
+ *  `atlasCorpora` above, which reads `atlas/atoms.json`: a corpus can
+ *  have either, both, or neither, and `notebook_list` marks it
+ *  explorable if EITHER exists (see `commands/corpus.rs` — the
+ *  explorable set is a union of the two readers). `AtlasSurface` then
+ *  routes to the matching view, so "which map does it have" decides
+ *  which surface a beat is filming. */
+export async function convCorpora(
+  bridge: Bridge,
+): Promise<{ corpora: ConvCorpus[]; error: string | null }> {
+  // Deliberately NOT `.catch(() => [])`. `atlas_list_conv_corpora`
+  // rejects with "Sqlite store not initialised" when the desktop has no
+  // tiered store open at all — a different world from "this corpus
+  // hasn't been read yet", with a different fix. Swallowing it makes an
+  // infrastructure failure wear the costume of an empty result, and a
+  // beat then skips with remediation advice that cannot work.
   try {
-    const stats = await bridge.invoke<Record<string, number>>("meshapp_corpus_stats", {
-      corpusId,
-    });
-    // An atlas that exists but is empty is not filmable either.
-    const atoms = Number(stats?.atoms ?? 0);
-    return atoms > 0 ? stats : null;
-  } catch {
-    return null;
+    return { corpora: await bridge.invoke<ConvCorpus[]>("atlas_list_conv_corpora"), error: null };
+  } catch (e) {
+    return { corpora: [], error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** The tiered map for `corpusId` with at least one note in state
+ *  `Ready`, or null. A corpus mid-build reports rows in `Pending` /
+ *  `PartiallyReady`; those render as a half-populated list, so they are
+ *  not a filmable precondition. */
+export async function convCorpusReady(
+  bridge: Bridge,
+  corpusId: string,
+): Promise<{
+  corpus: ConvCorpus;
+  readyCount: number;
+} | { corpus: null; readyCount: 0; why: string }> {
+  const { corpora, error } = await convCorpora(bridge);
+  if (error) {
+    return { corpus: null, readyCount: 0, why: `atlas_list_conv_corpora failed: ${error}` };
+  }
+  const found = corpora.find((c) => c.corpus_id === corpusId);
+  if (!found) {
+    return {
+      corpus: null,
+      readyCount: 0,
+      why:
+        `no tiered map for \`${corpusId}\`. Reported: ` +
+        `[${corpora.map((c) => `${c.corpus_id}:${c.conv_count}`).join(", ") || "none"}]`,
+    };
+  }
+  const readyCount = Number(found.state_counts?.Ready ?? 0);
+  return readyCount > 0
+    ? { corpus: found, readyCount }
+    : {
+        corpus: null,
+        readyCount: 0,
+        why:
+          `\`${corpusId}\` has ${found.conv_count} note(s) in the tiered store but none in ` +
+          `state Ready (${JSON.stringify(found.state_counts ?? {})}) — a build in flight, ` +
+          `not a finished map`,
+      };
+}
+
+export interface MeshAppInstall {
+  app_id: string;
+  name: string;
+  granted: Record<string, boolean>;
+  trust?: string;
+}
+
+/** The recorded install + granted permission subset for a mesh app.
+ *  `meshapp_list_installs` is host-only (it refuses a mesh-app caller),
+ *  which is exactly why a test can read it. */
+export async function meshAppInstall(
+  bridge: Bridge,
+  appId: string,
+): Promise<MeshAppInstall | null> {
+  const installs = await bridge
+    .invoke<MeshAppInstall[]>("meshapp_list_installs")
+    .catch(() => [] as MeshAppInstall[]);
+  return installs.find((i) => i.app_id === appId) ?? null;
+}
+
+export interface CorpusEntry {
+  id: string;
+  name: string;
+  status: string;
+  chunks_count: number | null;
+}
+
+/** The desktop's own view of an installed corpus — chunk count included.
+ *  The honest gate for a mesh app that reads the chunk index rather than
+ *  the atlas (the Today feed resolves through `document_feed`, which
+ *  reads documents, which is why its empty `atlas/` dir is correct and
+ *  an atlas gate would wrongly skip it). */
+export async function corpusEntry(
+  bridge: Bridge,
+  corpusId: string,
+): Promise<CorpusEntry | null> {
+  const all = await bridge
+    .invoke<CorpusEntry[]>("list_corpora")
+    .catch(() => [] as CorpusEntry[]);
+  return all.find((c) => c.id === corpusId) ?? null;
 }
 
 export interface PlacementView {
