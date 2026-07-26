@@ -1688,9 +1688,9 @@ privacy = "mesh_allowed"
 
 // ─── Compaction privacy invariant (marathon-graceful) ────────
 //
-// `summarize_dropped_history` produces a Fast-slot summary of dropped
-// chat history that the prompt then re-injects as a preamble. The
-// privacy contract: that summary call MUST use `Speed::Fast` because
+// `conv_frame::fold` folds dropped chat history into the conversation
+// frame that the prompt then re-injects. The privacy contract: that
+// fold call MUST use `Speed::Fast` because
 // `MeshInferenceProvider` only forwards `Speed::Slow` over the mesh
 // — Fast stays local. If a future refactor accidentally bumps this
 // to `Speed::Slow` (e.g. "the summary needs more model power"),
@@ -1702,7 +1702,7 @@ privacy = "mesh_allowed"
 // unit-shape; no harness needed.
 
 #[tokio::test]
-async fn summarize_dropped_history_uses_fast_slot_only() {
+async fn conv_frame_fold_uses_fast_slot_only() {
     use async_trait::async_trait;
     use futures::Stream;
     use sovereign_core::error::{Error as CoreError, Result as CoreResult};
@@ -1778,16 +1778,16 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
         },
     ];
 
-    let _ = sovereign_core::context::summarize_dropped_history(&provider, &dropped)
+    let _ = sovereign_core::conv_frame::fold(&provider, None, &dropped, 0, dropped.len())
         .await
-        .expect("summarize should complete with the captured response");
+        .expect("fold should complete with the captured response");
 
     let captured = provider
         .captured
         .lock()
         .unwrap()
         .clone()
-        .expect("summarize_dropped_history must call inference.complete exactly once");
+        .expect("conv_frame::fold must call inference.complete exactly once");
 
     // Compression runs on the fast slot — it's a cheap background
     // summary and the small model suffices. NOTE (post-OICP-refactor):
@@ -1800,7 +1800,7 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
     // (ARCH §7.4 defence-in-depth).
     assert!(
         matches!(captured.preferred_speed, Speed::Fast),
-        "summarize_dropped_history must use the fast slot, got {:?}",
+        "conv_frame::fold must use the fast slot, got {:?}",
         captured.preferred_speed
     );
     assert_eq!(
@@ -1810,14 +1810,14 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
             .expect("compression must carry a Workload envelope")
             .sharding(),
         sovereign_core::oicp::ShardingPrivacy::LocalOnly,
-        "summarize_dropped_history must stay LocalOnly — dropped chat content must never offload",
+        "conv_frame::fold must stay LocalOnly — dropped chat content must never offload",
     );
     // Sanity: structured_output must be set so the parse path
     // remains deterministic. (If a future refactor swaps in a
     // free-form summary, the parse logic needs a parallel change.)
     assert!(
         captured.structured_output.is_some(),
-        "summarize_dropped_history must request structured output"
+        "conv_frame::fold must request structured output"
     );
 }
 
@@ -1832,7 +1832,7 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
 /// keeps `offload_eligible` false. This pins BOTH — a regression that
 /// reverted the class to Fast, OR one that opened the posture to
 /// MeshAllowed (leaking memory content over the mesh), fails here.
-/// Sibling of `summarize_dropped_history_uses_fast_slot_only`, which
+/// Sibling of `conv_frame_fold_uses_fast_slot_only`, which
 /// pins the *opposite* choice for the cheap compression path.
 #[tokio::test]
 async fn memory_integrity_guards_route_primary_and_stay_local() {

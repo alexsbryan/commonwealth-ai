@@ -508,6 +508,23 @@ export type NarrationPhase =
   // `applyCounter` in routing.machine.ts) and rendered by CounterCard.
   // Two-frame contract on claim_check_start: an empty-claims frame the
   // moment the audit opens, then a frame carrying the extracted list.
+  // ── Conversation-memory frames ──────────────────────────────────
+  // The two memory channels, made visible at the moment they act:
+  // `conversation_recall` = earlier turns of THIS thread retrieved by
+  // similarity and put back in the prompt (memory being READ);
+  // `conversation_folded` = turns that left the visible window folded
+  // into the running frame (memory being WRITTEN). The fold chip used
+  // to ride `gap_check_fired`, which bridges into the
+  // information-request card — its own tag stops a routine fold from
+  // rendering as a pending question.
+  | {
+      conversation_recall: {
+        turns: number;
+        turn_indices: number[];
+        top_similarity: number;
+      };
+    }
+  | { conversation_folded: { turns: number } }
   | { claim_check_start: { claims: string[]; recheck: boolean } }
   | { claim_verdict: { index: number; supported: boolean } }
   | { claim_revision_start: { failed: number } }

@@ -105,9 +105,10 @@ pub(crate) use self::merge_select::{
 };
 pub(crate) use self::question_analysis::{
     cap_chunks_per_article, comparison_axis, extract_commitment_phrase,
-    extract_comparison_entities, extract_question_entities, parse_metalingual_locator,
-    project_retrieved_chunks, raptor_late_inject_enabled, reserve_atom_enum_chunks,
-    reserve_chunks_per_entity, reserve_raptor_chunks, MetalingualLocator,
+    extract_comparison_entities, extract_question_entities, locator_hint_from_coarse,
+    parse_metalingual_locator, project_retrieved_chunks, raptor_late_inject_enabled,
+    reserve_atom_enum_chunks, reserve_chunks_per_entity, reserve_raptor_chunks,
+    MetalingualLocator, COARSE_CONVERSATION_LOCATOR_DIRECT, COARSE_CONVERSATION_LOCATOR_EMBED,
 };
 pub(crate) use self::retrieval_helpers::{
     apply_cross_corpus_discipline, atlas_grounding_enabled, blend_query_aware,
@@ -116,8 +117,8 @@ pub(crate) use self::retrieval_helpers::{
     reweight_by_query_relevance,
 };
 pub use self::types::{
-    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistorySummaryProv, MetaAtlasHitRecord,
-    RecalledMemoryProv, StreamHandle, TurnProvenance,
+    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistoryRecallProv, HistorySummaryProv,
+    MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle, TurnProvenance,
 };
 pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 
@@ -193,6 +194,25 @@ pub struct Runtime {
     /// persisted — a fresh process re-learns within one turn.
     pub(crate) assembly_memo:
         std::sync::RwLock<std::collections::HashMap<String, prompt_budget::MeasuredAssembly>>,
+    /// Content-keyed memo for retrieval-over-history candidate units.
+    ///
+    /// `maybe_retrieve_relevant_history` re-derives an embedding AND
+    /// (when GLiNER is wired) an entity set for EVERY dropped
+    /// user/assistant pair on EVERY turn. Both are pure functions of
+    /// the pair's rendered body, and the set of pairs only ever grows
+    /// by one per turn — so the naive path pays Θ(N) embeds on turn N,
+    /// Θ(N²) over a conversation. Measured on a 44-turn longhaul
+    /// fixture the embed batch alone dominated pre-retrieval latency
+    /// past ~turn 20.
+    ///
+    /// Keyed by a hash of the unit body (not by turn index): index
+    /// parity can flip when a turn appends an odd number of messages,
+    /// and a content key degrades to a miss rather than to a WRONG
+    /// embedding. Process-local and bounded — see
+    /// [`Self::history_unit_vectors`].
+    pub(crate) history_unit_memo: std::sync::Mutex<
+        std::collections::HashMap<u64, self::retrieval::history::HistoryUnitVectors>,
+    >,
     /// Per-conversation preemption for post-stream housekeeping: a new
     /// user turn cancels the prior turn's gap-check/refinement token
     /// so fresh turns never queue behind stale background work (the
@@ -459,6 +479,7 @@ impl Runtime {
             wikipedia_graph: None,
             note_store: None,
             assembly_memo: std::sync::RwLock::new(std::collections::HashMap::new()),
+            history_unit_memo: std::sync::Mutex::new(std::collections::HashMap::new()),
             post_stream_preemption: collaboration::PostStreamPreemption::default(),
             compaction: None,
             conv_tiered_reader: None,

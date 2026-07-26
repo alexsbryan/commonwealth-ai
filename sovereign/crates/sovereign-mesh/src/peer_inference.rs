@@ -52,6 +52,11 @@ use sovereign_inference::remote::RemoteApiProvider;
 use tokio::sync::RwLock;
 
 use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
+use crate::decision_log::{
+    self, CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath,
+    DecisionSink, ExclusionReason, LoadSource, OutcomeContext, RequestFacts, ScoreRecord, ServedBy,
+    Verdict,
+};
 use crate::oicp_synthesis::build_self_manifest;
 use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
 
@@ -206,6 +211,70 @@ mod peer_inference_disabled_tests {
 /// selection path; long enough that a Tailscale relay round-trip
 /// under load completes comfortably.
 const MANIFEST_FETCH_TIMEOUT: Duration = Duration::from_millis(800);
+
+/// A manifest read, plus the provenance P2 of
+/// `docs/specs/SCHEDULER_QUALITY.md` requires: how old the copy the
+/// scorer read actually was, and whether it came out of the 60s cache
+/// or off the wire.
+///
+/// The claims a candidate is scored on are only as current as the
+/// manifest they were read from. A cached manifest up to
+/// [`MANIFEST_TTL`] old is a second, independent staleness channel
+/// alongside gossip lag (F1), and one that no log has ever recorded —
+/// so "the peer advertised that model" and "the peer advertised that
+/// model a minute ago" have been indistinguishable in hindsight.
+struct ManifestRead {
+    manifest: ProviderManifest,
+    rtt_ms: u32,
+    /// Seconds since the manifest was fetched. `0` for a live fetch.
+    age_secs: u64,
+    from_cache: bool,
+}
+
+/// The name the local node is recorded under in a decision record's
+/// candidate set. Peers are recorded under their mesh name, which is
+/// never this.
+const LOCAL_CANDIDATE_NAME: &str = "local";
+
+/// The result of a ranked OICP selection, plus the identity of the
+/// decision record that produced it.
+///
+/// The `decision_id` is the whole point: it travels with the request
+/// through the cascade and back out on the completion, which is what
+/// makes decision→outcome a join rather than two unrelated log
+/// streams. Without it the Tier-1 calibration contract
+/// (`docs/specs/SCHEDULER_QUALITY.md` §5) has nothing to compare.
+struct RankedSelection {
+    /// Peers that strictly beat local, best-first.
+    peers: Vec<(PeerInferenceEndpoint, ModelCandidate)>,
+    decision_id: String,
+    oicp_request_id: String,
+}
+
+/// Top pick of a [`RankedSelection`], carrying the same decision
+/// identity so the non-streaming `complete` path can close the join
+/// too.
+///
+/// The identity fields sit outside the `Option` on purpose: a
+/// selection that picked nobody still made a decision, and that
+/// decision still needs an outcome. Folding the ids into the `Some`
+/// arm would silently drop every `stay_local` record from the join.
+struct SinglePeerSelection {
+    pick: Option<(PeerInferenceEndpoint, ModelCandidate)>,
+    decision_id: String,
+    oicp_request_id: String,
+}
+
+/// A routing cascade plus the identity of the decision that produced
+/// it. The cascade steps are tried in order; whichever one serves
+/// closes the join by emitting an outcome carrying `decision_id` and
+/// its own index (index > 0 means a failover happened, which is a
+/// waste metric in `SCHEDULER_QUALITY.md` §5).
+struct RoutePlan {
+    steps: Vec<RouteDecision>,
+    decision_id: String,
+    oicp_request_id: String,
+}
 
 struct CachedManifest {
     manifest: ProviderManifest,
@@ -412,7 +481,31 @@ pub struct MeshInferenceProvider {
     /// the counter in lock-step with reality across panic / stream
     /// drop / early-return paths.
     in_flight_publisher: Arc<AtomicU32>,
+    /// Where routing decision records go (P1 of
+    /// `docs/specs/SCHEDULER_QUALITY.md`).
+    ///
+    /// Injected rather than reached for as a process-global so tests
+    /// can assert on the exact records a scenario produced without
+    /// racing each other, and so a caller that wants no
+    /// instrumentation pays nothing. Production wiring installs
+    /// [`decision_log::TracingDecisionSink::from_env`].
+    ///
+    /// Emitting through this sink changes no routing decision. It is
+    /// the observer that makes the decision legible in hindsight and
+    /// replayable in the Tier-1 simulator.
+    decision_sink: Arc<dyn DecisionSink>,
+    /// Unix seconds of the last fleet snapshot emitted into the
+    /// decision stream (P3). `0` = none yet. Atomic so the rate limit
+    /// costs nothing on the hot path.
+    last_snapshot_unix: Arc<std::sync::atomic::AtomicU64>,
 }
+
+/// How often a fleet observation snapshot is folded into the decision
+/// record stream. Coarse on purpose — this samples fleet
+/// *composition*, which changes on the scale of nodes joining and
+/// EWMAs warming up, not the per-request state the decision records
+/// already carry.
+const SNAPSHOT_INTERVAL_SECS: u64 = 60;
 
 impl MeshInferenceProvider {
     /// Standard constructor — takes the live `EmbeddedDaemon` so
@@ -487,6 +580,52 @@ impl MeshInferenceProvider {
             )),
             slot_aliases: arc_swap::ArcSwap::from_pointee(std::collections::HashMap::new()),
             in_flight_publisher: Arc::new(AtomicU32::new(0)),
+            decision_sink: Arc::new(decision_log::TracingDecisionSink::from_env()),
+            last_snapshot_unix: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    /// Replace the routing-decision sink (P1 of
+    /// `docs/specs/SCHEDULER_QUALITY.md`).
+    ///
+    /// Tests install [`decision_log::CaptureDecisionSink`] to assert
+    /// on exactly the records a scenario produced; a trace-capture
+    /// session installs a [`decision_log::TracingDecisionSink`]
+    /// pointed at an explicit JSONL path. The default —
+    /// [`decision_log::TracingDecisionSink::from_env`] — emits to
+    /// `tracing` and, when `SOVEREIGN_DECISION_LOG` is set, to that
+    /// file.
+    pub fn with_decision_sink(mut self, sink: Arc<dyn DecisionSink>) -> Self {
+        self.decision_sink = sink;
+        self
+    }
+
+    /// The installed decision sink. Cloned into the `OutcomeContext`
+    /// that rides along on a dispatched stream so the completion half
+    /// of the join is emitted wherever the request finishes.
+    pub fn decision_sink(&self) -> Arc<dyn DecisionSink> {
+        Arc::clone(&self.decision_sink)
+    }
+
+    /// Build the completion-half context for a cascade step that is
+    /// about to serve. `attempt_index` is the step's position in the
+    /// cascade — `0` is the decision's first choice, anything higher
+    /// means the steps in `failovers` were tried and did not serve.
+    fn outcome_ctx(
+        &self,
+        decision_id: &str,
+        oicp_request_id: &str,
+        served_by: ServedBy,
+        attempt_index: u32,
+        failovers: &[decision_log::FailoverAttempt],
+    ) -> OutcomeContext {
+        OutcomeContext {
+            sink: Arc::clone(&self.decision_sink),
+            decision_id: decision_id.to_string(),
+            oicp_request_id: oicp_request_id.to_string(),
+            served_by,
+            attempt_index,
+            failovers: failovers.to_vec(),
         }
     }
 
@@ -555,6 +694,114 @@ impl MeshInferenceProvider {
     /// Snapshot of per-peer health for diagnostics surfaces.
     pub fn peer_health_snapshot(&self) -> Vec<(String, bool, u32, u64)> {
         self.peer_health.snapshot()
+    }
+
+    /// Emit a fleet snapshot into the decision stream if one is due.
+    ///
+    /// A capture has to be **self-contained** to be replayable: the
+    /// episodes and the fleet they ran against must come from the
+    /// same file and the same moments. Interleaving the snapshot into
+    /// the record stream on a timer achieves that with one env var
+    /// and no second collection step — and because a long capture
+    /// spans a changing fleet, one snapshot at the start would model
+    /// a mesh that stopped existing halfway through.
+    ///
+    /// The interval is deliberately coarse relative to gossip (10s)
+    /// and manifest TTL (60s): this samples fleet *composition*, not
+    /// per-request state, which the decision records already carry.
+    async fn maybe_emit_snapshot(&self, now_unix: u64) {
+        let last = self.last_snapshot_unix.load(Ordering::Relaxed);
+        if last != 0 && now_unix.saturating_sub(last) < SNAPSHOT_INTERVAL_SECS {
+            return;
+        }
+        // Claim the slot before doing the work so concurrent requests
+        // don't all decide they are the one to snapshot.
+        if self
+            .last_snapshot_unix
+            .compare_exchange(last, now_unix, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
+            return;
+        }
+        let snapshot = self.observation_snapshot().await;
+        self.decision_sink
+            .record(decision_log::DecisionEvent::Snapshot(Box::new(snapshot)));
+    }
+
+    /// P3 of `docs/specs/SCHEDULER_QUALITY.md` — export the whole
+    /// observation state the scheduler decides from.
+    ///
+    /// Joins the three views that today live in three unrelated
+    /// places: this node's per-peer `NodeObservations` (latency and
+    /// throughput EWMAs), the peers' gossiped `BenchmarkResult` and
+    /// load signals, and `PeerHealthTracker`'s quarantine state.
+    /// Separately, none of them answers "what fleet is this?";
+    /// together they are exactly the input a simulator's service-time
+    /// model needs to be **fit from the real mesh** instead of
+    /// hand-tuned — which is the difference between §3's "p95
+    /// improves 2.5×" being evidence and being an artifact of chosen
+    /// constants.
+    ///
+    /// Read-only and allocation-cheap; safe to call from a diagnostic
+    /// route on a live daemon.
+    pub async fn observation_snapshot(&self) -> decision_log::FleetSnapshot {
+        use crate::decision_log::{FleetSnapshot, LocalObservationRecord, PeerObservationRecord};
+        use crate::decision_trace::TRACE_SCHEMA;
+        let now = Self::now_unix_secs();
+        let peer_obs = self.peer_observations.read().await.clone();
+        let health: std::collections::HashMap<String, (bool, u32, u64)> = self
+            .peer_health
+            .snapshot()
+            .into_iter()
+            .map(|(name, quarantined, fails, cooldown)| (name, (quarantined, fails, cooldown)))
+            .collect();
+
+        // Peers are enumerated from the endpoint source rather than
+        // from the observation map: a peer this node has never
+        // dispatched to has no observations but is still part of the
+        // fleet, and a fleet description that omits the idle nodes
+        // would misstate the composition the sim is meant to
+        // reproduce.
+        let endpoints = self.mesh.peer_inference_endpoints().await;
+        let mut peers: Vec<PeerObservationRecord> = endpoints
+            .into_iter()
+            .map(|p| {
+                let (quarantined, consecutive_failures, cooldown_remaining_secs) =
+                    health.get(&p.name).copied().unwrap_or((false, 0, 0));
+                PeerObservationRecord {
+                    observations: peer_obs.get(&p.name).cloned().unwrap_or_default(),
+                    node_id: Some(p.node_id.to_hex()),
+                    benchmark: p.benchmark.clone(),
+                    gossiped_in_flight: p.current_in_flight,
+                    inference_availability: p.inference_availability,
+                    gossip_age_secs: (p.gossip_last_seen_unix > 0)
+                        .then(|| now.saturating_sub(p.gossip_last_seen_unix)),
+                    quarantined,
+                    consecutive_failures,
+                    cooldown_remaining_secs,
+                    name: p.name,
+                }
+            })
+            .collect();
+        peers.sort_by(|a, b| a.name.cmp(&b.name));
+
+        FleetSnapshot {
+            schema: TRACE_SCHEMA.to_string(),
+            captured_at_unix: now,
+            local: LocalObservationRecord {
+                observations: self.local_observations.read().await.clone(),
+                benchmark: self.local_benchmark.read().await.clone(),
+                advertised_models: self
+                    .self_manifest
+                    .load()
+                    .models
+                    .iter()
+                    .map(|m| m.id.clone())
+                    .collect(),
+                in_flight_published: self.in_flight_publisher.load(Ordering::Relaxed),
+            },
+            peers,
+        }
     }
 
     /// Replace the local-side benchmark result. Called once by the
@@ -692,10 +939,7 @@ impl MeshInferenceProvider {
     /// [`adjust_for_observations`] so LAN peers pick up their
     /// locality bonus in real deployments instead of defaulting
     /// to `Far`.
-    async fn get_peer_manifest(
-        &self,
-        peer: &PeerInferenceEndpoint,
-    ) -> Option<(ProviderManifest, u32)> {
+    async fn get_peer_manifest(&self, peer: &PeerInferenceEndpoint) -> Option<ManifestRead> {
         self.get_peer_manifest_inner(peer, false).await
     }
 
@@ -710,10 +954,7 @@ impl MeshInferenceProvider {
     /// reload, then served `Model not loaded` to every chat
     /// completion for the rest of the 60 s TTL until an operator
     /// did `daemon restart`.
-    async fn get_peer_manifest_fresh(
-        &self,
-        peer: &PeerInferenceEndpoint,
-    ) -> Option<(ProviderManifest, u32)> {
+    async fn get_peer_manifest_fresh(&self, peer: &PeerInferenceEndpoint) -> Option<ManifestRead> {
         self.get_peer_manifest_inner(peer, true).await
     }
 
@@ -721,14 +962,28 @@ impl MeshInferenceProvider {
         &self,
         peer: &PeerInferenceEndpoint,
         bypass_cache: bool,
-    ) -> Option<(ProviderManifest, u32)> {
-        let key = peer.node_id.to_string();
+    ) -> Option<ManifestRead> {
+        // `to_hex()`, not `to_string()`: `NodeId`'s `Display` is the
+        // TRUNCATED human form (`node-` + the first 8 of 16 bytes) and
+        // its own doc says so. Two peers sharing a first-8-byte prefix
+        // would have shared one cache entry and been served each
+        // other's manifests — vanishingly unlikely for random ids, but
+        // a human-facing rendering has no business being a cache key.
+        // Surfaced by the decision records: two test peers scored
+        // against one manifest because their ids rendered identically.
+        let key = peer.node_id.to_hex();
         // Cache hit (unless caller demanded a fresh probe).
         if !bypass_cache {
             let cache = self.peer_cache.read().await;
             if let Some(entry) = cache.get(&key) {
-                if entry.fetched_at.elapsed() < MANIFEST_TTL {
-                    return Some((entry.manifest.clone(), entry.rtt_ms));
+                let age = entry.fetched_at.elapsed();
+                if age < MANIFEST_TTL {
+                    return Some(ManifestRead {
+                        manifest: entry.manifest.clone(),
+                        rtt_ms: entry.rtt_ms,
+                        age_secs: age.as_secs(),
+                        from_cache: true,
+                    });
                 }
             }
         }
@@ -817,7 +1072,12 @@ impl MeshInferenceProvider {
                                     rtt_ms,
                                 },
                             );
-                            return Some((m, rtt_ms));
+                            return Some(ManifestRead {
+                                manifest: m,
+                                rtt_ms,
+                                age_secs: 0,
+                                from_cache: false,
+                            });
                         }
                         Err(e) => {
                             tracing::info!(
@@ -862,11 +1122,13 @@ impl MeshInferenceProvider {
     /// OICP peer selection: the single best peer that strictly beats local, or
     /// `None`. Thin wrapper over [`Self::select_peers_ranked`] for callers (the
     /// non-streaming `complete`, tests) that only want the top pick.
-    async fn select_peer(
-        &self,
-        request: &CompletionRequest,
-    ) -> Option<(PeerInferenceEndpoint, ModelCandidate)> {
-        self.select_peers_ranked(request).await.into_iter().next()
+    async fn select_peer(&self, request: &CompletionRequest) -> SinglePeerSelection {
+        let sel = self.select_peers_ranked(request).await;
+        SinglePeerSelection {
+            pick: sel.peers.into_iter().next(),
+            decision_id: sel.decision_id,
+            oicp_request_id: sel.oicp_request_id,
+        }
     }
 
     /// OICP peer selection, ranked best-first. Every peer that strictly beats
@@ -876,7 +1138,7 @@ impl MeshInferenceProvider {
     async fn select_peers_ranked(
         &self,
         request: &CompletionRequest,
-    ) -> Vec<(PeerInferenceEndpoint, ModelCandidate)> {
+    ) -> RankedSelection {
         // Glassbox: every stay-local decision below names its gate so
         // the routing outcome is reconstructable from a debug log.
         // `oicp_request_id` is the caller-declared tag (e.g. the
@@ -887,13 +1149,24 @@ impl MeshInferenceProvider {
             .as_ref()
             .and_then(|o| o.request_id.as_deref())
             .unwrap_or("");
+        // P1: one decision record per decision point. The builder is
+        // filled as we score and emitted exactly once on every exit
+        // path below — including the gates, whose records carry no
+        // candidates but do name the gate. "The hub lost" and "the
+        // hub was never considered" are different failures and the
+        // record has to be able to say which happened.
+        let mut rec = DecisionBuilder::new(
+            oicp_request_id,
+            DecisionPath::RankedOicp,
+            Self::request_facts(request),
+        );
         if !Self::has_routing_signal(request) {
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
                 gate = "no_routing_signal",
                 "mesh-inference: staying local"
             );
-            return Vec::new();
+            return self.gated(rec, "no_routing_signal");
         }
         // Operator override: short-circuit all outbound peer
         // routing. Set `SOVEREIGN_DISABLE_PEER_INFERENCE=1` in the
@@ -909,7 +1182,7 @@ impl MeshInferenceProvider {
                 "mesh-inference: peer routing disabled via \
                  SOVEREIGN_DISABLE_PEER_INFERENCE — staying local"
             );
-            return Vec::new();
+            return self.gated(rec, "operator_disabled");
         }
         // SLOT_POLICY §5 — the offload gate. A request crosses the
         // network to a peer only when its envelope both permits
@@ -924,7 +1197,7 @@ impl MeshInferenceProvider {
         // `has_routing_signal` above already proved the envelope is
         // present; bind it defensively and bail if somehow absent.
         let Some(req_oicp) = request.oicp.as_ref() else {
-            return Vec::new();
+            return self.gated(rec, "envelope_absent");
         };
         if !crate::oicp_select::offload_eligible(req_oicp) {
             tracing::debug!(
@@ -935,7 +1208,7 @@ impl MeshInferenceProvider {
                 "mesh-inference: staying local (SLOT_POLICY §5: \
                  offload iff MeshAllowed AND latency != Fast)"
             );
-            return Vec::new();
+            return self.gated(rec, "not_offload_eligible");
         }
 
         // Local is always a candidate. `None` means no loaded
@@ -957,6 +1230,7 @@ impl MeshInferenceProvider {
         let local_obs = self.local_observations.read().await.clone();
         let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
+        let now_unix = Self::now_unix_secs();
         let local_cand = score_manifest_for_request(&self_manifest, req_oicp).map(|c| {
             // Local availability is `None` (neutral): the local
             // node's business is already captured by
@@ -969,20 +1243,24 @@ impl MeshInferenceProvider {
                 local_bench.as_ref(),
                 None,
             );
-            tracing::debug!(
-                candidate = "local",
-                model_id = %cand.model_id,
-                claim_score = breakdown.claim_score,
-                observation_mult = breakdown.observation_mult,
-                load_penalty = breakdown.load_penalty,
-                locality_bonus = breakdown.locality_bonus,
-                cold_start_weight = breakdown.cold_start_weight,
-                throughput_factor = breakdown.throughput_factor,
-                throughput_source = breakdown.throughput_source,
-                availability = breakdown.availability,
-                final_score = breakdown.final_score,
-                "mesh-inference: score breakdown"
-            );
+            // P2: the local candidate's load signal has no staleness —
+            // that asymmetry between self and peers IS finding F1, so
+            // the record states it explicitly (`LoadSource::Local`,
+            // `gossip_age_secs: None`) rather than leaving it implied.
+            let inputs = CandidateInputs::from_observations(&local_obs, LoadSource::Local)
+                .with_benchmark(local_bench.as_ref(), now_unix);
+            rec.push_candidate(CandidateRecord {
+                kind: CandidateKind::Local,
+                name: LOCAL_CANDIDATE_NAME.to_string(),
+                node_id: None,
+                model_id: cand.model_id.clone(),
+                size_gb: cand.size_gb,
+                locality: decision_log::locality_label(NodeLocality::Local).to_string(),
+                rank: None,
+                selected: false,
+                score: ScoreRecord::from(&breakdown),
+                inputs,
+            });
             cand
         });
         tracing::info!(
@@ -1019,12 +1297,30 @@ impl MeshInferenceProvider {
                     peer = %peer.name,
                     "mesh-inference: skipping quarantined peer in scoring"
                 );
+                rec.exclude(
+                    &peer.name,
+                    Some(peer.node_id.to_hex()),
+                    ExclusionReason::Quarantined,
+                );
                 continue;
             }
-            let (manifest, rtt_ms) = match self.get_peer_manifest(&peer).await {
+            let manifest_read = match self.get_peer_manifest(&peer).await {
                 Some(m) => m,
-                None => continue,
+                None => {
+                    rec.exclude(
+                        &peer.name,
+                        Some(peer.node_id.to_hex()),
+                        ExclusionReason::ManifestUnavailable,
+                    );
+                    continue;
+                }
             };
+            let ManifestRead {
+                manifest,
+                rtt_ms,
+                age_secs: manifest_age_secs,
+                from_cache: manifest_from_cache,
+            } = manifest_read;
             if needs_forced_choice
                 && !manifest
                     .features
@@ -1037,11 +1333,23 @@ impl MeshInferenceProvider {
                     "mesh-inference: excluding peer — forced_choice sentinel \
                      but manifest does not advertise x:forced_choice"
                 );
+                rec.exclude(
+                    &peer.name,
+                    Some(peer.node_id.to_hex()),
+                    ExclusionReason::NoForcedChoice,
+                );
                 continue;
             }
             let mut raw = match score_manifest_for_request(&manifest, req_oicp) {
                 Some(c) => c,
-                None => continue,
+                None => {
+                    rec.exclude(
+                        &peer.name,
+                        Some(peer.node_id.to_hex()),
+                        ExclusionReason::NoClaimMatch,
+                    );
+                    continue;
+                }
             };
             // Pinned worker pods have no "users" beyond the owner —
             // the mesh's local-affinity bias (which scales peer scores
@@ -1082,6 +1390,8 @@ impl MeshInferenceProvider {
             // not yet plumbed and would muddle the cold-start ramp.
             //
             // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+            let self_observed_in_flight = obs.in_flight;
+            let mut in_flight_source = LoadSource::SelfObserved;
             if let Some(gossiped) = peer.current_in_flight {
                 tracing::debug!(
                     peer = %peer.name,
@@ -1090,6 +1400,7 @@ impl MeshInferenceProvider {
                     "mesh-inference: applying gossiped in-flight override"
                 );
                 obs.in_flight = gossiped;
+                in_flight_source = LoadSource::Gossip;
             }
             let (cand, breakdown) = adjust_for_observations(
                 raw,
@@ -1102,20 +1413,6 @@ impl MeshInferenceProvider {
                 // peers that haven't gossiped one keeps them neutral.
                 peer.inference_availability,
             );
-            tracing::debug!(
-                candidate = %peer.name,
-                model_id = %cand.model_id,
-                claim_score = breakdown.claim_score,
-                observation_mult = breakdown.observation_mult,
-                load_penalty = breakdown.load_penalty,
-                locality_bonus = breakdown.locality_bonus,
-                cold_start_weight = breakdown.cold_start_weight,
-                throughput_factor = breakdown.throughput_factor,
-                throughput_source = breakdown.throughput_source,
-                availability = breakdown.availability,
-                final_score = breakdown.final_score,
-                "mesh-inference: score breakdown"
-            );
             tracing::info!(
                 peer = %peer.name,
                 peer_pick = %cand.model_id,
@@ -1123,6 +1420,34 @@ impl MeshInferenceProvider {
                 peer_size_gb = ?cand.size_gb,
                 "mesh-inference: scored peer"
             );
+            // P2: every signal that fed this score, stamped with how
+            // old it was when the scorer read it. The gossip age is
+            // the measurement F1 has been missing — the load number
+            // and the load number's age are different facts, and only
+            // the pair can distinguish "the peer is idle" from "the
+            // peer was idle a full anti-entropy round ago."
+            let mut inputs = CandidateInputs::from_observations(&obs, in_flight_source)
+                .with_benchmark(peer.benchmark.as_ref(), now_unix);
+            inputs.self_observed_in_flight = Some(self_observed_in_flight);
+            inputs.gossiped_in_flight = peer.current_in_flight;
+            inputs.availability = peer.inference_availability;
+            inputs.gossip_age_secs = (peer.gossip_last_seen_unix > 0)
+                .then(|| now_unix.saturating_sub(peer.gossip_last_seen_unix));
+            inputs.manifest_age_secs = Some(manifest_age_secs);
+            inputs.manifest_from_cache = Some(manifest_from_cache);
+            inputs.rtt_ms = Some(rtt_ms);
+            rec.push_candidate(CandidateRecord {
+                kind: CandidateKind::Peer,
+                name: peer.name.clone(),
+                node_id: Some(peer.node_id.to_hex()),
+                model_id: cand.model_id.clone(),
+                size_gb: cand.size_gb,
+                locality: decision_log::locality_label(classify_rtt_ms(rtt_ms)).to_string(),
+                rank: None,
+                selected: false,
+                score: ScoreRecord::from(&breakdown),
+                inputs,
+            });
             scored.push((peer, cand));
         }
 
@@ -1167,7 +1492,78 @@ impl MeshInferenceProvider {
                 tracing::debug!("mesh-inference: no peer strictly beats local, staying local")
             }
         }
-        winners
+        // P3: fold a fleet snapshot into the same record stream on a
+        // slow cadence. Cheap (a clone of two small maps) and rate-
+        // limited to at most one per SNAPSHOT_INTERVAL_SECS, so a busy
+        // node pays it once a minute, not once a request.
+        self.maybe_emit_snapshot(now_unix).await;
+
+        let ranked_names: Vec<String> = winners.iter().map(|(p, _)| p.name.clone()).collect();
+        let verdict = if ranked_names.is_empty() {
+            Verdict::StayLocal
+        } else {
+            Verdict::Peers {
+                ranked: ranked_names.clone(),
+            }
+        };
+        let decision = rec.finish(verdict, &ranked_names);
+        let decision_id = decision.decision_id.clone();
+        decision_log::emit_decision(&self.decision_sink, decision);
+        RankedSelection {
+            peers: winners,
+            decision_id,
+            oicp_request_id: oicp_request_id.to_string(),
+        }
+    }
+
+    /// Emit a decision that never reached scoring, and return an
+    /// empty selection. Every gate in [`Self::select_peers_ranked`]
+    /// exits through here so a gated request is as visible in the
+    /// record stream as a scored one — "stayed local because
+    /// `latency == Fast`" is an answer; a missing record is not.
+    fn gated(&self, rec: DecisionBuilder, gate: &str) -> RankedSelection {
+        let decision = rec.finish(
+            Verdict::Gated {
+                gate: gate.to_string(),
+            },
+            &[],
+        );
+        let decision_id = decision.decision_id.clone();
+        let oicp_request_id = decision.oicp_request_id.clone();
+        decision_log::emit_decision(&self.decision_sink, decision);
+        RankedSelection {
+            peers: Vec::new(),
+            decision_id,
+            oicp_request_id,
+        }
+    }
+
+    /// The request-side facts a decision record carries. Read from
+    /// the OICP envelope where present, defaulted the same way the
+    /// scheduler itself defaults them (§8: absent hint → `general`,
+    /// absent latency → `normal`) so a replayed record reconstructs
+    /// the same request the scorer saw.
+    fn request_facts(request: &CompletionRequest) -> RequestFacts {
+        match request.oicp.as_ref() {
+            Some(o) => RequestFacts {
+                capability_hint: o.effective_hint().to_string(),
+                latency_class: format!("{:?}", o.effective_latency_class()),
+                sharding: format!("{:?}", o.sharding()),
+                context_tokens: o.context_tokens,
+                max_output_tokens: o.max_output_tokens,
+                preferred_speed: format!("{:?}", request.preferred_speed),
+                explicit_model_id: request.model_id.clone(),
+            },
+            None => RequestFacts {
+                capability_hint: "<no-envelope>".into(),
+                latency_class: "<no-envelope>".into(),
+                sharding: "<no-envelope>".into(),
+                context_tokens: None,
+                max_output_tokens: None,
+                preferred_speed: format!("{:?}", request.preferred_speed),
+                explicit_model_id: request.model_id.clone(),
+            },
+        }
     }
 
     /// Stamp the response's `model_id` with a peer-attribution
@@ -1345,8 +1741,8 @@ impl MeshInferenceProvider {
             } else {
                 self.get_peer_manifest(&peer).await
             };
-            let (manifest, _rtt) = match fetch {
-                Some(m) => m,
+            let manifest = match fetch {
+                Some(m) => m.manifest,
                 None => continue,
             };
             if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
@@ -1447,7 +1843,7 @@ impl MeshInferenceProvider {
         self.shared_model_id.load_full().map(|s| (*s).clone())
     }
 
-    async fn select_route(&self, request: &CompletionRequest) -> Result<Vec<RouteDecision>> {
+    async fn select_route(&self, request: &CompletionRequest) -> Result<RoutePlan> {
         // Effective named target: an explicit `model_id` (Hard — fail loud if no
         // node advertises it) takes priority; otherwise a configured shared-model
         // primary (Soft — degrade to the local model when the cluster is forming
@@ -1457,14 +1853,54 @@ impl MeshInferenceProvider {
             None => (self.shared_primary_id(request), true),
         };
         if let Some(model_id) = named {
-            match self.locate_named_model(&model_id).await {
+            // P1 on the named path. This record carries a verdict but
+            // no scored candidates, and that is deliberate: named
+            // dispatch is name resolution plus a min-in-flight
+            // tiebreak (`locate_named_model`), not the OICP scorer,
+            // so there is no `ScoreBreakdown` to report and inventing
+            // a neutral one would pollute the §5 scoreboard with
+            // decisions the scorer never made. What the record does
+            // guarantee is that **every** outcome has a decision to
+            // join back to, on both routing surfaces.
+            let rec = DecisionBuilder::new(
+                request
+                    .oicp
+                    .as_ref()
+                    .and_then(|o| o.request_id.as_deref())
+                    .unwrap_or(""),
+                DecisionPath::NamedModel,
+                Self::request_facts(request),
+            );
+            let located = self.locate_named_model(&model_id).await;
+            let verdict = match &located {
+                NamedModelLocation::Local => Verdict::NamedLocal {
+                    model_id: model_id.clone(),
+                },
+                NamedModelLocation::Peer(peer, cand) => Verdict::NamedPeer {
+                    peer: peer.name.clone(),
+                    model_id: cand.model_id.clone(),
+                },
+                NamedModelLocation::Unknown => Verdict::NamedUnknown {
+                    model_id: model_id.clone(),
+                },
+            };
+            let decision = rec.finish(verdict, &[]);
+            let decision_id = decision.decision_id.clone();
+            let oicp_request_id = decision.oicp_request_id.clone();
+            decision_log::emit_decision(&self.decision_sink, decision);
+            let plan = |steps| RoutePlan {
+                steps,
+                decision_id: decision_id.clone(),
+                oicp_request_id: oicp_request_id.clone(),
+            };
+            match located {
                 NamedModelLocation::Local => {
                     tracing::info!(model = %model_id, soft, "mesh-inference: routing locally by model name");
                     let guard = self.enter_local_inflight(&model_id);
-                    Ok(vec![RouteDecision::LocalNamed {
+                    Ok(plan(vec![RouteDecision::LocalNamed {
                         attribution: model_id,
                         guard,
-                    }])
+                    }]))
                 }
                 NamedModelLocation::Peer(peer, peer_cand) => {
                     tracing::info!(
@@ -1483,7 +1919,7 @@ impl MeshInferenceProvider {
                         // the local model if every address fails — the cascade's
                         // existing LocalFallback step (degraded, not an error).
                         let total = self.enter_local_total();
-                        Ok(vec![
+                        Ok(plan(vec![
                             RouteDecision::Peer {
                                 peer,
                                 peer_cand,
@@ -1491,14 +1927,14 @@ impl MeshInferenceProvider {
                                 disposition: PeerFailureDisposition::Soft,
                             },
                             RouteDecision::LocalFallback { total },
-                        ])
+                        ]))
                     } else {
-                        Ok(vec![RouteDecision::Peer {
+                        Ok(plan(vec![RouteDecision::Peer {
                             peer,
                             peer_cand,
                             ledger,
                             disposition: PeerFailureDisposition::Hard { model_id },
-                        }])
+                        }]))
                     }
                 }
                 NamedModelLocation::Unknown => {
@@ -1508,7 +1944,7 @@ impl MeshInferenceProvider {
                             "mesh-inference: shared model forming/unavailable — falling back to local primary"
                         );
                         let total = self.enter_local_total();
-                        Ok(vec![RouteDecision::LocalFallback { total }])
+                        Ok(plan(vec![RouteDecision::LocalFallback { total }]))
                     } else {
                         Err(sovereign_core::error::Error::ModelNotLoaded(format!(
                             "no node in this mesh advertises model '{}' — \
@@ -1526,10 +1962,18 @@ impl MeshInferenceProvider {
             // collapsing straight to local. `enter_local_total` stays eager so
             // the gossip publisher sees the (possible) local load on the same
             // timing it always did, before any peer round-trip decides.
-            let ranked = self.select_peers_ranked(request).await;
+            let RankedSelection {
+                peers: ranked,
+                decision_id,
+                oicp_request_id,
+            } = self.select_peers_ranked(request).await;
             let total = self.enter_local_total();
             if ranked.is_empty() {
-                Ok(vec![RouteDecision::LocalFallback { total }])
+                Ok(RoutePlan {
+                    steps: vec![RouteDecision::LocalFallback { total }],
+                    decision_id,
+                    oicp_request_id,
+                })
             } else {
                 tracing::info!(
                     peers = ranked.len(),
@@ -1549,7 +1993,11 @@ impl MeshInferenceProvider {
                     });
                 }
                 steps.push(RouteDecision::LocalFallback { total });
-                Ok(steps)
+                Ok(RoutePlan {
+                    steps,
+                    decision_id,
+                    oicp_request_id,
+                })
             }
         }
     }
@@ -1908,13 +2356,26 @@ impl InferenceProvider for MeshInferenceProvider {
             }
         }
 
-        if let Some((peer, peer_cand)) = self.select_peer(request).await {
+        // Non-streaming path. The decision→outcome join is closed by
+        // hand here rather than by the stream wrapper, because there
+        // is no stream: `complete()` measures total wall time only, so
+        // its outcome records `total_ms` with `ttft_ms: None`. Reading
+        // a TTFT off a non-streaming call would be a fabrication.
+        let SinglePeerSelection {
+            pick,
+            decision_id,
+            oicp_request_id,
+        } = self.select_peer(request).await;
+        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
+        if let Some((peer, peer_cand)) = pick {
             tracing::info!(
                 peer = %peer.name,
                 addrs = peer.base_urls.len(),
                 peer_pick = %peer_cand.model_id,
                 "mesh-inference: routing complete() to peer"
             );
+            let started = Instant::now();
+            let mut last_transport_err: Option<String> = None;
             for url in &peer.base_urls {
                 let rp = provider_for_peer(&peer, url);
                 match rp.complete(request).await {
@@ -1928,6 +2389,22 @@ impl InferenceProvider for MeshInferenceProvider {
                         // request hint instead of the served model.)
                         resp.model_id = peer_cand.model_id.clone();
                         self.peer_health.record_success(&peer.name);
+                        self.outcome_ctx(
+                            &decision_id,
+                            &oicp_request_id,
+                            ServedBy::Peer {
+                                name: peer.name.clone(),
+                                node_id: Some(peer.node_id.to_hex()),
+                                model_id: peer_cand.model_id.clone(),
+                            },
+                            0,
+                            &[],
+                        )
+                        .complete(
+                            None,
+                            Some(started.elapsed().as_secs_f64() * 1000.0),
+                            None,
+                        );
                         return Ok(Self::annotate(resp, &peer.name));
                     }
                     Err(e) => {
@@ -1937,6 +2414,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             error = %e,
                             "mesh-inference: peer complete() transport error, trying next address"
                         );
+                        last_transport_err = Some(format!("{e}"));
                     }
                 }
             }
@@ -1947,6 +2425,13 @@ impl InferenceProvider for MeshInferenceProvider {
                 peer = %peer.name,
                 "mesh-inference: all peer addresses failed, falling back to local"
             );
+            let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
+            let shed = decision_log::looks_shed(&err_text);
+            failovers.push(decision_log::FailoverAttempt {
+                peer: peer.name.clone(),
+                error: err_text,
+                shed,
+            });
         }
         // Two flows arrive here: (a) `select_peer` returned `None`
         // and we serve locally without ever trying a peer, (b) we
@@ -1957,7 +2442,26 @@ impl InferenceProvider for MeshInferenceProvider {
         // await (or on `?` if `complete` errors), keeping the count
         // in lock-step with reality.
         let _total = self.enter_local_total();
-        self.local.complete(request).await
+        let started = Instant::now();
+        let result = self.local.complete(request).await;
+        // Both flows that reach here close the join: (a) the selector
+        // ran and chose nobody (a `stay_local` decision — still a
+        // decision), and (b) a peer was tried and failed. `failovers`
+        // is what tells them apart in the record.
+        let ctx = self.outcome_ctx(
+            &decision_id,
+            &oicp_request_id,
+            ServedBy::LocalFallback {
+                model_id: self.local.model_id_for(request.preferred_speed),
+            },
+            failovers.len() as u32,
+            &failovers,
+        );
+        match &result {
+            Ok(_) => ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None),
+            Err(e) => ctx.failed(e.to_string(), false),
+        }
+        result
     }
 
     async fn complete_stream(
@@ -1984,9 +2488,15 @@ impl InferenceProvider for MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
-        let cascade = self.select_route(request).await?;
+        let RoutePlan {
+            steps,
+            decision_id,
+            oicp_request_id,
+        } = self.select_route(request).await?;
         let mut last_err: Option<sovereign_core::error::Error> = None;
-        for step in cascade.into_iter() {
+        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
+        for (attempt_index, step) in steps.into_iter().enumerate() {
+            let attempt_index = attempt_index as u32;
             match step {
                 RouteDecision::LocalNamed { attribution, guard } => {
                     let stream = self.local.complete_stream(request).await?;
@@ -1995,7 +2505,16 @@ impl InferenceProvider for MeshInferenceProvider {
                             ThroughputObservedStream::new(
                                 stream,
                                 ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            ),
+                            )
+                            .with_outcome(self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::Local {
+                                    model_id: attribution.clone(),
+                                },
+                                attempt_index,
+                                &failovers,
+                            )),
                             guard,
                         ));
                     return Ok((observed, attribution));
@@ -2019,7 +2538,18 @@ impl InferenceProvider for MeshInferenceProvider {
                                         name: peer.name.clone(),
                                         map: Arc::clone(&self.peer_observations),
                                     },
-                                );
+                                )
+                                .with_outcome(self.outcome_ctx(
+                                    &decision_id,
+                                    &oicp_request_id,
+                                    ServedBy::Peer {
+                                        name: peer.name.clone(),
+                                        node_id: Some(peer.node_id.to_hex()),
+                                        model_id: peer_cand.model_id.clone(),
+                                    },
+                                    attempt_index,
+                                    &failovers,
+                                ));
                                 if let Some(em) = ledger.clone() {
                                     wrapper = wrapper.with_ledger_emission(em);
                                 }
@@ -2050,8 +2580,27 @@ impl InferenceProvider for MeshInferenceProvider {
                         }
                     }
                     self.peer_health.record_failure(&peer.name);
+                    let step_err = last_transport_err
+                        .clone()
+                        .unwrap_or_else(|| "unreachable".into());
+                    let shed = decision_log::looks_shed(&step_err);
+                    failovers.push(decision_log::FailoverAttempt {
+                        peer: peer.name.clone(),
+                        error: step_err.clone(),
+                        shed,
+                    });
                     match disposition {
                         PeerFailureDisposition::Hard { model_id } => {
+                            // Terminal: no further step will serve, so
+                            // this is where the join closes.
+                            self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::Failed,
+                                attempt_index,
+                                &failovers,
+                            )
+                            .failed(step_err, shed);
                             return Err(sovereign_core::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
@@ -2076,15 +2625,25 @@ impl InferenceProvider for MeshInferenceProvider {
                 }
                 RouteDecision::LocalFallback { total } => {
                     let stream = self.local.complete_stream(request).await?;
+                    let model_id = self.local.model_id_for(request.preferred_speed);
                     let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
                         Box::pin(TotalGuardedStream::new(
                             ThroughputObservedStream::new(
                                 stream,
                                 ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            ),
+                            )
+                            .with_outcome(self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::LocalFallback {
+                                    model_id: model_id.clone(),
+                                },
+                                attempt_index,
+                                &failovers,
+                            )),
                             total,
                         ));
-                    return Ok((observed, self.local.model_id_for(request.preferred_speed)));
+                    return Ok((observed, model_id));
                 }
             }
         }
@@ -2093,6 +2652,25 @@ impl InferenceProvider for MeshInferenceProvider {
             last_err = ?last_err,
             "mesh-inference: route cascade exhausted — every candidate peer and the local fallback failed for this request"
         );
+        // Nothing served. Close the join anyway: a decision with no
+        // outcome is indistinguishable from a lost record, and the
+        // calibration contract needs "the mesh could not serve this"
+        // to be a *measurable* result rather than a gap.
+        {
+            let err_text = last_err
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "cascade exhausted".to_string());
+            let shed = decision_log::looks_shed(&err_text);
+            self.outcome_ctx(
+                &decision_id,
+                &oicp_request_id,
+                ServedBy::Failed,
+                failovers.len() as u32,
+                &failovers,
+            )
+            .failed(err_text, shed);
+        }
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(
                 "mesh-inference: route cascade exhausted with no success".into(),
@@ -2115,9 +2693,15 @@ impl InferenceProvider for MeshInferenceProvider {
         String,
     )> {
         use sovereign_core::types::StreamFrame;
-        let cascade = self.select_route(request).await?;
+        let RoutePlan {
+            steps,
+            decision_id,
+            oicp_request_id,
+        } = self.select_route(request).await?;
         let mut last_err: Option<sovereign_core::error::Error> = None;
-        for step in cascade.into_iter() {
+        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
+        for (attempt_index, step) in steps.into_iter().enumerate() {
+            let attempt_index = attempt_index as u32;
             match step {
                 RouteDecision::LocalNamed { attribution, guard } => {
                     let stream = self.local.complete_stream_with_finish(request).await?;
@@ -2126,7 +2710,16 @@ impl InferenceProvider for MeshInferenceProvider {
                             ThroughputObservedStream::new(
                                 stream,
                                 ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            ),
+                            )
+                            .with_outcome(self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::Local {
+                                    model_id: attribution.clone(),
+                                },
+                                attempt_index,
+                                &failovers,
+                            )),
                             guard,
                         ));
                     return Ok((observed, attribution));
@@ -2150,7 +2743,18 @@ impl InferenceProvider for MeshInferenceProvider {
                                         name: peer.name.clone(),
                                         map: Arc::clone(&self.peer_observations),
                                     },
-                                );
+                                )
+                                .with_outcome(self.outcome_ctx(
+                                    &decision_id,
+                                    &oicp_request_id,
+                                    ServedBy::Peer {
+                                        name: peer.name.clone(),
+                                        node_id: Some(peer.node_id.to_hex()),
+                                        model_id: peer_cand.model_id.clone(),
+                                    },
+                                    attempt_index,
+                                    &failovers,
+                                ));
                                 if let Some(em) = ledger.clone() {
                                     wrapper = wrapper.with_ledger_emission(em);
                                 }
@@ -2181,8 +2785,27 @@ impl InferenceProvider for MeshInferenceProvider {
                         }
                     }
                     self.peer_health.record_failure(&peer.name);
+                    let step_err = last_transport_err
+                        .clone()
+                        .unwrap_or_else(|| "unreachable".into());
+                    let shed = decision_log::looks_shed(&step_err);
+                    failovers.push(decision_log::FailoverAttempt {
+                        peer: peer.name.clone(),
+                        error: step_err.clone(),
+                        shed,
+                    });
                     match disposition {
                         PeerFailureDisposition::Hard { model_id } => {
+                            // Terminal: no further step will serve, so
+                            // this is where the join closes.
+                            self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::Failed,
+                                attempt_index,
+                                &failovers,
+                            )
+                            .failed(step_err, shed);
                             return Err(sovereign_core::error::Error::Routing(format!(
                                 "model '{}' is advertised by peer '{}' but all peer \
                                  addresses failed: {}",
@@ -2204,15 +2827,25 @@ impl InferenceProvider for MeshInferenceProvider {
                 }
                 RouteDecision::LocalFallback { total } => {
                     let stream = self.local.complete_stream_with_finish(request).await?;
+                    let model_id = self.local.model_id_for(request.preferred_speed);
                     let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
                         Box::pin(TotalGuardedStream::new(
                             ThroughputObservedStream::new(
                                 stream,
                                 ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            ),
+                            )
+                            .with_outcome(self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::LocalFallback {
+                                    model_id: model_id.clone(),
+                                },
+                                attempt_index,
+                                &failovers,
+                            )),
                             total,
                         ));
-                    return Ok((observed, self.local.model_id_for(request.preferred_speed)));
+                    return Ok((observed, model_id));
                 }
             }
         }
@@ -2221,6 +2854,25 @@ impl InferenceProvider for MeshInferenceProvider {
             last_err = ?last_err,
             "mesh-inference: typed route cascade exhausted — every candidate peer and the local fallback failed for this request"
         );
+        // Nothing served. Close the join anyway: a decision with no
+        // outcome is indistinguishable from a lost record, and the
+        // calibration contract needs "the mesh could not serve this"
+        // to be a *measurable* result rather than a gap.
+        {
+            let err_text = last_err
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "cascade exhausted".to_string());
+            let shed = decision_log::looks_shed(&err_text);
+            self.outcome_ctx(
+                &decision_id,
+                &oicp_request_id,
+                ServedBy::Failed,
+                failovers.len() as u32,
+                &failovers,
+            )
+            .failed(err_text, shed);
+        }
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(
                 "mesh-inference: typed route cascade exhausted with no success".into(),

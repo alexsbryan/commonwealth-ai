@@ -64,6 +64,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      synth.citation=info,\
      synth.budget=info,\
      placement=info,\
+     mesh.decision=info,\
      compute_child=info,\
      sovereign_compute=info,\
      fim=info";
@@ -219,6 +220,13 @@ mod tests {
             // Compute-child lifecycle transitions (P1). The glassbox source
             // for "distributed across N children / warming / recovering".
             "compute_child",
+            // Routing decision records (SCHEDULER_QUALITY.md Phase 0 P1).
+            // The surface that answers "why did this request go to the hub,
+            // and was that right in hindsight" from a deployed daemon's
+            // logs. Dark without this entry, which would leave the whole
+            // scheduler-quality loop blind in exactly the deployment it
+            // exists to measure.
+            "mesh.decision",
             // FIM inline completion (INLINE_COMPLETION.md): slot install,
             // alias-mode decisions, per-request stop outcomes — the
             // "why did my ghost text do that" surface.
@@ -283,6 +291,7 @@ mod tests {
             tracing::info!(target: "gate.call", "probe");
             tracing::info!(target: "synth.truncation", "probe");
             tracing::info!(target: "fim", "probe");
+            tracing::info!(target: "mesh.decision", "probe");
             tracing::info!(target: "sovereign_core", "probe"); // module control: enabled
             tracing::info!(target: "definitely_unlisted_zzz", "probe"); // control: dropped
         });
@@ -292,6 +301,7 @@ mod tests {
             "gate.call",
             "synth.truncation",
             "fim",
+            "mesh.decision",
             "sovereign_core",
         ] {
             assert!(

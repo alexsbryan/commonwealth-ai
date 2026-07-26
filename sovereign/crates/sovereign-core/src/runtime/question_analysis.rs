@@ -409,6 +409,35 @@ pub(crate) enum MetalingualLocator {
     Unknown,
 }
 
+/// Coarse label the router stamps when the LITERAL markers below
+/// committed the route (Pre-check -3).
+pub(crate) const COARSE_CONVERSATION_LOCATOR_DIRECT: &str = "CONVERSATION_LOCATOR_DIRECT";
+
+/// Coarse label the router stamps when the SEMANTIC locator axis
+/// committed the route (Pre-check -2.5, `EmbedRouter::locator_from_embedding`).
+pub(crate) const COARSE_CONVERSATION_LOCATOR_EMBED: &str = "CONVERSATION_LOCATOR_EMBED";
+
+/// Recover the locator the ROUTER committed on, from the coarse label
+/// it stamped on the classification.
+///
+/// Exists because the metalingual handler used to re-derive the
+/// locator by calling [`parse_metalingual_locator`] on the raw message
+/// — which is fine when the string markers are what routed the turn,
+/// and silently wrong when the semantic axis did: the router would
+/// commit "this is about our conversation", then the handler would
+/// re-parse, find no marker, fall through to `Ambient`, and go
+/// searching corpora for an answer that was in the message list. The
+/// routing decision is made once and travels; it is not re-guessed
+/// downstream from the same evidence.
+pub(crate) fn locator_hint_from_coarse(coarse: Option<&str>) -> Option<MetalingualLocator> {
+    match coarse {
+        Some(COARSE_CONVERSATION_LOCATOR_DIRECT) | Some(COARSE_CONVERSATION_LOCATOR_EMBED) => {
+            Some(MetalingualLocator::Conversation)
+        }
+        _ => None,
+    }
+}
+
 /// Parse the metalingual locator from a message. Mirrors the heuristic
 /// in [`crate::router::LlmRouter::looks_like_metalingual`] — same families, but here
 /// we record *which* family fired so the handler can resolve to the

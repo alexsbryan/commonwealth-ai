@@ -204,6 +204,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
@@ -330,6 +331,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {

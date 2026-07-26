@@ -302,6 +302,33 @@ pub(crate) const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
 /// rides the turn-count arm at `CONV_HISTORY_TURNS = 8`.
 pub(crate) const COMPACTION_PRESSURE_THRESHOLD: f32 = 0.9;
 
+/// How many newly-dropped messages must accumulate before paying for
+/// another fold of the running preamble (2026-07-26 rolling-compaction
+/// pass).
+///
+/// A turn drops 2 messages, so a stride of 6 means the preamble is
+/// re-folded roughly every third turn instead of every turn. Between
+/// folds the un-folded messages are the NEWEST dropped ones — the two
+/// or four that just left the visible window — which are exactly the
+/// ones the retrieval-over-history channel is most likely to surface
+/// verbatim anyway. So the stride trades a little preamble freshness
+/// for a 3× cut in Housekeep calls on long threads, on the material
+/// that is least dependent on the preamble.
+pub(crate) const CONV_COMPACT_FOLD_STRIDE: usize = 6;
+
+/// Hard cap on how many messages a SINGLE fold call may read.
+///
+/// This is the bound that makes compaction cost independent of
+/// conversation length. Incremental folds sit far below it (stride-sized
+/// batches); it binds on the cold fold, where a fresh process meets a
+/// conversation that already has hundreds of dropped messages. Over the
+/// cap, `context::fold_window` keeps a head and a tail and reports the
+/// gap so the preamble is honestly partial rather than quietly so.
+///
+/// 24 messages × ≤400 chars ≈ 9.6k chars ≈ 2.5k tokens — comfortably
+/// inside a Fast slot alongside a ≤120-word prior summary.
+pub(crate) const CONV_COMPACT_MAX_FOLD_MSGS: usize = 24;
+
 /// Below this dropped-message count, suppress the narration chip
 /// (compaction fires, but silently — chips on ≤2 dropped messages
 /// are spam on short chats). The compaction still runs and emits a
@@ -588,6 +615,32 @@ answer. This flag is required even when the fact is famous and you are \
 certain of it. If the key fact does come from the passages, cite them with \
 [Source: title]. Never present a general-knowledge fact as if it were \
 retrieved from the user's sources.";
+
+/// Admits the conversation's own earlier turns as citable evidence.
+///
+/// The base [`KNOWLEDGE_SYNTHESIS_SYSTEM`] frames the turn's evidence as
+/// "retrieved passages from an installed knowledge base". The
+/// conversation-history blocks — retrieval-selected earlier turns and the
+/// compacted preamble, both rendered into the system message by
+/// `build_system_message` — do not read as "passages" under that framing,
+/// so the model declines against them: measured 2026-07-25 (gap-probe
+/// run), a question whose answer sat at rank 1 in the history-retrieval
+/// block got "the available sources do not contain …" even after the
+/// grounding gate was unblocked by `conversation_pinned_evidence`
+/// (violation_prob 1.0 → 0.0). The gate was the first hop; this is the
+/// second.
+///
+/// Appended to `gap_note` ONLY when that turn actually carries
+/// conversation evidence (see `conversation_pinned_evidence`), so the
+/// prompt delta is exactly zero on the ordinary corpus-only KQ turn.
+///
+/// SHAPE-level wording only, per the no-teaching-to-the-test rule: it
+/// names the block and the citation form, never a fact category.
+pub(crate) const CONVERSATION_EVIDENCE_DIRECTIVE: &str = "\
+EARLIER TURNS OF THIS CONVERSATION COUNT AS SOURCES, exactly like the \
+passages. When one holds the asked-for fact, lead with that answer and cite \
+it [Source: earlier in this conversation] — never reply that the sources \
+lack something this conversation already established.";
 
 pub(crate) fn build_synthesis_system_prompt_with_provenance(
     comparison: bool,

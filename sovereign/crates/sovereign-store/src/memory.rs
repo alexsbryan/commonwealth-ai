@@ -38,6 +38,12 @@ pub struct InMemoryStateStore {
     search_budgets: RwLock<HashMap<String, SearchBudget>>,
     /// Durable per-attempt ledger (replay safety + audit). See `StepExecutionStore`.
     step_executions: RwLock<Vec<StepExecution>>,
+    /// Rendered `conversation-frame/v1` documents by conversation id.
+    /// Overridden (rather than left on the trait's amnesiac default) so
+    /// tests exercise the same incremental-fold path the sqlite store
+    /// takes — a default-None store silently makes every turn a cold
+    /// fold, which is exactly the behaviour under test.
+    conversation_frames: RwLock<HashMap<String, String>>,
 }
 
 impl InMemoryStateStore {
@@ -53,6 +59,7 @@ impl InMemoryStateStore {
             corpus_states: RwLock::new(HashMap::new()),
             search_budgets: RwLock::new(HashMap::new()),
             step_executions: RwLock::new(Vec::new()),
+            conversation_frames: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -65,6 +72,23 @@ impl Default for InMemoryStateStore {
 
 #[async_trait]
 impl ConversationStore for InMemoryStateStore {
+    async fn get_conversation_frame(&self, conversation_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conversation_frames
+            .read()
+            .await
+            .get(conversation_id)
+            .cloned())
+    }
+
+    async fn set_conversation_frame(&self, conversation_id: &str, frame: &str) -> Result<()> {
+        self.conversation_frames
+            .write()
+            .await
+            .insert(conversation_id.to_string(), frame.to_string());
+        Ok(())
+    }
+
     async fn save_message(&self, msg: &Message) -> Result<()> {
         // Ensure conversation exists.
         let mut convos = self.conversations.write().await;

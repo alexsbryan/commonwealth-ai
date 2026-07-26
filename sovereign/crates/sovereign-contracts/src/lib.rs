@@ -19,6 +19,7 @@
 pub use oicp_types as oicp;
 
 pub mod error;
+pub mod frame;
 pub mod health;
 pub mod intent_policy;
 pub mod mcp_config;

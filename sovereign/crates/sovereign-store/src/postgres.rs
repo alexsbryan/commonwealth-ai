@@ -207,6 +207,12 @@ impl PostgresStateStore {
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_conversation_id TEXT;
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS skill_id TEXT;
 
+            -- Conversation frames (2026-07-26). Mirror of the SQLite
+            -- run_conversation_frame_migration: the rendered
+            -- conversation-frame/v1 document, whose own frontmatter
+            -- carries the fold watermark. NULL = no frame yet.
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS frame TEXT;
+
             -- Inner-work memory wall (denormalized scope tag). Mirror
             -- of run_inner_work_memory_wall_migrations on SQLite.
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_skill_id TEXT;
@@ -517,6 +523,42 @@ impl ConversationStore for PostgresStateStore {
                 "UPDATE conversations SET skill_id = $2 \
                  WHERE id = $1 AND skill_id IS NULL",
                 &[&conversation_id, &skill_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_conversation_frame(&self, conversation_id: &str) -> Result<Option<String>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT frame FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(row.and_then(|r| r.get::<_, Option<String>>(0)))
+    }
+
+    async fn set_conversation_frame(&self, conversation_id: &str, frame: &str) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        // 0 rows is not an error here — see the SQLite impl: a lost
+        // frame write costs one cold fold, failing the turn costs the
+        // user their answer.
+        client
+            .execute(
+                "UPDATE conversations SET frame = $2 \
+                 WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id, &frame],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;

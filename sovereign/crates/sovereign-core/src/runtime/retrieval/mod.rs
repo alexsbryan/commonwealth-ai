@@ -20,7 +20,7 @@ mod atom_enum;
 mod boosts;
 mod conv_tiered;
 mod corpus_search;
-mod history;
+pub(crate) mod history;
 pub(crate) mod query_expansion;
 mod raptor_grounding;
 mod source_expansion;
@@ -420,7 +420,19 @@ impl Runtime {
         // "what I don't have" note so the synthesis is honest
         // about the user's coverage gap. Empty string when no
         // gaps — adds zero prompt overhead.
-        let gap_note = build_coverage_gaps_note(&all_chunks, &folder_meta_for_ctx);
+        let mut gap_note = build_coverage_gaps_note(&all_chunks, &folder_meta_for_ctx);
+        // Same second hop as the KnowledgeQuery routes: the grounding
+        // gate already pins this conversation's own earlier turns as
+        // evidence, but the base synthesis prompt calls the evidence
+        // "retrieved passages", so the model declines against a fact it
+        // remembered. Gated on the same predicate as the pin — a turn
+        // with no conversation evidence keeps a byte-identical prompt.
+        if !crate::runtime::grounding::conversation_pinned_evidence(context).is_empty() {
+            if !gap_note.is_empty() {
+                gap_note.push_str("\n\n");
+            }
+            gap_note.push_str(crate::runtime::prompts::CONVERSATION_EVIDENCE_DIRECTIVE);
+        }
         // Budget reminder — same directive spliced into the
         // KnowledgeQuery synthesis routes. Tells the model how much
         // room it has so it picks a shape that lands within the

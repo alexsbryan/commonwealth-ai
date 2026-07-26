@@ -885,6 +885,36 @@ pub trait ConversationStore: Send + Sync {
         Ok(())
     }
 
+    /// Read this conversation's rendered `conversation-frame/v1`
+    /// document — the named-section summary of what the conversation
+    /// established outside its visible turn window. `None` = no frame
+    /// yet (new conversation, or one that has not compacted).
+    ///
+    /// The fold watermark rides in the document's own frontmatter (see
+    /// [`crate::frame`]), so this single accessor pair is the whole
+    /// persistence surface: no side table, and a resumed conversation
+    /// continues folding incrementally instead of re-summarising its
+    /// entire history.
+    ///
+    /// Default impl returns `None` so existing `ConversationStore`
+    /// implementations keep compiling. A store that does not override
+    /// this is not broken, just amnesiac across processes — it pays one
+    /// bounded cold fold per conversation per process.
+    #[allow(unused_variables)]
+    async fn get_conversation_frame(&self, conversation_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    /// Persist this conversation's rendered frame document, replacing
+    /// any previous one. See [`Self::get_conversation_frame`].
+    ///
+    /// Default impl is a no-op so existing `ConversationStore`
+    /// implementations keep compiling. Real backends override.
+    #[allow(unused_variables)]
+    async fn set_conversation_frame(&self, conversation_id: &str, frame: &str) -> Result<()> {
+        Ok(())
+    }
+
     /// Persist the user-controlled per-conversation corpus allow-list.
     /// `None` clears the column ("all installed corpora", the default
     /// state); `Some(vec)` writes the explicit subset. Empty vec is

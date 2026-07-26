@@ -78,7 +78,8 @@ pub(crate) use pipeline::StreamingVerifier;
 // type re-exports are for call sites that name them.
 #[allow(unused_imports)]
 pub(crate) use search::{
-    conversation_pinned_evidence, AttachedAssetSearcher, ClaimSearcher, SealedEvidenceSearch,
+    conversation_pinned_evidence, seal_conversation_evidence, AttachedAssetSearcher, ClaimSearcher,
+    SealedEvidenceSearch,
 };
 
 use std::collections::HashSet;

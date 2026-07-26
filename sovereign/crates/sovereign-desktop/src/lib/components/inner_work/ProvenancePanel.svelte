@@ -216,6 +216,30 @@
             {/each}
           </ul>
         {/if}
+        <!-- Recalled turns — retrieval-over-history. Distinct from
+             `sent_to_model` (the rolling visible window): these are
+             OLDER pairs that fell out of the window and were pulled
+             back by similarity to this message. Absent array = the
+             channel didn't fire this turn. -->
+        <dl class="kv">
+          <dt>recalled earlier turns</dt>
+          <dd>
+            {(provenance.history_recall?.length ?? 0) === 0
+              ? "0 — nothing older than the window cleared the similarity floor"
+              : `${provenance.history_recall?.length} pulled back by similarity`}
+          </dd>
+        </dl>
+        {#if provenance.history_recall && provenance.history_recall.length > 0}
+          <ul class="list">
+            {#each provenance.history_recall as hit}
+              <li>
+                <span class="role">turn ~{hit.turn_index}</span>
+                <span class="preview">{hit.excerpt}</span>
+                <span class="more">sim {hit.similarity.toFixed(2)}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
     </section>
 

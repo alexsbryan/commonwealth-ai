@@ -44,6 +44,9 @@
     presentation_complete: "❧",
     gap_check_fired: "?",
     lesson_drafted: "◈",
+    // Conversation memory: recall reads (↺), fold writes (❐).
+    conversation_recall: "↺",
+    conversation_folded: "❐",
     tool_invocation_start: "⌕",
     tool_invocation_complete: "✓",
     stage_error: "!",

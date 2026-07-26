@@ -183,7 +183,13 @@ pub enum NodeLocality {
 ///
 /// Observations are **local** to each scheduler per §7 — they are
 /// never advertised between nodes.
-#[derive(Debug, Clone, Default)]
+///
+/// `Serialize`/`Deserialize` do **not** contradict that: nothing
+/// gossips this type. The derives exist so a node can *export* its
+/// own observation state for offline analysis and simulator
+/// calibration (`SCHEDULER_QUALITY.md` P3), which is a diagnostic
+/// read, not an advertisement.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct NodeObservations {
     /// Currently outstanding requests on this node.
     pub in_flight: u32,

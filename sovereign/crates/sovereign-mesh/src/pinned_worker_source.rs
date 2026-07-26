@@ -213,6 +213,7 @@ impl PinnedWorkerEndpointSource {
                 current_in_flight: p.capabilities.current_in_flight,
                 // Pinned pods don't gossip availability — neutral.
                 inference_availability: None,
+                gossip_last_seen_unix: 0,
                 transport: Some(p.transport.clone()),
             })
             .collect()
@@ -426,6 +427,7 @@ mod tests {
             benchmark: None,
             current_in_flight: None,
             inference_availability: None,
+            gossip_last_seen_unix: 0,
             transport: None,
         }
     }

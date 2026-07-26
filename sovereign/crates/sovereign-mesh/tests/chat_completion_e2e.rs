@@ -255,6 +255,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -395,6 +396,7 @@ async fn oicp_503_fails_over_to_next_peer() {
             benchmark: None,
             current_in_flight: None,
             inference_availability: None,
+            gossip_last_seen_unix: 0,
             transport: None,
         },
         PeerInferenceEndpoint {
@@ -405,6 +407,7 @@ async fn oicp_503_fails_over_to_next_peer() {
             benchmark: None,
             current_in_flight: None,
             inference_availability: None,
+            gossip_last_seen_unix: 0,
             transport: None,
         },
     ];
@@ -485,6 +488,7 @@ async fn peer_dies_mid_stream_does_not_duplicate() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let wrapper =
@@ -533,6 +537,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -584,6 +589,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -637,6 +643,7 @@ async fn local_only_judge_shaped_request_stays_local() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -680,6 +687,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -724,6 +732,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -772,6 +781,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -832,6 +842,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -880,6 +891,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
@@ -925,6 +937,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         benchmark: None,
         current_in_flight: None,
         inference_availability: None,
+        gossip_last_seen_unix: 0,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });

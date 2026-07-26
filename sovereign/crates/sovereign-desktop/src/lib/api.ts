@@ -428,6 +428,17 @@ export interface ContradictionProv {
   current_claim: string;
 }
 
+/// One earlier turn-pair that retrieval-over-history pulled back into
+/// the prompt. Mirrors `sovereign_core::runtime::HistoryRecallProv`;
+/// `#[serde(skip_serializing_if = "Vec::is_empty")]` on the Rust side
+/// means the whole `history_recall` array is absent (not `[]`) on
+/// turns with no recall, and on frames persisted before 2026-07-26.
+export interface HistoryRecallProv {
+  turn_index: number;
+  similarity: number;
+  excerpt: string;
+}
+
 export interface TurnProvenance {
   conversation_id: string;
   message_id: string;
@@ -438,6 +449,7 @@ export interface TurnProvenance {
   system_prompt_chars: number;
   recalled_memories: RecalledMemoryProv[];
   history_summary: HistorySummaryProv;
+  history_recall?: HistoryRecallProv[];
   temporal_tensions: string[];
   contradiction: ContradictionProv | null;
   current_goal: string | null;

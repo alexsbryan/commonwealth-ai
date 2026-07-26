@@ -1060,6 +1060,19 @@ impl Runtime {
         // string when there's nothing to disclose, so the prompt
         // overhead is zero in the common case.
         let mut gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
+        // Conversation turns are evidence too (gap-probe fix 2, second
+        // hop). The gate already admits them via
+        // `conversation_pinned_evidence`; without this the SYNTHESIS
+        // model still declines, because the base prompt frames evidence
+        // as "retrieved passages" and the history block doesn't read as
+        // one. Gated on the same predicate as the pin, so a turn with no
+        // conversation evidence gets a byte-identical prompt to before.
+        if !crate::runtime::grounding::conversation_pinned_evidence(context).is_empty() {
+            if !gap_note.is_empty() {
+                gap_note.push_str("\n\n");
+            }
+            gap_note.push_str(crate::runtime::prompts::CONVERSATION_EVIDENCE_DIRECTIVE);
+        }
         if agentic_still_insufficient {
             // The agentic loop fired, ran its targeted second retrieval
             // pass, and the evidence STILL fails the sufficiency judge.
@@ -1547,6 +1560,17 @@ impl Runtime {
                     "sealed call-graph trace into the gate's evidence universe"
                 );
             }
+            // This conversation's own recalled turns join the universe on
+            // the same footing as the code trace — the value-presence
+            // check reads `chunks` and nothing else, so a fact recalled
+            // from an earlier turn is a vp=1.0 hard abstain unless it is
+            // sealed here. See `seal_conversation_evidence`.
+            crate::runtime::grounding::seal_conversation_evidence(
+                context,
+                &mut gate_chunks,
+                &mut gate_labels,
+                &mut gate_chunk_labels,
+            );
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
                 chunks: gate_chunks,
                 source_labels: gate_labels,
