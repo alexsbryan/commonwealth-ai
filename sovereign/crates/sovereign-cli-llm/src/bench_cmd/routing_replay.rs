@@ -47,6 +47,14 @@ fn expected_intents(category: &str) -> &'static [&'static str] {
         "commissive" => &["CommissiveQuery"],
         "expressive" => &["ExpressiveQuery"],
         "metalingual" => &["MetalingualQuery"],
+        // Structural questions about our own code — "what calls X", "where is
+        // Y implemented". Shares the in-system locator with `metalingual` and
+        // is separated from it by what the user wants back: a call-graph trace
+        // rather than a definition. Added when `skills_migration_smoke` was
+        // re-adjudicated against `Intent::CodeQuery`, which post-dates the
+        // bank; without an entry here a `category = "code"` question with no
+        // `expected_intent` override would expect NOTHING and pass vacuously.
+        "code" => &["CodeQuery"],
         "comparative" => &["ComparisonQuery"],
         "factual_recall" => &["KnowledgeQuery", "SimpleQuery"],
         "multi_article_synthesis" => &["DeepQuery"],

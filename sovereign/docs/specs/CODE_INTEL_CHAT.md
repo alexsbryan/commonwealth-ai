@@ -620,6 +620,48 @@ remaining work is the production build (Inc 1–3), not more proof.
       (35B is too slow to re-enrich and there's no mid tier); broader tuning of the
       0.6 distance factor across more queries (works for the gate Q; routing bench
       clean; the boost is self-gating + a no-op for non-code corpora).
+  - **2026-07-25 — Inc 4 follow-up (ii) CLOSED, and its diagnosis was wrong.**
+    - **What we believed.** The 2026-06-25 entry recorded *"In this codebase, where
+      is X" → router picks `MetalingualQuery` (canned "no code corpus indexed"
+      reply, no retrieval). The meta phrasing defeats it,* and filed follow-up (ii)
+      as a **router** problem: send code questions to a retrieval path.
+    - **What was actually happening.** The canned reply was not a routing artifact.
+      `handle_metalingual_query` resolved "this codebase" with
+      `kind_filter = Some(CorpusKind::Code)` — the tag this very spec notes repo
+      corpora deliberately never carry (`commonwealth-ai` is `knowledge`-kind with
+      a full graph). The filter matched **zero corpora on every real install**, so
+      the handler fell to its `no_source` empty state regardless of how the
+      question was phrased or how well it routed. Measured 2026-07-25:
+      `commonwealth-ai`, 41,691 chunks, `scip_graph.db` present, `kind=knowledge`
+      — and metalingual retrieved nothing from it. Even a *correctly* routed
+      metalingual code question could never have worked.
+    - **Why it hid for a month.** `handlers/code_query.rs` had already chosen the
+      robust signal, so the code route worked and masked the broken one; and the
+      failure was indistinguishable from a misroute, so the fix was aimed at the
+      router. The predicate existed in three places that disagreed — `code_query`
+      (graph-only), `sovereign_tools::code::has_code_graph` (graph OR tag), and
+      metalingual (tag-only) — because `sovereign-core` carries `sovereign-tools`
+      only as a **dev-dependency** and literally cannot call the corrected version.
+    - **Fix.** One predicate, `corpus_engine::IndexInfo::is_code_corpus` (graph OR
+      tag), living beside `IndexInfo` where every consumer can reach it; all three
+      sites delegate. Metalingual now scopes in-system locators through
+      `code_corpus_ids()`, the same resolver `handle_code_query` uses — the two
+      routes agree on what the codebase IS and differ only in what they do with it.
+    - **Boundary made recoverable.** Metalingual and CodeQuery share the in-system
+      locator, so k-NN will keep misfiring on novel phrasings; what made that
+      catastrophic was the asymmetry (land on metalingual with a structural
+      question → nothing at all; the reverse → merely over-scoped). An in-system
+      locator that finds no vocabulary match now escalates once to
+      `handle_code_query`, stamped `escalated_from` in the response metadata. It
+      searches the source the user named, so the carve-out's anti-confabulation
+      guarantee is intact.
+    - **Router, separately.** The `codebase-navigator` exemplar block filed five
+      structural shapes under `metalingual_query` (it predates `Intent::CodeQuery`),
+      so the nearest neighbour to *"Where is tool dispatch implemented, and what
+      calls it?"* was a mislabelled metalingual exemplar (sim=0.786). The four
+      where/what-calls shapes moved to `code_query`; *what does X mean* and *what
+      changed* stayed. `skills_migration_smoke` was re-adjudicated to match, with
+      the reason recorded in the bank.
 
 ---
 

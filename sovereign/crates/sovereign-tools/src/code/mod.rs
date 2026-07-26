@@ -290,7 +290,6 @@ use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
-use corpus_engine::types::CorpusKind;
 use corpus_engine::{CorpusEngine, CorpusIndex, Error as CorpusError};
 
 /// A single code chunk row read from a LanceDB query via the typed code
@@ -328,28 +327,20 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
 
 /// Is this corpus one the code tools should query?
 ///
-/// The honest answer is **not** `kind == CorpusKind::Code`. That tag is
-/// unreliable-by-design for repos: `Recipe.corpus.kind` is a non-`Option`
-/// field defaulting to `Knowledge`, and the two recipes that build code
-/// corpora deliberately leave it that way, because retrieval admits only
-/// `Knowledge | Catalog` and CODE_INTEL_CHAT.md routes code questions
-/// through the knowledge path — a repo tagged `Code` would vanish from
-/// chat. `commonwealth-ai` ships as `kind:"knowledge"` with 36k code
-/// chunks and a full SCIP graph.
+/// Thin alias for [`corpus_engine::IndexInfo::is_code_corpus`], which
+/// carries the full rationale for why the `CorpusKind::Code` tag alone is
+/// the wrong test. The predicate moved to `IndexInfo` after it turned out
+/// to exist in three places that disagreed — this one, `code_corpus_ids`
+/// in the runtime, and the metalingual handler's tag-only filter, which
+/// matched nothing and declined every "in this codebase" question.
+/// `sovereign-core` cannot call this function (it depends on
+/// `sovereign-tools` only as a dev-dependency), which is precisely how the
+/// copies drifted.
 ///
-/// So the code tools screened on `kind == Code` and silently matched
-/// nothing: `code_search` reported "0 code corpora" on a machine whose
-/// repo index was perfectly healthy. The robust signal — already chosen
-/// by `handlers/code_query.rs` and `code_trace.rs` for this exact reason
-/// — is an on-disk `scip_graph.db` beside the chunk table.
-///
-/// Accepting either keeps the original safety property intact: a prose
-/// corpus (Wikipedia, SEP) has neither a `Code` tag nor a graph, so it is
-/// still skipped before any Lance call, which matters because its chunk
-/// table lacks the typed code columns entirely and the query would error
-/// at column resolution rather than return zero rows.
+/// Kept as a named function because it reads better at the call sites in
+/// this module and is part of the crate's public surface.
 pub fn has_code_graph(info: &corpus_engine::IndexInfo) -> bool {
-    info.kind == CorpusKind::Code || info.path.join("scip_graph.db").exists()
+    info.is_code_corpus()
 }
 
 /// Run a filter-pushdown query against every installed *code* corpus and

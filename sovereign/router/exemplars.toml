@@ -14,6 +14,13 @@
 #   - comparison_query   — bounded two-entity contrast
 #   - metalingual_query  — about how the system or conversation uses
 #                          a word ("in this codebase", "earlier you said")
+#   - code_query         — about the STRUCTURE of this codebase: where
+#                          something is implemented, what calls it, how a
+#                          request flows. Scopes retrieval to the code
+#                          corpora and grounds the answer in the SCIP call
+#                          graph. Shares the in-system locator with
+#                          metalingual_query — see the codebase-navigator
+#                          block below for the discriminator.
 #   - conation_query     — imperative directed at the assistant: one-shot
 #                          ("stop", "shorter please", "try again") or
 #                          durative coaching ("from now on, keep answers
@@ -857,34 +864,56 @@ query = "What tensions keep showing up in how I describe my mornings?"
 # keywords.
 # ─────────────────────────────────────────────────────────────────
 
-# ── codebase-navigator → metalingual_query / knowledge_query ──
-# These shapes ask about the codebase/project as a coded system —
-# Jakobson's metalingual function. The in-system locator ("in
-# this codebase", "in our project") is the load-bearing signal.
+# ── codebase-navigator → code_query / metalingual_query ──
+# These shapes all ask about the codebase as a coded system, so the
+# in-system locator ("in this codebase", "in our project", "in our
+# code") appears on BOTH sides and cannot be the discriminator. The
+# migration that first landed this block treated the locator as
+# load-bearing and filed every shape under metalingual_query; that put
+# structural questions on a route with no call graph, and because
+# `metalingual_query`'s nearest exemplar then won the k-NN, the
+# code route became unreachable for the exact question CODE_INTEL_CHAT.md
+# calls the "pop" test ("Where is tool dispatch implemented, and what
+# calls it?" classified MetalingualQuery, sim=0.786 — measured
+# 2026-07-25).
+#
+# The discriminator is the INTERROGATIVE SHAPE — what the user wants
+# back, not what the question is about:
+#
+#   code_query        WHERE it lives · WHAT CALLS it · HOW it runs
+#                     -> answered from the SCIP call graph
+#   metalingual_query what a term MEANS in our system · what CHANGED
+#                     -> answered from prose, docs, notes, code-as-text
+#
+# Both routes read the same code corpora (`IndexInfo::is_code_corpus`),
+# so a misroute now costs precision rather than the answer.
 
 [[example]]
-intent = "metalingual_query"
+intent = "code_query"
 query = "Where is the function that handles tool dispatch in this codebase?"
 
 [[example]]
-intent = "metalingual_query"
+intent = "code_query"
 query = "Who calls KnowledgeViewManager::splice_into in our code?"
 
+[[example]]
+intent = "code_query"
+query = "Find the implementation of the URL-allowlist constraint."
+
+[[example]]
+intent = "code_query"
+query = "What's the call chain from handle_message_stream to the inference provider?"
+
+# Stays metalingual: asks what a term MEANS here, not where it lives.
 [[example]]
 intent = "metalingual_query"
 query = "What does `IntentPolicy` mean in this project?"
 
+# Stays metalingual: asks what CHANGED, which the call graph cannot
+# answer — this is history over the repo, served by `recent_changes`.
 [[example]]
 intent = "metalingual_query"
 query = "What recent changes touched the router classification pipeline?"
-
-[[example]]
-intent = "metalingual_query"
-query = "Find the implementation of the URL-allowlist constraint."
-
-[[example]]
-intent = "knowledge_query"
-query = "What's the call chain from handle_message_stream to the inference provider?"
 
 # ── research-analyst → deep_query ──
 # Multi-source synthesis with evaluation, not a flat lookup.
