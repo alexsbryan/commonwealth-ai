@@ -6,9 +6,12 @@
 //! are enforced here, not in the UI:
 //!
 //! 1. **No model originates a number.** Every figure is a deterministic
-//!    Rust fold over chunk rows (and the GLiNER `chunk_entities` table,
-//!    whose surface forms are verbatim chunk spans). [`ScaleCard`] carries
-//!    a `derivation` trace, parcel_analytics-style.
+//!    Rust fold over chunk rows, the GLiNER `chunk_entities` table (whose
+//!    surface forms are verbatim chunk spans), the `conv_raptor_nodes`
+//!    enrichment layer and the chunk embeddings. Where a model
+//!    contributed at all it *nominated* — it named a cluster's entities
+//!    during enrichment — and the arithmetic over those nominations is
+//!    all here. Cards carry a `derivation` trace, parcel_analytics-style.
 //! 2. **Every quote is verbatim and cited.** Excerpts/citations carry the
 //!    `(chunk_id, text)` pair; folds only pick spans verified against the
 //!    in-memory chunk content, and [`verify_wrapped_artifact`] re-checks
@@ -32,7 +35,17 @@ use serde::{Deserialize, Serialize};
 use corpus_engine::chunkers::threaded_turns::{parse_turns, Attribution};
 use corpus_engine::index::CorpusIndex;
 
-pub const WRAPPED_SCHEMA_VERSION: u32 = 2;
+pub mod semantic;
+
+pub use semantic::{
+    Asking, HourBand, NightShiftCard, Pivot, RecurringCard, RecurringThread, TurnCard,
+};
+
+/// v3: obsessions + cast moved onto the `conv_raptor_nodes` enrichment
+/// layer and off raw GLiNER frequency; three embedding-backed cards
+/// added. A builder change only reaches existing installs on a corpus
+/// update unless this bumps — and this one must reach them.
+pub const WRAPPED_SCHEMA_VERSION: u32 = 3;
 pub const WRAPPED_DIRNAME: &str = "wrapped";
 const EDITION_ALL_TIME: &str = "all-time";
 
@@ -79,10 +92,6 @@ const CASE_PROFILE_MIN_EVIDENCE: u32 = 3;
 /// because their capitalized-mid-sentence count dominates.
 const CASE_PROFILE_GENERIC_SHARE: f64 = 0.5;
 
-/// A topic must recur across at least this many distinct conversations
-/// to appear on the Obsessions card — "X came up once" is no hook.
-const MIN_TOPIC_CONVS: usize = 3;
-
 // ─── Artifact schema (the JSON the JS reads) ─────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +114,9 @@ pub struct WrappedArtifact {
 pub enum WrappedCard {
     Scale(ScaleCard),
     Rhythm(RhythmCard),
+    NightShift(NightShiftCard),
+    Recurring(RecurringCard),
+    Turn(TurnCard),
     Obsessions(ObsessionsCard),
     Cast(CastCard),
     Door(DoorCard),
@@ -169,6 +181,9 @@ pub struct Citation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObsessionsCard {
     pub quarters: Vec<QuarterTopics>,
+    /// How the themes were chosen and ranked — shown behind "why this?".
+    /// Every card that makes a claim owes the reader this.
+    pub derivation: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,8 +197,13 @@ pub struct QuarterTopics {
 pub struct TopicStat {
     pub text: String,
     pub label: String,
-    /// Distinct conversations mentioning this entity in the quarter.
+    /// Distinct conversations mentioning this theme within the group
+    /// (quarter, hour band) this stat belongs to.
     pub conversations: usize,
+    /// z-scored log-odds against the whole-archive baseline — how much
+    /// this group over-indexes on the theme. This is the RANK key; the
+    /// count is context, not the ordering. See [`semantic::log_odds`].
+    pub distinctiveness: f64,
     pub sample: Citation,
 }
 
@@ -192,6 +212,7 @@ pub struct TopicStat {
 pub struct CastCard {
     pub nodes: Vec<CastNode>,
     pub edges: Vec<CastEdge>,
+    pub derivation: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,20 +220,36 @@ pub struct CastNode {
     pub id: String,
     pub canonical_name: String,
     pub entity_type: String,
-    /// Incident co-occurrence edges among the cast.
+    /// Incident edges among the cast.
     pub degree: usize,
-    /// Distinct conversations this entity appears in.
+    /// Normalised betweenness in [0, 1] — how much of the cast's
+    /// connective structure runs through this one. Size nodes by THIS,
+    /// not by degree: the interesting names in an archive are the ones
+    /// bridging separate concerns, not the most frequent ones.
+    pub bridging: f64,
+    /// Distinct conversations this theme appears in.
     pub conversations: usize,
+    /// `YYYY-MM-DD` of the first and last conversation it appears in.
+    pub first_date: String,
+    pub last_date: String,
     pub sample: Citation,
 }
 
+/// An edge that had to earn its place. v2 linked any pair sharing two
+/// conversations and typed every edge `appears_with`; across hundreds of
+/// conversations that graph is near-complete and therefore says nothing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CastEdge {
     pub source: String,
     pub target: String,
-    pub relationship_type: String,
     /// Distinct conversations where both endpoints appear.
     pub co_conversations: usize,
+    /// Pointwise mutual information. Only positive edges are kept — the
+    /// pair must co-occur more than two independent themes would.
+    pub pmi: f64,
+    /// `YYYY-MM-DD` of the first and last conversation holding both.
+    pub first_date: String,
+    pub last_date: String,
 }
 
 /// Static closing card; copy lives in the bundle.
@@ -228,7 +265,17 @@ pub struct ConvDoc {
     pub conv_uuid: String,
     pub title: Option<String>,
     /// Turns in archive order (chunk id ascending, in-chunk order).
+    ///
+    /// This is the PARSED SUBSET of the conversation: a turn exists only
+    /// where the chunk text carried a `### [ts] role` header. Most of
+    /// this archive does not — measured 2026-07-26 on
+    /// conversations-anthropic, 13,373 of 16,404 chunks parse to zero
+    /// turns. Anything that reasons about the SHAPE of a conversation
+    /// must read `chunk_ids`, not this; `turns` is for quotes and clocks.
     pub turns: Vec<Turn>,
+    /// Every chunk of this conversation in archive order (chunk id
+    /// ascending), parsed or not. The conversation's true extent.
+    pub chunk_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -286,24 +333,53 @@ pub async fn build_wrapped_artifact(
 
     let chunk_content: HashMap<u64, String> =
         rows.iter().map(|r| (r.id, r.content.clone())).collect();
-    let chunk_quarter = chunk_quarter_map(&rows);
     let docs = build_conv_docs(&rows);
 
     let entity_rows = match state_db {
         Some(db) => read_chunk_entities(db, &meta.corpus_id)?,
         None => Vec::new(),
     };
+    let raptor_nodes = match state_db {
+        Some(db) => semantic::read_raptor_nodes(db, &meta.corpus_id)?,
+        None => Vec::new(),
+    };
 
-    // Corpus-evidence generics pass: which candidate surface forms does
-    // the assistant's own prose write in lowercase? Those are common
-    // nouns, not names — drop them from the entity cards.
-    let assistant_texts = collect_assistant_text(&rows);
-    let candidates: HashSet<String> = entity_rows
-        .iter()
-        .filter(|r| r.score >= ENTITY_SCORE_FLOOR && r.text.trim().len() >= 3)
-        .map(|r| r.text.trim().to_ascii_lowercase())
-        .collect();
-    let generic = generic_keys_by_case_profile(&candidates, &assistant_texts);
+    // Chunk geometry. A corpus without embeddings (or an index that
+    // fails the read) simply loses the three embedding-backed cards —
+    // absent data, absent card.
+    let embeddings: HashMap<u64, Vec<f32>> = match index.stream_embedding_column().await {
+        Ok((ids, vectors)) => ids.into_iter().zip(vectors).collect(),
+        Err(e) => {
+            eprintln!("wrapped: embeddings unavailable, geometry cards skipped: {e}");
+            HashMap::new()
+        }
+    };
+
+    // Prefer the enrichment layer's cluster themes; fall back to NER
+    // when this corpus has not been enriched. The folds are identical
+    // either way — only the quality of the words changes.
+    let theme_index = if raptor_nodes.is_empty() {
+        let ner = ner_theme_rows(&entity_rows, &rows, &chunk_content);
+        semantic::ThemeIndex::from_ner(&ner, &docs, &chunk_content)
+    } else {
+        semantic::ThemeIndex::from_enrichment(
+            &raptor_nodes,
+            &docs,
+            &chunk_content,
+            &semantic::gliner_label_map(&entity_rows),
+        )
+    };
+    eprintln!(
+        "wrapped: {} conversations, {} chunks, {} enrichment nodes, {} ner rows, {} embeddings \
+         ⇒ themes from {} ({} citable)",
+        docs.len(),
+        rows.len(),
+        raptor_nodes.len(),
+        entity_rows.len(),
+        embeddings.len(),
+        theme_index.source.as_str(),
+        theme_index.prior.len(),
+    );
 
     let mut cards = Vec::new();
     if let Some(c) = fold_scale(&docs) {
@@ -312,10 +388,19 @@ pub async fn build_wrapped_artifact(
     if let Some(c) = fold_rhythm(&docs) {
         cards.push(WrappedCard::Rhythm(c));
     }
-    if let Some(c) = fold_obsessions(&entity_rows, &chunk_quarter, &chunk_content, &generic) {
+    if let Some(c) = semantic::fold_recurring(&docs, &embeddings, &chunk_content) {
+        cards.push(WrappedCard::Recurring(c));
+    }
+    if let Some(c) = semantic::fold_turn(&docs, &embeddings, &chunk_content) {
+        cards.push(WrappedCard::Turn(c));
+    }
+    if let Some(c) = semantic::fold_obsessions(&theme_index) {
         cards.push(WrappedCard::Obsessions(c));
     }
-    if let Some(c) = fold_cast(&entity_rows, &chunk_content, &generic) {
+    if let Some(c) = semantic::fold_night_shift(&theme_index, &docs, None) {
+        cards.push(WrappedCard::NightShift(c));
+    }
+    if let Some(c) = semantic::fold_cast(&theme_index) {
         cards.push(WrappedCard::Cast(c));
     }
     cards.push(WrappedCard::Door(DoorCard::default()));
@@ -386,6 +471,25 @@ fn cited_chunk_ids(a: &WrappedArtifact) -> HashSet<u64> {
             WrappedCard::Cast(c) => {
                 for n in &c.nodes {
                     ids.insert(n.sample.chunk_id);
+                }
+            }
+            WrappedCard::NightShift(n) => {
+                for b in &n.bands {
+                    for t in &b.topics {
+                        ids.insert(t.sample.chunk_id);
+                    }
+                }
+            }
+            WrappedCard::Recurring(r) => {
+                for thread in &r.threads {
+                    for a in &thread.askings {
+                        ids.insert(a.excerpt.chunk_id);
+                    }
+                }
+            }
+            WrappedCard::Turn(t) => {
+                for p in &t.pivots {
+                    ids.extend(p.before.iter().chain(p.after.iter()).map(|e| e.chunk_id));
                 }
             }
             WrappedCard::Scale(_) | WrappedCard::Door(_) => {}
@@ -463,6 +567,41 @@ fn verify_artifact_against_content(
                         &n.sample.text,
                         "cast.sample",
                     );
+                }
+            }
+            WrappedCard::NightShift(n) => {
+                for b in &n.bands {
+                    for t in &b.topics {
+                        check_span(
+                            content,
+                            &mut failures,
+                            t.sample.chunk_id,
+                            &t.sample.text,
+                            "night_shift.sample",
+                        );
+                    }
+                }
+            }
+            WrappedCard::Recurring(r) => {
+                for thread in &r.threads {
+                    for a in &thread.askings {
+                        check_span(
+                            content,
+                            &mut failures,
+                            a.excerpt.chunk_id,
+                            &a.excerpt.text,
+                            "recurring.asking",
+                        );
+                    }
+                }
+            }
+            WrappedCard::Turn(t) => {
+                for p in &t.pivots {
+                    for (e, what) in [(&p.before, "turn.before"), (&p.after, "turn.after")] {
+                        if let Some(e) = e {
+                            check_span(content, &mut failures, e.chunk_id, &e.text, what);
+                        }
+                    }
                 }
             }
             WrappedCard::Scale(_) | WrappedCard::Door(_) => {}
@@ -572,7 +711,14 @@ pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec
             conv_uuid: key,
             title: None,
             turns: Vec::new(),
+            chunk_ids: Vec::new(),
         });
+        // Rows arrive id-ascending, so pushing keeps archive order. Guard
+        // the last id only: a chunk row is unique by id, so a repeat can
+        // only be adjacent.
+        if doc.chunk_ids.last() != Some(&row.id) {
+            doc.chunk_ids.push(row.id);
+        }
         if doc.title.is_none() {
             let from_meta = row
                 .metadata_raw
@@ -594,20 +740,6 @@ pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec
         }
     }
     by_doc.into_values().collect()
-}
-
-/// chunk id → `YYYY-Qn` of its first timestamped turn.
-fn chunk_quarter_map(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> HashMap<u64, String> {
-    let mut out = HashMap::new();
-    for row in rows {
-        if let Some(ts) = parse_turns(&row.content)
-            .iter()
-            .find_map(|t| t.timestamp.as_deref().and_then(parse_turn_ts))
-        {
-            out.insert(row.id, format!("{}-Q{}", ts.year(), (ts.month0() / 3) + 1));
-        }
-    }
-    out
 }
 
 // ─── Pure folds ──────────────────────────────────────────────────────
@@ -910,161 +1042,25 @@ pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow])
     out
 }
 
-pub fn fold_obsessions(
-    rows: &[EntityRow],
-    chunk_quarter: &HashMap<u64, String>,
+/// GLiNER rows that clear the deterministic quality bar, ready to be
+/// folded into a [`semantic::ThemeIndex`] as the fallback theme source
+/// for a corpus with no conversation enrichment. The corpus-evidence
+/// generics pass above is what makes this source usable at all — it is
+/// the difference between `People · Companies · Workers` and
+/// `Fed · IMF · Community Land Trusts`.
+pub fn ner_theme_rows<'a>(
+    rows: &'a [EntityRow],
+    all_chunks: &[corpus_engine::index::EnrichmentChunkRow],
     content: &HashMap<u64, String>,
-    generic: &HashSet<String>,
-) -> Option<ObsessionsCard> {
-    const TOP_PER_QUARTER: usize = 5;
-    let rows = quality_rows(rows, content, generic);
-    if rows.is_empty() {
-        return None;
-    }
-    // (quarter, entity key) → (display text, label, conv set, best row)
-    struct Acc<'a> {
-        text: String,
-        label: String,
-        convs: HashSet<&'a str>,
-        best: &'a EntityRow,
-    }
-    let mut by_q: BTreeMap<String, HashMap<String, Acc>> = BTreeMap::new();
-    for r in rows {
-        let Some(quarter) = chunk_quarter.get(&r.chunk_id) else {
-            continue;
-        };
-        let Some(conv) = r.conv_uuid.as_deref() else {
-            continue;
-        };
-        let key = r.text.trim().to_ascii_lowercase();
-        let acc = by_q
-            .entry(quarter.clone())
-            .or_default()
-            .entry(key)
-            .or_insert_with(|| Acc {
-                text: r.text.trim().to_string(),
-                label: r.label.clone(),
-                convs: HashSet::new(),
-                best: r,
-            });
-        acc.convs.insert(conv);
-        if r.score > acc.best.score {
-            acc.best = r;
-        }
-    }
-    let quarters: Vec<QuarterTopics> = by_q
-        .into_iter()
-        .map(|(quarter, entities)| {
-            let mut topics: Vec<TopicStat> = entities
-                .into_values()
-                .filter(|a| a.convs.len() >= MIN_TOPIC_CONVS)
-                .map(|a| TopicStat {
-                    conversations: a.convs.len(),
-                    sample: Citation {
-                        chunk_id: a.best.chunk_id,
-                        char_start: a.best.char_start,
-                        char_end: a.best.char_end,
-                        text: a.best.text.clone(),
-                    },
-                    text: a.text,
-                    label: a.label,
-                })
-                .collect();
-            topics.sort_by(|a, b| {
-                b.conversations
-                    .cmp(&a.conversations)
-                    .then_with(|| a.text.cmp(&b.text))
-            });
-            topics.truncate(TOP_PER_QUARTER);
-            QuarterTopics { quarter, topics }
-        })
-        .filter(|q| !q.topics.is_empty())
-        .collect();
-    (!quarters.is_empty()).then_some(ObsessionsCard { quarters })
-}
-
-pub fn fold_cast(
-    rows: &[EntityRow],
-    content: &HashMap<u64, String>,
-    generic: &HashSet<String>,
-) -> Option<CastCard> {
-    const CAST_LABELS: &[&str] = &["Person", "Organization", "Work"];
-    const MAX_NODES: usize = 20;
-    const MAX_EDGES: usize = 60;
-    const MIN_CO_CONVS: usize = 2;
-
-    struct Acc<'a> {
-        text: String,
-        label: String,
-        convs: HashSet<&'a str>,
-        best: &'a EntityRow,
-    }
-    let mut by_key: HashMap<String, Acc> = HashMap::new();
-    for r in quality_rows(rows, content, generic) {
-        if !CAST_LABELS.contains(&r.label.as_str()) {
-            continue;
-        }
-        let Some(conv) = r.conv_uuid.as_deref() else {
-            continue;
-        };
-        let key = r.text.trim().to_ascii_lowercase();
-        let acc = by_key.entry(key).or_insert_with(|| Acc {
-            text: r.text.trim().to_string(),
-            label: r.label.clone(),
-            convs: HashSet::new(),
-            best: r,
-        });
-        acc.convs.insert(conv);
-        if r.score > acc.best.score {
-            acc.best = r;
-        }
-    }
-    if by_key.is_empty() {
-        return None;
-    }
-    let mut ranked: Vec<(String, Acc)> = by_key.into_iter().collect();
-    ranked.sort_by(|(ka, a), (kb, b)| b.convs.len().cmp(&a.convs.len()).then_with(|| ka.cmp(kb)));
-    ranked.truncate(MAX_NODES);
-
-    let mut edges: Vec<CastEdge> = Vec::new();
-    for i in 0..ranked.len() {
-        for j in (i + 1)..ranked.len() {
-            let shared = ranked[i].1.convs.intersection(&ranked[j].1.convs).count();
-            if shared >= MIN_CO_CONVS {
-                edges.push(CastEdge {
-                    source: ranked[i].0.clone(),
-                    target: ranked[j].0.clone(),
-                    relationship_type: "appears_with".to_string(),
-                    co_conversations: shared,
-                });
-            }
-        }
-    }
-    edges.sort_by(|a, b| b.co_conversations.cmp(&a.co_conversations));
-    edges.truncate(MAX_EDGES);
-
-    let mut degree: HashMap<&str, usize> = HashMap::new();
-    for e in &edges {
-        *degree.entry(e.source.as_str()).or_default() += 1;
-        *degree.entry(e.target.as_str()).or_default() += 1;
-    }
-    let nodes: Vec<CastNode> = ranked
+) -> Vec<&'a EntityRow> {
+    let assistant_texts = collect_assistant_text(all_chunks);
+    let candidates: HashSet<String> = rows
         .iter()
-        .map(|(key, a)| CastNode {
-            id: key.clone(),
-            canonical_name: a.text.clone(),
-            entity_type: a.label.clone(),
-            degree: degree.get(key.as_str()).copied().unwrap_or(0),
-            conversations: a.convs.len(),
-            sample: Citation {
-                chunk_id: a.best.chunk_id,
-                char_start: a.best.char_start,
-                char_end: a.best.char_end,
-                text: a.best.text.clone(),
-            },
-        })
+        .filter(|r| r.score >= ENTITY_SCORE_FLOOR && r.text.trim().len() >= 3)
+        .map(|r| r.text.trim().to_ascii_lowercase())
         .collect();
-    Some(CastCard { nodes, edges })
+    let generic = generic_keys_by_case_profile(&candidates, &assistant_texts);
+    quality_rows(rows, content, &generic)
 }
 
 // ─── GLiNER entity reads ─────────────────────────────────────────────

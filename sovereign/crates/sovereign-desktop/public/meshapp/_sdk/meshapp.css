@@ -87,6 +87,9 @@ h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.012em; margin: 0 0 6p
 }
 .chip.signal { color: var(--accent-light); background: var(--accent-dim); border-color: rgba(201, 168, 76, 0.32); }
 .meta { color: var(--ink-muted); font-size: 12px; margin-top: 4px; line-height: 1.55; }
+/* The "why this?" derivation trace: how a card's claim was arrived at. */
+ul.meta { margin: 6px 0 0; padding-left: 18px; }
+ul.meta li { margin: 3px 0; }
 
 /* Scale / provenance banner */
 .banner {

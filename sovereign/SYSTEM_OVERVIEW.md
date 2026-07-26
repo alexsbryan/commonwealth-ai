@@ -2201,7 +2201,34 @@ substring of its chunk — a failing artifact is never served), and caches
 `<index>/wrapped/all-time.json` keyed on the corpus fingerprint (opening
 the app rebuilds a stale artifact on demand). Cards are typed; absent
 data ⇒ absent card; unknown card types are SKIPPED — the forward-compat
-seam future enriched cards ship through. Bundles compose the
+seam future enriched cards ship through. The **v3 deck** is Scale,
+Rhythm, Recurring, Turn, Obsessions, Night Shift, Cast, Door; the folds
+that need enrichment or geometry live in `wrapped/semantic.rs`, the rest
+in `wrapped.rs`. Three things about it are load-bearing and expensive to
+rediscover. (1) **Themes come from RAPTOR `primary_entities`, not
+GLiNER** — measured on `conversations-anthropic`, GLiNER's top of archive
+is `People (77) · WORK (53) · Companies (46)` where RAPTOR's is
+`San Francisco (37) · Federal Reserve (33) · Taoism (13)`: nouns versus a
+life. `ThemeIndex` is source-agnostic (`from_enrichment | from_ner`) so an
+un-enriched corpus still gets a deck, at lower quality. Themes rank by
+z-scored log-odds against the archive baseline (Monroe et al.), never by
+frequency — frequency ranks the baseline and returns the same list every
+quarter, which is what made v2 read as topical co-occurrence. (2)
+**`ConvDoc::turns` is the PARSED SUBSET of a conversation, not its
+shape.** A chunk yields turns only where its text carries a
+`### [ts] role` header, and 13,373 of this archive's 16,404 chunks do not
+— they are mid-answer continuation fragments that begin mid-sentence.
+Anything reasoning about conversation SHAPE must read
+`ConvDoc::chunk_ids`; `turns` is for quotes and clocks. Reading shape off
+`turns` cost the Turn card 90% of its evidence (1,510 of 15,283 seams,
+135 of 425 conversations) until 2026-07-26. The corollary is a licence,
+not just a warning: because an unparsed chunk provably holds no turn
+boundary, "the last thing you said before the seam" is correct at any
+chunk distance, so the quote walk is deliberately unbounded. (3) **The
+archive stamps UTC and the Night Shift claim is false in it** —
+`infer_utc_offset` locates the 4h trough in the user-turn histogram and
+places its centre at 03:00 local (this archive infers UTC-7); the naive
+UTC version labelled 17:00 local "late night". Bundles compose the
 **MeshApp SDK**
 (`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
 corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable
