@@ -852,6 +852,25 @@ pub fn locality_label(l: NodeLocality) -> &'static str {
     }
 }
 
+/// Inverse of [`locality_label`]. `None` for a label this build does
+/// not know.
+///
+/// Replay ([`crate::decision_replay`]) needs the bucket back as a
+/// value to re-run the scorer, and the record stores it as a string
+/// precisely so the log format can outlive a refactor of the enum.
+/// Returning `Option` rather than defaulting to `Far` is the point:
+/// an unreadable label is a *gap in the record*, and silently
+/// substituting the neutral bucket would hide it behind a
+/// locality_bonus of 1.0 that looks perfectly plausible.
+pub fn locality_from_label(label: &str) -> Option<NodeLocality> {
+    match label {
+        "local" => Some(NodeLocality::Local),
+        "near" => Some(NodeLocality::Near),
+        "far" => Some(NodeLocality::Far),
+        _ => None,
+    }
+}
+
 /// A decision in progress. The emission sites build one of these as
 /// they score, then `emit` it once — so a decision record can never
 /// be half-written, and the scoring loop stays readable.
@@ -894,7 +913,28 @@ impl DecisionBuilder {
 
     /// Mark the winners in ranked order and finish. `ranked` names the
     /// candidates in cascade order; the first is `selected`.
-    pub fn finish(mut self, verdict: Verdict, ranked: &[String]) -> RoutingDecision {
+    pub fn finish(self, verdict: Verdict, ranked: &[String]) -> RoutingDecision {
+        let now = now_unix_ms();
+        self.finish_at(verdict, ranked, now)
+    }
+
+    /// [`Self::finish`] with the timestamp supplied rather than read
+    /// from the wall clock.
+    ///
+    /// Production calls `finish`. A *simulated* decider
+    /// (`crate::mesh_sim`) runs on virtual time, and a record stamped
+    /// with the host's wall clock would be unorderable against the
+    /// episode it belongs to — the scoreboard reads `ts_unix_ms` to
+    /// build per-window herding and fairness series, so the sim's
+    /// records have to carry sim time. Same reason the core takes
+    /// `now_unix` rather than reading a clock: a decision is a pure
+    /// function of its inputs, and time is one of them.
+    pub fn finish_at(
+        mut self,
+        verdict: Verdict,
+        ranked: &[String],
+        ts_unix_ms: u64,
+    ) -> RoutingDecision {
         for (i, name) in ranked.iter().enumerate() {
             if let Some(c) = self.candidates.iter_mut().find(|c| &c.name == name) {
                 c.rank = Some(i as u32);
@@ -905,7 +945,7 @@ impl DecisionBuilder {
             schema: DECISION_LOG_SCHEMA.to_string(),
             decision_id: self.decision_id,
             oicp_request_id: self.oicp_request_id,
-            ts_unix_ms: now_unix_ms(),
+            ts_unix_ms,
             path: self.path,
             request: self.request,
             candidates: self.candidates,

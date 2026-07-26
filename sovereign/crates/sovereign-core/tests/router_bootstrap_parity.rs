@@ -19,11 +19,12 @@
 
 use std::sync::Arc;
 
+use sovereign_core::archive_classifier::ConversationArchiveClassifier;
 use sovereign_core::current_info_classifier::CurrentInfoClassifier;
 use sovereign_core::effort_classifier::EffortClassifier;
 use sovereign_core::router_bootstrap::{
-    build_llm_router, ExemplarOverrides, BAKED_CURRENT_INFO_EXAMPLES, BAKED_EFFORT_EXAMPLES,
-    BAKED_ROUTER_EXEMPLARS, BAKED_SCOPE_EXAMPLES,
+    build_llm_router, ExemplarOverrides, BAKED_ARCHIVE_EXAMPLES, BAKED_CURRENT_INFO_EXAMPLES,
+    BAKED_EFFORT_EXAMPLES, BAKED_ROUTER_EXEMPLARS, BAKED_SCOPE_EXAMPLES,
 };
 use sovereign_core::router_embed::EmbedRouter;
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
@@ -76,8 +77,16 @@ async fn baked_current_info_examples_parse_and_build() {
     assert!(c.current_count() > 0 && c.evergreen_count() > 0);
 }
 
+#[tokio::test]
+async fn baked_archive_examples_parse_and_build() {
+    let c = ConversationArchiveClassifier::from_toml_str(BAKED_ARCHIVE_EXAMPLES, inference())
+        .await
+        .expect("baked archive_examples.toml must parse + embed");
+    assert!(c.archive_count() > 0 && c.thread_count() > 0);
+}
+
 /// The core parity invariant: a healthy boot from the baked defaults wires all
-/// four classifiers. If a future edit drops a `with_*` call or breaks a bake,
+/// five classifiers. If a future edit drops a `with_*` call or breaks a bake,
 /// `all_wired()` flips false here long before a user notices desktop chat
 /// regressing.
 #[tokio::test]

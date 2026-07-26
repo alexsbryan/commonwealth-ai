@@ -304,6 +304,16 @@ pub struct LlmRouter {
     /// the keyword heuristic when absent (tests / minimal configs).
     /// Installed via `with_current_info_classifier`.
     current_info_classifier: Option<Arc<crate::current_info_classifier::CurrentInfoClassifier>>,
+    /// Optional binary classifier for the ARCHIVE-vs-THREAD axis —
+    /// "about my past chats" vs "about this conversation". Runs off
+    /// the SAME query embedding as the locator axis and the scope
+    /// classifier (see `archive_classifier.rs`; it is calibrated on
+    /// the instruction-prefixed vector and must not be handed
+    /// another). When it fires, Pre-check -2.4 commits the turn to
+    /// `KnowledgeQuery` + `scope = "personal"` so retrieval searches
+    /// the user's own corpora instead of dead-ending in the
+    /// metalingual handler's `no_source` empty state.
+    archive_classifier: Option<Arc<crate::archive_classifier::ConversationArchiveClassifier>>,
     /// Cache of L2-normalised embeddings of the registered tools'
     /// described purposes, keyed by the (order-independent) tool-id set.
     /// Powers the tool-relevance gate (see `query_best_tool_sim`).
@@ -386,6 +396,7 @@ impl LlmRouter {
             scope_classifier: None,
             effort_classifier: None,
             current_info_classifier: None,
+            archive_classifier: None,
             tool_embed_cache: std::sync::RwLock::new(None),
         }
     }
@@ -462,6 +473,18 @@ impl LlmRouter {
         classifier: Arc<crate::scope_classifier::PersonalScopeClassifier>,
     ) -> Self {
         self.scope_classifier = Some(classifier);
+        self
+    }
+
+    /// Install the conversation-archive binary classifier. Runs off the
+    /// same query embedding as the locator axis; an archive verdict
+    /// commits the turn to `KnowledgeQuery` + personal scope rather
+    /// than letting it fall into the metalingual cascade.
+    pub fn with_archive_classifier(
+        mut self,
+        classifier: Arc<crate::archive_classifier::ConversationArchiveClassifier>,
+    ) -> Self {
+        self.archive_classifier = Some(classifier);
         self
     }
 
@@ -1687,6 +1710,87 @@ impl Router for LlmRouter {
                     tracing::debug!(target: "router.locator", error = %e,
                         "router.locator: embed failed; continuing without the axis");
                 }
+            }
+        }
+
+        // Pre-check -2.4: the conversation ARCHIVE axis.
+        //
+        // Pre-check -2.5 above answers "is this about THIS thread?".
+        // This one answers the adjacent question its negative set was
+        // swept against: "is this about the user's PAST chats?" —
+        // "Have I mentioned kayaking in any of our past chats?".
+        //
+        // Measured 2026-07-26, before this axis existed: that question
+        // routed MetalingualQuery, the handler string-parsed the
+        // locator to `Unknown`, preferred CODE corpora, found nothing,
+        // and emitted the `no_source` empty state. The user's own
+        // archive was never searched. The CORRECT verdict was already
+        // top-ranked by the embed router — KnowledgeQuery, scope
+        // personal, at 0.531 — but the intent floor is 0.55, so it
+        // abstained and the LLM classifier picked metalingual. It is
+        // not wrong to call the question conversational; it is wrong
+        // about WHICH conversation.
+        //
+        // This runs AFTER the locator axis on purpose. The two gates
+        // are calibrated to be disjoint, but if they ever disagreed,
+        // the older and more heavily swept axis should win: a
+        // this-thread question answered from the thread is cheap and
+        // correct, while a this-thread question sent to corpus search
+        // is the regression we just removed.
+        //
+        // Same asymmetric posture as the locator gate, for the same
+        // reason: a false positive restricts a world question to
+        // personal corpora (user-visible), a false negative just
+        // leaves today's cascade in place. Tuned for precision — see
+        // `archive_classifier` module docs for the calibration.
+        if let (Some(archive_cls), Some(q)) =
+            (self.archive_classifier.as_ref(), query_embedding.as_ref())
+        {
+            if let Some(v) = archive_cls.classify_from_embedding(q) {
+                let latency_ms = start.elapsed().as_millis() as i64;
+                let hash = message_hash(message);
+                let _ = self
+                    .store
+                    .log_routing(&hash, "KnowledgeQuery", latency_ms)
+                    .await;
+                let _ = self
+                    .store
+                    .log_routing_meta(
+                        &hash,
+                        crate::runtime::COARSE_CONVERSATION_ARCHIVE_EMBED,
+                        None,
+                    )
+                    .await;
+                eprintln!(
+                    "[router] \"{}\" → KnowledgeQuery/personal (conversation ARCHIVE; \
+                     sim {:.2}, margin {:.2})",
+                    message.chars().take(60).collect::<String>(),
+                    v.sim_archive,
+                    v.margin,
+                );
+                return Ok(RouterClassification {
+                    primary: IntentCandidate {
+                        intent: Intent::KnowledgeQuery,
+                        confidence: 0.9,
+                    },
+                    alternatives: Vec::new(),
+                    rationale: Some(
+                        "this asks about our PAST conversations — searched over your own \
+                         corpora, not this thread"
+                            .into(),
+                    ),
+                    coarse_intent: Some(
+                        crate::runtime::COARSE_CONVERSATION_ARCHIVE_EMBED.to_string(),
+                    ),
+                    self_assessment: None,
+                    timing: None,
+                    // The whole point: personal scope is what routes
+                    // retrieval to the user's own corpora
+                    // (`step_scope_personal_filter`). Committing the
+                    // intent without it would search Wikipedia for the
+                    // user's chat history.
+                    scope: Some("personal".to_string()),
+                });
             }
         }
 

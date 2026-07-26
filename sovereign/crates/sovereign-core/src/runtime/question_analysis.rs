@@ -417,6 +417,17 @@ pub(crate) const COARSE_CONVERSATION_LOCATOR_DIRECT: &str = "CONVERSATION_LOCATO
 /// committed the route (Pre-check -2.5, `EmbedRouter::locator_from_embedding`).
 pub(crate) const COARSE_CONVERSATION_LOCATOR_EMBED: &str = "CONVERSATION_LOCATOR_EMBED";
 
+/// Coarse label the router stamps when the ARCHIVE axis committed the
+/// route (Pre-check -2.4,
+/// `ConversationArchiveClassifier::classify_from_embedding`).
+///
+/// Deliberately NOT part of [`locator_hint_from_coarse`]: an archive
+/// question is routed AWAY from the metalingual handler entirely, to
+/// `KnowledgeQuery` over the user's personal corpora. Mapping it to a
+/// [`MetalingualLocator`] would reintroduce the exact dead end this
+/// axis exists to fix.
+pub(crate) const COARSE_CONVERSATION_ARCHIVE_EMBED: &str = "CONVERSATION_ARCHIVE_EMBED";
+
 /// Recover the locator the ROUTER committed on, from the coarse label
 /// it stamped on the classification.
 ///

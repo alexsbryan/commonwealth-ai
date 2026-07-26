@@ -1,18 +1,24 @@
 # Scheduler quality — a measurement loop for OICP delegation
 
-Status: **Phase 0 landed — instrumentation in place, simulator not
-yet built** (2026-07-26). Diagnosis measured, build order proposed;
-§6 Phase 0 (P1–P4) is implemented and gated, Phase 1 (the Tier-1
-simulator) is the next step. Companion to
+Status: **Phase 1 S0 landed (2026-07-26) — the Tier-1 simulator runs
+the real scorer, and §3's transcribed numbers are superseded by §3.1.
+S1's *instrument* landed the same day and is self-tested at 1.000
+agreement against a simulated capture; the hardware capture it points
+at has not been taken. No Phase-2 behavioural change has landed in
+production.** Phase 0 (P1–P4) instrumentation landed earlier the same
+day. Companion to
 [`MESH_INFERENCE.md`](MESH_INFERENCE.md) (which specified
 `household-bench` as Increment 0 and was never built) and
 [`OICP_RATIONALIZATION.md`](OICP_RATIONALIZATION.md) (which unified the
 scorer but deliberately preserved its shape).
 
 Method: code audit of every decision point from request to dispatch,
-plus two simulation probes that drive a faithful transcription of the
-real scoring arithmetic. Every finding below carries a `file:line`.
-Every number below is labelled either *measured from code* or *modelled*.
+plus two simulation probes that drove a faithful *transcription* of
+the real scoring arithmetic (§3) — and, since S0, a Tier-1 simulator
+that drives the **real** decision function itself (§3.1). Every
+finding below carries a `file:line`. Every number is labelled either
+*measured from code* or *modelled*. Where §3 and §3.1 disagree, §3.1
+wins: it ran the code.
 
 ---
 
@@ -67,6 +73,11 @@ This is the reason the current stack "just works" solo and on a pair,
 and why no existing test can see the problem: **every test has one
 decider.**
 
+> **S0 update (§3.1):** reproduces against the real scorer, but it
+> costs the **tail**, not the median — the opposite of what §3's
+> transcription reported. And the recorded gossip age understates the
+> true age, because `gossip_last_seen_unix` is receipt time.
+
 ### F2 — The shared "busy" signal is not a busy signal (CRITICAL)
 
 `inference_availability` multiplies into the score
@@ -84,6 +95,35 @@ In fairness: `current_in_flight` **is** gossiped and **does** override
 the load term (`peer_inference.rs:1085`), so real load is visible — it
 is F1-stale, not absent. It is the availability term that is
 mis-specified, and it is weighted to dominate.
+
+> **Caveat on "real load is visible", raised 2026-07-26 and not yet
+> resolved.** That sentence assumes the gossiped counter is a *total*.
+> `MESH_LOAD_AWARENESS.md` and `AppState::current_local_in_flight`
+> state that intent, but every bump site for the counter
+> (`peer_inference.rs::enter_local_total`, six call sites) sits in the
+> joiner-side provider — the **outbound** path. Whether a request
+> arriving *from* a peer also passes through it is the open question,
+> and it is not answerable by reading: it needs two daemons with
+> `SOVEREIGN_DECISION_LOG` set, driving A→B and reading B's
+> `FleetSnapshot.local.in_flight_published`.
+>
+> **Priced first (`Arm::OutboundOnlyLoad`, 2026-07-26): if the bug is
+> real it is expensive, so the audit is earned.** Publishing only
+> locally-originated work under-reports the true signal by 67–93% and
+> costs:
+>
+> | scenario | total (intended) | outbound-only | Δ mean | top-server share |
+> |---|---|---|---|---|
+> | household-evening-12 | 25.7s | 58.0s | **+126%** | 0.41 → 0.55 |
+> | twin-hubs | 33.3s | 40.0s | +20% | 0.41 → 0.50 |
+> | isolation | 81.4s | 556.9s | **+584%** | 0.55 → 0.62 |
+>
+> The loop is the one F2 already names, closed the other way round: a
+> node saturated by peer work advertises near-zero load, reads as
+> idle, and wins more of it. That is the bounded-cost case for
+> spending two daemons on the audit — an experiment that was ranked
+> "worth confirming" is now ranked "confirm before Phase 2 touches
+> the load term at all".
 
 ### F3 — The heterogeneity term does not discriminate under heterogeneity (HIGH)
 
@@ -139,6 +179,13 @@ Twelve deciders computing the same `argmax` from the same gossiped
 snapshot is the textbook condition for synchronized convergence. There
 is no randomization, no hysteresis, and no per-decider jitter anywhere
 in `select_peers_ranked`.
+
+> **S0 update (§3.1):** the mechanism reproduces, but the *remedy*
+> mostly does not apply. In a fleet with a unique capability winner
+> the eligible set is a singleton — 49 of 49 offloads — so sampling
+> has nothing to sample and two-choices is a literal no-op. It bites
+> only when several peers tie, and even then it is dominated by
+> fixing staleness.
 
 ### F6 — Reciprocity implements proportionality where the intent is a floor (HIGH)
 
@@ -226,6 +273,91 @@ policy can be designed and bench-proven before it ever gates a real
 request.** It must not be switched on before the metrics above exist —
 that ordering is the whole point of §6.
 
+### F7 — The cold-start ramp is self-locking (HIGH, found by Tier 1)
+
+`cold_start_weight` (`scoring.rs:297`) starts a peer at
+`COLD_START_MIN_WEIGHT` and ramps to 1.0 over `COLD_START_SAMPLES = 20`
+observations. Its doc comment states the intent as a normative claim:
+
+> "so new peers still receive routable traffic (otherwise they'd never
+> accumulate history)"
+
+**That claim is false, and the mechanism is the reason.** Samples
+accumulate only on dispatch (`record_dispatch`), and the 0.7 floor is
+multiplied against a locality bonus that already favours local
+(1.15 vs 1.05 for a LAN peer). A cold peer therefore needs roughly a
+1.6× claim-score advantage merely to break even with the local model —
+and if it does not get it, it is never dispatched to, so it never
+accumulates the samples that would lift the penalty.
+
+Measured in Tier 1 (§3.1): on a 12-node household fleet, **one node
+ever received a peer request**, and across two 30-minute fleets **no
+(decider, peer) pair ever completed the ramp**. At household request
+volumes the ramp is not a ramp; it is a permanent flat penalty applied
+to every peer and to no local slot.
+
+This compounds F6's concentration loop from the other direction: F6 is
+about who gets *served* under contention, F7 is about who ever gets
+*tried*. Both push work toward the incumbent.
+
+> **Priced 2026-07-26 (`Arm::WarmStart`) — and the obvious remedy is
+> wrong.** The finding above is confirmed; the fix it implies is not.
+> Warm-starting every decider's peer observations at
+> `COLD_START_SAMPLES` — the counterfactual in which the ramp has
+> already finished — makes the mesh **much worse**, not better:
+>
+> | scenario | arm 0 mean | warm-start mean | Δ | Δ offloads |
+> |---|---|---|---|---|
+> | household-evening-12 | 25.7s | 86.1s | **+235%** | 49 → 77 |
+> | heterogeneous-fleet | 40.2s | 114.5s | **+185%** | 33 → 48 |
+> | twin-hubs | 33.3s | 32.3s | −3% | 74 → 76 |
+>
+> **The mechanism is *not* F1 — that was checked, not assumed, and
+> the check refuted it.** The obvious reading is that lifting the
+> floor unlocks offloads the decider cannot aim, because it cannot see
+> a peer's queue for 10–30s. `Arm::FreshWarmStart` tests exactly that
+> by warm-starting *and* telling the scorer the truth. If staleness
+> were the cause the penalty would shrink. It does not — it grows:
+>
+> | scenario | warm-start cost, stale signal | warm-start cost, **fresh** signal |
+> |---|---|---|
+> | household-evening-12 | +235% | **+264%** |
+> | heterogeneous-fleet | +185% | **+246%** |
+> | twin-hubs | −3% | +7% |
+>
+> So the extra offloads lose **on their own merits**, with or without
+> F1. Which makes F7 a symptom of something larger than F7: the
+> scoring function is systematically **over-eager to offload**, and
+> `cold_start_weight`'s 0.7 floor is the only thing compensating —
+> accidentally, via a term that was written to mean something else
+> entirely.
+>
+> That is a direct argument for §4.1. A product of dimensionless
+> multipliers cannot represent "this hop costs more than it buys",
+> so it cannot decline a bad offload on the merits; ranking on
+> **predicted time-to-answer** can, and would make the floor
+> unnecessary rather than load-bearing.
+>
+> Consequences for Phase 2. First, **do not remove the cold-start
+> floor until the objective is fixed** — it is the only brake, and the
+> arms above price its removal at +235% even under perfect
+> information. Second, the doc comment is still false and should still
+> be corrected (arm 0 dispatches to exactly **1 of 12** peers over a
+> household evening) — but the correction is to the *documentation*,
+> not to the constant.
+>
+> Recorded as a method note because it nearly went the other way: the
+> first write-up of this block asserted "the ramp masks F1" from the
+> latency table alone. The table was equally consistent with two
+> mechanisms and one extra arm separated them.
+>
+> Isolation caveat, since `samples` feeds three terms: the arm also
+> flips some peers from `benchmark_estimate` to `observed`
+> throughput. Measured, not assumed — 1137 of 1232 peer candidates
+> (≈92%) still score from the benchmark estimate under warm-start, so
+> the source flip is a minority effect and the latency delta is
+> dominated by `cold_start_weight` itself.
+
 ## 3. Measurement — what the probes showed
 
 Two probes drive a faithful transcription of the real arithmetic:
@@ -268,6 +400,95 @@ which lands after the human stops typing**. Three such windows in a day
 ratchets the cooldown to 180s and climbing. Meanwhile the availability
 term was *already* de-prioritizing that hub 5× — quarantine adds a hard
 skip on top of a soft signal that was working correctly.
+
+### 3.1 What Tier 1 found when it ran the real scorer (2026-07-26)
+
+Phase 1 S0 landed and re-ran the same questions through
+`scheduler_core::rank` — the production decision function — instead of
+a transcription of it (`sovereign-mesh/src/mesh_sim/`, feature
+`mesh-sim`; `tests/mesh_sim_scoreboard.rs`). Seed 20260726. **The
+table above is superseded on magnitude and on remedy; two of its three
+readings do not survive.**
+
+`household-evening-12` (1 hub, 3 desktops, 8 laptops, 30 min, 128
+decisions):
+
+| arm | p50 s | p95 s | eff vs oracle | top-server share | waste | tail spread s |
+|---|---|---|---|---|---|---|
+| as-implemented | 17.7 | 71.3 | 0.42 | 0.38 | 0% | 84.4 |
+| fresh signals | 17.3 | 63.1 | 0.45 | 0.38 | 0% | 70.2 |
+| two-choices | 17.7 | 71.3 | 0.42 | 0.38 | 0% | 84.4 |
+| fresh + two-choices | 17.3 | 63.1 | 0.45 | 0.38 | 0% | 70.2 |
+| oracle | 11.1 | 17.3 | — | 0.23 | 0% | 4.6 |
+
+`twin-hubs` (3 *identical* hubs, 8 laptops — the only fleet where a
+sampling remedy has anything to sample):
+
+| arm | p50 s | p95 s | eff vs oracle | tail spread s |
+|---|---|---|---|---|
+| as-implemented | 29.6 | 85.5 | 0.33 | 84.0 |
+| fresh signals | 25.4 | **41.6** | 0.44 | 16.9 |
+| two-choices | 26.6 | 60.3 | 0.40 | 47.6 |
+| fresh + two-choices | 26.5 | 42.4 | 0.43 | 17.6 |
+| oracle | 11.3 | 17.4 | — | 8.6 |
+
+**F1 — reproduces, but it costs the TAIL, not the median.** §3 read it
+the other way round. Removing staleness moves p50 by 2% on
+`household-evening-12` and 14% on `twin-hubs`, while p95 improves 11%
+and **51%** respectively. The median barely moves because a stale
+signal mostly changes *whether* you offload; the tail moves because it
+changes *which* peer you pick, and only a fleet with more than one
+eligible peer can express that.
+
+**F3 — reproduces exactly.** `throughput_factor` is 1.000 for every
+node in a 25→120 tok/s fleet, as predicted. The term intended to
+handle heterogeneity is constant across heterogeneity.
+
+**F5 — the mechanism reproduces; the proposed remedy is inert in the
+common case.** On `household-evening-12` the eligible set is a
+**singleton in 49 of 49 offloads** — exactly one peer strictly beats
+local — so two-choices sampling is a literal no-op and the table shows
+it byte-for-byte identical to arm 0. Sampling only bites when the
+capability winner is not unique (`twin-hubs`: p95 85.5 → 60.3), and
+even there it is dominated by fixing staleness and adds nothing on top
+of it. §3's claim that two-choices cuts p95 2.5× and completes fewer
+requests does **not** survive: it completes exactly as many, and its
+effect is smaller and conditional on fleet composition.
+
+**Two findings the transcription could not have produced**, both
+consequences of running the real scorer:
+
+- **F7 — the cold-start ramp is self-locking.** `cold_start_weight`'s
+  own doc comment says the ramp exists "so new peers still receive
+  routable traffic (otherwise they'd never accumulate history)".
+  Measured: on `household-evening-12`, **1 of 12 nodes ever received a
+  single peer request**, and across both fleets **no (decider, peer)
+  pair ever reached the 20 samples that complete the ramp**. Samples
+  accumulate only on dispatch, and the 0.7 cold-start floor multiplied
+  against local's 1.15 locality bonus means a cold peer needs roughly
+  a 1.6× claim advantage just to break even. Never chosen → never
+  sampled → never un-penalised. At household traffic volumes the
+  "ramp" is a permanent flat penalty on every peer, and the code's own
+  normative claim about it is false.
+- **The recorded gossip age understates the real one.**
+  `gossip_last_seen_unix` is receipt time, not measurement time, so
+  the P2 provenance on every candidate record is optimistic by the
+  propagation delay — median 12.4s true vs 8.5s recorded here, 21.0s
+  vs 8.9s on the pair scenario. Every F1 number derived from records
+  alone is a lower bound.
+
+**Waste needs two numbers, not one.** §5's "offloads where round-trip
+exceeded local service" is 100% on `household-evening-12` — and that
+is not a defect. A laptop sending a knowledge turn to a bigger, slower
+model buys a better answer with latency, deliberately. The scoreboard
+therefore reports `slower` (any offload slower than local) separately
+from `waste` (offloads that were slower *because the peer was backed
+up* — it would have won had it been idle). On the isolation scenario
+waste is 80%, which is real scheduler error; on the household scenario
+it is 0%.
+
+**Unchanged from §3:** the F4 arm remains untestable here because no
+admission gate is enabled, exactly as its caveat says.
 
 ## 4. The proposal
 
@@ -493,6 +714,111 @@ transcription of it.
 |---|---|---|
 | S0 | Tier-1 `mesh-sim` + scoreboard + oracle, arm 0 = as-implemented | F1/F3/F5 reproduce against the **real** scorer, or are retired as artifacts of my transcription |
 | S1 | Calibrate against replayed P4 fixtures | decision-agreement + ordinal p95 agreement above threshold; date recorded |
+
+**S0: landed 2026-07-26.** Results and what they overturned are in
+§3.1. Structure:
+
+| where | what |
+|---|---|
+| `src/scheduler_core.rs` | The decision, extracted from `select_peers_ranked` as a pure total function over a belief snapshot. Production gathers then calls it; the sim builds the snapshot and calls the same function. Decision-preserving: the ten Phase-0 e2e record tests pass unchanged. |
+| `src/mesh_sim/` (feature `mesh-sim`) | Virtual clock, event queue, gossip propagation, manifest-cache ageing, queueing, the five arms, the perfect-information oracle. Beside `dst.rs`, same rationale, no extra dependencies. |
+| `src/mesh_sim/scoreboard.rs` | Split in two on purpose: `RecordMetrics` is computable from a **production capture** as well as a sim run — that is the precondition for S1 — while `TruthMetrics` needs simulator ground truth and is therefore never allowed to define a calibration gate. |
+| `tests/mesh_sim_scoreboard.rs` | The scoreboard run. §5's hard invariants are assertions; everything else is printed, because a metric with an unagreed threshold is a flaky test. |
+
+Arm 0 is not a model of the scheduler: `rank` is the function the
+daemon calls. What the sim models is the environment — service time,
+gossip delay, cache ageing, queueing — and those are exactly what S1's
+calibration contract exists to check.
+
+**Three measurement bugs were found and fixed during S0**, all of
+which had made the first run's numbers look better than they were.
+Recording them because each is a trap the next scoreboard metric can
+fall into: (1) herding CoV computed over *chosen* targets makes
+maximal herding score as zero, since the CoV of a one-element vector
+is zero — the denominator must be the *eligible* set; (2) pooling all
+local service into one `<local>` bucket makes a policy that spreads
+work across twelve nodes read as more concentrated than one that
+funnels everything to a hub; (3) `{:>6.2}` applied to a `&str` in
+Rust's formatter is a *truncation*, which silently rendered `3.11` as
+`3.`.
+
+**S1: the instrument landed 2026-07-26; the capture has not been
+taken.** The step is split because its two halves have very different
+costs, and only one of them needs hardware.
+
+The decomposition that made the first half cheap: a decision record
+carries no manifests, so it cannot re-run `rank` — and it does not
+need to. Agreement factors into two independent questions, both
+answerable from a production capture as the schema already stands:
+
+| half | question | inputs |
+|---|---|---|
+| **scorer agreement** | does the record carry every input the *score* depended on? | recorded `CandidateInputs` + `claim_score` + `locality` + `size_gb`, pushed back through the real `score_with_adjustments` |
+| **policy agreement** | does the record carry every input the *ranking* depended on? | recorded `final_score`s, pushed back through the real strictly-beats-local filter and best-first sort |
+
+The two deliberately run off different inputs — the policy half reads
+recorded scores, never recomputed ones. Chaining them would let one
+scorer bug cascade into a policy failure and you would learn strictly
+less from the same run.
+
+| where | what |
+|---|---|
+| `src/decision_replay.rs` | The replay itself. Calls production's scorer and production's ranking policy; reports `scorer_agreement` / `policy_agreement`, per-factor disagreements, and named `ReplayGap`s. Both ratios return `0.0` on an empty denominator, never a vacuous `1.0`. |
+| `src/scheduler_core.rs` | The ranking half of the decision extracted as `winners_over_local` + `beats_local` + `local_sentinel`, so replay re-runs the policy rather than a copy of it — the same discipline that makes arm 0 *be* the scheduler. |
+| `tests/scheduler_replay_agreement.rs` | The fixture with a known answer: sim → `TracingDecisionSink::to_path` → JSONL → `SchedulerTrace::from_jsonl_path` → replay. Every stage but the record *content* is the code a real capture goes through. |
+
+**Result: 1.000 / 1.000, bit-exact, across all five scenarios × four
+decision-making arms** (4,573 candidates, 413 decisions). On a
+simulated capture that is the only admissible answer — the sim wrote
+those records by running the same code moments earlier — so the value
+of the run is that it makes a *wrong* answer unambiguous. The suite
+proves the instrument can fail: corrupting one recorded
+`inputs.samples` drops agreement to 0.958 and names `cold_start_weight`
+as the factor that no longer follows from the record.
+
+**What S1 settled without spending daemon time.** The open question
+going in was whether `claim_affinity` — an argument the scorer takes
+and the record does not carry — forced another Phase-0 schema field.
+It does not, and the reason is structural rather than lucky:
+
+```text
+observation_mult = effective_affinity(a, obs) / a
+                 = (clamp(a) · (1 − w·f)) / a     [samples > 0]
+                 = (1 − w·f)                       for a ∈ (0, 1]
+```
+
+and `a ∈ [0, 1]` **by construction** — `ScoredClaim::claim_affinity` is
+always `CapabilityClaim::effective_affinity()`, which clamps (NaN → 0).
+The multiplier is therefore independent of `a` across the whole legal
+domain except `a == 0`, which is exactly the `claim_score == 0` case
+(both are that same clamped number upstream). The replay probes with
+`1.0` or `0.0` accordingly and reproduces the breakdown exactly.
+Finding this *before* the capture is the whole reason S1's replay was
+built ahead of S1's data.
+
+**What still needs hardware.** The exit criterion above has two
+clauses and only the first is now instrumented. Decision-agreement is
+ready to run against a real capture (`SOVEREIGN_DECISION_LOG=<path>`
+on two daemons, drive traffic, replay). Ordinal p95 agreement needs
+the Tier-2 side to exist, and is unblocked but unstarted.
+
+**Two diagnostic arms landed alongside S1 (2026-07-26).** Neither is a
+candidate policy; both exist to price a question before it costs
+hardware time, which is the cheapest thing the simulator does.
+
+| arm | question | answer |
+|---|---|---|
+| `WarmStart` | does F7's self-locking ramp *cost* anything? | Yes, and with the opposite sign to the one the finding implies: removing the penalty is **+235% mean latency**. See F7. |
+| `FreshWarmStart` | is that damage F1's fault? | **No** — the penalty is *larger* under fresh signals (+264%). The offloads lose on their own merits, so the 0.7 floor is compensating for an over-eager objective, not for staleness. This is the arm that stopped a wrong causal claim reaching this doc. |
+| `OutboundOnlyLoad` | would it matter if the gossiped in-flight counter missed inbound peer work? | Yes — **+126% to +584%** mean latency, under-reporting the signal by 67–93%. The two-daemon audit is earned. See F2. |
+
+Both follow the same pattern and it is worth naming, because it
+generalises: **a null result is only informative if the knob is proven
+connected.** Each arm asserts its own wiring — `WarmStart` asserts
+that arm 0 does apply a cold-start penalty and that warm-start removes
+it; `OutboundOnlyLoad` asserts the published sum actually shrinks —
+and only then prints the outcome. Without that, "nothing moved" and
+"nothing was flipped" render identically.
 
 ### Phase 2 — behavioural changes, each as an arm then a landing
 

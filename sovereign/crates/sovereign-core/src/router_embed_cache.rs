@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Disk cache for the router classifier exemplar embeddings.
 //!
-//! The four boot classifiers (embed router, scope, effort,
-//! current-info) embed ~310 static exemplar strings at every process
-//! start — measured at ~5.7s of the desktop splash screen
+//! The five boot classifiers (embed router, scope, effort,
+//! current-info, archive) embed ~350 static exemplar strings at every
+//! process start — measured at ~5.7s of the desktop splash screen
 //! (2026-06-10, Qwen3-Embedding-0.6B at ~19ms/call, sequential).
 //! Those embeddings are a pure function of (exemplar text, embed
 //! model, embed method), so they're cached here keyed by text hash
@@ -431,7 +431,7 @@ impl std::fmt::Display for CacheStaleReason {
 
 /// Pure, no-inference freshness check of a committed/baked router-embed cache.
 /// Verifies (1) it was stamped for `expected_fingerprint` and (2) it carries an
-/// entry for every `(method, text)` the four boot classifiers embed. The CI
+/// entry for every `(method, text)` the five boot classifiers embed. The CI
 /// gate test, the `router-cache check` verb, and the bump hook ALL call this
 /// one function, so the gate can never disagree across surfaces.
 ///

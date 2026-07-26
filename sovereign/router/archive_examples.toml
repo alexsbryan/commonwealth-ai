@@ -1,0 +1,114 @@
+# Conversation-archive classifier examples — consumed by
+# `sovereign_core::archive_classifier::ConversationArchiveClassifier`.
+#
+# Binary classifier for the ARCHIVE-vs-THREAD axis: is this question
+# about the user's PAST conversations (a corpus search over the chat
+# archive) or about THIS conversation (answerable from the message
+# list in front of us)?
+#
+# ## Why this axis exists
+#
+# "Have I mentioned kayaking in any of our past chats?" used to route
+# MetalingualQuery → the handler string-parsed the locator, got
+# `Unknown`, preferred CODE corpora, found nothing, and emitted the
+# `no_source` empty state. The correct intent (KnowledgeQuery, scope
+# personal) WAS top-ranked by the embed router — at 0.531, under the
+# 0.55 intent floor — so the router abstained and the LLM classifier
+# picked metalingual.
+#
+# Two cheaper fixes were tried and rejected WITH NUMBERS (see the
+# `attempt` note, 2026-07-26):
+#
+#   1. More exemplars in `exemplars.toml`. Similarity there is
+#      TOPIC-dominated: the same axis-C exemplar scores 1.000 on its
+#      own topic and 0.531 on a near-identical phrasing about a
+#      different topic. Adding rows buys the topics you add, nothing
+#      else.
+#   2. A rule over the EXISTING axes: `intent == Metalingual &&
+#      scope == personal && locator margin < 0 → KnowledgeQuery`.
+#      cells_v1's own metalingual question ("What did you mention
+#      earlier about retrieval?") scores scope personal +0.239 and
+#      locator margin -0.106 — MORE negative than the archive
+#      query's -0.079. Neither existing discriminator separates the
+#      two classes; any threshold that catches the archive question
+#      flips the bench question.
+#
+# So archive-vs-thread gets its own decision surface, in the shape
+# that worked for `scope` (centroid over ~20 varied-domain examples,
+# topic-robust by construction) rather than the shape that failed
+# (k=1 nearest exemplar).
+#
+# ## Authoring principles (inherited from scope_examples.toml)
+#
+#   1. NEVER paraphrase a question from a bench or calibration set
+#      this classifier is evaluated on. The held-out set lives in
+#      `tests/archive_axis_live.rs`; cells_v1's metalingual row is
+#      the hard gate. Coaching to either is worse than missing.
+#   2. Cover SHAPES, not domains. A shape is "cross-session
+#      existence check", "archive search imperative", "aggregate
+#      over all history". Vary the domains so shape is the only
+#      signal that generalises.
+#   3. ~20 per class — a binary centroid converges fast.
+#   4. Archive examples should not all say "past chat". Mix in
+#      "previous session", "old thread", "conversation history",
+#      "over the months", and bare "before"/"ever" framings.
+#   5. Thread examples should span the deictic range: "just now",
+#      "a moment ago", "up to now", "scroll up", "in this exchange",
+#      plus reference to the assistant's own prior turns.
+
+[archive]
+examples = [
+    # cross-session existence check
+    "Have we ever gotten into astrophotography in an old thread?",
+    "In any of my previous sessions, did I bring up the tenant dispute?",
+    "Have I brought up insomnia before, in other chats?",
+    "Have I ever, in any prior thread, described my commute?",
+    # archive search imperative
+    "Look back through my chat history for anything about beekeeping.",
+    "Search my old chats for what I said about the wedding budget.",
+    "Dig through my old conversations for the reading list I made.",
+    "Check my conversation history for mentions of my sister's move.",
+    "Somewhere in my archive I asked about lens filters - find it.",
+    # locating a specific past conversation
+    "Is there an earlier conversation where I planned the Iceland trip?",
+    "Was there a previous chat about the roof repair?",
+    "Did a past chat cover the tax question?",
+    "Did I talk about switching careers in one of our earlier conversations?",
+    # aggregate over all history
+    "Across everything we've ever discussed, what do I say about my father?",
+    "Going back through our whole history, what recipes have I asked about?",
+    "Over all our past sessions, how often do I mention burnout?",
+    "Across past chats, what programming languages have I asked about?",
+    # longitudinal / time-windowed recall
+    "What have I told you about my thesis over the months?",
+    "What did I say about the marathon in chats from last spring?",
+    "In our older exchanges, did I settle on a name for the dog?",
+]
+
+[thread]
+examples = [
+    # immediate deixis — the turn just before this one
+    "Read back my last message.",
+    "What did you just tell me about the config file?",
+    "Right before this, what were we comparing?",
+    "Say that again, the part about the deadline.",
+    "Go back to what you said about the schema a minute ago.",
+    "You gave me three options a moment ago - repeat them.",
+    "What was the last file you mentioned in this reply?",
+    # position within the current exchange
+    "What's the point I made two messages back?",
+    "How many questions have I asked you just now?",
+    "Scroll up: what number did you quote me?",
+    "Remind me what I told you at the start of this session.",
+    # state of the current exchange
+    "What are we in the middle of?",
+    "Recap where we've gotten to.",
+    "I lost the thread - what were we doing?",
+    "Have we settled anything yet in this exchange?",
+    "Which of these did we already rule out?",
+    "Am I repeating myself in this chat?",
+    # about the assistant's own turns here
+    "Summarize what you've said up to now.",
+    "What have you been assuming in your answers here?",
+    "Restate your previous answer more simply.",
+]
