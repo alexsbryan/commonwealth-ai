@@ -15,7 +15,7 @@ HEATMAP[0][2] = 12; // Monday 02:00 — the max cell
 HEATMAP[4][22] = 3;
 
 const ARTIFACT = {
-  schema_version: 1,
+  schema_version: 3,
   edition: "all-time",
   built_at_unix: 1781000000,
   corpus_id: "conversations-anthropic",
@@ -48,29 +48,88 @@ const ARTIFACT = {
       },
     },
     {
+      type: "recurring",
+      threads: [
+        {
+          conversations: 3,
+          span_days: 401,
+          askings: [
+            { conv_uuid: "c1", date: "2025-01-10", excerpt: { chunk_id: 11, text: "Can you explain how llama.cpp slots work?" } },
+            { conv_uuid: "c2", date: "2025-08-02", excerpt: { chunk_id: 12, text: "Planning with Alice from Acme about Berlin." } },
+            { conv_uuid: "c3", date: "2026-02-15", excerpt: { chunk_id: 11, text: "Rust context." } },
+          ],
+        },
+      ],
+      derivation: ["576 conversation openings compared pairwise by embedding cosine"],
+    },
+    {
+      type: "turn",
+      pivots: [
+        {
+          conv_uuid: "conv-rabbit",
+          title: "Slots deep dive",
+          date: "2025-03-09",
+          seam_index: 4,
+          chunk_count: 12,
+          cosine: 0.21,
+          conv_median: 0.83,
+          drop: 0.62,
+          before: { chunk_id: 11, text: "Can you explain how llama.cpp slots work?" },
+          after: { chunk_id: 12, text: "Planning with Alice from Acme about Berlin." },
+        },
+      ],
+      derivation: ["a seam counts when its cosine falls below its own conversation's median"],
+    },
+    {
       type: "obsessions",
       quarters: [
         {
           quarter: "2025-Q1",
           topics: [
-            { text: "Rust", label: "Work", conversations: 41, sample: { chunk_id: 11, char_start: 0, char_end: 4, text: "Rust" } },
-            { text: "Berlin", label: "Location", conversations: 7, sample: { chunk_id: 12, char_start: 0, char_end: 6, text: "Berlin" } },
+            { text: "Rust", label: "Work", conversations: 41, distinctiveness: 3.4, sample: { chunk_id: 11, char_start: 0, char_end: 4, text: "Rust" } },
+            { text: "Berlin", label: "Location", conversations: 7, distinctiveness: 1.2, sample: { chunk_id: 12, char_start: 0, char_end: 6, text: "Berlin" } },
           ],
+        },
+      ],
+      derivation: ["ranked by z-scored log-odds against the whole-archive baseline, NOT by count"],
+    },
+    {
+      type: "night_shift",
+      utc_offset_hours: -7,
+      derivation: ["quietest 4h of user turns = UTC 08:00-11:59", "its centre placed at 03:00 local"],
+      bands: [
+        {
+          name: "late night",
+          start_hour: 0,
+          end_hour: 5,
+          mentions: 516,
+          topics: [{ text: "Jung", label: "Theme", conversations: 12, distinctiveness: 2.9, sample: { chunk_id: 11, char_start: 0, char_end: 4, text: "Rust" } }],
+        },
+        {
+          name: "morning",
+          start_hour: 6,
+          end_hour: 11,
+          mentions: 4650,
+          topics: [{ text: "Plyometrics", label: "Theme", conversations: 9, distinctiveness: 2.1, sample: { chunk_id: 12, char_start: 0, char_end: 6, text: "Berlin" } }],
         },
       ],
     },
     {
       type: "cast",
       nodes: [
-        { id: "alice", canonical_name: "Alice", entity_type: "Person", degree: 1, conversations: 12, sample: { chunk_id: 12, char_start: 0, char_end: 5, text: "Alice" } },
-        { id: "acme", canonical_name: "Acme", entity_type: "Organization", degree: 1, conversations: 9, sample: { chunk_id: 12, char_start: 0, char_end: 4, text: "Acme" } },
-        { id: "anna karenina", canonical_name: "Anna Karenina", entity_type: "Work", degree: 0, conversations: 3, sample: { chunk_id: 11, char_start: 0, char_end: 13, text: "Anna Karenina" } },
+        { id: "alice", canonical_name: "Alice", entity_type: "Person", degree: 1, bridging: 0.9, conversations: 12, first_date: "2025-01-04", last_date: "2026-02-01", sample: { chunk_id: 12, char_start: 0, char_end: 5, text: "Alice" } },
+        { id: "acme", canonical_name: "Acme", entity_type: "Organization", degree: 1, bridging: 0.4, conversations: 9, first_date: "2025-02-04", last_date: "2025-12-01", sample: { chunk_id: 12, char_start: 0, char_end: 4, text: "Acme" } },
+        { id: "anna karenina", canonical_name: "Anna Karenina", entity_type: "Work", degree: 0, bridging: 0.0, conversations: 3, first_date: "2025-05-04", last_date: "2025-06-01", sample: { chunk_id: 11, char_start: 0, char_end: 13, text: "Anna Karenina" } },
       ],
-      edges: [{ source: "alice", target: "acme", relationship_type: "appears_with", co_conversations: 5 }],
+      edges: [{ source: "alice", target: "acme", co_conversations: 5, pmi: 1.31, first_date: "2025-02-04", last_date: "2025-11-20" }],
+      derivation: ["node size is betweenness, not frequency"],
     },
     { type: "door" },
   ],
 };
+
+/** Index of each card in the fixture deck — the dots follow this order. */
+const CARD = { scale: 0, rhythm: 1, recurring: 2, turn: 3, obsessions: 4, night_shift: 5, cast: 6, door: 7 };
 
 const CHUNKS: Record<string, string> = {
   "11": "### [2025-03-09 15:00] user\n\nCan you explain how llama.cpp slots work? Rust context. Anna Karenina aside.\n\n### [2025-03-09 15:02] assistant\n\nSlots are lazy-loaded model instances.",
@@ -103,7 +162,7 @@ test.describe("Wrapped mesh app bundle", () => {
     await installBridge(page);
     await page.goto("/meshapp/wrapped/index.html");
     await expect(page.locator("#loading")).toBeHidden();
-    await expect(dots(page)).toHaveCount(5);
+    await expect(dots(page)).toHaveCount(8);
     const slide = activeSlide(page);
     await expect(slide).toContainText("576");
     await expect(slide).toContainText("14 months");
@@ -121,7 +180,7 @@ test.describe("Wrapped mesh app bundle", () => {
     await page.keyboard.press("ArrowLeft");
     await expect(activeSlide(page)).toHaveAttribute("data-card", "scale");
     // Dots jump directly.
-    await dots(page).nth(4).click();
+    await dots(page).nth(CARD.door).click();
     await expect(activeSlide(page)).toHaveAttribute("data-card", "door");
     await expect(activeSlide(page)).toContainText("Your archive is now your memory");
   });
@@ -129,7 +188,7 @@ test.describe("Wrapped mesh app bundle", () => {
   test("the door's call-to-action asks the host to open Outer Work, scoped", async ({ page }) => {
     await installBridge(page);
     await page.goto("/meshapp/wrapped/index.html");
-    await dots(page).nth(4).click();
+    await dots(page).nth(CARD.door).click();
     await activeSlide(page).getByRole("button", { name: /ask your past self/i }).click();
     await expect
       .poll(async () => page.evaluate(() => (window as any).__openedOuterWork))
@@ -144,7 +203,7 @@ test.describe("Wrapped mesh app bundle", () => {
       m.openOuterWork = async () => { throw new Error("no chat to open"); };
     });
     await page.goto("/meshapp/wrapped/index.html");
-    await dots(page).nth(4).click();
+    await dots(page).nth(CARD.door).click();
     await activeSlide(page).getByRole("button", { name: /ask your past self/i }).click();
     await expect(activeSlide(page)).toContainText("Open this in the desktop app");
   });
@@ -155,7 +214,7 @@ test.describe("Wrapped mesh app bundle", () => {
     await activeSlide(page).getByRole("button", { name: "Skip" }).click();
     await expect(activeSlide(page)).toHaveAttribute("data-card", "rhythm");
     await expect(dots(page).nth(0)).toHaveClass(/skipped/);
-    await dots(page).nth(4).click();
+    await dots(page).nth(CARD.door).click();
     await expect(activeSlide(page).getByRole("button", { name: "Skip" })).toHaveCount(0);
   });
 
@@ -180,7 +239,7 @@ test.describe("Wrapped mesh app bundle", () => {
   test("the obsessions card counts conversations and cites a sample", async ({ page }) => {
     await installBridge(page);
     await page.goto("/meshapp/wrapped/index.html");
-    await dots(page).nth(2).click();
+    await dots(page).nth(CARD.obsessions).click();
     const slide = activeSlide(page);
     await expect(slide).toContainText("2025-Q1");
     await expect(slide).toContainText("Rust");
@@ -192,23 +251,79 @@ test.describe("Wrapped mesh app bundle", () => {
   test("the cast constellation renders nodes and a clicked node cites itself", async ({ page }) => {
     await installBridge(page);
     await page.goto("/meshapp/wrapped/index.html");
-    await dots(page).nth(3).click();
+    await dots(page).nth(CARD.cast).click();
     const slide = activeSlide(page);
     await expect(slide.locator("svg circle")).toHaveCount(3);
     await expect(slide.locator("svg")).toContainText("Alice");
     await slide.locator("svg circle").first().click();
-    await expect(slide).toContainText(/conversations\./);
+    await expect(slide).toContainText(/conversations,/);
+    // Edges carry their evidence now, not a hard-coded "appears_with".
+    await expect(slide).toContainText("5 shared conversations");
     await slide.getByRole("button", { name: /where they appear/ }).click();
     await expect(slide.locator(".card-full")).toContainText("Alice from Acme");
+  });
+
+  test("the recurring card leads with the SPAN, and every asking is verbatim", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/wrapped/index.html");
+    await dots(page).nth(CARD.recurring).click();
+    const slide = activeSlide(page);
+    // 401 days must read as a span a person would say, not a raw count.
+    await expect(slide).toContainText("You came back to this 3 times over 13 months");
+    await expect(slide.locator(".excerpt")).toHaveCount(3);
+    await expect(slide).toContainText("2025-01-10");
+    await expect(slide).toContainText("2026-02-15");
+    await slide.getByRole("button", { name: /that conversation/ }).first().click();
+    await expect(slide.locator(".card-full").first()).toContainText("Slots are lazy-loaded");
+  });
+
+  test("the turn card quotes both sides of the seam", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/wrapped/index.html");
+    await dots(page).nth(CARD.turn).click();
+    const slide = activeSlide(page);
+    await expect(slide).toContainText("On 2025-03-09");
+    await expect(slide).toContainText("Slots deep dive");
+    await expect(slide).toContainText("before");
+    await expect(slide).toContainText("after");
+    const quotes = slide.locator(".excerpt");
+    await expect(quotes.nth(0)).toHaveText("Can you explain how llama.cpp slots work?");
+    await expect(quotes.nth(1)).toHaveText("Planning with Alice from Acme about Berlin.");
+  });
+
+  test("the night shift states the LOCAL clock it is claiming in", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/wrapped/index.html");
+    await dots(page).nth(CARD.night_shift).click();
+    const slide = activeSlide(page);
+    await expect(slide).toContainText("late night");
+    await expect(slide).toContainText("00:00–05:59");
+    await expect(slide).toContainText("Jung");
+    await expect(slide).toContainText("Plyometrics");
+    // The offset is on the card, not buried — the claim is false without it.
+    await expect(slide).toContainText("your local clock (UTC-7)");
+  });
+
+  test("every claim card exposes the host's derivation behind 'why this?'", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/wrapped/index.html");
+    for (const card of ["recurring", "turn", "obsessions", "night_shift", "cast"] as const) {
+      await dots(page).nth(CARD[card]).click();
+      const slide = activeSlide(page);
+      const why = slide.getByRole("button", { name: /why this/ });
+      await expect(why).toHaveCount(1);
+      await why.click();
+      await expect(slide.locator("ul.meta")).toBeVisible();
+    }
   });
 
   test("unknown card types are skipped — the enriched-deck forward-compat seam", async ({ page }) => {
     const future = {
       ...ARTIFACT,
       cards: [
-        ARTIFACT.cards[0],
+        ARTIFACT.cards[CARD.scale],
         { type: "archetype", name: "The Night Debugger" }, // not in this bundle's renderers
-        ARTIFACT.cards[4],
+        ARTIFACT.cards[CARD.door],
       ],
     };
     await installBridge(page, future);
@@ -219,7 +334,7 @@ test.describe("Wrapped mesh app bundle", () => {
   });
 
   test("absent sections shrink the deck — absent data means an absent card", async ({ page }) => {
-    const sparse = { ...ARTIFACT, cards: [ARTIFACT.cards[0], ARTIFACT.cards[1], ARTIFACT.cards[4]] };
+    const sparse = { ...ARTIFACT, cards: [ARTIFACT.cards[CARD.scale], ARTIFACT.cards[CARD.rhythm], ARTIFACT.cards[CARD.door]] };
     await installBridge(page, sparse);
     await page.goto("/meshapp/wrapped/index.html");
     await expect(dots(page)).toHaveCount(3);
@@ -254,7 +369,7 @@ test.describe("Wrapped mesh app bundle", () => {
     );
     await page.addInitScript({ path: "src-tauri/src/meshapp_shim.js" });
     await page.goto("/meshapp/wrapped/index.html");
-    await expect(dots(page)).toHaveCount(5);
+    await expect(dots(page)).toHaveCount(8);
     await expect(activeSlide(page)).toContainText("576");
   });
 });

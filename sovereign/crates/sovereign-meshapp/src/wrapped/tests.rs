@@ -17,10 +17,13 @@ fn turn(ts_str: &str, is_user: bool, words: u64, chunk_id: u64, first_line: &str
 }
 
 fn doc(uuid: &str, turns: Vec<Turn>) -> ConvDoc {
+    let mut chunk_ids: Vec<u64> = turns.iter().map(|t| t.chunk_id).collect();
+    chunk_ids.dedup();
     ConvDoc {
         conv_uuid: uuid.to_string(),
         title: Some(format!("title-{uuid}")),
         turns,
+        chunk_ids,
     }
 }
 
@@ -172,117 +175,42 @@ fn content_map(pairs: &[(u64, &str)]) -> HashMap<u64, String> {
     pairs.iter().map(|(id, c)| (*id, c.to_string())).collect()
 }
 
-fn no_generics() -> HashSet<String> {
-    HashSet::new()
-}
+// ─── ner_theme_rows (the fallback theme source) ──────────────────────
 
 #[test]
-fn obsessions_groups_by_quarter_and_ranks_by_conversations() {
-    let rows = vec![
-        erow(1, "Rust", "Work", 0.9, "c1"),
-        erow(2, "Rust", "Work", 0.8, "c2"),
-        erow(3, "Rust", "Work", 0.7, "c4"),
-        erow(3, "Tokio", "Work", 0.7, "c1"), // 1 conv — below MIN_TOPIC_CONVS
-        erow(4, "Berlin", "Location", 0.9, "c3"), // Q2 chunk
-        erow(5, "Berlin", "Location", 0.8, "c5"),
-        erow(6, "Berlin", "Location", 0.7, "c6"),
-    ];
-    let quarters: HashMap<u64, String> = [
-        (1, "2025-Q1"),
-        (2, "2025-Q1"),
-        (3, "2025-Q1"),
-        (4, "2025-Q2"),
-        (5, "2025-Q2"),
-        (6, "2025-Q2"),
-    ]
-    .into_iter()
-    .map(|(k, v)| (k, v.to_string()))
-    .collect();
-    let content = content_map(&[
-        (1, "I love Rust a lot"),
-        (2, "more Rust here"),
-        (3, "Rust and Tokio runtime question"),
-        (4, "trip to Berlin"),
-        (5, "Berlin again"),
-        (6, "still Berlin"),
-    ]);
-    let c = fold_obsessions(&rows, &quarters, &content, &no_generics()).unwrap();
-    assert_eq!(c.quarters.len(), 2);
-    let q1 = &c.quarters[0];
-    assert_eq!(q1.quarter, "2025-Q1");
-    // Tokio (1 conversation) is no hook — only Rust (3 convs) survives.
-    assert_eq!(q1.topics.len(), 1);
-    assert_eq!(q1.topics[0].text, "Rust");
-    assert_eq!(q1.topics[0].conversations, 3);
-    // Sample cites the highest-score row and is verbatim.
-    assert_eq!(q1.topics[0].sample.chunk_id, 1);
-    assert_eq!(c.quarters[1].quarter, "2025-Q2");
-    assert_eq!(c.quarters[1].topics[0].text, "Berlin");
-}
-
-#[test]
-fn obsessions_drops_stoplist_low_score_and_non_verbatim_rows() {
+fn ner_theme_rows_applies_score_stoplist_length_and_verbatim_filters() {
     let rows = vec![
         erow(1, "you", "Person", 0.99, "c1"),  // stoplist floor
         erow(1, "Rust", "Work", 0.3, "c1"),    // below score floor
         erow(1, "Phantom", "Work", 0.9, "c1"), // not verbatim in chunk
         erow(1, "ok", "Work", 0.9, "c1"),      // too short
+        erow(1, "Tokio", "Work", 0.9, "c1"),   // survives
     ];
-    let quarters: HashMap<u64, String> = [(1u64, "2025-Q1".to_string())].into_iter().collect();
-    let content = content_map(&[(1, "talking about Rust with you, ok")]);
-    assert!(fold_obsessions(&rows, &quarters, &content, &no_generics()).is_none());
+    let content = content_map(&[(1, "talking about Rust and Tokio with you, ok")]);
+    let chunks = vec![chunk_row(1, "c1", "talking about Rust and Tokio with you, ok", None)];
+    let kept = ner_theme_rows(&rows, &chunks, &content);
+    let names: Vec<&str> = kept.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(names, vec!["Tokio"]);
 }
 
 #[test]
-fn obsessions_drops_case_profile_generics() {
-    // "workers" recurs across 3 convs but the generic set kills it.
+fn ner_theme_rows_drops_corpus_evidence_generics() {
+    // The assistant's own prose writes "workers" lowercase, so the
+    // case-profile verdict calls it a common noun — no stoplist entry
+    // required. This is the filter that makes the NER fallback usable.
     let rows = vec![
         erow(1, "Workers", "Person", 0.9, "c1"),
         erow(2, "Workers", "Person", 0.9, "c2"),
-        erow(3, "Workers", "Person", 0.9, "c3"),
     ];
-    let quarters: HashMap<u64, String> = [(1, "2025-Q1"), (2, "2025-Q1"), (3, "2025-Q1")]
-        .into_iter()
-        .map(|(k, v)| (k, v.to_string()))
-        .collect();
-    let content = content_map(&[
-        (1, "Workers unite"),
-        (2, "Workers again"),
-        (3, "Workers third"),
-    ]);
-    let generic: HashSet<String> = ["workers".to_string()].into_iter().collect();
-    assert!(fold_obsessions(&rows, &quarters, &content, &generic).is_none());
-}
-
-#[test]
-fn cast_builds_cooccurrence_graph_with_degree() {
-    let mut rows = Vec::new();
-    // Alice + Acme co-occur in c1 and c2; Bob appears alone in c3.
-    for conv in ["c1", "c2"] {
-        rows.push(erow(1, "Alice", "Person", 0.9, conv));
-        rows.push(erow(1, "Acme", "Organization", 0.9, conv));
-    }
-    rows.push(erow(1, "Bob", "Person", 0.9, "c3"));
-    rows.push(erow(1, "Berlin", "Location", 0.9, "c1")); // label excluded
-    let content = content_map(&[(1, "Alice from Acme met Bob in Berlin")]);
-    let c = fold_cast(&rows, &content, &no_generics()).unwrap();
-    assert_eq!(c.nodes.len(), 3); // Alice, Acme, Bob — no Location
-    assert_eq!(c.edges.len(), 1);
-    assert_eq!(c.edges[0].co_conversations, 2);
-    let alice = c
-        .nodes
-        .iter()
-        .find(|n| n.canonical_name == "Alice")
-        .unwrap();
-    assert_eq!(alice.conversations, 2);
-    assert_eq!(alice.degree, 1);
-    let bob = c.nodes.iter().find(|n| n.canonical_name == "Bob").unwrap();
-    assert_eq!(bob.degree, 0);
-}
-
-#[test]
-fn cast_absent_without_entity_rows() {
-    assert!(fold_cast(&[], &HashMap::new(), &no_generics()).is_none());
+    let content = content_map(&[(1, "Workers unite"), (2, "Workers again")]);
+    let chunks = vec![chunk_row(
+        3,
+        "c3",
+        "### [2025-01-01 10:00] assistant\n\nthe workers organised; more workers joined, and workers won.",
+        None,
+    )];
+    let kept = ner_theme_rows(&rows, &chunks, &content);
+    assert!(kept.is_empty(), "case-profile verdict should drop 'workers'");
 }
 
 // ─── case profile ────────────────────────────────────────────────────
@@ -542,19 +470,30 @@ async fn build_audit_cache_and_staleness_round_trip() {
     assert_eq!(artifact.schema_version, WRAPPED_SCHEMA_VERSION);
     assert_eq!(artifact.corpus_id, corpus_id);
 
-    // Deck: scale + rhythm + obsessions + cast + door.
+    // Deck order is fixed by the builder. The fixture's four chunks have
+    // no enrichment rows, so the themes come from the NER fallback; the
+    // conversations are too short for a `turn` and cluster into too few
+    // hour bands for a `night_shift`, but their openings DO cluster —
+    // which is the embedding path proving itself through the real index,
+    // not a fixture.
     let types: Vec<&str> = artifact
         .cards
         .iter()
         .map(|c| match c {
             WrappedCard::Scale(_) => "scale",
             WrappedCard::Rhythm(_) => "rhythm",
+            WrappedCard::NightShift(_) => "night_shift",
+            WrappedCard::Recurring(_) => "recurring",
+            WrappedCard::Turn(_) => "turn",
             WrappedCard::Obsessions(_) => "obsessions",
             WrappedCard::Cast(_) => "cast",
             WrappedCard::Door(_) => "door",
         })
         .collect();
-    assert_eq!(types, vec!["scale", "rhythm", "obsessions", "cast", "door"]);
+    assert_eq!(
+        types,
+        vec!["scale", "rhythm", "recurring", "obsessions", "cast", "door"]
+    );
 
     // The audit passes against the live index.
     verify_wrapped_artifact(&artifact, &idx_dir).await.unwrap();

@@ -46,8 +46,13 @@ export function forceGraph(container, data, opts = {}) {
     n.y = cy + r * Math.sin(i * GA);
   });
 
-  const maxDeg = nodes.reduce((m, n) => Math.max(m, n.degree || 1), 1);
-  const radius = (n) => 5 + 14 * Math.sqrt((n.degree || 1) / maxDeg);
+  // Node area encodes `opts.size` (default: link count). Pass a
+  // different measure when link count is not what the graph is ABOUT —
+  // e.g. betweenness, when the story is who connects otherwise-separate
+  // clusters rather than who has the most links.
+  const sizeOf = opts.size || ((n) => n.degree || 1);
+  const maxSize = nodes.reduce((m, n) => Math.max(m, sizeOf(n) || 0), 0) || 1;
+  const radius = (n) => 5 + 14 * Math.sqrt(Math.max(sizeOf(n) || 0, 0.06) / maxSize);
 
   const linkEls = links.map(() => {
     const ln = svg("line", { stroke: "#3a2f5c", "stroke-width": "1", "stroke-opacity": "0.8" });
