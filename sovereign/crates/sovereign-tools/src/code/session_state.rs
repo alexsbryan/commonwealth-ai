@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use serde_json::json;
 
+use sovereign_contracts::frame::{Frame, FrameSchema};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::{
@@ -47,19 +48,22 @@ pub const FRAME_SECTIONS: [&str; 8] = [
 /// Hard cap on the rendered frame (SESSION_CONTINUITY §2).
 pub const FRAME_TOKEN_BUDGET: usize = 2_000;
 
-/// ~4 chars per token — same heuristic as `cache-audit`.
-fn approx_tokens(s: &str) -> usize {
-    s.chars().count() / 4
-}
+/// The session frame's contract, expressed in the shared frame
+/// primitive. Parse / upsert / render / budget mechanics live in
+/// [`sovereign_contracts::frame`]; what stays here is what is specific
+/// to a CODING session — the file layout under
+/// `~/.sovereign/sessions/<id>/`, the git frontmatter, and the
+/// status/notes/provenance stamping.
+const SCHEMA: FrameSchema = FrameSchema {
+    schema_id: "session-frame/v1",
+    sections: &FRAME_SECTIONS,
+    token_budget: FRAME_TOKEN_BUDGET,
+};
 
 /// Map a caller-supplied section name (canonical, lowercase, or
 /// snake_case param id) to its canonical heading.
 pub fn canonical_section(name: &str) -> Option<&'static str> {
-    let norm = name.trim().to_lowercase().replace('_', " ");
-    FRAME_SECTIONS
-        .iter()
-        .find(|s| s.to_lowercase() == norm)
-        .copied()
+    SCHEMA.canonical_section(name)
 }
 
 /// One upsert's payload. Sections are `(canonical name, new body)`.
@@ -83,58 +87,6 @@ pub struct UpsertOutcome {
     pub approx_tokens: usize,
 }
 
-/// Ordered frontmatter + section bodies. Unknown frontmatter keys are
-/// preserved verbatim so an upsert never strips fields a newer writer
-/// added.
-struct Frame {
-    front: Vec<(String, String)>,
-    bodies: Vec<(String, String)>, // canonical section -> body (may be empty)
-}
-
-impl Frame {
-    fn get(&self, key: &str) -> Option<&str> {
-        self.front
-            .iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.as_str())
-    }
-
-    fn set(&mut self, key: &str, value: String) {
-        match self.front.iter_mut().find(|(k, _)| k == key) {
-            Some(entry) => entry.1 = value,
-            None => self.front.push((key.to_string(), value)),
-        }
-    }
-
-    fn body_mut(&mut self, section: &str) -> &mut String {
-        // All eight sections are materialized at construction; this
-        // only ever finds an existing entry.
-        &mut self
-            .bodies
-            .iter_mut()
-            .find(|(name, _)| name == section)
-            .expect("all frame sections materialized")
-            .1
-    }
-
-    fn render(&self) -> String {
-        let mut out = String::from("---\n");
-        for (k, v) in &self.front {
-            out.push_str(&format!("{k}: {v}\n"));
-        }
-        out.push_str("---\n");
-        for (name, body) in &self.bodies {
-            out.push_str(&format!("\n## {name}\n\n"));
-            let trimmed = body.trim();
-            if !trimmed.is_empty() {
-                out.push_str(trimmed);
-                out.push('\n');
-            }
-        }
-        out
-    }
-}
-
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
@@ -153,41 +105,6 @@ fn git_capture(repo_root: &Path, args: &[&str]) -> Option<String> {
     (!s.is_empty()).then_some(s)
 }
 
-/// Parse an existing frame.md. Lenient: sections not in the schema are
-/// dropped (the upsert re-normalizes to the eight-section contract);
-/// missing sections materialize empty.
-fn parse_frame(text: &str) -> Frame {
-    let mut front = Vec::new();
-    let mut rest = text;
-    if let Some(after) = text.strip_prefix("---") {
-        if let Some(end) = after.find("\n---") {
-            for line in after[..end].lines() {
-                if let Some((k, v)) = line.split_once(':') {
-                    front.push((k.trim().to_string(), v.trim().to_string()));
-                }
-            }
-            rest = &after[end + 4..];
-        }
-    }
-    let mut bodies: Vec<(String, String)> = FRAME_SECTIONS
-        .iter()
-        .map(|s| (s.to_string(), String::new()))
-        .collect();
-    let mut current: Option<usize> = None;
-    for line in rest.lines() {
-        if let Some(heading) = line.strip_prefix("## ") {
-            current =
-                canonical_section(heading).and_then(|c| bodies.iter().position(|(n, _)| n == c));
-            continue;
-        }
-        if let Some(idx) = current {
-            bodies[idx].1.push_str(line);
-            bodies[idx].1.push('\n');
-        }
-    }
-    Frame { front, bodies }
-}
-
 fn new_frame(session_id: &str, repo_root: Option<&Path>, update: &FrameUpdate) -> Frame {
     let repo = repo_root
         .and_then(|r| r.file_name())
@@ -198,7 +115,7 @@ fn new_frame(session_id: &str, repo_root: Option<&Path>, update: &FrameUpdate) -
         .and_then(|r| git_capture(r, &["rev-parse", "--abbrev-ref", "HEAD"]))
         .unwrap_or_else(|| "unknown".into());
     let front = vec![
-        ("schema".into(), "session-frame/v1".into()),
+        ("schema".into(), SCHEMA.schema_id.into()),
         ("session_id".into(), session_id.to_string()),
         (
             "harness".into(),
@@ -217,11 +134,9 @@ fn new_frame(session_id: &str, repo_root: Option<&Path>, update: &FrameUpdate) -
         ("provenance".into(), "self-reported".into()),
         ("notes".into(), "[]".into()),
     ];
-    let bodies = FRAME_SECTIONS
-        .iter()
-        .map(|s| (s.to_string(), String::new()))
-        .collect();
-    Frame { front, bodies }
+    let mut frame = SCHEMA.empty();
+    frame.front = front;
+    frame
 }
 
 /// Section-level upsert of a schema-v1 frame. See module docs for the
@@ -250,14 +165,17 @@ pub fn upsert_frame(
     let existing = std::fs::read_to_string(&path).ok();
     let created = existing.is_none();
     let mut frame = match &existing {
-        Some(text) => parse_frame(text),
+        Some(text) => SCHEMA.parse(text),
         None => new_frame(session_id, repo_root, &update),
     };
 
     let mut sections_updated = Vec::new();
     for (name, body) in &update.sections {
         let canonical = canonical_section(name).expect("validated above");
-        *frame.body_mut(canonical) = body.clone();
+        // Bind first: a `debug_assert!(frame.set_body(..))` would compile
+        // the write itself out of a release build.
+        let applied = frame.set_body(canonical, body.clone());
+        debug_assert!(applied, "schema section `{canonical}` must exist in the frame");
         sections_updated.push(canonical.to_string());
     }
 
@@ -303,19 +221,9 @@ pub fn upsert_frame(
     frame.set("provenance", "self-reported".into());
 
     let rendered = frame.render();
-    let total = approx_tokens(&rendered);
-    if total > FRAME_TOKEN_BUDGET {
-        let per_section: Vec<String> = frame
-            .bodies
-            .iter()
-            .map(|(n, b)| format!("{n} {}t", approx_tokens(b)))
-            .collect();
-        return Err(format!(
-            "session_state: frame would be ~{total} tokens (budget {FRAME_TOKEN_BUDGET}) — \
-             trim before writing. Per section: {}. The spec: drop detail, never sections.",
-            per_section.join(", ")
-        ));
-    }
+    let total = frame
+        .check_budget(&SCHEMA)
+        .map_err(|e| format!("session_state: {e}"))?;
 
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("session_state: mkdir {}: {e}", dir.display()))?;

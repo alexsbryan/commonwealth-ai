@@ -199,6 +199,55 @@ pub(crate) fn conversation_pinned_evidence(
     out
 }
 
+/// Citation label carried by sealed conversation turns. Matches the form
+/// `CONVERSATION_EVIDENCE_DIRECTIVE` tells the model to cite, so the
+/// citation-attribution check reads such a `[Source: …]` as legitimate.
+pub(crate) const CONVERSATION_EVIDENCE_LABEL: &str = "earlier in this conversation";
+
+/// Seal this conversation's own turns into a gate EVIDENCE UNIVERSE, the
+/// same way the code trace joins it.
+///
+/// Pinning them on [`ClaimSearcher`] alone is not enough: the pin only
+/// widens the per-claim confirmatory loop, while the entity-anchored
+/// value-presence check (`value_presence::assess_asserted_value`) tests
+/// the answer's asserted value against `EvidenceContext::chunks` and
+/// returns `vp = 1.0` outright when it is absent — short-circuiting
+/// before any widening runs. Measured 2026-07-26: with the synthesis
+/// prompt fixed so the model DOES answer "polonium" from the recalled
+/// turn, value-presence found no "polonium" among the corpus chunks and
+/// hard-abstained the turn (vp 1.0), replacing a correct answer with
+/// "I couldn't confirm an answer …". Sealing widens the evidence, never
+/// the scope — these passages are turns the synthesis prompt already saw.
+///
+/// `chunk_labels` is PARALLEL to `chunks`; it is extended only while that
+/// invariant holds, matching the code-trace site's guard.
+pub(crate) fn seal_conversation_evidence(
+    context: &crate::types::ConversationContext,
+    chunks: &mut Vec<String>,
+    source_labels: &mut Vec<String>,
+    chunk_labels: &mut Vec<Vec<String>>,
+) -> usize {
+    let turns = conversation_pinned_evidence(context);
+    if turns.is_empty() {
+        return 0;
+    }
+    let sealed = turns.len();
+    for turn in turns {
+        chunks.push(turn);
+        if chunk_labels.len() + 1 == chunks.len() {
+            chunk_labels.push(vec![CONVERSATION_EVIDENCE_LABEL.to_string()]);
+        }
+    }
+    source_labels.push(CONVERSATION_EVIDENCE_LABEL.to_string());
+    tracing::info!(
+        target: "grounding_gate",
+        sealed_turns = sealed,
+        evidence_chunks = chunks.len(),
+        "sealed conversation turns into the gate's evidence universe"
+    );
+    sealed
+}
+
 impl ClaimSearcher {
     /// Attach turn-local sealed passages (see [`ClaimSearcher::pinned`]).
     pub(crate) fn with_pinned(mut self, pinned: Vec<String>) -> Self {

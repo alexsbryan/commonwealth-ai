@@ -140,6 +140,16 @@ where
     target: ThroughputTarget,
     completed: bool,
     ledger_emission: Option<LedgerEmission>,
+    /// P1 of `docs/specs/SCHEDULER_QUALITY.md`: the completion half of
+    /// the decision→outcome join.
+    ///
+    /// This wrapper is the natural home for it — it is already the
+    /// one place that measures TTFT, wall time and token count for
+    /// every dispatched stream, on every terminus (local, local
+    /// fallback, peer) and on every exit (clean end, client abort,
+    /// mid-stream death). Measuring those numbers a second time
+    /// somewhere else would guarantee the two eventually disagree.
+    outcome: Option<crate::decision_log::OutcomeContext>,
 }
 
 impl<S: Stream + Send + Unpin + 'static> ThroughputObservedStream<S>
@@ -155,11 +165,22 @@ where
             target,
             completed: false,
             ledger_emission: None,
+            outcome: None,
         }
     }
 
     pub(crate) fn with_ledger_emission(mut self, emission: LedgerEmission) -> Self {
         self.ledger_emission = Some(emission);
+        self
+    }
+
+    /// Attach the decision context so this stream's completion emits
+    /// the outcome record that joins back to the routing decision.
+    pub(crate) fn with_outcome(
+        mut self,
+        outcome: crate::decision_log::OutcomeContext,
+    ) -> Self {
+        self.outcome = Some(outcome);
         self
     }
 }
@@ -200,12 +221,20 @@ where
         let count = self.chunk_count;
         let target = self.target.clone();
         let emission = self.ledger_emission.clone();
+        let outcome = self.outcome.take();
 
         // Skip recording if no first token ever arrived AND no
         // chunks were yielded. Pure-failure case — nothing to
         // measure, and the failure tracker handles it via
         // `record_failure`.
-        if first_chunk.is_none() && count == 0 {
+        //
+        // A stream carrying an outcome context is the exception: the
+        // decision→outcome join must close even for a request that
+        // produced nothing, or a zero-token dispatch would look like
+        // a decision that never completed. The timings simply come
+        // back `None`.
+        let observable = first_chunk.is_some() || count > 0;
+        if !observable && outcome.is_none() {
             return;
         }
 
@@ -220,6 +249,22 @@ where
                     None
                 }
             });
+
+            // The outcome record is emitted first and unconditionally:
+            // it is the join, and losing it because a later step
+            // early-returned would silently break calibration.
+            if let Some(ctx) = outcome {
+                let total_ms = now.duration_since(dispatched).as_secs_f64() * 1000.0;
+                ctx.complete(
+                    ttft_ms,
+                    Some(total_ms),
+                    observable.then_some(count),
+                );
+            }
+
+            if !observable {
+                return;
+            }
 
             match target {
                 ThroughputTarget::Local(obs) => {

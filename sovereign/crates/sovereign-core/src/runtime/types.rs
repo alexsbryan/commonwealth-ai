@@ -311,6 +311,13 @@ pub struct TurnProvenance {
     pub system_prompt_chars: usize,
     pub recalled_memories: Vec<RecalledMemoryProv>,
     pub history_summary: HistorySummaryProv,
+    /// Earlier turns of THIS conversation that retrieval-over-history
+    /// spliced into the prompt. Empty when the conversation is still
+    /// short enough that every turn is in the visible window, when no
+    /// candidate cleared the similarity floor, or on provenance frames
+    /// persisted before this field (2026-07-26).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history_recall: Vec<HistoryRecallProv>,
     pub temporal_tensions: Vec<String>,
     pub contradiction: Option<ContradictionProv>,
     pub current_goal: Option<String>,
@@ -384,6 +391,56 @@ pub struct HistoryEntryProv {
     pub role: String,
     pub content_preview: String,
     pub full_chars: usize,
+}
+
+/// One earlier turn-pair that retrieval-over-history pulled back into
+/// this turn's prompt (`Runtime::maybe_retrieve_relevant_history`).
+///
+/// The ledger's answer to "did it actually remember, or did it guess?"
+/// — the recall channel is otherwise invisible after the turn ends
+/// (`ConversationContext::history_retrieval_hits` is `#[serde(skip)]`
+/// and recomputed every turn), so without this the provenance frame
+/// showed a system prompt with an unexplained "Relevant earlier turns"
+/// block in it.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct HistoryRecallProv {
+    /// Index into the conversation's message list of the pair's lead
+    /// message — the same `turn_index` the narration chip carries.
+    pub turn_index: usize,
+    /// Hybrid similarity (cosine, plus entity Jaccard when GLiNER is
+    /// available) against the current user message.
+    pub similarity: f32,
+    /// Leading excerpt of the recalled pair, capped for the ledger.
+    pub excerpt: String,
+}
+
+impl HistoryRecallProv {
+    /// Longest excerpt the ledger keeps per recalled pair. The hit
+    /// bodies are already truncated to 600 chars per message at index
+    /// time; this trims further because provenance frames are
+    /// persisted per turn and the point here is attribution, not a
+    /// second copy of the conversation.
+    const EXCERPT_CHARS: usize = 240;
+
+    /// Project this turn's recall hits into ledger rows. Empty when
+    /// retrieval-over-history didn't run or found nothing above the
+    /// similarity floor — the same `None`/empty distinction the
+    /// prompt renderer makes.
+    pub(crate) fn from_context(context: &crate::types::ConversationContext) -> Vec<Self> {
+        context
+            .history_retrieval_hits
+            .as_ref()
+            .map(|hits| {
+                hits.iter()
+                    .map(|h| Self {
+                        turn_index: h.turn_index,
+                        similarity: h.similarity,
+                        excerpt: h.content.chars().take(Self::EXCERPT_CHARS).collect(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

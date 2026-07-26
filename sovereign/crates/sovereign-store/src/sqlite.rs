@@ -116,6 +116,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Corpus filter migration failed: {e}")))?;
         migrations::run_searched_sources_migration(&conn)
             .map_err(|e| Error::Storage(format!("Searched sources migration failed: {e}")))?;
+        migrations::run_conversation_frame_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Conversation frame migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -440,6 +442,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Corpus filter migration failed: {e}")))?;
         migrations::run_searched_sources_migration(&conn)
             .map_err(|e| Error::Storage(format!("Searched sources migration failed: {e}")))?;
+        migrations::run_conversation_frame_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Conversation frame migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),

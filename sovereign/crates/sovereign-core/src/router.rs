@@ -1586,7 +1586,7 @@ impl Router for LlmRouter {
                 .await;
             let _ = self
                 .store
-                .log_routing_meta(&hash, "CONVERSATION_LOCATOR_DIRECT", None)
+                .log_routing_meta(&hash, crate::runtime::COARSE_CONVERSATION_LOCATOR_DIRECT, None)
                 .await;
             eprintln!(
                 "[router] \"{}\" → MetalingualQuery (explicit conversation locator; direct route)",
@@ -1602,11 +1602,92 @@ impl Router for LlmRouter {
                     "explicit in-conversation locator — answered from this thread, not a corpus"
                         .into(),
                 ),
-                coarse_intent: Some("CONVERSATION_LOCATOR_DIRECT".to_string()),
+                coarse_intent: Some(crate::runtime::COARSE_CONVERSATION_LOCATOR_DIRECT.to_string()),
                 self_assessment: None,
                 timing: None,
                 scope: None,
             });
+        }
+
+        // Pre-check -2.5: the SEMANTIC conversation locator.
+        //
+        // Pre-check -3 above catches the nine literal markers ("in this
+        // conversation", "earlier you said", …). Everything else that
+        // means the same thing — "what was the first thing I asked?",
+        // "where did we leave off?", "read that back to me" — fell
+        // through to Pre-check -2 below and INHERITED the thread's
+        // knowledge intent, so a question whose answer was sitting in
+        // the message list went looking for it in a corpus. Measured
+        // 2026-07-25: 4 of 5 runs.
+        //
+        // This tier runs the embed router's locator axis (one-vs-rest
+        // over exemplars tagged `locator = "conversation"`, its own
+        // floor + margin — independent of the intent gate, which is
+        // ambiguous on exactly these queries). It must sit ABOVE the
+        // inherit pre-check to be reachable at all, which is why the
+        // query embedding is computed here and then threaded down to
+        // the intent + scope classifiers: one embed serves all three,
+        // so the only new cost is on turns that used to short-circuit
+        // before any embedding at all.
+        //
+        // Same hard-commit posture as Pre-check -3 — no classifier
+        // gets a vote — earned by the calibration in
+        // `router_embed::DEFAULT_LOCATOR_MIN_MARGIN` (zero false
+        // positives over the held-out negative set).
+        let mut query_embedding: Option<Vec<f32>> = None;
+        if let Some(embed) = self.embed_router.as_ref() {
+            match embed
+                .embed_query_normalized(message, &*self.inference)
+                .await
+            {
+                Ok(q) => {
+                    let verdict = embed.locator_from_embedding(&q);
+                    query_embedding = Some(q);
+                    if let Some(v) = verdict {
+                        if v.locator == "conversation" {
+                            let latency_ms = start.elapsed().as_millis() as i64;
+                            let hash = message_hash(message);
+                            let _ = self
+                                .store
+                                .log_routing(&hash, "MetalingualQuery", latency_ms)
+                                .await;
+                            let _ = self
+                                .store
+                                .log_routing_meta(&hash, crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED, None)
+                                .await;
+                            eprintln!(
+                                "[router] \"{}\" → MetalingualQuery (semantic conversation locator; \
+                                 sim {:.2}, margin {:.2})",
+                                message.chars().take(60).collect::<String>(),
+                                v.top_sim,
+                                v.margin,
+                            );
+                            return Ok(RouterClassification {
+                                primary: IntentCandidate {
+                                    intent: Intent::MetalingualQuery,
+                                    confidence: 0.95,
+                                },
+                                alternatives: Vec::new(),
+                                rationale: Some(format!(
+                                    "this question is about our conversation (nearest shape: \
+                                     \"{}\") — answered from this thread, not a corpus",
+                                    v.nearest_exemplar
+                                )),
+                                coarse_intent: Some(crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED.to_string()),
+                                self_assessment: None,
+                                timing: None,
+                                scope: None,
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    // Soft-fail: no locator signal, no embedding to
+                    // share. The block below re-embeds if it can.
+                    tracing::debug!(target: "router.locator", error = %e,
+                        "router.locator: embed failed; continuing without the axis");
+                }
+            }
         }
 
         // Pre-check -2: inherit prior knowledge-family intent when
@@ -1687,10 +1768,17 @@ impl Router for LlmRouter {
         };
 
         if let Some(embed) = self.embed_router.as_ref() {
-            match embed
-                .classify_returning_embedding(message, &*self.inference)
-                .await
-            {
+            // Reuse the vector the locator axis already paid for
+            // (Pre-check -2.5). Re-embedding only when that step
+            // errored keeps the classify contract identical while
+            // holding the per-turn embed count at one.
+            let embedded = match query_embedding.take() {
+                Some(q) => Ok((embed.classify_from_embedding(&q), q)),
+                None => embed
+                    .classify_returning_embedding(message, &*self.inference)
+                    .await,
+            };
+            match embedded {
                 Ok((intent_verdict, query_embedding)) => {
                     // Scope classifier runs off the embed-router's query
                     // embedding (single embed call serves both intent + scope).

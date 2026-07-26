@@ -297,17 +297,84 @@ query = "How does this project define routing?"
 intent = "metalingual_query"
 query = "What does ATOS stand for in our system?"
 
+# ── locator = "conversation" — questions about THIS thread ──
+#
+# An orthogonal axis, scored one-vs-rest on its own threshold+margin
+# (`EmbedRouter::locator_from_embedding`), independent of the intent
+# gate. The intent axis can be ambiguous — "what was the first thing I
+# asked?" sits near conation ("Elaborate on the second point") and near
+# personal-archive recall — while the locator signal is clear. Before
+# this axis existed the Conversation family was gated on NINE literal
+# substrings (`parse_metalingual_locator`), so any phrasing outside that
+# list inherited the thread's knowledge intent and searched a corpus for
+# an answer that was sitting in the message list.
+#
+# Do NOT tag archive-recall shapes ("in any of our past chats", "across
+# my past conversations") — those search the user's conversation CORPUS
+# and belong to knowledge_query + scope = "personal" below. This tag
+# means the current thread, whose turns are already in context.
+#
+# Calibration 2026-07-26 against Qwen3-Embedding-0.6B (query-instruction
+# prefix applied, exemplars.toml as the one-vs-rest negative set): 8
+# held-out positives / 14 held-out negatives, ZERO false positives at
+# every (min_sim, min_margin) swept. Positives that fire clear the gate
+# by a wide margin (target case "what was the first thing I asked?" —
+# L=0.791, margin +0.374); the ones that abstain lose to genuinely
+# adjacent shapes and fall through to the normal cascade.
+
 [[example]]
 intent = "metalingual_query"
+locator = "conversation"
 query = "What did we discuss earlier about routing?"
 
 [[example]]
 intent = "metalingual_query"
+locator = "conversation"
 query = "Earlier you mentioned a reranker — what model was that?"
 
 [[example]]
 intent = "metalingual_query"
+locator = "conversation"
 query = "In this conversation, what corpus did we agree to enrich first?"
+
+# Shapes the nine literal markers never covered. One exemplar per
+# shape, phrased away from the probe set that calibrated the gate.
+
+# A. ordinal / positional reference to this thread
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "What did I ask you at the very start of this chat?"
+
+# B. thread-so-far summary
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "What have we covered so far in this session?"
+
+# C. enumeration over this thread
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "How many questions have I put to you so far?"
+
+# D. did-you-retain-what-I-told-you
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Do you remember what I said my goal was here?"
+
+# E. resumption after a break
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Where did we leave off before I stepped away?"
+
+# F. replay of the assistant's own last words
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Read back what you told me a moment ago."
 
 [[example]]
 intent = "metalingual_query"

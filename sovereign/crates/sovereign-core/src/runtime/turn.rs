@@ -755,8 +755,13 @@ impl Runtime {
                 .await
             }
             Intent::MetalingualQuery => {
-                self.handle_metalingual_query(message, conversation_id, &context)
-                    .await
+                self.handle_metalingual_query(
+                    message,
+                    conversation_id,
+                    &context,
+                    crate::runtime::locator_hint_from_coarse(coarse_intent.as_deref()),
+                )
+                .await
             }
             Intent::ConationQuery => {
                 self.handle_conation_query(message, conversation_id, &context)

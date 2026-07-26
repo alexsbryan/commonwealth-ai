@@ -27,6 +27,14 @@ Current in-flight:
 - [`STREAMING_GATE_PIPELINE.md`](STREAMING_GATE_PIPELINE.md) —
   overlap the longform grounding-gate verification under the draft
   stream; the final holistic-scan barrier stays the safety floor.
+- [`SCHEDULER_QUALITY.md`](SCHEDULER_QUALITY.md) — a measurement loop
+  for OICP delegation: why the scheduling layer has no bench (the
+  scorer ranks but doesn't predict), six findings with `file:line`, and
+  a three-tier loop (fast in-process mesh-sim → `household-bench` →
+  soak) with a calibration contract. **Phase 0 landed** — joinable
+  decision→outcome records with input provenance, fleet snapshots and
+  a replay-fixture loader (`sovereign-mesh/decision_log.rs`,
+  `decision_trace.rs`); the Tier-1 simulator is the next step.
 
 ### 2. Reference patterns
 

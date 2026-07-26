@@ -38,11 +38,25 @@ impl Runtime {
     pub(crate) async fn handle_metalingual_query(
         &self,
         message: &str,
-        _conversation_id: &str,
+        conversation_id: &str,
         context: &ConversationContext,
+        // The locator the ROUTER committed on, when it committed on
+        // one. `None` = no routing-level verdict to honour, so parse
+        // the message. Threading this is what lets the semantic
+        // locator tier work at all: those queries carry none of the
+        // literal markers `parse_metalingual_locator` looks for, so
+        // re-parsing here would discard the router's decision and send
+        // the turn off to search corpora (the 2026-07-25 gap-probe
+        // failure, one layer down).
+        locator_hint: Option<MetalingualLocator>,
     ) -> Result<Response> {
-        let locator = parse_metalingual_locator(message);
-        tracing::info!(?locator, "MetalingualQuery: parsed locator");
+        let from_router = locator_hint.is_some();
+        let locator = locator_hint.unwrap_or_else(|| parse_metalingual_locator(message));
+        tracing::info!(
+            ?locator,
+            from_router,
+            "MetalingualQuery: resolved locator"
+        );
 
         // Resolve locator → (kind_filter, name_match).
         let (kind_filter, name_match): (Option<corpus_engine::CorpusKind>, Option<String>) =
@@ -88,6 +102,35 @@ impl Runtime {
         // semantic neighbour to match, so every candidate scores below
         // the retrieval floor. Order is the signal here, so the
         // relevance reweight/sort below is deliberately NOT applied.
+        // The running conversation frame — the distilled record of the
+        // turns that have already scrolled out of the visible window
+        // (`conv_frame`: topics, entities, stated goals, commitments,
+        // open threads). It is the honest answer to "what do you
+        // remember about this chat": the raw turns in `context` are
+        // only what survived the window, while the frame is what the
+        // system actually carries forward. Loaded for the Conversation
+        // locator only — no other locator is asking about this thread.
+        let conversation_frame: Option<String> =
+            if matches!(locator, MetalingualLocator::Conversation) {
+                match self.store.get_conversation_frame(conversation_id).await {
+                    Ok(raw) => {
+                        let rendered = crate::conv_frame::parse(raw.as_deref()).render_for_prompt();
+                        let rendered = rendered.trim().to_string();
+                        (!rendered.is_empty()).then_some(rendered)
+                    }
+                    Err(e) => {
+                        // Soft-fail: the turns below still answer most
+                        // conversation questions. Losing the frame
+                        // degrades recall, it doesn't break the turn.
+                        tracing::debug!(error = %e, conversation_id,
+                            "metalingual: conversation frame unreadable");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
         let mut chunks = if matches!(locator, MetalingualLocator::Conversation) {
             conversation_turns_as_chunks(&context.conversation.messages)
         } else {
@@ -118,7 +161,12 @@ impl Runtime {
             chunks
         };
 
-        if chunks.is_empty() {
+        // A conversation whose turns have all scrolled out of the
+        // window yields zero chunks but may still have a frame — that
+        // is precisely the case the frame exists for, so an available
+        // frame keeps the turn on the synthesis path instead of the
+        // "couldn't find that reference" bail below.
+        if chunks.is_empty() && conversation_frame.is_none() {
             // No indexed source matches the locator. Surface the gap
             // honestly — the alternative (parametric fallback) is
             // exactly the failure mode that motivated this carve-out.
@@ -157,7 +205,7 @@ impl Runtime {
             };
             let response_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
-                conversation_id: _conversation_id.to_string(),
+                conversation_id: conversation_id.to_string(),
                 role: Role::Assistant,
                 content: empty_message,
                 created_at: now(),
@@ -236,14 +284,49 @@ impl Runtime {
         } else {
             format!("{conv_briefing}\n{doc_context}")
         };
+        // Frame FIRST: it is the summary of everything the verbatim
+        // turns below no longer contain, and an ordinal or "what have
+        // we covered" question is answered by the frame's Topics /
+        // Stated goals / Open threads sections rather than by any one
+        // retrieved turn.
+        let knowledge_block = match &conversation_frame {
+            Some(frame) => format!(
+                "MY RUNNING NOTES ON THIS CONVERSATION (folded from turns that \
+                 scrolled out of view — this is what I carry forward):\n\
+                 {frame}\n\n{knowledge_block}"
+            ),
+            None => knowledge_block,
+        };
+        // The instruction splits on locator because the two question
+        // shapes are genuinely different. A source-anchored lookup
+        // ("what does SEP mean by X") wants vocabulary-in-that-source.
+        // A question about THIS thread wants recall: what was said,
+        // by whom, and in what ORDER — "what did I ask first" is
+        // answered by position, not by similarity, and the generic
+        // "how does <source> use the term(s)" framing pushed the model
+        // toward defining a word nobody asked about.
+        let instruction = if matches!(locator, MetalingualLocator::Conversation) {
+            "Answer from this conversation itself — my running notes above plus the \
+             turns quoted below them. Quote the actual words that were used and say \
+             which turn they came from. Order is meaningful: if the question asks what \
+             came first, earliest, or at the start, answer from the order of the turns \
+             shown, not from whichever turn looks most related. If the material above \
+             does not contain the answer, say that plainly — never invent an exchange \
+             that isn't there."
+                .to_string()
+        } else {
+            format!(
+                "Answer how *{locator_phrase}* uses the term(s) in this question. \
+                 Quote and cite source titles. If the retrieved passages don't \
+                 cover the term, say so explicitly — do not substitute generic \
+                 knowledge. Source attribution is the whole point of this answer."
+            )
+        };
         let prompt = format!(
             "RETRIEVED FROM {locator_phrase}:\n\n{knowledge_block}\n\n\
              ════════════════════════════════════\n\n\
              Question: {message}\n\n\
-             Answer how *{locator_phrase}* uses the term(s) in this question. \
-             Quote and cite source titles. If the retrieved passages don't \
-             cover the term, say so explicitly — do not substitute generic \
-             knowledge. Source attribution is the whole point of this answer."
+             {instruction}"
         );
         // Structural honesty + attribution (contract principle 4 —
         // structure over instruction, the GK-caveat lesson): the
@@ -260,9 +343,16 @@ impl Runtime {
         let asked_terms = quoted_terms(message);
         let any_term_present = asked_terms.iter().any(|t| {
             let tl = t.to_lowercase();
-            chunks
-                .iter()
-                .any(|c| c.content.to_lowercase().contains(&tl))
+            // The frame counts as retrieved material: a term the model
+            // can see in the running notes must not draw a "does not
+            // appear" caveat committed at decode time.
+            let in_frame = conversation_frame
+                .as_ref()
+                .is_some_and(|f| f.to_lowercase().contains(&tl));
+            in_frame
+                || chunks
+                    .iter()
+                    .any(|c| c.content.to_lowercase().contains(&tl))
         });
         let committed_prefix: String = if !asked_terms.is_empty() && !any_term_present {
             format!(
@@ -323,7 +413,7 @@ impl Runtime {
             .collect();
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
-            conversation_id: _conversation_id.to_string(),
+            conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
             content: verified.rewritten,
             created_at: now(),
@@ -332,6 +422,12 @@ impl Runtime {
                 "locator": format!("{:?}", locator),
                 "sources": sources,
                 "chunks_used": chunks.len(),
+                // Whether the running conversation frame was part of
+                // the evidence — the difference between "answered from
+                // turns still in view" and "answered from what I
+                // folded away", which is otherwise unrecoverable after
+                // the turn.
+                "conversation_frame_used": conversation_frame.is_some(),
             })),
             version: 0,
         };
@@ -473,6 +569,301 @@ mod tests {
         CONV_LOCATOR_HEAD_MSGS, CONV_LOCATOR_TAIL_MSGS,
     };
     use crate::types::{Message, Role};
+
+    use std::pin::Pin;
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+    use futures::Stream;
+
+    use crate::error::{Error, Result};
+    use crate::registry::ToolRegistry;
+    use crate::runtime::Runtime;
+    use crate::skills::SkillRegistry;
+    use crate::traits::InferenceProvider;
+    use crate::types::{
+        CompletionRequest, CompletionResponse, Conversation, ConversationContext, Depth,
+        ProviderCapabilities, Speed,
+    };
+
+    /// Records the synthesis prompt so a test can assert on what the
+    /// model was actually shown — the only honest way to check "did
+    /// the frame reach the prompt?".
+    struct RecordingInference {
+        prompts: Mutex<Vec<String>>,
+    }
+
+    impl RecordingInference {
+        fn new() -> Self {
+            Self {
+                prompts: Mutex::new(Vec::new()),
+            }
+        }
+        fn last_prompt(&self) -> String {
+            self.prompts
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .expect("a synthesis call was made")
+        }
+    }
+
+    #[async_trait]
+    impl InferenceProvider for RecordingInference {
+        async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+            self.prompts.lock().unwrap().push(r.prompt.clone());
+            Ok(CompletionResponse {
+                text: "we opened on orbital mechanics.".to_string(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "recording".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("unused".into()))
+        }
+        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+            Ok(vec![0.1, 0.2, 0.3, 0.4])
+        }
+        async fn embed_query(&self, _q: &str) -> Result<Vec<f32>> {
+            Ok(vec![0.1, 0.2, 0.3, 0.4])
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    fn runtime_with(
+        inference: Arc<RecordingInference>,
+        store: Arc<sovereign_store::memory::InMemoryStateStore>,
+    ) -> Runtime {
+        Runtime::new(
+            inference,
+            Box::new(crate::stubs::PassthroughRouter),
+            Box::new(crate::stubs::NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            store,
+            Arc::new(SkillRegistry::new()),
+            Arc::new(crate::executor::AutoApprovalChannel),
+            crate::types::InferenceConfig::default(),
+        )
+    }
+
+    fn context_with(messages: Vec<Message>) -> ConversationContext {
+        ConversationContext {
+            conversation: Conversation {
+                id: "conv-frame".to_string(),
+                title: None,
+                messages,
+                created_at: 0,
+                updated_at: 0,
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
+                enabled_corpora: None,
+                searched_sources: None,
+            },
+            memories: Vec::new(),
+            working_memory: None,
+            installed_corpora: vec![],
+            corpus_ceiling: None,
+            document_session: None,
+            topic_context: None,
+            knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
+            compacted_history: None,
+            history_retrieval_hits: None,
+            tool_dossier: None,
+            intent_policy: None,
+        }
+    }
+
+    fn stored_frame() -> String {
+        let mut frame = crate::conv_frame::parse(None);
+        frame.set_body("Topics", "orbital mechanics, then Hohmann transfers".into());
+        frame.set_body("Entities", "Kepler, Hohmann".into());
+        frame.set_body("Stated goals", "user wants short answers".into());
+        frame.render()
+    }
+
+    /// "What do you remember about this conversation?" must be answered
+    /// from the RUNNING FRAME, not only from whichever turns happen to
+    /// still be in the window. The frame is the distillation of
+    /// everything the window already dropped, so a conversation long
+    /// enough for the question to be interesting is exactly the case
+    /// where the raw turns can't answer it.
+    #[tokio::test]
+    async fn conversation_locator_puts_the_running_frame_in_the_prompt() {
+        let inference = Arc::new(RecordingInference::new());
+        let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+        let runtime = runtime_with(Arc::clone(&inference), Arc::clone(&store));
+        crate::traits::ConversationStore::set_conversation_frame(
+            &*store,
+            "conv-frame",
+            &stored_frame(),
+        )
+        .await
+        .expect("frame persisted");
+
+        let ctx = context_with(vec![Message {
+            id: "m0".into(),
+            conversation_id: "conv-frame".into(),
+            role: Role::User,
+            content: "and what about aerobraking?".into(),
+            created_at: 1_700_000_000,
+            metadata: None,
+            version: 0,
+        }]);
+
+        runtime
+            .handle_metalingual_query(
+                "what have we discussed in this conversation?",
+                "conv-frame",
+                &ctx,
+                None,
+            )
+            .await
+            .expect("handler succeeded");
+
+        let prompt = inference.last_prompt();
+        assert!(
+            prompt.contains("MY RUNNING NOTES ON THIS CONVERSATION"),
+            "frame block missing from prompt:\n{prompt}"
+        );
+        assert!(
+            prompt.contains("Hohmann transfers"),
+            "frame body missing from prompt:\n{prompt}"
+        );
+        assert!(
+            prompt.contains("Order is meaningful"),
+            "conversation locator must use the recall instruction, not the \
+             vocabulary-lookup one:\n{prompt}"
+        );
+    }
+
+    /// A conversation whose turns have all rolled out of view still has
+    /// a frame — and that is precisely when the frame matters. The
+    /// empty-chunks bail ("could you quote the part you're asking
+    /// about?") must not fire over a frame we can read.
+    #[tokio::test]
+    async fn frame_alone_keeps_the_turn_off_the_empty_state_bail() {
+        let inference = Arc::new(RecordingInference::new());
+        let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+        let runtime = runtime_with(Arc::clone(&inference), Arc::clone(&store));
+        crate::traits::ConversationStore::set_conversation_frame(
+            &*store,
+            "conv-frame",
+            &stored_frame(),
+        )
+        .await
+        .expect("frame persisted");
+
+        let response = runtime
+            .handle_metalingual_query(
+                "what have we discussed in this conversation?",
+                "conv-frame",
+                // No messages at all — zero chunks from the turns.
+                &context_with(Vec::new()),
+                None,
+            )
+            .await
+            .expect("handler succeeded");
+
+        assert!(
+            !response.message.content.contains("couldn't find that reference"),
+            "frame-only turn took the empty-state bail: {}",
+            response.message.content
+        );
+        assert_eq!(
+            response.message.metadata.as_ref().and_then(|m| m
+                .get("conversation_frame_used")
+                .and_then(|v| v.as_bool())),
+            Some(true),
+            "metadata must record that the frame was the evidence"
+        );
+    }
+
+    /// The semantic locator tier's whole value depends on this: the
+    /// router commits "this is about our conversation" on a message
+    /// carrying NONE of the nine literal markers, and the handler must
+    /// honour that verdict instead of re-parsing the same string and
+    /// reaching a different answer. Without the hint this message
+    /// parses to `Ambient` and goes looking through code corpora.
+    #[tokio::test]
+    async fn router_locator_verdict_beats_the_string_parse() {
+        let message = "what was the first thing I asked?";
+        assert_eq!(
+            crate::runtime::parse_metalingual_locator(message),
+            crate::runtime::MetalingualLocator::Unknown,
+            "fixture must carry no literal marker, else this proves nothing"
+        );
+
+        let inference = Arc::new(RecordingInference::new());
+        let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+        let runtime = runtime_with(Arc::clone(&inference), Arc::clone(&store));
+
+        let ctx = context_with(vec![
+            Message {
+                id: "m0".into(),
+                conversation_id: "conv-frame".into(),
+                role: Role::User,
+                content: "how do ion thrusters work?".into(),
+                created_at: 1_700_000_000,
+                metadata: None,
+                version: 0,
+            },
+            Message {
+                id: "m1".into(),
+                conversation_id: "conv-frame".into(),
+                role: Role::Assistant,
+                content: "they accelerate ionised propellant electrostatically.".into(),
+                created_at: 1_700_000_001,
+                metadata: None,
+                version: 0,
+            },
+        ]);
+
+        let response = runtime
+            .handle_metalingual_query(
+                message,
+                "conv-frame",
+                &ctx,
+                crate::runtime::locator_hint_from_coarse(Some(
+                    crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED,
+                )),
+            )
+            .await
+            .expect("handler succeeded");
+
+        assert_eq!(
+            response
+                .message
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("locator"))
+                .and_then(|v| v.as_str()),
+            Some("Conversation"),
+            "handler must record the router's locator, not its own re-parse"
+        );
+        let prompt = inference.last_prompt();
+        assert!(
+            prompt.contains("ion thrusters"),
+            "the thread's own turns must be the evidence:\n{prompt}"
+        );
+    }
 
     #[test]
     fn quoted_terms_extracts_each_quote_style() {

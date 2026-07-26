@@ -227,6 +227,46 @@ pub enum NarrationPhase {
     /// card.
     LessonDrafted,
 
+    // ── Conversation-memory frames (2026-07-26) ───────────────
+    //
+    // Conversation memory carries the past through constant-capacity
+    // channels the user never saw: the compaction fold (turns → a
+    // running frame) and retrieval-over-history (similarity-selected
+    // earlier turns spliced back into the prompt). Both changed what
+    // the model knows while the chat surface said nothing, so a
+    // correct recall read as luck and a missed one read as amnesia.
+    // These two frames make the memory system legible at the moment
+    // it acts.
+    /// Earlier turns from THIS conversation were retrieved by
+    /// similarity to the current message and spliced into the prompt
+    /// (`Runtime::maybe_retrieve_relevant_history`). The chip is the
+    /// user-visible receipt for "I remembered this" — without it,
+    /// recall is invisible and indistinguishable from parametric
+    /// guessing.
+    ConversationRecall {
+        /// How many earlier turn-pairs were pulled back in.
+        turns: usize,
+        /// Message-list indices of the recalled pairs, oldest first.
+        /// Lets the UI anchor each chip to the turn it recalled.
+        turn_indices: Vec<usize>,
+        /// Best hybrid similarity among the recalled pairs, in
+        /// `[-1, 1]` — the same score the retrieval floor gates on.
+        top_similarity: f32,
+    },
+    /// Turns that fell out of the visible window were folded into the
+    /// running conversation frame
+    /// (`Runtime::maybe_compact_dropped_history`). Distinct from
+    /// `ConversationRecall`: this is memory being *written*, not read.
+    ///
+    /// Previously emitted as `GapCheckFired` — which the desktop
+    /// treats as a bridge into the information-request card, so a
+    /// routine fold rendered as a pending question. Its own variant
+    /// fixes that mislabel.
+    ConversationFolded {
+        /// Messages folded into the frame on this turn.
+        turns: usize,
+    },
+
     // ── Team-pipeline stage frames ────────────────────────────
     /// Router invocation began. Pairs with `RoutingComplete`.
     RoutingStart,

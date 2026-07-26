@@ -19,6 +19,17 @@ pub mod capabilities;
 pub mod commit_harvest;
 pub mod corpus_watch_http;
 pub mod daemon;
+/// Routing decision records — Phase 0 (P1/P2) of
+/// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
+/// routing decision (full candidate set, every scorer input stamped
+/// with its provenance and age) joined by `decision_id` to one record
+/// per completion (served-by / TTFT / total / tokens / shed). Pure
+/// instrumentation: it changes no routing decision.
+pub mod decision_log;
+/// Trace-replay fixtures — Phase 0 (P3/P4). Reads a `decision_log`
+/// JSONL stream plus an observation-state snapshot back into the
+/// episode the Tier-1 simulator replays.
+pub mod decision_trace;
 pub mod deep_link;
 #[cfg(feature = "dst")]
 pub mod dst;

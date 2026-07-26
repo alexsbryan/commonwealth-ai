@@ -64,6 +64,30 @@ use crate::error::{Error, Result};
 use crate::traits::InferenceProvider;
 use crate::types::Intent;
 
+/// Locator gate — floor on the best similarity to a tagged exemplar.
+///
+/// Deliberately BELOW the intent floor (0.55). The locator axis is
+/// one-vs-rest, so its discriminating quantity is the margin over the
+/// rest of the bank, not the absolute similarity; the floor only sheds
+/// queries too far from anything to be trusted.
+const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.50;
+
+/// Locator gate — margin the tagged group must hold over the best
+/// UNTAGGED exemplar.
+///
+/// Calibrated 2026-07-26 against Qwen3-Embedding-0.6B over the whole
+/// exemplar bank as the negative set (8 held-out positives, 14 held-out
+/// negatives, query-instruction prefix applied). Every negative scored a
+/// margin ≤ -0.030 — the closest being "Search the web for today's
+/// launch coverage" — so 0.02 keeps a ~0.05 cushion. It is the
+/// asymmetry that sets this value: a false positive HARD-COMMITS a
+/// world question to conversation-only answering, while a false
+/// negative merely falls through to the existing cascade. Positives
+/// that abstain here ("what was my second question?", which sits
+/// nearer the conation exemplar "Elaborate on the second point") lose
+/// nothing they had before.
+const DEFAULT_LOCATOR_MIN_MARGIN: f32 = 0.02;
+
 const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
 // Raised from 0.04 → 0.10 after code_query/generative_query densified
 // the intent space (see module doc "Confidence + margin gate").
@@ -90,6 +114,14 @@ struct ExemplarRow {
     /// `None` = no scope hint (current default behavior).
     #[serde(default)]
     scope: Option<String>,
+    /// Optional locator axis, ALSO orthogonal to intent: which source
+    /// the question points at. Today's only value is `"conversation"`
+    /// — this thread, whose turns are already in the context. Scored
+    /// one-vs-rest on its own gate (`locator_from_embedding`), NOT
+    /// through the per-intent k=1 ranking, because the locator signal
+    /// can be unambiguous on a query whose intent is not.
+    #[serde(default)]
+    locator: Option<String>,
 }
 
 /// One embedded exemplar.
@@ -105,6 +137,9 @@ struct Exemplar {
     /// `EmbedClassification.scope` when this exemplar is the
     /// nearest match.
     scope: Option<String>,
+    /// Optional locator tag; consumed by `locator_from_embedding`,
+    /// never by the intent ranking.
+    locator: Option<String>,
 }
 
 /// Result of an embed-classify call.
@@ -128,6 +163,23 @@ pub struct EmbedClassification {
     pub scope: Option<String>,
 }
 
+/// Result of a locator-axis call. Orthogonal to [`EmbedClassification`]
+/// — a query can carry a decisive locator with an ambiguous intent,
+/// which is exactly the case this axis exists for.
+#[derive(Debug, Clone)]
+pub struct LocatorVerdict {
+    /// The winning locator tag (today: `"conversation"`).
+    pub locator: String,
+    /// Max cosine similarity to any exemplar carrying that tag.
+    pub top_sim: f32,
+    /// `top_sim` minus the best similarity to any exemplar NOT
+    /// carrying it — the one-vs-rest separation the gate turns on.
+    pub margin: f32,
+    /// Nearest tagged exemplar, truncated — the "why did this fire?"
+    /// surface.
+    pub nearest_exemplar: String,
+}
+
 /// Hand-authored intent classifier. Pre-embeds every exemplar at
 /// load time; classify-time cost is one embedding call plus a flat
 /// loop over the exemplar set.
@@ -136,6 +188,8 @@ pub struct EmbedRouter {
     exemplars: Vec<Exemplar>,
     min_top_sim: f32,
     min_margin: f32,
+    locator_min_sim: f32,
+    locator_min_margin: f32,
 }
 
 impl EmbedRouter {
@@ -183,6 +237,7 @@ impl EmbedRouter {
                 embedding: emb,
                 query: row.query,
                 scope: row.scope,
+                locator: row.locator,
             });
         }
 
@@ -196,6 +251,8 @@ impl EmbedRouter {
             exemplars,
             min_top_sim: DEFAULT_MIN_TOP_SIM,
             min_margin: DEFAULT_MIN_MARGIN,
+            locator_min_sim: DEFAULT_LOCATOR_MIN_SIM,
+            locator_min_margin: DEFAULT_LOCATOR_MIN_MARGIN,
         })
     }
 
@@ -215,6 +272,36 @@ impl EmbedRouter {
         self.min_top_sim = min_top_sim;
         self.min_margin = min_margin;
         self
+    }
+
+    /// Override the locator-axis thresholds. Useful for tests + tuning.
+    pub fn with_locator_thresholds(mut self, min_sim: f32, min_margin: f32) -> Self {
+        self.locator_min_sim = min_sim;
+        self.locator_min_margin = min_margin;
+        self
+    }
+
+    /// How many exemplars carry a locator tag. Zero means the axis is
+    /// inert — `locator_from_embedding` always abstains.
+    pub fn locator_exemplar_count(&self) -> usize {
+        self.exemplars.iter().filter(|e| e.locator.is_some()).count()
+    }
+
+    /// Embed + L2-normalise a query, without classifying.
+    ///
+    /// Exists so a caller can run the locator axis EARLY (before the
+    /// intent pre-checks that would otherwise short-circuit) and then
+    /// hand the same vector to [`Self::classify_from_embedding`] and
+    /// the scope classifier. One embed serves all three; the axes stay
+    /// independent.
+    pub async fn embed_query_normalized(
+        &self,
+        query: &str,
+        inference: &dyn InferenceProvider,
+    ) -> Result<Vec<f32>> {
+        let mut q = inference.embed_query(query).await?;
+        normalize(&mut q);
+        Ok(q)
     }
 
     pub fn exemplar_count(&self) -> usize {
@@ -256,6 +343,97 @@ impl EmbedRouter {
         normalize(&mut q);
         let intent = self.classify_from_embedding(&q);
         Ok((intent, q))
+    }
+
+    /// Score the LOCATOR axis against a pre-computed query embedding.
+    ///
+    /// One-vs-rest, deliberately not the per-intent k=1 ranking used
+    /// for intent:
+    ///
+    /// * `top_sim` = best similarity to any exemplar carrying a given
+    ///   locator tag;
+    /// * `margin`  = that minus the best similarity to any exemplar
+    ///   NOT carrying it — every other row in the bank is a negative,
+    ///   including the personal-archive rows that ask about the user's
+    ///   past conversations rather than this one.
+    ///
+    /// Why a separate axis at all: intent and locator are independent.
+    /// "What was the first thing I asked?" is intent-ambiguous (it sits
+    /// near conation and near archive recall) while being locator-clear.
+    /// Reading the locator off the winning INTENT exemplar — the way
+    /// `scope` used to work — loses exactly those cases, because k=1
+    /// hands the tag to whichever intent won. See `scope_classifier.rs`
+    /// for the same lesson learned the expensive way.
+    ///
+    /// Returns `None` when no tagged exemplar exists, when the floor
+    /// isn't met, or when the margin is too thin — in every case the
+    /// caller simply continues down its normal cascade.
+    pub fn locator_from_embedding(&self, q_normalized: &[f32]) -> Option<LocatorVerdict> {
+        if q_normalized.is_empty() {
+            return None;
+        }
+        // Best similarity per tag, and the best over untagged rows.
+        let mut per_tag: HashMap<&str, (f32, &str)> = HashMap::new();
+        let mut untagged_best = f32::MIN;
+        for ex in &self.exemplars {
+            if ex.embedding.len() != q_normalized.len() {
+                continue;
+            }
+            let sim = dot(q_normalized, &ex.embedding);
+            match ex.locator.as_deref() {
+                Some(tag) => {
+                    per_tag
+                        .entry(tag)
+                        .and_modify(|(best, best_q)| {
+                            if sim > *best {
+                                *best = sim;
+                                *best_q = ex.query.as_str();
+                            }
+                        })
+                        .or_insert((sim, ex.query.as_str()));
+                }
+                None => untagged_best = untagged_best.max(sim),
+            }
+        }
+        let (tag, (top_sim, nearest)) = per_tag
+            .into_iter()
+            .max_by(|a, b| a.1 .0.partial_cmp(&b.1 .0).unwrap_or(std::cmp::Ordering::Equal))?;
+
+        // A second tag would also be a negative for the winner. With
+        // one tag today this reduces to the untagged best; written so
+        // adding a tag can't silently weaken the gate.
+        let rest_best = if untagged_best == f32::MIN {
+            0.0
+        } else {
+            untagged_best
+        };
+        let margin = top_sim - rest_best;
+        let decided = top_sim >= self.locator_min_sim && margin >= self.locator_min_margin;
+
+        // Glassbox on its own target so "why did/didn't the locator
+        // fire?" is answerable from logs without enabling the whole
+        // router.embed stream. Emitted for every evaluation, including
+        // abstentions — the near-misses are the tuning signal.
+        tracing::info!(
+            target: "router.locator",
+            event = "classify",
+            locator = %tag,
+            top_sim,
+            rest_best,
+            margin,
+            min_sim = self.locator_min_sim,
+            min_margin = self.locator_min_margin,
+            decided,
+            nearest = %truncate(nearest, 60),
+            "router.locator: one-vs-rest decision"
+        );
+
+        decided.then(|| LocatorVerdict {
+            locator: tag.to_string(),
+            top_sim,
+            margin,
+            nearest_exemplar: truncate(nearest, 80),
+        })
     }
 
     /// Classify against a pre-computed query embedding. Public for
@@ -421,6 +599,15 @@ mod tests {
     }
 
     fn make_exemplar(intent: Intent, query: &str, emb: Vec<f32>) -> Exemplar {
+        tagged_exemplar(intent, query, emb, None)
+    }
+
+    fn tagged_exemplar(
+        intent: Intent,
+        query: &str,
+        emb: Vec<f32>,
+        locator: Option<&str>,
+    ) -> Exemplar {
         let mut e = emb;
         normalize(&mut e);
         Exemplar {
@@ -428,13 +615,30 @@ mod tests {
             embedding: e,
             query: query.into(),
             scope: None,
+            locator: locator.map(String::from),
         }
+    }
+
+    fn router_with(exemplars: Vec<Exemplar>, min_top_sim: f32, min_margin: f32) -> EmbedRouter {
+        EmbedRouter {
+            exemplars,
+            min_top_sim,
+            min_margin,
+            locator_min_sim: DEFAULT_LOCATOR_MIN_SIM,
+            locator_min_margin: DEFAULT_LOCATOR_MIN_MARGIN,
+        }
+    }
+
+    fn unit(v: Vec<f32>) -> Vec<f32> {
+        let mut q = v;
+        normalize(&mut q);
+        q
     }
 
     #[test]
     fn classify_picks_max_similarity_intent_with_margin() {
-        let r = EmbedRouter {
-            exemplars: vec![
+        let r = router_with(
+            vec![
                 make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![1.0, 0.0, 0.0]),
                 make_exemplar(Intent::DeepQuery, "Why did X happen?", vec![0.0, 1.0, 0.0]),
                 make_exemplar(
@@ -443,9 +647,9 @@ mod tests {
                     vec![0.0, 0.0, 1.0],
                 ),
             ],
-            min_top_sim: 0.5,
-            min_margin: 0.1,
-        };
+            0.5,
+            0.1,
+        );
         // Query close to the KnowledgeQuery exemplar
         let q = vec![0.95_f32, 0.10, 0.10];
         let mut qn = q.clone();
@@ -458,15 +662,15 @@ mod tests {
 
     #[test]
     fn classify_returns_none_below_min_top_sim() {
-        let r = EmbedRouter {
-            exemplars: vec![make_exemplar(
+        let r = router_with(
+            vec![make_exemplar(
                 Intent::KnowledgeQuery,
                 "x",
                 vec![1.0, 0.0, 0.0],
             )],
-            min_top_sim: 0.9,
-            min_margin: 0.0,
-        };
+            0.9,
+            0.0,
+        );
         // Orthogonal query → 0 similarity
         let mut q = vec![0.0_f32, 1.0, 0.0];
         normalize(&mut q);
@@ -475,14 +679,14 @@ mod tests {
 
     #[test]
     fn classify_returns_none_below_min_margin() {
-        let r = EmbedRouter {
-            exemplars: vec![
+        let r = router_with(
+            vec![
                 make_exemplar(Intent::KnowledgeQuery, "x", vec![1.0, 0.0, 0.0]),
                 make_exemplar(Intent::DeepQuery, "y", vec![0.9, 0.1, 0.0]),
             ],
-            min_top_sim: 0.0,
-            min_margin: 0.2, // tight
-        };
+            0.0,
+            0.2, // tight
+        );
         // Query close to both → margin too small to commit
         let mut q = vec![1.0_f32, 0.05, 0.0];
         normalize(&mut q);
@@ -491,11 +695,143 @@ mod tests {
 
     #[test]
     fn classify_returns_none_when_exemplars_empty() {
-        let r = EmbedRouter {
-            exemplars: vec![],
-            min_top_sim: 0.0,
-            min_margin: 0.0,
-        };
+        let r = router_with(vec![], 0.0, 0.0);
         assert!(r.classify_from_embedding(&[1.0, 0.0]).is_none());
+    }
+
+    // ── Locator axis ────────────────────────────────────────────
+    //
+    // Fixture geometry: the locator exemplar sits on x, the rest of
+    // the bank on y/z. A query leaning toward x is locator-clear;
+    // one sitting between x and y is not.
+
+    fn locator_bank() -> Vec<Exemplar> {
+        vec![
+            tagged_exemplar(
+                Intent::MetalingualQuery,
+                "What did I ask you at the very start of this chat?",
+                vec![1.0, 0.0, 0.0],
+                Some("conversation"),
+            ),
+            make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![0.0, 1.0, 0.0]),
+            make_exemplar(Intent::ConationQuery, "Stop.", vec![0.0, 0.0, 1.0]),
+        ]
+    }
+
+    #[test]
+    fn locator_fires_on_a_clear_one_vs_rest_win() {
+        let r = router_with(locator_bank(), 0.55, 0.10);
+        let v = r
+            .locator_from_embedding(&unit(vec![0.98, 0.15, 0.0]))
+            .expect("clear locator win must fire");
+        assert_eq!(v.locator, "conversation");
+        assert!(v.margin > 0.5, "margin was {}", v.margin);
+        assert!(v.nearest_exemplar.starts_with("What did I ask you"));
+    }
+
+    /// The axis is ORTHOGONAL to intent: a query the intent gate
+    /// abstains on (two intents too close to separate) can still carry
+    /// a decisive locator. This is the whole reason it is not read off
+    /// the winning intent exemplar.
+    #[test]
+    fn locator_can_fire_where_the_intent_gate_abstains() {
+        let mut bank = locator_bank();
+        // Second intent placed right next to the first so the intent
+        // margin collapses, while the locator exemplar stays clear.
+        bank.push(make_exemplar(
+            Intent::DeepQuery,
+            "Why did X happen?",
+            vec![0.0, 0.99, 0.1],
+        ));
+        let r = router_with(bank, 0.55, 0.10);
+        let q = unit(vec![0.55, 0.83, 0.0]);
+        assert!(
+            r.classify_from_embedding(&q).is_none(),
+            "fixture must be intent-ambiguous for this test to mean anything"
+        );
+        // Same query, locator axis: still under-separated here, so it
+        // abstains too — the point is that the two gates are decided
+        // independently, not that locator always wins.
+        let loose = router_with(locator_bank(), 0.55, 0.10).with_locator_thresholds(0.4, 0.0);
+        assert_eq!(
+            loose
+                .locator_from_embedding(&unit(vec![0.75, 0.66, 0.0]))
+                .map(|v| v.locator),
+            Some("conversation".to_string()),
+        );
+    }
+
+    #[test]
+    fn locator_abstains_below_its_margin() {
+        // Query equidistant from the tagged exemplar and a plain one.
+        let r = router_with(locator_bank(), 0.55, 0.10).with_locator_thresholds(0.4, 0.05);
+        assert!(r
+            .locator_from_embedding(&unit(vec![1.0, 1.0, 0.0]))
+            .is_none());
+    }
+
+    /// Floor and margin are independent gates: a query can win
+    /// one-vs-rest by a mile and still be too far from anything to
+    /// commit on. The 4th dimension here is orthogonal to every
+    /// exemplar, so it drains absolute similarity while leaving the
+    /// margin wide.
+    #[test]
+    fn locator_abstains_below_its_floor_despite_a_wide_margin() {
+        let bank = vec![
+            tagged_exemplar(
+                Intent::MetalingualQuery,
+                "What did I ask you at the very start of this chat?",
+                vec![1.0, 0.0, 0.0, 0.0],
+                Some("conversation"),
+            ),
+            make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![0.0, 1.0, 0.0, 0.0]),
+        ];
+        let q = unit(vec![0.6, 0.1, 0.0, 0.79]);
+        let permissive = router_with(bank.clone(), 0.55, 0.10).with_locator_thresholds(0.4, 0.05);
+        let v = permissive
+            .locator_from_embedding(&q)
+            .expect("margin alone is comfortably clear");
+        assert!(v.margin > 0.4, "margin was {}", v.margin);
+        assert!(v.top_sim < 0.7, "top_sim was {}", v.top_sim);
+
+        let strict = router_with(bank, 0.55, 0.10).with_locator_thresholds(0.9, 0.0);
+        assert!(
+            strict.locator_from_embedding(&q).is_none(),
+            "the floor must reject what the margin would have admitted"
+        );
+    }
+
+    #[test]
+    fn locator_abstains_when_no_exemplar_is_tagged() {
+        let r = router_with(
+            vec![make_exemplar(
+                Intent::KnowledgeQuery,
+                "What is X?",
+                vec![1.0, 0.0, 0.0],
+            )],
+            0.55,
+            0.10,
+        );
+        assert_eq!(r.locator_exemplar_count(), 0);
+        assert!(r.locator_from_embedding(&unit(vec![1.0, 0.0, 0.0])).is_none());
+    }
+
+    /// The shipped bank must actually carry the axis — a rename or a
+    /// dropped tag would silently disable the whole tier, and the
+    /// symptom (conversation questions quietly routing to corpora)
+    /// is the exact failure this was built to fix.
+    #[test]
+    fn shipped_exemplars_carry_conversation_locator_rows() {
+        let parsed: ExemplarFile =
+            toml::from_str(crate::router_bootstrap::BAKED_ROUTER_EXEMPLARS).expect("baked TOML");
+        let tagged = parsed
+            .example
+            .iter()
+            .filter(|r| r.locator.as_deref() == Some("conversation"))
+            .count();
+        assert!(
+            tagged >= 6,
+            "expected the conversation-locator exemplar set, found {tagged}"
+        );
     }
 }

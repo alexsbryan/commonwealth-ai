@@ -884,6 +884,34 @@ Effort-tier escalation +
 robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
 `SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
 
+**The locator axis — "is this question about our conversation?"
+(2026-07-26).** A third orthogonal axis on the exemplar bank, alongside
+`scope`. Rows tagged `locator = "conversation"` in
+`sovereign/router/exemplars.toml` are scored **one-vs-rest**
+(`EmbedRouter::locator_from_embedding`): best similarity to a tagged row
+minus best similarity to every other row in the bank, gated on its own
+floor + margin, decided **independently of the intent gate**. It exists
+because the two axes disagree on exactly the queries that matter — "what
+was the first thing I asked?" is intent-ambiguous (it sits near conation
+and near personal-archive recall) while being locator-unambiguous — and
+because reading a tag off the winning *intent* exemplar is the design
+that already failed once for `scope` (`scope_classifier.rs` post-mortem).
+The verdict runs as **Pre-check -2.5** in `router.rs`, ABOVE the
+knowledge-thread-inherit pre-check that used to swallow these questions,
+and the query embedding it pays for is threaded down to the intent and
+scope classifiers so the per-turn embed count stays at one. Committing
+hard-commits `MetalingualQuery` with coarse label
+`CONVERSATION_LOCATOR_EMBED`, and that label — not a second string parse
+— is what tells `handle_metalingual_query` which locator to honour
+(`locator_hint_from_coarse`). Before it, the Conversation family was
+gated on nine literal substrings, so any other phrasing inherited the
+thread's knowledge intent and searched a corpus for an answer sitting in
+the message list. Thresholds are calibrated, not guessed: zero false
+positives over a held-out negative set that includes the adversarial
+neighbours (archive recall over *past* conversations, world questions
+using ordinal/summary vocabulary) — re-runnable against a live daemon
+via `tests/locator_axis_live.rs --ignored`.
+
 **Pre-built router-embed cache (`router_embed_cache.rs`).** The four boot
 classifiers embed ~310 static exemplars at every process start — ~5.7s on Apple
 Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`
@@ -1255,6 +1283,29 @@ stay mesh-side.
 - **Working memory** — compressed every message via
   `memory::compress_working_memory` (Quick slot, ≤200 tokens) into
   `{ current_goal, facts, active_documents }`.
+- **Conversation memory — three constant-capacity channels, now
+  visible.** What a long thread carries forward is (1) the rolling
+  visible window, (2) the **conversation frame** (`conv_frame.rs` — five
+  named sections Topics / Entities / Stated goals / Commitments / Open
+  threads, 320-token budget, persisted in `conversations.frame`, folded
+  incrementally by `maybe_compact_dropped_history` off a watermark
+  carried in the document's own frontmatter), and (3)
+  **retrieval-over-history** (`maybe_retrieve_relevant_history` — the
+  dropped turn-pairs embedded once and memoized per `Runtime`, hybrid
+  cosine+entity scored, MMR-selected). Total is ~2.8k tokens
+  *independent of conversation length*. The frame replaced a re-narrated
+  prose blob for two reasons, only one of which is cost: a blob has to be
+  rewritten to be updated (and re-narration is where named entities get
+  dropped), and a blob is not **renderable** — "what do you remember
+  about this conversation?" is answered from sections, and the
+  metalingual Conversation branch now does exactly that, putting the
+  frame in the prompt ahead of the verbatim turns. Both channels narrate
+  themselves: `NarrationPhase::ConversationRecall` (memory being read —
+  turn indices + best similarity) and `ConversationFolded` (memory being
+  written). Recall also lands in `TurnProvenance.history_recall` so the
+  ledger can tell a verified recall from a lucky parametric guess; the
+  chip is why the streaming surface runs retrieval-over-history *after*
+  `sessions.begin` rather than before.
 - **Long-term memory** — extracted at conversation end. Each
   `Memory` has `confidence`, `created_at`, `last_used`. FTS5
   retrieval. Exponential monthly decay; pruned below
@@ -1651,6 +1702,34 @@ The composed OICP scoring product lives ONCE in `oicp-types`
 rationalization) and is consumed by sovereign-mesh and
 sovereign-inference; leader election lives in
 `commonwealth_core::partition::elect_leader`.
+
+**Scheduler quality — measurement, not just plumbing.** Retrieval,
+grounding and synthesis each have a bench and a tight iteration loop;
+this layer has unit tests on individual factors and e2e suites that
+verify *plumbing*, and until 2026-07 nothing measured whether a
+routing decision was **good**. The diagnosis, the six findings behind
+it and the build order are in
+[`docs/specs/SCHEDULER_QUALITY.md`](./docs/specs/SCHEDULER_QUALITY.md);
+the root cause is that `score_with_adjustments` returns a product of
+six dimensionless multipliers — it *ranks*, it does not *predict* — so
+no scoreboard was definable.
+
+**Phase 0 (instrumentation) is landed**, changing no routing decision:
+
+| module | role |
+|---|---|
+| `sovereign-mesh/decision_log.rs` | One `RoutingDecision` per decision point (whole candidate set, each `ScoreBreakdown`, each input stamped with its **provenance and age**, peers excluded before scoring and why, the verdict) joined by `decision_id` to one `RoutingOutcome` per completion (served-by / TTFT / total / tokens / shed / failovers). `DecisionSink` is the seam — production, capture-for-tests, null. |
+| `sovereign-mesh/decision_trace.rs` | Replay: `SchedulerTrace::from_jsonl` groups records into `Episode`s by `decision_id` (never adjacency — a live log interleaves requests) and reports a `join_rate` to gate on. |
+| `sovereign-mesh/peer_inference.rs` | Emission at `select_peers_ranked` (including gated exits) and join-closing in both stream cascades and `complete`. `observation_snapshot()` exports per-peer observations + gossiped benchmarks + `PeerHealth` — folded into the record stream every 60s so a capture is self-contained. |
+
+Capture with `SOVEREIGN_DECISION_LOG=<path>` on the daemon; records
+also reach `tracing` under the **`mesh.decision`** target (listed in
+`DAEMON_TRACING_FILTER`, without which a custom target is dark).
+
+Phase 1 — the Tier-1 `mesh-sim` that links the *real* scorer and
+`PeerHealthTracker` with no GPU — is **not built yet**. The ordering is
+deliberate: the sim is the baseline machine, so behavioural fixes land
+as sim arms rather than in production first.
 
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a

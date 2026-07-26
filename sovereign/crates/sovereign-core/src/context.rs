@@ -129,109 +129,35 @@ pub async fn build_context(
     })
 }
 
+/// Choose which of `candidates` a single fold call will actually read,
+/// keeping the prompt bounded. Returns `(window, elided)`.
+///
+/// Under `max` messages the whole slice passes through. Over it we keep
+/// a head and a tail and report the gap — the same head+tail-with-a-seam
+/// shape `conversation_turns_as_chunks` uses for the conversation
+/// locator, so the two long-thread renderings degrade the same way.
+///
+/// The head matters as much as the tail here: the head carries how the
+/// conversation OPENED (the topical anchor nothing else preserves),
+/// while the tail is the material closest to the visible window.
+pub fn fold_window(candidates: &[Message], max: usize) -> (Vec<Message>, usize) {
+    if candidates.len() <= max {
+        return (candidates.to_vec(), 0);
+    }
+    let head = max / 2;
+    let tail = max - head;
+    let mut window = Vec::with_capacity(max);
+    window.extend_from_slice(&candidates[..head]);
+    window.extend_from_slice(&candidates[candidates.len() - tail..]);
+    (window, candidates.len() - max)
+}
+
 /// Update the conversation's topic context by extracting the dominant topic
 /// and domain from recent messages. Uses a Fast-slot inference call.
 ///
 /// Returns a new `ConversationTopicContext` reflecting the current conversation
 /// state. If inference fails, returns a default context rather than propagating
 /// the error (topic tracking is best-effort, not critical path).
-/// Summarize a window of dropped conversation turns into a compact
-/// "earlier conversation" preamble. Returned summary is prepended to
-/// the visible-history block in the synthesis system prompt by
-/// `runtime::format_conversation_history` so the model retains
-/// access to entities, decisions, and topical arc that have rolled
-/// off the verbatim window.
-///
-/// The Fast-slot extractor is JSON-schema-constrained so the parse
-/// either succeeds or fails loudly. A failure leaves
-/// `compacted_history = None`; the synthesis path then operates on
-/// just the visible window — graceful degradation, not silent loss.
-///
-/// Surfaced by `sovereign/bench/wikipedia_learn` 2026-05-17 marathon
-/// thread: a 12-turn arc with callbacks across turns blows past the
-/// 8-message visible window. Without this primitive, turn 11's
-/// "Going back to Babbage's original vision …" finds no Babbage in
-/// the prompt because T0/T1 fell off the rolling window.
-pub async fn summarize_dropped_history(
-    inference: &dyn InferenceProvider,
-    dropped: &[Message],
-) -> Result<Option<String>> {
-    if dropped.is_empty() {
-        return Ok(None);
-    }
-
-    let transcript: String = dropped
-        .iter()
-        .map(|m| {
-            let role = match m.role {
-                Role::User => "User",
-                Role::Assistant => "Assistant",
-                Role::System => "System",
-            };
-            let mut end = m.content.len().min(400);
-            while end > 0 && !m.content.is_char_boundary(end) {
-                end -= 1;
-            }
-            format!("{role}: {}", &m.content[..end])
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let prompt = format!(
-        "Summarize the conversation excerpt below into a compact \
-         preamble (≤120 words) the assistant can read at the top of \
-         a continuing conversation. Keep named entities, decisions \
-         the user made, and the topical arc; drop pleasantries and \
-         filler. Write in past tense, third-person (e.g., \"The user \
-         asked about X. The assistant explained Y, Z.\").\n\n\
-         Excerpt:\n{transcript}\n\n\
-         Reply with JSON only:\n\
-         {{\"summary\": \"…\"}}"
-    );
-
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": { "summary": {"type": "string"} },
-        "required": ["summary"],
-    });
-
-    // SLOT_POLICY §3 Housekeep: conversation-preamble summarization.
-    let mut request =
-        CompletionRequest::for_workload(Workload::Housekeep, prompt).with_output_budget(400);
-    request.temperature = Some(0.0);
-    request.structured_output = Some(schema);
-
-    let response = inference.complete(&request).await?;
-    let raw = response.text.trim();
-    let json_str = raw
-        .strip_prefix("```json")
-        .and_then(|s| s.strip_suffix("```"))
-        .unwrap_or(raw)
-        .trim();
-
-    let parsed: serde_json::Value = match serde_json::from_str(json_str) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!(error = %e, raw = %raw, "summarize_dropped_history: parse failed");
-            return Ok(None);
-        }
-    };
-    let summary = parsed
-        .get("summary")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    if let Some(ref s) = summary {
-        tracing::info!(
-            dropped_messages = dropped.len(),
-            summary_chars = s.chars().count(),
-            "context: summarize_dropped_history — done"
-        );
-    }
-    Ok(summary)
-}
-
 pub async fn update_topic_context(
     inference: &dyn InferenceProvider,
     messages: &[Message],

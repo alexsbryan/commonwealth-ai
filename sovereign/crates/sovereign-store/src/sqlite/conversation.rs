@@ -270,6 +270,39 @@ impl ConversationStore for SqliteStateStore {
         Ok(())
     }
 
+    async fn get_conversation_frame(&self, conversation_id: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().await;
+        // `query_row` + OptionalExtension: a missing conversation and a
+        // NULL frame are the same answer here ("no frame yet"), and a
+        // compaction path must never fail a turn over it.
+        let frame: Option<Option<String>> = conn
+            .query_row(
+                "SELECT frame FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
+                rusqlite::params![conversation_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(map_db)?;
+        Ok(frame.flatten())
+    }
+
+    async fn set_conversation_frame(&self, conversation_id: &str, frame: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE conversations SET frame = ?2 \
+             WHERE id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![conversation_id, frame],
+        )
+        .map_err(map_db)?;
+        // Deliberately NOT an error on 0 rows, unlike
+        // `set_conversation_enabled_corpora`: that setter serves a user
+        // action that should fail loudly, while this one is background
+        // housekeeping on a conversation that may have been deleted
+        // mid-turn. Losing a frame write is recoverable (one cold fold);
+        // failing the user's turn over it is not.
+        Ok(())
+    }
+
     async fn set_conversation_enabled_corpora(
         &self,
         conversation_id: &str,

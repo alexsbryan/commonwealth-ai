@@ -1337,36 +1337,30 @@ impl Runtime {
             seal_trace,
             "streaming gate: call-graph trace sealing decision"
         );
+        // Built ahead of the literal so this conversation's own recalled
+        // turns can be sealed in alongside the trace — the value-presence
+        // check reads `chunks` alone, so an earlier-turn fact is a vp=1.0
+        // hard abstain unless it is in there (`seal_conversation_evidence`).
+        let (gate_chunks, gate_chunk_labels, gate_source_labels) = if gate_on {
+            let mut c = crate::runtime::grounding::gate_evidence_chunks(&chunks);
+            // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
+            // block appended, or the citation-alignment check mis-maps.
+            let mut cl = crate::runtime::grounding::gate_evidence_chunk_labels(&chunks);
+            let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&chunks);
+            if seal_trace {
+                c.push(code_trace.clone());
+                cl.push(trace_labels.clone());
+                sl.extend(trace_labels.iter().cloned());
+            }
+            crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
+            (c, cl, sl)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
-            chunks: if gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_chunks(&chunks);
-                if seal_trace {
-                    v.push(code_trace.clone());
-                }
-                v
-            } else {
-                Vec::new()
-            },
-            chunk_labels: if gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&chunks);
-                // PARALLEL to `chunks` — push exactly one entry for the block
-                // appended above, or the citation-alignment check mis-maps.
-                if seal_trace {
-                    v.push(trace_labels.clone());
-                }
-                v
-            } else {
-                Vec::new()
-            },
-            source_labels: if gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_source_labels(&chunks);
-                if seal_trace {
-                    v.extend(trace_labels.iter().cloned());
-                }
-                v
-            } else {
-                Vec::new()
-            },
+            chunks: gate_chunks,
+            chunk_labels: gate_chunk_labels,
+            source_labels: gate_source_labels,
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
@@ -2473,36 +2467,29 @@ impl Runtime {
             Vec::new()
         };
         let deep_seal_trace = !deep_trace_labels.is_empty();
+        // Built ahead of the literal so the conversation's own recalled
+        // turns join the universe too — see the KnowledgeQuery sibling
+        // above and `seal_conversation_evidence`.
+        let (deep_chunks, deep_chunk_labels, deep_source_labels) = if deep_gate_on {
+            let mut c = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
+            // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
+            // block pushed, or citation alignment mis-maps.
+            let mut cl = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
+            let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
+            if deep_seal_trace {
+                c.push(kc.code_trace.clone());
+                cl.push(deep_trace_labels.clone());
+                sl.extend(deep_trace_labels.iter().cloned());
+            }
+            crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
+            (c, cl, sl)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
-            chunks: if deep_gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
-                if deep_seal_trace {
-                    v.push(kc.code_trace.clone());
-                }
-                v
-            } else {
-                Vec::new()
-            },
-            chunk_labels: if deep_gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
-                // PARALLEL to `chunks` — exactly one entry for the block
-                // pushed above, or citation alignment mis-maps.
-                if deep_seal_trace {
-                    v.push(deep_trace_labels.clone());
-                }
-                v
-            } else {
-                Vec::new()
-            },
-            source_labels: if deep_gate_on {
-                let mut v = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
-                if deep_seal_trace {
-                    v.extend(deep_trace_labels.iter().cloned());
-                }
-                v
-            } else {
-                Vec::new()
-            },
+            chunks: deep_chunks,
+            chunk_labels: deep_chunk_labels,
+            source_labels: deep_source_labels,
             searcher: if deep_gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(
@@ -3110,14 +3097,16 @@ impl Runtime {
         self.maybe_compact_dropped_history(&mut context, conversation_id, None)
             .await;
 
-        // 2a.5. Retrieval-over-history spike (2026-05-26). Gated on
-        //       SOVEREIGN_HISTORY_RETRIEVAL=1. Embeds prior turn pairs
-        //       OUTSIDE the visible window, picks top-K cosine-near
-        //       the current user message, stashes hits on the context
-        //       for the renderer. Mechanism A/B vs the lossy-summary
-        //       compaction arm — see `maybe_retrieve_relevant_history`.
-        self.maybe_retrieve_relevant_history(&mut context, message)
-            .await;
+        // Retrieval-over-history used to run here, immediately after
+        // compaction. It now runs below `sessions.begin` (step 3.5)
+        // so the recall it performs can be narrated — the session id
+        // the chip needs isn't bound until then. Nothing between here
+        // and there reads `history_retrieval_hits`: its only consumers
+        // are `build_system_message` (handler-side prompt assembly)
+        // and `grounding::search`, both downstream of dispatch. The
+        // wellbeing-crisis early return in between overrides the
+        // system message wholesale, so moving the work past it also
+        // stops paying for an embed batch a crisis turn discards.
 
         // 2b. Tag the conversation with the ambient BACKGROUND skill
         // that was active when it started. The store upsert is
@@ -3274,6 +3263,23 @@ impl Runtime {
             classification.clone(),
             policy.clone(),
         );
+
+        // 3.5. Retrieval-over-history. Embeds prior turn pairs OUTSIDE
+        //      the visible window, picks top-K by hybrid similarity to
+        //      the current user message, stashes the hits on the
+        //      context for `build_system_message` to render as
+        //      "Relevant earlier turns". Runs HERE — after
+        //      `sessions.begin` — because the recall is narrated
+        //      (`NarrationPhase::ConversationRecall`) and the chip
+        //      needs a session to hang from. See the note at step 2a
+        //      for why moving it past routing is safe.
+        self.maybe_retrieve_relevant_history(
+            &mut context,
+            message,
+            conversation_id,
+            Some(&_session_id),
+        )
+        .await;
 
         // Destructure the classification fields we still thread as
         // diagnostics into downstream handlers. Preserving these
@@ -3563,8 +3569,13 @@ impl Runtime {
             );
             let response = match intent {
                 Intent::MetalingualQuery => {
-                    self.handle_metalingual_query(message, conversation_id, &context)
-                        .await?
+                    self.handle_metalingual_query(
+                        message,
+                        conversation_id,
+                        &context,
+                        crate::runtime::locator_hint_from_coarse(coarse_intent.as_deref()),
+                    )
+                    .await?
                 }
                 Intent::ConationQuery => {
                     self.handle_conation_query(message, conversation_id, &context)

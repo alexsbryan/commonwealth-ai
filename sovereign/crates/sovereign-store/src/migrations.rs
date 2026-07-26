@@ -467,6 +467,29 @@ pub fn run_corpus_visibility_migration(conn: &Connection) -> rusqlite::Result<()
     Ok(())
 }
 
+/// Conversation frames (2026-07-26). Adds `conversations.frame`, the
+/// rendered `conversation-frame/v1` document: named sections (topics,
+/// entities, stated goals, commitments, open threads) that carry what a
+/// conversation established after its verbatim turns roll out of the
+/// prompt window.
+///
+/// This column is what makes dropped-history compaction incremental
+/// ACROSS PROCESSES. Before it, the preamble lived only in a
+/// `ConversationContext` field that `build_context` rebuilt as `None`
+/// every turn, so every turn re-summarised the entire dropped tail — a
+/// blocking Fast-slot call whose prompt grew with conversation length.
+/// The fold watermark (`covered_upto`) rides in the document's own
+/// frontmatter, so resuming a conversation needs exactly this one column
+/// and no side table.
+///
+/// `NULL` on every pre-migration row and on every conversation that has
+/// not yet compacted; read paths treat NULL as "no frame yet" and pay
+/// one bounded cold fold.
+pub fn run_conversation_frame_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN frame TEXT");
+    Ok(())
+}
+
 /// Add per-document owner for multi-user hubs. `owner` is the uploading
 /// principal; a `NULL` column (every pre-migration row) is visible to all —
 /// the back-compat default, so single-user deployments are unaffected.

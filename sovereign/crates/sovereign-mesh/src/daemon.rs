@@ -1786,6 +1786,10 @@ impl EmbeddedDaemon {
                 benchmark: m.capabilities.benchmark.clone(),
                 current_in_flight: m.capabilities.current_in_flight,
                 inference_availability: Some(m.capabilities.inference_availability),
+                // P2 provenance: the LWW event time on the member
+                // record is exactly the age of the two load signals
+                // above — they arrive on the same gossip payload.
+                gossip_last_seen_unix: m.last_seen,
                 // Mesh peers always use the default plain-HTTP transport
                 // — TLS pinning is reserved for ephemeral worker pods,
                 // which surface through `PinnedWorkerEndpointSource` in
@@ -3441,6 +3445,21 @@ pub struct PeerInferenceEndpoint {
     /// peer stays routable) — adopted 2026-06-10; the signal was
     /// previously gossiped but ignored by routing.
     pub inference_availability: Option<f32>,
+    /// `MemberRecord::last_seen` for the gossip record the two load
+    /// signals above were read from (unix seconds; `0` = unknown).
+    ///
+    /// This is the **staleness** half of the two-field pair that P2
+    /// of `docs/specs/SCHEDULER_QUALITY.md` exists to measure. F1 is
+    /// that a decider sees its own load exactly and every peer's a
+    /// full anti-entropy round or more late; a load value without
+    /// its age cannot distinguish "the hub is idle" from "the hub
+    /// was idle thirty seconds ago." Nothing routes on this — the
+    /// scorer never reads it — but every decision record stamps
+    /// `now - last_seen` next to the value it scored, which turns
+    /// F1's dead time from a modelled 10–30s hypothesis into a
+    /// measured distribution, and gives the Tier-1 simulator its
+    /// most load-bearing parameter as data instead of a guess.
+    pub gossip_last_seen_unix: u64,
     /// How to actually open a connection to this endpoint.
     ///
     /// `None` is the default mesh transport — plain HTTP to `base_urls`,
