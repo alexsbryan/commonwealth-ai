@@ -167,7 +167,10 @@ impl Runtime {
 impl ClaimSearcher {
     /// Attach turn-local sealed passages (see [`ClaimSearcher::pinned`]).
     pub(crate) fn with_pinned(mut self, pinned: Vec<String>) -> Self {
-        self.pinned = pinned.into_iter().filter(|p| !p.trim().is_empty()).collect();
+        self.pinned = pinned
+            .into_iter()
+            .filter(|p| !p.trim().is_empty())
+            .collect();
         self
     }
 

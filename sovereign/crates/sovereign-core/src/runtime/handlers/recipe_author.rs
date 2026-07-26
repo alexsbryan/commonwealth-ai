@@ -52,10 +52,7 @@ const MAX_TOOL_ITERATIONS: usize = 12;
 fn is_artifact_write_tool(name: &str) -> bool {
     matches!(
         name,
-        "recipe_write"
-            | "recipe_write_structured"
-            | "workflow_write"
-            | "workflow_write_structured"
+        "recipe_write" | "recipe_write_structured" | "workflow_write" | "workflow_write_structured"
     )
 }
 
@@ -816,7 +813,10 @@ mod tests {
             "workflow_write",
             "workflow_write_structured",
         ] {
-            assert!(is_artifact_write_tool(tool), "{tool} should be a write tool");
+            assert!(
+                is_artifact_write_tool(tool),
+                "{tool} should be a write tool"
+            );
             assert!(
                 !is_artifact_validate_tool(tool),
                 "{tool} is a write, not a validate"

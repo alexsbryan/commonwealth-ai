@@ -289,11 +289,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // Same failure the lint/test surface fixed with `watcher.live` /
     // `watcher_down`; the code-intel surface never got it.
     match sovereign_mesh::projects::Registry::load() {
-        Ok(registry) => match registry
-            .entries()
-            .iter()
-            .find(|e| e.corpus_id == corpus_id)
-        {
+        Ok(registry) => match registry.entries().iter().find(|e| e.corpus_id == corpus_id) {
             Some(entry) if entry.root == repo_root => {
                 let mut on: Vec<&str> = Vec::new();
                 if entry.watchers.scip {
@@ -317,7 +313,10 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
                     "  Watched       \u{26a0} registered under a different root: {}",
                     entry.root.display()
                 );
-                println!("                  Nothing is watching {}", repo_root.display());
+                println!(
+                    "                  Nothing is watching {}",
+                    repo_root.display()
+                );
                 println!("                  Run: sovereign project register");
             }
             None => {

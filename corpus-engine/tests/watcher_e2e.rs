@@ -420,12 +420,7 @@ async fn reindex_preserves_every_symbol_when_chunks_share_content() {
         .expect("reindex after append");
 
     let idx = fx.open().await;
-    for s in [
-        "packed_one",
-        "packed_two",
-        "packed_three",
-        "packed_four",
-    ] {
+    for s in ["packed_one", "packed_two", "packed_three", "packed_four"] {
         assert!(
             has_symbol(&idx, s).await,
             "{s} was lost by reindex_file — identical-content chunks collapsed again"
