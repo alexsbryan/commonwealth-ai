@@ -39,6 +39,20 @@ BASE = f"http://localhost:{PORT}"
 # tuning: this log is the baseline the need-probability ranker must beat.
 RETRIEVAL_LOG_DIR = pathlib.Path.home() / ".sovereign" / "retrieval-log"
 
+# THE PAYLOAD BUDGET IS LOAD-BEARING (MEMORY_MODEL §5 E5, measured 2026-07-26).
+# Claude Code spills hook output over ~10KB to a file and shows the agent only a
+# 2KB preview. This hook was printing 8 notes at full length — 15KB payloads
+# observed — so ~85% of what it logged as "injected" never reached the model at
+# all, while `retrieval-audit` counted every one of them in its denominator.
+# Under budget: notes are delivered whole, in rank order, until the budget is
+# spent; the remainder is named (not silently dropped) and the log records
+# `delivered` per note so the E2 hit-rate is measured against what actually
+# entered context.
+NOTES_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_NOTES_BUDGET_CHARS", "6000"))
+# A note longer than this is truncated rather than allowed to eat the budget
+# alone; the id is printed so the agent can dereference the full text.
+NOTE_MAX_CHARS = int(os.environ.get("SOVEREIGN_NOTE_MAX_CHARS", "2000"))
+
 
 def status(msg):
     # Honest, single-line status — becomes agent context. Prefixed so the agent
@@ -77,7 +91,38 @@ def distinctive_terms(content, cap=15):
     return out
 
 
-def log_injection(session_id, query, label, notes):
+def budget_notes(notes):
+    """Split `notes` (rank order) into what fits the payload budget and what
+    doesn't. Returns (rendered, decisions) where `rendered` is the list of
+    (note, text) actually printed and `decisions` is a per-note record of
+    delivered/truncated for the retrieval log.
+
+    Greedy fill in rank order: a note too large for the remaining budget is
+    skipped and a later, smaller one may still land. That trades strict
+    rank-prefix semantics for more notes delivered — acceptable because the
+    top-ranked note is guaranteed to land regardless of size, and `delivered`
+    records the truth either way."""
+    rendered, decisions, spent = [], [], 0
+    for n in notes:
+        content = (n.get("content") or "").strip()
+        truncated = False
+        if len(content) > NOTE_MAX_CHARS:
+            content = (content[:NOTE_MAX_CHARS].rstrip()
+                       + f"\n… [truncated; full note: `sovereign notes --query \"{(n.get('id') or '')[:8]}\"`]")
+            truncated = True
+        block = f"[{n.get('kind', 'note')}] {content}\n"
+        # Always deliver the top-ranked note even if it alone exceeds the
+        # budget — an empty injection is worse than one over-long note.
+        if spent + len(block) > NOTES_BUDGET_CHARS and rendered:
+            decisions.append((n, False, False, 0))
+            continue
+        rendered.append((n, block))
+        decisions.append((n, True, truncated, len(block)))
+        spent += len(block)
+    return rendered, decisions
+
+
+def log_injection(session_id, query, label, decisions):
     # Append-only, fail-silent side effect. The injection is this hook's primary
     # duty (see the dependability contract above) — logging must NEVER interfere
     # with it, so every failure here is swallowed. No session_id => no join key
@@ -92,7 +137,10 @@ def log_injection(session_id, query, label, notes):
             "prompt_sha": sha16(query),
             "query": (query or "")[:200],
             "label": label,
-            "count": len(notes),
+            "count": len(decisions),
+            "delivered_count": sum(1 for _, d, _, _ in decisions if d),
+            "budget_chars": NOTES_BUDGET_CHARS,
+            "payload_chars": sum(c for _, d, _, c in decisions if d),
             "notes": [
                 {
                     "rank": i,
@@ -103,8 +151,13 @@ def log_injection(session_id, query, label, notes):
                     "files": n.get("files") or [],
                     "terms": distinctive_terms(n.get("content") or ""),
                     "approx_tokens": len((n.get("content") or "")) // 4,
+                    # Did this note actually reach the model's context? Notes
+                    # past the payload budget are logged as retrieved-but-not-
+                    # delivered so the hit-rate denominator stays honest.
+                    "delivered": delivered,
+                    "truncated": truncated,
                 }
-                for i, n in enumerate(notes)
+                for i, (n, delivered, truncated, _) in enumerate(decisions)
             ],
         }
         with (RETRIEVAL_LOG_DIR / f"{session_id}.jsonl").open("a", encoding="utf-8") as f:
@@ -218,13 +271,20 @@ def main():
     if not uniq:
         return  # daemon healthy, simply nothing relevant — stay silent
 
-    # Record exactly what enters context, BEFORE printing — the log describes the
-    # injected set (`uniq`), which is what the audit will test for downstream use.
-    log_injection(session_id, query, label, uniq)
+    # Budget BEFORE logging: the log must describe what actually entered
+    # context, not what the ranker returned. (Pre-2026-07-26 it described the
+    # latter, and the payload silently spilled — see NOTES_BUDGET_CHARS.)
+    rendered, decisions = budget_notes(uniq)
+    log_injection(session_id, query, label, decisions)
 
     print(f"## Sovereign notes ({label}, injected by hook)\n")
-    for n in uniq:
-        print(f"[{n.get('kind', 'note')}] {n.get('content', '').strip()}\n")
+    for _, block in rendered:
+        print(block)
+    dropped = len(decisions) - len(rendered)
+    if dropped:
+        print(f"_({dropped} further note{'s' if dropped > 1 else ''} matched but "
+              f"exceeded this hook's {NOTES_BUDGET_CHARS}-char injection budget — "
+              f"they are NOT in your context; `notes(query: \"…\")` to pull them.)_\n")
 
 
 try:

@@ -1,10 +1,11 @@
 # The Memory Model — Context as Working Memory, the Brain as Long-Term Store
 
-**Status:** Initiative compass, drafted 2026-07-24. Principles (§3) are the
-evaluation bar for all memory-adjacent work; experiments (§5) are the roadmap,
-E1 in flight. Per `ARCH_PRINCIPLES.md §1.1`: §3 becomes contract as each
-experiment's build log confirms it; until then treat any individual mapping
-claim as a hypothesis with its measurement named.
+**Status:** Initiative compass, drafted 2026-07-24; first fleet cohort
+re-measurement 2026-07-26 (§4a). Principles (§3) are the evaluation bar for
+all memory-adjacent work; experiments (§5) are the roadmap. Per
+`ARCH_PRINCIPLES.md §1.1`: §3 becomes contract as each experiment's build log
+confirms it; until then treat any individual mapping claim as a hypothesis
+with its measurement named.
 
 **Owner context:** successor to (and generalization of) the bionic-suit
 initiative. Everything remains accountable to `sovereign cache-audit`. Parent
@@ -113,9 +114,60 @@ existing clothes.
 
 ---
 
+## 4a. First fleet cohort read — 2026-07-26
+
+Two days of fleet operation under the protocol (`session_state` + the
+split-enforce hook both went live 2026-07-24). Cohorts from
+`cache-audit --json`: **pre = 07-17..07-23 (n=23)**, **post = 07-25..07-26
+(n=13)**. Reports: `~/.sovereign/reports/fleet-2026-07-24.md` (baseline) and
+`fleet-2026-07-26.md`.
+
+| median per session | pre | post | Δ |
+|---|--:|--:|--:|
+| cache-read tokens / turn (the rent line) | 258.0k | 159.8k | **−38%** |
+| peak context | 466k | 257k | **−45%** |
+| peak ctx / turn (accretion rate) | 2,659t | 2,088t | −21% |
+| turns | 153 | 137 | −10% |
+| code-intel calls | 2 | 6 | 3× |
+| ramp raw (pre-first-Edit acquisition) | 18,636t | 17,388t | −7% |
+| raw acquisition / turn | 340t | 352t | **flat** |
+| cost | $57.81 | $15.92 | −72% (confounded) |
+
+**Confirmed directionally.** Turns held roughly flat while peak context
+halved — sessions accrete less per turn, which is the model's central claim.
+Read token metrics, not dollars: the post cohort is mostly opus-5 against a
+pre cohort of opus-4.8/fable-5, so the cost delta carries a pricing confound
+the token deltas do not.
+
+**P2 / E4a flipped the frame population.** Frame census: 23 frames, **18
+self-reported / 5 distilled** — and every frame whose session started after
+`session_state` shipped (07-24 04:30Z) is self-reported. The rescue path went
+to zero in practice without a policy fight.
+
+**The split hook is live and mostly obeyed.** Zero split events existed before
+07-24; 38 events across 18 sessions since. 8 of 12 red-crossing sessions ended
+within 30 min of first red (median post-red growth 10k). The 4 that ignored it
+grew 7–43k further and lingered 3–13h — the failure mode is a live session
+declining the directive, not the hook missing the crossing.
+
+**Not moving — the retrieval half.** Ramp is flat (18.6k → 17.4k; gate passes
+4/23 → 0/13) and raw acquisition per turn is flat (H4 held 10.1% → 10.3%).
+Frames are being *written* but successors still re-acquire on boot: the §4
+gist-boot evidence has not generalized past its two hand-run cases. The
+savings so far come from the context ceiling (P3-coarse / splitting), not from
+P1 pointers displacing reads. **This is the gap to attack next** — it is E4a's
+mirror image on the read side, and it is now E5.
+
+Caveats: post cohort is 2 days, n=13; windows overlap; one resumed long-lived
+session sits in the post cohort by mtime with unchanged spend (medians absorb
+it). Treat every number here as one window, not a trend.
+
+---
+
 ## 5. Experiments
 
-**E1 — Price eviction-at-close (H5 counterfactual). MEASURED 2026-07-24.**
+**E1 — Price eviction-at-close (H5 counterfactual). MEASURED 2026-07-24;
+RE-MEASURED 2026-07-26 — follow-up prediction failing.**
 H5 shipped in `cache-audit --counterfactual`: work-item close proxied by
 `git commit` tool calls; on close, context returns to seed + ~1k gist per
 closed item; the eviction re-prefills retained context once (5m cache write);
@@ -142,6 +194,24 @@ follow-up: as commit-per-item discipline spreads through the fleet
 (CLAUDE.md protocol), H5's fleet share should climb toward the 34cf682b
 ratio — re-measure in the weekly fleet report; if it doesn't move, boundary
 density wasn't the binding constraint and this section is wrong.
+
+**Re-measured 2026-07-26 — the prediction is failing, first window.** H5's
+fleet share went **down**: 9.5% → **8.0%** ($147.53 → $109.68), evictions
+34 → 29, fleet commits 47 → 38. In the post-adoption cohort (§4a) the
+boundary density collapsed outright: **2 in-transcript commits across 13
+sessions**. Commit-per-item discipline did not spread — the protocol text
+landed, the behaviour did not.
+
+Read carefully, this does not yet falsify P3's *mechanism* (34cf682b's 72%
+still stands as the demonstration that boundaries pay when they exist); it
+falsifies the *diffusion assumption* — that documenting the lever in
+CLAUDE.md would produce boundaries. Standing interpretation until the next
+window: **a memory lever that depends on model discipline does not
+propagate** (the same finding E3's design constraint already asserts, now
+with fleet evidence). If H5 is still flat or falling at the next
+re-measurement, the honest move is to stop treating commit cadence as a
+lever we can request and either (a) make work-item close a harness-detected
+event rather than a git artifact, or (b) retire the H5 line from the ledger.
 
 **E2 — Rational forgetting for the notes store.** Need-probability ranking
 (recency × retrieval frequency) for injection and retention, replacing pure
@@ -170,8 +240,31 @@ by the session) improves against the current hook's baseline.
   deferred until fleet logs reveal the `any%` distribution — measure before
   tuning applies to the metric too. The tool prints this caveat inline when
   it detects saturation.
-- **Remaining E2 work:** accumulate fleet logs → calibrate content matching →
-  build the need-probability ranker → re-run the audit and compare `strong%`.
+- **Fleet baseline established 2026-07-26 — `strong% = 32%`, and its
+  denominator is inflated.** 15 sessions, **518 injections, 205 anchored,
+  strong 32% / any 75%** (`sovereign notes retrieval-audit`). Per-session
+  strong% ranges 0–52%. It replaces the single-session 75%, which was a
+  working-squarely-on-topic outlier.
+  - **Correction, same day (E5 R2):** `inject-notes.sh` printed all 8 ranked
+    notes at full length — 15KB payloads — but the harness spills anything
+    over ~10KB to a file and delivers a 2KB preview. The hook logged every
+    note as injected regardless, so **the 32% is measured against a
+    denominator containing notes that never entered context**. Roughly 13–20%
+    of the payload was reaching the model; at the new 6000-char budget, 57%
+    of ranked notes are delivered (measured over 3 real prompts).
+  - Fixed by logging `delivered` per note and excluding dropped notes from
+    every denominator. Pre-2026-07-26 rows are marked `legacy: delivery
+    unknown` and **must not be compared against post-flag rows** — the tool
+    prints this inline. The ranker's real gate is the first post-flag fleet
+    number, not the 32%.
+  - This also revises the saturation caveat above: `any%` pegged at ~100% on
+    the 2fa2ddbb lineage, but at fleet scale it reads **75%** and is *not*
+    saturated. Saturation is a property of on-topic sessions, not of the
+    metric. `strong%` remains the gate (anchors are the falsifiable signal),
+    but `any%` is now usable as a secondary read.
+- **Remaining E2 work:** calibrate content matching (rarity/IDF weighting) →
+  build the need-probability ranker → re-run the audit against the 32%
+  baseline. The measure-first precondition is now satisfied: the logs exist.
 
 **E3 — Live eviction mechanics.** Harness-side: on work-item close, replace
 verbatim tool results with one-line gist + pointer. Blocked on E1's number.
@@ -195,7 +288,12 @@ priority ordered by P2:
   `svrn session grade`, exit 0). The successor-critical double-weighted
   sections carried (Next 3/3, Invariants 2/3); the weak spot was
   Decisions (2/4 — encode-time compression dropped two rationale
-  bullets). P2 confirmed at the artifact level.
+  bullets). P2 confirmed at the artifact level. **Adoption confirmed at the
+  fleet level 2026-07-26:** 18 of 23 frames self-reported, and 100% of
+  frames from sessions started after the tool shipped (§4a). E4a is the
+  one lever in this document that propagated without discipline — because
+  it is a tool call at a transition, not a habit to maintain. Contrast E1's
+  diffusion failure; that contrast is the design lesson.
 - **E4b (retrieval practice, weak path):** restructure the distill stage-2
   prompt from "summarize the spine" to "answer the eight section-questions,
   citing spine evidence per item" (testing effect / elaborative
@@ -205,6 +303,66 @@ priority ordered by P2:
   prompt work. Prediction from P2: E4b+E4c together still land below E4a;
   measure to confirm, then set policy that distilled frames stay
   rescue-only regardless.
+
+**E5 — Close the reconstruction gap (opened by the 2026-07-26 measurement).**
+E1–E4 all address the *write* side; §4a shows the *read* side is where the
+model is not paying out. Frames are written and injected, yet ramp is flat
+(18.6k → 17.4k, 0/13 gate passes) and raw acquisition per turn is unmoved
+(340t → 352t). Successors boot with a gist and then re-acquire the verbatim
+anyway.
+
+**Diagnosis 2026-07-26 — three mechanical faults, none of them discipline.**
+
+- **R1 — the boot hook injects the newest frame, not the successor's.**
+  `session-boot.sh` selected by `max(mtime)` over `~/.sovereign/sessions/*/frame.md`.
+  With 4+ workstreams interleaved (24 live frames at time of writing) the
+  newest frame is the right one only by luck. Direct evidence: session
+  `40ab6490` was handed another thread's frame and spent its ramp hunting —
+  `grep -rl -i "wrapped" ~/.sovereign/sessions/*/frame.md`, then reading
+  three frames by hand. Natural experiment (n=2): right-frame `86060bbd`
+  ramped 16 calls / 9.3k; wrong-frame `40ab6490` ramped 27 calls / 20.9k.
+- **R2 — the boot payload exceeded the harness inline cap and spilled.**
+  Claude Code persists any hook output over ~10KB (smallest observed spill
+  9.8KB across 80 transcripts) to a file and shows a 2KB preview. The boot
+  brief ran 11.4KB, so the first tool call of a booted session was literally
+  `Read .../tool-results/hook-<uuid>-stdout.txt` — the budgeted brief
+  converting itself into an unbudgeted raw read, inside the very metric it
+  exists to shrink.
+- **R3 — no dereference surface for frames.** `sovereign session` has
+  list/distill/grade and `session_state` is upsert-only, so "find the right
+  frame" costs greps and Reads. P1 says a frame should enter context as a
+  pointer; there was nothing to dereference with.
+
+**Phase 0 (instrument) + Phase 1 (stop the spill): SHIPPED 2026-07-26.**
+
+- `session-boot.sh` writes `~/.sovereign/sessions/<id>/boot.json` — chosen
+  frame, its age/provenance, `frame_candidates`, `frame_is_own`, payload
+  chars. Before this, *which frame a session received was unrecoverable*, so
+  no honest classifier could exist.
+- Both hooks are now payload-budgeted (boot 8000 chars, notes 6000) with
+  overflow degraded to a dereferenceable pointer. Measured after: boot
+  payload 11.4KB → 7.7KB, under the spill floor.
+- `cache-audit --ramp --classify` buckets ramp raw acquisition into
+  **boot-spill / frame-hunt / frame-covered / new-task**, reading boot.json
+  for ground truth and printing `UNKNOWN` rather than guessing when it is
+  absent. First run over the 5 most recent sessions (all pre-provenance, so
+  frame-covered is unmeasurable): **boot-spill 10,303t and frame-hunt 6,314t
+  out of 53,918t ramp raw — 31% of ramp was the two mechanical wastes**, and
+  5,872t of the frame-hunt was `40ab6490` alone, confirming the hand read.
+
+**Phase 2 (not built): frame selection + dereference.** `sovereign session
+frames` (list in-flight) + `frames <id>` (read one) as the dereference verb;
+boot injects the *index* (~200 tokens of one-liners) instead of a possibly-wrong
+1-2k frame; full-frame injection moves to the first `UserPromptSubmit`, where
+the prompt exists and `inject-notes.sh` already does relevance matching —
+SessionStart has no prompt, which is *why* selection fell back to recency.
+Start with in-flight + branch + recency; build a ranker only if the classifier
+says selection is still wrong (measure before tuning, as in E2).
+
+Gate: median ramp raw for frame-booted successors below 10k with no
+regression in successor error rate. Design constraint inherited from E1's
+diffusion failure: whatever lands must be harness- or tool-shaped, not a
+protocol paragraph asking agents to read less.
 
 ---
 
@@ -216,12 +374,25 @@ session to ~50–60k steady state cuts the 76% rent line by roughly
 two-thirds, overlapping heavily with H1 (the levers substitute more than
 they stack on long sessions; E1 quantifies the residual).
 
+**Observed 2026-07-26 (§4a):** rent per turn fell 38% and median peak context
+fell 45% in the first post-adoption cohort — consistent with the banked H1
+figure being realized in practice rather than only in counterfactual. The
+counterfactual levers moved accordingly: H1@100k 49.0% → 45.0% (less headroom
+left to recover, which is what success looks like on a counterfactual),
+H5 9.5% → 8.0% (§5 E1), H4 10.1% → 10.3% (unmoved).
+
 **Prediction worth watching (falsifiable):** in the current regime the turn-0
 preamble (~43k) is a 5% lever (H2a). In a gist-first steady state near seed,
 the preamble becomes the *dominant* remaining rent, and the lever ordering
 inverts — preamble diet and boot-brief tiering become first-class. If E1/E3
 land and H2a's share does NOT grow in the next fleet counterfactual, this
 model is missing something.
+
+- **First read 2026-07-26: consistent, too small to call.** H2a share
+  **5.3% → 6.1%** (+0.8pp) on a preamble that itself barely moved (46k →
+  45k) — i.e. the share grew because the denominator shrank, which is the
+  predicted mechanism. One window, sub-point-size effect; do not bank it.
+  Keep `preamble_avg_ktok` in the fleet report as the tracker.
 
 Costs honestly on the other side: encode-time writes (~2k tokens/frame + note
 calls), reconstruction failures (caught by the `--ramp` gate), eviction

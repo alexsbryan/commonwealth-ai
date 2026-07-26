@@ -554,9 +554,151 @@ struct RampReport {
     intel_calls: u64,
     /// Read calls during ramp whose file_path was already Read in ramp.
     repeat_reads: u64,
+    /// Raw-acquisition tokens split by WHY they were acquired (`--classify`).
+    classes: RampClasses,
+    /// Was boot provenance available? Without it `frame_covered` is unknowable
+    /// and everything unclassified falls to `new_task` — which would read as
+    /// "all genuine research" when it may be re-reading a frame we can't see.
+    boot_known: bool,
+    /// Which session's frame this one was booted with — the input to the
+    /// mis-injection question ("was it even my predecessor's?").
+    frame_session: Option<String>,
 }
 
-fn analyze_ramp(path: &Path) -> Option<RampReport> {
+/// Why a ramp acquisition happened (MEMORY_MODEL §5 E5). Only one bucket is
+/// unambiguous waste (`BootSpill`); the rest are diagnostic, and only
+/// `FrameCovered` is an upper bound (co-occurrence, like the notes audit).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum RampClass {
+    /// Re-reading the boot hook's own payload after the harness spilled it to
+    /// a file. Pure waste: it was already written for this session's context.
+    BootSpill,
+    /// Hunting the session-frame directory — the successor was handed the
+    /// wrong frame (or none) and went looking. Waste caused by selection.
+    FrameHunt,
+    /// Touching a file/symbol the injected frame already named. Candidate
+    /// waste: the gist was in context and got dereferenced anyway. Some of
+    /// this is legitimate P5 (verify before load-bearing use).
+    FrameCovered,
+    /// Everything else: acquisition on a subject the frame never mentioned.
+    /// Genuine new-task cost, not addressable by better handoff.
+    NewTask,
+}
+
+#[derive(Default, Clone, Copy)]
+struct RampClasses {
+    boot_spill: u64,
+    frame_hunt: u64,
+    frame_covered: u64,
+    new_task: u64,
+}
+
+impl RampClasses {
+    fn add(&mut self, class: RampClass, tokens: u64) {
+        match class {
+            RampClass::BootSpill => self.boot_spill += tokens,
+            RampClass::FrameHunt => self.frame_hunt += tokens,
+            RampClass::FrameCovered => self.frame_covered += tokens,
+            RampClass::NewTask => self.new_task += tokens,
+        }
+    }
+}
+
+/// What the boot hook actually injected into a session, read back from
+/// `~/.sovereign/sessions/<id>/boot.json` (written by session-boot.sh).
+struct BootProvenance {
+    frame_session: Option<String>,
+    /// Path- and identifier-shaped tokens lifted from the injected frame —
+    /// the anchors a later acquisition can be tested against.
+    anchors: std::collections::HashSet<String>,
+}
+
+impl BootProvenance {
+    fn load(session_id: &str) -> Option<Self> {
+        let home = std::env::var("HOME").ok()?;
+        let dir = Path::new(&home).join(".sovereign").join("sessions");
+        let text = std::fs::read_to_string(dir.join(session_id).join("boot.json")).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+        let frame_session = v
+            .get("frame_session")
+            .and_then(|s| s.as_str())
+            .map(str::to_string);
+        let mut anchors = std::collections::HashSet::new();
+        if let Some(fs) = &frame_session {
+            if let Ok(frame) = std::fs::read_to_string(dir.join(fs).join("frame.md")) {
+                anchors = frame_anchors(&frame);
+            }
+        }
+        Some(Self {
+            frame_session,
+            anchors,
+        })
+    }
+}
+
+/// Path- and identifier-shaped tokens from a frame. Deliberately narrow: a
+/// generic word ("sovereign", "session") would match every later call and
+/// inflate `frame_covered` into meaninglessness.
+fn frame_anchors(frame: &str) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for raw in frame.split(|c: char| c.is_whitespace() || matches!(c, '`' | '"' | '(' | ')' | ',')) {
+        let t = raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '_');
+        if t.len() < 6 {
+            continue;
+        }
+        let path_like = t.contains('/') || t.contains(".rs") || t.contains(".md") || t.contains(".py");
+        let ident_like = t.contains('_') || t.chars().skip(1).any(|c| c.is_uppercase());
+        if !path_like && !ident_like {
+            continue;
+        }
+        // Index by basename too: frames cite repo-relative paths, later calls
+        // often use absolute ones.
+        if let Some(base) = t.rsplit('/').next() {
+            if base.len() >= 6 {
+                out.insert(base.to_lowercase());
+            }
+        }
+        out.insert(t.to_lowercase());
+    }
+    out
+}
+
+fn classify_ramp_call(
+    name: &str,
+    input: Option<&serde_json::Value>,
+    boot: Option<&BootProvenance>,
+) -> RampClass {
+    let blob = input.map(|i| i.to_string().to_lowercase()).unwrap_or_default();
+    if blob.contains("/tool-results/hook-") {
+        return RampClass::BootSpill;
+    }
+    if blob.contains(".sovereign/sessions") || blob.contains("frame.md") {
+        return RampClass::FrameHunt;
+    }
+    let Some(boot) = boot else {
+        return RampClass::NewTask;
+    };
+    // A Read is tested on its basename; anything else on whether an anchor
+    // appears anywhere in its input (command, pattern, query).
+    if name == "Read" {
+        if let Some(fp) = input
+            .and_then(|i| i.get("file_path"))
+            .and_then(|f| f.as_str())
+        {
+            let base = fp.rsplit('/').next().unwrap_or(fp).to_lowercase();
+            if boot.anchors.contains(&base) {
+                return RampClass::FrameCovered;
+            }
+        }
+        return RampClass::NewTask;
+    }
+    if boot.anchors.iter().any(|a| blob.contains(a.as_str())) {
+        return RampClass::FrameCovered;
+    }
+    RampClass::NewTask
+}
+
+fn analyze_ramp(path: &Path, boot: Option<&BootProvenance>) -> Option<RampReport> {
     let text = std::fs::read_to_string(path).ok()?;
     let mut requests = 0u64;
     let mut first_edit_req: Option<u64> = None;
@@ -564,8 +706,9 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
     let (mut intel_tokens, mut intel_calls) = (0u64, 0u64);
     let mut repeat_reads = 0u64;
     let mut read_paths: std::collections::HashSet<String> = Default::default();
-    // tool_use_id -> true=raw, false=intel (ramp window only)
-    let mut pending: BTreeMap<String, bool> = BTreeMap::new();
+    let mut classes = RampClasses::default();
+    // tool_use_id -> (true=raw / false=intel, why it was acquired)
+    let mut pending: BTreeMap<String, (bool, RampClass)> = BTreeMap::new();
     let mut last_usage_id: Option<String> = None;
 
     for line in text.lines() {
@@ -632,7 +775,8 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
                     };
                     if let (Some(raw), Some(id)) = (kind, block.get("id").and_then(|i| i.as_str()))
                     {
-                        pending.insert(id.to_string(), raw);
+                        let class = classify_ramp_call(name, block.get("input"), boot);
+                        pending.insert(id.to_string(), (raw, class));
                     }
                 }
                 Some("tool_result") if first_edit_req.is_none() => {
@@ -640,7 +784,7 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
                         .get("tool_use_id")
                         .and_then(|t| t.as_str())
                         .unwrap_or("");
-                    if let Some(raw) = pending.remove(tid) {
+                    if let Some((raw, class)) = pending.remove(tid) {
                         let toks = block
                             .get("content")
                             .map(result_text)
@@ -649,6 +793,10 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
                         if raw {
                             raw_tokens += toks;
                             raw_calls += 1;
+                            // Only raw acquisition is classified — code-intel
+                            // calls are the behaviour we WANT, not a leak to
+                            // attribute.
+                            classes.add(class, toks);
                         } else {
                             intel_tokens += toks;
                             intel_calls += 1;
@@ -675,7 +823,68 @@ fn analyze_ramp(path: &Path) -> Option<RampReport> {
         intel_tokens,
         intel_calls,
         repeat_reads,
+        classes,
+        boot_known: boot.is_some(),
+        frame_session: boot.and_then(|b| b.frame_session.clone()),
     })
+}
+
+/// `--ramp --classify`: WHERE the ramp went, not just how big it was.
+fn print_ramp_classified(reports: &[RampReport]) {
+    println!(
+        "{:<10} {:>10} {:>11} {:>11} {:>14} {:>10}  {}",
+        "session", "ramp raw", "boot-spill", "frame-hunt", "frame-covered", "new-task", "frame"
+    );
+    println!("{}", "-".repeat(84));
+    let mut tot = RampClasses::default();
+    let (mut total_raw, mut unknown_sessions) = (0u64, 0usize);
+    for r in reports {
+        let c = r.classes;
+        tot.boot_spill += c.boot_spill;
+        tot.frame_hunt += c.frame_hunt;
+        tot.frame_covered += c.frame_covered;
+        tot.new_task += c.new_task;
+        total_raw += r.raw_tokens;
+        if !r.boot_known {
+            unknown_sessions += 1;
+        }
+        println!(
+            "{:<10} {:>9}t {:>10}t {:>10}t {:>13}t {:>9}t  {}",
+            short_session_id(&r.file),
+            r.raw_tokens,
+            c.boot_spill,
+            c.frame_hunt,
+            c.frame_covered,
+            c.new_task,
+            match (&r.frame_session, r.boot_known) {
+                (Some(f), _) => f.chars().take(8).collect::<String>(),
+                (None, true) => "none".to_string(),
+                (None, false) => "UNKNOWN".to_string(),
+            }
+        );
+    }
+    println!("{}", "-".repeat(84));
+    println!(
+        "{:<10} {:>9}t {:>10}t {:>10}t {:>13}t {:>9}t",
+        "FLEET", total_raw, tot.boot_spill, tot.frame_hunt, tot.frame_covered, tot.new_task
+    );
+    println!(
+        "\nboot-spill  = re-reading the boot hook's own payload after the harness spilled it\n\
+         \x20             to a file (>~10KB). Pure waste; fixed by budgeting the hook.\n\
+         frame-hunt  = searching ~/.sovereign/sessions for the RIGHT frame — the successor\n\
+         \x20             was handed the wrong one. Waste caused by frame selection.\n\
+         frame-covered = touching a file/symbol the injected frame already named. UPPER BOUND\n\
+         \x20             (co-occurrence): some is legitimate dereference-before-use (P5).\n\
+         new-task    = subject the frame never mentioned. Not addressable by better handoff."
+    );
+    if unknown_sessions > 0 {
+        println!(
+            "\n! {unknown_sessions} session(s) have no ~/.sovereign/sessions/<id>/boot.json \
+             (pre-2026-07-26, or booted with SOVEREIGN_NO_BOOT_BRIEF). For those, \
+             frame-covered is unknowable and its tokens fall into new-task — read their \
+             new-task column as an upper bound, not as proven new work."
+        );
+    }
 }
 
 fn print_ramp(reports: &[RampReport]) {
@@ -1183,6 +1392,11 @@ fn print_help() {
          \x20                    before the first Edit/Write, and repeated file Reads.\n\
          \x20                    The split-safety gauge (successor should ramp <=5k, 0\n\
          \x20                    repeats). Combine with --session <id> for one session.\n\
+         \x20 --classify         With --ramp: split ramp acquisition by WHY (boot-spill /\n\
+         \x20                    frame-hunt / frame-covered / new-task). Needs the boot\n\
+         \x20                    provenance sidecar ~/.sovereign/sessions/<id>/boot.json\n\
+         \x20                    written by session-boot.sh; sessions without it are\n\
+         \x20                    marked UNKNOWN rather than guessed at.\n\
          \x20 --counterfactual   Replay sessions under four independent cost levers\n\
          \x20                    (splitting, preamble/injection overhead, turn\n\
          \x20                    batching, acquisition routing) and price each —\n\
@@ -1427,6 +1641,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut json = false;
     let mut counterfactual = false;
     let mut ramp = false;
+    let mut classify_ramp = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -1438,6 +1653,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--json" => json = true,
             "--counterfactual" => counterfactual = true,
             "--ramp" => ramp = true,
+            "--classify" => classify_ramp = true,
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
             "--session" => session = it.next().cloned(),
@@ -1500,13 +1716,26 @@ pub async fn run(args: &[String]) -> i32 {
         };
         let ramps: Vec<RampReport> = selected
             .iter()
-            .filter_map(|r| analyze_ramp(&target_dir.join(&r.file)))
+            .filter_map(|r| {
+                // Boot provenance is keyed on the FULL session id, which is the
+                // transcript filename without its extension.
+                let boot = if classify_ramp {
+                    BootProvenance::load(r.file.trim_end_matches(".jsonl"))
+                } else {
+                    None
+                };
+                analyze_ramp(&target_dir.join(&r.file), boot.as_ref())
+            })
             .collect();
         if ramps.is_empty() {
             eprintln!("cache-audit: no ramp data for the selection");
             return 1;
         }
-        print_ramp(&ramps);
+        if classify_ramp {
+            print_ramp_classified(&ramps);
+        } else {
+            print_ramp(&ramps);
+        }
         return 0;
     }
 
@@ -1606,6 +1835,92 @@ pub async fn run(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn boot_with(anchors: &[&str]) -> BootProvenance {
+        BootProvenance {
+            frame_session: Some("donor".into()),
+            anchors: anchors.iter().map(|a| a.to_lowercase()).collect(),
+        }
+    }
+
+    #[test]
+    fn frame_anchors_keeps_code_shapes_and_drops_prose() {
+        let frame = "## Next\n\
+                     Fix `sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs` so that\n\
+                     analyze_ramp handles the classify flag before we ship it today.";
+        let a = frame_anchors(frame);
+        assert!(a.contains("cache_audit_cmd.rs"), "basename indexed");
+        assert!(
+            a.contains("sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs"),
+            "full path indexed"
+        );
+        assert!(a.contains("analyze_ramp"), "snake_case identifier kept");
+        // Prose words carry no code shape and would match everything.
+        assert!(!a.contains("handles"));
+        assert!(!a.contains("before"));
+        assert!(!a.contains("today"));
+    }
+
+    #[test]
+    fn ramp_classifier_separates_the_two_pure_wastes() {
+        let boot = boot_with(&["cache_audit_cmd.rs"]);
+        // Re-reading the boot hook's own spilled payload.
+        let spill = serde_json::json!({
+            "file_path": "/Users/x/.claude/projects/-p/tool-results/hook-abc-stdout.txt"
+        });
+        assert_eq!(
+            classify_ramp_call("Read", Some(&spill), Some(&boot)),
+            RampClass::BootSpill
+        );
+        // Hunting the frames directory for the right handoff.
+        let hunt = serde_json::json!({
+            "command": "grep -rl -i wrapped ~/.sovereign/sessions/*/frame.md"
+        });
+        assert_eq!(
+            classify_ramp_call("Bash", Some(&hunt), Some(&boot)),
+            RampClass::FrameHunt
+        );
+    }
+
+    #[test]
+    fn ramp_classifier_splits_frame_covered_from_new_task() {
+        let boot = boot_with(&["cache_audit_cmd.rs", "analyze_ramp"]);
+        let covered = serde_json::json!({"file_path": "/repo/src/cache_audit_cmd.rs"});
+        assert_eq!(
+            classify_ramp_call("Read", Some(&covered), Some(&boot)),
+            RampClass::FrameCovered,
+            "the frame already named this file"
+        );
+        let fresh = serde_json::json!({"file_path": "/repo/src/unrelated_module.rs"});
+        assert_eq!(
+            classify_ramp_call("Read", Some(&fresh), Some(&boot)),
+            RampClass::NewTask
+        );
+        // Non-Read calls match anchors anywhere in their input.
+        let grep = serde_json::json!({"pattern": "fn analyze_ramp"});
+        assert_eq!(
+            classify_ramp_call("Grep", Some(&grep), Some(&boot)),
+            RampClass::FrameCovered
+        );
+    }
+
+    #[test]
+    fn without_boot_provenance_nothing_is_claimed_as_frame_covered() {
+        // No boot.json => we cannot know what the frame held. Everything that
+        // isn't self-evident waste must fall to new-task, and the caller is
+        // told the session is UNKNOWN rather than shown a confident zero.
+        let read = serde_json::json!({"file_path": "/repo/src/cache_audit_cmd.rs"});
+        assert_eq!(
+            classify_ramp_call("Read", Some(&read), None),
+            RampClass::NewTask
+        );
+        // The two waste classes are still detectable without provenance.
+        let spill = serde_json::json!({"file_path": "/p/tool-results/hook-x-stdout.txt"});
+        assert_eq!(
+            classify_ramp_call("Read", Some(&spill), None),
+            RampClass::BootSpill
+        );
+    }
 
     #[test]
     fn classify_routes_tools_to_buckets() {

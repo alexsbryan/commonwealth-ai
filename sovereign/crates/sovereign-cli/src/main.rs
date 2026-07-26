@@ -726,6 +726,14 @@ async fn async_main() {
         }
     }
 
+    // A dev checkout running a dispatcher built without `--features
+    // dev-tools` has silently lost the developer verbs. Warn on EVERY verb,
+    // not only the gated ones: the whole failure mode is that the loss
+    // surfaces later, on an unrelated command, long after the build that
+    // caused it. Warn-only; never blocks. (After the hidden introspection
+    // verbs above, which must stay machine-parseable on stdout.)
+    sibling::warn_if_dev_tools_missing(cfg!(feature = "dev-tools"));
+
     // Gate the developer toolchain out of the default build. `cfg!` (not
     // `#[cfg]`) so `DEV_VERBS` stays referenced — and thus warning-free —
     // in both feature states; the optimizer drops this block when the
@@ -737,8 +745,11 @@ async fn async_main() {
                 eprintln!(
                     "{first}: part of the Sovereign developer toolchain (project \
                      lifecycle, ATOS orchestration, code intelligence). It is not \
-                     in the default build. Rebuild with `cargo build --features \
-                     dev-tools` and build the `sovereign-cli-dev` sibling to enable it."
+                     in the default build. Restore it with `cargo build -p \
+                     sovereign-cli --features dev-tools` (the `-p` matters — \
+                     without it you rebuild the workspace default, not this \
+                     dispatcher), plus `cargo build -p sovereign-cli-dev` for the \
+                     sibling that actually runs the verb."
                 );
                 std::process::exit(2);
             }
