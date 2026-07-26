@@ -126,8 +126,46 @@ DESKTOP=0
 match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^vendor/|^scripts/sovereign-test\.sh$|^scripts/lib/)' && RUST=1
 match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
 
-FAILED=()
+FAILED=()        # gates that ran and said no — these block
+UNVERIFIED=()    # gates that could not run here — these warn
 BUILD_BROKE=0
+
+# Is a build break attributable to code in THIS repo?
+#
+# The distinction is the difference between a gate that protects you and a gate
+# that just stands in your way. A rustc diagnostic pointing at a file in this
+# workspace is yours: block it. A third-party build script that fell over —
+# missing native header, no cmake, a libclang whose resource directory has no
+# include/ — is a property of the shell you happen to be pushing FROM, and no
+# edit to this push can fix it. Blocking there teaches people that the gate is
+# noise, and a gate people route around protects nothing.
+#
+# FAILS CLOSED: no log, or anything it cannot classify, counts as first-party.
+break_is_first_party() {
+    local raw="${1:-}"
+    [[ -f "$raw" ]] || return 0
+
+    # Any diagnostic pointing outside the registry/toolchain is our source.
+    #
+    # Collect into a variable rather than testing `grep -qv`'s exit status: on
+    # EMPTY input (no diagnostics at all — the exact case we are classifying)
+    # GNU grep -v exits 1 but some drop-in replacements exit 0, which silently
+    # inverts the verdict. Emptiness of the result is unambiguous everywhere.
+    local ours
+    ours="$(grep -E '^[[:space:]]*--> ' "$raw" 2>/dev/null \
+        | grep -v -e '\.cargo/registry' -e '/rustc/' -e '\.cargo/git' || true)"
+    [[ -n "$ours" ]] && return 0
+
+    # Nothing of ours in the log, and a dependency's build script or the
+    # native linker is what died.
+    if grep -qE 'failed to run custom build command for|error: linking with|cannot find -l' \
+        "$raw" 2>/dev/null; then
+        return 1
+    fi
+
+    return 0
+}
+
 run_gate() {
     local label="$1"; shift
     local started=$SECONDS
@@ -200,7 +238,24 @@ if (( RUST )); then
             tf="$(sed -n 's/^total_fail=//p' "$counts")"
             ce="$(tr -d '[:space:]' < "$cargo_exit")"
             if [[ "${tp:-0}" == "0" && "${tf:-0}" == "0" && "${ce:-0}" != "0" ]]; then
-                BUILD_BROKE=1
+                if break_is_first_party "target/sovereign-test/latest/cargo.raw.log"; then
+                    BUILD_BROKE=1
+                else
+                    # Not this push's fault, and not fixable by editing this
+                    # push. Downgrade to a warning and let it through — CI
+                    # compiles on a clean checkout and is the right authority
+                    # for "does this build somewhere that isn't your laptop."
+                    unset 'FAILED[-1]'
+                    warn "${C_BOLD}workspace tests could not RUN in this shell${C_RESET} — a third-party build"
+                    warn "script failed and no first-party diagnostic was emitted. Not blocking:"
+                    warn "nothing in this push can fix a native toolchain that isn't installed here."
+                    warn "  what broke:  $(sed -n 's/^error: failed to run custom build command for `\(.*\)`.*/\1/p' \
+                        target/sovereign-test/latest/cargo.raw.log 2>/dev/null | head -1 || true)"
+                    warn "  full log:    target/sovereign-test/latest/cargo.raw.log"
+                    warn "  this repo's native deps (cmake, clang, vulkan) live in the dev toolbox —"
+                    warn "  push from there, or run ./scripts/sovereign-test.sh inside it, to gate for real."
+                    UNVERIFIED+=("workspace tests")
+                fi
             fi
         fi
     fi
@@ -234,14 +289,13 @@ if (( ${#FAILED[@]} )); then
         cat >&2 <<EOF
 
   ${C_BOLD}The workspace did not COMPILE — zero tests ran.${C_RESET} That is a build
-  problem, not a test failure, and it is often environmental rather than
-  anything in this push (a toolbox missing a dnf package, a stale bindgen,
-  a linker that moved). The compiler error is the last thing in:
+  problem, not a test failure, and the diagnostic points at source in this
+  repo, so it is this push's to fix. The compiler error is the last thing in:
 
       target/sovereign-test/latest/cargo.raw.log
 
-  If it is your machine and not your code, CI will still gate this on a
-  clean checkout:  git push --no-verify
+  (A build break coming from a DEPENDENCY's build script is treated as
+  environmental and only warns — see break_is_first_party in this script.)
 EOF
     else
         cat >&2 <<EOF
@@ -253,6 +307,14 @@ EOF
 EOF
     fi
     exit 1
+fi
+
+if (( ${#UNVERIFIED[@]} )); then
+    # Honest bookkeeping: this is NOT the same claim as "all gates passed", and
+    # saying so would be the sort of green light that makes a gate worthless.
+    warn "${C_YELLOW}pushing with ${#UNVERIFIED[@]} gate(s) UNVERIFIED here${C_RESET} — CI is the authority for:"
+    for g in "${UNVERIFIED[@]}"; do printf '           - %s\n' "$g" >&2; done
+    exit 0
 fi
 
 say "${C_GREEN}all gates passed${C_RESET} — pushing"
