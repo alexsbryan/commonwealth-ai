@@ -1769,7 +1769,8 @@ changed the diagnosis:
 | module | role |
 |---|---|
 | `sovereign-mesh/scheduler_core.rs` | The routing decision as a **pure total function** — `rank(DecisionBuilder, RankInputs) -> RankResult` over a snapshot of what a decider believes, with `now_unix` passed rather than read. `select_peers_ranked` is now gather-then-decide: async I/O above the line, this below it. Also holds the observation feedback (`observe_dispatch` / `observe_success` / `observe_failure`) the provider's `record_*` methods delegate to, so sim and production age their beliefs by one implementation. |
-| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, seven arms (as-implemented / fresh-signals / two-choices / both / warm-start / outbound-only-load / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; separate RNG streams for world and policy so switching arms cannot perturb the world the arms are compared in. |
+| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, nine arms (as-implemented / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; **three** separate RNG streams — world, policy, and advertised-rate error — so switching arms cannot perturb the world the arms are compared in, and `advertised_rate_error: 0.0` still reproduces every number recorded before that knob existed. |
+| `sovereign-mesh/predicted_time.rs` | The §4.1 candidate objective, and the only ranking in the tree with **no tunable constant**: `predict()` returns `queue + prefill + decode + rtt` as named addends or an `Unpredictable` reason (never a defaulted rate — a guessed rate is a fabricated fact with a unit attached), and `faster_than_local` filters on it. `LocalOption` keeps *unpredictable* local (⇒ no hop) distinct from *infeasible* local (⇒ any feasible peer wins); collapsing those points them in opposite directions. Reads only what a decider can see, so `PredictInputs::from_candidate` scores it against a production capture. |
 | `sovereign-mesh/mesh_sim/scoreboard.rs` | `RecordMetrics` is computable from a **production capture** too (the S1 precondition); `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
 
 Run it: `cargo test -p sovereign-mesh --features mesh-sim,treesitter
@@ -1782,7 +1783,7 @@ capture it points at is not taken:
 | module | role |
 |---|---|
 | `sovereign-mesh/decision_replay.rs` | Re-runs the **live** scorer and the **live** ranking policy over a captured record and reports whether the record reproduces its own scores and verdict. Split in two on purpose: *scorer agreement* (recorded `CandidateInputs` + `claim_score` + locality → `score_with_adjustments` → does `final_score` come back?) and *policy agreement* (recorded scores → `winners_over_local` → does the `Verdict` come back?). The two run off independent inputs so one bug cannot cascade into the other. Both ratios return `0.0` on an empty denominator, never a vacuous `1.0`. |
-| `sovereign-mesh/scheduler_core.rs` | Gained `winners_over_local` / `beats_local` / `local_sentinel` — the ranking half extracted so replay re-runs the policy rather than a copy of it. |
+| `sovereign-mesh/scheduler_core.rs` | Gained `winners_over_local` / `beats_local` / `local_sentinel` — the ranking half extracted so replay re-runs the policy rather than a copy of it. Also `RankObjective` on `RankInputs` (`Product` \| `PredictedTime`): the objective is a *parameter* rather than a branch at the call site, so both objectives share one scoring body, one record shape and one `finish_at` — which is what keeps a decision record describing what the decider actually did instead of the product's opinion of a choice it did not make. Production passes `Product`. |
 | `tests/scheduler_replay_agreement.rs` | The fixture with a known answer: sim → `TracingDecisionSink::to_path` → JSONL → `SchedulerTrace::from_jsonl_path` → replay. **1.000 / 1.000, bit-exact**, five scenarios × six arms. |
 
 The gap S1 was expected to surface — `claim_affinity` is an argument
@@ -1818,6 +1819,26 @@ new **F7 — the cold-start ramp is self-locking**, contradicting
 `cold_start_weight`'s own doc comment. **No Phase-2 behavioural change
 has landed in production** — the ordering is deliberate: the sim is the
 baseline machine, so fixes land as sim arms first.
+
+**§4.1 measured (`Arm::PredictedTime` + `sovereign-mesh/predicted_time.rs`,
+2026-07-26).** The candidate objective — rank on
+`queue + prefill + decode + rtt` instead of on a product of
+dimensionless multipliers — now exists as an arm, introduces **no
+tunable constant**, and is computable from a decision record, so it can
+be scored against a production capture with no new instrumentation.
+It decomposes the oracle gap that arm 0 and `Oracle` only bracketed:
+**the wrong objective costs +126%/+200%/+250%, imperfect information
+costs +4.7%/+1.8%/−0.0%** (household / twin-hubs / heterogeneous), which
+demotes F1 to the sustained-contention case (`isolation`, +43.8%). The
+win survives a ±2× mis-rated fleet (`SimConfig::advertised_rate_error`,
+which exists because the sim otherwise grades the predictor against its
+own rate card). **It cannot land yet, and not for a latency reason:**
+ranking on time alone routes knowledge turns to 4B laptops — 37 of 38
+household offloads, and never a hub in `twin-hubs` — so §4.1's tier
+floor is a prerequisite, and no §5 metric can see what its absence
+costs. Replay also surfaced a missing field: a `RoutingDecision` does
+not record *which objective* produced its verdict, so a predicted-time
+capture reports scorer agreement 1.000 and policy agreement 0.009.
 
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a

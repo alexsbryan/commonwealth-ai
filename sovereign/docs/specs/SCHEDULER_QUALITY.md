@@ -526,6 +526,87 @@ Quality/tier preference remains a separate, explicit input (a tier
 floor from `resolve_synthesis_route`), not a multiplier folded into the
 same number as latency.
 
+> **PRICED as a Tier-1 arm 2026-07-26 (`Arm::PredictedTime`,
+> `sovereign-mesh/src/predicted_time.rs`). The objective works, and the
+> arm also found the thing that would break if it shipped as-is.**
+>
+> The arm replaces only the ranking: same hard gates, same candidate
+> records, same scores recorded, so a delta against arm 0 is a delta of
+> *objective* and of nothing else. It introduces **no constant** — no
+> floor, no weight, no tie-margin — because `rtt` sits inside the
+> number and a hop that buys less than it costs loses arithmetically.
+>
+> **1. The decomposition, which is what the arm was built for.** Arm 0
+> and `Oracle` bracketed the problem; this is the missing middle term —
+> the oracle's objective computed from what a decider can actually see.
+>
+> | scenario | arm 0 | predicted | oracle | wrong objective costs | imperfect info costs |
+> |---|---|---|---|---|---|
+> | household-evening-12 | 25.7s | 11.4s | 10.8s | **+126%** | +4.7% |
+> | twin-hubs | 33.3s | 11.1s | 10.9s | **+200%** | +1.8% |
+> | heterogeneous-fleet | 40.2s | 11.5s | 11.5s | **+250%** | −0.0% |
+> | isolation | 81.4s | 16.9s | 11.7s | **+382%** | +43.8% |
+>
+> The objective error dominates the information error by 5–100× on
+> three of four fleets. **That reorders Phase 2**: F1 (fresh
+> backpressure) was queued as step 2 on the strength of §3's "staleness
+> costs the median", but against a *correct* objective staleness is
+> worth 1.8–4.7% on the fleets where offloading is rare. `isolation` is
+> the exception at +43.8%, and it is the one fleet with sustained
+> contention — which is the honest scope for F1's remaining value.
+>
+> Corroborates F7 independently: arm 0 offloads 49/74/33 times where
+> predicted-time offloads 38/11/7. The scorer *was* over-eager to
+> offload, measured now by a second mechanism.
+>
+> **2. What the harness cannot see, stated before anyone quotes the
+> table.** A node's advertised `BenchmarkResult` is built from the same
+> `Hardware` the service-time model consumes, so the rate card is exact
+> truth by construction and the predictor has **zero model error** — its
+> only error is the queue substitution (gossip carries an in-flight
+> *count*, so each job ahead is assumed to look like the job in hand).
+> `SimConfig::advertised_rate_error` exists to price that flattery, and
+> the win survives it:
+>
+> | rate-card error | arm 0 eff | predicted eff |
+> |---|---|---|
+> | ±0% (exact, flattering) | 0.29–0.42 | 0.95–1.00 |
+> | ±10% | 0.29–0.42 | 0.86–0.90 |
+> | ±100% | 0.36–0.91 | 0.85–0.90 |
+>
+> Predicted-time loses ~10 points to a mis-rated fleet and then goes
+> flat; it does not unravel. Read arm 0's *rise* in that right-hand
+> column as a third sighting of the same pathology, not as arm 0
+> improving: at ±50% some advertised rates fall under
+> `throughput_factor`'s 20 tok/s reference, the clamp finally
+> discriminates, peers score lower, and fewer bad offloads happen. A
+> broken rate card becomes an accidental brake — exactly what
+> `cold_start_weight`'s floor was.
+>
+> **3. THE BLOCKER, and it is not latency.** Ranking on time alone
+> prefers whichever node answers soonest, which on every fleet here is a
+> *small fast model*. Arm 0 sent all 49 household offloads to the 35B
+> hub; predicted-time sent 37 of 38 to 4B laptops. In `twin-hubs` it
+> never chose a hub at all.
+>
+> That is the objective doing precisely what it was asked, and it is why
+> the paragraph above this block is load-bearing rather than a caveat:
+> **§4.1 cannot land without the tier floor as a separate explicit
+> input.** Worse, no metric on this scoreboard can see the cost — §5's
+> metrics are latency, fairness and waste, and answer quality is not
+> among them. So the landing gate for Phase 2 step 1 is not an
+> efficiency-ratio number; it is a quality gate the sim cannot supply.
+>
+> **4. A missing record field, found from replay's side.** A
+> `RoutingDecision` carries inputs, scores and a verdict, but not *which
+> objective* mapped scores to verdict, so `decision_replay` re-runs the
+> product policy over any capture: a predicted-time capture reports
+> scorer agreement **1.000** and policy agreement **0.009**. The fix is
+> an objective tag, which is smaller than the `predicted_ms` column one
+> would reach for first — `CandidateInputs` already carries `in_flight`,
+> `rtt_ms` and both `bench_*` rates, so **the objective is already
+> scoreable against a production capture with no new instrumentation.**
+
 ### 4.2 Three contained follow-ons, in order
 
 1. **Fresh backpressure.** Piggyback the serving node's true queue
@@ -802,30 +883,45 @@ ready to run against a real capture (`SOVEREIGN_DECISION_LOG=<path>`
 on two daemons, drive traffic, replay). Ordinal p95 agreement needs
 the Tier-2 side to exist, and is unblocked but unstarted.
 
-**Two diagnostic arms landed alongside S1 (2026-07-26).** Neither is a
-candidate policy; both exist to price a question before it costs
-hardware time, which is the cheapest thing the simulator does.
+**Arms landed alongside S1 (2026-07-26).** The first three are
+diagnostics rather than candidate policies: they price a question before
+it costs hardware time, which is the cheapest thing the simulator does.
+The fourth is the §4.1 candidate itself.
 
 | arm | question | answer |
 |---|---|---|
 | `WarmStart` | does F7's self-locking ramp *cost* anything? | Yes, and with the opposite sign to the one the finding implies: removing the penalty is **+235% mean latency**. See F7. |
 | `FreshWarmStart` | is that damage F1's fault? | **No** — the penalty is *larger* under fresh signals (+264%). The offloads lose on their own merits, so the 0.7 floor is compensating for an over-eager objective, not for staleness. This is the arm that stopped a wrong causal claim reaching this doc. |
 | `OutboundOnlyLoad` | would it matter if the gossiped in-flight counter missed inbound peer work? | Yes — **+126% to +584%** mean latency, under-reporting the signal by 67–93%. The two-daemon audit is earned. See F2. |
+| `PredictedTime` | how much of the oracle gap is a **wrong objective** rather than **imperfect information**? | Overwhelmingly the objective: +126%/+200%/+250% against +4.7%/+1.8%/−0.0%. Survives a ±2× mis-rated fleet. **But it routes knowledge turns to 4B laptops**, so it cannot land without a tier floor. Full result in §4.1. |
 
-Both follow the same pattern and it is worth naming, because it
-generalises: **a null result is only informative if the knob is proven
-connected.** Each arm asserts its own wiring — `WarmStart` asserts
-that arm 0 does apply a cold-start penalty and that warm-start removes
-it; `OutboundOnlyLoad` asserts the published sum actually shrinks —
-and only then prints the outcome. Without that, "nothing moved" and
-"nothing was flipped" render identically.
+They all follow one pattern worth naming, because it generalises: **a
+null result is only informative if the knob is proven connected.** Each
+arm asserts its own wiring before printing an outcome — `WarmStart` that
+arm 0 applies a cold-start penalty and warm-start removes it;
+`OutboundOnlyLoad` that the published sum actually shrinks;
+`PredictedTime` that its verdicts differ from arm 0's *and* that
+predictions exist at all (a request with no token shape is
+unpredictable for every candidate including local, which would collapse
+the arm into stay-local-always and print as a strong result). Without
+that, "nothing moved" and "nothing was flipped" render identically.
+
+`PredictedTime` extends the pattern one step, and the extension is the
+reusable part: **an arm must also price the harness assumption that
+most flatters it.** Here the sim builds each node's advertised benchmark
+from the same `Hardware` its service-time model consumes, so the
+predictor was being graded against its own rate card.
+`SimConfig::advertised_rate_error` is the knob that discloses it. The
+generalisation: when an arm consumes a signal the harness *generates*,
+the arm cannot measure that signal's error, and the report has to say
+so before anyone quotes the number.
 
 ### Phase 2 — behavioural changes, each as an arm then a landing
 
 | # | Step | Exit criterion |
 |---|---|---|
-| 1 | §4.1 predicted-time ranking | efficiency ratio improves; `ci-bench` core flat; glassbox trace states a predicted time per candidate |
-| 2 | Fresh backpressure | the median gap between the `as-is` and `fresh` arms closes |
+| 1 | §4.1 predicted-time ranking — **arm done, landing blocked on the tier floor** | ~~efficiency ratio improves~~ (done: 0.29–0.42 → 0.85–0.90 on a mis-rated fleet, 0.95–1.00 on a perfect one). Remaining, and re-scoped by what the arm found: a **tier floor as a separate explicit input**, plus a quality gate — the arm routes knowledge turns to 4B laptops and no §5 metric can see that. Then `ci-bench` core flat; glassbox trace states a predicted time per candidate; an **objective tag on `RoutingDecision`** so replay can pick the right policy |
+| 2 | Fresh backpressure — **demoted** | Against the product objective F1 looked like the median's main cost. Against a *correct* objective it is worth 1.8–4.7% on three fleets and +43.8% on `isolation` alone, so this is now scoped to sustained contention. Exit unchanged: the median gap between the `as-is` and `fresh` arms closes |
 | 3 | Two-choices sampling | herding CoV and p95 improve; the completed-count trade-off is reported, not hidden |
 | 4 | Congestion ≠ failure + honour `Retry-After` | quarantines-of-healthy-nodes goes to zero under a shed scenario |
 | 5 | F6 floors: deficit-ordered queue, contribution demoted to surplus | worst-served-origin share and dependency-weighted shed hold under sustained contention |
