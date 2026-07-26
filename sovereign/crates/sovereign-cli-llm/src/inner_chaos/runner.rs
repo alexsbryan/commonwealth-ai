@@ -191,6 +191,46 @@ async fn run_thread(
             return;
         }
     };
+    // Declare the SURFACE that owns this conversation before the first
+    // message — the harness analogue of the desktop's
+    // `create_conversation(surface_skill_id = Some("inner-work"))`
+    // (sovereign-desktop `commands/conversation.rs`), which persists the
+    // tag at create time so the first dispatch already knows which
+    // surface it is serving.
+    //
+    // WITHOUT this the harness was NOT testing the witness path
+    // (found 2026-07-26, instrumented probe). `inner-work` is
+    // `activation_kind = "workspace"`, and since the 2026-07-15
+    // regression fix `background_skill_id_for_conversation` deliberately
+    // NEVER infers a workspace skill at dispatch time — workspace
+    // ownership is a create-time declaration. So the conversation row
+    // kept `skill_id = NULL`, `resolve_active_mode` returned `None`,
+    // `policy_for` received `active_mode = None` + the default Factual
+    // register, and `apply_witness_intent_override` returned on its
+    // first line. The relational register was never pinned: turns
+    // reached the witness handler only when the router happened to
+    // classify EXPRESSIVE, and a "how do I stop seeing myself as
+    // unreliable?" turn classified REASONING and dispatched to
+    // `DeepQuery` — the handler the 2026-07-08 fix loop had explicitly
+    // closed off. Third instance of this harness-validity class, after
+    // the brain/judge silently on the 4B fast slot and the dead
+    // `turn_register()` recall guard.
+    if let Err(e) = session
+        .runtime
+        .seed_conversation(&conv_id, unix_seconds() as i64, Some(WITNESS_SKILL))
+        .await
+    {
+        let record = error_record(
+            thread_idx,
+            0,
+            persona,
+            &conv_id,
+            format!("conversation surface-tag failed: {e}"),
+        );
+        push(journal, records, record);
+        return;
+    }
+
     // NOTE: seeded with `None` (General pool), which the inner-work
     // witness scope (`Scoped("inner-work")`) cannot see — so the core
     // safety personas run against an EMPTY recall pool. That is fine

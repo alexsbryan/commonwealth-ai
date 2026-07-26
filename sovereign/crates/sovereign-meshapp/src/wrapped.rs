@@ -32,7 +32,7 @@ use std::path::Path;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::chunkers::threaded_turns::{parse_turns, Attribution};
+use corpus_engine::chunkers::threaded_turns::{parse_turns, Attribution, ParsedTurn};
 use corpus_engine::index::CorpusIndex;
 
 pub mod semantic;
@@ -41,11 +41,16 @@ pub use semantic::{
     Asking, HourBand, NightShiftCard, Pivot, RecurringCard, RecurringThread, TurnCard,
 };
 
+/// v4: a turn's words now count the continuation chunks it spills into,
+/// so the Scale card's headline stops undercounting the archive ~5x.
 /// v3: obsessions + cast moved onto the `conv_raptor_nodes` enrichment
 /// layer and off raw GLiNER frequency; three embedding-backed cards
-/// added. A builder change only reaches existing installs on a corpus
-/// update unless this bumps — and this one must reach them.
-pub const WRAPPED_SCHEMA_VERSION: u32 = 3;
+/// added.
+///
+/// A builder change only reaches existing installs when the corpus next
+/// updates — unless this bumps. Bump it whenever a cached artifact
+/// would otherwise keep serving a figure this build knows is wrong.
+pub const WRAPPED_SCHEMA_VERSION: u32 = 4;
 pub const WRAPPED_DIRNAME: &str = "wrapped";
 const EDITION_ALL_TIME: &str = "all-time";
 
@@ -139,12 +144,16 @@ pub struct ScaleCard {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RhythmCard {
-    /// `heatmap[weekday][hour]` turn counts; weekday 0 = Monday, hour is
-    /// UTC (the archive's clock — turn headers slice the export's UTC
-    /// ISO timestamps).
+    /// `heatmap[weekday][hour]` turn counts; weekday 0 = Monday. Hours
+    /// are LOCAL — the archive stamps UTC, and
+    /// [`semantic::LocalClock`] moves each turn onto the reader's own
+    /// wall clock before it is bucketed, weekday included.
     pub heatmap: Vec<Vec<u32>>,
     pub total_turns: u64,
     pub longest_session: Option<LongestSession>,
+    /// The offset the hours above are expressed in.
+    pub utc_offset_hours: i32,
+    pub derivation: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,7 +291,16 @@ pub struct ConvDoc {
 pub struct Turn {
     pub ts: Option<NaiveDateTime>,
     pub is_user: bool,
-    /// Whitespace-token count of the body (header line excluded).
+    /// Whitespace-token count of the turn's FULL body — the part in the
+    /// header-bearing chunk plus every continuation chunk the turn
+    /// spills into, header lines excluded.
+    ///
+    /// The distinction is the whole ballgame on a real archive: a turn
+    /// block ends where its chunk ends, so counting only header-bearing
+    /// text saw 19.9% of `conversations-anthropic` and reported the
+    /// user:assistant ratio as 2.7x when it is 14.9x (measured
+    /// 2026-07-26 over 16,404 chunks). [`build_conv_docs`] owns the
+    /// attribution walk that closes that gap.
     pub words: u64,
     pub chunk_id: u64,
     /// First non-empty body line — the only quotable span a turn offers.
@@ -381,11 +399,16 @@ pub async fn build_wrapped_artifact(
         theme_index.prior.len(),
     );
 
+    // One clock for the whole deck. Inferred from the archive itself
+    // (the host OS offset is not the archive owner's — a shared or
+    // travelled machine would relabel every hour on every card).
+    let clock = semantic::LocalClock::infer(&docs, None);
+
     let mut cards = Vec::new();
     if let Some(c) = fold_scale(&docs) {
         cards.push(WrappedCard::Scale(c));
     }
-    if let Some(c) = fold_rhythm(&docs) {
+    if let Some(c) = fold_rhythm(&docs, &clock) {
         cards.push(WrappedCard::Rhythm(c));
     }
     if let Some(c) = semantic::fold_recurring(&docs, &embeddings, &chunk_content) {
@@ -397,7 +420,7 @@ pub async fn build_wrapped_artifact(
     if let Some(c) = semantic::fold_obsessions(&theme_index) {
         cards.push(WrappedCard::Obsessions(c));
     }
-    if let Some(c) = semantic::fold_night_shift(&theme_index, &docs, None) {
+    if let Some(c) = semantic::fold_night_shift(&theme_index, &docs, &clock) {
         cards.push(WrappedCard::NightShift(c));
     }
     if let Some(c) = semantic::fold_cast(&theme_index) {
@@ -680,6 +703,21 @@ fn turn_body(block: &str) -> &str {
     }
 }
 
+/// The run of text a chunk opens with, before its first turn header —
+/// i.e. the tail of the turn the PREVIOUS chunk left open. A chunk with
+/// no header at all is one long continuation, so the whole of it
+/// qualifies. Returns `""` when the chunk opens on a header.
+///
+/// This is the one rule that makes a turn's real extent recoverable:
+/// `parse_turns` blocks stop at the chunk boundary, and 13,373 of this
+/// archive's 16,404 chunks are pure continuation.
+fn continuation_lead<'a>(content: &'a str, turns: &[ParsedTurn]) -> &'a str {
+    match turns.first() {
+        Some(t) => &content[..t.byte_start],
+        None => content,
+    }
+}
+
 fn first_nonempty_line(body: &str) -> String {
     body.lines()
         .map(str::trim_end)
@@ -728,7 +766,21 @@ pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec
                 .filter(|s| !s.trim().is_empty());
             doc.title = from_meta.or_else(|| row.title.clone());
         }
-        for t in parse_turns(&row.content) {
+        let turns = parse_turns(&row.content);
+        // Text before this chunk's first header is the tail of the turn
+        // the previous chunk left open — credit it there. Text before a
+        // conversation's FIRST header belongs to no turn and is dropped
+        // rather than guessed at (2,912 words, 0.08% of the real
+        // archive).
+        let lead = continuation_lead(&row.content, &turns)
+            .split_whitespace()
+            .count() as u64;
+        if lead > 0 {
+            if let Some(open) = doc.turns.last_mut() {
+                open.words += lead;
+            }
+        }
+        for t in turns {
             let body = turn_body(&t.block);
             doc.turns.push(Turn {
                 ts: t.timestamp.as_deref().and_then(parse_turn_ts),
@@ -785,7 +837,7 @@ pub fn fold_scale(docs: &[ConvDoc]) -> Option<ScaleCard> {
         derivation: vec![
             format!("conversations = distinct source documents in the index ({})", docs.len()),
             format!(
-                "words_total = Σ whitespace tokens over {turn_count} turn bodies (headers excluded) = {words_total}"
+                "words_total = Σ whitespace tokens over {turn_count} turn bodies, each counted across every chunk it spills into (turn headers, and any text before a conversation's first header, excluded) = {words_total}"
             ),
             format!(
                 "months_active = distinct (year, month) over timestamped turns = {}",
@@ -795,34 +847,52 @@ pub fn fold_scale(docs: &[ConvDoc]) -> Option<ScaleCard> {
     })
 }
 
-pub fn fold_rhythm(docs: &[ConvDoc]) -> Option<RhythmCard> {
+/// Turns by weekday × hour, on the reader's clock.
+///
+/// The grid is the one place the deck shows a whole week at once, so it
+/// is also the one place a wrong clock is most visible: bucketing the
+/// raw UTC stamp put the reference archive's peak at 20:00 while the
+/// Night Shift card, four slides later, called the same turns 13:00.
+/// Both cards now read [`semantic::LocalClock`].
+pub fn fold_rhythm(docs: &[ConvDoc], clock: &semantic::LocalClock) -> Option<RhythmCard> {
     let mut heatmap = vec![vec![0u32; 24]; 7];
     let mut total_turns = 0u64;
     let mut any_ts = false;
+    let mut stamped = 0u64;
     for d in docs {
         for t in &d.turns {
             total_turns += 1;
             if let Some(ts) = t.ts {
                 any_ts = true;
-                let wd = ts.weekday().num_days_from_monday() as usize;
-                heatmap[wd][ts.hour() as usize] += 1;
+                stamped += 1;
+                let local = clock.local(ts);
+                let wd = local.weekday().num_days_from_monday() as usize;
+                heatmap[wd][local.hour() as usize] += 1;
             }
         }
     }
     if !any_ts {
         return None;
     }
+    let mut derivation = vec![format!(
+        "heatmap = {stamped} timestamped turns bucketed by local weekday × hour (of {total_turns} turns in all)"
+    )];
+    derivation.extend(clock.derivation.iter().cloned());
     Some(RhythmCard {
         heatmap,
         total_turns,
-        longest_session: longest_session(docs),
+        longest_session: longest_session(docs, clock),
+        utc_offset_hours: clock.offset_hours,
+        derivation,
     })
 }
 
 /// Best maximal run of timestamped turns within one conversation with
 /// inter-turn gap ≤ [`SESSION_GAP_MIN`]; ranked by duration, then turn
-/// count. Excerpt = first user turn's opening line within the run.
-fn longest_session(docs: &[ConvDoc]) -> Option<LongestSession> {
+/// count. Excerpt = first user turn's opening line within the run. The
+/// reported date is the reader's local one — a session that began at
+/// 01:00 UTC belongs to the evening before at UTC−7.
+fn longest_session(docs: &[ConvDoc], clock: &semantic::LocalClock) -> Option<LongestSession> {
     let mut best: Option<LongestSession> = None;
     for d in docs {
         let stamped: Vec<&Turn> = d.turns.iter().filter(|t| t.ts.is_some()).collect();
@@ -849,6 +919,7 @@ fn longest_session(docs: &[ConvDoc]) -> Option<LongestSession> {
                 }
             };
             if better {
+                let local_start = clock.local(start);
                 let mut chunk_ids: Vec<u64> = run.iter().map(|t| t.chunk_id).collect();
                 chunk_ids.dedup();
                 let excerpt = run
@@ -861,7 +932,7 @@ fn longest_session(docs: &[ConvDoc]) -> Option<LongestSession> {
                 best = Some(LongestSession {
                     conv_uuid: d.conv_uuid.clone(),
                     title: d.title.clone(),
-                    date: start.format("%Y-%m-%d").to_string(),
+                    date: local_start.format("%Y-%m-%d").to_string(),
                     duration_minutes: duration,
                     turns,
                     chunk_ids,
@@ -1028,15 +1099,46 @@ pub fn generic_keys_by_case_profile(
     generic
 }
 
-/// Assistant-authored turn bodies — the formal-register evidence pool
-/// for the case profile.
+/// Assistant-authored prose — the formal-register evidence pool for the
+/// case profile.
+///
+/// Walks each conversation in chunk order carrying the open turn's
+/// authorship, so an assistant answer that spills across continuation
+/// chunks contributes all of itself. Reading header-bearing text alone
+/// left 81.5% of the real archive's prose out of the pool the generics
+/// filter needs `CASE_PROFILE_MIN_EVIDENCE` sightings from.
 pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec<String> {
+    let mut sorted: Vec<&corpus_engine::index::EnrichmentChunkRow> = rows.iter().collect();
+    // Group by conversation, then archive order within it — the open
+    // turn must never carry across a conversation boundary.
+    sorted.sort_by(|a, b| {
+        a.source_doc_id
+            .cmp(&b.source_doc_id)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
     let mut out = Vec::new();
-    for row in rows {
-        for t in parse_turns(&row.content) {
+    let mut doc: Option<&Option<String>> = None;
+    let mut open_is_assistant = false;
+    for row in sorted {
+        if doc != Some(&row.source_doc_id) {
+            doc = Some(&row.source_doc_id);
+            open_is_assistant = false;
+        }
+        let turns = parse_turns(&row.content);
+        if open_is_assistant {
+            let lead = continuation_lead(&row.content, &turns).trim();
+            if !lead.is_empty() {
+                out.push(lead.to_string());
+            }
+        }
+        for t in &turns {
             if t.attribution == Attribution::Assistant {
                 out.push(turn_body(&t.block).to_string());
             }
+        }
+        if let Some(last) = turns.last() {
+            open_is_assistant = last.attribution == Attribution::Assistant;
         }
     }
     out

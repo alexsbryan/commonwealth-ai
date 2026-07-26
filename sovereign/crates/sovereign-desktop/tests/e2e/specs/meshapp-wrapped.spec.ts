@@ -15,7 +15,7 @@ HEATMAP[0][2] = 12; // Monday 02:00 — the max cell
 HEATMAP[4][22] = 3;
 
 const ARTIFACT = {
-  schema_version: 3,
+  schema_version: 4,
   edition: "all-time",
   built_at_unix: 1781000000,
   corpus_id: "conversations-anthropic",
@@ -46,6 +46,14 @@ const ARTIFACT = {
         chunk_ids: [11, 12],
         excerpt: { chunk_id: 11, text: "Can you explain how llama.cpp slots work?" },
       },
+      // The grid ships already shifted onto the reader's clock — the
+      // same offset the night-shift card names, so the deck tells one
+      // time. The bundle never re-buckets.
+      utc_offset_hours: -7,
+      derivation: [
+        "heatmap = 9421 timestamped turns bucketed by local weekday × hour",
+        "its centre placed at 03:00 local ⇒ local clock = UTC-7",
+      ],
     },
     {
       type: "recurring",
@@ -223,6 +231,10 @@ test.describe("Wrapped mesh app bundle", () => {
     await page.goto("/meshapp/wrapped/index.html");
     await page.keyboard.press("ArrowRight");
     const slide = activeSlide(page);
+    // The kicker + headline survive the grid render — heatGrid() clears
+    // whatever container it is given, and once got the whole slide.
+    await expect(slide).toContainText("When you think");
+    await expect(slide).toContainText("9,421 turns");
     await expect(slide.locator(".heat-cell")).toHaveCount(7 * 24);
     const max = slide.locator('.heat-cell[data-i="4"]');
     await expect(max).toHaveCount(1);
@@ -234,6 +246,10 @@ test.describe("Wrapped mesh app bundle", () => {
     // Tap-through dereferences to the cited conversation text.
     await slide.getByRole("button", { name: /where it went/ }).first().click();
     await expect(slide.locator(".card-full").first()).toContainText("Slots are lazy-loaded");
+    // One clock for the whole deck: the grid is local, and says so.
+    await expect(slide).toContainText("on your own clock");
+    await slide.getByRole("button", { name: /why this/ }).first().click();
+    await expect(slide).toContainText("local clock = UTC-7");
   });
 
   test("the obsessions card counts conversations and cites a sample", async ({ page }) => {

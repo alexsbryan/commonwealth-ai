@@ -16,6 +16,15 @@ fn turn(ts_str: &str, is_user: bool, words: u64, chunk_id: u64, first_line: &str
     }
 }
 
+/// A clock with a known offset — the folds take the clock as an
+/// argument precisely so a test can pin it.
+fn clock(offset_hours: i32) -> semantic::LocalClock {
+    semantic::LocalClock {
+        offset_hours,
+        derivation: vec![format!("test clock UTC{offset_hours:+}")],
+    }
+}
+
 fn doc(uuid: &str, turns: Vec<Turn>) -> ConvDoc {
     let mut chunk_ids: Vec<u64> = turns.iter().map(|t| t.chunk_id).collect();
     chunk_ids.dedup();
@@ -60,7 +69,7 @@ fn scale_absent_for_empty_corpus() {
 // ─── fold_rhythm ─────────────────────────────────────────────────────
 
 #[test]
-fn rhythm_heatmap_buckets_by_utc_weekday_and_hour() {
+fn rhythm_heatmap_buckets_by_weekday_and_hour() {
     // 2025-01-06 is a Monday.
     let docs = vec![doc(
         "a",
@@ -70,10 +79,51 @@ fn rhythm_heatmap_buckets_by_utc_weekday_and_hour() {
             turn("2025-01-12 23:59", true, 1, 2, "z"), // Sunday
         ],
     )];
-    let c = fold_rhythm(&docs).unwrap();
+    let c = fold_rhythm(&docs, &clock(0)).unwrap();
     assert_eq!(c.heatmap[0][2], 2); // Monday 02:xx
     assert_eq!(c.heatmap[6][23], 1); // Sunday 23:xx
     assert_eq!(c.total_turns, 3);
+    assert_eq!(c.utc_offset_hours, 0);
+}
+
+/// The clock moves the whole datetime, so a turn near midnight lands on
+/// a different WEEKDAY, not just a different column. Getting this half
+/// right would smear the grid a day out of phase.
+#[test]
+fn rhythm_heatmap_is_on_the_local_clock_weekday_included() {
+    let docs = vec![doc(
+        "a",
+        vec![
+            // Monday 02:10 UTC → Sunday 19:10 at UTC−7.
+            turn("2025-01-06 02:10", true, 1, 1, "x"),
+            // Monday 23:00 UTC → Monday 16:00 at UTC−7.
+            turn("2025-01-06 23:00", false, 1, 1, "y"),
+        ],
+    )];
+    let c = fold_rhythm(&docs, &clock(-7)).unwrap();
+    assert_eq!(c.heatmap[6][19], 1, "Sunday 19:00 local");
+    assert_eq!(c.heatmap[0][16], 1, "Monday 16:00 local");
+    assert_eq!(c.heatmap[0][2], 0, "nothing left on the UTC cell");
+    assert_eq!(c.utc_offset_hours, -7);
+    assert!(c.derivation.iter().any(|d| d.contains("test clock UTC-7")));
+}
+
+/// A late-night session belongs to the evening the reader lived, not the
+/// next UTC day.
+#[test]
+fn longest_session_date_is_local() {
+    let docs = vec![doc(
+        "night",
+        vec![
+            turn("2025-03-10 01:00", true, 1, 1, "start"),
+            turn("2025-03-10 01:40", false, 1, 1, "end"),
+        ],
+    )];
+    let s = fold_rhythm(&docs, &clock(-7))
+        .unwrap()
+        .longest_session
+        .unwrap();
+    assert_eq!(s.date, "2025-03-09");
 }
 
 #[test]
@@ -88,7 +138,7 @@ fn rhythm_absent_when_no_turn_is_timestamped() {
             first_line: "hello".into(),
         }],
     )];
-    assert!(fold_rhythm(&docs).is_none());
+    assert!(fold_rhythm(&docs, &clock(0)).is_none());
 }
 
 #[test]
@@ -115,7 +165,7 @@ fn longest_session_splits_on_gap_and_prefers_duration() {
             ],
         ),
     ];
-    let s = fold_rhythm(&docs).unwrap().longest_session.unwrap();
+    let s = fold_rhythm(&docs, &clock(0)).unwrap().longest_session.unwrap();
     assert_eq!(s.conv_uuid, "rabbit");
     assert_eq!(s.date, "2025-03-09");
     assert_eq!(s.duration_minutes, 61);
@@ -145,7 +195,7 @@ fn longest_session_tie_breaks_on_turn_count() {
             ],
         ),
     ];
-    let s = fold_rhythm(&docs).unwrap().longest_session.unwrap();
+    let s = fold_rhythm(&docs, &clock(0)).unwrap().longest_session.unwrap();
     assert_eq!(s.conv_uuid, "three-turns");
 }
 
@@ -369,6 +419,81 @@ fn conv_docs_parse_turns_titles_and_word_counts() {
     assert_eq!(d.turns[0].words, 6); // "How do lifetimes work in Rust?"
     assert_eq!(d.turns[0].first_line, "How do lifetimes work in Rust?");
     assert_eq!(d.turns[2].chunk_id, 6);
+}
+
+/// A turn's words include every continuation chunk it spills into.
+/// Reading only header-bearing text saw 19.9% of the real archive.
+#[test]
+fn conv_docs_credit_continuation_chunks_to_the_open_turn() {
+    let rows = vec![
+        chunk_row(5, "conv-a", CONV_A, None),
+        // Pure continuation of the assistant answer — no header at all.
+        chunk_row(6, "conv-a", "and the compiler checks every one of them.", None),
+        // Continuation, then a new turn in the same chunk.
+        chunk_row(
+            7,
+            "conv-a",
+            "Mostly.\n\n### [2025-01-06 02:40] user\n\nAnd borrows?",
+            None,
+        ),
+    ];
+    let docs = build_conv_docs(&rows);
+    let d = &docs[0];
+    assert_eq!(d.turns.len(), 3);
+    // User turn is untouched by the assistant's spill.
+    assert_eq!(d.turns[0].words, 6);
+    // "They bound how long references live." (6) + chunk 6 (8) + "Mostly." (1)
+    assert_eq!(d.turns[1].words, 15);
+    assert!(!d.turns[1].is_user);
+    // The continuation does not become a turn, but its chunk is shape.
+    assert_eq!(d.turns[2].chunk_id, 7);
+    assert_eq!(d.chunk_ids, vec![5, 6, 7]);
+}
+
+/// Text before a conversation's FIRST header belongs to no turn, and an
+/// open turn never carries across a conversation boundary.
+#[test]
+fn conv_docs_drop_preamble_and_never_leak_across_conversations() {
+    let rows = vec![
+        chunk_row(5, "conv-a", CONV_A, None),
+        chunk_row(6, "conv-b", "orphan preamble with no header at all", None),
+        chunk_row(
+            7,
+            "conv-b",
+            "### [2025-02-01 10:00] user\n\nSecond conversation.",
+            None,
+        ),
+    ];
+    let docs = build_conv_docs(&rows);
+    let b = docs.iter().find(|d| d.conv_uuid == "conv-b").unwrap();
+    assert_eq!(b.turns.len(), 1);
+    assert_eq!(b.turns[0].words, 2, "preamble must not land on conv-b");
+    let a = docs.iter().find(|d| d.conv_uuid == "conv-a").unwrap();
+    assert_eq!(
+        a.turns[1].words, 6,
+        "conv-b's preamble must not land on conv-a's open turn"
+    );
+}
+
+#[test]
+fn assistant_text_pool_includes_continuations_not_user_prose() {
+    let rows = vec![
+        chunk_row(5, "conv-a", CONV_A, None),
+        chunk_row(6, "conv-a", "assistant spill sentence", None),
+        chunk_row(
+            7,
+            "conv-a",
+            "### [2025-01-06 02:40] user\n\nAnd borrows?",
+            None,
+        ),
+        // Continuation of a USER turn — must not enter the pool.
+        chunk_row(8, "conv-a", "user spill sentence", None),
+    ];
+    let pool = collect_assistant_text(&rows).join("\n");
+    assert!(pool.contains("They bound how long references live."));
+    assert!(pool.contains("assistant spill sentence"));
+    assert!(!pool.contains("user spill sentence"));
+    assert!(!pool.contains("How do lifetimes work in Rust?"));
 }
 
 // ─── end-to-end: build + audit + staleness over a real index ─────────

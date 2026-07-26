@@ -323,8 +323,8 @@ fn night_shift_bands_by_local_hour_not_utc() {
     let c: HashMap<u64, String> = pairs.into_iter().collect();
     let idx = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());
 
-    let utc = fold_night_shift(&idx, &docs, Some(0));
-    let shifted = fold_night_shift(&idx, &docs, Some(-7));
+    let utc = fold_night_shift(&idx, &docs, &LocalClock::infer(&docs, Some(0)));
+    let shifted = fold_night_shift(&idx, &docs, &LocalClock::infer(&docs, Some(-7)));
     // Single band ⇒ card withheld (nothing to contrast), but the band
     // that WOULD be populated differs, which is the point.
     assert!(utc.is_none() && shifted.is_none());
@@ -364,7 +364,7 @@ fn night_shift_contrasts_two_populated_bands() {
     }
     let c: HashMap<u64, String> = pairs.into_iter().collect();
     let idx = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());
-    let card = fold_night_shift(&idx, &docs, Some(0)).unwrap();
+    let card = fold_night_shift(&idx, &docs, &LocalClock::infer(&docs, Some(0))).unwrap();
     assert_eq!(card.utc_offset_hours, 0);
     assert_eq!(card.bands.len(), 2);
 

@@ -374,6 +374,12 @@ pub struct ParsedTurn {
     pub timestamp: Option<String>,
     /// The full block, header line included, trailing whitespace trimmed.
     pub block: String,
+    /// Byte offset of the block's header within the text that was
+    /// parsed. `text[..turns[0].byte_start]` is therefore the text that
+    /// precedes every header — for a chunk cut out of the middle of a
+    /// long turn, that leading text belongs to the PREVIOUS turn, and a
+    /// caller totalling a turn's real extent needs the offset to say so.
+    pub byte_start: usize,
 }
 
 /// Split rendered conversation text into its turn blocks. Returns an
@@ -415,6 +421,7 @@ pub fn parse_turns(text: &str) -> Vec<ParsedTurn> {
             attribution,
             timestamp,
             block,
+            byte_start: *start,
         });
     }
     turns

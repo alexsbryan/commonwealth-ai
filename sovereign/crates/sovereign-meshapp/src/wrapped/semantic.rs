@@ -775,20 +775,54 @@ pub fn infer_utc_offset(docs: &[ConvDoc], os_offset: Option<i32>) -> (i32, Vec<S
                 (start + 3) % 24
             ),
             format!("its centre placed at 03:00 local ⇒ local clock = UTC{offset:+}"),
-            "hour bands below are local; the archive itself stamps UTC".to_string(),
+            "every hour this deck shows you is local; the archive itself stamps UTC".to_string(),
         ],
     )
+}
+
+/// The archive's local clock — inferred once and handed to every card
+/// that puts an hour in front of the reader.
+///
+/// It exists because two cards deriving the clock independently is two
+/// chances to disagree on the same slide deck. Before it, the Rhythm
+/// heatmap bucketed in UTC while the Night Shift bands were labelled
+/// UTC−7, so the reference archive's peak read as 20:00 on one card and
+/// 13:00 on the other — the same person, seven hours apart.
+#[derive(Debug, Clone)]
+pub struct LocalClock {
+    pub offset_hours: i32,
+    /// How the offset was arrived at — verbatim into the cards' own
+    /// `derivation`, so the reader can audit the clock like any figure.
+    pub derivation: Vec<String>,
+}
+
+impl LocalClock {
+    pub fn infer(docs: &[ConvDoc], os_offset: Option<i32>) -> Self {
+        let (offset_hours, derivation) = infer_utc_offset(docs, os_offset);
+        Self {
+            offset_hours,
+            derivation,
+        }
+    }
+
+    /// A UTC stamp read on the archive-owner's own wall clock. Shifts the
+    /// whole datetime, not just the hour: a 23:00 UTC turn at UTC−7 is
+    /// the PREVIOUS day at 16:00, and a heatmap keyed by weekday has to
+    /// move it there too.
+    pub fn local(&self, ts: NaiveDateTime) -> NaiveDateTime {
+        ts + chrono::Duration::hours(self.offset_hours as i64)
+    }
 }
 
 pub fn fold_night_shift(
     idx: &ThemeIndex,
     docs: &[ConvDoc],
-    os_offset: Option<i32>,
+    clock: &LocalClock,
 ) -> Option<NightShiftCard> {
     if idx.is_empty() {
         return None;
     }
-    let (offset, derivation) = infer_utc_offset(docs, os_offset);
+    let (offset, derivation) = (clock.offset_hours, clock.derivation.clone());
 
     // chunk id → local hour of its first user turn.
     let mut chunk_hour: HashMap<u64, u32> = HashMap::new();

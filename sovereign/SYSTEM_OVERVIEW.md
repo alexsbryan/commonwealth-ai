@@ -2224,11 +2224,24 @@ Anything reasoning about conversation SHAPE must read
 135 of 425 conversations) until 2026-07-26. The corollary is a licence,
 not just a warning: because an unparsed chunk provably holds no turn
 boundary, "the last thing you said before the seam" is correct at any
-chunk distance, so the quote walk is deliberately unbounded. (3) **The
-archive stamps UTC and the Night Shift claim is false in it** —
-`infer_utc_offset` locates the 4h trough in the user-turn histogram and
-places its centre at 03:00 local (this archive infers UTC-7); the naive
-UTC version labelled 17:00 local "late night". Bundles compose the
+chunk distance, so the quote walk is deliberately unbounded. The same
+blind spot ran through TEXT until 2026-07-26: a `parse_turns` block
+stops at its chunk's edge, so a turn's words have to be walked forward
+across the continuation chunks it spills into (`continuation_lead` +
+`build_conv_docs`). Counting header-bearing text alone saw 19.9% of the
+archive and reported 704,924 words at a 2.7x assistant:user ratio where
+the truth is 3,512,842 at 14.9x. (3) **The archive stamps UTC, and the
+deck shows one clock — the reader's.** `semantic::LocalClock` is
+inferred once per build (`infer_utc_offset` locates the 4h trough in the
+user-turn histogram and places its centre at 03:00 local; this archive
+infers UTC-7) and handed to every card that shows an hour: the Rhythm
+heatmap shifts whole datetimes, weekday included, and the Night Shift
+bands read the same offset. Two cards inferring it separately is two
+chances to disagree in front of the reader — which is exactly what
+shipped in v3, where the grid peaked at 20:00 UTC while Night Shift
+called those same turns 13:00. `WRAPPED_SCHEMA_VERSION` (now 4) is the
+lever that forces a cached artifact to rebuild when a fold change like
+this must reach existing installs before the corpus next updates. Bundles compose the
 **MeshApp SDK**
 (`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
 corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable

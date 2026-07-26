@@ -113,7 +113,8 @@ impl Runtime {
                      \u{2022} Now: {now}\n\
                      \n\
                      Three small moves, in order — not a template to recite:\n\
-                       1. Name what they said, specifically.\n\
+                       1. Speak to the specific thing they said — \
+                          without opening by quoting it back.\n\
                        2. Surface the prior — name it, don't smooth it \
                           into agreement.\n\
                        3. Hand the decision back with one real question.",
@@ -617,7 +618,8 @@ impl Runtime {
                      \u{2022} Now: {now}\n\
                      \n\
                      Three small moves, in order — not a template to recite:\n\
-                       1. Name what they said, specifically.\n\
+                       1. Speak to the specific thing they said — \
+                          without opening by quoting it back.\n\
                        2. Surface the prior — name it, don't smooth it \
                           into agreement.\n\
                        3. Hand the decision back with one real question.",
