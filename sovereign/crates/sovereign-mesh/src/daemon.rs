@@ -1960,7 +1960,7 @@ impl EmbeddedDaemon {
             // direct-ip miss, and a starved `/status` probe (3 straight misses at
             // ~774ms gossip RTT under decode load) that dropped the peer entirely.
             let mut fresh: Option<(String, String)> = None;
-            if let Some(p) = prev.as_ref().filter(|p| p.is_direct()) {
+            match reaffirm_plan(prev.as_ref(), rpc_tunnel_mode()) {
                 // KNOWN direct-ip worker still gossip-Online (it passed the Online +
                 // dialable membership filter above): re-affirm its cached endpoint
                 // WITHOUT any network probe. Measured 2026-07-19: under active decode
@@ -1976,11 +1976,24 @@ impl EmbeddedDaemon {
                 // (sticky is pruned for offline nodes after the loop); a dead
                 // rpc-server with live gossip surfaces via the ggml RPC connection
                 // failing → supervised reload (P0.4), not a discovery probe.
-                fresh = Some((p.endpoint.clone(), p.via.clone()));
-            } else {
-                // UNKNOWN worker (initial discovery), or a known non-direct (bridge/
-                // probe-host) worker whose liveness can't be cheaply TCP-probed: run
-                // the full `/status` probe + endpoint selection.
+                Reaffirm::Held => {
+                    fresh = prev.as_ref().map(|p| (p.endpoint.clone(), p.via.clone()));
+                }
+                // KNOWN bridged worker: re-mint its loopback endpoint straight from
+                // the transport's bridge cache — same gossip-as-liveness argument,
+                // and the `/status` probe it replaces rides the SAME iroh path as
+                // the tunnel it would be checking (so decode load starves it on a
+                // worker that is serving fine, and a non-direct endpoint has no
+                // stickiness to survive the miss — see `reaffirm_plan`).
+                Reaffirm::Rebridge => {
+                    fresh = bridge_rpc_endpoint(&transport, &m).await;
+                }
+                Reaffirm::FullProbe => {}
+            }
+            if fresh.is_none() {
+                // UNKNOWN worker (initial discovery), a probe-host worker, or a
+                // bridged one whose iroh path just vanished (it may have moved onto
+                // the LAN): run the full `/status` probe + endpoint selection.
                 let probes = transport
                     .endpoints(
                         &commonwealth_transport::peer_contact(&m),
@@ -3502,6 +3515,66 @@ impl StickyEndpoint {
     fn is_direct(&self) -> bool {
         self.via == "direct-ip"
     }
+
+    /// A loopback endpoint served by an iroh bridge to the peer.
+    fn is_bridge(&self) -> bool {
+        self.via.starts_with("iroh-bridge")
+    }
+}
+
+/// How a discovery tick should re-establish the endpoint of a peer we already
+/// hold a choice for. Split out from the IO so the "never re-probe a known
+/// worker over the link its own tensors are saturating" rule is a unit-testable
+/// policy rather than a branch buried in a 200-line async method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reaffirm {
+    /// Re-use the held endpoint verbatim — no network at all.
+    Held,
+    /// Re-resolve the peer's iroh bridge. Loopback-local against the transport's
+    /// bridge cache: no WAN round-trip, so congestion can't starve it.
+    Rebridge,
+    /// Nothing worth re-affirming — run the full `/status` probe.
+    FullProbe,
+}
+
+/// The re-affirm policy for one peer, given last tick's held choice.
+///
+/// Both known-worker cases rest on the SAME evidence: the peer already passed
+/// this tick's gossip-Online + dialable membership filter, and gossip rides a
+/// separate path with a looser budget than any probe we could run here. What a
+/// probe would add is not liveness but noise — it rides the very link the RPC
+/// tensor traffic is saturating.
+///
+/// For a bridged worker that noise was load-bearing (2026-07-26 tunnel e2e): the
+/// `/status` probe travels the same iroh path as the tunnel, and each timeout
+/// left `fresh = None`, which `sticky_endpoint` turns into "worker absent" for a
+/// non-direct endpoint — read downstream as a flap. The endpoint never moved
+/// (`127.0.0.1:40021` for six straight minutes) yet the tracker logged
+/// `flaps=9 quarantine_count=5 cooldown_secs=300`, excluding a peer that was
+/// serving the whole time. Re-minting the bridge instead touches only loopback.
+///
+/// A dead rpc-server behind live gossip is NOT this function's problem in either
+/// case — it surfaces when ggml's RPC connection fails, via supervised reload
+/// (DAEMON_RESILIENCE P0.4), not via a discovery probe.
+///
+/// **Stated trade-off:** a bridged worker is never re-probed for a direct IP, so
+/// under `auto` a peer that fell back to the tunnel stays on it rather than
+/// upgrading back to raw LAN TCP. This is deliberate and narrow: `auto` prefers
+/// direct-ip at selection, so becoming bridged at all means direct was
+/// unreachable at first sight; cross-network peers (the case this path exists
+/// for) can never be direct; `always` wants the tunnel by definition; and the
+/// pin clears on the peer's next Offline→Online cycle, which prunes stickiness.
+/// The upgrade probe is deferrable, but if added it must be an UPGRADE ONLY —
+/// its failure may never drop the worker, or it re-opens the flap this closed.
+fn reaffirm_plan(prev: Option<&StickyEndpoint>, tunnel: RpcTunnelMode) -> Reaffirm {
+    match prev {
+        Some(p) if p.is_direct() => Reaffirm::Held,
+        // `never` means the operator has opted out of bridging; re-probe so the
+        // worker can move to a direct address (or drop out) rather than be
+        // pinned to a tunnel we're no longer allowed to use.
+        Some(p) if p.is_bridge() && tunnel != RpcTunnelMode::Never => Reaffirm::Rebridge,
+        _ => Reaffirm::FullProbe,
+    }
 }
 
 /// Consecutive direct-ip probe misses tolerated before a worker's endpoint is
@@ -3676,6 +3749,69 @@ mod tests {
             direct_misses: 0,
         };
         assert!(sticky_endpoint(Some(&bridge_only), None, 3).is_none());
+    }
+
+    fn held(via: &str) -> StickyEndpoint {
+        StickyEndpoint {
+            endpoint: "127.0.0.1:40021".to_string(),
+            via: via.to_string(),
+            direct_misses: 0,
+        }
+    }
+
+    #[test]
+    fn reaffirm_probes_only_what_it_has_never_seen() {
+        use RpcTunnelMode::*;
+        // First sight of a peer: nothing held, so the full probe is the only way
+        // to learn whether it serves an RPC worker at all.
+        assert_eq!(reaffirm_plan(None, Auto), Reaffirm::FullProbe);
+        // A proven direct-ip is re-affirmed from cache (2026-07-19 guard).
+        assert_eq!(reaffirm_plan(Some(&held("direct-ip")), Auto), Reaffirm::Held);
+        // A probe-host fallback is a last resort, not evidence of anything —
+        // keep re-probing so it can be promoted to a real transport.
+        assert_eq!(
+            reaffirm_plan(Some(&held("probe-host")), Auto),
+            Reaffirm::FullProbe
+        );
+    }
+
+    #[test]
+    fn reaffirm_never_reprobes_a_known_bridged_worker_over_its_own_tunnel() {
+        // THE 2026-07-26 REGRESSION. A bridged worker was re-probed via
+        // `/status` every tick; that probe rides the same iroh path as the
+        // tunnel, so under load it timed out, `fresh` went None, and
+        // `sticky_endpoint` drops a non-direct endpoint on a miss (asserted in
+        // `sticky_drops_a_non_direct_worker_when_unreachable`) — which the
+        // eligibility tracker reads as a flap. Observed: endpoint pinned at
+        // 127.0.0.1:40021 for six minutes while flaps climbed to 9 and the
+        // cooldown compounded to 300s, excluding a peer that was serving.
+        for via in ["iroh-bridge:x", "iroh-bridge:iroh:127.0.0.1:40021→86627fd5"] {
+            assert_eq!(
+                reaffirm_plan(Some(&held(via)), RpcTunnelMode::Auto),
+                Reaffirm::Rebridge,
+                "{via} must be re-minted from the local bridge cache, never re-probed"
+            );
+            assert_eq!(
+                reaffirm_plan(Some(&held(via)), RpcTunnelMode::Always),
+                Reaffirm::Rebridge
+            );
+        }
+    }
+
+    #[test]
+    fn reaffirm_respects_an_operator_opting_out_of_bridging() {
+        // `SOVEREIGN_RPC_TUNNEL=never` withdraws permission to tunnel. Holding a
+        // bridge endpoint would pin the worker to a transport we may no longer
+        // use, so re-probe: it either surfaces at a direct address or drops out.
+        assert_eq!(
+            reaffirm_plan(Some(&held("iroh-bridge:x")), RpcTunnelMode::Never),
+            Reaffirm::FullProbe
+        );
+        // The direct-ip hold is unaffected by the tunnel knob.
+        assert_eq!(
+            reaffirm_plan(Some(&held("direct-ip")), RpcTunnelMode::Never),
+            Reaffirm::Held
+        );
     }
 
     #[test]

@@ -1,0 +1,300 @@
+# Long-haul context-degradation probe (44 turns)
+#
+# Tests the claim: "A user never has to think about context limits.
+# A conversation can be as long as it needs to be with limited
+# degradation because the brain is external."
+#
+# DESIGN — controlled anchor/probe, not a naturalistic chat:
+#   * T0-T3 plant four distinctive ANCHORS on Marie Curie.
+#   * Five FILLER phases (Linnaeus / Galileo / Darwin / Newton /
+#     Mendel), ~6 turns each, push the anchors far outside the
+#     visible window (CONV_HISTORY_TURNS = 8 messages = 4 pairs).
+#   * After each filler phase, the SAME TWO PROBES re-ask for the
+#     anchors at increasing gap distance (~8, ~16, ~24, ~32, ~40
+#     turns back).
+#
+# Probe A ("meta") is answerable ONLY from conversation state — no
+# Wikipedia chunk can say what the user asked first. NOTE: the
+# deterministic scorer matches substrings in retrieved chunks OR the
+# answer, so Probe A's ratio is inflated by any Curie chunk. Read the
+# ANSWER TEXT for Probe A turns; the ratio alone is not evidence.
+#
+# Probe B is a coreference callback whose content is corpus-backed but
+# whose REFERENT ("she", "that element") is conversation-only.
+#
+# Holding the probe wording fixed across the five gaps is what makes
+# recall-vs-gap a degradation curve rather than a difficulty curve.
+
+[bank]
+name = "wikipedia-learn-longhaul"
+corpus = "wikipedia"
+description = """
+44-turn long-haul context-degradation probe. Anchors planted at T0-T3,
+re-probed verbatim at gaps of ~8/16/24/32/40 turns.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 45000
+max_per_question_ms = 90000
+
+[[threads]]
+id = "longhaul_44"
+category = "marathon_graceful"
+description = "44-turn long-haul. Four Curie anchors planted at T0-T3, then re-probed verbatim at gaps of ~8/16/24/32/40 turns across five unrelated filler phases."
+
+# ══ ANCHORS (T0-T3) ═══════════════════════════════════════════════
+
+[[threads.turns]]
+question = "Who was Marie Curie?"
+expected_facts = ["physicist", "Polish", "Nobel"]
+expected_sources = ["Marie Curie"]
+notes = "ANCHOR A — the conversation's first topic. Probe A asks for this at all five gaps."
+
+[[threads.turns]]
+question = "What element did she discover with her husband in 1898?"
+expected_facts = ["polonium", "Pierre", "1898"]
+expected_sources = ["Marie Curie", "Polonium"]
+notes = "ANCHOR B — polonium. Probe B reaches back for this at all five gaps."
+
+[[threads.turns]]
+question = "Why was that research so dangerous at the time?"
+expected_facts = ["radiation", "protective", "sickness"]
+expected_sources = ["Marie Curie"]
+notes = "ANCHOR C — the danger dimension."
+
+[[threads.turns]]
+question = "Did her work earn recognition during her lifetime?"
+expected_facts = ["Nobel", "1903", "1911"]
+expected_sources = ["Marie Curie"]
+notes = "ANCHOR D — two Nobels. Last anchor turn; everything after is filler or probe."
+
+# ══ FILLER PHASE 1 — Linnaeus (T4-T9) ═════════════════════════════
+
+[[threads.turns]]
+question = "Stepping away from that — who founded the modern system of biological classification?"
+expected_facts = ["Linnaeus", "binomial", "classification"]
+expected_sources = ["Carl Linnaeus"]
+notes = "Explicit topic pivot. Anchors begin rolling out of the visible window here."
+
+[[threads.turns]]
+question = "What does binomial nomenclature actually mean?"
+expected_facts = ["genus", "species", "two"]
+expected_sources = ["Binomial nomenclature"]
+
+[[threads.turns]]
+question = "Which book of his introduced it?"
+expected_facts = ["Systema Naturae", "1735"]
+expected_sources = ["Carl Linnaeus", "Systema Naturae"]
+
+[[threads.turns]]
+question = "How did he group organisms above the species level?"
+expected_facts = ["kingdom", "class", "order"]
+expected_sources = ["Carl Linnaeus", "Taxonomy"]
+
+[[threads.turns]]
+question = "Was his classification based on evolution?"
+expected_facts = ["no", "before", "Darwin"]
+expected_sources = ["Carl Linnaeus"]
+
+[[threads.turns]]
+question = "Where did he do most of his work?"
+expected_facts = ["Uppsala", "Sweden"]
+expected_sources = ["Carl Linnaeus"]
+
+# ══ PROBE SET 1 — gap ≈ 8 turns (T10-T11) ═════════════════════════
+
+[[threads.turns]]
+question = "Before we go further — what was the very first topic I asked you about in this conversation?"
+expected_facts = ["Marie Curie"]
+expected_sources = []
+notes = "PROBE A @ gap 10. Conversation-only. READ THE ANSWER — ratio is confounded by corpus chunks."
+
+[[threads.turns]]
+question = "And that element she discovered with her husband — what was it called again?"
+expected_facts = ["polonium"]
+expected_sources = ["Marie Curie"]
+notes = "PROBE B @ gap 10. Coref 'she'/'that element' resolvable only from conversation state."
+
+# ══ FILLER PHASE 2 — Galileo (T12-T17) ════════════════════════════
+
+[[threads.turns]]
+question = "New subject: who first used a telescope to study the night sky systematically?"
+expected_facts = ["Galileo", "telescope", "1609"]
+expected_sources = ["Galileo Galilei"]
+
+[[threads.turns]]
+question = "What did he see around Jupiter?"
+expected_facts = ["moons", "four", "Io"]
+expected_sources = ["Galileo Galilei", "Galilean moons"]
+
+[[threads.turns]]
+question = "Why did that observation matter so much?"
+expected_facts = ["geocentric", "Copernican", "orbit"]
+expected_sources = ["Galileo Galilei"]
+
+[[threads.turns]]
+question = "What happened to him because of those views?"
+expected_facts = ["Inquisition", "heresy", "house arrest"]
+expected_sources = ["Galileo Galilei"]
+
+[[threads.turns]]
+question = "What did he contribute to the study of motion?"
+expected_facts = ["falling", "acceleration", "inertia"]
+expected_sources = ["Galileo Galilei"]
+
+[[threads.turns]]
+question = "When did he die?"
+expected_facts = ["1642"]
+expected_sources = ["Galileo Galilei"]
+
+# ══ PROBE SET 2 — gap ≈ 16 turns (T18-T19) ════════════════════════
+
+[[threads.turns]]
+question = "Before we go further — what was the very first topic I asked you about in this conversation?"
+expected_facts = ["Marie Curie"]
+expected_sources = []
+notes = "PROBE A @ gap 18. Wording held fixed vs T10."
+
+[[threads.turns]]
+question = "And that element she discovered with her husband — what was it called again?"
+expected_facts = ["polonium"]
+expected_sources = ["Marie Curie"]
+notes = "PROBE B @ gap 18. Wording held fixed vs T11."
+
+# ══ FILLER PHASE 3 — Darwin (T20-T25) ═════════════════════════════
+
+[[threads.turns]]
+question = "Different topic — who proposed evolution by natural selection?"
+expected_facts = ["Darwin", "natural selection"]
+expected_sources = ["Charles Darwin"]
+
+[[threads.turns]]
+question = "What voyage shaped his thinking?"
+expected_facts = ["Beagle", "1831"]
+expected_sources = ["Charles Darwin", "HMS Beagle"]
+
+[[threads.turns]]
+question = "What did he notice on the Galapagos?"
+expected_facts = ["finches", "islands", "beak"]
+expected_sources = ["Charles Darwin"]
+
+[[threads.turns]]
+question = "When did he finally publish?"
+expected_facts = ["1859", "Origin of Species"]
+expected_sources = ["On the Origin of Species"]
+
+[[threads.turns]]
+question = "Who independently reached a similar idea?"
+expected_facts = ["Wallace"]
+expected_sources = ["Alfred Russel Wallace"]
+
+[[threads.turns]]
+question = "How was the book received at the time?"
+expected_facts = ["controversy", "religious", "debate"]
+expected_sources = ["On the Origin of Species"]
+
+# ══ PROBE SET 3 — gap ≈ 24 turns (T26-T27) ════════════════════════
+
+[[threads.turns]]
+question = "Before we go further — what was the very first topic I asked you about in this conversation?"
+expected_facts = ["Marie Curie"]
+expected_sources = []
+notes = "PROBE A @ gap 26."
+
+[[threads.turns]]
+question = "And that element she discovered with her husband — what was it called again?"
+expected_facts = ["polonium"]
+expected_sources = ["Marie Curie"]
+notes = "PROBE B @ gap 26."
+
+# ══ FILLER PHASE 4 — Newton (T28-T33) ═════════════════════════════
+
+[[threads.turns]]
+question = "Switching again — who formulated the law of universal gravitation?"
+expected_facts = ["Newton", "gravitation"]
+expected_sources = ["Isaac Newton"]
+
+[[threads.turns]]
+question = "What book laid out his laws of motion?"
+expected_facts = ["Principia", "1687"]
+expected_sources = ["Isaac Newton", "Philosophiae Naturalis Principia Mathematica"]
+
+[[threads.turns]]
+question = "What are those three laws, briefly?"
+expected_facts = ["inertia", "acceleration", "reaction"]
+expected_sources = ["Newton's laws of motion"]
+
+[[threads.turns]]
+question = "What did he do in optics?"
+expected_facts = ["prism", "spectrum", "light"]
+expected_sources = ["Isaac Newton"]
+
+[[threads.turns]]
+question = "Did he invent calculus?"
+expected_facts = ["Leibniz", "dispute"]
+expected_sources = ["Isaac Newton"]
+
+[[threads.turns]]
+question = "What role did he hold at the Royal Mint?"
+expected_facts = ["Master", "coin"]
+expected_sources = ["Isaac Newton"]
+
+# ══ PROBE SET 4 — gap ≈ 32 turns (T34-T35) ════════════════════════
+
+[[threads.turns]]
+question = "Before we go further — what was the very first topic I asked you about in this conversation?"
+expected_facts = ["Marie Curie"]
+expected_sources = []
+notes = "PROBE A @ gap 34."
+
+[[threads.turns]]
+question = "And that element she discovered with her husband — what was it called again?"
+expected_facts = ["polonium"]
+expected_sources = ["Marie Curie"]
+notes = "PROBE B @ gap 34."
+
+# ══ FILLER PHASE 5 — Mendel (T36-T41) ═════════════════════════════
+
+[[threads.turns]]
+question = "Last new topic — who worked out the basic laws of heredity?"
+expected_facts = ["Mendel", "heredity"]
+expected_sources = ["Gregor Mendel"]
+
+[[threads.turns]]
+question = "What plant did he experiment on?"
+expected_facts = ["pea", "Pisum"]
+expected_sources = ["Gregor Mendel"]
+
+[[threads.turns]]
+question = "What ratio did he observe in the second generation?"
+expected_facts = ["3:1", "dominant", "recessive"]
+expected_sources = ["Gregor Mendel", "Mendelian inheritance"]
+
+[[threads.turns]]
+question = "Why was his work ignored for so long?"
+expected_facts = ["1900", "rediscovered", "obscure"]
+expected_sources = ["Gregor Mendel"]
+
+[[threads.turns]]
+question = "Where did he carry out this work?"
+expected_facts = ["monastery", "Brno", "abbey"]
+expected_sources = ["Gregor Mendel"]
+
+[[threads.turns]]
+question = "What was his role there?"
+expected_facts = ["abbot", "friar", "monk"]
+expected_sources = ["Gregor Mendel"]
+
+# ══ PROBE SET 5 — gap ≈ 40 turns (T42-T43) ════════════════════════
+
+[[threads.turns]]
+question = "Before we go further — what was the very first topic I asked you about in this conversation?"
+expected_facts = ["Marie Curie"]
+expected_sources = []
+notes = "PROBE A @ gap 42. Maximum distance."
+
+[[threads.turns]]
+question = "And that element she discovered with her husband — what was it called again?"
+expected_facts = ["polonium"]
+expected_sources = ["Marie Curie"]
+notes = "PROBE B @ gap 42. Maximum distance."

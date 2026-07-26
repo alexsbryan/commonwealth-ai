@@ -1556,10 +1556,21 @@ impl Runtime {
                         context.conversation.enabled_corpora.as_deref(),
                         &plan.chunks,
                     )
-                    .with_pinned(if plan.code_trace.is_empty() {
-                        Vec::new()
-                    } else {
-                        vec![plan.code_trace.clone()]
+                    // Pin what the per-claim corpus re-search cannot
+                    // reach: the turn-local code trace, plus facts
+                    // recalled from earlier in this conversation (which
+                    // live in no corpus and would otherwise be audited
+                    // as ungrounded).
+                    .with_pinned({
+                        let mut pinned = if plan.code_trace.is_empty() {
+                            Vec::new()
+                        } else {
+                            vec![plan.code_trace.clone()]
+                        };
+                        pinned.extend(
+                            crate::runtime::grounding::conversation_pinned_evidence(context),
+                        );
+                        pinned
                     }),
                 ) as _),
                 entity_anchored: plan.gate_entity_anchored,

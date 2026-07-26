@@ -77,7 +77,9 @@ pub(crate) use pipeline::StreamingVerifier;
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
 #[allow(unused_imports)]
-pub(crate) use search::{AttachedAssetSearcher, ClaimSearcher, SealedEvidenceSearch};
+pub(crate) use search::{
+    conversation_pinned_evidence, AttachedAssetSearcher, ClaimSearcher, SealedEvidenceSearch,
+};
 
 use std::collections::HashSet;
 use std::sync::Arc;
