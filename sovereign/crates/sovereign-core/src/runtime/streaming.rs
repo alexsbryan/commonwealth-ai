@@ -1370,10 +1370,20 @@ impl Runtime {
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
-                        .with_pinned(if seal_trace {
-                            vec![code_trace.clone()]
-                        } else {
-                            Vec::new()
+                        .with_pinned({
+                            // Turn-local evidence the per-claim corpus
+                            // re-search cannot see: the code-trace block,
+                            // plus anything recalled from earlier in THIS
+                            // conversation (which lives in no corpus).
+                            let mut pinned = if seal_trace {
+                                vec![code_trace.clone()]
+                            } else {
+                                Vec::new()
+                            };
+                            pinned.extend(
+                                crate::runtime::grounding::conversation_pinned_evidence(&context),
+                            );
+                            pinned
                         }),
                 ) as _)
             } else {
@@ -2502,11 +2512,19 @@ impl Runtime {
                     // The claim audit RE-SEARCHES the corpus per claim; the
                     // call-graph block lives only in this turn, so pin it or
                     // the audit re-derives evidence without it and flags
-                    // facts that are verbatim in the sealed universe.
-                    .with_pinned(if deep_seal_trace {
-                        vec![kc.code_trace.clone()]
-                    } else {
-                        Vec::new()
+                    // facts that are verbatim in the sealed universe. Recalled
+                    // earlier turns have the same property — they live in no
+                    // corpus at all.
+                    .with_pinned({
+                        let mut pinned = if deep_seal_trace {
+                            vec![kc.code_trace.clone()]
+                        } else {
+                            Vec::new()
+                        };
+                        pinned.extend(
+                            crate::runtime::grounding::conversation_pinned_evidence(&context),
+                        );
+                        pinned
                     }),
                 ) as _)
             } else {

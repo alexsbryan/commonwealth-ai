@@ -1672,6 +1672,24 @@ quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
 local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
 multi-box-only to validate (run `scripts/mesh-soak.sh`).
 
+**Discovery never probes a worker over the link that worker's own tensors are
+saturating (`daemon::reaffirm_plan`).** Gossip-Online membership — not a probe —
+is the liveness signal for a worker discovery has already resolved once, because
+the probe rides the congested path while gossip rides a separate one with a
+looser budget. So a known **direct-ip** worker is re-affirmed from cache, and a
+known **iroh-bridge** worker is re-minted from the transport's local bridge cache
+(loopback only); only an unknown or probe-host worker pays the full `/status`
+probe. Both known-worker cases trade the same way: a dead rpc-server behind live
+gossip surfaces when ggml's RPC connection fails → supervised reload, not at
+discovery. The bridge case is load-bearing because a non-direct endpoint gets no
+stickiness (`sticky_endpoint` holds only direct-ip), so one starved probe used to
+read as "worker absent" → flap → quarantine, compounding to 300s against a peer
+that was serving throughout. Underneath, `HttpBridge::retarget` keeps a bridge's
+loopback port stable across a peer's gossiped dial-info change (retarget in
+place, don't rebuild), because that port IS the worker's endpoint string in
+ggml's device list — minting a new one made an unmoved peer read downstream as a
+stream of different workers.
+
 **Byte-mass-aware split (`plan_shards_weighted`).** The placement policy apportions
 each device a CONTIGUOUS block range whose *bytes* — not block *count* — are
 proportional to its VRAM. This is the split the live load runs (`rpc_distribution`

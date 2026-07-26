@@ -367,6 +367,10 @@ fn parse_relay_mode(relay_urls: &[String]) -> Option<iroh::RelayMode> {
 #[derive(Debug)]
 pub struct HttpBridge {
     local_addr: SocketAddr,
+    /// Where accepted connections dial, read fresh per connection. The
+    /// loopback listener is the bridge's IDENTITY; the peer address it
+    /// tunnels to is a mutable attribute — see [`retarget`](Self::retarget).
+    target: Arc<std::sync::Mutex<EndpointAddr>>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -389,6 +393,8 @@ impl HttpBridge {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let local_addr = listener.local_addr()?;
         let peer_label = target.id.to_string();
+        let target = Arc::new(std::sync::Mutex::new(target));
+        let target_slot = Arc::clone(&target);
         let task = tokio::spawn(async move {
             loop {
                 let Ok((tcp, _)) = listener.accept().await else {
@@ -400,15 +406,26 @@ impl HttpBridge {
                 // The tunnel must be latency-transparent — disable it.
                 tcp.set_nodelay(true).ok();
                 let endpoint = endpoint.clone();
-                let target = target.clone();
+                // Read the CURRENT target per connection: a retarget between
+                // accepts must take effect on the very next dial.
+                let target = target_slot
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
                 let peer_label = peer_label.clone();
                 tokio::spawn(async move {
                     let conn = match endpoint.connect(target, alpn).await {
                         Ok(c) => c,
                         Err(e) => {
+                            // The ALPN is the whole diagnosis for an "error 120:
+                            // peer doesn't support any known protocol" reject —
+                            // without it you cannot tell a peer that lacks a
+                            // ggml rpc-server (no cwth/rpc/0) from one that is
+                            // unreachable, and both surface as "dial failed".
                             tracing::warn!(
                                 target: "transport",
                                 peer = %peer_label,
+                                alpn = %String::from_utf8_lossy(alpn),
                                 error = %e,
                                 "iroh bridge: dial failed"
                             );
@@ -431,11 +448,31 @@ impl HttpBridge {
                 });
             }
         });
-        Ok(Self { local_addr, task })
+        Ok(Self {
+            local_addr,
+            target,
+            task,
+        })
     }
 
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// Point subsequent dials at `target` WITHOUT rebinding the loopback
+    /// listener, so the local port survives a peer's dial-info change.
+    ///
+    /// That port is not an implementation detail: it is the address handed
+    /// to plain-TCP clients that cannot be told to re-resolve — most
+    /// sharply ggml's rpc-server list, which the mesh's RPC discovery
+    /// advertises as the worker's endpoint STRING. Rebuilding the bridge
+    /// minted a new ephemeral port on every gossiped address change, so a
+    /// stable peer read downstream as a stream of different workers
+    /// (observed 2026-07-25: 34207 → 40043 → 39419 → 34133 → 40021 for one
+    /// unmoved Mac). Identity is the bridge; the peer address is an
+    /// attribute of it.
+    pub fn retarget(&self, target: EndpointAddr) {
+        *self.target.lock().unwrap_or_else(|e| e.into_inner()) = target;
     }
 }
 
@@ -636,20 +673,34 @@ impl IrohTransport {
             if cached.dial_key == dial_key {
                 return Some(cached.bridge.local_addr());
             }
+        }
+        let Some(target) = self.endpoint_addr_for(pubkey, peer) else {
+            // The fresh contact has no dialable path at all (no relay, no
+            // direct addrs). Nothing to retarget TO — drop any stale bridge
+            // rather than keep tunneling at an address the peer has left.
+            bridges.remove(&key);
+            return None;
+        };
+        if let Some(cached) = bridges.get_mut(&key) {
             // The peer's gossiped dial info changed (typical: it
             // restarted and its ephemeral iroh port moved). A frozen
-            // bridge would keep dialing the dead target forever —
-            // rebuild against the fresh contact. Dropping the old
-            // bridge aborts its accept loop; in-flight tunnels to a
-            // stale target were doomed anyway.
+            // bridge would keep dialing the dead target forever — point
+            // this one at the fresh contact instead. Retargeting rather
+            // than rebuilding keeps the loopback port stable, which is
+            // what plain-TCP clients holding that address depend on (see
+            // `HttpBridge::retarget`); in-flight tunnels to the stale
+            // target were doomed either way.
+            cached.bridge.retarget(target);
+            cached.dial_key = dial_key;
+            let local_addr = cached.bridge.local_addr();
             tracing::info!(
                 target: "transport",
                 peer = %hex::encode(&key.0[..4]),
-                "iroh bridge: peer dial info changed — rebuilding bridge"
+                bridge = %local_addr,
+                "iroh bridge: peer dial info changed — retargeted in place (port held)"
             );
-            bridges.remove(&key);
+            return Some(local_addr);
         }
-        let target = self.endpoint_addr_for(pubkey, peer)?;
         let bridge = HttpBridge::spawn(self.endpoint.clone(), target, alpn)
             .await
             .ok()?;
@@ -1099,6 +1150,105 @@ mod tests {
             !ep.bound_sockets().is_empty(),
             "endpoint must bind a socket"
         );
+    }
+
+    /// Read the marker a bridge's loopback port forwards to. Same handshake as
+    /// `read_marker_over` (send first so the peer's `accept_bi` fires), but
+    /// against an ALREADY-BOUND bridge port rather than a fresh bridge — the
+    /// point being that the port outlives a retarget.
+    async fn read_marker_from_port(port: SocketAddr) -> Vec<u8> {
+        let mut tcp = tokio::net::TcpStream::connect(port)
+            .await
+            .expect("connect to bridge port");
+        let _ = tcp.write_all(b"ping").await;
+        let _ = tcp.shutdown().await;
+        let mut buf = Vec::new();
+        let read = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tcp.read_to_end(&mut buf),
+        )
+        .await;
+        read.expect("read did not time out").expect("read ok");
+        buf
+    }
+
+    fn contact_for(server: &Endpoint, addrs: Vec<SocketAddr>) -> crate::PeerContact {
+        crate::PeerContact {
+            node_id: commonwealth_core::ids::NodeId::from_u128(9),
+            addresses: vec![],
+            node_pubkey: Some(NodePubkey(*server.id().as_bytes())),
+            relay_url: None,
+            iroh_direct_addrs: addrs,
+        }
+    }
+
+    /// A peer's gossiped dial info changing must RETARGET the bridge, not
+    /// rebuild it: the loopback port is what plain-TCP clients hold (ggml's
+    /// rpc-server list, via the mesh's discovered worker endpoint string), and
+    /// minting a new one made an unmoved peer read downstream as a stream of
+    /// different workers (2026-07-25: 34207 → 40043 → 39419 → 34133 → 40021).
+    /// The tunnel must still land on the NEW target — that's what the rebuild
+    /// was originally protecting (the 2026-07-19 dual-restart heal deadlock), so
+    /// this asserts both halves: same port, fresh destination.
+    #[tokio::test]
+    async fn bridge_retargets_in_place_when_peer_dial_info_changes() {
+        let worker_addr = spawn_marker_listener(b"WORKER").await;
+        let server_ep = hermetic_endpoint(31, vec![RPC_ALPN.to_vec()]).await;
+        let mut routes = HashMap::new();
+        routes.insert(RPC_ALPN.to_vec(), worker_addr);
+        let _acceptor = IrohAcceptor::spawn_routed(server_ep.clone(), routes);
+
+        let transport = IrohTransport::new(hermetic_endpoint(32, vec![]).await);
+
+        // Tick 1: the peer's gossiped address is stale (nothing listens there).
+        // The bridge binds a port; nothing is dialed until a client connects.
+        let stale: SocketAddr = "127.0.0.1:1".parse().unwrap();
+        let first = transport
+            .endpoints(&contact_for(&server_ep, vec![stale]), TrafficClass::RpcTensor)
+            .await;
+        let port_before = first[0].base_url.clone();
+
+        // Tick 2: gossip carries the peer's real address. Different dial key.
+        let live = loopback_sockets(&server_ep);
+        let second = transport
+            .endpoints(&contact_for(&server_ep, live), TrafficClass::RpcTensor)
+            .await;
+        assert_eq!(
+            second[0].base_url, port_before,
+            "a dial-info change must hold the loopback port, not mint a new one"
+        );
+
+        // …and the tunnel now reaches the peer at its NEW address, proving the
+        // held port is not a frozen bridge still dialing the dead one.
+        let bridge_port: SocketAddr = second[0]
+            .base_url
+            .strip_prefix("http://")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            read_marker_from_port(bridge_port).await,
+            b"WORKER",
+            "the retargeted bridge must reach the peer's current address"
+        );
+    }
+
+    /// An unchanged contact re-resolves to the SAME bridge with no rebind. This
+    /// is what makes the mesh's per-tick re-mint of a known bridged worker
+    /// (`sovereign_mesh::daemon::reaffirm_plan` → `Rebridge`) free: it replaces
+    /// a `/status` probe that rode the same congested iroh path as the tunnel.
+    #[tokio::test]
+    async fn repeated_resolution_of_an_unchanged_peer_reuses_the_bridge() {
+        let server_ep = hermetic_endpoint(33, vec![RPC_ALPN.to_vec()]).await;
+        let transport = IrohTransport::new(hermetic_endpoint(34, vec![]).await);
+        let contact = contact_for(&server_ep, loopback_sockets(&server_ep));
+        let a = transport
+            .endpoints(&contact, TrafficClass::RpcTensor)
+            .await;
+        let b = transport
+            .endpoints(&contact, TrafficClass::RpcTensor)
+            .await;
+        assert_eq!(a[0].base_url, b[0].base_url, "cached bridge must be reused");
     }
 
     #[test]

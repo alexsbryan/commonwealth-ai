@@ -1,8 +1,39 @@
 # Distributed inference (Qwen-122B heterogeneous) — investigation handoff
 
 **Date:** 2026-07-18 · **Author:** pairing session (Alex + Claude) · **Tree HEAD at handoff:** `b4c39cb2`
-**Status:** 2 of 3 blockers fixed (uncommitted, working tree). 1 open blocker that opens a real
-architecture question. **Nothing committed — all changes are in the working tree.**
+**Status at the time of writing:** 2 of 3 blockers fixed (uncommitted). **Superseded — read the
+2026-07-26 block below first.** All three blockers are now fixed and committed; the cross-network
+question §6 poses has been answered by a working tunnel, not by argument.
+
+> ## ⚠️ SUPERSEDING UPDATE — 2026-07-26
+>
+> **Blocker #3 is CLOSED and the "LAN-only" framing throughout this document is obsolete.** Commit
+> `5c9ccf86` landed the ggml-RPC-over-iroh path (`RPC_ALPN cwth/rpc/0` + `TrafficClass::RpcTensor`),
+> and a forced-tunnel E2E (host RuggedFox, worker BeefyMac, `SOVEREIGN_RPC_TUNNEL=always`) has since
+> demonstrated it end to end. Evidence, twice, in `~/.sovereign/logs/rpc-tunnel-e2e.log`
+> (04:03:26 and 04:11:07):
+>
+> ```
+> discovered mesh RPC worker peer=BeefyMac via=iroh-bridge:iroh:127.0.0.1:37187→86627fd5
+> registered mesh RPC device free_gb=20.97 total_gb=55.66      <- Metal VRAM read THROUGH the tunnel
+> rpc-warm: worker shard warm via=iroh:…→86627fd5 written=0 already=20
+> primary slot placement decided mode=distributed total_blocks=32 local_blocks=27
+> distributed load: explicit tensor placement via -ot overrides
+> ```
+>
+> `rpc_tensor` is a required iroh class with `require_encryption=true` and fails closed, so a pass
+> here cannot be the LAN path wearing a tunnel's clothes.
+>
+> **Still unmeasured: decode.** No completion has yet run to completion across the tunnel, so there
+> is **no tok/s number for the distributed cross-network path**. The one attempt (04:11:56) prefilled
+> 29 tokens and was killed 15 s later by a worker-eligibility quarantine — a discovery defect, since
+> fixed (`daemon.rs::reaffirm_plan`, `HttpBridge::retarget`), that had nothing to do with the
+> transport. Getting that number is the next step, and until it exists §6's question 2 ("can the
+> per-layer hop live on this path?") is answered only for the *relay floor* measured in the
+> 2026-07-18 characterization (5.5–7.1 tok/s between two NATed home boxes), which is the worst case,
+> not the cloud case (public IP → direct hole-punch).
+>
+> Read §5/§6 below as the reasoning that produced the fix, not as open work.
 
 > **UPDATE (later 2026-07-18, post-characterization):** the §6 questions were answered by
 > measurement (`commonwealth-transport/examples/tunnel_bench.rs`, see the transport-characterization
@@ -23,7 +54,8 @@ architecture question. **Nothing committed — all changes are in the working tr
 > forced-tunnel with the Mac (4B, expect ~40 tok/s), then a relay-grade pass. Path-quality gating
 > at placement (refuse/warn on relay) remains future work — observability first.
 
-> **Second-set-of-eyes ask:** the RPC-distribution path is **LAN-only** — it reaches peers by raw
+> **Second-set-of-eyes ask (ANSWERED — kept for the reasoning; the direction was built and works,
+> see the 2026-07-26 block):** the RPC-distribution path is **LAN-only** — it reaches peers by raw
 > TCP/HTTP to their direct IPs. The use case that matters is **machines on different networks**,
 > which forces everything over **iroh**. The good news is a generic TCP-over-iroh tunnel already
 > exists in-tree (`IrohAcceptor`/`TcpBridge`); it just isn't wired to the RPC paths. The core
@@ -55,7 +87,7 @@ backtrace. Everything below is from logs/stacks, not guesses.
 |---|---|---|---|
 | 1 | **Discovery resolved the worker to `127.0.0.1:50052`** — `discover_rpc_workers` derived the RPC host from the `/status` probe URL, which under iroh is a loopback proxy. | log: `discovered mesh RPC worker endpoint=127.0.0.1:50052` | ✅ fixed (LAN-only — see caveat) |
 | 2 | **`model_bytes` = first-shard size (~10 MB)** — placement read `metadata(model_path)` where `model_path` is shard `00001-of-00003` (~10 MB header shard), not the 92 GB total. `10 MB < SAFE_STREAM_MB (512)` → `classify_placement` picked **`StreamSplit`** (bulk weight stream) instead of `OwnedOverrides` (warm-cache). Bulk stream → `ggml_backend_rpc_buffer_set_tensor` → the >800 MB RPC `send()` deadlock. | placement log `mode=stream-split`; `gdb` stack blocked in `ggml_backend_rpc_buffer_set_tensor ← load_all_data ← reload_primary`; after fix: `auto-warming worker shards … model_mb=87669` | ✅ fixed (root cause of the "hang") |
-| 3 | **Warm control + data plane use raw HTTP to the iroh-only internal port** — `orchestrate_warm` POSTs `http://{worker_ip}:9742/internal/rpc-warm` and hands the worker `http://{host}:9742/internal/v1/models/file/…` range URLs. `:9742` is iroh/QUIC (UDP); internal HTTP only travels *over* iroh. | log: `auto-warm failed … POST http://192.168.1.2:9742/internal/rpc-warm ← Connection refused (os error 111)` → `placement decided mode=local` (fell back) | ❌ **OPEN** |
+| 3 | **Warm control + data plane use raw HTTP to the iroh-only internal port** — `orchestrate_warm` POSTs `http://{worker_ip}:9742/internal/rpc-warm` and hands the worker `http://{host}:9742/internal/v1/models/file/…` range URLs. `:9742` is iroh/QUIC (UDP); internal HTTP only travels *over* iroh. | log: `auto-warm failed … POST http://192.168.1.2:9742/internal/rpc-warm ← Connection refused (os error 111)` → `placement decided mode=local` (fell back) | ✅ fixed + demonstrated over iroh (`5c9ccf86`; see the 2026-07-26 block) |
 
 **Net:** with #1 and #2 fixed, the code now correctly (a) finds the worker, (b) classifies the 92 GB
 model as "too big to bulk-stream → warm-cache path", and (c) *attempts* the warm. It fails at the warm

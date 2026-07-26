@@ -1553,6 +1553,62 @@ impl Router for LlmRouter {
             .await
             .unwrap_or_default();
 
+        // Pre-check -3: an explicit "…in this conversation" locator is a
+        // question ABOUT this thread, and takes the direct route to the
+        // handler that reads it. No classifier gets a vote: the markers
+        // (`parse_metalingual_locator`'s Conversation family — "in this
+        // conversation", "earlier you said", "we discussed") are
+        // unambiguous, and every probabilistic layer downstream gets
+        // this wrong in a way that is invisible to the user.
+        //
+        // This MUST precede Pre-check -2. Measured 2026-07-25: asking
+        // "what was the very first topic I asked you about in this
+        // conversation?" inside a knowledge thread routed to
+        // KnowledgeQuery 4 times out of 5 via KNOWLEDGE_THREAD_INHERIT
+        // below — the meta-question inherited the thread's intent
+        // before anything could notice it wasn't about the world. The
+        // one run that did reach MetalingualQuery was the only one that
+        // gave an honest answer.
+        //
+        // Deliberately narrow: ONLY the Conversation family commits
+        // here. SystemCode/NamedSource route acceptably through the
+        // embed router today, and Ambient fires on any " this"/" here"
+        // — far too broad to hard-commit on.
+        if matches!(
+            crate::runtime::parse_metalingual_locator(message),
+            crate::runtime::MetalingualLocator::Conversation
+        ) {
+            let latency_ms = start.elapsed().as_millis() as i64;
+            let hash = message_hash(message);
+            let _ = self
+                .store
+                .log_routing(&hash, "MetalingualQuery", latency_ms)
+                .await;
+            let _ = self
+                .store
+                .log_routing_meta(&hash, "CONVERSATION_LOCATOR_DIRECT", None)
+                .await;
+            eprintln!(
+                "[router] \"{}\" → MetalingualQuery (explicit conversation locator; direct route)",
+                message.chars().take(60).collect::<String>(),
+            );
+            return Ok(RouterClassification {
+                primary: IntentCandidate {
+                    intent: Intent::MetalingualQuery,
+                    confidence: 0.95,
+                },
+                alternatives: Vec::new(),
+                rationale: Some(
+                    "explicit in-conversation locator — answered from this thread, not a corpus"
+                        .into(),
+                ),
+                coarse_intent: Some("CONVERSATION_LOCATOR_DIRECT".to_string()),
+                self_assessment: None,
+                timing: None,
+                scope: None,
+            });
+        }
+
         // Pre-check -2: inherit prior knowledge-family intent when
         // the conversation already has an established knowledge
         // thread. Structural detector — keys off

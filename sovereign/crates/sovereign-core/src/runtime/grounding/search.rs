@@ -164,6 +164,41 @@ impl Runtime {
     }
 }
 
+/// Turn-local conversation evidence for [`ClaimSearcher::pinned`].
+///
+/// The claim audit RE-SEARCHES the corpus per claim. A fact the user and
+/// assistant established EARLIER IN THIS CONVERSATION lives in no corpus,
+/// so it is structurally invisible to that re-search: the audit finds
+/// nothing stating it and flags a correctly-recalled fact as ungrounded.
+///
+/// Measured 2026-07-25 (gap-probe run): asked to recall an element named
+/// 26 turns earlier, conversation-history retrieval surfaced the right
+/// turn at rank 1 — and the gate still abstained with
+/// `violation_prob: 1.0`, because the corpus passages didn't restate it.
+/// The user sees "I couldn't confirm an answer against the passages your
+/// sources turned up" for something the system remembered perfectly.
+///
+/// Pinning these widens the EVIDENCE, never the scope — the same
+/// contract the code-trace pin already satisfies. These passages are the
+/// conversation's own turns; admitting them as evidence for claims about
+/// that conversation grants no reach beyond the sealed universe the
+/// synthesis prompt already saw.
+pub(crate) fn conversation_pinned_evidence(
+    context: &crate::types::ConversationContext,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    // Similarity-selected earlier turns (history.rs `maybe_retrieve_relevant_history`).
+    if let Some(hits) = context.history_retrieval_hits.as_ref() {
+        out.extend(hits.iter().map(|h| h.content.clone()));
+    }
+    // The compacted preamble standing in for turns that rolled out of
+    // the visible window entirely.
+    if let Some(preamble) = context.compacted_history.as_deref() {
+        out.push(preamble.to_string());
+    }
+    out
+}
+
 impl ClaimSearcher {
     /// Attach turn-local sealed passages (see [`ClaimSearcher::pinned`]).
     pub(crate) fn with_pinned(mut self, pinned: Vec<String>) -> Self {

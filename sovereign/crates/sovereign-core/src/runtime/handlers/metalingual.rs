@@ -49,9 +49,19 @@ impl Runtime {
             match &locator {
                 MetalingualLocator::SystemCode => (Some(corpus_engine::CorpusKind::Code), None),
                 MetalingualLocator::Conversation => {
-                    // sovereign's conversation-history corpus is a
-                    // Knowledge-kind corpus with a known id substring.
-                    (None, Some("conversation".to_string()))
+                    // Unused on this path — the Conversation locator
+                    // does NOT search corpora (see the direct-route
+                    // branch below). Kept so the match stays total.
+                    //
+                    // This previously resolved to `Some("conversation")`,
+                    // matching a Knowledge corpus whose id contains
+                    // "conversation". No such corpus is ever installed,
+                    // so the branch was dead: it always returned zero
+                    // chunks and fell through to the `no_source` message
+                    // — even when routing was correct. Measured
+                    // 2026-07-25 (gap-probe run, 0/5 recall on
+                    // "what was the very first topic I asked about").
+                    (None, None)
                 }
                 MetalingualLocator::NamedSource(name) => (None, Some(name.clone())),
                 MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
@@ -70,30 +80,43 @@ impl Runtime {
             MetalingualLocator::Ambient | MetalingualLocator::Unknown => "this system".to_string(),
         };
 
-        let embedding = self
-            .inference
-            .embed_query(message)
-            .await
-            .unwrap_or_default();
-        let mut chunks = self
-            .search_corpora_filtered(
-                &embedding,
-                message,
-                KQ_PER_CORPUS_LIMIT,
-                kind_filter,
-                name_match.as_deref(),
-                "MetalingualQuery",
-                context.conversation.enabled_corpora.as_deref(),
-                context.corpus_ceiling.as_deref(),
-            )
-            .await;
+        // The Conversation locator's source IS the conversation. Take
+        // the direct route to the turns already in `context` instead of
+        // searching installed corpora — a question about this thread is
+        // not a retrieval problem, and the similarity channels can't
+        // serve it anyway: ordinal asks ("what did I ask FIRST") have no
+        // semantic neighbour to match, so every candidate scores below
+        // the retrieval floor. Order is the signal here, so the
+        // relevance reweight/sort below is deliberately NOT applied.
+        let mut chunks = if matches!(locator, MetalingualLocator::Conversation) {
+            conversation_turns_as_chunks(&context.conversation.messages)
+        } else {
+            let embedding = self
+                .inference
+                .embed_query(message)
+                .await
+                .unwrap_or_default();
+            let mut chunks = self
+                .search_corpora_filtered(
+                    &embedding,
+                    message,
+                    KQ_PER_CORPUS_LIMIT,
+                    kind_filter,
+                    name_match.as_deref(),
+                    "MetalingualQuery",
+                    context.conversation.enabled_corpora.as_deref(),
+                    context.corpus_ceiling.as_deref(),
+                )
+                .await;
 
-        // Reweight + sort + cap mirror KnowledgeQuery's conditioning so
-        // chunk quality is on the same scale.
-        reweight_by_query_relevance(&mut chunks, message);
-        chunks.sort_by(cross_corpus_sort_cmp);
-        let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
-        chunks.truncate(KQ_MERGED_LIMIT);
+            // Reweight + sort + cap mirror KnowledgeQuery's conditioning so
+            // chunk quality is on the same scale.
+            reweight_by_query_relevance(&mut chunks, message);
+            chunks.sort_by(cross_corpus_sort_cmp);
+            let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+            chunks.truncate(KQ_MERGED_LIMIT);
+            chunks
+        };
 
         if chunks.is_empty() {
             // No indexed source matches the locator. Surface the gap
@@ -344,9 +367,112 @@ fn quoted_terms(message: &str) -> Vec<String> {
     terms
 }
 
+/// Head and tail message counts kept when a conversation is too long to
+/// render whole. The head is what ordinal questions ("what did I ask
+/// FIRST", "how did this start") reach for; the tail is what "what have
+/// we covered" and recency-flavoured asks need. The middle is elided
+/// with an explicit marker rather than silently dropped — a summary the
+/// user can't see the seams of is worse than a visible gap.
+const CONV_LOCATOR_HEAD_MSGS: usize = 8;
+const CONV_LOCATOR_TAIL_MSGS: usize = 12;
+
+/// Per-message char cap in the rendered turn list. Generous relative to
+/// the visible-history tiers because this path renders FEWER messages
+/// (head+tail, not every turn) and the question is usually *about* an
+/// early turn's content.
+const CONV_LOCATOR_CHARS_PER_MSG: usize = 400;
+
+/// Render the conversation's own turns as evidence chunks, in turn
+/// order, each labelled with its ordinal.
+///
+/// This is the evidence surface for [`MetalingualLocator::Conversation`].
+/// It exists because a question *about this thread* is not a retrieval
+/// problem: the three conversation-memory channels (visible window,
+/// compacted preamble, similarity retrieval over dropped pairs) are all
+/// keyed on content similarity or recency, so an ordinal ask has no
+/// semantic neighbour to match and every candidate lands under the
+/// retrieval floor. Measured 2026-07-25: 0/5 recall of "what was the
+/// very first topic I asked about" at conversation depths 10-42, with
+/// `no_hits_above_floor` at four of the five depths.
+///
+/// The ordinal label is the load-bearing part — it is the only place in
+/// the prompt where turn ORDER is stated explicitly, which is what lets
+/// the model answer "first"/"then"/"after that" at all.
+fn conversation_turns_as_chunks(msgs: &[Message]) -> Vec<corpus_engine::ScoredChunk> {
+    let total = msgs.len();
+
+    // Which indices to render: whole thread when short, else head+tail.
+    let elide = total > CONV_LOCATOR_HEAD_MSGS + CONV_LOCATOR_TAIL_MSGS;
+    let keep: Vec<usize> = if elide {
+        (0..CONV_LOCATOR_HEAD_MSGS)
+            .chain(total - CONV_LOCATOR_TAIL_MSGS..total)
+            .collect()
+    } else {
+        (0..total).collect()
+    };
+
+    let mut out: Vec<corpus_engine::ScoredChunk> = Vec::with_capacity(keep.len() + 1);
+    let mut prev: Option<usize> = None;
+    for (rank, &i) in keep.iter().enumerate() {
+        // Visible seam where the middle was dropped.
+        if let Some(p) = prev {
+            if i != p + 1 {
+                out.push(conv_chunk(
+                    "(elided)".to_string(),
+                    format!("[turns {}-{} not shown]", p + 2, i),
+                    rank,
+                ));
+            }
+        }
+        prev = Some(i);
+
+        let m = &msgs[i];
+        let role = match m.role {
+            Role::User => "user",
+            Role::Assistant => "assistant",
+            Role::System => "system",
+        };
+        let mut end = m.content.len().min(CONV_LOCATOR_CHARS_PER_MSG);
+        while end > 0 && !m.content.is_char_boundary(end) {
+            end -= 1;
+        }
+        let body = if end < m.content.len() {
+            format!("{}...", &m.content[..end])
+        } else {
+            m.content.clone()
+        };
+        // 1-based ordinal: "turn 1" is the conversation's opening message.
+        out.push(conv_chunk(format!("Turn {} ({role})", i + 1), body, rank));
+    }
+    out
+}
+
+/// One rendered turn as a pseudo-chunk. `corpus_id` names the source in
+/// the user's terms so citations read "this conversation", not a corpus
+/// id that doesn't exist. Scores descend with turn order so that any
+/// downstream stable sort preserves the sequence — order is the signal
+/// on this path, not relevance.
+fn conv_chunk(title: String, content: String, rank: usize) -> corpus_engine::ScoredChunk {
+    corpus_engine::ScoredChunk {
+        content,
+        title: Some(title),
+        url: None,
+        corpus_id: "this conversation".to_string(),
+        score: 1.0 - (rank as f32) * 1e-3,
+        metadata: std::collections::HashMap::new(),
+        chunk_id: None,
+        source_doc_id: None,
+        vector_distance: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::quoted_terms;
+    use super::{
+        conversation_turns_as_chunks, quoted_terms, CONV_LOCATOR_CHARS_PER_MSG,
+        CONV_LOCATOR_HEAD_MSGS, CONV_LOCATOR_TAIL_MSGS,
+    };
+    use crate::types::{Message, Role};
 
     #[test]
     fn quoted_terms_extracts_each_quote_style() {
@@ -368,5 +494,77 @@ mod tests {
     fn quoted_terms_ignores_unquoted_and_degenerate() {
         assert!(quoted_terms("How is sovereignty used here?").is_empty());
         assert!(quoted_terms("What's a y?").is_empty()); // apostrophe noise stays out
+    }
+
+    fn msg(i: usize, role: Role, content: &str) -> Message {
+        Message {
+            id: format!("m{i}"),
+            conversation_id: "c".to_string(),
+            role,
+            content: content.to_string(),
+            created_at: i as i64,
+            metadata: None,
+            version: 0,
+        }
+    }
+
+    fn thread(pairs: usize) -> Vec<Message> {
+        let mut v = Vec::new();
+        for p in 0..pairs {
+            v.push(msg(v.len(), Role::User, &format!("question {p}")));
+            v.push(msg(v.len(), Role::Assistant, &format!("answer {p}")));
+        }
+        v
+    }
+
+    #[test]
+    fn short_thread_renders_every_turn_in_order_with_ordinals() {
+        let chunks = conversation_turns_as_chunks(&thread(3));
+        assert_eq!(chunks.len(), 6, "no elision below the head+tail budget");
+        assert_eq!(chunks[0].title.as_deref(), Some("Turn 1 (user)"));
+        assert_eq!(chunks[0].content, "question 0");
+        assert_eq!(chunks[1].title.as_deref(), Some("Turn 2 (assistant)"));
+        assert_eq!(chunks[5].title.as_deref(), Some("Turn 6 (assistant)"));
+        // Order is the signal: scores must descend so any stable
+        // downstream sort preserves the sequence.
+        assert!(chunks.windows(2).all(|w| w[0].score > w[1].score));
+        assert!(chunks.iter().all(|c| c.corpus_id == "this conversation"));
+    }
+
+    /// The regression this whole path exists for: at depth, the FIRST
+    /// turn must survive into the evidence. Similarity retrieval scored
+    /// it under the floor at every depth measured (2026-07-25).
+    #[test]
+    fn long_thread_keeps_the_opening_turn_and_marks_the_seam() {
+        let msgs = thread(30); // 60 messages, well past head+tail
+        let chunks = conversation_turns_as_chunks(&msgs);
+
+        assert_eq!(chunks[0].title.as_deref(), Some("Turn 1 (user)"));
+        assert_eq!(chunks[0].content, "question 0");
+
+        // The seam is a real chunk so the elision is visible in the
+        // prompt rather than silently swallowed. Its CONTENT names the
+        // range, because that is the text the model actually reads.
+        let elided: Vec<_> = chunks
+            .iter()
+            .filter(|c| c.title.as_deref() == Some("(elided)"))
+            .collect();
+        assert_eq!(elided.len(), 1, "exactly one visible seam");
+        assert_eq!(elided[0].content, "[turns 9-48 not shown]");
+
+        assert_eq!(
+            chunks.len(),
+            CONV_LOCATOR_HEAD_MSGS + CONV_LOCATOR_TAIL_MSGS + 1
+        );
+        assert_eq!(chunks.last().unwrap().title.as_deref(), Some("Turn 60 (assistant)"));
+    }
+
+    #[test]
+    fn long_messages_are_truncated_not_dropped() {
+        let long = "x".repeat(CONV_LOCATOR_CHARS_PER_MSG * 3);
+        let chunks = conversation_turns_as_chunks(&[msg(0, Role::User, &long)]);
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.ends_with("..."));
+        assert_eq!(chunks[0].content.len(), CONV_LOCATOR_CHARS_PER_MSG + 3);
     }
 }
