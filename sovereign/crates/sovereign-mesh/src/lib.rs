@@ -26,6 +26,10 @@ pub mod daemon;
 /// per completion (served-by / TTFT / total / tokens / shed). Pure
 /// instrumentation: it changes no routing decision.
 pub mod decision_log;
+/// Decision replay — Phase 1 (S1). Re-runs the live scorer and the
+/// live ranking policy over a captured `decision_log` record and
+/// reports whether the record reproduces its own scores and verdict.
+pub mod decision_replay;
 /// Trace-replay fixtures — Phase 0 (P3/P4). Reads a `decision_log`
 /// JSONL stream plus an observation-state snapshot back into the
 /// episode the Tier-1 simulator replays.
@@ -49,6 +53,12 @@ pub mod landscape_digest_http;
 pub mod loopback_guard;
 pub mod mcp_router;
 pub mod mesh_discovery;
+/// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
+/// feature flag beside `dst`: same crate (only this crate can name
+/// the scheduler's internals), same "never in a production build"
+/// rationale.
+#[cfg(feature = "mesh-sim")]
+pub mod mesh_sim;
 pub mod mesh_http;
 pub mod model_fetch;
 pub mod newsworthy_host;
@@ -56,6 +66,11 @@ pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
 pub mod peer_inference;
 pub mod persist;
+/// The §4.1 candidate objective — rank on predicted time-to-answer
+/// rather than on a product of dimensionless multipliers
+/// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
+/// capture as well as from the live path.
+pub mod predicted_time;
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 pub mod projects;
@@ -65,6 +80,9 @@ pub mod reading_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod rpc_warm_http;
+/// The routing decision as a pure function — shared by the production
+/// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).
+pub(crate) mod scheduler_core;
 pub mod slot_aliases;
 pub mod source_content_validator;
 pub mod state;

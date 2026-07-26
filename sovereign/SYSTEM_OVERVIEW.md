@@ -868,8 +868,9 @@ embedding-centroid pre-checks: the **embed router** (intent exemplars → a
 direct intent when confident, skipping the LLM passes), the **scope**
 classifier (personal vs external), the **effort** classifier (a high-effort
 referential `Answer` → `DeepQuery` → primary slot — the exhaustive-ask
-escalation), and the **current-info** classifier (drives `force_action` for
-time-sensitive queries). All four are assembled by the single helper
+escalation), the **current-info** classifier (drives `force_action` for
+time-sensitive queries), and the **archive** classifier (past chats vs this
+thread — see below). All five are assembled by the single helper
 `sovereign-core/src/router_bootstrap.rs::build_llm_router`, which **every**
 surface calls — CLI/bench, desktop, and the served daemon. Exemplars are baked
 into the binary (`include_str!` of `sovereign/router/*.toml`), so the stack
@@ -912,8 +913,37 @@ neighbours (archive recall over *past* conversations, world questions
 using ordinal/summary vocabulary) — re-runnable against a live daemon
 via `tests/locator_axis_live.rs --ignored`.
 
-**Pre-built router-embed cache (`router_embed_cache.rs`).** The four boot
-classifiers embed ~310 static exemplars at every process start — ~5.7s on Apple
+**The archive axis — "past chats, or *this* one?" (2026-07-26).** The
+locator axis above answers "is this about THIS thread?"; this one answers
+the adjacent question its negative set was swept against. "Have I
+mentioned kayaking in any of our past chats?" used to route
+`MetalingualQuery`, whereupon the handler string-parsed the locator to
+`Unknown`, preferred CODE corpora, found nothing, and emitted the
+`no_source` empty state — the user's own archive never searched. The
+correct verdict was *already* top-ranked (`KnowledgeQuery`, scope
+personal, 0.531) but sat under the 0.55 intent floor, so the router
+abstained and the LLM classifier picked metalingual. It is not wrong to
+call the question conversational; it is wrong about *which*
+conversation.
+Two cheaper fixes were rejected with numbers: more exemplars (similarity
+in the bank is topic-dominated — the same exemplar scores 1.000 on its
+own topic and 0.531 on a different one), and a rule over the existing
+axes (cells_v1's own metalingual row scores *more* negative on the
+locator axis than the archive query does, so any threshold catching one
+flips the other). So archive-vs-thread gets its own centroid classifier
+(`archive_classifier.rs`, `sovereign/router/archive_examples.toml`) in
+the shape that worked for `scope`, and runs as **Pre-check -2.4** —
+*after* the locator axis, so the older and more heavily swept gate wins
+any disagreement. Firing hard-commits `KnowledgeQuery` **plus
+`scope = "personal"`** (coarse label `CONVERSATION_ARCHIVE_EMBED`);
+without the scope the intent alone would search Wikipedia for the user's
+chat history. Calibrated on the shared instruction-prefixed embedding —
+the unprefixed space collapses world negatives into the positive range —
+at 5/6 held-out positives and **0/20 false positives**, re-runnable via
+`tests/archive_axis_live.rs --ignored`.
+
+**Pre-built router-embed cache (`router_embed_cache.rs`).** The five boot
+classifiers embed ~350 static exemplars at every process start — ~5.7s on Apple
 Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`
 gates off Metal). So the embeddings are pre-computed for the prescribed embed
 model and committed at `sovereign/router/router-embed-cache.json`, baked into
@@ -1726,10 +1756,61 @@ Capture with `SOVEREIGN_DECISION_LOG=<path>` on the daemon; records
 also reach `tracing` under the **`mesh.decision`** target (listed in
 `DAEMON_TRACING_FILTER`, without which a custom target is dark).
 
-Phase 1 — the Tier-1 `mesh-sim` that links the *real* scorer and
-`PeerHealthTracker` with no GPU — is **not built yet**. The ordering is
-deliberate: the sim is the baseline machine, so behavioural fixes land
-as sim arms rather than in production first.
+**Phase 1 S0 (the Tier-1 simulator) is landed** (2026-07-26), and it
+changed the diagnosis:
+
+| module | role |
+|---|---|
+| `sovereign-mesh/scheduler_core.rs` | The routing decision as a **pure total function** — `rank(DecisionBuilder, RankInputs) -> RankResult` over a snapshot of what a decider believes, with `now_unix` passed rather than read. `select_peers_ranked` is now gather-then-decide: async I/O above the line, this below it. Also holds the observation feedback (`observe_dispatch` / `observe_success` / `observe_failure`) the provider's `record_*` methods delegate to, so sim and production age their beliefs by one implementation. |
+| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, seven arms (as-implemented / fresh-signals / two-choices / both / warm-start / outbound-only-load / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; separate RNG streams for world and policy so switching arms cannot perturb the world the arms are compared in. |
+| `sovereign-mesh/mesh_sim/scoreboard.rs` | `RecordMetrics` is computable from a **production capture** too (the S1 precondition); `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
+
+Run it: `cargo test -p sovereign-mesh --features mesh-sim,treesitter
+--test mesh_sim_scoreboard -- --nocapture` (~0.3s; `sovereign-lint.sh`
+keeps it compiling).
+
+**Phase 1 S1's instrument is landed** (2026-07-26) — the hardware
+capture it points at is not taken:
+
+| module | role |
+|---|---|
+| `sovereign-mesh/decision_replay.rs` | Re-runs the **live** scorer and the **live** ranking policy over a captured record and reports whether the record reproduces its own scores and verdict. Split in two on purpose: *scorer agreement* (recorded `CandidateInputs` + `claim_score` + locality → `score_with_adjustments` → does `final_score` come back?) and *policy agreement* (recorded scores → `winners_over_local` → does the `Verdict` come back?). The two run off independent inputs so one bug cannot cascade into the other. Both ratios return `0.0` on an empty denominator, never a vacuous `1.0`. |
+| `sovereign-mesh/scheduler_core.rs` | Gained `winners_over_local` / `beats_local` / `local_sentinel` — the ranking half extracted so replay re-runs the policy rather than a copy of it. |
+| `tests/scheduler_replay_agreement.rs` | The fixture with a known answer: sim → `TracingDecisionSink::to_path` → JSONL → `SchedulerTrace::from_jsonl_path` → replay. **1.000 / 1.000, bit-exact**, five scenarios × six arms. |
+
+The gap S1 was expected to surface — `claim_affinity` is an argument
+the scorer takes and the record does not carry — turned out not to
+need a schema field: `observation_mult = effective_affinity(a,obs)/a`
+is independent of `a` over `(0, 1]`, and `a` is clamped to `[0, 1]` at
+the type level by `CapabilityClaim::effective_affinity`. Settling that
+in the simulator is the reason the replay was built before the
+capture.
+
+Three **diagnostic** arms landed with it, each pricing a question
+before it costs hardware time, and each asserting its own wiring first
+(a null result is only informative if the knob is proven connected).
+`WarmStart` prices F7: removing the cold-start floor is **+235% mean
+latency**, so the floor is the mesh's only brake on offloading.
+`FreshWarmStart` then asks whether that damage is F1's — and says
+**no**, the penalty is *larger* (+264%) with a perfect load signal, so
+the extra offloads lose on their own merits and the floor is
+compensating for an **over-eager objective**. That is a direct
+argument for §4.1's structural change: a product of dimensionless
+multipliers cannot decline a hop that costs more than it buys, and
+ranking on predicted time-to-answer can. `OutboundOnlyLoad` says that
+if the gossiped in-flight counter misses inbound peer work it costs
++126% to +584%, which earns the two-daemon audit F2's caveat now calls
+for.
+
+Findings, in `SCHEDULER_QUALITY.md` §3.1: **F3 reproduced exactly**;
+**F1 reproduced but costs the tail, not the median** (the reverse of
+the hand-model's reading); **F5's mechanism reproduced but its
+two-choices remedy is inert** wherever the fleet has a unique
+capability winner, because the eligible set is then a singleton; and a
+new **F7 — the cold-start ramp is self-locking**, contradicting
+`cold_start_weight`'s own doc comment. **No Phase-2 behavioural change
+has landed in production** — the ordering is deliberate: the sim is the
+baseline machine, so fixes land as sim arms first.
 
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a

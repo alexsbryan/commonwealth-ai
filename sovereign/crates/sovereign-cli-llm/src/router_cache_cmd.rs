@@ -23,6 +23,7 @@ use sovereign_core::models_manifest::ModelsManifest;
 use sovereign_core::router_bootstrap::exemplar_specs;
 use sovereign_core::router_embed::EmbedRouter;
 use sovereign_core::router_embed_cache::{check_cache_fresh, BootEmbedCache};
+use sovereign_core::archive_classifier::ConversationArchiveClassifier;
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbedOnlyProvider;
@@ -72,7 +73,7 @@ fn repo_root() -> Option<PathBuf> {
     }
 }
 
-/// Load the four exemplar TOMLs + models.toml + the committed cache from disk.
+/// Load the five exemplar TOMLs + models.toml + the committed cache from disk.
 fn read_tree(root: &Path) -> std::io::Result<TreeFiles> {
     let rd = |rel: &str| std::fs::read_to_string(root.join(rel));
     Ok(TreeFiles {
@@ -81,6 +82,7 @@ fn read_tree(root: &Path) -> std::io::Result<TreeFiles> {
         scope: rd(&format!("{ROUTER_DIR}/scope_examples.toml"))?,
         effort: rd(&format!("{ROUTER_DIR}/effort_examples.toml"))?,
         current_info: rd(&format!("{ROUTER_DIR}/current_info_examples.toml"))?,
+        archive: rd(&format!("{ROUTER_DIR}/archive_examples.toml"))?,
         models: rd(MODELS_REL)?,
     })
 }
@@ -91,13 +93,14 @@ struct TreeFiles {
     scope: String,
     effort: String,
     current_info: String,
+    archive: String,
     models: String,
 }
 
 /// Resolve `(specs, fingerprint)` from the working tree — shared by check + the
 /// post-rebuild verification so they agree by construction.
 fn specs_and_fingerprint(t: &TreeFiles) -> Result<(Vec<(&'static str, String)>, String), String> {
-    let specs = exemplar_specs(&t.router, &t.scope, &t.effort, &t.current_info)
+    let specs = exemplar_specs(&t.router, &t.scope, &t.effort, &t.current_info, &t.archive)
         .map_err(|e| format!("parse exemplars: {e}"))?;
     let manifest =
         ModelsManifest::from_toml_str(&t.models).map_err(|e| format!("parse models.toml: {e}"))?;
@@ -256,6 +259,12 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
         .await?;
         CurrentInfoClassifier::from_toml_str_cached(
             &tree.current_info,
+            Arc::clone(&provider),
+            Some(&mut cache),
+        )
+        .await?;
+        ConversationArchiveClassifier::from_toml_str_cached(
+            &tree.archive,
             Arc::clone(&provider),
             Some(&mut cache),
         )

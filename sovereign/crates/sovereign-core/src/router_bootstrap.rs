@@ -19,6 +19,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::archive_classifier::ConversationArchiveClassifier;
 use crate::current_info_classifier::CurrentInfoClassifier;
 use crate::effort_classifier::EffortClassifier;
 use crate::error::{Error, Result};
@@ -35,8 +36,9 @@ pub const BAKED_SCOPE_EXAMPLES: &str = include_str!("../../../router/scope_examp
 pub const BAKED_EFFORT_EXAMPLES: &str = include_str!("../../../router/effort_examples.toml");
 pub const BAKED_CURRENT_INFO_EXAMPLES: &str =
     include_str!("../../../router/current_info_examples.toml");
+pub const BAKED_ARCHIVE_EXAMPLES: &str = include_str!("../../../router/archive_examples.toml");
 
-/// Every `(method, text)` pair the four boot classifiers embed, in boot order.
+/// Every `(method, text)` pair the five boot classifiers embed, in boot order.
 /// `method` is the embed-cache key space: `"q"` (instruction-prefixed
 /// `embed_query`) for the embed-router / scope / current-info classifiers,
 /// `"d"` (unprefixed `embed`) for the effort classifier (see
@@ -51,6 +53,7 @@ pub fn exemplar_specs(
     scope: &str,
     effort: &str,
     current_info: &str,
+    archive: &str,
 ) -> Result<Vec<(&'static str, String)>> {
     let mut specs = Vec::new();
     for t in EmbedRouter::exemplar_texts(router)? {
@@ -65,6 +68,13 @@ pub fn exemplar_specs(
     for t in CurrentInfoClassifier::exemplar_texts(current_info)? {
         specs.push(("q", t));
     }
+    // Archive is `"q"`: it is calibrated on the instruction-prefixed
+    // vector it SHARES with the embed router (see
+    // `archive_classifier` module docs — the unprefixed space
+    // collapses the world negatives into the positive range).
+    for t in ConversationArchiveClassifier::exemplar_texts(archive)? {
+        specs.push(("q", t));
+    }
     Ok(specs)
 }
 
@@ -76,6 +86,7 @@ pub fn baked_exemplar_specs() -> Result<Vec<(&'static str, String)>> {
         BAKED_SCOPE_EXAMPLES,
         BAKED_EFFORT_EXAMPLES,
         BAKED_CURRENT_INFO_EXAMPLES,
+        BAKED_ARCHIVE_EXAMPLES,
     )
 }
 
@@ -89,6 +100,7 @@ pub struct ExemplarOverrides {
     pub scope: Option<PathBuf>,
     pub effort: Option<PathBuf>,
     pub current_info: Option<PathBuf>,
+    pub archive: Option<PathBuf>,
 }
 
 impl ExemplarOverrides {
@@ -112,6 +124,10 @@ impl ExemplarOverrides {
             current_info: resolve(
                 "SOVEREIGN_CURRENT_INFO_EXAMPLES",
                 "sovereign/router/current_info_examples.toml",
+            ),
+            archive: resolve(
+                "SOVEREIGN_ARCHIVE_EXAMPLES",
+                "sovereign/router/archive_examples.toml",
             ),
         }
     }
@@ -150,6 +166,7 @@ pub struct RouterBuildReport {
     pub scope: Option<ClassifierSource>,
     pub effort: Option<ClassifierSource>,
     pub current_info: Option<ClassifierSource>,
+    pub archive: Option<ClassifierSource>,
 }
 
 impl RouterBuildReport {
@@ -160,12 +177,13 @@ impl RouterBuildReport {
             && self.scope.is_some()
             && self.effort.is_some()
             && self.current_info.is_some()
+            && self.archive.is_some()
     }
 }
 
 /// Assemble a fully-wired [`LlmRouter`]: embed router → scope → effort →
-/// current-info, each from its override path when present else the baked
-/// default, each soft-degrading independently. Returns the router plus a
+/// current-info → archive, each from its override path when present else the
+/// baked default, each soft-degrading independently. Returns the router plus a
 /// [`RouterBuildReport`] for the caller to log.
 ///
 /// `on_cold_start` fires once, before any exemplar embedding, iff the shared
@@ -185,7 +203,7 @@ pub async fn build_llm_router(
     let mut report = RouterBuildReport::default();
 
     // Exemplar embeddings are static per (text, embed model); without
-    // the cache the four classifiers below re-embed ~310 strings
+    // the cache the five classifiers below re-embed ~350 strings
     // sequentially at every boot (~5.7s of desktop splash, measured
     // 2026-06-10). Validity is a sentinel cosine probe inside `open`.
     let mut embed_cache = crate::router_embed_cache::BootEmbedCache::open(&*inference).await;
@@ -244,6 +262,21 @@ pub async fn build_llm_router(
             "current-info classifier unavailable; force_action falls back to keyword heuristic"),
     }
 
+    // 5. Conversation-archive classifier — separates "about my chat
+    //    ARCHIVE" (a personal-corpus search) from "about THIS thread"
+    //    (answerable from the message list). Without it, archive
+    //    questions route MetalingualQuery and dead-end on the
+    //    `no_source` empty state. See `archive_classifier` module docs.
+    match load_archive(&overrides.archive, &inference, &mut embed_cache).await {
+        Ok((c, src)) => {
+            tracing::info!(target: "router.bootstrap", archive = c.archive_count(), thread = c.thread_count(), source = ?src, "archive classifier wired");
+            router = router.with_archive_classifier(Arc::new(c));
+            report.archive = Some(src);
+        }
+        Err(e) => tracing::warn!(target: "router.bootstrap", error = %e,
+            "archive classifier unavailable; archive questions fall back to the metalingual cascade"),
+    }
+
     embed_cache.flush();
 
     tracing::info!(
@@ -252,6 +285,7 @@ pub async fn build_llm_router(
         scope = report.scope.is_some(),
         effort = report.effort.is_some(),
         current_info = report.current_info.is_some(),
+        archive = report.archive.is_some(),
         all_wired = report.all_wired(),
         "router classifier stack assembled"
     );
@@ -306,6 +340,33 @@ async fn load_scope(
         None => (
             PersonalScopeClassifier::from_toml_str_cached(
                 BAKED_SCOPE_EXAMPLES,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
+            ClassifierSource::Baked,
+        ),
+    })
+}
+
+async fn load_archive(
+    over: &Option<PathBuf>,
+    inf: &Arc<dyn InferenceProvider>,
+    cache: &mut crate::router_embed_cache::BootEmbedCache,
+) -> Result<(ConversationArchiveClassifier, ClassifierSource)> {
+    Ok(match over {
+        Some(p) => (
+            ConversationArchiveClassifier::from_toml_str_cached(
+                &read_override(p, "archive examples")?,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
+            ClassifierSource::Path(p.clone()),
+        ),
+        None => (
+            ConversationArchiveClassifier::from_toml_str_cached(
+                BAKED_ARCHIVE_EXAMPLES,
                 Arc::clone(inf),
                 Some(cache),
             )

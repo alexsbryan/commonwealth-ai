@@ -108,7 +108,8 @@ pub(crate) use self::question_analysis::{
     extract_comparison_entities, extract_question_entities, locator_hint_from_coarse,
     parse_metalingual_locator, project_retrieved_chunks, raptor_late_inject_enabled,
     reserve_atom_enum_chunks, reserve_chunks_per_entity, reserve_raptor_chunks,
-    MetalingualLocator, COARSE_CONVERSATION_LOCATOR_DIRECT, COARSE_CONVERSATION_LOCATOR_EMBED,
+    MetalingualLocator, COARSE_CONVERSATION_ARCHIVE_EMBED, COARSE_CONVERSATION_LOCATOR_DIRECT,
+    COARSE_CONVERSATION_LOCATOR_EMBED,
 };
 pub(crate) use self::retrieval_helpers::{
     apply_cross_corpus_discipline, atlas_grounding_enabled, blend_query_aware,

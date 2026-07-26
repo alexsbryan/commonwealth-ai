@@ -208,14 +208,23 @@ fi
 # leaf crate, so its dev-tools flag (which re-enables the gated dev-verb
 # surface the test runner exercises) is only added when sovereign-cli is
 # part of the selection.
+#
+# `sovereign-mesh/mesh-sim` (the Tier-1 scheduler simulator,
+# SCHEDULER_QUALITY.md §5) rides along on the same rule. It is
+# off-by-default so production never links a measurement harness, but
+# a harness nothing compiles is a harness that silently rots — and
+# this one is pure compute with no extra dependencies, so checking it
+# costs a few seconds. Same leaf-crate conditional as dev-tools.
 features="corpus-engine/treesitter"
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools"
+    features+=",sovereign-cli/dev-tools,sovereign-mesh/mesh-sim"
 else
     for c in "${crates[@]}"; do
         if [[ "$c" == "sovereign-cli" ]]; then
             features+=",sovereign-cli/dev-tools"
-            break
+        fi
+        if [[ "$c" == "sovereign-mesh" ]]; then
+            features+=",sovereign-mesh/mesh-sim"
         fi
     done
 fi

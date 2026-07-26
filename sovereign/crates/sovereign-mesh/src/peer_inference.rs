@@ -44,7 +44,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
-    ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations, ProviderManifest,
+    ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
@@ -53,11 +53,14 @@ use tokio::sync::RwLock;
 
 use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
 use crate::decision_log::{
-    self, CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath,
-    DecisionSink, ExclusionReason, LoadSource, OutcomeContext, RequestFacts, ScoreRecord, ServedBy,
+    self, DecisionBuilder, DecisionPath, DecisionSink, OutcomeContext, RequestFacts, ServedBy,
     Verdict,
 };
 use crate::oicp_synthesis::build_self_manifest;
+use crate::scheduler_core::{
+    self, LocalCandidateView, PeerCandidateView, PeerManifestView, RankInputs, RankObjective,
+    RankResult,
+};
 use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
 
 /// How long to trust a fetched peer manifest before re-fetching.
@@ -231,10 +234,6 @@ struct ManifestRead {
     from_cache: bool,
 }
 
-/// The name the local node is recorded under in a decision record's
-/// candidate set. Peers are recorded under their mesh name, which is
-/// never this.
-const LOCAL_CANDIDATE_NAME: &str = "local";
 
 /// The result of a ranked OICP selection, plus the identity of the
 /// decision record that produced it.
@@ -292,10 +291,7 @@ struct CachedManifest {
 // the Joiner picking a peer (here) AND the peer-side adapter
 // picking which loaded slot to serve the request from. Importing
 // here keeps the rest of this file unchanged.
-use crate::oicp_select::{
-    adjust_for_observations, candidates_equal, classify_rtt_ms, pick_better,
-    score_manifest_for_request, ModelCandidate,
-};
+use crate::oicp_select::{classify_rtt_ms, ModelCandidate};
 
 /// Narrow trait the wrapper uses to discover routable peers. The
 /// production implementation is `EmbeddedDaemon` — but factoring
@@ -850,16 +846,10 @@ impl MeshInferenceProvider {
     /// if `peer_name` is `None`). Increments in-flight + samples.
     pub async fn record_dispatch(&self, peer_name: Option<&str>) {
         match peer_name {
-            None => {
-                let mut obs = self.local_observations.write().await;
-                obs.in_flight = obs.in_flight.saturating_add(1);
-                obs.samples = obs.samples.saturating_add(1);
-            }
+            None => scheduler_core::observe_dispatch(&mut *self.local_observations.write().await),
             Some(name) => {
                 let mut obs = self.peer_observations.write().await;
-                let entry = obs.entry(name.to_string()).or_default();
-                entry.in_flight = entry.in_flight.saturating_add(1);
-                entry.samples = entry.samples.saturating_add(1);
+                scheduler_core::observe_dispatch(obs.entry(name.to_string()).or_default());
             }
         }
     }
@@ -868,37 +858,24 @@ impl MeshInferenceProvider {
     /// Decrements in-flight; leaves failure counters untouched so
     /// the rolling rate drifts toward zero.
     pub async fn record_success(&self, peer_name: Option<&str>) {
-        let mut obs_ref = match peer_name {
-            None => self.local_observations.write().await,
+        match peer_name {
+            None => scheduler_core::observe_success(&mut *self.local_observations.write().await),
             Some(name) => {
                 let mut map = self.peer_observations.write().await;
-                let entry = map
-                    .entry(name.to_string())
-                    .or_insert_with(NodeObservations::default);
-                entry.in_flight = entry.in_flight.saturating_sub(1);
-                // Drift failure rate toward zero on every success.
-                entry.recent_failure_rate = (entry.recent_failure_rate * 0.9).max(0.0);
-                return;
+                scheduler_core::observe_success(map.entry(name.to_string()).or_default());
             }
-        };
-        obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
-        obs_ref.recent_failure_rate = (obs_ref.recent_failure_rate * 0.9).max(0.0);
+        }
     }
 
     /// Record that a dispatched request failed. Decrements in-flight
     /// and bumps the rolling failure rate toward 1.0.
     pub async fn record_failure(&self, peer_name: Option<&str>) {
-        let mut obs_ref = match peer_name {
-            None => self.local_observations.write().await,
+        match peer_name {
+            None => scheduler_core::observe_failure(&mut *self.local_observations.write().await),
             Some(name) => {
                 let mut map = self.peer_observations.write().await;
-                let entry = map
-                    .entry(name.to_string())
-                    .or_insert_with(NodeObservations::default);
-                entry.in_flight = entry.in_flight.saturating_sub(1);
-                // Rolling-window failure rate: EMA toward 1.0 with
-                // alpha 0.1 — 10 consecutive failures settle near 0.65.
-                entry.recent_failure_rate = (entry.recent_failure_rate * 0.9 + 0.1).min(1.0);
+                let entry = map.entry(name.to_string()).or_default();
+                scheduler_core::observe_failure(entry);
                 tracing::warn!(
                     target: "mesh.health",
                     peer = name,
@@ -906,11 +883,8 @@ impl MeshInferenceProvider {
                     in_flight = entry.in_flight,
                     "peer dispatch failed — failure-rate EMA climbing; the scorer will deprioritize this peer"
                 );
-                return;
             }
-        };
-        obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
-        obs_ref.recent_failure_rate = (obs_ref.recent_failure_rate * 0.9 + 0.1).min(1.0);
+        }
     }
 
     /// Returns `true` when the request carries any v0.3 routing
@@ -936,7 +910,7 @@ impl MeshInferenceProvider {
     /// make anyway, repurposed as a locality probe — sub-5ms is
     /// same-host, sub-25ms is LAN, else WAN (see
     /// [`classify_rtt_ms`]). Caller folds this into
-    /// [`adjust_for_observations`] so LAN peers pick up their
+    /// [`crate::oicp_select::adjust_for_observations`] so LAN peers pick up their
     /// locality bonus in real deployments instead of defaulting
     /// to `Far`.
     async fn get_peer_manifest(&self, peer: &PeerInferenceEndpoint) -> Option<ManifestRead> {
@@ -1155,7 +1129,7 @@ impl MeshInferenceProvider {
         // candidates but do name the gate. "The hub lost" and "the
         // hub was never considered" are different failures and the
         // record has to be able to say which happened.
-        let mut rec = DecisionBuilder::new(
+        let rec = DecisionBuilder::new(
             oicp_request_id,
             DecisionPath::RankedOicp,
             Self::request_facts(request),
@@ -1231,282 +1205,96 @@ impl MeshInferenceProvider {
         let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
         let now_unix = Self::now_unix_secs();
-        let local_cand = score_manifest_for_request(&self_manifest, req_oicp).map(|c| {
-            // Local availability is `None` (neutral): the local
-            // node's business is already captured by
-            // `local_obs.in_flight`; the gossiped availability
-            // signal exists to protect busy PEERS.
-            let (cand, breakdown) = adjust_for_observations(
-                c,
-                &local_obs,
-                NodeLocality::Local,
-                local_bench.as_ref(),
-                None,
-            );
-            // P2: the local candidate's load signal has no staleness —
-            // that asymmetry between self and peers IS finding F1, so
-            // the record states it explicitly (`LoadSource::Local`,
-            // `gossip_age_secs: None`) rather than leaving it implied.
-            let inputs = CandidateInputs::from_observations(&local_obs, LoadSource::Local)
-                .with_benchmark(local_bench.as_ref(), now_unix);
-            rec.push_candidate(CandidateRecord {
-                kind: CandidateKind::Local,
-                name: LOCAL_CANDIDATE_NAME.to_string(),
-                node_id: None,
-                model_id: cand.model_id.clone(),
-                size_gb: cand.size_gb,
-                locality: decision_log::locality_label(NodeLocality::Local).to_string(),
-                rank: None,
-                selected: false,
-                score: ScoreRecord::from(&breakdown),
-                inputs,
-            });
-            cand
-        });
-        tracing::info!(
-            local_models = self_manifest.models.len(),
-            local_scores = local_cand.is_some(),
-            local_score = local_cand.as_ref().map(|c| c.score).unwrap_or(f32::NEG_INFINITY),
-            local_pick = local_cand.as_ref().map(|c| c.model_id.as_str()).unwrap_or("<none>"),
-            local_size_gb = ?local_cand.as_ref().and_then(|c| c.size_gb),
-            req_hint = %req_oicp.effective_hint(),
-            req_latency = ?req_oicp.effective_latency_class(),
-            "mesh-inference: scoring local"
-        );
 
+        // ── Gather ──────────────────────────────────────────────
+        // Everything from here to `scheduler_core::rank` is I/O and
+        // environment: fetch what this node currently believes about
+        // its peers. Nothing below decides anything. The split is
+        // load-bearing — the Tier-1 simulator
+        // (`SCHEDULER_QUALITY.md` §5) replaces exactly this half and
+        // shares the other, so arm 0 of the sim runs the production
+        // decision rather than a transcription of it.
         let peers = self.mesh.peer_inference_endpoints().await;
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
         // Forced-choice sentinel (SLOT_POLICY §6): a request eliciting a
         // calibrated one-pass distribution can only be honoured by a peer
         // whose manifest advertises `x:forced_choice`. Compute the need
-        // once; the per-peer check below excludes non-advertising peers so
-        // the sentinel never crosses to a peer that would silently fall
-        // back to K-sampling. (Explicit `model_id` dispatch is honoured by
-        // name and never reaches this scorer, so it is not filtered here.)
+        // once; the core excludes non-advertising peers so the sentinel
+        // never crosses to a peer that would silently fall back to
+        // K-sampling. (Explicit `model_id` dispatch is honoured by name
+        // and never reaches this scorer, so it is not filtered here.)
         let needs_forced_choice = request.forced_choice_candidates().is_some();
-        let mut scored: Vec<(PeerInferenceEndpoint, ModelCandidate)> = Vec::new();
-        for peer in peers {
-            // Drop quarantined peers from the candidate set. They'll
-            // re-enter automatically once their cooldown expires.
-            // Returning None from select_peer (when this is the only
-            // candidate that would have won) falls back to local —
-            // which is the correct behaviour for the OICP path
-            // because OICP-driven calls don't pin a specific model.
-            if self.peer_health.is_quarantined(&peer.name) {
-                tracing::debug!(
-                    peer = %peer.name,
-                    "mesh-inference: skipping quarantined peer in scoring"
-                );
-                rec.exclude(
-                    &peer.name,
-                    Some(peer.node_id.to_hex()),
-                    ExclusionReason::Quarantined,
-                );
-                continue;
-            }
-            let manifest_read = match self.get_peer_manifest(&peer).await {
-                Some(m) => m,
-                None => {
-                    rec.exclude(
-                        &peer.name,
-                        Some(peer.node_id.to_hex()),
-                        ExclusionReason::ManifestUnavailable,
-                    );
-                    continue;
-                }
+        let mut views: Vec<PeerCandidateView> = Vec::with_capacity(peers.len());
+        for peer in &peers {
+            // A quarantined peer is skipped *before* the manifest
+            // fetch — the exclusion costs no network. The core
+            // records the reason.
+            let quarantined = self.peer_health.is_quarantined(&peer.name);
+            let manifest = if quarantined {
+                None
+            } else {
+                self.get_peer_manifest(peer).await.map(|m| PeerManifestView {
+                    manifest: m.manifest,
+                    rtt_ms: m.rtt_ms,
+                    age_secs: m.age_secs,
+                    from_cache: m.from_cache,
+                })
             };
-            let ManifestRead {
-                manifest,
-                rtt_ms,
-                age_secs: manifest_age_secs,
-                from_cache: manifest_from_cache,
-            } = manifest_read;
-            if needs_forced_choice
-                && !manifest
-                    .features
-                    .iter()
-                    .any(|f| f.as_str() == sovereign_core::oicp::features::X_FORCED_CHOICE)
-            {
-                tracing::debug!(
-                    oicp_request_id = %oicp_request_id,
-                    peer = %peer.name,
-                    "mesh-inference: excluding peer — forced_choice sentinel \
-                     but manifest does not advertise x:forced_choice"
-                );
-                rec.exclude(
-                    &peer.name,
-                    Some(peer.node_id.to_hex()),
-                    ExclusionReason::NoForcedChoice,
-                );
-                continue;
-            }
-            let mut raw = match score_manifest_for_request(&manifest, req_oicp) {
-                Some(c) => c,
-                None => {
-                    rec.exclude(
-                        &peer.name,
-                        Some(peer.node_id.to_hex()),
-                        ExclusionReason::NoClaimMatch,
-                    );
-                    continue;
-                }
-            };
-            // Pinned worker pods have no "users" beyond the owner —
-            // the mesh's local-affinity bias (which scales peer scores
-            // by their willingness to serve outside requests) doesn't
-            // apply. Normalising claim_affinity to 1.0 makes the
-            // `effective_affinity / claim_affinity` ratio inside
-            // `adjust_for_observations` collapse to a neutral
-            // multiplier so a pinned pod isn't penalised for failing
-            // to advertise mesh-affinity it has no concept of.
-            // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md hard part 3.
-            if peer.transport.is_some() {
-                raw.claim_affinity = 1.0;
-            }
-            // Apply operational adjustments. Locality is derived
-            // from the manifest-fetch RTT (see PR-F) — same round
-            // trip, no extra probe — so LAN deployments actually
-            // see their locality bonus instead of every peer
-            // defaulting to `Far`.
-            let mut obs = peer_obs_snapshot
-                .get(&peer.name)
-                .cloned()
-                .unwrap_or_default();
-            // Cluster-wide load-awareness override. The founder's
-            // local `peer_observations[name].in_flight` only counts
-            // requests this node dispatched to the peer — it is
-            // structurally blind to traffic the peer served from
-            // its own local user (e.g. a workstation operator
-            // running Claude desktop alongside their daemon). When
-            // the peer gossips its self-reported count, prefer it:
-            // it captures *total* load, including locally-driven
-            // traffic. Without this override, a busy peer with no
-            // founder-originated traffic looks phantom-idle and
-            // wins routing it can't actually serve in time.
-            //
-            // Sample-floor heuristic: keep the founder's local
-            // sample count (used elsewhere in scoring). Only the
-            // in-flight number is swapped — gossiped samples are
-            // not yet plumbed and would muddle the cold-start ramp.
-            //
-            // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-            let self_observed_in_flight = obs.in_flight;
-            let mut in_flight_source = LoadSource::SelfObserved;
-            if let Some(gossiped) = peer.current_in_flight {
-                tracing::debug!(
-                    peer = %peer.name,
-                    self_observed = obs.in_flight,
-                    gossiped,
-                    "mesh-inference: applying gossiped in-flight override"
-                );
-                obs.in_flight = gossiped;
-                in_flight_source = LoadSource::Gossip;
-            }
-            let (cand, breakdown) = adjust_for_observations(
-                raw,
-                &obs,
-                classify_rtt_ms(rtt_ms),
-                peer.benchmark.as_ref(),
-                // Gossiped availability — ADOPTED 2026-06-10 (the
-                // signal was previously dropped on the floor; a peer
-                // advertising 0.2 was scored as if idle). `None` for
-                // peers that haven't gossiped one keeps them neutral.
-                peer.inference_availability,
-            );
-            tracing::info!(
-                peer = %peer.name,
-                peer_pick = %cand.model_id,
-                peer_score = cand.score,
-                peer_size_gb = ?cand.size_gb,
-                "mesh-inference: scored peer"
-            );
-            // P2: every signal that fed this score, stamped with how
-            // old it was when the scorer read it. The gossip age is
-            // the measurement F1 has been missing — the load number
-            // and the load number's age are different facts, and only
-            // the pair can distinguish "the peer is idle" from "the
-            // peer was idle a full anti-entropy round ago."
-            let mut inputs = CandidateInputs::from_observations(&obs, in_flight_source)
-                .with_benchmark(peer.benchmark.as_ref(), now_unix);
-            inputs.self_observed_in_flight = Some(self_observed_in_flight);
-            inputs.gossiped_in_flight = peer.current_in_flight;
-            inputs.availability = peer.inference_availability;
-            inputs.gossip_age_secs = (peer.gossip_last_seen_unix > 0)
-                .then(|| now_unix.saturating_sub(peer.gossip_last_seen_unix));
-            inputs.manifest_age_secs = Some(manifest_age_secs);
-            inputs.manifest_from_cache = Some(manifest_from_cache);
-            inputs.rtt_ms = Some(rtt_ms);
-            rec.push_candidate(CandidateRecord {
-                kind: CandidateKind::Peer,
+            views.push(PeerCandidateView {
                 name: peer.name.clone(),
-                node_id: Some(peer.node_id.to_hex()),
-                model_id: cand.model_id.clone(),
-                size_gb: cand.size_gb,
-                locality: decision_log::locality_label(classify_rtt_ms(rtt_ms)).to_string(),
-                rank: None,
-                selected: false,
-                score: ScoreRecord::from(&breakdown),
-                inputs,
+                node_id_hex: peer.node_id.to_hex(),
+                quarantined,
+                pinned_transport: peer.transport.is_some(),
+                gossiped_in_flight: peer.current_in_flight,
+                availability: peer.inference_availability,
+                gossip_last_seen_unix: peer.gossip_last_seen_unix,
+                benchmark: peer.benchmark.clone(),
+                observations: peer_obs_snapshot
+                    .get(&peer.name)
+                    .cloned()
+                    .unwrap_or_default(),
+                manifest,
             });
-            scored.push((peer, cand));
         }
 
-        // Keep only peers that strictly beat local — same tie-break as before
-        // (local wins ties: no round-trip cost, no attribution churn) — ranked
-        // best-first. The cascade tries them in order; local is the final
-        // fallback step.
-        let local_for_cmp = local_cand.clone().unwrap_or(ModelCandidate {
-            score: f32::NEG_INFINITY,
-            size_gb: None,
-            model_id: "<local-insufficient>".into(),
-            claim_affinity: 0.0,
-        });
-        let mut winners: Vec<(PeerInferenceEndpoint, ModelCandidate)> = scored
-            .into_iter()
-            .filter(|(_, cand)| {
-                let winner = pick_better(local_for_cmp.clone(), cand.clone());
-                winner.model_id == cand.model_id
-                    && winner.score == cand.score
-                    && winner.size_gb == cand.size_gb
-                    && !candidates_equal(&local_for_cmp, cand)
-            })
-            .collect();
-        // Best-first per `pick_better` (score desc, then size asc — a total
-        // order), so the cascade tries the strongest peer first.
-        winners.sort_by(|(_, a), (_, b)| {
-            let w = pick_better(a.clone(), b.clone());
-            if w.model_id == a.model_id && w.score == a.score && w.size_gb == a.size_gb {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Greater
-            }
-        });
-        match winners.first() {
-            Some((peer, cand)) => tracing::info!(
-                peer = %peer.name,
-                peer_pick = %cand.model_id,
-                ranked = winners.len(),
-                "mesh-inference: peer(s) selected by OICP (ranked, best-first)"
-            ),
-            None => {
-                tracing::debug!("mesh-inference: no peer strictly beats local, staying local")
-            }
-        }
+        // ── Decide ──────────────────────────────────────────────
+        let RankResult { ranked, decision } = scheduler_core::rank(
+            rec,
+            RankInputs {
+                now_unix,
+                oicp_request_id,
+                req: req_oicp,
+                needs_forced_choice,
+                // Production still ranks on the product. §4.1's
+                // predicted-time objective is measured as a Tier-1 arm
+                // first (`SCHEDULER_QUALITY.md` §6: behavioural work
+                // goes INTO the sim as arms, not into production).
+                objective: RankObjective::Product,
+                local: LocalCandidateView {
+                    manifest: &self_manifest,
+                    observations: &local_obs,
+                    benchmark: local_bench.as_ref(),
+                },
+                peers: &views,
+            },
+        );
+
         // P3: fold a fleet snapshot into the same record stream on a
         // slow cadence. Cheap (a clone of two small maps) and rate-
         // limited to at most one per SNAPSHOT_INTERVAL_SECS, so a busy
         // node pays it once a minute, not once a request.
         self.maybe_emit_snapshot(now_unix).await;
 
-        let ranked_names: Vec<String> = winners.iter().map(|(p, _)| p.name.clone()).collect();
-        let verdict = if ranked_names.is_empty() {
-            Verdict::StayLocal
-        } else {
-            Verdict::Peers {
-                ranked: ranked_names.clone(),
-            }
-        };
-        let decision = rec.finish(verdict, &ranked_names);
+        // Re-pair the ranked indices with the endpoints we own. The
+        // core deals in indices so it never has to name
+        // `PeerInferenceEndpoint`, which lives on the daemon side of
+        // the crate and drags transport with it.
+        let mut owned: Vec<Option<PeerInferenceEndpoint>> = peers.into_iter().map(Some).collect();
+        let winners: Vec<(PeerInferenceEndpoint, ModelCandidate)> = ranked
+            .into_iter()
+            .filter_map(|(idx, cand)| owned.get_mut(idx).and_then(Option::take).map(|p| (p, cand)))
+            .collect();
+
         let decision_id = decision.decision_id.clone();
         decision_log::emit_decision(&self.decision_sink, decision);
         RankedSelection {
