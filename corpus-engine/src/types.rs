@@ -434,6 +434,113 @@ pub struct IndexInfo {
     pub display: Option<crate::recipe::DisplayMeta>,
 }
 
+impl IndexInfo {
+    /// Is this corpus one that code-aware consumers should query?
+    ///
+    /// The honest answer is **not** `kind == CorpusKind::Code`. That tag
+    /// is unreliable-by-design for repos: `Recipe.corpus.kind` is a
+    /// non-`Option` field defaulting to `Knowledge`, and the two recipes
+    /// that build code corpora deliberately leave it that way, because
+    /// chat retrieval admits only `Knowledge | Catalog` and
+    /// `CODE_INTEL_CHAT.md` routes code questions *through* the knowledge
+    /// path — a repo tagged `Code` would vanish from chat. So
+    /// `commonwealth-ai` ships as `kind:"knowledge"` with 36k code chunks
+    /// and a full SCIP graph.
+    ///
+    /// Every consumer that screened on the tag alone therefore matched
+    /// **nothing** on a healthy install: `code_search` reported "0 code
+    /// corpora" against a perfect index, and `handle_metalingual_query`
+    /// declined every "in this codebase" question with `no_source` while
+    /// 41k indexed chunks sat beside it. The robust signal is an on-disk
+    /// `scip_graph.db` next to the chunk table.
+    ///
+    /// Accepting *either* keeps the original safety property intact: a
+    /// prose corpus (Wikipedia, SEP) has neither a `Code` tag nor a
+    /// graph, so it is still skipped before any Lance call — which
+    /// matters, because its chunk table lacks the typed code columns
+    /// entirely and the query would error at column resolution rather
+    /// than return zero rows.
+    ///
+    /// This lives on `IndexInfo` rather than in a consumer crate because
+    /// it previously existed as three copies that disagreed
+    /// (`sovereign_tools::code::has_code_graph`,
+    /// `Runtime::code_corpus_ids`, and the metalingual handler's tag
+    /// filter). `sovereign-core` carries `sovereign-tools` only as a
+    /// dev-dependency, so the runtime could not reach the corrected
+    /// version even in principle. Both crates already depend on
+    /// corpus-engine, and corpus-engine owns `IndexInfo` — so this is the
+    /// one place all of them can share.
+    pub fn is_code_corpus(&self) -> bool {
+        self.kind == CorpusKind::Code || self.path.join("scip_graph.db").exists()
+    }
+}
+
+#[cfg(test)]
+mod is_code_corpus_tests {
+    use super::*;
+
+    /// Build a minimal `IndexInfo` through serde so the test doesn't have to
+    /// name the ~30 `#[serde(default)]` fields that are irrelevant here.
+    fn info(path: &std::path::Path, kind: &str) -> IndexInfo {
+        serde_json::from_value(serde_json::json!({
+            "corpus_id": "fixture",
+            "corpus_name": "Fixture",
+            "path": path,
+            "chunk_count": 1,
+            "index_size_bytes": 1,
+            "created_at": 0,
+            "last_updated": 0,
+            "embedding_model": "test",
+            "embedding_dimensions": 1024,
+            "mesh_sharing": false,
+            "is_shard": false,
+            "chunk_range": null,
+            "kind": kind,
+        }))
+        .expect("fixture IndexInfo deserializes")
+    }
+
+    #[test]
+    fn code_tag_alone_is_enough() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(info(dir.path(), "code").is_code_corpus());
+    }
+
+    /// The regression this predicate exists for. Repo corpora ship as
+    /// `knowledge`-kind on purpose, so a tag-only test matched nothing on a
+    /// healthy install — `commonwealth-ai` (41k chunks, full SCIP graph) was
+    /// invisible to every code-aware consumer.
+    #[test]
+    fn scip_graph_alone_is_enough_even_when_tagged_knowledge() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("scip_graph.db"), b"").unwrap();
+        let info = info(dir.path(), "knowledge");
+        assert_eq!(info.kind, CorpusKind::Knowledge);
+        assert!(
+            info.is_code_corpus(),
+            "a knowledge-tagged corpus with a SCIP graph IS a code corpus — this is \
+             the shape every real repo index has"
+        );
+    }
+
+    #[test]
+    fn both_signals_together_still_true() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("scip_graph.db"), b"").unwrap();
+        assert!(info(dir.path(), "code").is_code_corpus());
+    }
+
+    /// The safety property: a prose corpus has neither signal, so it is
+    /// skipped before any Lance call. Its chunk table lacks the typed code
+    /// columns entirely, so querying it would error at column resolution
+    /// rather than return zero rows.
+    #[test]
+    fn prose_corpus_with_neither_signal_is_not_code() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!info(dir.path(), "knowledge").is_code_corpus());
+    }
+}
+
 // ─── Scored Chunk (search result) ───────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

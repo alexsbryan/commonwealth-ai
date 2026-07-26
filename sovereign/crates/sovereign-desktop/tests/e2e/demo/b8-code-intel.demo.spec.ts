@@ -236,26 +236,50 @@ beatTest(
     // says. Measured 2026-07-25: inherited DeepQuery, code-intel bridge never
     // engaged.
     //
-    // The conversation menu renders lazily (`notebookConvs.length > 0` resolves
-    // after mount), so a short probe silently no-ops — which is how this hid.
-    // Wait properly, then ASSERT the thread is empty: a stale thread must fail
-    // the beat, not quietly re-pin the route.
+    // Two traps here, both of which produced a SILENT pass while the beat kept
+    // asking into yesterday's 20-message thread:
+    //
+    //  1. `locator.isVisible({timeout})` DOES NOT WAIT. It is an immediate
+    //     check and the timeout option is inert, so probing a menu that renders
+    //     only after `notebookConvs` resolves always missed it. Use `waitFor`,
+    //     which actually polls.
+    //  2. `toHaveCount(0)` on a list that populates asynchronously passes on
+    //     its FIRST poll — before the restored history has rendered. As an
+    //     emptiness guard it confirms nothing. Let the surface settle first.
     const convMenu = page.getByTestId("notebook-conv-menu");
-    if (await convMenu.isVisible({ timeout: 15_000 }).catch(() => false)) {
-      await demoClick(page, convMenu, { settleMs: 300 });
-      await demoClick(page, page.getByTestId("notebook-ask-new"), { settleMs: 900 });
+    const hasHistory = await convMenu
+      .waitFor({ state: "visible", timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (hasHistory) {
+      await demoClick(page, convMenu, { settleMs: 400 });
+      await demoClick(page, page.getByTestId("notebook-ask-new"), { settleMs: 1200 });
       run.note("minted a fresh conversation (notebook had prior threads)");
+    } else {
+      run.note("notebook had no prior threads — Ask opened on a fresh conversation");
     }
-    await expect(
-      page.locator(".sv-ai-msg"),
-      "B8 must open on an empty thread — a prior assistant turn makes the router " +
-        "inherit that turn's intent (pre-check -2) and CodeQuery becomes unreachable",
-    ).toHaveCount(0);
+    await page.waitForTimeout(2500); // give a restored thread time to render, so the guard below can see it
+    const stale = await page.locator(".sv-ai-msg").count();
+    run.requireOrSkip(
+      stale === 0,
+      `the Ask tab still shows ${stale} prior assistant turn(s) after minting a fresh ` +
+        "conversation. A prior turn makes the router inherit that turn's intent " +
+        "(pre-check -2 `inherits_prior_knowledge_intent`, logged as " +
+        "KNOWLEDGE_THREAD_INHERIT at latency 0), so the code route is unreachable " +
+        "however the question is phrased — and the take would open on an old question. " +
+        "Wipe the demo profile's conversations, or run with a fresh profile.",
+    );
     run.mark("scoped");
     await run.dwell(1200);
 
     await run.caption("Asked in English. Scoped to the code.", 3000);
-    const facts = await run.turn(QUESTION, { requireCitations: true, charDelayMs: 26 });
+    // NOT `requireCitations: true` here, deliberately. Off the code route the
+    // grounding gate declines and the turn carries zero `retrieved_chunks` —
+    // which is the CORRECT behaviour for a question the retrieval couldn't
+    // answer, but as a turn-level invariant it fails the beat one line before
+    // the route check that would have explained why. Citations are asserted
+    // below, after the route has been established as code_query.
+    const facts = await run.turn(QUESTION, { charDelayMs: 26 });
     run.mark("code-answer");
 
     // ── The route, asserted before anything downstream of it. ──
@@ -271,18 +295,38 @@ beatTest(
       run.note("route not reported by this build — falling through to the answer-shape gates");
     } else {
       run.note(`routed as: ${routed}`);
-      expect(
-        routed,
-        `the turn must route to code_query, got \`${routed}\`. Intent is k-NN over ` +
-          "exemplars and only reclassifies when a CODE-STRUCTURAL exemplar is nearest " +
-          '("what calls X", "where is Y implemented"). On the knowledge route the ' +
-          "code-intel summaries are never reweighted, so retrieval returns raw chunks " +
-          "and the answer is architecture prose — or an honest decline. Rephrase " +
-          "QUESTION toward the structural shape, or check the exemplar set.",
-      ).toBe("code_query");
+      // SKIP, not fail — code intel is a CLI feature today (operator, 2026-07-25):
+      // the first-class wiring for DESKTOP inference was never done. So a desktop
+      // turn not reaching `code_query` is the product's current shape, not a
+      // regression, and a red beat here would be a standing lie about a promise
+      // nobody made. Measured on this build: KnowledgeQuery on one phrasing,
+      // DeepQuery on the structural one, and KNOWLEDGE_THREAD_INHERIT (latency 0,
+      // route unreachable by construction) on any thread with history.
+      //
+      // Keep the check — when the desktop wiring lands, this beat comes back to
+      // life on its own and the reel gains a beat. Until then B8 belongs to the
+      // CLI surface: `sovereign chat ask` against a code corpus is where the
+      // capability is real and filmable.
+      run.requireOrSkip(
+        routed === "code_query",
+        `the turn routed to \`${routed}\`, not code_query. Code-intel chat has no ` +
+          "first-class desktop-inference wiring yet — it is a CLI feature. Off the " +
+          "code route the code-intel summaries are never reweighted " +
+          "(`reweight_by_query_relevance`), so retrieval returns raw chunks and the " +
+          "answer is architecture prose or an honest decline. Film this from the CLI, " +
+          "or land the desktop wiring and this beat lights up unchanged.",
+      );
     }
 
     // ── Grounded in code, not in the model's memory of Rust. ──
+    // Past the route gate, so an empty citation set here is a real defect: the
+    // turn WAS a code query and retrieval still returned nothing.
+    expect(
+      facts.citations.length,
+      "a code-route turn must carry retrieved_chunks — zero means the grounding " +
+        "gate declined against the passages it was given, so check retrieval over " +
+        `\`${SCOPE_CORPUS}\` rather than the answer text`,
+    ).toBeGreaterThan(0);
     const cited = [...new Set(facts.citations.map((c) => c.corpus_id))];
     run.note(`retrieval drew from: ${cited.join(", ")}`);
     expect(

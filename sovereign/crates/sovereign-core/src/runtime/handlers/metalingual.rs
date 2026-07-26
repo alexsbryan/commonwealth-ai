@@ -3,10 +3,17 @@
 //!
 //! Distinct from KnowledgeQuery: filters retrieval to the source the
 //! locator points to ("according to SEP" → only sep; "in this
-//! codebase" → only Code corpora). When the locator names a source
-//! that isn't indexed locally, we surface the gap explicitly rather
-//! than falling through to general knowledge — silent confabulation
-//! against the wrong source is exactly what this carve-out prevents.
+//! codebase" → only the code corpora, resolved by
+//! [`corpus_engine::IndexInfo::is_code_corpus`] rather than by the
+//! `CorpusKind::Code` tag, which repo corpora deliberately never carry).
+//! When the locator names a source that isn't indexed locally, we surface
+//! the gap explicitly rather than falling through to general knowledge —
+//! silent confabulation against the wrong source is exactly what this
+//! carve-out prevents.
+//!
+//! The one exception is a handoff, not a fallback: an in-system locator
+//! that finds no vocabulary match escalates to `handle_code_query`, which
+//! searches the same source the user named with the call graph in play.
 
 use crate::error::Result;
 use crate::types::*;
@@ -35,6 +42,14 @@ impl Runtime {
     /// through to general knowledge retrieval — that would defeat the
     /// whole point of the metalingual carve-out (silent confabulation
     /// against the wrong source).
+    ///
+    /// One escalation is allowed ahead of that dead end: an in-system
+    /// locator with code corpora available but no vocabulary match hands
+    /// off to `handle_code_query` once, stamped `escalated_from` in the
+    /// response metadata. It searches the source the user actually named,
+    /// so the carve-out's guarantee is intact — what it removes is the
+    /// asymmetry where a structural question landing on this route got
+    /// nothing at all while the reverse misroute cost only precision.
     pub(crate) async fn handle_metalingual_query(
         &self,
         message: &str,
@@ -58,10 +73,51 @@ impl Runtime {
             "MetalingualQuery: resolved locator"
         );
 
+        // Which locators point at *our own code*. Both the retrieval scope
+        // below and the empty-state escalation key off this, so they cannot
+        // disagree about what "in this codebase" covers.
+        let in_system = matches!(
+            &locator,
+            MetalingualLocator::SystemCode
+                | MetalingualLocator::Ambient
+                | MetalingualLocator::Unknown
+        );
+
+        // Resolve the codebase by CAPABILITY, not by tag.
+        //
+        // This used to be `kind_filter = Some(CorpusKind::Code)`, which
+        // matched **zero corpora on every real install**: repo corpora
+        // deliberately ship as `knowledge`-kind (chat retrieval admits only
+        // `Knowledge | Catalog`, so a `Code` tag would delete them from chat —
+        // see `IndexInfo::is_code_corpus`). The result was that every "in this
+        // codebase" question fell to the `no_source` empty state below while a
+        // fully indexed repo with a SCIP graph sat right beside it. Measured
+        // 2026-07-25: `commonwealth-ai`, 41,691 chunks, `kind=knowledge`,
+        // `scip_graph.db` present — and metalingual retrieved nothing from it.
+        //
+        // `code_corpus_ids()` is the same resolver `handle_code_query` uses, so
+        // the two routes now agree on what the codebase IS and differ only in
+        // what they do with it: metalingual asks what a term *means*, CodeQuery
+        // asks where it lives and what calls it.
+        let code_ids: Vec<String> = if in_system {
+            self.code_corpus_ids().await
+        } else {
+            Vec::new()
+        };
+
         // Resolve locator → (kind_filter, name_match).
         let (kind_filter, name_match): (Option<corpus_engine::CorpusKind>, Option<String>) =
             match &locator {
-                MetalingualLocator::SystemCode => (Some(corpus_engine::CorpusKind::Code), None),
+                MetalingualLocator::SystemCode
+                | MetalingualLocator::Ambient
+                | MetalingualLocator::Unknown => {
+                    // Scoped via `code_ids` below rather than by kind. An
+                    // ambient locator ("what does X mean here") resolves the
+                    // same way — in a dev chat that is nearly always the
+                    // codebase, and when no code corpus exists the scope is
+                    // empty and the empty-state message handles it.
+                    (None, None)
+                }
                 MetalingualLocator::Conversation => {
                     // Unused on this path — the Conversation locator
                     // does NOT search corpora (see the direct-route
@@ -78,14 +134,36 @@ impl Runtime {
                     (None, None)
                 }
                 MetalingualLocator::NamedSource(name) => (None, Some(name.clone())),
-                MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
-                    // Best-effort: prefer Code if any code corpus is
-                    // installed (most common ambient locator in a dev
-                    // chat); if none, the search returns empty and the
-                    // empty-state message handles it.
-                    (Some(corpus_engine::CorpusKind::Code), None)
-                }
             };
+
+        // Intersect the code scope with any explicit conversation scope, so a
+        // user who narrowed the notebook to one corpus keeps that narrowing.
+        // An empty intersection means the user scoped away from every code
+        // corpus — honour that and let the empty state explain, rather than
+        // silently searching corpora they excluded.
+        let scope: Option<Vec<String>> = if in_system {
+            Some(match context.conversation.enabled_corpora.as_deref() {
+                Some(enabled) => {
+                    let allowed: std::collections::HashSet<&str> =
+                        enabled.iter().map(String::as_str).collect();
+                    code_ids
+                        .iter()
+                        .filter(|c| allowed.contains(c.as_str()))
+                        .cloned()
+                        .collect()
+                }
+                None => code_ids.clone(),
+            })
+        } else {
+            None
+        };
+        if in_system {
+            tracing::info!(
+                target: "runtime.metalingual",
+                corpora = ?scope,
+                "MetalingualQuery: scoping retrieval to code corpora"
+            );
+        }
 
         let locator_phrase = match &locator {
             MetalingualLocator::SystemCode => "this codebase".to_string(),
@@ -147,7 +225,11 @@ impl Runtime {
                     kind_filter,
                     name_match.as_deref(),
                     "MetalingualQuery",
-                    context.conversation.enabled_corpora.as_deref(),
+                    // In-system locators carry the code scope; every other
+                    // locator keeps the conversation's own scope untouched.
+                    scope
+                        .as_deref()
+                        .or(context.conversation.enabled_corpora.as_deref()),
                     context.corpus_ceiling.as_deref(),
                 )
                 .await;
@@ -167,6 +249,64 @@ impl Runtime {
         // frame keeps the turn on the synthesis path instead of the
         // "couldn't find that reference" bail below.
         if chunks.is_empty() && conversation_frame.is_none() {
+            // ── Recoverable boundary, before the honest dead end. ──
+            //
+            // The metalingual/code split is a k-NN boundary between two
+            // clusters that share the same in-system locator ("in this
+            // codebase" appears on both sides); what separates them is the
+            // interrogative shape — what a term MEANS versus WHERE it lives
+            // and what calls it. Novel phrasings will land on the wrong side
+            // of that boundary, and the cost of doing so used to be
+            // catastrophic in exactly one direction: a structural question
+            // that landed here got no answer at all, while the reverse
+            // (a vocabulary question landing on the code route) merely
+            // returned a slightly over-scoped but correct one.
+            //
+            // So when the user pointed at our own code and this route found
+            // nothing there, hand off to the code route once rather than dead
+            // ending. That is NOT the parametric fallback the carve-out
+            // forbids — it searches the very source the user named, harder.
+            // A misroute now costs latency instead of the answer.
+            if in_system && !code_ids.is_empty() {
+                tracing::info!(
+                    target: "runtime.metalingual",
+                    ?locator,
+                    code_corpora = code_ids.len(),
+                    "MetalingualQuery: no vocabulary match in the codebase; escalating to CodeQuery"
+                );
+                let mut escalated = self
+                    .handle_code_query(
+                        message,
+                        conversation_id,
+                        context,
+                        None,
+                        None,
+                        Some("metalingual_empty_escalation".to_string()),
+                    )
+                    .await?;
+                // Stamp the handoff so it is legible in the transcript and the
+                // provenance panel — an escalation nobody can see is magic,
+                // and magic is what makes routing bugs take three sessions to
+                // find.
+                let note = serde_json::json!({
+                    "escalated_from": "MetalingualQuery",
+                    "escalation_reason": format!(
+                        "in-system locator {:?}, 0 vocabulary matches, {} code corpus(es) available",
+                        locator,
+                        code_ids.len()
+                    ),
+                });
+                match escalated.message.metadata.as_mut() {
+                    Some(serde_json::Value::Object(map)) => {
+                        if let serde_json::Value::Object(extra) = note {
+                            map.extend(extra);
+                        }
+                    }
+                    _ => escalated.message.metadata = Some(note),
+                }
+                return Ok(escalated);
+            }
+
             // No indexed source matches the locator. Surface the gap
             // honestly — the alternative (parametric fallback) is
             // exactly the failure mode that motivated this carve-out.

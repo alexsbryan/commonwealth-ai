@@ -31,25 +31,47 @@ the framework grid.
 default_p95_ms = 5000
 max_per_question_ms = 15000
 
-# ── codebase-navigator → metalingual_query ──
-# "in this codebase" / "in our code" — the metalingual locator.
+# ── codebase-navigator → code_query / metalingual_query ──
+#
+# This bank was authored when the skills-as-menu was retired, which was
+# BEFORE `Intent::CodeQuery` existed (CODE_INTEL_CHAT.md Inc 4). At the
+# time "about the codebase" had exactly one home, so all three shapes
+# below were filed under `metalingual_query` — the only in-system route
+# there was.
+#
+# The taxonomy grew a second one, and `types/routing.rs` is now the
+# contract: `CodeQuery` explicitly claims "what calls gate_answer" and
+# "where is X implemented", naming `MetalingualQuery` as the distinct
+# vocabulary route ("what does X *mean* here"). These expectations track
+# that contract rather than the pre-CodeQuery world.
+#
+# Both routes read the same code corpora (`IndexInfo::is_code_corpus`),
+# so the split is about what the user gets back — a call-graph trace vs a
+# definition — not about whether the codebase is searched at all. That
+# was the 2026-07-25 bug: metalingual filtered on `CorpusKind::Code`, a
+# tag repo corpora never carry, and answered `no_source` every time.
 
+# Structural: "who calls X" is a call-graph question.
 [[questions]]
 id = "nav_who_calls"
-category = "metalingual"
-expected_intent = "metalingual_query"
+category = "code"
+expected_intent = "code_query"
 expected_facts = ["stub"]
 expected_sources = []
 question = "Who calls the SearchTool::execute method in our code?"
 
+# Structural: "where is X implemented" is a location question.
 [[questions]]
 id = "nav_find_where"
-category = "metalingual"
-expected_intent = "metalingual_query"
+category = "code"
+expected_intent = "code_query"
 expected_facts = ["stub"]
 expected_sources = []
 question = "Where in this codebase is the URL allowlist constraint implemented?"
 
+# Stays metalingual: "what changed" is history over the repo, which the
+# call graph cannot answer — it is served by `recent_changes`, not by a
+# trace from an entry symbol.
 [[questions]]
 id = "nav_what_changed"
 category = "metalingual"

@@ -18,12 +18,13 @@
 //!
 //! Safety / no-over-rotation: when no code corpus is installed, the handler
 //! falls straight through to the plain knowledge path — a non-code deployment
-//! behaves exactly as before. The code-corpus signal is the on-disk SCIP graph,
-//! NOT the `CorpusKind::Code` tag (an indexed code corpus may be `knowledge`-
-//! kind, e.g. commonwealth-ai), so detection is robust.
+//! behaves exactly as before. The code-corpus signal is
+//! [`corpus_engine::IndexInfo::is_code_corpus`] — an on-disk SCIP graph OR the
+//! `CorpusKind::Code` tag — never the tag alone, because an indexed code corpus
+//! is usually `knowledge`-kind (e.g. commonwealth-ai) and a tag-only test
+//! matches nothing on a healthy install.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 use crate::error::Result;
 use crate::types::*;
@@ -108,20 +109,24 @@ impl Runtime {
         .await
     }
 
-    /// Corpus ids that have an on-disk SCIP graph — the robust "this is a code
-    /// corpus" signal, independent of the `CorpusKind::Code` tag (an indexed code
-    /// corpus may be `knowledge`-kind, e.g. commonwealth-ai). Best-effort
-    /// filesystem scan under the data dir; matches the layout `code_trace` and
-    /// the daemon writer use.
+    /// Corpus ids this deployment can answer code questions from.
+    ///
+    /// The predicate is [`corpus_engine::IndexInfo::is_code_corpus`] — an
+    /// on-disk SCIP graph OR the `CorpusKind::Code` tag — which is where the
+    /// rationale lives. It used to be inlined here as a graph-only check, and
+    /// separately (and wrongly) in `handlers/metalingual.rs` as a tag-only
+    /// check; the tag-only copy matched zero corpora on every real install
+    /// because repo corpora deliberately ship as `knowledge`-kind.
+    ///
+    /// `IndexInfo::path` is the corpus's own index directory, so the graph
+    /// probe no longer has to reconstruct `<data_dir>/indexes/<id>` from the
+    /// environment — one less way for this to disagree with `code_trace` and
+    /// the daemon writer about where the graph lives.
     pub(crate) async fn code_corpus_ids(&self) -> Vec<String> {
-        let base = std::env::var("SOVEREIGN_DATA_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
-        let indexes = base.join("indexes");
         let mut ids = Vec::new();
         if let Some(engine) = &self.corpus_engine {
             for info in engine.installed_indexes().await.unwrap_or_default() {
-                if indexes.join(&info.corpus_id).join("scip_graph.db").exists() {
+                if info.is_code_corpus() {
                     ids.push(info.corpus_id);
                 }
             }
