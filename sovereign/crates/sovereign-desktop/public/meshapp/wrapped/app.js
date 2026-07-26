@@ -157,9 +157,14 @@ function renderRhythm(slide, card) {
   slide.appendChild(el("div", { class: "story-kicker", text: "When you think" }));
   slide.appendChild(el("div", {
     class: "story-line",
-    text: fmtInt(card.total_turns) + " turns, hour by hour — by the archive's clock (UTC).",
+    text: fmtInt(card.total_turns) + " turns, hour by hour — on your own clock.",
   }));
-  heatGrid(slide, card.heatmap);
+  // heatGrid() clears the container it is handed — it is built to
+  // re-render in place — so it gets its own, not the slide. Handing it
+  // the slide erased the kicker and the line above it.
+  const grid = el("div");
+  slide.appendChild(grid);
+  heatGrid(grid, card.heatmap);
 
   const s = card.longest_session;
   if (!s) return;
@@ -182,6 +187,7 @@ function renderRhythm(slide, card) {
     drill.appendChild(citationExpander(bridge, id, { label: "where it went" }));
   }
   slide.appendChild(drill);
+  slide.appendChild(whyThis(card.derivation));
 }
 
 /**

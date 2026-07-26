@@ -544,8 +544,8 @@ impl Runtime {
         // be brief.
         s.push_str(
             "\n\nReply shape. The witness move is one specific \
-             observation grounded in the record (or named gap) plus, \
-             at most, one real hand-back question. With multiple \
+             observation grounded in the record plus one real \
+             hand-back question. With multiple \
              memories, pick the ONE detail that most changes the \
              answer — don't list. If your draft ends with a \
              wisdom-voice paragraph (\"this often happens when…\", \
