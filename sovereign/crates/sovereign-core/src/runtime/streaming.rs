@@ -2463,72 +2463,71 @@ impl Runtime {
             Vec::new()
         };
         let deep_seal_trace = !deep_trace_labels.is_empty();
-        let deep_gate_evidence =
-            crate::runtime::grounding::EvidenceContext {
-                chunks: if deep_gate_on {
-                    let mut v = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
-                    if deep_seal_trace {
-                        v.push(kc.code_trace.clone());
-                    }
-                    v
-                } else {
-                    Vec::new()
-                },
-                chunk_labels: if deep_gate_on {
-                    let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
-                    // PARALLEL to `chunks` — exactly one entry for the block
-                    // pushed above, or citation alignment mis-maps.
-                    if deep_seal_trace {
-                        v.push(deep_trace_labels.clone());
-                    }
-                    v
-                } else {
-                    Vec::new()
-                },
-                source_labels: if deep_gate_on {
-                    let mut v = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
-                    if deep_seal_trace {
-                        v.extend(deep_trace_labels.iter().cloned());
-                    }
-                    v
-                } else {
-                    Vec::new()
-                },
-                searcher: if deep_gate_on {
-                    Some(std::sync::Arc::new(
-                        self.claim_searcher(
-                            context.conversation.enabled_corpora.as_deref(),
-                            &kc.chunks,
-                        )
-                        // The claim audit RE-SEARCHES the corpus per claim; the
-                        // call-graph block lives only in this turn, so pin it or
-                        // the audit re-derives evidence without it and flags
-                        // facts that are verbatim in the sealed universe.
-                        .with_pinned(if deep_seal_trace {
-                            vec![kc.code_trace.clone()]
-                        } else {
-                            Vec::new()
-                        }),
-                    ) as _)
-                } else {
-                    None
-                },
-                entity_anchored: false,
-                // Best retrieval similarity over the draft's chunks → the env-gated
-                // retry-floor signal. The floor engages on the short single-claim
-                // path (a short deep answer can reach it); long-form deep answers
-                // take the per-claim audit path that ignores it.
-                top_similarity: if deep_gate_on {
-                    let best = kc
-                        .chunks
-                        .iter()
-                        .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
-                        .fold(f32::NEG_INFINITY, f32::max);
-                    best.is_finite().then_some(best)
-                } else {
-                    None
-                },
-            };
+        let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
+            chunks: if deep_gate_on {
+                let mut v = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
+                if deep_seal_trace {
+                    v.push(kc.code_trace.clone());
+                }
+                v
+            } else {
+                Vec::new()
+            },
+            chunk_labels: if deep_gate_on {
+                let mut v = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
+                // PARALLEL to `chunks` — exactly one entry for the block
+                // pushed above, or citation alignment mis-maps.
+                if deep_seal_trace {
+                    v.push(deep_trace_labels.clone());
+                }
+                v
+            } else {
+                Vec::new()
+            },
+            source_labels: if deep_gate_on {
+                let mut v = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
+                if deep_seal_trace {
+                    v.extend(deep_trace_labels.iter().cloned());
+                }
+                v
+            } else {
+                Vec::new()
+            },
+            searcher: if deep_gate_on {
+                Some(std::sync::Arc::new(
+                    self.claim_searcher(
+                        context.conversation.enabled_corpora.as_deref(),
+                        &kc.chunks,
+                    )
+                    // The claim audit RE-SEARCHES the corpus per claim; the
+                    // call-graph block lives only in this turn, so pin it or
+                    // the audit re-derives evidence without it and flags
+                    // facts that are verbatim in the sealed universe.
+                    .with_pinned(if deep_seal_trace {
+                        vec![kc.code_trace.clone()]
+                    } else {
+                        Vec::new()
+                    }),
+                ) as _)
+            } else {
+                None
+            },
+            entity_anchored: false,
+            // Best retrieval similarity over the draft's chunks → the env-gated
+            // retry-floor signal. The floor engages on the short single-claim
+            // path (a short deep answer can reach it); long-form deep answers
+            // take the per-claim audit path that ignores it.
+            top_similarity: if deep_gate_on {
+                let best = kc
+                    .chunks
+                    .iter()
+                    .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
+                    .fold(f32::NEG_INFINITY, f32::max);
+                best.is_finite().then_some(best)
+            } else {
+                None
+            },
+        };
         let deep_gate_profile = deep_gate_surface.profile();
         let deep_gate_question: String = message.to_string();
         if deep_gate_on {

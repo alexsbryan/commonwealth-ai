@@ -1657,7 +1657,8 @@ mod tests {
 
         idx.set_kind_and_parent(Some(crate::types::CorpusKind::Knowledge), None)
             .unwrap();
-        idx.set_source_path(Path::new("/home/dev/some-repo")).unwrap();
+        idx.set_source_path(Path::new("/home/dev/some-repo"))
+            .unwrap();
 
         assert_eq!(
             idx.info().await.unwrap().kind,
@@ -1674,7 +1675,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;
 
-        idx.set_source_path(Path::new("/home/dev/some-repo")).unwrap();
+        idx.set_source_path(Path::new("/home/dev/some-repo"))
+            .unwrap();
 
         assert_eq!(
             idx.info().await.unwrap().kind,

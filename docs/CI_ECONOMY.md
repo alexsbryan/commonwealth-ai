@@ -181,6 +181,22 @@ shallow clone, pruned ref) the hook gates *everything* rather than reporting
 while testing it — which is the argument for testing gates rather than
 trusting them.
 
+**It reports failures at the altitude of the fix.** A gate is only worth
+running if a red result tells you what to do next, so:
+
+- A rustfmt failure prints the *file list* and the one command that fixes it
+  (`cargo fmt --all`), not fifteen screens of diff. The diff is derivable; the
+  next action is what you needed.
+- A workspace that does not *compile* is reported as a build failure, not a
+  test failure — sovereign-test.sh already distinguishes them (non-zero cargo
+  exit, zero tests parsed) and the hook now reads that. The distinction matters
+  because a build break is frequently environmental rather than yours (a
+  toolbox that lost a dnf package, a stale build-script artifact), and calling
+  it a "test failure" sends you reading test code for a missing header.
+- Run by hand with nothing unpushed, it gates your *uncommitted working tree*
+  rather than reporting the empty set and exiting 0. On a real push it still
+  gates exactly what git says is going out.
+
 ### Tier 1 — CI (`.github/workflows/ci.yml`)
 
 Confirms Tier 0 on a clean checkout, and is the real gate for contributions

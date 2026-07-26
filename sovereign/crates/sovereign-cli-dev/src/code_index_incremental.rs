@@ -539,7 +539,9 @@ mod tests {
 
     #[test]
     fn large_delta_falls_back_to_full_unless_forced() {
-        let many: Vec<String> = (0..LARGE_DELTA_FILES + 1).map(|i| format!("f{i}.rs")).collect();
+        let many: Vec<String> = (0..LARGE_DELTA_FILES + 1)
+            .map(|i| format!("f{i}.rs"))
+            .collect();
         let d = ResolvedDelta {
             label: "commit abc".into(),
             changed: many,

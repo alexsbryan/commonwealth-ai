@@ -135,7 +135,10 @@ fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertC
 async fn index_one(index: &CorpusIndex, embed: &EmbedFn, e: &SymbolEnrichment) -> Result<bool> {
     let key = symbol_source_key(&e.meta);
     let committed = index.committed_chunks_for_doc(&key).await?;
-    if committed.iter().any(|c| c.content_hash == index_identity(e)) {
+    if committed
+        .iter()
+        .any(|c| c.content_hash == index_identity(e))
+    {
         return Ok(false);
     }
     let content = render_for_index(e);

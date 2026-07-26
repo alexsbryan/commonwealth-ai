@@ -1554,7 +1554,10 @@ async fn cmd_index(args: &[String]) -> i32 {
                 "Incremental refresh of '{corpus_id}': {} changed file(s) since {base}",
                 files.len(),
             );
-            run_incremental(&abs_path, &corpus_id, &data_dir, &files, &head_now, &dirty_now).await
+            run_incremental(
+                &abs_path, &corpus_id, &data_dir, &files, &head_now, &dirty_now,
+            )
+            .await
         }
         inc::Plan::Full { reason } => {
             eprintln!("Full rebuild of '{corpus_id}' — {reason}.");
@@ -1589,12 +1592,7 @@ async fn cmd_index(args: &[String]) -> i32 {
 /// modes — a full rebuild that forgets to stamp condemns the following run to
 /// another full rebuild, which is how the corpus got 28 days stale in the
 /// first place.
-fn stamp_index_state(
-    index_dir: &Path,
-    root: &Path,
-    head: &Option<String>,
-    dirty: &[String],
-) {
+fn stamp_index_state(index_dir: &Path, root: &Path, head: &Option<String>, dirty: &[String]) {
     let Some(head) = head else {
         // Not a git repo: no baseline to diff against, so deliberately leave
         // no stamp rather than one that would be treated as usable.

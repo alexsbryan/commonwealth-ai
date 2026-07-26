@@ -368,8 +368,7 @@ impl Runtime {
             // Kept in scope (not consumed inline) so it can ride out on the
             // KnowledgeContext and reach the DeepQuery gate — see
             // `code_trace::trace_source_labels`.
-            code_trace_out =
-                crate::runtime::code_trace::build_code_trace_block(&all_chunks).await;
+            code_trace_out = crate::runtime::code_trace::build_code_trace_block(&all_chunks).await;
             let doc_context = if code_trace_out.is_empty() {
                 doc_context
             } else {

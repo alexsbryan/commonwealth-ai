@@ -78,7 +78,9 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 done
 
 # Invoked by hand (no stdin from git), or nothing pushable was found.
+HAND_RUN=0
 if [[ -z "$RANGE" ]]; then
+    HAND_RUN=1
     if [[ -n "$(git rev-parse --verify -q origin/main 2>/dev/null || true)" ]]; then
         RANGE="origin/main..HEAD"
     else
@@ -97,8 +99,18 @@ if (( diff_status != 0 )); then
     warn "could not diff ${RANGE} (git exit ${diff_status}) — gating EVERYTHING rather than assuming it is clean"
     CHANGED="$(git ls-files)"
 elif [[ -z "$CHANGED" ]]; then
-    say "no file changes in ${RANGE} — nothing to gate"
-    exit 0
+    # Run by hand with nothing unpushed: you almost certainly meant "check what
+    # I am working on right now", not "check the empty set and exit 0". Gate the
+    # working tree instead. (Never do this for a real push — git already told us
+    # exactly what is going out, and uncommitted work is not part of it.)
+    if (( HAND_RUN )); then
+        CHANGED="$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } 2>/dev/null | sort -u)"
+        [[ -n "$CHANGED" ]] && say "nothing unpushed — gating your uncommitted working tree instead"
+    fi
+    if [[ -z "$CHANGED" ]]; then
+        say "no file changes in ${RANGE} — nothing to gate"
+        exit 0
+    fi
 fi
 
 n_changed=$(printf '%s\n' "$CHANGED" | wc -l | tr -d ' ')
@@ -115,6 +127,7 @@ match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^
 match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
 
 FAILED=()
+BUILD_BROKE=0
 run_gate() {
     local label="$1"; shift
     local started=$SECONDS
@@ -128,8 +141,37 @@ run_gate() {
 }
 
 # ── Gate 1: rustfmt. Instant, deterministic, cannot flake. ─────────────────
+#
+# A rustfmt failure is mechanical, zero-risk, and always fixed by exactly one
+# command. `cargo fmt --check` answers it by printing every hunk it would
+# change — fifteen files of that, followed by "PUSH BLOCKED", makes a
+# three-second problem read like a crisis and teaches people to reach for
+# --no-verify. So report WHICH files and THE fix, and keep the diff for anyone
+# who actually wants to look at it.
+fmt_gate() {
+    local out files
+    out="$(cargo fmt --all --check 2>&1)" && return 0
+
+    files="$(printf '%s\n' "$out" \
+        | sed -n 's/^Diff in //p' | sed 's/:[0-9][0-9]*:*$//' \
+        | sed "s#^${REPO_ROOT}/##" \
+        | sort -u)"
+
+    if [[ -z "$files" ]]; then
+        # Not a formatting diff — rustfmt itself failed (parse error, missing
+        # component). Show it verbatim; the file list would be a lie.
+        printf '%s\n' "$out" >&2
+        return 1
+    fi
+
+    printf '%s\n' "  ${C_BOLD}$(printf '%s\n' "$files" | wc -l | tr -d ' ') file(s) need formatting:${C_RESET}" >&2
+    printf '%s\n' "$files" | sed 's/^/    /' >&2
+    printf '\n%s\n\n' "  ${C_BOLD}fix:${C_RESET} cargo fmt --all   ${C_DIM}(then re-push; nothing else to do)${C_RESET}" >&2
+    return 1
+}
+
 if (( RUST )); then
-    run_gate "rustfmt" cargo fmt --all --check
+    run_gate "rustfmt" fmt_gate
 fi
 
 # ── Gate 2: docs-gate. Every repo path cited by the narrative docs must ────
@@ -143,6 +185,24 @@ if (( RUST )); then
         warn "SKIPPING workspace tests (SOVEREIGN_PREPUSH_QUICK set) — CI will run them"
     else
         run_gate "workspace tests (sovereign-test.sh)" ./scripts/sovereign-test.sh --human
+
+        # "The tests ran and some failed" and "nothing ran because the
+        # workspace did not compile" are different problems with different
+        # fixes, and the second one is very often not about your code at all —
+        # a toolbox that lost a dnf package, a stale bindgen, a linker that
+        # moved. Reporting it as a TEST failure sends you hunting through test
+        # code for a missing header. sovereign-test.sh already knows the
+        # difference (cargo exited non-zero, zero tests parsed); read it.
+        counts="target/sovereign-test/latest/counts.env"
+        cargo_exit="target/sovereign-test/latest/cargo.exit"
+        if [[ -f "$counts" && -f "$cargo_exit" ]]; then
+            tp="$(sed -n 's/^total_pass=//p' "$counts")"
+            tf="$(sed -n 's/^total_fail=//p' "$counts")"
+            ce="$(tr -d '[:space:]' < "$cargo_exit")"
+            if [[ "${tp:-0}" == "0" && "${tf:-0}" == "0" && "${ce:-0}" != "0" ]]; then
+                BUILD_BROKE=1
+            fi
+        fi
     fi
 else
     say "no Rust changes — skipping workspace tests"
@@ -170,13 +230,28 @@ echo >&2
 if (( ${#FAILED[@]} )); then
     fail "PUSH BLOCKED — ${#FAILED[@]} gate(s) failed:"
     for g in "${FAILED[@]}"; do printf '           - %s\n' "$g" >&2; done
-    cat >&2 <<EOF
+    if (( BUILD_BROKE )); then
+        cat >&2 <<EOF
 
-  Test failures are listed above; adapter logs for triage are under
+  ${C_BOLD}The workspace did not COMPILE — zero tests ran.${C_RESET} That is a build
+  problem, not a test failure, and it is often environmental rather than
+  anything in this push (a toolbox missing a dnf package, a stale bindgen,
+  a linker that moved). The compiler error is the last thing in:
+
+      target/sovereign-test/latest/cargo.raw.log
+
+  If it is your machine and not your code, CI will still gate this on a
+  clean checkout:  git push --no-verify
+EOF
+    else
+        cat >&2 <<EOF
+
+  Failures are listed above; adapter logs for triage are under
   target/sovereign-test/latest/ (cargo.jsonl, cargo.raw.log).
 
   To push anyway:  git push --no-verify
 EOF
+    fi
     exit 1
 fi
 
