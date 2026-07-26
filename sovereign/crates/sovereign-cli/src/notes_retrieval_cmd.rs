@@ -64,6 +64,15 @@ struct LoggedNote {
     files: Vec<String>,
     #[serde(default)]
     terms: Vec<String>,
+    /// Did this note actually reach the model's context, or was it retrieved
+    /// and then dropped at the hook's payload budget? `None` = the record
+    /// predates the flag (2026-07-26), where the answer is genuinely unknown:
+    /// the hook printed every note it logged, but any payload over ~10KB was
+    /// spilled to a file by the harness and only a 2KB preview reached the
+    /// model. Legacy denominators are therefore inflated by an unknown amount
+    /// — never silently fold them in with post-flag rows.
+    #[serde(default)]
+    delivered: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +92,11 @@ struct NoteUsage {
     /// How many prompts injected this note (retrieval frequency — the raw
     /// signal the future need-probability ranker will consume).
     injections: u64,
+    /// Injections that actually reached context (see `LoggedNote::delivered`).
+    delivered_injections: u64,
+    /// True when at least one record carried the flag — i.e. we KNOW whether
+    /// this note was delivered. False for pre-2026-07-26 logs.
+    delivery_known: bool,
     has_anchor: bool,
     symbol_hit: bool,
     file_hit: bool,
@@ -91,6 +105,13 @@ struct NoteUsage {
 }
 
 impl NoteUsage {
+    /// Whether this note is admissible to a hit-rate denominator: it reached
+    /// context at least once, or we have no delivery information at all.
+    /// A note the hook dropped at the budget cannot be "used", and counting
+    /// it would penalize the ranker for the hook's payload limit.
+    fn countable(&self) -> bool {
+        !self.delivery_known || self.delivered_injections > 0
+    }
     fn anchor_used(&self) -> bool {
         self.symbol_hit || self.file_hit
     }
@@ -114,17 +135,31 @@ struct SessionAudit {
 }
 
 impl SessionAudit {
+    /// Notes that reached context — the honest denominator. Legacy notes
+    /// (no delivery flag) are included, which is why `legacy()` rows are
+    /// labelled in the output rather than quietly averaged in.
+    fn countable(&self) -> impl Iterator<Item = &NoteUsage> {
+        self.notes.iter().filter(|n| n.countable())
+    }
     fn injected(&self) -> usize {
-        self.notes.len()
+        self.countable().count()
+    }
+    /// Retrieved by the ranker but dropped at the hook's payload budget.
+    fn dropped(&self) -> usize {
+        self.notes.len() - self.injected()
+    }
+    /// No record in this session carried the delivery flag.
+    fn legacy(&self) -> bool {
+        !self.notes.iter().any(|n| n.delivery_known)
     }
     fn anchored(&self) -> usize {
-        self.notes.iter().filter(|n| n.has_anchor).count()
+        self.countable().filter(|n| n.has_anchor).count()
     }
     fn anchor_used(&self) -> usize {
-        self.notes.iter().filter(|n| n.anchor_used()).count()
+        self.countable().filter(|n| n.anchor_used()).count()
     }
     fn used_any(&self) -> usize {
-        self.notes.iter().filter(|n| n.used_any()).count()
+        self.countable().filter(|n| n.used_any()).count()
     }
 }
 
@@ -231,10 +266,21 @@ fn audit_session(
     records: &[InjectionRecord],
     evidence: Option<&Evidence>,
 ) -> SessionAudit {
+    /// Per-note accumulator across every injection in the session.
+    #[derive(Default)]
+    struct Acc {
+        kind: String,
+        injections: u64,
+        delivered_injections: u64,
+        delivery_known: bool,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        terms: Vec<String>,
+    }
+
     // note_id -> accumulator. Preserve first-seen order for stable output.
     let mut order: Vec<String> = Vec::new();
-    let mut acc: BTreeMap<String, (String, u64, Vec<String>, Vec<String>, Vec<String>)> =
-        BTreeMap::new();
+    let mut acc: BTreeMap<String, Acc> = BTreeMap::new();
     for rec in records {
         for n in &rec.notes {
             // Fall back to a synthetic key when a note predates id logging, so
@@ -248,22 +294,31 @@ fn audit_session(
             });
             let entry = acc.entry(key.clone()).or_insert_with(|| {
                 order.push(key.clone());
-                (n.kind.clone(), 0, Vec::new(), Vec::new(), Vec::new())
+                Acc {
+                    kind: n.kind.clone(),
+                    ..Default::default()
+                }
             });
-            entry.1 += 1;
+            entry.injections += 1;
+            if let Some(delivered) = n.delivered {
+                entry.delivery_known = true;
+                if delivered {
+                    entry.delivered_injections += 1;
+                }
+            }
             for s in &n.symbols {
-                if !entry.2.contains(s) {
-                    entry.2.push(s.clone());
+                if !entry.symbols.contains(s) {
+                    entry.symbols.push(s.clone());
                 }
             }
             for f in &n.files {
-                if !entry.3.contains(f) {
-                    entry.3.push(f.clone());
+                if !entry.files.contains(f) {
+                    entry.files.push(f.clone());
                 }
             }
             for t in &n.terms {
-                if !entry.4.contains(t) {
-                    entry.4.push(t.clone());
+                if !entry.terms.contains(t) {
+                    entry.terms.push(t.clone());
                 }
             }
         }
@@ -272,13 +327,13 @@ fn audit_session(
     let notes = order
         .into_iter()
         .map(|key| {
-            let (kind, injections, symbols, files, terms) = acc.remove(&key).unwrap();
-            let has_anchor = !symbols.is_empty() || !files.is_empty();
+            let a = acc.remove(&key).unwrap();
+            let has_anchor = !a.symbols.is_empty() || !a.files.is_empty();
             let (symbol_hit, file_hit, term_hits) = match evidence {
                 Some(ev) => (
-                    symbols.iter().any(|s| ev.contains(s)),
-                    files.iter().any(|f| ev.contains_file(f)),
-                    terms.iter().filter(|t| ev.contains(t)).count(),
+                    a.symbols.iter().any(|s| ev.contains(s)),
+                    a.files.iter().any(|f| ev.contains_file(f)),
+                    a.terms.iter().filter(|t| ev.contains(t)).count(),
                 ),
                 // No transcript to correlate against: every hit is unknown, so
                 // score nothing as used rather than guessing.
@@ -286,8 +341,10 @@ fn audit_session(
             };
             NoteUsage {
                 id: key,
-                kind,
-                injections,
+                kind: a.kind,
+                injections: a.injections,
+                delivered_injections: a.delivered_injections,
+                delivery_known: a.delivery_known,
                 has_anchor,
                 symbol_hit,
                 file_hit,
@@ -472,30 +529,33 @@ fn rate(num: usize, den: usize) -> f64 {
 fn print_table(audits: &[SessionAudit]) {
     println!("Notes retrieval audit — injected-note hit-rate (E2/P4 baseline)\n");
     println!(
-        "{:<10}  {:>4}  {:>8}  {:>10}  {:>8}",
-        "session", "inj", "anchored", "strong%", "any%"
+        "{:<10}  {:>4}  {:>7}  {:>8}  {:>10}  {:>8}",
+        "session", "inj", "dropped", "anchored", "strong%", "any%"
     );
-    println!("{}", "-".repeat(48));
+    println!("{}", "-".repeat(58));
 
     let (mut t_inj, mut t_anch, mut t_anch_used, mut t_used_any) = (0usize, 0usize, 0usize, 0usize);
-    let mut missing = 0usize;
+    let (mut missing, mut t_dropped, mut legacy_sessions) = (0usize, 0usize, 0usize);
     for a in audits {
         let inj = a.injected();
         let anch = a.anchored();
         let strong = rate(a.anchor_used(), anch);
         let any = rate(a.used_any(), inj);
-        let flag = if a.transcript_found {
-            ""
-        } else {
-            " (no transcript)"
-        };
+        let mut flag = String::new();
         if !a.transcript_found {
             missing += 1;
+            flag.push_str(" (no transcript)");
         }
+        if a.legacy() {
+            legacy_sessions += 1;
+            flag.push_str(" (legacy: delivery unknown)");
+        }
+        t_dropped += a.dropped();
         println!(
-            "{:<10}  {:>4}  {:>8}  {:>9.0}%  {:>7.0}%{}",
+            "{:<10}  {:>4}  {:>7}  {:>8}  {:>9.0}%  {:>7.0}%{}",
             &a.session_id.chars().take(10).collect::<String>(),
             inj,
+            a.dropped(),
             anch,
             strong,
             any,
@@ -511,17 +571,33 @@ fn print_table(audits: &[SessionAudit]) {
         }
     }
 
-    println!("{}", "-".repeat(48));
+    println!("{}", "-".repeat(58));
     let fleet_strong = rate(t_anch_used, t_anch);
     let fleet_any = rate(t_used_any, t_inj);
     println!(
-        "{:<10}  {:>4}  {:>8}  {:>9.0}%  {:>7.0}%",
-        "FLEET", t_inj, t_anch, fleet_strong, fleet_any
+        "{:<10}  {:>4}  {:>7}  {:>8}  {:>9.0}%  {:>7.0}%",
+        "FLEET", t_inj, t_dropped, t_anch, fleet_strong, fleet_any
     );
     println!(
         "\nstrong = anchor(symbol|file) matches ÷ anchored notes  ·  \
          any = (anchor|content) matches ÷ all injected"
     );
+    println!(
+        "inj counts notes that REACHED context; dropped = retrieved but cut at the \
+         hook's payload budget (they cannot be 'used', so they are not in any denominator)."
+    );
+    // The pre-2026-07-26 hook logged every ranked note as injected, then let the
+    // harness spill any payload over ~10KB to a file the agent usually never
+    // read. Those denominators are inflated by an unknown amount, so a legacy
+    // rate is NOT comparable with a post-flag one. Say so rather than letting a
+    // ranker take credit for a fixed payload budget.
+    if legacy_sessions > 0 {
+        println!(
+            "! {legacy_sessions} session(s) predate the delivery flag: their `inj` counts \
+             notes the hook LOGGED, not necessarily notes that reached context (payload \
+             spill). Do not compare those rows against post-flag rows."
+        );
+    }
     // Ceiling warning. On a session working squarely ON a note's topic, the
     // note's distinctive terms flood the transcript and `any%` pegs at ~100% —
     // measuring nothing (a saturated metric cannot show a ranker improving).
@@ -559,11 +635,14 @@ fn print_json(audits: &[SessionAudit]) {
             out.push(',');
         }
         out.push_str(&format!(
-            "{{\"session_id\":\"{}\",\"transcript_found\":{},\"injected\":{},\"anchored\":{},\
+            "{{\"session_id\":\"{}\",\"transcript_found\":{},\"legacy_delivery_unknown\":{},\
+             \"injected\":{},\"dropped_at_budget\":{},\"anchored\":{},\
              \"anchor_used\":{},\"used_any\":{},\"notes\":[",
             json_escape(&a.session_id),
             a.transcript_found,
+            a.legacy(),
             a.injected(),
+            a.dropped(),
             a.anchored(),
             a.anchor_used(),
             a.used_any()
@@ -573,11 +652,14 @@ fn print_json(audits: &[SessionAudit]) {
                 out.push(',');
             }
             out.push_str(&format!(
-                "{{\"id\":\"{}\",\"kind\":\"{}\",\"injections\":{},\"has_anchor\":{},\
+                "{{\"id\":\"{}\",\"kind\":\"{}\",\"injections\":{},\
+                 \"delivered_injections\":{},\"delivery_known\":{},\"has_anchor\":{},\
                  \"symbol_hit\":{},\"file_hit\":{},\"term_hits\":{},\"used_any\":{}}}",
                 json_escape(&n.id),
                 json_escape(&n.kind),
                 n.injections,
+                n.delivered_injections,
+                n.delivery_known,
                 n.has_anchor,
                 n.symbol_hit,
                 n.file_hit,
@@ -607,7 +689,14 @@ fn print_help() {
          \x20 --format json      Machine-readable output\n\n\
          METRICS:\n\
          \x20 strong = anchor(symbol|file) matches / anchored notes (high-confidence floor)\n\
-         \x20 any    = (anchor|content) matches / all injected notes (headline)\n"
+         \x20 any    = (anchor|content) matches / all injected notes (headline)\n\n\
+         DELIVERY:\n\
+         \x20 Denominators count only notes that REACHED context. The hook budgets its\n\
+         \x20 payload (~10KB spills to a file the agent rarely reads), logs `delivered`\n\
+         \x20 per note, and this audit excludes the dropped ones — they cannot be used,\n\
+         \x20 and counting them would blame the ranker for the payload cap.\n\
+         \x20 Logs written before 2026-07-26 carry no flag; those rows are marked\n\
+         \x20 `legacy: delivery unknown` and must NOT be compared against newer ones.\n"
     );
 }
 
@@ -649,6 +738,8 @@ mod tests {
             id: "n1".into(),
             kind: "invariant".into(),
             injections: 3,
+            delivered_injections: 3,
+            delivery_known: true,
             has_anchor: true,
             symbol_hit: true,
             file_hit: false,
@@ -665,6 +756,8 @@ mod tests {
             id: "n".into(),
             kind: "decision".into(),
             injections: 1,
+            delivered_injections: 1,
+            delivery_known: true,
             has_anchor: false,
             symbol_hit: false,
             file_hit: false,
@@ -689,6 +782,7 @@ mod tests {
                 symbols: vec!["CorpusEngine".into()],
                 files: vec![],
                 terms: vec![],
+                delivered: Some(true),
             }],
         };
         let records = vec![rec(()), rec(())];
@@ -704,6 +798,75 @@ mod tests {
         assert_eq!(audit.anchor_used(), 1);
     }
 
+    fn logged(id: &str, delivered: Option<bool>) -> LoggedNote {
+        LoggedNote {
+            id: Some(id.into()),
+            kind: "invariant".into(),
+            symbols: vec!["CorpusEngine".into()],
+            files: vec![],
+            terms: vec![],
+            delivered,
+        }
+    }
+
+    #[test]
+    fn notes_dropped_at_the_payload_budget_leave_every_denominator() {
+        // The ranker returned two notes; only one fit the hook's budget. The
+        // dropped one never reached the model, so it can neither be "used" nor
+        // count against the hit rate — otherwise the ranker is blamed for the
+        // payload cap (the bug that inflated the pre-2026-07-26 baseline).
+        let records = vec![InjectionRecord {
+            session_id: "s".into(),
+            notes: vec![logged("kept", Some(true)), logged("cut", Some(false))],
+        }];
+        let ev = evidence_from("touching CorpusEngine today");
+        let audit = audit_session("s", &records, Some(&ev));
+        assert_eq!(audit.injected(), 1, "only the delivered note counts");
+        assert_eq!(audit.dropped(), 1);
+        assert_eq!(audit.anchored(), 1);
+        assert_eq!(audit.anchor_used(), 1);
+        assert!(!audit.legacy(), "flag present => not a legacy row");
+    }
+
+    #[test]
+    fn a_note_delivered_in_any_injection_counts_as_delivered() {
+        // Budget pressure varies per prompt: the same note can land on one turn
+        // and be cut on the next. Reaching context ONCE is enough to be usable.
+        let records = vec![
+            InjectionRecord {
+                session_id: "s".into(),
+                notes: vec![logged("n", Some(false))],
+            },
+            InjectionRecord {
+                session_id: "s".into(),
+                notes: vec![logged("n", Some(true))],
+            },
+        ];
+        let ev = evidence_from("touching CorpusEngine today");
+        let audit = audit_session("s", &records, Some(&ev));
+        assert_eq!(audit.injected(), 1);
+        assert_eq!(audit.dropped(), 0);
+        assert_eq!(audit.notes[0].injections, 2, "frequency counts both");
+        assert_eq!(audit.notes[0].delivered_injections, 1);
+    }
+
+    #[test]
+    fn legacy_records_are_counted_but_flagged_as_unknown_delivery() {
+        // Pre-flag logs: the hook printed everything it logged, but payloads
+        // over ~10KB were spilled by the harness. Count them (dropping them
+        // would erase the baseline) and mark the row so nobody compares it
+        // against a post-flag one.
+        let records = vec![InjectionRecord {
+            session_id: "s".into(),
+            notes: vec![logged("old", None)],
+        }];
+        let ev = evidence_from("touching CorpusEngine today");
+        let audit = audit_session("s", &records, Some(&ev));
+        assert_eq!(audit.injected(), 1);
+        assert_eq!(audit.dropped(), 0);
+        assert!(audit.legacy(), "no flag anywhere => legacy row");
+    }
+
     #[test]
     fn missing_transcript_scores_nothing_as_used() {
         let records = vec![InjectionRecord {
@@ -714,6 +877,7 @@ mod tests {
                 symbols: vec!["Foo".into()],
                 files: vec![],
                 terms: vec!["something".into()],
+                delivered: Some(true),
             }],
         }];
         let audit = audit_session("s", &records, None);
