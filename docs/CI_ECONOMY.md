@@ -189,10 +189,26 @@ running if a red result tells you what to do next, so:
   next action is what you needed.
 - A workspace that does not *compile* is reported as a build failure, not a
   test failure — sovereign-test.sh already distinguishes them (non-zero cargo
-  exit, zero tests parsed) and the hook now reads that. The distinction matters
-  because a build break is frequently environmental rather than yours (a
-  toolbox that lost a dnf package, a stale build-script artifact), and calling
-  it a "test failure" sends you reading test code for a missing header.
+  exit, zero tests parsed) and the hook now reads that. Calling a build break a
+  "test failure" sends you reading test code for a missing header.
+- **A build break in a third-party build script does not block the push.**
+  `break_is_first_party()` asks whether any rustc diagnostic points at source
+  in this repo. If one does, it is yours and the push is blocked. If the only
+  failure is a dependency's build script or the native linker, the push goes
+  through with a loud `UNVERIFIED` warning naming the crate, because no edit to
+  that push could have fixed it. It fails closed: an unclassifiable log counts
+  as first-party.
+
+  This is not laxity, it is where the gate's authority actually ends. This repo
+  builds `llama-cpp-sys-4`, which needs cmake, clang and clang's own builtin
+  headers — those live in the dev toolbox, not on a bare Fedora host. Push from
+  a host shell and bindgen dies on `stdbool.h`, in a *shared* `target/` where
+  the cmake step is already cached, so the failure surfaces several layers away
+  from its cause. A gate that blocks that push is not protecting the branch; it
+  is asking you to fix your shell by editing your commits, and the only move it
+  leaves you is `--no-verify` — which switches off the gates that *did* have
+  something to say. Verdicts the developer cannot act on are how gates lose
+  their authority.
 - Run by hand with nothing unpushed, it gates your *uncommitted working tree*
   rather than reporting the empty set and exiting 0. On a real push it still
   gates exactly what git says is going out.
