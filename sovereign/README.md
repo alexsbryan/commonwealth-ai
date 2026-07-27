@@ -74,7 +74,7 @@ AMD Strix Halo or a cloud-GPU peer take a little more — see the [toolbox](docs
 
 ## Where to go next
 
-- Something broke? `svrn doctor`, then [troubleshooting](docs/TROUBLESHOOTING.md).
+- Something broke? `svrn doctor`, then [troubleshooting](docs/TROUBLESHOOTING.md). Using the desktop app rather than the CLI — or helping someone who is? [Having trouble?](docs/HAVING_TROUBLE.md) covers the same ground without a terminal.
 - [Command reference](docs/CLI_REFERENCE.md) · [knowledge bases](docs/KNOWLEDGE_BASES.md) · [features](docs/FEATURES.md) · [FAQ](docs/FAQ.md).
 - Building on it? The [development guide](docs/DEVELOPMENT.md).
 - Auditing? [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) and [ARCH_PRINCIPLES.md](ARCH_PRINCIPLES.md) first.

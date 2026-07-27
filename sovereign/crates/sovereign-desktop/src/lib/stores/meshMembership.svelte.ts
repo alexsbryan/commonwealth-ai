@@ -15,16 +15,17 @@
 //   1. App.svelte's `onJoined` calls `meshMembership.noteJoined()`.
 //   2. MeshSettings watches `epoch` in an $effect and re-pulls mesh
 //      state the moment it changes.
-//   3. SettingsPanel consumes `takeSettingsNav()` to land the user on
-//      the Mesh tab, whether the panel was already open or is about
-//      to mount.
+//   3. `noteJoined` also queues a Mesh-tab navigation on the shared
+//      `settingsNav` store, which SettingsPanel consumes — whether the
+//      panel was already open or is about to mount.
 //
 // Same rationale as atlasNavigation.svelte.ts: the dialog and the
 // settings surface live in sibling branches of App.svelte and never
 // see each other's props; a small store is the cheapest stable bridge.
 
+import { settingsNav } from "./settingsNav.svelte";
+
 let _epoch = $state(0);
-let _settingsNavPending = $state(false);
 
 export const meshMembership = {
   /// Monotonic counter, bumped on every membership change this app
@@ -34,30 +35,22 @@ export const meshMembership = {
     return _epoch;
   },
 
-  /// True while a "show the Mesh settings tab" request is queued.
-  get settingsNavPending(): boolean {
-    return _settingsNavPending;
-  },
-
   /// Record a completed join. Bumps `epoch` and queues a settings
   /// navigation to the Mesh tab.
+  ///
+  /// The navigation half lives in [`settingsNav`] rather than here:
+  /// it stopped being a mesh concern the moment a second surface (the
+  /// reconnect banner's route to the health check) needed the same
+  /// thing, and two mechanisms for "open Settings there" is one too
+  /// many.
   noteJoined(): void {
     _epoch += 1;
-    _settingsNavPending = true;
-  },
-
-  /// Consume the pending settings navigation — returns whether one
-  /// was queued and clears it, so a later manual open of Settings
-  /// doesn't replay the jump to the Mesh tab.
-  takeSettingsNav(): boolean {
-    const v = _settingsNavPending;
-    _settingsNavPending = false;
-    return v;
+    settingsNav.request("mesh");
   },
 
   /// Hard reset — for tests.
   clear(): void {
     _epoch = 0;
-    _settingsNavPending = false;
+    settingsNav.clear();
   },
 };

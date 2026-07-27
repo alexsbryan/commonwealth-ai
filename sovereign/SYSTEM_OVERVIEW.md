@@ -1480,7 +1480,7 @@ traversal). The desktop app registers as the system handler.
 | Voice contract harness | `sovereign/bench/voice/README.md` |
 | Production search integration | [`docs/specs/PRODUCTION_SEARCH_INTEGRATION.md`](./docs/specs/PRODUCTION_SEARCH_INTEGRATION.md) |
 | Features overview | [`docs/FEATURES.md`](./docs/FEATURES.md) |
-| FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
+| FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md) (end users, no terminal), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) (maintainers), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
 | **On-call runbook** (incident decision tree, supervision, memory budget, glassbox map, bench noise bands, sibling-rebuild map) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
 | Retrieval pipeline steps + env-knob registry (GENERATED, freshness-gated) | [`docs/retrieval-pipeline.md`](./docs/retrieval-pipeline.md) |
 
@@ -2320,10 +2320,41 @@ work pins the GPU while the user is chatting. Components:
 - **W4 — first-mesh-join consent** —
   `DesktopConfig.first_mesh_consent`; ConsentGate renders when
   unset.
-- **W6 — crash-bundle "send to Alex"**
-  (`crash_bundle.rs`) — markdown file at
-  `~/Desktop/sovereign-crash-<ts>.md`, prefilled `mailto:`. No
-  auto-upload; v1 ships transparency.
+- **W6 — self-service support surface.** Built for onboarding
+  non-developers who must be debugged remotely from artifacts they
+  can produce unaided. Three layers, in the order a person hits them:
+  - **Fix it yourself** — `health.rs` runs seven checks (`engine`,
+    `model`, `mesh`, `mesh_peers`, `knowledge`, `disk`, `stability`)
+    over a `HealthFacts` struct gathered by `commands/diagnostics.rs`.
+    `evaluate` is pure; every non-OK check carries a terminal-free
+    `fix_hint`; an unreachable probe renders `Unknown`, never a
+    fabricated verdict. Rendered by `HealthPanel.svelte` at the top of
+    Settings → Diagnostics, and reachable from the reconnect banner's
+    **Check my setup** (via the `settingsNav` store, which App.svelte
+    refuses mid-setup).
+  - **Report the machine** — `prepare_diagnostic_report` writes
+    `~/Desktop/svrnmesh-<reason>-<ts>.md` for any `ReportReason`, not
+    only a crash. `ReportReason::parse` degrades unknown → `Other`: a
+    user trying to report a problem is never blocked by an enum.
+  - **Report one answer** — `turn_report.rs` + `prepare_answer_report`,
+    for the complaint machine state cannot explain. The snapshot comes
+    from the **frontend**, assembled from the assistant message's
+    persisted metadata (route, sources, backend/peer, gate action),
+    because `TurnProvenance` holds only the newest turn of a
+    conversation, in memory, on one register. Each report carries a
+    speakable `reference_code` derived from `message_id` via a **pinned**
+    FNV-1a — a wire format, not an implementation detail: change it and
+    a user's screenshot stops matching their own report file. Passage
+    *text* is opt-in per report, defaulted off, and `render_turn_section`
+    enforces the gate itself rather than trusting the caller.
+
+  Every report is a file on the Desktop the user reads before sending.
+  No auto-upload anywhere, and the report **states its own contents** —
+  the disclosure text is derived from what is actually in the file, so
+  a state-only report, an answer report, and an answer report with
+  source text each describe themselves honestly. User-facing doc:
+  [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md) (no terminal);
+  the maintainer-facing `docs/TROUBLESHOOTING.md` points at it.
 
 **MeshApp bridge (first-party sandboxed apps).** A mesh app runs in a
 `meshapp-<id>` webview reached only through a permission-gated bridge.

@@ -411,6 +411,12 @@ pub struct CrashReportInfo {
     /// The project's GitHub Issues URL. Frontend passes this to
     /// `tauri-plugin-shell.open(url)`; the user attaches the report.
     pub issues_url: String,
+    /// Short speakable handle for a reported answer (e.g. `2AM-QSC`),
+    /// set only when the report is about a specific turn. The UI shows
+    /// it back so the user can quote it before the file has gone
+    /// anywhere. `None` for machine-state reports.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_code: Option<String>,
 }
 
 #[tauri::command]
@@ -426,5 +432,6 @@ pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
     Ok(CrashReportInfo {
         report_path: prepared.report_path.to_string_lossy().into_owned(),
         issues_url: prepared.issues_url,
+        reference_code: prepared.reference_code,
     })
 }

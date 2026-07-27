@@ -13,6 +13,8 @@ mod dev_flags;
 mod enrich_commands;
 mod error;
 mod friendly_names;
+mod health;
+mod turn_report;
 mod governance_commands;
 mod import_commands;
 mod insight_commands;
@@ -582,6 +584,9 @@ fn main() -> ExitCode {
             commands::get_activity_recent,
             commands::get_chat_activity,
             commands::prepare_crash_report,
+            commands::run_health_check,
+            commands::prepare_diagnostic_report,
+            commands::prepare_answer_report,
             crash_report::list_crash_records,
             crash_report::read_crash_record,
             crash_report::delete_crash_record,

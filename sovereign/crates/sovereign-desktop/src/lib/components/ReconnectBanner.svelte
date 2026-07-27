@@ -5,6 +5,21 @@
   import { invoke } from "@tauri-apps/api/core";
   import { prepareCrashReport } from "../api";
 
+  interface Props {
+    /** Take the user to the health check.
+     *
+     *  The banner asks; it does not navigate. Both halves of the move
+     *  — queueing the Diagnostics tab and switching the view — belong
+     *  to whoever owns the router, because that owner is the only one
+     *  who knows when the move is refusable (mid-setup, it is). A
+     *  banner that queued the tab itself would leave a stale request
+     *  behind on every refusal. Unset = the route is hidden rather
+     *  than dead. */
+    onOpenDiagnostics?: () => void;
+  }
+
+  let { onOpenDiagnostics }: Props = $props();
+
   // Mirrors `crate::supervisor::SupervisorState`. The Rust side
   // emits `#[serde(tag = "kind", rename_all = "snake_case")]` so we
   // get a discriminant in `kind`.
@@ -177,6 +192,11 @@
         >
           {reconnectBusy ? "Reconnecting…" : "Reconnect"}
         </button>
+        {#if onOpenDiagnostics}
+          <button class="action" onclick={() => onOpenDiagnostics?.()}>
+            Check my setup
+          </button>
+        {/if}
         <button class="action" onclick={handleReportProblem} disabled={sendBusy}>
           {sendBusy ? "Preparing…" : "Report problem"}
         </button>
@@ -207,10 +227,13 @@
 {#if attachVisible && !visible}
   <div class="banner banner-failed" role="status">
     <span class="banner-text">
-      Lost the connection to your daemon (port {attach?.kind === "down"
+      <!-- This used to end with "or run `svrn daemon restart`", which
+           is the exact move a non-developer cannot make. The button
+           beside it does the same thing, and the health check explains
+           the rest. -->
+      Lost the connection to the engine (port {attach?.kind === "down"
         ? attach.client_port
-        : ""}). If it's restarting, this clears by itself; otherwise
-      restart it — or run <code>svrn daemon restart</code>.
+        : ""}). If it's restarting, this clears by itself.
     </span>
     <div class="banner-actions">
       <button
@@ -218,8 +241,13 @@
         onclick={handleAttachRestart}
         disabled={restartBusy}
       >
-        {restartBusy ? "Restarting…" : "Restart daemon"}
+        {restartBusy ? "Restarting…" : "Restart the engine"}
       </button>
+      {#if onOpenDiagnostics}
+        <button class="action" onclick={() => onOpenDiagnostics?.()}>
+          Check my setup
+        </button>
+      {/if}
       <button class="action" onclick={() => (attachDismissed = true)}>
         Dismiss
       </button>

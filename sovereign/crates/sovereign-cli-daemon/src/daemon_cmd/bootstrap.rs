@@ -372,6 +372,24 @@ pub(super) fn apply_shared_model_role_to_env(
     }
 }
 
+/// Optional operator scoping of the distributable-worker pool:
+/// `SOVEREIGN_RPC_WORKER_ALLOWLIST` = comma-separated node-id hex prefixes.
+/// Absent or empty = no filter (every discovered worker is a candidate).
+/// Exists for controlled measurements — when several peers advertise RPC
+/// serving, this pins a distributed load to the worker under test instead of
+/// sharding across whoever happens to be online (first need: the 2026-07-27
+/// cloud-tensor-peer proof, where a LAN peer still advertising RPC from an
+/// earlier experiment would have contaminated the WAN decode number).
+fn worker_allowlist() -> Option<Vec<String>> {
+    let raw = std::env::var("SOVEREIGN_RPC_WORKER_ALLOWLIST").ok()?;
+    let list: Vec<String> = raw
+        .split(',')
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!list.is_empty()).then_some(list)
+}
+
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub(super) fn spawn_rpc_worker_discovery(
     daemon: Arc<EmbeddedDaemon>,
@@ -420,13 +438,34 @@ pub(super) fn spawn_rpc_worker_discovery(
                 let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
                     .ok()
                     .and_then(|s| commonwealth_core::ids::NodeId::from_hex(&s));
+                let allowlist = worker_allowlist();
+                if let Some(list) = &allowlist {
+                    tracing::info!(
+                        ?list,
+                        "shared-model: RPC worker allowlist active — non-matching discovered workers are excluded"
+                    );
+                }
                 let mut was_host = false;
                 loop {
                     // Raw discovery → eligibility gate → only PROVEN-STABLE workers
                     // reach the provider + the reload decision. A flapping worker stays
                     // out of `workers`, so the set the debounce compares never
                     // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
-                    let raw = daemon_for_disco.discover_rpc_workers().await;
+                    let mut raw = daemon_for_disco.discover_rpc_workers().await;
+                    if let Some(list) = &allowlist {
+                        raw.retain(|w| {
+                            let hex = w.node_id.to_hex();
+                            let keep = list.iter().any(|p| hex.starts_with(p.as_str()));
+                            if !keep {
+                                tracing::debug!(
+                                    worker = %hex,
+                                    endpoint = %w.endpoint,
+                                    "shared-model: discovered worker excluded by SOVEREIGN_RPC_WORKER_ALLOWLIST"
+                                );
+                            }
+                            keep
+                        });
+                    }
                     let now = std::time::Instant::now();
                     eligibility.observe(&raw, now);
                     let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
