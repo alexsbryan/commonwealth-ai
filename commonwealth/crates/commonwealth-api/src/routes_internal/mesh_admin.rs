@@ -277,11 +277,18 @@ pub async fn models_unload(
 /// the lazy-load tax. Idempotent. Loopback-only (mounted on the
 /// `:9741` client router behind the loopback guard).
 ///
+/// That mounting claim was FALSE from the day it was written until
+/// 2026-07-27 — the route lived on `internal_router` (`:9742`), so
+/// every caller's POST 404'd and was swallowed as a no-op. If you
+/// are reading this doc to learn where the route is, verify it in
+/// `server::client_router` rather than trusting this sentence.
+///
 /// Wired into the desktop app's window-focus / chat-mount events
 /// so the slot is hot by the time the user hits send. Without
 /// this, every conversation that pauses past `primary_idle_secs`
-/// (default 60s) re-pays the full model load on the next turn —
-/// 10–20s on Metal, much worse on CPU.
+/// (default 300s — `setup_config::default_primary_idle_secs`)
+/// re-pays the full model load on the next turn — 10–20s on
+/// Metal, and 57–95s measured for an 18.5 GB primary.
 pub async fn inference_warmup(
     State(state): State<AppState>,
 ) -> Result<Json<WarmupResponse>, (StatusCode, String)> {
@@ -1266,10 +1273,18 @@ mod tests {
 // The Settings UI (and W3's tray menu) reads this status, sets the
 // peer-inflight ceiling, and toggles the runtime pause.
 //
-// Routes are mounted on the client port behind the same loopback
-// guard as `/internal/inference/warmup` — the operator's process
-// (or the desktop talking to a child daemon) calls them locally;
-// peers reaching them at all is a protocol error the guard rejects.
+// Routes are mounted on the INTERNAL port (`:9742`) — verified in
+// `server::internal_router`, and matched by their callers, which
+// build URLs from `AppState::internal_base_url()` (the desktop tray
+// and `commands/budget.rs`). This comment previously claimed the
+// client port "behind the same loopback guard as
+// `/internal/inference/warmup`"; both halves were wrong, and warmup
+// has since moved to `:9741` for its own reasons.
+//
+// Beware the general trap: the `/internal/` path prefix says NOTHING
+// about which port a route is on. `/internal/corpus/watch/*` is on
+// the client port, `/internal/rpc-warm` is on this one. Read the
+// router, not the path.
 
 #[derive(Debug, Serialize)]
 pub struct ContributionStatusResponse {

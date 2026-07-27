@@ -68,6 +68,24 @@ pub fn client_router(state: AppState) -> Router {
         )
         // Status endpoint.
         .route("/status", get(routes_status::status))
+        // Eagerly load the primary chat slot so the first turn after an
+        // idle unload doesn't pay the 10-90s lazy-load tax.
+        //
+        // Mounted HERE, on the client port, deliberately — it was on
+        // `internal_router` until 2026-07-27 and that was wrong twice
+        // over. Every caller is local (the desktop's window-focus and
+        // chat-mount warm, and the attach-mode provider in
+        // `oicp-client`, which derives this URL from its `/v1`
+        // endpoint), so on `:9742` the route was unreachable by the
+        // only clients that wanted it — the POST 404'd and the warm
+        // silently never happened. It was simultaneously reachable by
+        // any mesh PEER, i.e. an unauthenticated "make that node load
+        // 18.5 GB off disk" lever. The `client_auth` layer below is the
+        // loopback guard this handler's doc always claimed it had.
+        .route(
+            "/internal/inference/warmup",
+            post(routes_internal::inference_warmup),
+        )
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
         // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
@@ -324,13 +342,12 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/models/inventory",
             get(routes_internal::models_inventory),
         )
-        // Eagerly warm the primary chat slot. Desktop fires this on
-        // window-focus / chat-mount so the first turn after a
-        // resume doesn't pay the 10–90s lazy-load tax.
-        .route(
-            "/internal/inference/warmup",
-            post(routes_internal::inference_warmup),
-        )
+        // NOTE: `/internal/inference/warmup` is NOT here — it is
+        // mounted on `client_router` (`:9741`). See the rationale at
+        // that route; in short, its callers are local and its cost is
+        // an 18.5 GB disk load, so it belongs behind the client port's
+        // loopback guard rather than on the peer-reachable port.
+        //
         // Contribution controls (W2). Read by the Settings panel and
         // the tray status chip; mutated by the pause/ceiling controls.
         // Loopback-only — the same guard that protects /internal/*.
@@ -775,6 +792,48 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// The warm route must be reachable on the CLIENT port and absent
+    /// from the peer-reachable one. It sat only on `internal_router`
+    /// (`:9742`) until 2026-07-27: the desktop and `oicp-client` derive
+    /// the URL from their `/v1` endpoint — `:9741` — so every warm-up
+    /// POST 404'd and was swallowed as a best-effort no-op, which is
+    /// why Attach mode silently never warmed its model while looking
+    /// fully wired. Both directions are pinned, because moving it back
+    /// would re-disable warm-up in the shipped app without failing
+    /// anything else.
+    #[tokio::test]
+    async fn warmup_route_is_on_the_client_port_not_the_peer_port() {
+        let response = mock_router(test_app_state())
+            .oneshot(
+                Request::post("/internal/inference/warmup")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "warmup must be routable on the client port the desktop actually calls"
+        );
+
+        let response = internal_router(test_app_state())
+            .oneshot(
+                Request::post("/internal/inference/warmup")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "an 18.5 GB disk load must not be a lever any mesh peer can pull"
+        );
     }
 
     #[tokio::test]
