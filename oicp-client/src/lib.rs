@@ -22,7 +22,7 @@ use serde::Deserialize;
 
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::oicp::{OicpResponseMeta, ProviderManifest};
-use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
 use sovereign_contracts::types::*;
 
 /// OpenAI-compatible API client.
@@ -1010,6 +1010,11 @@ pub struct SplitInferenceProvider {
     /// uses) so `effective_context_size` answers without a daemon round-trip —
     /// the runtime's budget-aware compaction arm reads it.
     context_size: u32,
+    /// Absolute URL of the daemon's `/status`, derived once from the `/v1`
+    /// endpoint. Sole consumer is [`Self::primary_slot_status`]: this
+    /// provider holds no weights, so the only honest answer to "is the
+    /// deep slot cold?" comes from the node that does.
+    status_url: String,
 }
 
 impl SplitInferenceProvider {
@@ -1039,6 +1044,17 @@ impl SplitInferenceProvider {
             chat_model_id,
             embed_model_id,
             context_size,
+            // `endpoint_v1` is the OpenAI-shaped base (".../v1"); `/status`
+            // is its sibling, not a child. Trim exactly one trailing "/v1"
+            // (and any trailing slash) rather than string-replacing, so a
+            // host whose path legitimately contains "v1" elsewhere survives.
+            status_url: format!(
+                "{}/status",
+                endpoint_v1
+                    .trim_end_matches('/')
+                    .trim_end_matches("/v1")
+                    .trim_end_matches('/')
+            ),
         }
     }
 
@@ -1140,6 +1156,65 @@ impl InferenceProvider for SplitInferenceProvider {
 
     fn effective_context_size(&self) -> Option<u32> {
         Some(self.context_size)
+    }
+
+    /// Ask the daemon whether its deep-reasoning slot is loaded.
+    ///
+    /// This provider owns no weights, so the inherited default (read the
+    /// sync `resident_slots()`, which is empty here) would answer `None`
+    /// forever — and the caller would stay silent through the exact wait
+    /// it exists to explain. The attach-mode desktop runs its Runtime
+    /// in-process against this provider, so that silence was the bug:
+    /// a 95s cold load with a frozen counter and no stated cause.
+    ///
+    /// Fails soft in every direction — unreachable daemon, non-200,
+    /// unparseable body, no primary row — all yield `None`, i.e. "can't
+    /// say", never a fabricated verdict and never a blocked turn. The
+    /// timeout is deliberately tight: this runs on the critical path
+    /// immediately before synthesis, and a narration frame is never
+    /// worth delaying the answer it narrates.
+    async fn primary_slot_status(&self) -> Option<ResidentSlot> {
+        #[derive(Deserialize)]
+        struct StatusBody {
+            inference: StatusInference,
+        }
+        #[derive(Deserialize)]
+        struct StatusInference {
+            #[serde(default)]
+            resident: Vec<StatusSlot>,
+        }
+        #[derive(Deserialize)]
+        struct StatusSlot {
+            role: String,
+            #[serde(default)]
+            model_id: String,
+            #[serde(default)]
+            resident: bool,
+            #[serde(default)]
+            size_bytes: Option<u64>,
+            #[serde(default)]
+            transitioning: bool,
+        }
+
+        let resp = reqwest::Client::new()
+            .get(&self.status_url)
+            .timeout(std::time::Duration::from_millis(1500))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: StatusBody = resp.json().await.ok()?;
+        let slot = body.inference.resident.into_iter().find(|s| s.role == "primary")?;
+        Some(ResidentSlot {
+            role: slot.role,
+            model_id: slot.model_id,
+            resident: slot.resident,
+            size_bytes: slot.size_bytes,
+            transitioning: slot.transitioning,
+            placement: None,
+        })
     }
 }
 
