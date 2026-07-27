@@ -55,6 +55,14 @@
   // measured) to read as a hang, and previously the only major phase
   // of a turn with no frame of its own.
   const modelLoad = $derived(counter?.modelLoad ?? null);
+  // …and whether it is still happening. `modelLoad` is never cleared —
+  // it records that THIS turn paid a cold load, which stays true for
+  // the rest of the timeline — so "still loading" has to be derived,
+  // not read. The heartbeat is the exact end marker: it first fires at
+  // `held_tokens == 1` (streaming.rs), so one heartbeat proves the
+  // weights are in memory and producing. Without this gate the "off
+  // disk" sub-line outlives the load and sits under "writing…".
+  const loadingNow = $derived(heartbeat ? null : modelLoad);
   const modelLoadSize = $derived(
     modelLoad?.sizeBytes != null
       ? `${(modelLoad.sizeBytes / 1_073_741_824).toFixed(1)} GB`
@@ -187,16 +195,21 @@
               <span class="num token-count">{heartbeat.tokens.toLocaleString()}</span>
             {/key}
             {heartbeat.tokens === 1 ? "token" : "tokens"}
-          {:else if modelLoad}
+          {:else if loadingNow}
             loading the model into memory&hellip;
           {:else}
             Warming up the primary model&hellip;
           {/if}
         </div>
-        {#if modelLoad}
+        {#if loadingNow}
           <!-- Named cause beats a spinner: this wait runs to minutes on
                a cold slot, and saying why is the difference between
                patience and a force-quit.
+
+               `loadingNow`, not `modelLoad`: this sub-line is present
+               tense and must retire the instant tokens appear, or it
+               strands "…off disk" under "writing…" and outranks the
+               drafting sub-line for the rest of the turn.
 
                The size branch is the fallback-first case today: the
                embedded engine only reports `size_bytes` for a RESIDENT
@@ -208,8 +221,8 @@
                page cache and 95s under memory pressure. -->
           <div class="stage-sub" data-testid="counter-model-load-sub">
             {modelLoadSize
-              ? `${modelLoad.modelId} · ${modelLoadSize} off disk`
-              : `${modelLoad.modelId} off disk`} — first deep answer since
+              ? `${loadingNow.modelId} · ${modelLoadSize} off disk`
+              : `${loadingNow.modelId} off disk`} — first deep answer since
             it went idle
           </div>
         {:else if evidence?.earlyDecline}

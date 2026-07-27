@@ -209,7 +209,13 @@ export interface CounterState {
    *  disk before synthesis can produce a single token — measured at
    *  57-95s against 0.44s warm. Set by `model_load`; never cleared,
    *  because once a turn has paid this wait the explanation stays
-   *  true for that turn's timeline. Absent on every warm turn. */
+   *  true for that turn's timeline. Absent on every warm turn.
+   *
+   *  So this field answers "did this turn pay a cold load?", NOT "is
+   *  it loading right now?". Anything present-tense must gate it on
+   *  the absence of a `synthesisProgress` heartbeat — the first
+   *  heartbeat fires at held_tokens == 1, so it is the exact end
+   *  marker (see `loadingNow` in CounterCard.svelte). */
   modelLoad: { modelId: string; sizeBytes: number | null } | null;
   /** elapsed_ms of the most recent counter-relevant frame. */
   elapsedMs: number;

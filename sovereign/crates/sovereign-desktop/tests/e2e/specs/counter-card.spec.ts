@@ -148,6 +148,73 @@ test.describe("verification counter", () => {
     );
   });
 
+  test("cold slot: the load sub-line explains the wait, then retires when tokens arrive", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await page.locator(".input-area textarea").fill("cold-slot question");
+    await page.locator(".send-btn").click();
+    await expect.poll(() => chat.api.lastStreamStart()).not.toBeNull();
+    const ctx = (await chat.api.lastStreamStart())!;
+
+    const card = page.locator('[data-testid="counter-card"]');
+    const loadSub = page.locator('[data-testid="counter-model-load-sub"]');
+
+    await page.evaluate((cid) => {
+      const emit = (phase: unknown, text: string, elapsed_ms: number) =>
+        window.__sovereign_test__.emit("turn-narration", {
+          session_id: "s1",
+          conversation_id: cid,
+          event: { phase, text, elapsed_ms },
+        });
+      emit(
+        {
+          retrieval_complete: { chunks_in: 14, corpora: ["project-notes"] },
+        },
+        "Read 14 chunks across 1 source.",
+        6_000,
+      );
+      // The primary slot was cold at synthesis. Null size_bytes is the
+      // common shape — the engine only reports a size for a RESIDENT
+      // slot, and this frame exists because it is not.
+      emit(
+        { model_load: { model_id: "Qwen3.6-35B-A3B", size_bytes: null } },
+        "Loading Qwen3.6-35B-A3B into memory.",
+        8_000,
+      );
+    }, ctx.conversationId);
+
+    // While loading: the named cause outranks the drafting sub-line —
+    // this is the wait that reads as a hang, so it owns the line.
+    await expect(card).toHaveAttribute("data-station", "draft");
+    await expect(card).toContainText("loading the model into memory");
+    await expect(loadSub).toContainText("Qwen3.6-35B-A3B off disk");
+    await expect(card).not.toContainText("drafting from 14 passages");
+
+    // First heartbeat = held_tokens == 1, so the weights are in memory
+    // and producing. The load sub-line must retire; leaving it up
+    // strands "…off disk" under "writing…" for the rest of the turn.
+    await page.evaluate((cid) => {
+      window.__sovereign_test__.emit("turn-narration", {
+        session_id: "s1",
+        conversation_id: cid,
+        event: {
+          phase: { synthesis_progress: { tokens: 142 } },
+          text: "",
+          elapsed_ms: 70_000,
+        },
+      });
+    }, ctx.conversationId);
+
+    await expect(card).toContainText("writing");
+    await expect(card).toContainText("142");
+    await expect(loadSub).toHaveCount(0);
+    await expect(card).not.toContainText("off disk");
+    // …and the sub-line the load had been outranking comes back.
+    await expect(card).toContainText("drafting from 14 passages");
+  });
+
   test("ungated turn: counter yields once tokens stream with no gate signal", async ({
     sovereignPage: page,
     chat,

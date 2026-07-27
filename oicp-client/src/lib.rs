@@ -1114,6 +1114,29 @@ impl InferenceProvider for SplitInferenceProvider {
         self.chat.complete_stream(request).await
     }
 
+    /// Stream with a TYPED terminal frame.
+    ///
+    /// Third instance of the same defect, found while auditing the
+    /// first two: `self.chat` parses the real `finish_reason` and
+    /// `usage` off the SSE wire, but without this forward the trait
+    /// default wraps the UNTYPED `complete_stream` and appends a
+    /// `Finish { reason: Stop, usage: None }` it never observed. The
+    /// trait doc is explicit that silent truncation "is the bug this
+    /// method exists to make impossible" — and inheriting the default
+    /// reintroduced exactly that: a `max_tokens` cutoff rendered
+    /// identically to a clean stop, and token accounting read `None`,
+    /// on every streaming turn in Attach mode.
+    ///
+    /// `complete_stream_with_id_and_finish` needs no forward of its
+    /// own: its default composes this method with `model_id_for`, and
+    /// both are now honest here.
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
+        self.chat.complete_stream_with_finish(request).await
+    }
+
     async fn complete_batch(
         &self,
         requests: &[CompletionRequest],
@@ -1215,6 +1238,30 @@ impl InferenceProvider for SplitInferenceProvider {
             transitioning: slot.transitioning,
             placement: None,
         })
+    }
+
+    /// Ask the daemon to load its deep-reasoning slot now.
+    ///
+    /// Same shape of bug as [`Self::primary_slot_status`] above, and it
+    /// is worth stating plainly because this is the second instance:
+    /// the trait's default `warmup_primary` is `Ok(())`, a SILENT
+    /// no-op. A weight-less provider that doesn't override it therefore
+    /// reports success while doing nothing, and the caller has no way
+    /// to tell "warmed" from "never happened". The desktop's two warm
+    /// triggers — window-focus and chat-mount — both ran through this
+    /// provider in Attach mode, so both were dead: the app looked like
+    /// it had warm-up wired end to end while every deep turn still paid
+    /// the full cold load.
+    ///
+    /// `self.chat` already implements this correctly against the
+    /// daemon's HTTP warmup route, so the fix is delegation, not new
+    /// transport. Best-effort by the same reasoning as the rest of the
+    /// warm path: an unwarmed slot is a slow first turn, never a
+    /// blocked one. The embed provider is deliberately not warmed —
+    /// the embed slot is eagerly loaded at daemon startup and never
+    /// idle-unloaded, so it has nothing to warm.
+    async fn warmup_primary(&self) -> Result<()> {
+        self.chat.warmup_primary().await
     }
 }
 
@@ -1392,6 +1439,47 @@ mod tests {
         assert_eq!(
             provider.warmup_url(),
             "http://peer:9741/internal/inference/warmup",
+        );
+    }
+
+    /// `SplitInferenceProvider` must actually ISSUE the warm request,
+    /// not inherit the trait's silent `Ok(())`. This is the second bug
+    /// of that exact shape on this provider (see `primary_slot_status`),
+    /// and both were invisible because the default returns success — so
+    /// the test asserts the wire behaviour, which is the only thing a
+    /// no-op cannot fake. A one-shot TCP listener stands in for the
+    /// daemon so this stays dependency-free and offline.
+    #[tokio::test]
+    async fn split_provider_actually_sends_the_warmup_request() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 2048];
+            let n = stream.read(&mut buf).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 16\r\n\r\n{\"latency_ms\":0}")
+                .unwrap();
+            stream.flush().unwrap();
+            String::from_utf8_lossy(&buf[..n]).to_string()
+        });
+
+        let provider = SplitInferenceProvider::new(
+            &format!("http://127.0.0.1:{port}/v1"),
+            "chat-model".to_string(),
+            "embed-model".to_string(),
+            4096,
+            String::new(),
+        );
+        provider.warmup_primary().await.unwrap();
+
+        let request = server.join().unwrap();
+        assert!(
+            request.starts_with("POST /internal/inference/warmup "),
+            "warm-up must reach the daemon's warmup route; got request line: {}",
+            request.lines().next().unwrap_or("<empty>")
         );
     }
 
