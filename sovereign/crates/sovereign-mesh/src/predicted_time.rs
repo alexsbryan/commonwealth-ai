@@ -82,9 +82,72 @@
 //! [`predict`] is total over its inputs and returns `Err` rather than
 //! a sentinel when a candidate cannot be predicted at all.
 
-use sovereign_core::oicp::InferenceRequirements;
+use sovereign_core::oicp::{InferenceRequirements, ProviderManifest};
 
 use crate::decision_log::{CandidateInputs, RequestFacts};
+
+/// What a candidate owes before it can begin *this* request at all:
+/// nothing if the chosen model is already resident, its advertised load
+/// time if it is not.
+///
+/// A separate concept from queueing, and the distinction is the whole
+/// reason it is a separate addend. A queue is paid **per job ahead of
+/// us**; a model load is paid **once**, by whichever request arrives
+/// first, and everything behind it in the queue inherits a warm slot.
+/// So load enters the prediction additively and is not multiplied by
+/// `in_flight`.
+///
+/// This is the term whose absence would have been the most expensive:
+/// a 21GB model paged in from disk is tens of seconds, which dwarfs
+/// every other addend, and an objective that prices it at zero will
+/// cheerfully send a request to a node that has to boot a model to
+/// serve it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoadDebt {
+    /// `ModelStatus::loaded` for the model the scorer picked.
+    pub model_loaded: bool,
+    /// `ModelStatus::estimated_load_time_sec`, in ms. Zero when the
+    /// manifest advertises no estimate — see [`LoadDebt::pending_ms`]
+    /// for why that is a *reported* zero and not a silent one.
+    pub estimated_load_ms: u32,
+}
+
+impl LoadDebt {
+    /// Read the debt off a manifest for one specific model id — the
+    /// model the scorer actually chose, not the manifest's first entry.
+    ///
+    /// `None` when the manifest has no such model, which the caller
+    /// should treat the way it treats any other missing input rather
+    /// than as zero debt.
+    pub fn from_manifest(manifest: &ProviderManifest, model_id: &str) -> Option<Self> {
+        let model = manifest.models.iter().find(|m| m.id == model_id)?;
+        Some(Self {
+            model_loaded: model.status.loaded,
+            estimated_load_ms: model
+                .status
+                .estimated_load_time_sec
+                .map(|s| s.saturating_mul(1_000))
+                .unwrap_or(0),
+        })
+    }
+
+    /// Milliseconds of load this request would have to wait through.
+    ///
+    /// A cold model with **no advertised estimate** yields zero, and
+    /// that is a deliberate under-charge rather than an oversight: the
+    /// alternative is inventing a load time, which is the same
+    /// fabrication [`Unpredictable::NoThroughput`] refuses for decode
+    /// rates. The honest fix is for manifests to advertise the field —
+    /// `record it, do not guess it` — and until they do, this objective
+    /// is optimistic about cold peers in exactly one measurable way.
+    pub fn pending_ms(&self) -> u32 {
+        if self.model_loaded {
+            0
+        } else {
+            self.estimated_load_ms
+        }
+    }
+}
 
 /// The size of the job, in the two token counts that set it.
 ///
@@ -138,6 +201,9 @@ pub struct PredictInputs {
     pub pp_tok_s: Option<f32>,
     /// Token-generation rate from the advertised benchmark.
     pub tg_tok_s: Option<f32>,
+    /// Model-load debt, already resolved to milliseconds by
+    /// [`LoadDebt::pending_ms`]. Zero for a resident model.
+    pub pending_load_ms: u32,
 }
 
 impl PredictInputs {
@@ -153,6 +219,14 @@ impl PredictInputs {
             rtt_ms: inputs.rtt_ms.unwrap_or(0),
             pp_tok_s: inputs.bench_pp_tok_s,
             tg_tok_s: inputs.bench_tg_tok_s,
+            // A record from before the load-debt fields existed reads
+            // as "already resident", which is the pre-existing
+            // behaviour rather than a new guess.
+            pending_load_ms: LoadDebt {
+                model_loaded: inputs.model_loaded.unwrap_or(true),
+                estimated_load_ms: inputs.estimated_load_ms.unwrap_or(0),
+            }
+            .pending_ms(),
         }
     }
 }
@@ -206,6 +280,9 @@ impl std::fmt::Display for Unpredictable {
 /// surprising route.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Prediction {
+    /// Model-load debt — paid once by whoever arrives first, so it is
+    /// added rather than multiplied by the queue depth.
+    pub load_ms: f64,
     /// Time behind the jobs already committed to this candidate.
     pub queue_ms: f64,
     /// Prompt processing for this request.
@@ -230,13 +307,15 @@ impl Prediction {
 ///
 /// ```text
 /// service = ctx / pp_tok_s + out / tg_tok_s
-/// queue   = in_flight × service        // see the module docs
-/// total   = queue + service + rtt
+/// queue   = in_flight × service        // per job ahead of us
+/// load    = 0 if resident, else advertised load time   // paid ONCE
+/// total   = load + queue + service + rtt
 /// ```
 ///
 /// The `queue` line is the estimator's one real assumption: each job
 /// ahead of us is assumed to look like the job in our hand, because a
-/// count is all gossip carries. Every other term is measured.
+/// count is all gossip carries. Every other term is measured or
+/// advertised.
 pub fn predict(
     inputs: &PredictInputs,
     shape: Option<RequestShape>,
@@ -256,12 +335,16 @@ pub fn predict(
     // A count, not a duration — the substitution the module docs name.
     let queue_ms = inputs.in_flight as f64 * service_ms;
     let rtt_ms = inputs.rtt_ms as f64;
+    // Additive, NOT multiplied by the queue: one load warms the slot
+    // for everything behind it.
+    let load_ms = inputs.pending_load_ms as f64;
     Ok(Prediction {
+        load_ms,
         queue_ms,
         prefill_ms,
         decode_ms,
         rtt_ms,
-        total_ms: queue_ms + service_ms + rtt_ms,
+        total_ms: load_ms + queue_ms + service_ms + rtt_ms,
     })
 }
 
@@ -368,7 +451,114 @@ mod tests {
             rtt_ms,
             pp_tok_s: Some(pp),
             tg_tok_s: Some(tg),
+            pending_load_ms: 0,
         }
+    }
+
+    /// The same candidate, but its model has to be paged in first.
+    fn cold(mut i: PredictInputs, load_ms: u32) -> PredictInputs {
+        i.pending_load_ms = load_ms;
+        i
+    }
+
+    /// Load is paid ONCE, so it is added rather than multiplied by the
+    /// queue depth — the property that distinguishes it from queueing.
+    #[test]
+    fn load_debt_is_additive_and_not_multiplied_by_the_queue() {
+        let warm = predict(&inputs(3, 8, 1_000.0, 100.0), shape()).unwrap();
+        let cold = predict(&cold(inputs(3, 8, 1_000.0, 100.0), 42_000), shape()).unwrap();
+        assert_eq!(cold.load_ms, 42_000.0);
+        assert_eq!(cold.queue_ms, warm.queue_ms, "load must not scale the queue");
+        assert_eq!(cold.total_ms, warm.total_ms + 42_000.0);
+    }
+
+    /// The term that would have hurt most by its absence: a big cold
+    /// model loses to a small warm one even though it is faster once
+    /// running.
+    #[test]
+    fn a_cold_big_model_loses_to_a_warm_small_one_on_load_alone() {
+        let local = predict(&inputs(0, 0, 800.0, 40.0), shape());
+        // Faster hardware, but 42s of paging in first.
+        let cold_hub = predict(&cold(inputs(0, 8, 2_000.0, 60.0), 42_000), shape());
+        assert!(
+            cold_hub.as_ref().unwrap().total_ms > local.as_ref().unwrap().total_ms,
+            "the load debt has to dominate here or the test proves nothing"
+        );
+        assert!(faster_than_local(local.into(), vec![("hub", cold_hub)]).is_empty());
+    }
+
+    /// `LoadDebt` reads the model the scorer PICKED, not the manifest's
+    /// first entry, and a resident model owes nothing whatever it
+    /// advertises.
+    #[test]
+    fn load_debt_is_read_per_model_and_a_resident_model_owes_nothing() {
+        use sovereign_core::oicp::{
+            CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderModel,
+            OICP_VERSION,
+        };
+        let model = |id: &str, loaded: bool, load_sec: Option<u32>| ProviderModel {
+            id: id.into(),
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: load_sec,
+            },
+            size_gb: Some(21.0),
+            claims: vec![CapabilityClaim::new(
+                CapabilityHint::general(),
+                LatencyClass::Extended,
+                32_768,
+                4_000,
+                0.9,
+            )],
+            fingerprint: None,
+        };
+        let manifest = ProviderManifest {
+            oicp_version: OICP_VERSION.into(),
+            provider: None,
+            models: vec![
+                model("warm", true, Some(42)),
+                model("cold", false, Some(42)),
+                model("cold-unadvertised", false, None),
+            ],
+            knowledge: None,
+            federation: None,
+            features: vec![],
+        };
+        assert_eq!(
+            LoadDebt::from_manifest(&manifest, "warm").unwrap().pending_ms(),
+            0,
+            "a resident model owes nothing no matter what it advertises"
+        );
+        assert_eq!(
+            LoadDebt::from_manifest(&manifest, "cold").unwrap().pending_ms(),
+            42_000
+        );
+        // Documented under-charge: no estimate means no invented one.
+        assert_eq!(
+            LoadDebt::from_manifest(&manifest, "cold-unadvertised")
+                .unwrap()
+                .pending_ms(),
+            0
+        );
+        assert!(LoadDebt::from_manifest(&manifest, "absent").is_none());
+    }
+
+    /// A record written before the load-debt fields existed must read as
+    /// "resident", i.e. reproduce the old prediction exactly rather than
+    /// acquiring a new guess.
+    #[test]
+    fn a_record_without_load_fields_reads_as_resident() {
+        use crate::decision_log::LoadSource;
+        let obs = sovereign_core::oicp::NodeObservations::default();
+        let ci = CandidateInputs::from_observations(&obs, LoadSource::Local);
+        assert_eq!(ci.model_loaded, None);
+        assert_eq!(PredictInputs::from_candidate(&ci).pending_load_ms, 0);
     }
 
     #[test]

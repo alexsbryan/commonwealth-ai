@@ -113,6 +113,30 @@ pub struct SimConfig {
     /// reads the same benchmark through `throughput_factor`, so the
     /// comparison stays fair.
     pub advertised_rate_error: f32,
+    /// Seconds of model-load time per GB of weights. `0.0` = every node
+    /// starts with its model already resident, which is what the sim
+    /// assumed before this existed.
+    ///
+    /// Above zero, a node starts **cold**: its manifest advertises
+    /// `loaded: false` plus an `estimated_load_time_sec` of
+    /// `size_gb × this`, and the first request it serves pays that time
+    /// before service begins. After that the slot is warm for
+    /// everything behind it — which is why
+    /// `predicted_time::predict` adds the load term rather than
+    /// multiplying it by the queue.
+    ///
+    /// This exists because the objective was pricing a real cost at
+    /// zero: paging in a 21GB model dwarfs every other addend, and
+    /// nothing in the harness charged for it, so the arm could not have
+    /// found the mistake on its own.
+    ///
+    /// **Known simplification:** `build_peer_views` clones the peer's
+    /// *current* manifest while reporting a cache age, so residency is
+    /// visible to a decider sooner than a real 60s-TTL cache would
+    /// allow. That biases toward the decider being right about
+    /// residency, so any load-related finding here is a lower bound on
+    /// the real cost.
+    pub model_load_sec_per_gb: f64,
 }
 
 /// What a node counts when it gossips its in-flight number.
@@ -149,9 +173,11 @@ impl Default for SimConfig {
             gossip_max_extra_rounds: 2,
             manifest_ttl_ms: 60_000,
             slots_per_node: 1,
-            // Perfect rate cards by default, so every number recorded
-            // before this knob existed still reproduces exactly.
+            // Perfect rate cards and pre-loaded models by default, so
+            // every number recorded before these knobs existed still
+            // reproduces exactly.
             advertised_rate_error: 0.0,
+            model_load_sec_per_gb: 0.0,
         }
     }
 }
@@ -251,6 +277,26 @@ pub enum Arm {
     /// are not quotable until S1 runs against a capture from real
     /// hardware.
     PredictedTime,
+    /// [`PredictedTime`](Arm::PredictedTime) **under
+    /// [`PublishedLoad::OutboundOnly`]** — the composition that was
+    /// missing when the arm first landed, and it is the one that
+    /// matters most.
+    ///
+    /// The two objectives consume `in_flight` very differently. The
+    /// product passes it through `load_penalty`, a **bounded**
+    /// multiplier: a mis-attributed count moves the score a little. The
+    /// predicted time **multiplies it by a service time**, so a count
+    /// that misses inbound peer work is a *first-order* error that
+    /// scales with the queue. F2 should therefore hurt this objective
+    /// more than it hurts arm 0, and a scheduler that is confidently
+    /// wrong is worse than one that is vaguely wrong.
+    ///
+    /// If that holds, the two-daemon inbound-load audit is not just
+    /// earned (it already was, at +126%..+584% for arm 0) but a
+    /// **prerequisite** for landing §4.1 — because the objective's
+    /// accuracy is exactly what it trades the product's fudge factors
+    /// for.
+    PredictedTimeOutboundOnly,
     /// Not a policy anyone could implement: assigns each request to
     /// whichever node would finish it soonest, with perfect knowledge
     /// of every queue. The denominator of the efficiency ratio.
@@ -273,16 +319,17 @@ impl Arm {
             Arm::FreshWarmStart => "fresh+warm-start",
             Arm::OutboundOnlyLoad => "outbound-only-load",
             Arm::PredictedTime => "predicted-time",
+            Arm::PredictedTimeOutboundOnly => "predicted-time+outbound-only",
             Arm::Oracle => "oracle",
         }
     }
 
     /// Which ranking objective this arm hands to
-    /// `scheduler_core::rank`. Everything but [`Arm::PredictedTime`]
+    /// `scheduler_core::rank`. Everything but the predicted-time arms
     /// ranks the way production does today.
     pub(crate) fn objective(&self) -> RankObjective {
         match self {
-            Arm::PredictedTime => RankObjective::PredictedTime,
+            Arm::PredictedTime | Arm::PredictedTimeOutboundOnly => RankObjective::PredictedTime,
             _ => RankObjective::Product,
         }
     }
@@ -307,7 +354,7 @@ impl Arm {
     /// What a node counts when it gossips its load.
     pub fn published_load(&self) -> PublishedLoad {
         match self {
-            Arm::OutboundOnlyLoad => PublishedLoad::OutboundOnly,
+            Arm::OutboundOnlyLoad | Arm::PredictedTimeOutboundOnly => PublishedLoad::OutboundOnly,
             _ => PublishedLoad::Total,
         }
     }
@@ -316,7 +363,7 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 9] = [
+pub const ALL_ARMS: [Arm; 10] = [
     Arm::AsImplemented,
     Arm::FreshSignals,
     Arm::TwoChoices,
@@ -325,6 +372,7 @@ pub const ALL_ARMS: [Arm; 9] = [
     Arm::FreshWarmStart,
     Arm::OutboundOnlyLoad,
     Arm::PredictedTime,
+    Arm::PredictedTimeOutboundOnly,
     Arm::Oracle,
 ];
 
@@ -360,6 +408,13 @@ struct Job {
     started_ms: Option<u64>,
     /// Round-trip cost of the hop; 0 when served locally.
     rtt_ms: u32,
+    /// Model-load time this particular job paid, if it was the one that
+    /// found the node cold. Tracked per job so `on_service_done` can
+    /// attribute it to **TTFT** rather than to decode — charging it to
+    /// decode would understate observed `tg_tok_s` and teach the
+    /// throughput EWMA that a cold node is permanently slow, which is an
+    /// artifact of the accounting and not of the hardware.
+    load_paid_ms: u64,
     /// What this request would have cost had it stayed local, given
     /// the origin's true queue at decision time. Feeds the waste
     /// metric.
@@ -431,10 +486,17 @@ struct SimNode {
     availability: Option<f32>,
     pp_tok_s: f32,
     tg_tok_s: f32,
+    /// Time this node needs to page its model in. Zero when
+    /// `model_load_sec_per_gb` is off.
+    load_ms: u64,
 
     // ── truth ──
     running: Vec<Job>,
     queue: VecDeque<Job>,
+    /// Whether the model is currently paged in. Flips once, on the
+    /// first request served, and is mirrored into `manifest`'s
+    /// `ModelStatus::loaded` so a decider can see it.
+    resident: bool,
 
     // ── beliefs ──
     local_obs: NodeObservations,
@@ -496,7 +558,12 @@ impl SimNode {
             .iter()
             .map(|j| self.service_ms(j.context_tokens, j.output_tokens))
             .sum();
-        running + queued
+        // A cold node owes its model load before anything above can
+        // start. Once, not per job — same shape as the load term in
+        // `predicted_time::predict`, so the oracle and the predictor
+        // are minimising the same quantity.
+        let load = if self.resident { 0 } else { self.load_ms };
+        load + running + queued
     }
 }
 
@@ -608,6 +675,7 @@ impl Sim {
         // runs recorded before this knob existed.
         let mut rate_rng = Rng::new(seed ^ 0xC0DE_FACE_5A17_3E11);
         let rate_error = cfg.advertised_rate_error.max(0.0);
+        let load_per_gb = cfg.model_load_sec_per_gb.max(0.0);
         let nodes = scenario
             .nodes
             .iter()
@@ -616,7 +684,22 @@ impl Sim {
                 name: spec.name.clone(),
                 // Deterministic stand-in for a real 16-byte node id.
                 node_id_hex: format!("{:032x}", i as u128 + 1),
-                manifest: spec.manifest(),
+                // A cold node ADVERTISES that it is cold, and how long
+                // it would take — which is the only reason a decider
+                // can price the load at all.
+                manifest: {
+                    let mut m = spec.manifest();
+                    if load_per_gb > 0.0 {
+                        if let Some(model) = m.models.first_mut() {
+                            model.status.loaded = false;
+                            model.status.estimated_load_time_sec =
+                                Some((spec.size_gb as f64 * load_per_gb).round() as u32);
+                        }
+                    }
+                    m
+                },
+                load_ms: (spec.size_gb as f64 * load_per_gb * 1000.0) as u64,
+                resident: load_per_gb <= 0.0,
                 // What the node CLAIMS it can do, which is only the
                 // truth when `advertised_rate_error` is zero. Two-sided
                 // and multiplicative-symmetric: the factor lands in
@@ -1033,6 +1116,7 @@ impl Sim {
             arrived_ms: self.now_ms,
             started_ms: None,
             rtt_ms: rtt,
+            load_paid_ms: 0,
             local_alternative_ms,
             model_id: self.nodes[server]
                 .manifest
@@ -1058,7 +1142,23 @@ impl Sim {
             let Some(mut job) = self.nodes[node_idx].queue.pop_front() else {
                 return;
             };
-            let service = self.nodes[node_idx].service_ms(job.context_tokens, job.output_tokens);
+            // The first request to a cold node pays the model load;
+            // everything behind it inherits a warm slot. Flipping
+            // `manifest`'s `loaded` here is what lets a decider stop
+            // charging for it.
+            let load = if self.nodes[node_idx].resident {
+                0
+            } else {
+                let n = &mut self.nodes[node_idx];
+                n.resident = true;
+                if let Some(model) = n.manifest.models.first_mut() {
+                    model.status.loaded = true;
+                }
+                n.load_ms
+            };
+            let service =
+                load + self.nodes[node_idx].service_ms(job.context_tokens, job.output_tokens);
+            job.load_paid_ms = load;
             job.started_ms = Some(self.now_ms);
             let job_seq = job.seq;
             self.nodes[node_idx].running.push(job);
@@ -1082,7 +1182,8 @@ impl Sim {
         };
         let job = self.nodes[node_idx].running.remove(pos);
         let started = job.started_ms.unwrap_or(job.arrived_ms);
-        let server_ttft = self.nodes[node_idx].ttft_ms(job.context_tokens);
+        // Load is pre-first-token time, so it belongs to TTFT.
+        let server_ttft = self.nodes[node_idx].ttft_ms(job.context_tokens) + job.load_paid_ms;
         let queue_wait = started.saturating_sub(job.arrived_ms);
         let ttft_ms = queue_wait + server_ttft + job.rtt_ms as u64;
         let total_ms = self.now_ms.saturating_sub(job.arrived_ms) + job.rtt_ms as u64;

@@ -384,6 +384,16 @@ pub struct CandidateInputs {
     /// Age of that benchmark in seconds. A benchmark measured before
     /// a hardware change is a silent mis-input to `throughput_factor`.
     pub bench_age_secs: Option<u64>,
+    /// `ModelStatus::loaded` for the model the scorer picked, and the
+    /// load time it advertises. Recorded because §4.1's predicted-time
+    /// objective consumes them: **an objective may not read a signal the
+    /// record does not carry**, or the decision stops being replayable
+    /// from a capture. `None` on records written before these existed,
+    /// which `PredictInputs::from_candidate` reads as "resident".
+    #[serde(default)]
+    pub model_loaded: Option<bool>,
+    #[serde(default)]
+    pub estimated_load_ms: Option<u32>,
 }
 
 impl CandidateInputs {
@@ -406,6 +416,8 @@ impl CandidateInputs {
             p95_latency_ms: obs.p95_latency_ms,
             ttft_ewma_ms: obs.ttft_ewma_ms,
             tg_tok_s_ewma: obs.tg_tok_s_ewma,
+            model_loaded: None,
+            estimated_load_ms: None,
             bench_pp_tok_s: None,
             bench_tg_tok_s: None,
             bench_baseline_size_gb: None,
