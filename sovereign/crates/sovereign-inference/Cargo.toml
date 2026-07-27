@@ -58,7 +58,7 @@ llguidance = { workspace = true }
 # the Vulkan backend, which is GPU-accelerated on the same hardware
 # and bypasses the buggy ROCm+MoE path entirely. Revisit once #20176
 # lands a fix in a llama-cpp-2 release we can pin to.
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 # llama-cpp-4 0.4.2 bundles llama.cpp 99f3dc3 / tag b9982 (bumped from
 # 0.3.1's 94a220cd6 on 2026-07-16, ~250 upstream commits). Retains MTP
 # single-file self-speculation (PR #22673 — our original reason for moving
@@ -80,6 +80,36 @@ llguidance = { workspace = true }
 # does the real work. We re-add `mtmd` (the other half of the vendored
 # default). Linux keeps openmp below — libgomp is a standard system lib
 # there, so it's a packageable dep, not a bundling problem.
+#
+# ── Metal is aarch64-ONLY. Do not re-add it to the x86_64 leg. ──────────
+# `hardware.rs::detect_gpu` already refuses to offload on Intel Macs ("Metal +
+# llama.cpp on discrete AMD GPUs produces garbage output"), so Metal was compiled
+# in, unusable, and able only to hurt. It is not merely useless there — it is
+# fatal, because REGISTERING the backend is enough: ggml's own scheduler offloads
+# ops to any registered device once a batch reaches `op_offload_min_batch_size`
+# (32), regardless of n_gpu_layers. Our "no GPU" verdict governs sovereign's
+# choices, never ggml's scheduler.
+#
+# On a Mac without unified memory (`MTLDevice.hasUnifiedMemory == false` — any
+# Intel Mac) ggml sets `use_shared_buffers = false`, and the resulting non-shared
+# buffer paths wrap HOST pointers via `newBufferWithBytesNoCopy:`, which returns
+# nil unless the pointer is page-aligned. Two mirror-image failure modes, both
+# observed in the field on a MacBookPro16,1 (2026-07-27):
+#   ggml-metal-device.m:1743  GGML_ASSERT(buf_src)  -> abort()  "exited by signal"
+#   ggml-metal-device.m:1800  GGML_ASSERT(buf_dst)  -> abort()
+#   ggml-metal-device.m:1776  dispatch_semaphore_wait(.., FOREVER) -> wedged thread
+#                                                    "stopped responding (3 failed heartbeats)"
+# Six daemon deaths in one morning; the crash stack ran through
+# ggml_backend_sched_graph_compute_async under EmbedSlot::run_embed_batch_sync,
+# i.e. a slot that had loaded cleanly as "cpu+accelerate".
+#
+# Verified on that host, same binary, same workload: with the Metal backend
+# registered the daemon SIGABRTs inside embed_batch within ~5 minutes; with
+# `GGML_METAL_DEVICES=0` (zero Metal devices registered) it serves the same embed
+# batches indefinitely with zero asserts. Dropping the feature is the build-time
+# form of that, so no user has to know an env var exists.
+#
+# Apple Silicon is untouched below. Nothing outside macOS-x86_64 changes.
 llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["metal", "mtmd"] }
 # RPC distributed inference: enable the sys crate's `rpc` feature directly
 # (builds ggml with GGML_RPC=ON + binds ggml_backend_rpc_add_server) rather
@@ -87,6 +117,13 @@ llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["metal"
 # llama.cpp API (ggml_backend_rpc_add_device / 1-arg init) that no longer
 # exists in the pinned llama.cpp. We call the sys symbols directly from
 # embedded/model_slot.rs instead.
+llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
+
+# macOS x86_64 (Intel). Same as the aarch64 leg MINUS `metal` — see the block
+# above for why registering that backend here is fatal, not merely wasteful.
+# CPU via ggml's pthread pool + Accelerate, which is what these hosts already ran.
+[target.'cfg(all(target_os = "macos", not(target_arch = "aarch64")))'.dependencies]
+llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["mtmd"] }
 llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
