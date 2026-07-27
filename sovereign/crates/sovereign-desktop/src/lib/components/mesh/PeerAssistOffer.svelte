@@ -1,10 +1,17 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   Self-contained "get peer help" affordance for a heavy ingest. Probes which
-  mesh peers can help; renders nothing when the mesh is down, the corpus isn't
-  grantable, or no peer is eligible (graceful local-only degrade). Otherwise a
-  collapsed opt-in disclosure with the peer picker + the ephemerality
-  guarantees. Reports the decision up via `onChange`; the host owns kickoff.
+  mesh peers can help; renders a collapsed opt-in disclosure with the peer
+  picker + the ephemerality guarantees. Reports the decision up via `onChange`;
+  the host owns kickoff.
+
+  When it CAN'T help, callers on an ingest surface should pass
+  `explainWhenUnavailable` so the component says why instead of vanishing.
+  Silently rendering nothing was the 2026-07-27 bug: a user watching a slow
+  Obsidian vault embed had no peer-assist affordance and no way to tell whether
+  the feature was missing, their mesh was empty, or the corpus was ineligible.
+  Three very different situations collapsed into an empty div. Surfaces that
+  merely *decorate* (status chips) still default to hiding.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
@@ -19,18 +26,33 @@
     surface: "vault" | "folder" | "watched" | "recipe";
     /** Expand by default (e.g. when the host knows the corpus is heavy). */
     defaultExpanded?: boolean;
+    /**
+     * On ingest surfaces, render an honest one-line reason when assist isn't
+     * available instead of rendering nothing. Off by default so decorative
+     * surfaces stay quiet.
+     */
+    explainWhenUnavailable?: boolean;
     onChange: (decision: {
       enabled: boolean;
       peerNodeIds: string[];
     }) => void;
   }
 
-  let { corpusId, surface, defaultExpanded = false, onChange }: Props =
-    $props();
+  let {
+    corpusId,
+    surface,
+    defaultExpanded = false,
+    explainWhenUnavailable = false,
+    onChange,
+  }: Props = $props();
 
   let peers = $state<AssistEligiblePeer[]>([]);
   let grantable = $state(false);
   let loaded = $state(false);
+  // Whether the probe itself succeeded. Without this, "the daemon is down"
+  // and "your mesh has no peers" both look like `peers = []`, and we'd tell
+  // the user the wrong thing about a fixable situation.
+  let reachable = $state(true);
   // `defaultExpanded` seeds the disclosure once; `untrack` documents that we
   // intentionally capture only its initial value (no reactive re-sync).
   let expanded = $state(untrack(() => defaultExpanded));
@@ -41,11 +63,25 @@
   let showable = $derived(loaded && grantable && peers.length > 0);
   let hasEligible = $derived(eligible.length > 0);
 
+  // Why the offer can't be shown, in the user's terms. Ordered most-actionable
+  // first: an unreachable daemon is a different fix from an empty mesh, which
+  // is a different fix from an ineligible corpus.
+  let unavailableReason = $derived(
+    !reachable
+      ? "Mesh help unavailable — can't reach the mesh service on this machine."
+      : peers.length === 0
+        ? "Mesh help unavailable — no other machines have joined your mesh yet."
+        : !grantable
+          ? "Mesh help unavailable — this source isn't shareable with peers."
+          : null,
+  );
+
   async function refresh() {
     try {
       const resp = await meshAssistEligiblePeers(corpusId);
       peers = resp.peers;
       grantable = resp.grantable;
+      reachable = true;
       // Default-select eligible+online peers the first time we see them.
       if (!loaded) {
         selected = eligible.map((p) => p.node_id);
@@ -57,9 +93,12 @@
       loaded = true;
       emit();
     } catch {
-      // Mesh not running / daemon unreachable → stay hidden, local-only.
+      // Mesh not running / daemon unreachable → local-only. Recorded as
+      // UNREACHABLE rather than "no peers" so `explainWhenUnavailable`
+      // surfaces can tell the user which of the two it actually is.
       peers = [];
       grantable = false;
+      reachable = false;
       loaded = true;
       emit();
     }
@@ -144,6 +183,11 @@
       </div>
     {/if}
   </div>
+{:else if explainWhenUnavailable && loaded && unavailableReason}
+  <div class="offer unavailable">
+    <span class="spark" aria-hidden="true">✦</span>
+    <span>{unavailableReason}</span>
+  </div>
 {/if}
 
 <style>
@@ -153,6 +197,13 @@
     padding: 0.5rem 0.75rem;
     margin: 0.5rem 0;
     background: var(--color-surface-alt, rgba(0, 0, 0, 0.02));
+  }
+  .unavailable {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.75;
   }
   .offer-toggle {
     display: flex;
