@@ -1097,8 +1097,12 @@ impl MeshInferenceProvider {
     /// OICP peer selection: the single best peer that strictly beats local, or
     /// `None`. Thin wrapper over [`Self::select_peers_ranked`] for callers (the
     /// non-streaming `complete`, tests) that only want the top pick.
-    async fn select_peer(&self, request: &CompletionRequest) -> SinglePeerSelection {
-        let sel = self.select_peers_ranked(request).await;
+    async fn select_peer(
+        &self,
+        request: &CompletionRequest,
+        path: DecisionPath,
+    ) -> SinglePeerSelection {
+        let sel = self.select_peers_ranked(request, path).await;
         SinglePeerSelection {
             pick: sel.peers.into_iter().next(),
             decision_id: sel.decision_id,
@@ -1110,9 +1114,18 @@ impl MeshInferenceProvider {
     /// local is a candidate; the routing cascade tries them in order before
     /// falling back to local, so a 503 from the best peer fails over to the
     /// next-best peer instead of collapsing straight to local.
+    ///
+    /// `path` names WHY this ranking ran: [`DecisionPath::RankedOicp`]
+    /// for a request that carried no named target, or
+    /// [`DecisionPath::NamedFallthrough`] for one whose soft named
+    /// target resolved to nobody. The scoring is identical either way
+    /// — only the record's label differs, so an operator can count
+    /// shared-cluster outages without them vanishing into the ordinary
+    /// ranked population.
     async fn select_peers_ranked(
         &self,
         request: &CompletionRequest,
+        path: DecisionPath,
     ) -> RankedSelection {
         // Glassbox: every stay-local decision below names its gate so
         // the routing outcome is reconstructable from a debug log.
@@ -1130,11 +1143,7 @@ impl MeshInferenceProvider {
         // candidates but do name the gate. "The hub lost" and "the
         // hub was never considered" are different failures and the
         // record has to be able to say which happened.
-        let rec = DecisionBuilder::new(
-            oicp_request_id,
-            DecisionPath::RankedOicp,
-            Self::request_facts(request),
-        );
+        let rec = DecisionBuilder::new(oicp_request_id, path, Self::request_facts(request));
         if !Self::has_routing_signal(request) {
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
@@ -1744,12 +1753,32 @@ impl MeshInferenceProvider {
                 }
                 NamedModelLocation::Unknown => {
                     if soft {
+                        // Fall THROUGH to ranked mesh selection, not
+                        // straight to this node's own model. A soft
+                        // named target is a preference, not a
+                        // constraint — and the household that stood up
+                        // a shared 122B is exactly the household that
+                        // also has a 35B hub on the LAN. Dropping a 4B
+                        // laptop to its own 4B while that hub sits
+                        // free is a pure loss: no latency is bought,
+                        // no privacy is honoured, and the user sees a
+                        // markedly worse answer for no reason.
+                        //
+                        // The `NamedModel` record above already
+                        // recorded that `model_id` resolved to nobody;
+                        // the plan below joins its outcome to the
+                        // FALLTHROUGH record, because the ranked
+                        // scorer is what actually picks the server.
+                        // The two share an `oicp_request_id`, so the
+                        // pair reads as one story.
                         tracing::info!(
                             shared = %model_id,
-                            "mesh-inference: shared model forming/unavailable — falling back to local primary"
+                            "mesh-inference: shared model forming/unavailable — \
+                             falling through to ranked mesh selection"
                         );
-                        let total = self.enter_local_total();
-                        Ok(plan(vec![RouteDecision::LocalFallback { total }]))
+                        Ok(self
+                            .ranked_route_plan(request, DecisionPath::NamedFallthrough)
+                            .await)
                     } else {
                         Err(sovereign_core::error::Error::ModelNotLoaded(format!(
                             "no node in this mesh advertises model '{}' — \
@@ -1760,50 +1789,67 @@ impl MeshInferenceProvider {
                 }
             }
         } else {
-            // Ranked OICP failover: one Soft `Peer` step per peer that beats
-            // local, best-first, then `LocalFallback`. The cascade loop tries
-            // each in order — a 503 / transport failure on the best peer now
-            // fails over to the NEXT peer (Soft `continue`) instead of
-            // collapsing straight to local. `enter_local_total` stays eager so
-            // the gossip publisher sees the (possible) local load on the same
-            // timing it always did, before any peer round-trip decides.
-            let RankedSelection {
-                peers: ranked,
-                decision_id,
-                oicp_request_id,
-            } = self.select_peers_ranked(request).await;
-            let total = self.enter_local_total();
-            if ranked.is_empty() {
-                Ok(RoutePlan {
-                    steps: vec![RouteDecision::LocalFallback { total }],
-                    decision_id,
-                    oicp_request_id,
-                })
-            } else {
-                tracing::info!(
-                    peers = ranked.len(),
-                    "mesh-inference: routing to peer(s) by OICP selection (ranked failover)"
-                );
-                let mut steps = Vec::with_capacity(ranked.len() + 1);
-                for (peer, peer_cand) in ranked {
-                    let ledger = self
-                        .mesh
-                        .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
-                        .await;
-                    steps.push(RouteDecision::Peer {
-                        peer,
-                        peer_cand,
-                        ledger,
-                        disposition: PeerFailureDisposition::Soft,
-                    });
-                }
-                steps.push(RouteDecision::LocalFallback { total });
-                Ok(RoutePlan {
-                    steps,
-                    decision_id,
-                    oicp_request_id,
-                })
-            }
+            Ok(self
+                .ranked_route_plan(request, DecisionPath::RankedOicp)
+                .await)
+        }
+    }
+
+    /// Ranked OICP failover as a route plan: one Soft `Peer` step per
+    /// peer that strictly beats local, best-first, then
+    /// `LocalFallback`. The cascade loop tries each in order — a 503 /
+    /// transport failure on the best peer fails over to the NEXT peer
+    /// (Soft `continue`) instead of collapsing straight to local.
+    /// `enter_local_total` stays eager so the gossip publisher sees the
+    /// (possible) local load on the same timing it always did, before
+    /// any peer round-trip decides.
+    ///
+    /// Two callers, distinguished by `path` alone: the ordinary ranked
+    /// route, and the soft-named fallthrough (a configured shared
+    /// model that nobody in the mesh is currently serving). Sharing
+    /// the assembly is the point — a fallthrough that built its own
+    /// cascade would be free to drift from the one production ranks.
+    async fn ranked_route_plan(
+        &self,
+        request: &CompletionRequest,
+        path: DecisionPath,
+    ) -> RoutePlan {
+        let RankedSelection {
+            peers: ranked,
+            decision_id,
+            oicp_request_id,
+        } = self.select_peers_ranked(request, path).await;
+        let total = self.enter_local_total();
+        if ranked.is_empty() {
+            tracing::debug!(
+                ?path,
+                "mesh-inference: no peer beat local — serving locally"
+            );
+        } else {
+            tracing::info!(
+                ?path,
+                peers = ranked.len(),
+                "mesh-inference: routing to peer(s) by OICP selection (ranked failover)"
+            );
+        }
+        let mut steps = Vec::with_capacity(ranked.len() + 1);
+        for (peer, peer_cand) in ranked {
+            let ledger = self
+                .mesh
+                .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
+                .await;
+            steps.push(RouteDecision::Peer {
+                peer,
+                peer_cand,
+                ledger,
+                disposition: PeerFailureDisposition::Soft,
+            });
+        }
+        steps.push(RouteDecision::LocalFallback { total });
+        RoutePlan {
+            steps,
+            decision_id,
+            oicp_request_id,
         }
     }
 
@@ -2016,10 +2062,16 @@ impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         // Shared-model primary: a node configured to use a mesh-hosted shared
         // model routes its primary (Slow) turn into it, resolved to a `model_id`
-        // so the named path below routes there; degrade to the local model when
-        // the cluster is forming. (The streaming path, `select_route`, adds full
-        // soft peer-failure fallback; this non-streaming path degrades on
-        // unavailability and otherwise routes by name.)
+        // so the named path below routes there; when the cluster is forming or
+        // unreachable, fall THROUGH to the ranked scorer below rather than
+        // collapsing to this node's own model — same rule the streaming
+        // `select_route` applies, for the same reason (see its
+        // `NamedModelLocation::Unknown` arm). Here the fallthrough costs
+        // nothing structural: not rewriting `model_id` leaves the request on
+        // the ordinary ranked path that already runs a few lines down.
+        // (The streaming path additionally adds soft peer-failure fallback;
+        // this non-streaming path routes by name once resolved.)
+        let mut ranked_path = DecisionPath::RankedOicp;
         let _shared_owned;
         let request = if explicit_model_id(request).is_none() {
             match self.shared_primary_id(request) {
@@ -2027,10 +2079,11 @@ impl InferenceProvider for MeshInferenceProvider {
                     NamedModelLocation::Unknown => {
                         tracing::info!(
                             shared = %shared_id,
-                            "mesh-inference: shared model forming — local fallback (complete)"
+                            "mesh-inference: shared model forming/unavailable — \
+                             falling through to ranked mesh selection (complete)"
                         );
-                        let _total = self.enter_local_total();
-                        return self.local.complete(request).await;
+                        ranked_path = DecisionPath::NamedFallthrough;
+                        request
                     }
                     _ => {
                         _shared_owned = CompletionRequest {
@@ -2170,7 +2223,7 @@ impl InferenceProvider for MeshInferenceProvider {
             pick,
             decision_id,
             oicp_request_id,
-        } = self.select_peer(request).await;
+        } = self.select_peer(request, ranked_path).await;
         let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
         if let Some((peer, peer_cand)) = pick {
             tracing::info!(

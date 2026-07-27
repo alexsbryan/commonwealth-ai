@@ -755,6 +755,44 @@ pub fn plan_shards_explicit(
     Some(build_shards_from_counts(counts, &w))
 }
 
+/// Per-device BLOCK-COUNT fractions for `plan`, in device order — the value to
+/// hand llama.cpp as `tensor_split` so its own per-layer device assignment
+/// agrees with the `-ot` overrides built from the same plan.
+///
+/// This exists because `-ot` moves tensor BUFFERS only. llama.cpp keeps a
+/// separate notion of which device owns layer `il`, derived from the device list
+/// + `tensor_split`; with no `tensor_split` it falls back to a VRAM-proportional
+/// default. On a heterogeneous mesh the two rules round differently and the cut
+/// points disagree by a layer — measured 2026-07-27 on Qwen3.5-4B across
+/// RuggedFox+BeefyMac: device weights 40 GB / 116 GB put llama.cpp's cut at
+/// 40/156 ≈ 25.6% of 32 layers ≈ 8.2 (so layer 8 → RPC0) while the byte-mass
+/// plan gives RPC0 exactly 25.0% (blocks 0..=7, so `blk.8.*` → local). That one
+/// layer has its OPS on one device and its WEIGHTS on the other, which is
+/// exactly what `resolve_fused_ops` reports. On a hybrid model the straddled
+/// layer is a Gated DeltaNet layer, its fused kernel is disabled, and the
+/// unfused path's `GGML_OP_SET` reaches the RPC worker with a `buffer == nullptr
+/// && data == nullptr` dst — which passes `create_node`'s asymmetric guard
+/// (ggml-rpc.cpp:1285 only rejects null-buffer-with-non-null-data) and
+/// segfaults the worker in the backend's set op.
+///
+/// Deriving both from one plan removes the disagreement at the source rather
+/// than steering around it. Empty when no device holds blocks. Pure.
+pub fn tensor_split_from_plan(plan: &[NodeShard]) -> Vec<f32> {
+    let total: u32 = plan
+        .iter()
+        .filter_map(|s| s.blocks.map(|(a, b)| b - a + 1))
+        .sum();
+    if total == 0 {
+        return Vec::new();
+    }
+    plan.iter()
+        .map(|s| {
+            let n = s.blocks.map(|(a, b)| b - a + 1).unwrap_or(0);
+            n as f32 / total as f32
+        })
+        .collect()
+}
+
 /// The cacheable output head (LM projection) — placed with the last block-holding
 /// device, distinct from `token_embd` (input) which stays on the host CPU.
 pub fn is_output_tensor(name: &str) -> bool {
