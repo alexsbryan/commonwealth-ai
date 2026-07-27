@@ -210,8 +210,111 @@ impl Default for SimConfig {
 /// arms, not into production first").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arm {
-    /// Arm 0. The production decision on production's beliefs.
+    /// Arm 0. The production decision function on the beliefs
+    /// production's dispatch path was *designed* to produce.
+    ///
+    /// **Read the qualifier — it was not there before F9 (2026-07-27).**
+    /// This arm feeds `rank` an exact local in-flight count
+    /// ([`Sim::local_view_observations`]) and lets peer observations
+    /// accumulate samples through [`scheduler_core::observe_dispatch`].
+    /// Production did neither on the ranked path: `record_dispatch` had
+    /// no caller for the local side at all, and only the non-streaming
+    /// *named* arm calls it for peers. So arm 0 was the as-**designed**
+    /// baseline and [`BlindObservations`](Arm::BlindObservations) the
+    /// as-**shipped** one. Every number recorded against arm 0 before
+    /// 2026-07-27 — §3.1, §4.1.1, §4.1.2, §4.1.3, §4.2.1 — is a
+    /// comparison against the designed system, which is the right
+    /// baseline for "is this policy good?" and the wrong one for "what
+    /// does this mesh do today?".
+    ///
+    /// **Half of that gap has since closed.** F9's local half landed in
+    /// production the same day, so the exact local in-flight count this
+    /// arm supplies is now what the daemon supplies too (it reads
+    /// `in_flight_publisher` at the gather point). The remaining
+    /// divergence is the peer half, and the arm that models today's
+    /// mesh is therefore [`BlindPeerRamp`](Arm::BlindPeerRamp) — **not**
+    /// `BlindObservations`, which is now a historical baseline for the
+    /// pre-fix system. Whoever adds the next arm: compare against
+    /// `BlindPeerRamp` when the question is "what will this do on the
+    /// mesh tonight."
+    ///
+    /// Arm 0 keeps its name and its index because it is the denominator
+    /// every recorded number already references; renaming it would
+    /// invalidate the archive to fix a comment.
     AsImplemented,
+    /// Arm 0 with the local candidate's in-flight count forced to zero
+    /// on every decision — F9's headline half, in isolation.
+    ///
+    /// `load_penalty` (`scoring.rs:274`) reads `in_flight` from the
+    /// local candidate's [`NodeObservations`], and the only writer of
+    /// that field is `observe_dispatch`, reached for the local side
+    /// exclusively through `record_dispatch(None)` — which has **zero
+    /// callers in the repository**. The local candidate is therefore
+    /// scored permanently idle, and the design comment at
+    /// `peer_inference.rs:1198` ("so a hot local slot can lose to an
+    /// idle peer on load") describes behaviour the shipped code cannot
+    /// exhibit.
+    ///
+    /// Separate from [`BlindObservations`](Arm::BlindObservations) for
+    /// the same reason [`ResponseBackpressure`](Arm::ResponseBackpressure)
+    /// is separate from [`FreshSignals`](Arm::FreshSignals): the two
+    /// halves of F9 bias in the same direction, so folding them into one
+    /// arm would report a total without saying which half carries it.
+    BlindLocalLoad,
+    /// F9's peer half in isolation: peer observations frozen at zero
+    /// samples, but the origin's self-observed peer in-flight count
+    /// left intact.
+    ///
+    /// Exists to answer one question about
+    /// [`BlindObservations`](Arm::BlindObservations), which changes two
+    /// things about peers at once. Freezing `samples` pins
+    /// `cold_start_weight` at 0.7 forever; zeroing the self-observed
+    /// in-flight count makes an un-gossiped peer look idle. The first
+    /// biases against offload, the second biases toward it, and a
+    /// single arm carrying both cannot say which one moved the number.
+    /// The delta from here to `BlindObservations` is the in-flight
+    /// component alone.
+    ///
+    /// Not a faithful model of anything on its own — production has
+    /// both — so read it as an attribution instrument, not as a policy.
+    BlindPeerRamp,
+    /// **Both** halves of F9 — the faithful model of what production
+    /// scored up to 2026-07-27, and a historical baseline since.
+    ///
+    /// The local half was fixed that day, so today's mesh is
+    /// [`BlindPeerRamp`](Arm::BlindPeerRamp). This arm is kept because
+    /// the delta between the two *is* the value of that fix (−71% mean
+    /// / −76% p95 on `isolation`, ±1% on four other fleets), and
+    /// deleting it would leave the landing case unreproducible.
+    ///
+    /// [`BlindLocalLoad`](Arm::BlindLocalLoad), plus peer observations
+    /// frozen at zero samples. On the ranked/streaming path — the path
+    /// every anonymous offload takes — nothing calls
+    /// `record_dispatch(Some(..))` either; the sole call site is
+    /// `peer_inference.rs:2173`, the non-streaming *named* arm. So a
+    /// peer's `samples` never leaves 0, which pins `cold_start_weight`
+    /// at `COLD_START_MIN_WEIGHT` (0.7) forever and — the sharper
+    /// consequence — makes `throughput_factor` return neutral 1.0
+    /// regardless of what the peer actually achieved, because its
+    /// source-of-truth gate is `samples >= THROUGHPUT_OBSERVATION_THRESHOLD`
+    /// (`scoring.rs:231`). The streaming path *does* keep
+    /// `tg_tok_s_ewma` current for peers
+    /// (`ThroughputTarget::Peer`, `peer_inference.rs:2402`), so the
+    /// measurement is taken and then refused by a gate the same path
+    /// never opens.
+    ///
+    /// What is deliberately **not** blinded here, because production
+    /// does write it: the peer in-flight count (gossip, and it overrides
+    /// the self-observed value at `scheduler_core.rs:512`), the local
+    /// throughput EWMA (`ThroughputTarget::Local`), and `PeerHealth`
+    /// quarantine. Blinding those would model a system worse than the
+    /// one that shipped.
+    ///
+    /// Both biases point the same way — toward local — which is why
+    /// F9's arithmetic concludes the ranked path is *structurally*
+    /// incapable of preferring a peer on a homogeneous fleet. This arm
+    /// is how that claim gets a number instead of an argument.
+    BlindObservations,
     /// Arm 0 with the staleness removed: the gossiped in-flight count
     /// is the peer's *true* current count. Isolates F1 — the gap
     /// between this and arm 0 is the cost of dead time, and nothing
@@ -492,6 +595,9 @@ impl Arm {
     pub fn label(&self) -> &'static str {
         match self {
             Arm::AsImplemented => "as-implemented",
+            Arm::BlindLocalLoad => "blind-local-load",
+            Arm::BlindPeerRamp => "blind-peer-ramp",
+            Arm::BlindObservations => "blind-observations",
             Arm::FreshSignals => "fresh-signals",
             Arm::TwoChoices => "two-choices",
             Arm::FreshTwoChoices => "fresh+two-choices",
@@ -559,6 +665,36 @@ impl Arm {
         )
     }
 
+    /// Whether the local candidate is scored with an in-flight count of
+    /// zero no matter what this node is actually running — F9's local
+    /// half. See [`BlindLocalLoad`](Arm::BlindLocalLoad).
+    fn blind_local_load(&self) -> bool {
+        matches!(self, Arm::BlindLocalLoad | Arm::BlindObservations)
+    }
+
+    /// Whether peer observations stay frozen at zero samples — F9's
+    /// peer half. Kept distinct from
+    /// [`warm_start`](Arm::warm_start), which moves the same field in
+    /// the opposite direction: `warm_start` asks "what if every decider
+    /// had already finished the ramp?", this asks "what if no decider
+    /// can ever start it?". Both are needed because F7's answer to the
+    /// first turned out to be counter-intuitive.
+    fn blind_peer_samples(&self) -> bool {
+        matches!(self, Arm::BlindPeerRamp | Arm::BlindObservations)
+    }
+
+    /// Whether the origin's *self-observed* in-flight count for a peer
+    /// is frozen at zero — the second thing production's ranked path
+    /// never writes. Narrow by construction: `rank` overrides this
+    /// field with the gossiped count whenever a gossip record exists
+    /// (`scheduler_core.rs:512`), so it only reaches the score for a
+    /// peer never heard from. Separate from
+    /// [`blind_peer_samples`](Arm::blind_peer_samples) because the two
+    /// bias in opposite directions.
+    fn blind_peer_inflight(&self) -> bool {
+        matches!(self, Arm::BlindObservations)
+    }
+
     fn two_choices(&self) -> bool {
         matches!(
             self,
@@ -595,8 +731,15 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 16] = [
+pub const ALL_ARMS: [Arm; 19] = [
     Arm::AsImplemented,
+    // The two F9 arms sit immediately after arm 0 because that is the
+    // order the reading wants: as-designed → as-shipped → candidate
+    // changes. They must not displace index 0, which the scoreboard
+    // dereferences directly as the baseline.
+    Arm::BlindLocalLoad,
+    Arm::BlindPeerRamp,
+    Arm::BlindObservations,
     Arm::FreshSignals,
     Arm::TwoChoices,
     Arm::FreshTwoChoices,
@@ -1422,13 +1565,95 @@ impl Sim {
         result.ranked[picked].view_idx
     }
 
-    /// The origin's view of itself. Load is exact — a node knows its
-    /// own queue with zero delay, and that asymmetry is F1.
+    /// The origin's view of itself.
+    ///
+    /// On arm 0 load is exact — a node knows its own queue with zero
+    /// delay, and that asymmetry against [`PeerCandidateView`]'s three
+    /// age fields is F1.
+    ///
+    /// On the F9 arms it is exact in the other direction: **zero**,
+    /// always, which is what the shipped dispatch path hands the
+    /// scorer. F1's asymmetry is real but it is not the one production
+    /// has; production's decider is blind to *both* sides, and only
+    /// systematically wrong about one of them.
     fn local_view_observations(&self, origin: usize) -> NodeObservations {
         let node = &self.nodes[origin];
+        if self.arm.blind_local_load() {
+            // Exactly the struct `MeshInferenceProvider` constructs at
+            // `peer_inference.rs:559` and then never mutates on the
+            // dispatch path: seeded above the cold-start threshold,
+            // zero in flight, zero failures. The two throughput EWMAs
+            // are carried through from `local_obs` because production
+            // *does* keep those current, via `ThroughputTarget::Local`
+            // on the streaming path — they are the `T` term in F9's
+            // arithmetic and the only local signal that still moves.
+            return NodeObservations {
+                in_flight: 0,
+                samples: sovereign_core::oicp::COLD_START_SAMPLES * 2,
+                recent_failure_rate: 0.0,
+                p50_latency_ms: 0,
+                p95_latency_ms: 0,
+                ttft_ewma_ms: node.local_obs.ttft_ewma_ms,
+                tg_tok_s_ewma: node.local_obs.tg_tok_s_ewma,
+            };
+        }
         NodeObservations {
             in_flight: node.in_flight(),
             ..node.local_obs.clone()
+        }
+    }
+
+    /// What `origin` has learned about `peer` from actually dispatching
+    /// to it — the history half of the peer view, as distinct from the
+    /// gossiped load and the cached manifest.
+    ///
+    /// On the F9 arms this history does not exist. `record_dispatch` /
+    /// `record_success` are called for a peer at exactly one site
+    /// (`peer_inference.rs:2173`/`:2181`, the non-streaming **named**
+    /// arm), so on the ranked path a peer's `samples` never leaves 0.
+    /// Two consequences, and the second is the one that surprises:
+    ///
+    /// 1. `cold_start_weight(0)` pins the peer at 0.7 forever — the
+    ///    permanent form of F7's ramp rather than the transient one.
+    /// 2. `throughput_factor` gates its source-of-truth on
+    ///    `samples >= THROUGHPUT_OBSERVATION_THRESHOLD`
+    ///    (`scoring.rs:231`), so it returns neutral 1.0 *even though*
+    ///    `tg_tok_s_ewma` is being kept current for peers by
+    ///    `ThroughputTarget::Peer`. The mesh measures peer throughput
+    ///    on every stream and then declines to read it.
+    ///
+    /// `in_flight` is zeroed under
+    /// [`blind_peer_inflight`](Arm::blind_peer_inflight) for the same
+    /// reason and with a narrower blast radius: gossip overrides it
+    /// whenever a record exists (`scheduler_core.rs:512`), so it only
+    /// bites for a peer never heard from — where it makes the peer look
+    /// idle rather than loaded. That is a bias *toward* offload, the
+    /// opposite direction to the rest of F9, which is exactly why it is
+    /// a separate switch: [`BlindPeerRamp`](Arm::BlindPeerRamp) leaves
+    /// it alone so the two directions can be told apart. It is kept in
+    /// the faithful arm because it is what production does — a model
+    /// that quietly corrects production's counter-biases would not
+    /// answer the question being asked.
+    fn peer_view_observations(&self, origin: usize, peer: usize) -> NodeObservations {
+        let obs = &self.nodes[origin].peer_obs[peer];
+        if !self.arm.blind_peer_samples() {
+            return obs.clone();
+        }
+        NodeObservations {
+            in_flight: if self.arm.blind_peer_inflight() {
+                0
+            } else {
+                obs.in_flight
+            },
+            samples: 0,
+            recent_failure_rate: 0.0,
+            p50_latency_ms: 0,
+            p95_latency_ms: 0,
+            // Written in production by `ThroughputTarget::Peer`, and
+            // then ignored by the `samples` gate above. Carried so the
+            // arm models the *measurement* being taken.
+            ttft_ewma_ms: obs.ttft_ewma_ms,
+            tg_tok_s_ewma: obs.tg_tok_s_ewma,
         }
     }
 
@@ -1486,7 +1711,7 @@ impl Sim {
                 availability,
                 gossip_last_seen_unix: last_seen_unix,
                 benchmark: self.nodes[peer].benchmark.clone(),
-                observations: self.nodes[origin].peer_obs[peer].clone(),
+                observations: self.peer_view_observations(origin, peer),
                 manifest: Some(PeerManifestView {
                     manifest: self.nodes[peer].manifest.clone(),
                     rtt_ms: rtt,

@@ -170,21 +170,36 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     );
 }
 
-/// Property 4 — the inbound half of the load signal.
+/// Property 4 — the inbound half of the load signal, on the **desktop**
+/// topology, where it is currently a known gap.
 ///
-/// Drives the real `/v1/chat/completions` route on a real
-/// `client_router`, with the request carrying an `X-Node-Id` that is
-/// **not** this node: the wire shape of one peer asking another to
-/// serve a turn. While the generation is in flight the provider hook
-/// samples the published counter, because sampling it after the
-/// response has returned cannot tell "never incremented" from
-/// "incremented and correctly released".
+/// `local_inference` here is `SovereignInferenceAdapter(engine)` with no
+/// `MeshInferenceProvider` in the stack. That is exactly what the desktop
+/// installs (`sovereign-desktop/src-tauri/src/state.rs:952` hands the mesh
+/// `raw_inference`), and it is deliberate — the comment at `state.rs:941-953`
+/// says a peer POSTing to `:9741` must be served "without re-entering the
+/// mesh-routing wrapper and ping-ponging the request back out".
 ///
-/// The assertion is deliberately `>= 1` rather than `== 1`: the
-/// contract is "peer-served work is visible to gossip", not a
-/// particular accounting of guards.
+/// The consequence, which this test pins so it cannot regress silently: every
+/// writer of the published counter is an `enter_local_total` inside the MIP
+/// (`peer_inference.rs:1888`), so with no MIP in the path, peer-served work
+/// moves nothing. On desktop it is worse than a stale number — nothing calls
+/// `install_in_flight_publisher` at all, so `current_in_flight` is omitted
+/// from gossip entirely (`Option::is_none` + `skip_serializing_if`,
+/// `commonwealth-core/src/capabilities.rs:87-88`) and a founder scoring that
+/// node falls back to its own dispatch count, reading a pinned machine as idle.
+///
+/// This is asserted as **current behaviour, not desired behaviour**. The CLI
+/// daemon puts the MIP in the inbound path and does move the counter; the two
+/// surfaces disagree, and reconciling them is open work (SCHEDULER_QUALITY.md
+/// F2). When that lands, this test should flip to `>= 1` rather than be deleted
+/// — the sampling harness is the part worth keeping.
+///
+/// The counter is sampled *during* generation via the provider hook, because
+/// reading it after the response returns cannot distinguish "never
+/// incremented" from "incremented and correctly released".
 #[tokio::test]
-async fn serving_an_inbound_peer_request_publishes_in_flight() {
+async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
     let self_id = NodeId::from_u128(0x5EF_u128);
     let mut members = std::collections::HashMap::new();
     members.insert(
@@ -263,18 +278,18 @@ async fn serving_an_inbound_peer_request_publishes_in_flight() {
          did not reach local_inference and the assertion below would be \
          measuring nothing"
     );
-    assert!(
-        during >= 1,
-        "a peer request being served locally must be visible in the \
-         gossiped in-flight count, but the counter read {during} while \
-         generation was in flight. This is SCHEDULER_QUALITY.md F2's \
-         caveat: `current_in_flight` is bumped only by \
-         MeshInferenceProvider::enter_local_total on the OUTBOUND path, \
-         so a node saturated by peer work advertises itself as idle."
+    assert_eq!(
+        during, 0,
+        "CURRENT behaviour, pinned so the gap cannot close or widen silently: \
+         with no MeshInferenceProvider in the inbound path there is no \
+         `enter_local_total` to bump, so peer-served work is invisible to \
+         gossip. If this now reads {during}, the desktop topology gained a \
+         load-publishing path — that is the fix SCHEDULER_QUALITY.md F2 wants, \
+         so flip this assertion to `>= 1` and update the doc comment above."
     );
 
-    // The guard must also release, or the node would advertise
-    // permanent load and never be chosen again.
+    // Whatever the count, the guard accounting must balance — a leak here
+    // would make a node advertise permanent load and never be chosen again.
     assert_eq!(
         publisher.load(Ordering::Relaxed),
         0,

@@ -2253,3 +2253,139 @@ fn is_fresh_backpressure_worth_more_to_predicted_time_than_to_the_product() {
         }
     }
 }
+
+/// **F9, priced — and the two halves point in opposite directions.**
+///
+/// The finding is that the scorer reads a local-load counter nothing
+/// writes: `record_dispatch(None)` has zero callers, so
+/// `load_penalty` is permanently 1.0 for the local candidate. The
+/// same is true of peers on the ranked path — the sole
+/// `record_dispatch(Some(..))` call site is the non-streaming *named*
+/// arm — so peer `samples` never leaves 0 either.
+///
+/// The awkward part is that arm 0 does **not** model any of this: it
+/// hands `rank` an exact local queue depth and lets peer samples
+/// accumulate. Arm 0 is therefore the as-*designed* system, and every
+/// number recorded against it is a comparison against a mesh that
+/// does not exist. [`Arm::BlindObservations`] is the as-*shipped*
+/// one, and the arms in between exist to say which half of the
+/// blindness carries the difference.
+///
+/// The reason to split rather than report one total: the two halves
+/// bias in opposite directions. A blind local slot never looks busy,
+/// so the origin keeps work it should send away. A permanently cold
+/// peer never looks trustworthy, so the origin sends away less than
+/// it otherwise would. Reporting only the sum would net two real
+/// effects into one small number.
+///
+/// The wiring checks are asserted because a null result depends on
+/// them, and one directional claim is asserted because it is a
+/// property of the arithmetic rather than of these fleets:
+/// `load_penalty` is monotonically decreasing in `in_flight`, so
+/// zeroing the local count can only raise the local score, and can
+/// therefore only reduce offload. A run where blinding the local
+/// count *increased* offload would mean the arm is wired backwards.
+#[test]
+fn what_the_scorer_loses_by_never_seeing_its_own_load() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let arms = [
+        Arm::AsImplemented,
+        Arm::BlindLocalLoad,
+        Arm::BlindPeerRamp,
+        Arm::BlindObservations,
+    ];
+
+    // ---- wiring, on one scenario, before any table is believed ----
+    let s = scenario::isolation(SEED);
+    let local_loads = |r: &RunReport| -> Vec<f32> {
+        candidates(r)
+            .iter()
+            .filter(|c| c.kind == sovereign_mesh::decision_log::CandidateKind::Local)
+            .map(|c| c.score.load_penalty)
+            .collect()
+    };
+    let peer_samples = |r: &RunReport| -> Vec<u32> {
+        candidates(r)
+            .iter()
+            .filter(|c| c.kind == sovereign_mesh::decision_log::CandidateKind::Peer)
+            .map(|c| c.inputs.samples)
+            .collect()
+    };
+    let arm0 = run(&s, Arm::AsImplemented, SEED);
+    let blind_local = run(&s, Arm::BlindLocalLoad, SEED);
+    let blind_ramp = run(&s, Arm::BlindPeerRamp, SEED);
+
+    assert!(
+        local_loads(&arm0).iter().any(|p| *p < 0.999),
+        "arm 0 never penalised the local slot for its own load — \
+         nothing for the blind arm to take away, so the table below is unreadable"
+    );
+    assert!(
+        local_loads(&blind_local).iter().all(|p| (*p - 1.0).abs() < 1e-6),
+        "blind-local-load left a local load penalty in place — the arm is not wired"
+    );
+    assert!(
+        peer_samples(&arm0).iter().any(|n| *n > 0),
+        "arm 0 never accumulated a peer sample — nothing for blind-peer-ramp to freeze"
+    );
+    assert!(
+        peer_samples(&blind_ramp).iter().all(|n| *n == 0),
+        "blind-peer-ramp let a peer accumulate samples — the arm is not wired"
+    );
+
+    // ---- the table ----
+    println!("\n=== F9 — what each half of the observation blindness costs ===");
+    println!(
+        "  {:<20} {:>9} {:>9} {:>9}   (mean over {} seeds)",
+        "arm", "mean", "p95", "offloads", seeds.len()
+    );
+    for sc in [
+        scenario::household_evening_12(SEED),
+        scenario::pair(SEED),
+        scenario::twin_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+        scenario::isolation(SEED),
+    ] {
+        println!("── {} ──", sc.name);
+        let mut baseline = (0.0f64, 0.0f64);
+        for (i, arm) in arms.iter().enumerate() {
+            let (mut means, mut p95s, mut offs) = (0.0f64, 0.0f64, 0.0f64);
+            for seed in seeds {
+                let r = run(&sc, *arm, seed);
+                let scored = score(&r, GOSSIP_WINDOW_MS, None);
+                means += mean_total_ms(&r) / 1000.0;
+                p95s += scored.records.p95_total_ms / 1000.0;
+                offs += offloads(&r) as f64;
+            }
+            let n = seeds.len() as f64;
+            let (m, p, o) = (means / n, p95s / n, offs / n);
+            if i == 0 {
+                baseline = (m, p);
+                println!("  {:<20} {m:>8.1}s {p:>8.1}s {o:>9.1}", arm.label());
+            } else {
+                println!(
+                    "  {:<20} {m:>8.1}s {p:>8.1}s {o:>9.1}   mean {:+.0}%  p95 {:+.0}%",
+                    arm.label(),
+                    100.0 * (m - baseline.0) / baseline.0.max(0.001),
+                    100.0 * (p - baseline.1) / baseline.1.max(0.001),
+                );
+            }
+        }
+    }
+
+    // ---- the one directional claim that is arithmetic, not fleet ----
+    for sc in [scenario::isolation(SEED), scenario::twin_hubs(SEED)] {
+        for seed in seeds {
+            let wired = offloads(&run(&sc, Arm::BlindPeerRamp, seed));
+            let blind = offloads(&run(&sc, Arm::BlindObservations, seed));
+            assert!(
+                blind <= wired,
+                "{} seed {seed}: blinding the local load INCREASED offload ({wired} → {blind}). \
+                 `load_penalty` is monotonically decreasing in `in_flight`, so zeroing the local \
+                 count can only raise the local score — the arm must be wired backwards",
+                sc.name
+            );
+        }
+    }
+    let _ = (blind_local, blind_ramp);
+}

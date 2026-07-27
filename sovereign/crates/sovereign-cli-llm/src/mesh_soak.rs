@@ -691,6 +691,91 @@ mod tests {
         assert_eq!(m["load_success_rate"], 1.0);
     }
 
+    /// The shape `mesh-soak.sh` used to emit on a FAILING checkpoint is
+    /// invisible to the extractor — which is why `invariant_violation_rate`
+    /// could never rise above 0.0 no matter how badly a run failed.
+    ///
+    /// `check()` took the CLI's human branch, so a failure produced
+    /// `{phase, ok:false, detail}` with no `violations` key, and the `else if`
+    /// above requires that key. The gate therefore reported perfect invariant
+    /// health on a run that had just failed every checkpoint. `check()` now
+    /// emits the `--json` record verbatim (it always carries `violations`), and
+    /// this test is the pin: revert that flag and the first assertion here goes
+    /// red instead of the defect going unnoticed for another two months.
+    #[test]
+    fn a_failing_checkpoint_is_only_counted_when_it_carries_violations() {
+        // What the harness emits now.
+        let json_branch = vec![
+            serde_json::json!({"phase":"healthy","ok":true,"violations":[],"founder_degraded":[]}),
+            serde_json::json!({"phase":"healed","ok":false,"founder_degraded":[],
+                               "violations":[{"invariant":"convergence","detail":"node1 disagrees"}]}),
+        ];
+        assert_eq!(
+            soak_slis(&json_branch)["invariant_violation_rate"],
+            0.5,
+            "a failing checkpoint must move the rate"
+        );
+
+        // What it emitted before — retained as the negative control so the
+        // reason the flag is load-bearing stays legible to the next reader.
+        let human_branch = vec![
+            serde_json::json!({"phase":"healthy","ok":true,"violations":[]}),
+            serde_json::json!({"phase":"healed","ok":false,"detail":"convergence failed"}),
+        ];
+        assert_eq!(
+            soak_slis(&human_branch)["invariant_violation_rate"],
+            0.0,
+            "documents the defect: a failing checkpoint with no `violations` key \
+             is silently dropped, so the SLI reads clean on a failed run"
+        );
+    }
+
+    /// The cross-node offload verdict must reach the same SLI.
+    ///
+    /// `run_offload_probe` is shell, so nothing type-checks the record it
+    /// writes; this pins the exact JSON it emits against the extractor. The
+    /// probe deliberately reuses `invariant_violation_rate` rather than adding
+    /// its own SLI: the offload rate is only comparable between runs that
+    /// actually ran the probe, so a crash-lane baseline would false-alarm every
+    /// offload run.
+    #[test]
+    fn the_offload_verdict_feeds_the_violation_rate() {
+        let served = serde_json::json!({
+            "phase":"offload-serviceable","ok":true,"violations":[],
+            "detail":"2/3 turns served by a peer (local=1 fail=0)",
+            "models":"x @ peer node1 | y | z @ peer node1"
+        });
+        let never_offloaded = serde_json::json!({
+            "phase":"offload-serviceable","ok":false,
+            "violations":[{"invariant":"peer_offload_serviceable",
+                           "detail":"NO turn was served by a peer (local=3 fail=0 codes=200,200,200)"}],
+            "models":"a | b | c"
+        });
+        assert_eq!(soak_slis(&[served.clone()])["invariant_violation_rate"], 0.0);
+        assert_eq!(
+            soak_slis(&[never_offloaded.clone()])["invariant_violation_rate"],
+            1.0,
+            "a total offload outage must register as a violation, not as silence"
+        );
+        assert_eq!(
+            soak_slis(&[served, never_offloaded])["invariant_violation_rate"],
+            0.5
+        );
+
+        // The not-applicable record (fewer than 2 nodes) must NOT count as a
+        // pass: it carries no `violations` key precisely so it stays out of the
+        // denominator rather than diluting a real failure into looking fine.
+        let skipped = serde_json::json!({
+            "kind":"offload","applicable":false,"detail":"needs >=2 nodes"
+        });
+        let m = soak_slis(&[skipped]);
+        assert_eq!(m["invariant_violation_rate"], 0.0);
+        assert_eq!(
+            m["load_success_rate"], 1.0,
+            "a skipped probe must not be mistaken for a load sample"
+        );
+    }
+
     #[test]
     fn gate_flags_regression_past_tolerance() {
         let base: BTreeMap<String, f64> = [

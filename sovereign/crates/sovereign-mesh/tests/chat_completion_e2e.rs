@@ -206,6 +206,58 @@ async fn chat_completions_handler(
     Sse::new(stream).into_response()
 }
 
+/// Bodies the mock peer actually received, in arrival order.
+type BodyLog = Arc<std::sync::Mutex<Vec<serde_json::Value>>>;
+
+/// Same SSE response as `chat_completions_handler`, but records the
+/// request body first.
+///
+/// The plain mock accepts any body and never resolves the `model`
+/// field, which is precisely why it cannot catch a dispatch that
+/// names a model the receiving node does not advertise — it proves
+/// the transport works, not that the payload is serviceable. This
+/// variant exists so a test can assert on what actually goes on the
+/// wire.
+async fn capturing_chat_handler(
+    axum::extract::State(log): axum::extract::State<BodyLog>,
+    Query(_q): Query<StreamQuery>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    log.lock().expect("body log poisoned").push(body);
+    let delta = |s: &str| {
+        serde_json::json!({
+            "choices": [{
+                "index": 0,
+                "delta": { "content": s },
+                "finish_reason": null,
+            }]
+        })
+        .to_string()
+    };
+    let (first, second) = PEER_RESPONSE_TEXT.split_at(PEER_RESPONSE_TEXT.len() / 2);
+    let events = vec![
+        Ok::<_, std::convert::Infallible>(Event::default().data(delta(first))),
+        Ok(Event::default().data(delta(second))),
+        Ok(Event::default().data("[DONE]")),
+    ];
+    Sse::new(futures::stream::iter(events)).into_response()
+}
+
+async fn spawn_capturing_peer() -> (SocketAddr, BodyLog) {
+    let log: BodyLog = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route("/oicp/v1/capabilities", get(capabilities_handler))
+        .route("/v1/chat/completions", post(capturing_chat_handler))
+        .with_state(Arc::clone(&log));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    (addr, log)
+}
+
 async fn spawn_mock_peer() -> SocketAddr {
     let app = Router::new()
         .route("/oicp/v1/capabilities", get(capabilities_handler))
@@ -963,5 +1015,497 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     assert!(
         model_id.contains("@ peer Founder"),
         "OICP route should still attribute to peer; got {model_id:?}"
+    );
+}
+
+/// An unnamed ranked dispatch must put a model field on the wire that
+/// the receiving peer can actually resolve.
+///
+/// `explicit_model_id` (`peer_inference.rs:2028`) and `build_request`
+/// (`oicp-client/src/lib.rs:239`) disagree about what "unnamed" means.
+/// The former trims and rejects empty, so `None`, `Some("")` and
+/// `Some("  ")` all fall through to the ranked path. The latter matches
+/// only on `is_none()`, and maps that case to the peer provider's own
+/// `model_id` — which `provider_for_peer` (`peer_inference.rs:2053`)
+/// hardcodes to the placeholder `"mesh-peer"`. Nobody advertises that
+/// name, so the receiving node's named path returns `ModelNotLoaded`
+/// and 503s (confirmed against a live daemon, 2026-07-27).
+///
+/// `None` is not a corner case: `build_completion_request`
+/// (`inference_adapter.rs:324-329`) normalises empty/whitespace to
+/// `None`, so it is the ONLY shape the HTTP path can produce for a
+/// request with no model pinned.
+///
+/// Latency matters because `latency_to_speed(Normal|Extended)` is
+/// `Speed::Slow` (`slot_policy.rs:196-201`), which is the arm that
+/// substitutes the placeholder. Fast-class requests send `""` and are
+/// unaffected — this is why fast-lane offload works and knowledge
+/// turns do not.
+///
+/// The sibling tests here cannot catch this: `chat_completions_handler`
+/// accepts any body and never resolves `model`, so it proves the
+/// transport works rather than that the payload is serviceable.
+#[tokio::test]
+async fn an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve() {
+    let (peer_addr, bodies) = spawn_capturing_peer().await;
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![format!("http://{}/v1", peer_addr)],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        gossip_last_seen_unix: 0,
+        transport: None,
+    }];
+    let wrapper =
+        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+
+    // Normal latency + MeshAllowed, model_id LEFT UNSET — the exact
+    // shape `build_completion_request` produces for an inbound chat
+    // that pins no model.
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Normal)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let request = CompletionRequest::new("Summarise the argument for compatibilism.")
+        .with_speed(Speed::Slow)
+        .with_oicp(envelope);
+
+    let (stream, _model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("ranked route should reach the peer");
+    // Drain so the dispatch completes before we read the log.
+    let _: Vec<_> = stream.collect().await;
+
+    let body = bodies
+        .lock()
+        .expect("body log poisoned")
+        .first()
+        .cloned()
+        .expect("setup sanity: the peer was never dispatched to at all");
+
+    let model = body["model"].as_str().unwrap_or("<missing>");
+    assert_ne!(
+        model, "mesh-peer",
+        "the ranked dispatch put the peer provider's placeholder id on the wire. \
+         No node advertises 'mesh-peer', so the receiving peer's named path returns \
+         ModelNotLoaded and 503s; the origin then records a peer failure and falls \
+         back to local, quarantining a healthy peer after three strikes. Every \
+         unnamed Normal/Extended offload is affected. Full body: {body}"
+    );
+    assert!(
+        model.trim().is_empty(),
+        "an unnamed ranked dispatch must stay unnamed on the wire so the peer routes \
+         on the OICP envelope, but it carried model={model:?}. Full body: {body}"
+    );
+    assert!(
+        body.get("oicp").is_some(),
+        "dropping the envelope leaves the peer with neither a resolvable name nor a \
+         routing opinion. Full body: {body}"
+    );
+}
+
+// ── Model-resolving mock peer — serviceability, not just transport ──
+//
+// `chat_completions_handler` above accepts ANY body and never looks at
+// `model`. That is why twelve passing tests in this file coexisted with a
+// total outage of anonymous peer offload for weeks: every unnamed
+// Normal/Extended dispatch carried the unservable placeholder
+// `"mesh-peer"`, and a mock that never resolves a name cannot notice.
+//
+// This peer resolves `model` the way a receiving daemon does:
+//
+//   * a non-empty `model` it does not advertise → the 503 a real node
+//     returns when `locate_named_model` yields `Unknown` and the request
+//     becomes `Error::ModelNotLoaded` (`peer_inference.rs:1783-1787`);
+//   * an empty `model` → route on the OICP envelope, which is what the
+//     ranked path intends. No envelope either is a 400, because the
+//     request then carries neither a resolvable name nor a routing
+//     opinion and no receiver could do anything with it.
+//
+// The servable set is derived FROM the advertised manifest rather than
+// listed separately, so the two cannot drift apart — a mock whose
+// "what I serve" and "what I advertise" disagree is how you get a green
+// suite over a broken fleet.
+
+/// What the resolving peer did, in arrival order.
+#[derive(Default)]
+struct PeerLedger {
+    bodies: Vec<serde_json::Value>,
+    /// Requests this peer actually generated tokens for.
+    served: usize,
+    /// Requests refused because `model` named something it does not
+    /// advertise — the outage signature.
+    refused_unresolvable: usize,
+}
+
+type PeerLedgerHandle = Arc<std::sync::Mutex<PeerLedger>>;
+
+struct ResolvingPeerState {
+    manifest: ProviderManifest,
+    advertised: Vec<String>,
+    ledger: PeerLedgerHandle,
+}
+
+/// `two_slot_manifest` plus the `primary` / `commonwealth/primary` alias
+/// rows a real node emits off its Slow slot
+/// (`oicp_synthesis.rs:149-195`). The soak probe drives the named-alias
+/// class, so the in-process peer advertises the same shape.
+fn aliased_manifest() -> ProviderManifest {
+    let mut manifest = two_slot_manifest(Vec::new());
+    for alias in ["commonwealth/primary", "primary"] {
+        manifest.models.push(ProviderModel {
+            id: alias.into(),
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb: Some(5.5),
+            claims: vec![CapabilityClaim::new(
+                CapabilityHint::general(),
+                LatencyClass::Normal,
+                32_768,
+                4_000,
+                0.80,
+            )],
+            fingerprint: None,
+        });
+    }
+    manifest
+}
+
+fn canned_sse_response() -> axum::response::Response {
+    let delta = |s: &str| {
+        serde_json::json!({
+            "choices": [{
+                "index": 0,
+                "delta": { "content": s },
+                "finish_reason": null,
+            }]
+        })
+        .to_string()
+    };
+    let (first, second) = PEER_RESPONSE_TEXT.split_at(PEER_RESPONSE_TEXT.len() / 2);
+    let events = vec![
+        Ok::<_, std::convert::Infallible>(Event::default().data(delta(first))),
+        Ok(Event::default().data(delta(second))),
+        Ok(Event::default().data("[DONE]")),
+    ];
+    Sse::new(futures::stream::iter(events)).into_response()
+}
+
+async fn resolving_capabilities_handler(
+    axum::extract::State(state): axum::extract::State<Arc<ResolvingPeerState>>,
+) -> impl IntoResponse {
+    Json(state.manifest.clone())
+}
+
+async fn resolving_chat_handler(
+    axum::extract::State(state): axum::extract::State<Arc<ResolvingPeerState>>,
+    Query(_q): Query<StreamQuery>,
+    Json(body): Json<serde_json::Value>,
+) -> axum::response::Response {
+    let model = body["model"].as_str().unwrap_or("").trim().to_string();
+    let has_envelope = body.get("oicp").is_some();
+    let unresolvable = !model.is_empty() && !state.advertised.iter().any(|id| *id == model);
+    let anonymous_without_envelope = model.is_empty() && !has_envelope;
+
+    {
+        let mut ledger = state.ledger.lock().expect("ledger poisoned");
+        ledger.bodies.push(body.clone());
+        if unresolvable {
+            ledger.refused_unresolvable += 1;
+        } else if !anonymous_without_envelope {
+            ledger.served += 1;
+        }
+    }
+
+    if unresolvable {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": {
+                    "message": format!("no node in this mesh advertises model '{model}'"),
+                    "type": "model_not_loaded",
+                }
+            })),
+        )
+            .into_response();
+    }
+    if anonymous_without_envelope {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": { "message": "anonymous request carried no OICP envelope" }
+            })),
+        )
+            .into_response();
+    }
+    canned_sse_response()
+}
+
+async fn spawn_resolving_peer() -> (SocketAddr, PeerLedgerHandle) {
+    let manifest = aliased_manifest();
+    let advertised: Vec<String> = manifest.models.iter().map(|m| m.id.clone()).collect();
+    let ledger: PeerLedgerHandle = Arc::new(std::sync::Mutex::new(PeerLedger::default()));
+    let state = Arc::new(ResolvingPeerState {
+        manifest,
+        advertised,
+        ledger: Arc::clone(&ledger),
+    });
+    let app = Router::new()
+        .route("/oicp/v1/capabilities", get(resolving_capabilities_handler))
+        .route("/v1/chat/completions", post(resolving_chat_handler))
+        .with_state(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    (addr, ledger)
+}
+
+fn founder_endpoint(addr: SocketAddr) -> PeerInferenceEndpoint {
+    PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![format!("http://{}/v1", addr)],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        gossip_last_seen_unix: 0,
+        transport: None,
+    }
+}
+
+fn mesh_allowed_envelope() -> InferenceRequirements {
+    InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Normal)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed)
+}
+
+fn provider_with_resolving_peer(addr: SocketAddr) -> MeshInferenceProvider {
+    MeshInferenceProvider::with_peer_source(
+        local_byom(),
+        Arc::new(StubPeerSource {
+            peers: vec![founder_endpoint(addr)],
+        }),
+    )
+}
+
+async fn drain(
+    stream: impl futures::Stream<Item = Result<String, sovereign_core::error::Error>>,
+) -> String {
+    let mut collected = String::new();
+    let mut stream = Box::pin(stream);
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.expect("stream chunk should be Ok"));
+    }
+    collected
+}
+
+/// The instrument itself must discriminate. Asserted directly against the
+/// mock rather than through the scheduler, because every serviceability
+/// claim below rests on this: a permissive mock would let all three
+/// dispatch-class tests pass vacuously, which is precisely the failure
+/// mode that let `"mesh-peer"` survive twelve green e2e tests.
+#[tokio::test]
+async fn the_resolving_peer_refuses_a_model_it_does_not_advertise() {
+    let (addr, ledger) = spawn_resolving_peer().await;
+    let client = reqwest::Client::new();
+
+    let refused = client
+        .post(format!("http://{addr}/v1/chat/completions"))
+        .json(&serde_json::json!({
+            "model": "mesh-peer",
+            "stream": true,
+            "messages": [{"role": "user", "content": "hi"}],
+        }))
+        .send()
+        .await
+        .expect("mock peer should answer");
+    assert_eq!(
+        refused.status().as_u16(),
+        503,
+        "an unadvertised model must draw the same 503 a real daemon returns \
+         from locate_named_model → ModelNotLoaded"
+    );
+
+    let accepted = client
+        .post(format!("http://{addr}/v1/chat/completions"))
+        .json(&serde_json::json!({
+            "model": "Qwen3.5-9B.test",
+            "stream": true,
+            "messages": [{"role": "user", "content": "hi"}],
+        }))
+        .send()
+        .await
+        .expect("mock peer should answer");
+    assert_eq!(
+        accepted.status().as_u16(),
+        200,
+        "an advertised model must be served — otherwise the mock refuses \
+         everything and proves nothing"
+    );
+
+    let ledger = ledger.lock().expect("ledger poisoned");
+    assert_eq!(ledger.refused_unresolvable, 1);
+    assert_eq!(ledger.served, 1);
+}
+
+/// Class A — named dispatch. A `model` the peer advertises and the local
+/// side does not must be SERVED by the peer, not merely accepted by it.
+///
+/// Deliberately uses a peer-only id rather than the `primary` alias: the
+/// local stub's `model_id_for` returns its id for every speed, so
+/// `build_self_manifest` advertises `primary` locally too, and
+/// `locate_named_model`'s in-flight tiebreak (`peer_inference.rs:1501`)
+/// then keeps an idle origin local — correctly. Driving the alias class
+/// needs a non-zero `local_inflight_by_model`, which only real
+/// concurrency produces; that is the soak probe's job, not this test's.
+#[tokio::test]
+async fn a_named_dispatch_is_served_by_the_peer_that_advertises_it() {
+    let (addr, ledger) = spawn_resolving_peer().await;
+    let wrapper = provider_with_resolving_peer(addr);
+
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Slow)
+        .with_model_id("Qwen3.5-9B.test");
+
+    let (stream, attribution) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("a named dispatch for a peer-advertised model must reach the peer");
+    let text = drain(stream).await;
+
+    assert_eq!(
+        text, PEER_RESPONSE_TEXT,
+        "the tokens must have come from the peer, not a local fallback"
+    );
+    assert!(
+        attribution.contains("@ peer Founder"),
+        "attribution must name the serving peer; got {attribution:?}"
+    );
+
+    let ledger = ledger.lock().expect("ledger poisoned");
+    assert_eq!(ledger.served, 1, "peer served exactly one request");
+    assert_eq!(
+        ledger.refused_unresolvable, 0,
+        "the dispatch named something the peer could not resolve: {:?}",
+        ledger.bodies
+    );
+}
+
+/// Class B — ranked anonymous. The class that was totally broken.
+///
+/// This is the test that would have caught `"mesh-peer"` on day one:
+/// against a peer that resolves `model`, an unnamed dispatch carrying the
+/// placeholder draws a 503, the cascade exhausts, and the request lands on
+/// a local fallback that cannot answer — so the assertion below fails
+/// loudly instead of certifying a transport that serves nobody.
+#[tokio::test]
+async fn an_anonymous_ranked_dispatch_is_actually_served_by_the_peer() {
+    let (addr, ledger) = spawn_resolving_peer().await;
+    let wrapper = provider_with_resolving_peer(addr);
+
+    // model_id LEFT UNSET — the only shape `build_completion_request`
+    // (`inference_adapter.rs:324-329`) produces for an inbound chat that
+    // pins no model.
+    let request = CompletionRequest::new("Summarise the argument for compatibilism.")
+        .with_speed(Speed::Slow)
+        .with_oicp(mesh_allowed_envelope());
+
+    let (stream, attribution) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("an anonymous ranked dispatch must be servable by the peer");
+    let text = drain(stream).await;
+
+    assert_eq!(
+        text, PEER_RESPONSE_TEXT,
+        "the peer must have generated the tokens; a local fallback here means \
+         the dispatch was unservable"
+    );
+    assert!(
+        attribution.contains("@ peer Founder"),
+        "attribution must name the serving peer; got {attribution:?}"
+    );
+
+    let ledger = ledger.lock().expect("ledger poisoned");
+    assert_eq!(
+        ledger.refused_unresolvable, 0,
+        "the peer refused the dispatch as unresolvable — this is the \
+         'mesh-peer' outage signature. Bodies: {:?}",
+        ledger.bodies
+    );
+    assert_eq!(ledger.served, 1, "peer served exactly one request");
+}
+
+/// Class C — shared primary (soft named). Pins CURRENT behaviour,
+/// including a known gap it does not fix.
+///
+/// `select_route` resolves the shared target into a local variable
+/// (`peer_inference.rs:1665-1668`) but the streaming dispatch at `:2601`
+/// sends the UNTOUCHED request, so the shared model id never reaches the
+/// wire — the peer serves off the envelope instead. That is honest routing
+/// but not target-honouring: a request for a 122B shared primary can land
+/// on a peer's 35B. Non-streaming `complete` does it correctly
+/// (`:2086-2092` builds an owned copy).
+///
+/// Fixing it means deciding whether to pin `peer_cand.model_id` on
+/// dispatch, which also changes RANKED semantics — a design call. So this
+/// test asserts the gap rather than papering over it: if someone closes
+/// it, this test fails and they update it deliberately.
+#[tokio::test]
+async fn a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target() {
+    let (addr, ledger) = spawn_resolving_peer().await;
+    let wrapper = provider_with_resolving_peer(addr);
+    // Advertised by the peer, not by the local stub.
+    wrapper.set_shared_model_id(Some("Qwen3.5-27B.test".into()));
+
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Slow)
+        .with_oicp(mesh_allowed_envelope());
+
+    let (stream, attribution) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("a shared-primary request must reach the mesh");
+    let text = drain(stream).await;
+
+    assert_eq!(text, PEER_RESPONSE_TEXT, "the peer must have served it");
+    assert!(
+        attribution.contains("@ peer Founder"),
+        "attribution must name the serving peer; got {attribution:?}"
+    );
+
+    let ledger = ledger.lock().expect("ledger poisoned");
+    assert_eq!(ledger.served, 1);
+    assert_eq!(
+        ledger.refused_unresolvable, 0,
+        "bodies: {:?}",
+        ledger.bodies
+    );
+
+    let wire_model = ledger.bodies[0]["model"].as_str().unwrap_or("<missing>");
+    assert!(
+        wire_model.trim().is_empty(),
+        "PINNED GAP, not an endorsement: streaming shared-primary currently \
+         drops the resolved target and lets the peer route on the envelope, so \
+         the wire model is empty. If this now carries \
+         'Qwen3.5-27B.test', the gap at peer_inference.rs:2601 has been closed \
+         — update this test deliberately. Got {wire_model:?}"
     );
 }
