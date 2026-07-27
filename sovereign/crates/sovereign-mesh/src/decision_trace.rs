@@ -338,6 +338,7 @@ mod tests {
                 &NodeObservations::default(),
                 LoadSource::Gossip,
             ),
+            tier_band: None,
         }
     }
 

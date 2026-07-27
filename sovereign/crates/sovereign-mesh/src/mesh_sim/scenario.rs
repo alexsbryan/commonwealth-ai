@@ -253,6 +253,21 @@ fn laptop(name: &str, gap_s: f64) -> NodeSpec {
     }
 }
 
+/// A capable node — the same model, the same size, the same band as
+/// [`hub`], on a *different machine*.
+///
+/// Band membership is a function of `size_gb` alone, so every node
+/// built here lands in band 0 next to a plain `hub`. What differs is
+/// the only thing left: how fast the machine runs. That separation is
+/// the whole point — see [`mixed_hubs`].
+fn hub_speed(name: &str, pp_tok_s: f32, tg_tok_s: f32, gap_s: f64) -> NodeSpec {
+    NodeSpec {
+        hardware: Hardware { pp_tok_s, tg_tok_s },
+        mean_arrival_gap_s: Some(gap_s),
+        ..hub(name)
+    }
+}
+
 /// Uniform LAN: everyone 8ms from everyone.
 fn lan_rtts(n: usize) -> Vec<Vec<u32>> {
     (0..n)
@@ -342,6 +357,68 @@ pub fn twin_hubs(seed: u64) -> Scenario {
     let arrivals = generate_arrivals(&nodes, duration_ms, seed);
     Scenario {
         name: "twin-hubs".into(),
+        rtt_ms: lan_rtts(nodes.len()),
+        nodes,
+        duration_ms,
+        arrivals,
+    }
+}
+
+/// Three capable nodes of **different speeds**, plus enough load to
+/// matter and not enough to saturate them.
+///
+/// §4.1.1 measured the predicted-time objective against the product at
+/// *constant quality* — both arms wearing the tier floor, so both
+/// answering from the same band — and found predicted-time ~5% worse.
+/// That number came from one fleet, because `twin_hubs` was the only
+/// one in the suite whose top band could absorb the offered load; on
+/// the other two the floor's latency is a queue that never drains, and
+/// comparing schedulers inside an unbounded queue measures the fleet's
+/// capacity rather than anyone's policy. This is the second such fleet.
+///
+/// **It is deliberately the opposite bracket.** `twin_hubs` band 0 is
+/// three *identical* hubs, so a predicted-time objective has nothing to
+/// discriminate on but a stale gossiped queue count — the condition
+/// most hostile to it. Here band 0 holds a 34 tok/s machine, a 25 tok/s
+/// machine and an 11 tok/s machine running the same 35B: real speed
+/// variance, which is exactly what predicting a completion time is
+/// *for*. Read the two together as a bracket around the honest answer,
+/// not as one fleet agreeing with another.
+///
+/// Two properties are arithmetic rather than hope, and both should be
+/// re-derived if these numbers are edited:
+///
+/// - **Band 0 has capacity.** Mean knowledge turn is ~8.5k prompt
+///   tokens and ~575 output tokens, so service is ~20s / ~27s / ~62s on
+///   the three hubs — an aggregate ~0.10 turns/s. Offered knowledge
+///   load is 0.85 × (3/900 + 3/240 + 6/240) ≈ 0.035 turns/s, about a
+///   third of that. Even a policy that herds every turn onto the
+///   *fastest* hub alone runs it at ~70%: the tail gets expensive, the
+///   queue stays finite. Latency differences here are scheduling.
+/// - **The scorer is partly blind to the variance, and predicted time
+///   is not.** `throughput_factor` clamps to 1.0 at 20 tok/s
+///   (`scoring.rs`), so the product cannot tell the 34 tok/s hub from
+///   the 25 tok/s one — the F3 finding with something riding on it —
+///   while the 11 tok/s hub does score down. So the product sees one of
+///   the two speed gaps and the predicted-time objective sees both.
+pub fn mixed_hubs(seed: u64) -> Scenario {
+    let mut nodes = vec![
+        // A 4090-class box, a Strix-Halo-class box (the same machine
+        // `hub` has always modelled), and an old CPU-heavy server.
+        hub_speed("hub-fast", 2_400.0, 34.0, 900.0),
+        hub_speed("hub-mid", 2_000.0, 25.0, 900.0),
+        hub_speed("hub-slow", 900.0, 11.0, 900.0),
+    ];
+    for i in 0..3 {
+        nodes.push(desktop(&format!("desk-{i}"), 240.0));
+    }
+    for i in 0..6 {
+        nodes.push(laptop(&format!("lap-{i}"), 240.0));
+    }
+    let duration_ms = 30 * 60 * 1000;
+    let arrivals = generate_arrivals(&nodes, duration_ms, seed);
+    Scenario {
+        name: "mixed-hubs".into(),
         rtt_ms: lan_rtts(nodes.len()),
         nodes,
         duration_ms,

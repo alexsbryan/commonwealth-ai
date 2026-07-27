@@ -711,6 +711,7 @@ mod tests {
             selected: false,
             score: ScoreRecord::from(&breakdown),
             inputs,
+            tier_band: None,
         }
     }
 

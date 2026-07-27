@@ -62,6 +62,7 @@ use crate::scheduler_core::{
     RankResult,
 };
 use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
+use crate::tier::TierFloor;
 
 /// How long to trust a fetched peer manifest before re-fetching.
 /// OICP capabilities don't change request-to-request — a model
@@ -1270,6 +1271,11 @@ impl MeshInferenceProvider {
                 // first (`SCHEDULER_QUALITY.md` §6: behavioural work
                 // goes INTO the sim as arms, not into production).
                 objective: RankObjective::Product,
+                // §4.1's tier floor is likewise a Tier-1 arm
+                // first. `None` here is what keeps every arm
+                // recorded before it comparable — production
+                // behaviour is provably unchanged by this file.
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &self_manifest,
                     observations: &local_obs,

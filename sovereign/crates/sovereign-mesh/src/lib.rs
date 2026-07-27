@@ -88,6 +88,10 @@ pub mod source_content_validator;
 pub mod state;
 pub mod supervised_task;
 pub mod throughput_tracking;
+/// Capability bands — the tier floor of `SCHEDULER_QUALITY.md` §4.1:
+/// capability filters the candidate set, predicted cost ranks what
+/// survives.
+pub mod tier;
 pub mod tool_profile;
 pub mod types;
 pub mod watched_folder_runtime;

@@ -139,12 +139,93 @@ pub struct TruthMetrics {
     pub mean_by_class: BTreeMap<&'static str, f64>,
 }
 
+/// The column §5 was missing — where capability went, per decision.
+///
+/// §5's metric table is latency, fairness and waste. None of those can
+/// see the failure `Arm::PredictedTime` exposed: it ranks on time
+/// alone, so it prefers small fast models, and a scoreboard made of
+/// latency reads that as an *improvement*. The sim cannot judge an
+/// answer, so it cannot supply the quality gate directly. It can
+/// supply the **mechanism by which quality is lost**, which is where
+/// the turn was served relative to what was available, and that is
+/// what this counts.
+///
+/// Lives in the record-metric family deliberately: every number here
+/// comes from `RoutingDecision.candidates[].tier_band` plus the
+/// outcome's `served_by`, so **the identical function scores a
+/// production capture.** A quality regression on real hardware is
+/// therefore countable by the same ruler as a simulated one, which is
+/// the only way this becomes a landing gate rather than a sim artifact.
+#[derive(Debug, Clone, Default)]
+pub struct TierMetrics {
+    /// Decisions with at least one banded candidate — the denominator
+    /// for every rate below.
+    pub banded_decisions: usize,
+    /// Decisions short-circuited before any candidate was scored
+    /// (`LocalOnly` privacy, not offload-eligible). Outside the tier
+    /// question entirely; counted so they cannot quietly inflate or
+    /// deflate a rate.
+    pub gated_decisions: usize,
+    /// Decisions where no candidate advertised a size at all, so no
+    /// band could be assigned. Reported rather than dropped: a zero
+    /// here is what makes the rates below trustworthy, and a non-zero
+    /// one says the fleet is under-advertising rather than that the
+    /// scheduler behaved.
+    pub unbanded_decisions: usize,
+    /// **Served by a weaker band than the origin's own local model.**
+    /// A real regression: the user would have had a better answer by
+    /// not offloading at all. This is the one a hard invariant asserts.
+    pub downgrades: usize,
+    /// **A stronger band was feasible and was passed over**, while the
+    /// served candidate was no worse than staying home. Not a
+    /// regression against local — and precisely what a household hub
+    /// exists to prevent. Disjoint from `downgrades` by construction,
+    /// so the two sum to "served below the best available".
+    pub declined_upgrades: usize,
+    /// Mean band actually served (0 = the most capable models visible).
+    pub mean_served_band: f64,
+    /// Mean of the best band that was available to be served from. The
+    /// gap between this and `mean_served_band` is the magnitude behind
+    /// the two counts.
+    pub mean_best_band: f64,
+    /// How many turns each band served.
+    pub served_band_share: BTreeMap<u32, usize>,
+}
+
+impl TierMetrics {
+    /// Share of banded decisions served below the origin's own local
+    /// option. The invariant a tier-floor arm must hold at zero.
+    pub fn downgrade_rate(&self) -> f64 {
+        if self.banded_decisions == 0 {
+            return 0.0;
+        }
+        self.downgrades as f64 / self.banded_decisions as f64
+    }
+
+    /// Share of banded decisions that passed over a strictly more
+    /// capable feasible candidate without going below local.
+    pub fn declined_upgrade_rate(&self) -> f64 {
+        if self.banded_decisions == 0 {
+            return 0.0;
+        }
+        self.declined_upgrades as f64 / self.banded_decisions as f64
+    }
+
+    /// Everything served below the best band that was available,
+    /// however it got there.
+    pub fn below_best_rate(&self) -> f64 {
+        self.downgrade_rate() + self.declined_upgrade_rate()
+    }
+}
+
 /// One arm's full result.
 #[derive(Debug, Clone)]
 pub struct ArmScore {
     pub arm: Arm,
     pub records: RecordMetrics,
     pub truth: TruthMetrics,
+    /// Where capability went — §5's missing column.
+    pub tier: TierMetrics,
     /// Mean latency of the oracle ÷ mean latency of this arm. 1.0
     /// means "as good as perfect information"; 0.5 means twice the
     /// oracle's mean. `None` until an oracle run is supplied.
@@ -157,6 +238,102 @@ fn class_label(c: RequestClass) -> &'static str {
         RequestClass::Fast => "fast",
         RequestClass::Private => "private",
     }
+}
+
+/// Compute [`TierMetrics`] from the record stream. Takes a slice for
+/// the same reason [`record_metrics`] does: a production capture must
+/// be scorable by this exact code, or the landing gate measures the
+/// sim rather than the mesh.
+///
+/// Where a turn was *actually* served comes from the outcome's
+/// `served_by` when one joins, and falls back to the decision's
+/// selected candidate otherwise. That order matters: the cascade can
+/// fail over to a different node than the decision ranked first, and
+/// the user's answer came from whoever actually produced it.
+pub fn tier_metrics(records: &[DecisionEvent]) -> TierMetrics {
+    let mut decisions: Vec<&RoutingDecision> = Vec::new();
+    let mut served: HashMap<&str, &ServedBy> = HashMap::new();
+    for ev in records {
+        match ev {
+            DecisionEvent::Decision(d) => decisions.push(d),
+            DecisionEvent::Outcome(o) => {
+                served.insert(o.decision_id.as_str(), &o.served_by);
+            }
+            _ => {}
+        }
+    }
+
+    let mut m = TierMetrics::default();
+    let mut served_bands: Vec<f64> = Vec::new();
+    let mut best_bands: Vec<f64> = Vec::new();
+
+    for d in &decisions {
+        if matches!(d.verdict, Verdict::Gated { .. }) {
+            m.gated_decisions += 1;
+            continue;
+        }
+        let Some(best) = d.candidates.iter().filter_map(|c| c.tier_band).min() else {
+            // Candidates existed but none advertised a size. Not a
+            // scheduling event — a fleet-advertisement one.
+            m.unbanded_decisions += 1;
+            continue;
+        };
+
+        // Who actually answered. `LocalFallback` is still local, and
+        // the distinction between it and `Local` is about how the
+        // cascade got there, not about which model ran.
+        let served_name: Option<&str> = match served.get(d.decision_id.as_str()) {
+            Some(ServedBy::Local { .. }) | Some(ServedBy::LocalFallback { .. }) => {
+                Some(crate::scheduler_core::LOCAL_CANDIDATE_NAME)
+            }
+            Some(ServedBy::Peer { name, .. }) => Some(name.as_str()),
+            // A request every cascade step failed has no served tier
+            // to attribute; it is `RecordMetrics`' failure to count.
+            Some(ServedBy::Failed) => None,
+            None => d
+                .candidates
+                .iter()
+                .find(|c| c.selected)
+                .map(|c| c.name.as_str())
+                .or(Some(crate::scheduler_core::LOCAL_CANDIDATE_NAME)),
+        };
+        let Some(served_name) = served_name else {
+            continue;
+        };
+        let Some(served_band) = d
+            .candidates
+            .iter()
+            .find(|c| c.name == served_name)
+            .and_then(|c| c.tier_band)
+        else {
+            continue;
+        };
+        let local_band = d
+            .candidates
+            .iter()
+            .find(|c| c.name == crate::scheduler_core::LOCAL_CANDIDATE_NAME)
+            .and_then(|c| c.tier_band);
+
+        m.banded_decisions += 1;
+        *m.served_band_share.entry(served_band).or_insert(0) += 1;
+        served_bands.push(served_band as f64);
+        best_bands.push(best as f64);
+
+        // A larger band index is a weaker model. The two counts are
+        // kept disjoint so they can be added: a downgrade is already
+        // the worst version of passing over something better, and
+        // counting it twice would make the totals unreadable.
+        let downgraded = local_band.is_some_and(|lb| served_band > lb);
+        if downgraded {
+            m.downgrades += 1;
+        } else if served_band > best {
+            m.declined_upgrades += 1;
+        }
+    }
+
+    m.mean_served_band = mean(&served_bands);
+    m.mean_best_band = mean(&best_bands);
+    m
 }
 
 /// Compute the record-stream half. Takes a slice so a production
@@ -449,6 +626,7 @@ pub fn score(report: &RunReport, gossip_window_ms: u64, oracle_mean_ms: Option<f
     ArmScore {
         arm: report.arm,
         records: record_metrics(&report.records, gossip_window_ms),
+        tier: tier_metrics(&report.records),
         truth,
         efficiency_ratio,
     }
@@ -514,6 +692,39 @@ pub fn render(scenario: &str, seed: u64, scores: &[ArmScore]) -> String {
     out.push_str("         waste = offloads slower than local BECAUSE the peer was backed up (scheduler error)\n");
     out.push_str("         slower = offloads slower than local at all (includes the deliberate capability-for-latency trade)\n");
     out.push_str("         spread = worst-minus-best per-origin p95 (tail fairness) · off% = decisions that chose a peer\n");
+
+    // The quality column. Printed as its own block rather than four
+    // more columns on an already-wide table, because the reading is
+    // different in kind: everything above is a cost, everything here
+    // is what was traded for it.
+    out.push('\n');
+    out.push_str(&format!(
+        "{:<18} {:>7} {:>7} {:>9} {:>9} {:>10}\n",
+        "arm", "down%", "declUp%", "servedBand", "bestBand", "unbanded"
+    ));
+    out.push_str(&"-".repeat(64));
+    out.push('\n');
+    for s in scores {
+        let t = &s.tier;
+        out.push_str(&format!(
+            "{:<18} {:>6.0}% {:>6.0}% {:>9.2} {:>9.2} {:>10}\n",
+            s.arm.label(),
+            100.0 * t.downgrade_rate(),
+            100.0 * t.declined_upgrade_rate(),
+            t.mean_served_band,
+            t.mean_best_band,
+            t.unbanded_decisions,
+        ));
+    }
+    out.push_str("\ncapability (`crate::tier`): band 0 = the most capable models visible in that decision\n");
+    out.push_str("         down% = served in a WEAKER band than the origin's own local model — a real regression,\n");
+    out.push_str("           and the one a tier-floor arm must hold at zero\n");
+    out.push_str("         declUp% = a stronger band was feasible and was passed over, without going below local —\n");
+    out.push_str("           not a regression against staying home, but the thing a household hub exists to prevent\n");
+    out.push_str("         servedBand/bestBand = mean band served vs mean best available; the gap is the magnitude\n");
+    out.push_str("         unbanded = decisions where NO candidate advertised a size, so nothing above could be judged\n");
+    out.push_str("         these are the mechanism by which quality is lost, not quality itself — the sim cannot\n");
+    out.push_str("           score an answer, and §4.1's landing gate still needs a Tier-2 run that can\n");
     if let Some(first) = scores.first() {
         out.push_str(&format!(
             "\nstaleness: median load-signal age {:.1}s true vs {:.1}s as recorded (the record understates by {:.1}s)\n",
