@@ -4,6 +4,12 @@
 # Injects the notes most RELEVANT to the current prompt from the sovereign
 # external brain, instead of a flat recency dump.
 #
+# It also carries the SESSION HANDOFF (MEMORY_MODEL §5 E5 Phase 2): on the
+# first prompt of a session it injects the best-matching session frame in
+# full. That lives here rather than in session-boot.sh because SessionStart
+# has no prompt to select against, and selecting by recency alone hands
+# sessions the wrong workstream's frame.
+#
 # DEPENDABILITY CONTRACT (this hook must never mislead the agent):
 #   - It distinguishes failure modes HONESTLY. A genuine daemon outage, a
 #     reachable-but-slow brain (cold embed on the first call of a session), an
@@ -26,7 +32,7 @@ export SOVEREIGN_HOOK_INPUT="$(cat)"
 export SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}"
 
 exec python3 - <<'PY' 2>/dev/null
-import os, re, json, time, hashlib, pathlib, urllib.request, urllib.error, socket
+import os, re, json, time, hashlib, pathlib, subprocess, urllib.request, urllib.error, socket
 
 PORT = os.environ.get("SOVEREIGN_PORT", "9741")
 BASE = f"http://localhost:{PORT}"
@@ -52,6 +58,23 @@ NOTES_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_NOTES_BUDGET_CHARS", "6000"))
 # A note longer than this is truncated rather than allowed to eat the budget
 # alone; the id is printed so the agent can dereference the full text.
 NOTE_MAX_CHARS = int(os.environ.get("SOVEREIGN_NOTE_MAX_CHARS", "2000"))
+
+# ── First-prompt frame handoff (MEMORY_MODEL §5 E5 Phase 2) ─────────────────
+# SessionStart injects only the frame INDEX, because it has no prompt to select
+# against and newest-mtime selection demonstrably hands sessions the wrong
+# thread's frame. The full frame is injected HERE instead, on the first prompt
+# of a session, where the prompt exists and can break ties the boot hook could
+# not see.
+#
+# Once per session: the marker below is written on the first attempt whether or
+# not a frame was found, so this never becomes a per-turn subprocess.
+#
+# The two budgets are shared, not stacked. A frame plus a full notes payload
+# would land around 10.5KB and spill to a file — re-creating on turn one the
+# exact leak Phase 1 closed. On the frame-bearing turn, notes yield.
+SESSIONS_ROOT = pathlib.Path.home() / ".sovereign" / "sessions"
+FRAME_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_PROMPT_FRAME_CHARS", "4500"))
+NOTES_BUDGET_WITH_FRAME = int(os.environ.get("SOVEREIGN_NOTES_BUDGET_WITH_FRAME", "3200"))
 
 
 def status(msg):
@@ -91,7 +114,7 @@ def distinctive_terms(content, cap=15):
     return out
 
 
-def budget_notes(notes):
+def budget_notes(notes, budget):
     """Split `notes` (rank order) into what fits the payload budget and what
     doesn't. Returns (rendered, decisions) where `rendered` is the list of
     (note, text) actually printed and `decisions` is a per-note record of
@@ -113,7 +136,7 @@ def budget_notes(notes):
         block = f"[{n.get('kind', 'note')}] {content}\n"
         # Always deliver the top-ranked note even if it alone exceeds the
         # budget — an empty injection is worse than one over-long note.
-        if spent + len(block) > NOTES_BUDGET_CHARS and rendered:
+        if spent + len(block) > budget and rendered:
             decisions.append((n, False, False, 0))
             continue
         rendered.append((n, block))
@@ -122,7 +145,7 @@ def budget_notes(notes):
     return rendered, decisions
 
 
-def log_injection(session_id, query, label, decisions):
+def log_injection(session_id, query, label, decisions, budget):
     # Append-only, fail-silent side effect. The injection is this hook's primary
     # duty (see the dependability contract above) — logging must NEVER interfere
     # with it, so every failure here is swallowed. No session_id => no join key
@@ -139,7 +162,7 @@ def log_injection(session_id, query, label, decisions):
             "label": label,
             "count": len(decisions),
             "delivered_count": sum(1 for _, d, _, _ in decisions if d),
-            "budget_chars": NOTES_BUDGET_CHARS,
+            "budget_chars": budget,
             "payload_chars": sum(c for _, d, _, c in decisions if d),
             "notes": [
                 {
@@ -164,6 +187,102 @@ def log_injection(session_id, query, label, decisions):
             f.write(json.dumps(record) + "\n")
     except (OSError, TypeError, ValueError):
         pass
+
+
+def git(*args):
+    try:
+        p = subprocess.run(["git", *args], capture_output=True, text=True, timeout=3)
+        return p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def inject_frame_once(session_id, query):
+    """Inject the best-matching session frame, once per session.
+
+    Returns the number of chars printed (0 if nothing was injected), so the
+    caller can shrink the notes budget by that much.
+
+    Every exit path writes the marker: a session that found no frame must not
+    re-run this on every subsequent prompt. Every exit path also records WHY,
+    because `cache-audit --ramp --classify` can only separate "re-read what
+    the frame already had" from "genuine new-task acquisition" if it knows
+    which frame — if any — this session actually received.
+    """
+    if not session_id:
+        return 0
+    marker = SESSIONS_ROOT / session_id / "frame-inject.json"
+    if marker.exists():
+        return 0
+
+    rec = {"ts": int(time.time()), "session_id": session_id, "outcome": "none",
+           "chosen": None, "candidates": 0, "chars": 0, "signals": {}}
+    printed = 0
+    try:
+        # Boot already injected this session's own frame (resume/compact) —
+        # nothing to add, and re-injecting would duplicate 1-2k tokens.
+        boot = SESSIONS_ROOT / session_id / "boot.json"
+        if boot.exists():
+            try:
+                if json.loads(boot.read_text()).get("frame_selection") == "own_full":
+                    rec["outcome"] = "already_injected_at_boot"
+                    return 0
+            except (OSError, ValueError):
+                pass
+
+        repo = os.path.basename(git("rev-parse", "--show-toplevel"))
+        branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        p = subprocess.run(
+            ["sovereign", "session", "frames", "--json", "--repo", repo,
+             "--branch", branch, "--for-prompt", (query or "")[:400], "--limit", "3"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if p.returncode != 0 or not p.stdout.strip():
+            rec["outcome"] = f"frames_call_failed_rc{p.returncode}"
+            return 0
+        doc = json.loads(p.stdout)
+        cands = doc.get("candidates") or []
+        rec["candidates"] = doc.get("count", len(cands))
+        if not cands:
+            rec["outcome"] = "no_frames"
+            return 0
+        top = cands[0]
+        rec["chosen"] = top.get("session_id")
+        rec["signals"] = top.get("signals") or {}
+        text = pathlib.Path(top["path"]).read_text()
+        truncated = False
+        if len(text) > FRAME_BUDGET_CHARS:
+            text = (text[:FRAME_BUDGET_CHARS].rstrip()
+                    + f"\n\n_[frame truncated — full: `sovereign session frames "
+                      f"{top.get('short_id', '')}`]_")
+            truncated = True
+        others = rec["candidates"] - 1
+        header = (
+            f"## Session handoff — frame `{top.get('short_id', '')}` "
+            f"(selected for this prompt; {others} other live frame"
+            f"{'s' if others != 1 else ''})\n"
+        )
+        footer = (
+            "\n_Selected by branch match, then prompt overlap, then recency — "
+            "it can be wrong. `sovereign session frames` lists the rest._\n"
+            if others > 0 else ""
+        )
+        block = header + "\n" + text + "\n" + footer
+        print(block)
+        printed = len(block)
+        rec["outcome"] = "injected"
+        rec["chars"] = printed
+        rec["truncated"] = truncated
+        return printed
+    except Exception as e:
+        rec["outcome"] = f"error_{type(e).__name__}"
+        return printed
+    finally:
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(json.dumps(rec))
+        except OSError:
+            pass
 
 
 def is_timeout(e):
@@ -211,6 +330,12 @@ def main():
         payload = {}
     query = (payload.get("prompt") or "").strip()[:400]
     session_id = (payload.get("session_id") or "").strip()
+
+    # 0) The session handoff, once, before anything that can fail on the
+    #    daemon. Reading a frame is filesystem work — a dead daemon must not
+    #    cost the successor its predecessor's state.
+    frame_chars = inject_frame_once(session_id, query)
+    notes_budget = NOTES_BUDGET_WITH_FRAME if frame_chars else NOTES_BUDGET_CHARS
 
     # 1) Liveness probe — separates "daemon is genuinely down" from "the notes
     #    call itself failed". These are different truths.
@@ -274,8 +399,8 @@ def main():
     # Budget BEFORE logging: the log must describe what actually entered
     # context, not what the ranker returned. (Pre-2026-07-26 it described the
     # latter, and the payload silently spilled — see NOTES_BUDGET_CHARS.)
-    rendered, decisions = budget_notes(uniq)
-    log_injection(session_id, query, label, decisions)
+    rendered, decisions = budget_notes(uniq, notes_budget)
+    log_injection(session_id, query, label, decisions, notes_budget)
 
     print(f"## Sovereign notes ({label}, injected by hook)\n")
     for _, block in rendered:
@@ -283,7 +408,7 @@ def main():
     dropped = len(decisions) - len(rendered)
     if dropped:
         print(f"_({dropped} further note{'s' if dropped > 1 else ''} matched but "
-              f"exceeded this hook's {NOTES_BUDGET_CHARS}-char injection budget — "
+              f"exceeded this hook's {notes_budget}-char injection budget — "
               f"they are NOT in your context; `notes(query: \"…\")` to pull them.)_\n")
 
 

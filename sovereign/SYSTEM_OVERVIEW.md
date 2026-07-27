@@ -1408,7 +1408,14 @@ Verbs by sibling binary:
   synthesizes a schema-v1 session frame via one daemon chat call —
   see `sovereign/docs/specs/SESSION_CONTINUITY.md` and the graded
   golden at `quality/session-frame.golden.md`. Frames + spines land
-  under `~/.sovereign/sessions/<session_id>/`. The initiative-level
+  under `~/.sovereign/sessions/<session_id>/`. `session frames`
+  is the read side: the INDEX of live frames in selection order
+  (branch match → prompt overlap → recency), with `session frames
+  <id>` dereferencing one whole. Both are pure filesystem reads, so
+  the handoff survives a dead daemon; `.claude/hooks/session-boot.sh`
+  injects the index at SessionStart and
+  `.claude/hooks/inject-notes.sh` injects the selected frame on the
+  first prompt (MEMORY_MODEL §5 E5 Phase 2). The initiative-level
   design compass for all of this (context = working memory holding
   pointers/gists; notes/frames/facts/code-graph = external long-term
   store; eviction and forgetting policies) is

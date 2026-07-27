@@ -792,42 +792,11 @@ struct SectionGrade {
 async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
     // Candidate: an explicit path, or a session-id prefix resolved to
     // ~/.sovereign/sessions/<sid>/frame.md.
-    let candidate_path = {
-        let p = Path::new(id_or_path);
-        if p.is_file() {
-            p.to_path_buf()
-        } else {
-            let Some(root) = sessions_root() else {
-                eprintln!("grade: cannot resolve home directory");
-                return 2;
-            };
-            let matches: Vec<PathBuf> = std::fs::read_dir(&root)
-                .map(|rd| {
-                    rd.flatten()
-                        .map(|e| e.path())
-                        .filter(|d| {
-                            d.file_name()
-                                .and_then(|n| n.to_str())
-                                .is_some_and(|n| n.starts_with(id_or_path))
-                                && d.join("frame.md").is_file()
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            match matches.len() {
-                1 => matches[0].join("frame.md"),
-                0 => {
-                    eprintln!(
-                        "grade: `{id_or_path}` is neither a file nor a session with a frame under {}",
-                        root.display()
-                    );
-                    return 2;
-                }
-                n => {
-                    eprintln!("grade: `{id_or_path}` is ambiguous ({n} session matches)");
-                    return 2;
-                }
-            }
+    let candidate_path = match resolve_frame_path(id_or_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("grade: {e}");
+            return 2;
         }
     };
     let golden_path = flags
@@ -1013,6 +982,426 @@ async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
     }
 }
 
+// ── Frame index — selection + dereference (MEMORY_MODEL §5 E5 Phase 2) ────
+//
+// WHY THIS EXISTS. The boot hook used to inject the frame with the newest
+// mtime. With several workstreams interleaved (24 live frames when this was
+// measured) the newest frame is the successor's only by luck — and a WRONG
+// frame costs more than no frame: session 40ab6490 was handed another
+// thread's frame and burned 5,872 ramp tokens hunting for the right one by
+// hand, against 9.3k total ramp for the session that happened to get the
+// right one (E5 R1).
+//
+// The fix is a POINTER, not a better guess. Boot injects the *index* below —
+// one line per live frame, ~200 tokens — and the agent dereferences the one
+// it wants with `sovereign session frames <id>`. Selection still happens (the
+// first UserPromptSubmit injects the top-ranked frame in full), but it now
+// happens where the PROMPT exists, and it is recoverable when it is wrong.
+//
+// RANKING IS LEXICOGRAPHIC AND DELIBERATELY DUMB. E2's rule — measure before
+// tuning — applies here: no weights, no scoring function to over-fit. The
+// order is branch match, then prompt overlap (the one signal SessionStart
+// could never have, since it has no prompt), then recency. Every component,
+// used or not, is emitted in `--json`, so the classifier can later answer
+// "would a different order have picked a different frame?" against real
+// sessions instead of intuition.
+//
+// IN-FLIGHT IS RECORDED BUT NOT RANKED ON, and that is a correction to the
+// Phase 2 sketch, made against the live store. Two reasons, both observable
+// in `sovereign session frames` today: (1) `status` is free text — the 23
+// live frames carry `in-flight`, `completed`, AND `work-complete-uncommitted`
+// — so any predicate over it is a guess about a string, not a fact about the
+// work; (2) sorting in-flight first buried the frame the successor actually
+// needed. The session that opened this work was handed a `completed` frame
+// whose `## Next` was the entire task; ranked below every `in-flight` frame
+// it fell past the 8-line cut and would not have been injected at all. A
+// completed frame is the NORMAL good handoff — completion means the donor got
+// far enough to write down what comes next.
+
+/// One session frame, as the index sees it: its frontmatter facts, its goal
+/// line, and every ranking signal computed for it (recorded even when it did
+/// not affect the outcome — that is what makes the ranker auditable).
+#[derive(Debug, Clone)]
+pub(crate) struct FrameEntry {
+    pub(crate) session_id: String,
+    pub(crate) path: PathBuf,
+    pub(crate) repo: String,
+    pub(crate) branch: String,
+    pub(crate) status: String,
+    pub(crate) provenance: String,
+    pub(crate) age_s: u64,
+    pub(crate) goal: String,
+    pub(crate) next_items: usize,
+    pub(crate) chars: usize,
+    /// Ranking signals.
+    pub(crate) branch_match: bool,
+    pub(crate) in_flight: bool,
+    pub(crate) prompt_overlap: usize,
+    pub(crate) overlap_terms: Vec<String>,
+}
+
+/// Read one `key: value` line out of a schema-v1 frontmatter block. Stops at
+/// the closing `---` so a body line that happens to look like `key: value`
+/// can never be mistaken for frontmatter.
+pub(crate) fn frontmatter_field(frame: &str, key: &str) -> Option<String> {
+    let mut lines = frame.lines();
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    for line in lines {
+        let t = line.trim();
+        if t == "---" {
+            return None;
+        }
+        if let Some(rest) = t.strip_prefix(key) {
+            if let Some(v) = rest.strip_prefix(':') {
+                return Some(v.trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// The frame's goal as a single display line: first non-empty line of
+/// `## Goal`, capped. An index entry that wraps is an index nobody scans.
+pub(crate) fn goal_line(frame: &str, cap: usize) -> String {
+    let body = section_body(frame, "## Goal").unwrap_or_default();
+    let first = body
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .trim_start_matches(['-', '*', ' '])
+        .to_string();
+    if first.chars().count() <= cap {
+        return first;
+    }
+    let cut: String = first.chars().take(cap).collect();
+    format!("{}…", cut.trim_end())
+}
+
+/// Identifier-shaped tokens from free text — the same notion `inject-notes.sh`
+/// uses for its retrieval log: a token carrying a code/path shape
+/// (snake_case, CamelCase, dotted, slashed) or simply long. These are the
+/// tokens unlikely to co-occur by chance, so their presence in a frame is
+/// weak evidence the frame is about the same work as the prompt.
+pub(crate) fn distinctive_terms(text: &str, cap: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut cur = String::new();
+    // Hand-rolled scan (no regex dep in this crate): a token is
+    // [A-Za-z_][A-Za-z0-9_./-]* of length >= 5.
+    let push = |cur: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+        if cur.chars().count() >= 5 {
+            let t = cur.clone();
+            let distinctive = t.contains('_')
+                || t.contains('.')
+                || t.contains('/')
+                || t.chars().skip(1).any(|c| c.is_ascii_uppercase())
+                || t.chars().count() >= 8;
+            let tl = t.to_lowercase();
+            if distinctive && seen.insert(tl) {
+                out.push(t);
+            }
+        }
+        cur.clear();
+    };
+    for ch in text.chars() {
+        let starts = ch.is_ascii_alphabetic() || ch == '_';
+        let continues = ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '/' | '-');
+        if cur.is_empty() {
+            if starts {
+                cur.push(ch);
+            }
+        } else if continues {
+            cur.push(ch);
+        } else {
+            push(&mut cur, &mut out, &mut seen);
+            if out.len() >= cap {
+                return out;
+            }
+        }
+    }
+    push(&mut cur, &mut out, &mut seen);
+    out.truncate(cap);
+    out
+}
+
+/// How many of the prompt's distinctive terms appear anywhere in the frame.
+/// Case-insensitive substring, because a prompt says `session_cmd` where the
+/// frame says `session_cmd.rs`.
+fn overlap_with(frame_lower: &str, terms: &[String]) -> Vec<String> {
+    terms
+        .iter()
+        .filter(|t| frame_lower.contains(&t.to_lowercase()))
+        .cloned()
+        .collect()
+}
+
+/// Load every frame under `~/.sovereign/sessions/*/frame.md` newer than
+/// `max_age_days`, annotated with the ranking signals for this caller.
+pub(crate) fn load_frames(
+    root: &Path,
+    max_age_days: u64,
+    repo: Option<&str>,
+    branch: Option<&str>,
+    prompt: Option<&str>,
+) -> Vec<FrameEntry> {
+    let terms = prompt.map(|p| distinctive_terms(p, 20)).unwrap_or_default();
+    let now = std::time::SystemTime::now();
+    let mut out: Vec<FrameEntry> = Vec::new();
+    let Ok(rd) = std::fs::read_dir(root) else {
+        return out;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path().join("frame.md");
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue;
+        };
+        let age_s = meta
+            .modified()
+            .ok()
+            .and_then(|m| now.duration_since(m).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(u64::MAX);
+        if age_s > max_age_days.saturating_mul(86_400) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let frame_repo = frontmatter_field(&text, "repo").unwrap_or_default();
+        // Hard filter: a frame from another repository is not a candidate for
+        // this one. An UNKNOWN repo still passes — old frames predate the
+        // field, and dropping them silently would be the same class of lie
+        // this whole surface exists to remove.
+        if let Some(want) = repo {
+            if !frame_repo.is_empty() && frame_repo != want {
+                continue;
+            }
+        }
+        let frame_branch = frontmatter_field(&text, "branch").unwrap_or_default();
+        let status = frontmatter_field(&text, "status").unwrap_or_default();
+        let overlap_terms = if terms.is_empty() {
+            Vec::new()
+        } else {
+            overlap_with(&text.to_lowercase(), &terms)
+        };
+        out.push(FrameEntry {
+            session_id: entry.file_name().to_string_lossy().to_string(),
+            branch_match: branch.is_some_and(|b| b == frame_branch),
+            // `status` is free text written by whoever banked the frame — the
+            // live store carries `in-flight`, `completed`, and
+            // `work-complete-uncommitted`. Match on the stem, not the whole
+            // string, and treat anything unrecognised as still in flight
+            // (the safer read: an unknown status is not evidence of done).
+            in_flight: {
+                let s = status.to_lowercase();
+                !(s.contains("complete") || s.contains("abandon") || s.contains("done"))
+            },
+            prompt_overlap: overlap_terms.len(),
+            overlap_terms,
+            repo: frame_repo,
+            branch: frame_branch,
+            status,
+            provenance: frontmatter_field(&text, "provenance").unwrap_or_default(),
+            age_s,
+            goal: goal_line(&text, 96),
+            next_items: section_body(&text, "## Next")
+                .map(|b| golden_items(&b).len())
+                .unwrap_or(0),
+            chars: text.len(),
+            path,
+        });
+    }
+    rank_frames(&mut out);
+    out
+}
+
+/// Lexicographic order: branch match, then prompt overlap, then recency.
+/// See the module note above for why there are no weights, and why
+/// `in_flight` is carried on every entry but deliberately not sorted on.
+pub(crate) fn rank_frames(frames: &mut [FrameEntry]) {
+    frames.sort_by(|a, b| {
+        b.branch_match
+            .cmp(&a.branch_match)
+            .then(b.prompt_overlap.cmp(&a.prompt_overlap))
+            .then(a.age_s.cmp(&b.age_s))
+    });
+}
+
+fn human_age(age_s: u64) -> String {
+    if age_s < 3_600 {
+        format!("{}m", age_s / 60)
+    } else if age_s < 86_400 {
+        format!("{}h", age_s / 3_600)
+    } else {
+        format!("{}d", age_s / 86_400)
+    }
+}
+
+/// The index as it enters an agent's context: one scannable line per frame,
+/// and the verb that dereferences it. Kept tight on purpose — this replaces a
+/// 1–2k-token frame injection with roughly 200 tokens.
+pub(crate) fn render_index(frames: &[FrameEntry], limit: usize) -> String {
+    if frames.is_empty() {
+        return String::new();
+    }
+    let shown = frames.len().min(limit);
+    let mut s = format!(
+        "### Live session frames ({} live{}) — read one: `sovereign session frames <id>`\n\n",
+        frames.len(),
+        if shown < frames.len() {
+            format!(", {shown} shown")
+        } else {
+            String::new()
+        }
+    );
+    for f in frames.iter().take(shown) {
+        let id = short_session_id(&f.session_id);
+        let goal = if f.goal.is_empty() {
+            "(no goal recorded)"
+        } else {
+            &f.goal
+        };
+        s.push_str(&format!(
+            "- `{id}` · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
+            age = human_age(f.age_s),
+            branch = if f.branch.is_empty() { "?" } else { &f.branch },
+            status = if f.status.is_empty() { "?" } else { &f.status },
+            prov = if f.provenance.is_empty() {
+                "?"
+            } else {
+                &f.provenance
+            },
+            next = f.next_items,
+        ));
+    }
+    s
+}
+
+fn frame_json(f: &FrameEntry) -> serde_json::Value {
+    serde_json::json!({
+        "session_id": f.session_id,
+        "short_id": short_session_id(&f.session_id),
+        "path": f.path.display().to_string(),
+        "repo": f.repo,
+        "branch": f.branch,
+        "status": f.status,
+        "provenance": f.provenance,
+        "age_s": f.age_s,
+        "goal": f.goal,
+        "next_items": f.next_items,
+        "chars": f.chars,
+        "signals": {
+            "branch_match": f.branch_match,
+            "in_flight": f.in_flight,
+            "prompt_overlap": f.prompt_overlap,
+            "overlap_terms": f.overlap_terms,
+        },
+    })
+}
+
+/// Resolve a session-id prefix (or an explicit path) to a frame file.
+/// Shared by `frames <id>` and `grade <id>` so the two cannot disagree about
+/// what an id means.
+pub(crate) fn resolve_frame_path(id_or_path: &str) -> Result<PathBuf, String> {
+    let p = Path::new(id_or_path);
+    if p.is_file() {
+        return Ok(p.to_path_buf());
+    }
+    let root = sessions_root().ok_or_else(|| "cannot resolve home directory".to_string())?;
+    let mut matches: Vec<PathBuf> = std::fs::read_dir(&root)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|d| {
+                    d.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with(id_or_path))
+                        && d.join("frame.md").is_file()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    match matches.len() {
+        1 => Ok(matches.remove(0).join("frame.md")),
+        0 => Err(format!(
+            "`{id_or_path}` is neither a file nor a session with a frame under {} \
+             (see `svrn session frames`)",
+            root.display()
+        )),
+        n => Err(format!(
+            "`{id_or_path}` is ambiguous ({n} session matches) — use more of the id"
+        )),
+    }
+}
+
+fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
+    // Dereference: print one frame whole.
+    if let Some(id) = id {
+        return match resolve_frame_path(id) {
+            Ok(p) => match std::fs::read_to_string(&p) {
+                Ok(text) => {
+                    print!("{text}");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("frames: cannot read {} ({e})", p.display());
+                    2
+                }
+            },
+            Err(e) => {
+                eprintln!("frames: {e}");
+                2
+            }
+        };
+    }
+
+    let Some(root) = sessions_root() else {
+        eprintln!("frames: cannot resolve home directory");
+        return 2;
+    };
+    let max_age_days: u64 = flags
+        .get("max-age-days")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(14);
+    let limit: usize = flags.get("limit").and_then(|v| v.parse().ok()).unwrap_or(8);
+    let frames = load_frames(
+        &root,
+        max_age_days,
+        flags.get("repo").map(String::as_str),
+        flags.get("branch").map(String::as_str),
+        flags.get("for-prompt").map(String::as_str),
+    );
+
+    if flags.contains_key("json") {
+        let doc = serde_json::json!({
+            "schema": "frame-index/v1",
+            "root": root.display().to_string(),
+            "repo": flags.get("repo").cloned().unwrap_or_default(),
+            "branch": flags.get("branch").cloned().unwrap_or_default(),
+            "max_age_days": max_age_days,
+            "count": frames.len(),
+            // Rank order. The head is the selection; the rest is the evidence
+            // for why, so a caller can disagree with it.
+            "candidates": frames.iter().take(limit).map(frame_json).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string(&doc).unwrap_or_default());
+        return 0;
+    }
+
+    if frames.is_empty() {
+        println!("No session frames under {} (nothing to resume).", root.display());
+        return 0;
+    }
+    print!("{}", render_index(&frames, limit));
+    0
+}
+
 // ── CLI plumbing ─────────────────────────────────────────────────────────
 
 fn sessions_root() -> Option<PathBuf> {
@@ -1026,6 +1415,11 @@ fn print_help() {
          (schema: sovereign/docs/specs/SESSION_CONTINUITY.md).\n\n\
          Subcommands:\n\
          \x20 list               Recent transcripts for this project (newest first).\n\
+         \x20 frames             Index of live session frames, one line each, in\n\
+         \x20                    selection order (branch match, in-flight, prompt\n\
+         \x20                    overlap, recency). This is what the boot hook\n\
+         \x20                    injects — a pointer per frame, not a frame.\n\
+         \x20 frames <id>        Dereference: print that frame whole.\n\
          \x20 distill <id>       Extract the spine and synthesize a frame; <id> is a\n\
          \x20                    session-id prefix from `list`.\n\
          \x20 grade <id|path>    Grade a frame against the golden (spec §5): per-section\n\
@@ -1471,8 +1865,13 @@ pub async fn run(args: &[String]) -> i32 {
             }
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
-            "--no-llm" | "--stdout" | "--force" => {
+            "--no-llm" | "--stdout" | "--force" | "--json" => {
                 flags.insert(arg.trim_start_matches('-').to_string(), String::new());
+            }
+            "--repo" | "--branch" | "--for-prompt" | "--limit" | "--max-age-days" => {
+                if let Some(v) = it.next() {
+                    flags.insert(arg.trim_start_matches("--").to_string(), v.clone());
+                }
             }
             "--model" | "--max-tokens" | "--golden" | "--url" => {
                 if let Some(v) = it.next() {
@@ -1486,6 +1885,14 @@ pub async fn run(args: &[String]) -> i32 {
                 return 2;
             }
         }
+    }
+
+    // `frames` reads only ~/.sovereign/sessions — it must work with no
+    // transcripts present at all (a fresh machine, or a hook running outside
+    // a project), so it dispatches BEFORE the transcript-dir resolution that
+    // the transcript-reading subcommands need.
+    if sub.as_deref() == Some("frames") {
+        return run_frames(id.as_deref(), &flags);
     }
 
     let target_dir = match resolve_transcript_dir(project.as_deref(), dir.as_deref()) {
@@ -1792,5 +2199,225 @@ mod tests {
         assert!(missing.contains(&"## Next"));
         assert!(missing.contains(&"## Verification"));
         assert_eq!(missing.len(), FRAME_SECTIONS.len() - 2);
+    }
+
+    // ── Frame index (E5 Phase 2) ─────────────────────────────────────────
+
+    #[test]
+    fn frontmatter_field_stops_at_the_closing_fence() {
+        let f = "---\nrepo: commonwealth-ai\nbranch: main\n---\n\n## Goal\nbranch: not-frontmatter\n";
+        assert_eq!(
+            frontmatter_field(f, "repo").as_deref(),
+            Some("commonwealth-ai")
+        );
+        // A body line shaped like frontmatter is NOT frontmatter — the scan
+        // must stop at the closing fence, or `## Goal` prose could rewrite
+        // the branch the ranker filters on.
+        assert_eq!(frontmatter_field(f, "branch").as_deref(), Some("main"));
+        assert_eq!(frontmatter_field(f, "missing"), None);
+        // No frontmatter at all is not an error, just absent.
+        assert_eq!(frontmatter_field("## Goal\nx\n", "repo"), None);
+    }
+
+    #[test]
+    fn goal_line_takes_first_nonempty_and_caps() {
+        let f = "---\nx: y\n---\n\n## Goal\n\nShip the frame index.\nSecond line ignored.\n\n## State\nz\n";
+        assert_eq!(goal_line(f, 96), "Ship the frame index.");
+        // Capping appends an ellipsis rather than wrapping the index line.
+        let capped = goal_line(f, 8);
+        assert_eq!(capped, "Ship the…");
+        // A frame with no Goal section yields an empty line, not a panic.
+        assert_eq!(goal_line("## State\nonly\n", 96), "");
+    }
+
+    #[test]
+    fn distinctive_terms_keeps_identifier_shapes_only() {
+        let terms = distinctive_terms(
+            "fix session_cmd.rs and the boot hook because regression tests broke",
+            20,
+        );
+        assert!(terms.contains(&"session_cmd.rs".to_string()));
+        // Short, generic words carry no evidence and must not inflate overlap.
+        assert!(!terms.iter().any(|t| t == "and"));
+        assert!(!terms.iter().any(|t| t == "the"));
+        assert!(!terms.iter().any(|t| t == "boot"));
+        assert!(!terms.iter().any(|t| t == "tests"));
+        // Long words qualify even without a code shape.
+        assert!(terms.contains(&"regression".to_string()), "{terms:?}");
+        // Dedup is case-insensitive.
+        let dup = distinctive_terms("session_cmd SESSION_CMD session_cmd", 20);
+        assert_eq!(dup.len(), 1);
+    }
+
+    fn entry(id: &str, branch_match: bool, in_flight: bool, overlap: usize, age_s: u64) -> FrameEntry {
+        FrameEntry {
+            session_id: id.to_string(),
+            path: PathBuf::from("/tmp").join(id).join("frame.md"),
+            repo: "commonwealth-ai".into(),
+            branch: "main".into(),
+            status: if in_flight { "active" } else { "completed" }.into(),
+            provenance: "self-reported".into(),
+            age_s,
+            goal: "g".into(),
+            next_items: 1,
+            chars: 100,
+            branch_match,
+            in_flight,
+            prompt_overlap: overlap,
+            overlap_terms: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn rank_frames_is_lexicographic_branch_overlap_recency() {
+        // Newest frame LOSES to an older one on the caller's branch — the
+        // whole point of E5 R1: newest-mtime is the bug being fixed.
+        let mut v = vec![
+            entry("newest-wrong-branch", false, true, 5, 60),
+            entry("older-right-branch", true, false, 0, 9_000),
+        ];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "older-right-branch");
+
+        // Then prompt overlap — the signal SessionStart could never have.
+        let mut v = vec![
+            entry("recent-unrelated", true, true, 0, 60),
+            entry("older-on-topic", true, true, 3, 9_000),
+        ];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "older-on-topic");
+
+        // With those tied, recency decides — the old behaviour, kept as the
+        // fallback rather than the rule.
+        let mut v = vec![entry("old", true, true, 1, 9_000), entry("new", true, true, 1, 60)];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "new");
+
+        // REGRESSION (observed against the live store, 2026-07-26): a
+        // COMPLETED frame must not be pushed below in-flight frames. The
+        // successor's correct handoff was `completed`, and ranking in-flight
+        // first dropped it past the index cut entirely.
+        let mut v = vec![
+            entry("stale-in-flight", true, true, 0, 90_000),
+            entry("fresh-completed", true, false, 0, 60),
+        ];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "fresh-completed");
+    }
+
+    #[test]
+    fn in_flight_reads_the_status_stem_not_an_exact_string() {
+        let tmp = std::env::temp_dir().join(format!("svrn-status-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        for (id, status) in [
+            ("a", "in-flight"),
+            ("b", "completed"),
+            // Real value from the live store — an exact-match predicate read
+            // this as in-flight.
+            ("c", "work-complete-uncommitted"),
+        ] {
+            let d = tmp.join(id);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join("frame.md"),
+                format!("---\nrepo: r\nbranch: main\nstatus: {status}\n---\n\n## Goal\n\ng\n"),
+            )
+            .unwrap();
+        }
+        let frames = load_frames(&tmp, 14, Some("r"), Some("main"), None);
+        let by = |id: &str| frames.iter().find(|f| f.session_id == id).unwrap().in_flight;
+        assert!(by("a"));
+        assert!(!by("b"));
+        assert!(!by("c"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn render_index_is_one_line_per_frame_and_names_the_deref_verb() {
+        let v = vec![entry("aaaaaaaa-1111", true, true, 0, 120), entry("bbbbbbbb-2222", true, false, 0, 7_200)];
+        let out = render_index(&v, 8);
+        assert!(out.contains("sovereign session frames <id>"), "{out}");
+        // Two frames = two bullets, and the count is honest.
+        assert_eq!(out.lines().filter(|l| l.starts_with("- ")).count(), 2);
+        assert!(out.contains("2 live"), "{out}");
+        // A limit below the candidate count says so rather than silently
+        // truncating — a silent cap reads as "that's all there is".
+        let capped = render_index(&v, 1);
+        assert!(capped.contains("1 shown"), "{capped}");
+        assert_eq!(capped.lines().filter(|l| l.starts_with("- ")).count(), 1);
+        assert!(render_index(&[], 8).is_empty());
+    }
+
+    #[test]
+    fn load_frames_filters_by_repo_and_ranks() {
+        let tmp = std::env::temp_dir().join(format!("svrn-frames-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let write = |id: &str, repo: &str, branch: &str, status: &str, goal: &str| {
+            let d = tmp.join(id);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join("frame.md"),
+                format!(
+                    "---\nsession_id: {id}\nrepo: {repo}\nbranch: {branch}\nstatus: {status}\nprovenance: self-reported\n---\n\n## Goal\n\n{goal}\n\n## Next\n\n- one\n- two\n"
+                ),
+            )
+            .unwrap();
+        };
+        write("aaa", "commonwealth-ai", "main", "completed", "Fix the frame index");
+        write("bbb", "other-repo", "main", "active", "Unrelated repo work");
+        write(
+            "ccc",
+            "commonwealth-ai",
+            "side-branch",
+            "active",
+            "Side branch work on session_cmd.rs",
+        );
+
+        let frames = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None);
+        // The other repo is filtered out entirely, not merely down-ranked.
+        assert_eq!(frames.len(), 2);
+        assert!(frames.iter().all(|f| f.repo == "commonwealth-ai"));
+        // Branch match is the first key, so the on-branch COMPLETED frame
+        // outranks the off-branch in-flight one.
+        assert_eq!(frames[0].session_id, "aaa");
+        assert!(frames[0].branch_match);
+        assert_eq!(frames[0].next_items, 2);
+        assert_eq!(frames[0].goal, "Fix the frame index");
+
+        // The prompt names an identifier the side-branch frame mentions.
+        // Overlap is deliberately identifier-shaped: prose words like "work"
+        // or "branch" carry no evidence and must not move the ranking.
+        let frames = load_frames(
+            &tmp,
+            14,
+            Some("commonwealth-ai"),
+            Some("side-branch"),
+            Some("continue the session_cmd.rs work"),
+        );
+        assert_eq!(frames[0].session_id, "ccc");
+        assert!(frames[0].prompt_overlap > 0);
+        let prose_only = load_frames(
+            &tmp,
+            14,
+            Some("commonwealth-ai"),
+            Some("side-branch"),
+            Some("continue the work please"),
+        );
+        assert_eq!(prose_only[0].prompt_overlap, 0);
+
+        // The age window is real: backdate one frame past it and it drops out
+        // (the boot hook relies on this to stop resurrecting dead threads).
+        let aged = tmp.join("aaa").join("frame.md");
+        std::fs::File::options()
+            .write(true)
+            .open(&aged)
+            .unwrap()
+            .set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(20 * 86_400),
+            )
+            .unwrap();
+        let recent = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None);
+        assert!(recent.iter().all(|f| f.session_id != "aaa"), "{recent:?}");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

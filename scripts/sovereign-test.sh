@@ -102,15 +102,23 @@
 #                           (and any others). Default off.
 #   --keep-logs             Preserve adapter logs even on success
 #                           (failures always preserve).
+#   --allow-empty           Treat a zero-test run as green. OFF by default:
+#                           a gate that renders "green" from an empty run
+#                           tells the caller it verified something when it
+#                           verified nothing (see "Empty-run guard" below).
+#                           Pass this only when you genuinely expect a scope
+#                           with no tests.
 #   -h, --help              This message.
 #
 # Outputs Tier 2 JSONL events on stdout (one per line):
 #   {"t":"pass","n":"<test_name>"}
 #   {"t":"fail","n":"<test_name>","out":"<captured output>"}
-#   {"t":"summary","pass":<N>,"fail":<N>,"warn":0,"ms":<elapsed_ms>}
+#   {"t":"summary","pass":<N>,"fail":<N>,"warn":0,"ms":<elapsed_ms>,"empty":<bool>}
 #
 # Exit code: 0 iff cargo test exits 0 AND no `fail` events were
-# emitted. Non-zero on any failure or build error.
+# emitted AND at least one test actually ran. Non-zero on any failure
+# or build error; 4 specifically for "no tests matched" (see the
+# empty-run guard near the summary).
 
 set -uo pipefail
 
@@ -129,7 +137,16 @@ PACKAGES=()
 HUMAN=0
 KEEP_LOGS=0
 CHANGED=0
+ALLOW_EMPTY=0
 FILTER=""
+# Set when --filter derived the package scope itself (see "--filter → owning
+# crates"). The empty-run banner reads it to name the right culprit.
+FILTER_AUTOSCOPED=0
+# Set when the junit report we translated belongs to a DIFFERENT nextest run
+# (see the attribution check after the nextest invocation).
+JUNIT_MISMATCH=0
+our_run_id=""
+junit_run_id=""
 FILTER_WORKSPACE=0
 ENGINE="auto"
 # nextest writes its JUnit report under <target>/nextest/<profile>/. Pinned to
@@ -175,6 +192,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --keep-logs) KEEP_LOGS=1; shift ;;
+        --allow-empty) ALLOW_EMPTY=1; shift ;;
         -h|--help) print_help; exit 0 ;;
         *)
             echo "sovereign-test: unknown arg '$1' (use --help)" >&2
@@ -275,6 +293,10 @@ if [[ -n "$FILTER" && ${#PACKAGES[@]} -eq 0 && $FILTER_WORKSPACE -eq 0 ]]; then
     fi
 
     if [[ ${#PACKAGES[@]} -gt 0 ]]; then
+        # Remember that the SCOPE was inferred, not asked for. If this run then
+        # matches zero tests, the empty-run banner needs to know whether to
+        # blame the heuristic or the caller.
+        FILTER_AUTOSCOPED=1
         echo "sovereign-test: --filter '${FILTER}' scoped to ${#PACKAGES[@]} crate(s): ${PACKAGES[*]}" >&2
         echo "sovereign-test:   (--filter-workspace keeps the old compile-everything behaviour)" >&2
     else
@@ -381,8 +403,15 @@ if [[ "$ENGINE" == "nextest" ]]; then
     # selecting a crate with no matching test is an expected, benign outcome.
     # nextest's default for this is exit 4.
     # shellcheck disable=SC2206
+    # `--no-tests=fail` (was `pass`) is the ROOT of the fail-open in note
+    # 8def98d7: `pass` tells nextest to exit 0 SILENTLY when a scope contains
+    # no matching tests, which is how `--filter <a real test name>` produced
+    # "✓ All green" off a zero-test run. `fail` makes nextest say so itself
+    # (exit 4); the empty-run guard near the summary turns that into a banner
+    # naming the scope, and `--allow-empty` restores the old tolerance for
+    # callers that genuinely expect an empty scope.
     cargo_argv=(nextest run "${scope_argv[@]}" $EXTRA_FEATURES
-                --profile "$NEXTEST_PROFILE" --no-fail-fast --no-tests=pass)
+                --profile "$NEXTEST_PROFILE" --no-fail-fast --no-tests=fail)
     [[ -n "$FILTER" ]] && cargo_argv+=(-- "$FILTER")
 
     # nextest CANNOT run doctests (upstream limitation, not a config choice), so
@@ -437,15 +466,65 @@ if [[ "$ENGINE" == "nextest" ]]; then
     # report a stale green as if it were current, the exact orphaned-results
     # failure this repo treats as unforgivable. Delete it first: absent report
     # then unambiguously means "this run produced no results".
-    junit_path="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}/nextest/${NEXTEST_PROFILE}/junit.xml"
-    rm -f "$junit_path"
+    # WHERE nextest writes the report is NOT simply <CARGO_TARGET_DIR>/nextest.
+    # Measured 2026-07-26: with sccache wired, a scoped run exports
+    # CARGO_TARGET_DIR=target/sovereign-test-scoped, but nextest still wrote
+    # its junit under the WORKSPACE target dir. The adapter was then handed a
+    # path that did not exist, exited 1, and the gate reported `pass: 0
+    # fail: 0` for a run with 2 real failures — results silently destroyed on
+    # EVERY scoped nextest run on an sccache-wired machine.
+    #
+    # So don't predict the path — search the candidates and identify the
+    # report by RUN ID. nextest prints `Nextest run ID <uuid>` and stamps the
+    # same uuid on the report, which resolves the path AND rules out adopting
+    # another run's results (the daemon's watcher runs continuously against
+    # the workspace dir) in one check.
+    junit_candidates=()
+    [[ -n "${CARGO_TARGET_DIR:-}" ]] && \
+        junit_candidates+=("${CARGO_TARGET_DIR}/nextest/${NEXTEST_PROFILE}/junit.xml")
+    junit_candidates+=("${REPO_ROOT}/target/nextest/${NEXTEST_PROFILE}/junit.xml")
+
+    # Delete ours-to-be first: an absent report must mean "this run produced
+    # no results", never "a previous run's results are still lying here". The
+    # uuid check below is what makes adoption impossible, but deleting keeps
+    # the failure mode simple when nextest dies during compilation.
+    for c in "${junit_candidates[@]}"; do rm -f "$c"; done
 
     (
         cd "$REPO_ROOT"
         cargo "${cargo_argv[@]}" </dev/null 2>&1 | tee "$raw_log"
         echo "${PIPESTATUS[0]}" > "$exit_file"
     )
-    "$NEXTEST_ADAPTER" "$junit_path" > "$out_jsonl" 2>>"$raw_log"
+
+    our_run_id="$(grep -o 'Nextest run ID [0-9a-f-]\{36\}' "$raw_log" 2>/dev/null | tail -1 | awk '{print $4}')"
+    junit_path=""
+    for c in "${junit_candidates[@]}"; do
+        [[ -f "$c" ]] || continue
+        junit_run_id="$(grep -o 'uuid="[0-9a-f-]\{36\}"' "$c" 2>/dev/null | head -1 | cut -d'"' -f2)"
+        if [[ -z "$our_run_id" || "$junit_run_id" == "$our_run_id" ]]; then
+            junit_path="$c"
+            break
+        fi
+        # A report exists but belongs to someone else — remember it for the
+        # diagnostic, and keep looking.
+        junit_other="$c"
+    done
+
+    nextest_rc="$(cat "$exit_file" 2>/dev/null || echo 1)"
+    if [[ -n "$junit_path" ]]; then
+        "$NEXTEST_ADAPTER" "$junit_path" > "$out_jsonl" 2>>"$raw_log"
+    elif [[ "$nextest_rc" == "4" ]]; then
+        # nextest's own "no tests to run". A missing report is EXPECTED here,
+        # not a lost one — the empty-run guard names this outcome.
+        : > "$out_jsonl"
+    else
+        # No report we can attribute to this run. Never fall through to the
+        # adapter's empty 0/0 summary — that is indistinguishable from a
+        # genuinely green run, which is the whole failure class this gate is
+        # being hardened against.
+        JUNIT_MISMATCH=1
+        : > "$out_jsonl"
+    fi
 
     # Doctest pass — appended to the same log and JSONL stream, through the
     # libtest adapter (cargo test --doc still speaks libtest).
@@ -584,7 +663,57 @@ if [[ -f "$counts_file" ]]; then
 fi
 failed_names="$(cat "$fails_file" 2>/dev/null || true)"
 
-final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms}}"
+# ── Empty-run guard — a gate must NEVER render "green" from zero tests ─────
+#
+# cargo exits 0 when a scope contains no matching tests, so the exit code
+# alone cannot tell "everything passed" from "nothing ran". Before this guard
+# the summary read the exit code and printed `pass: 0  fail: 0  ✓ All green`.
+#
+# Measured 2026-07-26 (note 8def98d7): triaging a red test with
+# `--filter cross_view_digest_surfaces_resonance` built for 252s, ran ZERO
+# tests, and reported All green — while `cargo nextest run -p sovereign-tools
+# --test knowledge_view_e2e cross_view_digest` ran 2 and passed 2. The
+# --filter → owning-crate auto-scoping (see above) had picked a scope where
+# the target test binary never ran. An agent triaging that way gets a green
+# light having verified nothing: the same fail-open class as note d4a08e0d.
+#
+# So pass==0 && fail==0 on a clean cargo exit is its OWN outcome — NO TESTS
+# MATCHED — with its own exit code (4: distinct from 1=failures, 2=usage,
+# 101=cargo panic) and a banner that names the resolved scope, because the
+# scope is what the caller got wrong. `--allow-empty` opts out.
+#
+# A dirty cargo exit is NOT an empty run: it is a build error, which the
+# existing branch below already reports correctly. The ONE exception is
+# nextest's own exit 4 ("no tests to run") — same outcome, already named
+# honestly by the runner, so it takes the empty-run banner rather than the
+# "likely a build error" one. nextest's `--no-tests` defaults to `auto`,
+# which downgrades to a WARNING (exit 0) when the caller passed a filter —
+# which is exactly the case this guard exists to catch.
+#
+# An unattributable run (JUNIT_MISMATCH) is NOT empty — its counts are simply
+# someone else's. It gets its own outcome below so a lost race can never be
+# laundered into either "green" or "no tests matched".
+EMPTY_RUN=0
+if [[ $JUNIT_MISMATCH -eq 0 ]] \
+   && [[ "$total_pass" -eq 0 && "$total_fail" -eq 0 ]] \
+   && { [[ "$exit_val" == "0" ]] || [[ "$exit_val" == "4" ]]; }; then
+    EMPTY_RUN=1
+fi
+final_exit="$exit_val"
+if [[ $JUNIT_MISMATCH -eq 1 ]]; then
+    final_exit=5
+elif [[ $EMPTY_RUN -eq 1 ]]; then
+    # --allow-empty means the caller has decided an empty scope is acceptable,
+    # so it must also clear nextest's native exit 4 — otherwise the opt-out
+    # would only work under the cargo engine.
+    if [[ $ALLOW_EMPTY -eq 1 ]]; then final_exit=0; else final_exit=4; fi
+fi
+
+# `empty` rides the summary record so daemon-mode consumers (which never see
+# the --human banner) can tell an empty run from a green one too.
+empty_json=false
+[[ $EMPTY_RUN -eq 1 ]] && empty_json=true
+final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms},\"empty\":${empty_json}}"
 
 if [[ $HUMAN -eq 1 ]]; then
     {
@@ -627,7 +756,63 @@ if [[ $HUMAN -eq 1 ]]; then
         printf " %-12s  %s\n" "cargo exit:" "$exit_val"
         echo
 
-        if [[ "$total_fail" -gt 0 ]] || [[ "$exit_val" != "0" ]]; then
+        if [[ $JUNIT_MISMATCH -eq 1 ]]; then
+            echo " ✘ NOT GREEN — no results could be attributed to this run."
+            echo
+            echo "   The tests may well have run; their report could not be"
+            echo "   found, so the counts above mean nothing and are not"
+            echo "   reported as green."
+            echo
+            printf "   %-14s %s\n" "our run ID:" "${our_run_id:-<not printed>}"
+            for c in "${junit_candidates[@]}"; do
+                if [[ -f "$c" ]]; then
+                    printf "   %-14s %s\n" "found:" "$c"
+                    printf "   %-14s %s\n" "  its run ID:" \
+                        "$(grep -o 'uuid="[0-9a-f-]\{36\}"' "$c" 2>/dev/null | head -1 | cut -d'"' -f2)"
+                else
+                    printf "   %-14s %s\n" "absent:" "$c"
+                fi
+            done
+            echo
+            echo "   Two known causes: (a) a concurrent nextest run (the daemon's"
+            echo "   test watcher) overwrote the shared report; (b) nextest wrote"
+            echo "   its report somewhere neither candidate covers. Re-run with"
+            echo "   --engine cargo to bypass the junit path entirely."
+            echo
+            echo "   Exit 5 = unattributable results."
+            echo
+        elif [[ $EMPTY_RUN -eq 1 && $ALLOW_EMPTY -eq 0 ]]; then
+            # Deliberately louder than a pass and deliberately NOT "✘ Failures":
+            # nothing failed, nothing ran. The scope is the actionable fact.
+            scope_desc="--workspace (all crates)"
+            [[ ${#PACKAGES[@]} -gt 0 ]] && scope_desc="${PACKAGES[*]}"
+            echo " ✘ NOT GREEN — no tests matched. 0 passed, 0 failed."
+            echo
+            echo "   A zero-test run verifies NOTHING. cargo exited 0 because"
+            echo "   nothing ran, not because everything passed."
+            echo
+            printf "   %-10s %s\n" "scope:" "$scope_desc"
+            printf "   %-10s %s\n" "filter:" "${FILTER:-<none>}"
+            echo
+            if [[ -n "$FILTER" ]] && [[ $FILTER_AUTOSCOPED -eq 1 ]]; then
+                echo "   Most likely: --filter auto-scoped the build to crates whose"
+                echo "   sources mention the pattern, and the test binary that owns"
+                echo "   your test is not among them. Retry unscoped:"
+                echo "     $0 --human --filter-workspace --filter '$FILTER'"
+                echo "   Or name the crate directly:"
+                echo "     $0 --human --package <crate> --filter '$FILTER'"
+            elif [[ -n "$FILTER" ]]; then
+                echo "   The filter matched no test name in this scope. libtest"
+                echo "   matches a SUBSTRING of the full test path — check spelling,"
+                echo "   or widen the scope you asked for."
+            else
+                echo "   This scope contains no tests at all. Widen it, or pass"
+                echo "   --allow-empty if that is genuinely expected."
+            fi
+            echo
+            echo "   Exit 4 = no tests matched (1 = failures, 2 = usage)."
+            echo
+        elif [[ "$total_fail" -gt 0 ]] || [[ "$exit_val" != "0" ]]; then
             if [[ -n "$failed_names" ]]; then
                 echo " ✘ Failures:"
                 while IFS= read -r failed; do
@@ -647,6 +832,12 @@ if [[ $HUMAN -eq 1 ]]; then
             echo "   - Rerun a name filter: $0 --human --filter <pattern>"
             echo "   - Rerun one package:   $0 --human --package <crate>"
             echo "   - Rerun touched crates: $0 --human --changed"
+            echo
+        elif [[ $EMPTY_RUN -eq 1 ]]; then
+            # --allow-empty was passed: still say what happened. "Green" and
+            # "nothing ran" are different facts even when the caller has
+            # decided the second one is acceptable.
+            echo " ○ No tests matched — treated as green (--allow-empty)."
             echo
         else
             echo " ✓ All green."
@@ -669,4 +860,4 @@ if [[ -d "${LOG_DIR}/.runs" ]]; then
     done
 fi
 
-exit "$exit_val"
+exit "$final_exit"

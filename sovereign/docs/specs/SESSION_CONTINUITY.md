@@ -169,6 +169,30 @@ The protocol:
    0 repeated reads. A FAIL is reported with the section of the frame that
    failed to carry, and feeds §5 iteration.
 
+### 3b. Which frame the successor gets (SHIPPED 2026-07-26)
+
+With several workstreams live, "the newest frame" is the successor's only by
+luck — and a wrong frame costs more than none (MEMORY_MODEL §5 E5 R1). So the
+handoff is a **pointer first, frame second**:
+
+| Surface | What it does |
+|---|---|
+| `sovereign session frames` | The index: one line per live frame — id, age, branch, status, provenance, `## Next` count, goal. In selection order. |
+| `sovereign session frames <id>` | Dereference: print that frame whole. `<id>` is any unambiguous session-id prefix. |
+| `sovereign session frames --json …` | Same, machine-readable, with every ranking signal per candidate. `--repo` / `--branch` / `--for-prompt` / `--limit` / `--max-age-days` scope it. |
+
+- `session-boot.sh` (SessionStart) injects the **index**. It has no prompt to
+  select against, so it does not try to select. A resumed session gets its
+  OWN frame whole instead — that needs no selection.
+- `inject-notes.sh` (first UserPromptSubmit) injects the **top-ranked frame
+  whole**, once per session, recorded in
+  `~/.sovereign/sessions/<id>/frame-inject.json`.
+- Ranking is lexicographic: **branch match → prompt overlap → recency.**
+  In-flight status is displayed but deliberately not ranked on — `status` is
+  free text, and a `completed` frame is the normal good handoff.
+
+Both surfaces are pure filesystem reads, so the handoff survives a dead daemon.
+
 ---
 
 ## 4. `sovereign session distill` (build in flight)
