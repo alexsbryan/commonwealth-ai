@@ -14,7 +14,7 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 
 [dependencies]
 corpus-engine-scip = { workspace = true, optional = true }
-dirs = "5"
+dirs = "6"
 serde = { workspace = true }
 toml = { workspace = true }
 tokio = { workspace = true }

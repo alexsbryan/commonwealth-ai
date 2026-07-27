@@ -62,7 +62,7 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
-dirs = "5"
+dirs = "6"
 chrono = { workspace = true }
 sha2 = { workspace = true }
 # `meshapp publish/install` pack/unpack bundle artifacts (tar over zstd, like
@@ -71,11 +71,11 @@ tar = "0.4"
 zstd = "0.13"
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
+which = "8"
 hostname = { workspace = true }
 hex = "0.4"
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
-rand = "0.9"
+rand = "0.10"
 # `awareness` is dev-tools only in sovereign-cli; the LLM sibling
 # doesn't carry that surface (rusqlite for awareness lives there).
 
