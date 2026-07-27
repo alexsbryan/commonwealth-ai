@@ -1932,6 +1932,55 @@ the reading is about a peer you were about to keep hammering — is
 untestable in a sim with no admission gate, exactly as F4 is; the
 piggyback should ride §4.2 step 3's shed path instead.
 
+**F10 — the scheduler has no speed signal in production, and it changes
+how every paragraph above should be read (2026-07-27 — full result in
+`SCHEDULER_QUALITY.md` §4.5).** Everything above is Tier-1: measured on
+a simulator where each node advertises a `BenchmarkResult`. **No node on
+this mesh ever has.** `run_baseline_benchmark`
+(`sovereign-inference/src/benchmark.rs`) has zero callers,
+`set_local_benchmark` (`peer_inference.rs`) has zero callers, and
+`build_local_capabilities` hardcodes `benchmark: None` into every gossip
+tick — under comments that used to describe the startup probe and a
+`with_benchmark` setter as though both existed. Neither does; both
+comments are now corrected in place.
+
+So `throughput_factor` has two sources and production supplies neither
+(the observed decode EWMA is gated behind a `samples >= 5` the ranked
+path never reaches for a peer), leaving it at **neutral 1.0 for every
+peer on every fleet**. Read the `mixed-hubs` sentence above with that in
+mind: "the product already sends zero turns to the 11 tok/s hub,
+`throughput_factor` 0.55 is decisive" is true of the *simulated* mesh
+and false of this one, where that hub scores 1.0 like everything else.
+F3 is not a weak term; it is a constant.
+
+Two arms price it (`blind-rate-card`, and `blind-shipped` = the mesh as
+it runs tonight, now the as-shipped denominator in place of
+`blind-observations`). The rate card is worth **0% on five of six
+fleets** — including `heterogeneous-fleet` — and **−32% mean on
+`mixed-hubs` alone**, because the clamp at a 20 tok/s reference means a
+card only carries information about a node *slower* than reference, and
+`mixed-hubs` is the suite's only fleet containing one.
+
+**The obvious repair is a measured regression, so it is filed
+DO-NOT-BUILD.** Adding a call site to the dead probe wires the
+`Speed::Fast` slot: a ~2.5 GB model's rate stamped in as the baseline,
+which `throughput_factor` then extrapolates up to a 21 GB candidate on a
+*linear* size law. Decode is bandwidth-bound and the law is false, and
+the term's clamp is one-sided, so the error can only push large models
+down. New knobs `SimConfig::probe_baseline_size_gb` /
+`probe_sublinearity` measure it as `rate ∝ size^-β` (β=1 is the code's
+own assumption and reproduces the un-probed rows exactly): at β=0.7 the
+"win" grows to −56% while declined capability upgrades double 31→67, and
+at β=0.5 real downgrades appear. An honest card costs no quality — but
+only if it describes the model being *scored*. Benchmark per-model, or
+leave the probe dead.
+
+This also settles why §4.1 cannot ship: `PredictInputs::from_candidate`
+reads the advertised benchmark and nothing else, so unhardcoding
+`RankObjective::Product` today would yield `Unpredictable::NoThroughput`
+on every candidate of every request. The hardcoded switch is not the
+blocker; the missing rate card is.
+
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a
 consumer ring. Anchors advertise `NodeCapabilities.anchor` (`AnchorProfile{

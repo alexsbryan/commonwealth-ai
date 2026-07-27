@@ -206,6 +206,17 @@ The term exists specifically to handle a mixed fleet, and it is
 constant across a mixed fleet. Its only live discrimination is *below*
 20 tok/s — which is where the largest, highest-quality models sit.
 
+**Worse than filed, measured 2026-07-27 (§4.5, F10).** The above
+describes the term with a rate card. Production has none — and no
+observed EWMA for peers either — so `throughput_factor` takes its
+`(None, None)` branch and returns neutral 1.0 for **every peer on every
+fleet**. It is not weakly discriminating, it is a constant, and
+`blind-rate-card` costs nothing on five of six scenarios for exactly
+that reason. The "only live discrimination is below 20 tok/s" sentence
+is the load-bearing one and it survives: the one fleet where the rate
+card is worth anything (`mixed-hubs`, −32%) is the only one in the suite
+containing a sub-reference node.
+
 ### F4 — Congestion and failure share one channel (HIGH, latent)
 
 A 503 from admission lands in the `Err` arm
@@ -549,27 +560,52 @@ a name. Pinned by
 (`tests/scheduler_decision_records.rs`), verified red against the pre-fix code
 with the recorded `in_flight` at 0 where 8 was true.
 
-### F10 — The two policies §4.1 measured cannot fire in production (CRITICAL)
+### F10 — The scorer has no speed signal, so §4.1's policies cannot fire (CRITICAL — PRICED 2026-07-27, §4.5)
 
-`RankObjective::Product` (`peer_inference.rs:1288`) and `TierFloor::None`
-(`:1293`) are **hardcoded** at the production call site. The tier floor
-(`scheduler_core.rs:596-653`) and the predicted-time objective (`:681-726`) are
-therefore unreachable outside Tier 1 and its test arms.
+Filed as "a hardcoded switch." That was the smaller half, and the ordering
+between the two halves turned out to be the finding.
 
-§4.1.1 and §4.1.2 are labelled *measured*, and they were — in the simulator.
-Neither has shipped. Read them as evidence about a policy that **could** be
-adopted, not as a description of how this mesh routes today. §4.3's soft-named
-fallthrough (F8) remains the only item in this document that landed in
-production.
+**Half A — the switch.** `RankObjective::Product` (`peer_inference.rs:1288`)
+and `TierFloor::None` (`:1293`) are **hardcoded** at the production call site,
+so the tier floor (`scheduler_core.rs:596-653`) and the predicted-time
+objective (`:681-726`) are unreachable outside Tier 1. §4.1.1 and §4.1.2 are
+labelled *measured*, and they were — in the simulator. Neither has shipped.
+Read them as evidence about a policy that **could** be adopted, not as a
+description of how this mesh routes today.
 
-Related, and the reason the calibration contract in §5 cannot yet be honoured:
-it says the service-time model is "fit from data the fleet already collects."
-That data is not collected. `run_baseline_benchmark`
+**Half B — the inputs, and it is upstream of half A.** The data those policies
+consume is never collected. `run_baseline_benchmark`
 (`sovereign-inference/src/benchmark.rs:59`) and
 `MeshInferenceProvider::set_local_benchmark` (`peer_inference.rs:808`) have no
 callers, and `NodeCapabilities.benchmark` is hardcoded `None` in the gossip
-builder (`capabilities.rs:191`) — whose comment promises a `with_benchmark`
-setter that does not exist. Every peer is scored with `benchmark: None`.
+builder (`capabilities.rs:194`) — whose comment promises a `with_benchmark`
+setter that does not exist, as does `benchmark.rs`'s module header. Every
+candidate is scored with `benchmark: None`.
+
+Three consequences, measured in §4.5:
+
+1. **`throughput_factor` is a constant in production**, not a weak signal. Both
+   its sources are shut — no rate card, and the observed EWMA is gated behind
+   the `samples >= 5` the ranked path never reaches (F9's peer half) — so it
+   returns neutral 1.0 for every peer on every fleet. F3 is worse than
+   catalogued.
+2. **Unhardcoding half A today would expose a policy that cannot execute.**
+   `PredictInputs::from_candidate` reads the advertised benchmark and nothing
+   else, so `predict` would return `Err(Unpredictable::NoThroughput)` for every
+   candidate on every request. Half A is not the blocker; half B is.
+3. **The obvious repair is the wrong one.** Calling `run_baseline_benchmark` at
+   startup probes the `Speed::Fast` slot and leaves `throughput_factor`
+   extrapolating from a ~2.5 GB model to a 21 GB one on a linear size law that
+   is known to be false. §4.5 prices that: at realistic sub-linearity it buys
+   −56% latency and doubles declined upgrades. Probe the model being *scored*,
+   or do not probe.
+
+This is also why §5's calibration contract cannot be honoured: it says the
+service-time model is "fit from data the fleet already collects," and the fleet
+collects none of it.
+
+§4.3's soft-named fallthrough (F8) and F9's local half remain the only items in
+this document that landed in production.
 
 ### F11 — What the dispatcher omits from the wire blinds four surfaces (HIGH)
 
@@ -1538,6 +1574,137 @@ routing assertion, which is itself the point: no test in the repository
 could distinguish the pre- and post-fix scorer until one was written
 for it.
 
+### 4.5 F10 priced — the scorer has no speed signal at all — MEASURED 2026-07-27
+
+§4.4 found that arm 0 was not the shipped system in two ways. There is a
+third, it was never listed, and it is the larger one: **arm 0 supplies
+every candidate with a rate card, and no node on this mesh has ever
+advertised one.**
+
+The chain is dead end to end. `run_baseline_benchmark`
+(`sovereign-inference/src/benchmark.rs:59`) has zero callers.
+`MeshInferenceProvider::set_local_benchmark` (`peer_inference.rs:808`)
+has zero callers, so `local_benchmark` stays at the `None` it is
+constructed with (`:573`). The gossip builder hardcodes `benchmark: None`
+(`capabilities.rs:194`). Two doc comments describe the mechanism as
+though it runs — `benchmark.rs`'s module header ("Runs once at daemon
+startup … persisted to disk") and `capabilities.rs`'s ("stamped in by
+the daemon's startup probe via a separate `with_benchmark` setter"). The
+setter does not exist and the probe has no caller.
+
+**What that does to the score, and it is not a degradation — it is a
+deletion.** `throughput_factor` (`scoring.rs:362`) has exactly two
+sources and production supplies neither: the observed EWMA is gated on
+`samples >= 5`, which the ranked path never reaches (F9's peer half),
+and the benchmark estimate needs the card that does not exist. Its
+`(None, None)` branch returns **neutral 1.0**. So F3's term is not
+"failing to discriminate under heterogeneity" — it is a **constant**,
+and every peer on every fleet is scored as though it ran at the
+reference rate.
+
+One asymmetry survives, and it runs the other way. The *local* candidate
+does reach the observed gate: production seeds local `samples` above the
+cold-start threshold at construction (`peer_inference.rs:559`) and keeps
+`tg_tok_s_ewma` current via `ThroughputTarget::Local`. Since
+`throughput_factor` clamps to `[FLOOR, 1.0]`, the local node is the only
+candidate that can be scored *below* the constant every peer enjoys — a
+bias toward offload, opposite in direction to F9's local half. Measured
+inert in this suite (every local rate sits above the 20 tok/s reference,
+so the clamp never bites), but it is in the code and it is why F9's and
+F10's halves must not be netted into one number.
+
+**Two new arms** (`ALL_ARMS` 19 → 21): `blind-rate-card` — the card
+removed, everything else as-implemented; and `blind-shipped` —
+`blind-peer-ramp` plus `blind-rate-card`, which is what this mesh does
+tonight and the successor to `blind-observations` as the as-shipped
+denominator.
+
+| scenario | `blind-rate-card` | `blind-shipped` |
+|---|---|---|
+| `household-evening-12` | +0% / +0% | −24% / −32% |
+| `pair` | +0% / +0% | −11% / −6% |
+| `twin-hubs` | +0% / +0% | +3% / +4% |
+| `heterogeneous-fleet` | +0% / +0% | −33% / −34% |
+| `mixed-hubs` | **+29% / +88%** | **+48% / +117%** |
+| `isolation` | +0% / +0% | +13% / −27% |
+
+*(mean / p95, 5 seeds, against `as-implemented`. The `blind-shipped`
+column is `blind-peer-ramp` plus the rate card, and outside `mixed-hubs`
+it is `blind-peer-ramp` to the decimal — the two effects do not
+interact.)*
+
+**The rate card is worth nothing on five of six fleets, including the
+one called `heterogeneous-fleet`.** That is the sharp part.
+`throughput_factor` divides by a 20 tok/s reference and clamps to 1.0,
+so a rate card only carries information about a node *slower* than the
+reference. `mixed-hubs` is the only fleet in the suite with one (an 11
+tok/s hub). Everywhere else every node clamps to 1.0 with or without a
+card, and removing it changes not one decision. F3 catalogued the clamp
+as failing under heterogeneity; the clamp is better described as
+**a detector for sub-reference nodes and nothing else**.
+
+**The landing case, and then the reason not to take it.** Wiring the
+probe moves the mesh from `blind-shipped` to `blind-peer-ramp` (the peer
+ramp stays frozen either way — §4.4 measured it protective): −32% mean on
+`mixed-hubs`, 0% on all five others. The same large-where-it-fires,
+no-op-elsewhere shape that cleared F9 to land the same day. It also
+survives a mis-measured probe, and *widens* — −32% at ±0/±25% rate
+error, −37% at ±50%, −40% at ±100%, with the `blind-shipped` control
+flat at 28.0s throughout. A worse rate card helps, which is the fourth
+sighting of "a broken signal becomes an accidental brake."
+
+**But the mechanism the sim priced is not the one production would
+ship.** In this sim each node advertises a card measured on the model it
+serves, so `throughput_factor`'s size-ratio extrapolation
+(`scoring.rs:384`) runs at ratio 1.0 and is inert — asserted in the test
+rather than left to be noticed. `run_baseline_benchmark` probes the
+**`Speed::Fast` slot**: a ~2.5 GB model standing in for a 21 GB hub, with
+the estimate scaled linearly on the size ratio. `SimConfig`'s new
+`probe_baseline_size_gb` / `probe_sublinearity` model that, with real
+scaling as `rate ∝ size^-β`. β = 1 is the assumption the code already
+makes, and it reproduces the un-probed rows exactly (asserted, not
+eyeballed):
+
+| β | `blind-shipped` | `+rate-card` | Δ | downgrades | declined upgrades |
+|---|---|---|---|---|---|
+| 1.0 (the code's assumption) | 28.0s | 19.0s | −32% | 0.0 | 31.2 |
+| 0.9 | 28.0s | 19.0s | −32% | 0.0 | 31.2 |
+| 0.7 (bandwidth-bound) | 28.0s | 12.3s | **−56%** | 0.0 | **67.0** |
+| 0.5 | 28.0s | 12.1s | **−57%** | **3.0** | **67.0** |
+
+**Read the right-hand columns or the table lies to you.** The extra 24
+points of "win" at realistic β is bought with capability, not earned:
+declined upgrades more than double, and by β = 0.5 the mesh starts
+serving turns below the origin's own local model. β < 1 does not give
+the scorer better information — it gives it a *systematic under-estimate
+of large models*, and the clamp is one-sided, so that error can only
+push big candidates down. This is §4.1.1's hazard arriving through a
+completely different door: anything that makes small fast models look
+better reads as a large latency win on a scoreboard that cannot see
+answer quality.
+
+**Verdict: do not simply un-dead the existing probe.** The −32% row is
+real and is the only one that describes an honest rate card, and it is
+reachable — but only by probing *the model being scored* rather than the
+Fast slot. Eliminate the extrapolation; do not tune β. That is a
+different piece of work from calling `run_baseline_benchmark` at
+startup, and it is the one F10 actually asks for.
+
+**And this settles F10's other half.** `RankObjective::Product` is
+hardcoded at `peer_inference.rs:1288`, but unhardcoding it today would
+expose a policy that cannot execute: `PredictInputs::from_candidate`
+reads the advertised benchmark and nothing else, so `predict` would
+return `Err(Unpredictable::NoThroughput)` (`predicted_time.rs:342`) for
+**every candidate on every request**. The hardcoded objective is not the
+blocker. The missing rate card is, and the tier floor —
+`TierFloor::from_requirements` needs only advertised `size_gb` — is the
+one §4.1 policy that is actually reachable today. §4.1.1's numbers say
+it must not be enabled on a one-hub fleet regardless.
+
+**Gates.** `mesh_sim_scoreboard` 24 pass / 0 fail (was 23 — new:
+`what_the_scorer_loses_by_never_measuring_anyone`). `sovereign-mesh`
+lib 20 pass, including the `ALL_ARMS`-iterating invariants at 21 arms.
+
 ## 5. The quality loop
 
 The unlock: **the scheduling decision is a pure function, and the
@@ -1904,12 +2071,23 @@ so before anyone quotes the number.
 | 6 | Enable a finite ceiling; priority classes | hub degradation is shedding-with-recovery, not unbounded queueing — and step 5's floors hold while it sheds |
 | 7 | **F9 local half — LANDED 2026-07-27** | Wire the real local in-flight count into the scorer. Armed first (`blind-local-load` / `blind-peer-ramp` / `blind-observations`), measured at −71% mean / −76% p95 on `isolation` and ±1% on four other fleets, then landed. §4.4 |
 | — | **F9 peer half — DO NOT BUILD** | Priced as *protective*: freezing peer `samples` is worth −11%..−33% mean on three fleets. Completing the wiring is a regression. Second instance of F7's trap. §4.4 |
+| 8 | **F10 — the rate card, and it must be per-model** | Blocks step 1 entirely (a predicted-time objective with no rate card returns `NoThroughput` for every candidate). An honest card is worth −32% mean on `mixed-hubs` and 0% on five other fleets. Exit criterion is **not** "the probe has a caller": it is that the card describes the model being scored, so `throughput_factor`'s size-ratio extrapolation stays inert. Wiring the existing `Speed::Fast` probe instead fails this — §4.5 |
+| — | **F10 via the Fast-slot probe — DO NOT BUILD** | Un-deading `run_baseline_benchmark` as written reads as −56% and is a quality regression: declined upgrades double and downgrades appear. Fourth instance of the trap. §4.5 |
 
-F3's clamp is the one plausible exception to "arm before landing": a
+~~F3's clamp is the one plausible exception to "arm before landing": a
 term that evaluates to a constant carries zero information, so no
-metric can degrade by fixing it. Even so it lands as arm 1 rather than
-ahead of S0 — the cost of waiting is one sim run, and the benefit is
-that the baseline stays honest.
+metric can degrade by fixing it.~~ **Retracted 2026-07-27 by F10's arm,
+and it is worth keeping the strikethrough rather than deleting the
+sentence, because the reasoning was seductive and wrong in an
+instructive way.** The premise is true — `throughput_factor` really does
+evaluate to a constant in production (§4.5) — and the conclusion still
+does not follow. A constant carries no information, but the thing that
+replaces it is not information either unless it is *unbiased*. The
+shipped repair would substitute a systematic under-estimate of large
+models, and §4.5 measures that degrading two quality proxies while
+latency improves. "No metric can degrade by fixing it" quietly assumed
+the fix is a measurement; it is an extrapolation. Arm first — including,
+and especially, the changes that look like they cannot lose.
 
 Phase 0 before Phase 1 before Phase 2 is the same "baseline before
 optimization" discipline `MESH_INFERENCE.md` specified and that was

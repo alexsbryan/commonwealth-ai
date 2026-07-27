@@ -2389,3 +2389,357 @@ fn what_the_scorer_loses_by_never_seeing_its_own_load() {
     }
     let _ = (blind_local, blind_ramp);
 }
+
+/// F10's second half: no node on this mesh has ever advertised a
+/// `BenchmarkResult`, so `throughput_factor` has neither of its two
+/// sources and returns neutral 1.0 for every candidate on every fleet.
+///
+/// The test asserts the *structural* claim — that the term is a
+/// constant in production, not merely a weak signal — and prints the
+/// latency table for the arm that models tonight's mesh. The structural
+/// claim is the durable one: it is arithmetic from `scoring.rs:362`'s
+/// `(None, None)` branch, and it holds on any fleet, whereas the table
+/// is fleet-specific by construction.
+#[test]
+fn what_the_scorer_loses_by_never_measuring_anyone() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let arms = [
+        Arm::AsImplemented,
+        Arm::BlindPeerRamp,
+        Arm::BlindRateCard,
+        Arm::BlindShipped,
+    ];
+
+    // ---- wiring, before any table is believed ----
+    let s = scenario::mixed_hubs(SEED);
+    let sources = |r: &RunReport| -> Vec<String> {
+        candidates(r)
+            .iter()
+            .map(|c| c.score.throughput_source.clone())
+            .collect()
+    };
+    let factors = |r: &RunReport| -> Vec<f32> {
+        candidates(r)
+            .iter()
+            .map(|c| c.score.throughput_factor)
+            .collect()
+    };
+    let peer_factors = |r: &RunReport| -> Vec<f32> {
+        candidates(r)
+            .iter()
+            .filter(|c| c.kind == sovereign_mesh::decision_log::CandidateKind::Peer)
+            .map(|c| c.score.throughput_factor)
+            .collect()
+    };
+    let local_factors = |r: &RunReport| -> Vec<f32> {
+        candidates(r)
+            .iter()
+            .filter(|c| c.kind == sovereign_mesh::decision_log::CandidateKind::Local)
+            .map(|c| c.score.throughput_factor)
+            .collect()
+    };
+
+    let arm0 = run(&s, Arm::AsImplemented, SEED);
+    assert!(
+        sources(&arm0).iter().any(|s| s == "benchmark_estimate"),
+        "arm 0 never consulted a rate card on `mixed-hubs` — a fleet built out of \
+         speed variance. Nothing for the blind arm to take away, so the table is unreadable"
+    );
+    assert!(
+        factors(&arm0).iter().any(|f| *f < 0.999),
+        "arm 0 never discriminated on throughput — F3's term is already inert in the \
+         baseline, which would make this whole comparison vacuous"
+    );
+
+    // The finding, stated as an assertion rather than as prose — and it
+    // is an *asymmetry*, not a uniform blindness. The first draft of
+    // this test asserted every candidate scored neutral and failed on
+    // the local one, which is the more interesting answer:
+    //
+    //   * Every **peer** is neutral 1.0. Both of `throughput_factor`'s
+    //     sources are shut for peers — no rate card (F10) and no
+    //     samples (F9's peer half) — so it takes the `(None, None)`
+    //     branch every time.
+    //   * The **local** node is scored on its observed decode rate.
+    //     Production seeds local `samples` above the cold-start
+    //     threshold at construction (`peer_inference.rs:559`) and keeps
+    //     `tg_tok_s_ewma` current via `ThroughputTarget::Local`, so the
+    //     observed gate opens for the local candidate and only for it.
+    //
+    // `throughput_factor` clamps to `[FLOOR, 1.0]`, so the local
+    // candidate can only be scored *down* from the constant every peer
+    // enjoys. F10's blindness therefore biases **toward offload** —
+    // the opposite direction to F9's local half, which is why the two
+    // must not be reported as one number.
+    for sc in [
+        scenario::mixed_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+        scenario::twin_hubs(SEED),
+    ] {
+        let shipped = run(&sc, Arm::BlindShipped, SEED);
+        assert!(
+            peer_factors(&shipped).iter().all(|f| (*f - 1.0).abs() < 1e-6),
+            "{}: a PEER was scored with a non-neutral throughput factor on the \
+             as-shipped arm. Production gossips no rate card and never reaches the \
+             observed-EWMA gate for a peer, so this term cannot be anything but 1.0 \
+             — if it is, the arm is not wired",
+            sc.name
+        );
+        assert!(
+            !peer_factors(&shipped).is_empty(),
+            "{}: no peer was ever scored, so the assertion above is vacuous",
+            sc.name
+        );
+    }
+
+    // The asymmetry itself, on the fleet built to expose it: `isolation`
+    // sustains local contention, so the local EWMA is live and the
+    // clamp has something to bite on.
+    let shipped_iso = run(&scenario::isolation(SEED), Arm::BlindShipped, SEED);
+    let locals = local_factors(&shipped_iso);
+    let peers = peer_factors(&shipped_iso);
+    assert!(
+        peers.iter().all(|f| (*f - 1.0).abs() < 1e-6),
+        "isolation: a peer escaped the neutral constant on the as-shipped arm"
+    );
+    println!(
+        "\n  as-shipped throughput_factor — local min {:.3} / peers all {:.3}  \
+         ({} local, {} peer scorings)",
+        locals.iter().copied().fold(f32::INFINITY, f32::min),
+        peers.first().copied().unwrap_or(f32::NAN),
+        locals.len(),
+        peers.len(),
+    );
+
+    // ---- the scope limit, pinned rather than argued ----
+    // This is the caveat that decides whether the tables below license
+    // a production landing, so it is an assertion and not a paragraph.
+    //
+    // `throughput_factor` does not read a rate card directly: it scales
+    // `bench.tg_tok_s` by `baseline_size_gb / candidate_size_gb`
+    // (`scoring.rs:384`) to extrapolate from the model that was
+    // benchmarked to the model being scored. In this sim every node
+    // advertises exactly one model and benchmarks *that* model
+    // (`NodeSpec::benchmark`), so the ratio is 1.0 at every scoring and
+    // the extrapolation never runs.
+    //
+    // Production would not have that property. `run_baseline_benchmark`
+    // probes the **`Speed::Fast` slot** — a ~4B model — while the
+    // candidate being scored is whatever the peer advertises, often a
+    // 35B. The ratio would be ~0.1 and the estimate an order of
+    // magnitude below the measured rate. So a shipped probe activates a
+    // linear-extrapolation heuristic that nothing in this suite
+    // exercises, and the −32% below is NOT a prediction about it.
+    for sc in [
+        scenario::mixed_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+        scenario::household_evening_12(SEED),
+    ] {
+        for n in &sc.nodes {
+            if let Some(b) = n.benchmark() {
+                assert!(
+                    (b.baseline_size_gb - n.size_gb).abs() < 1e-6,
+                    "{}/{}: this sim's rate card is measured on the node's own \
+                     serving model, so `throughput_factor`'s size-ratio \
+                     extrapolation is inert here. If that ever stops being true, \
+                     the scope note above this assertion needs rewriting before \
+                     the F10 tables are quoted at anyone.",
+                    sc.name,
+                    n.name
+                );
+            }
+        }
+    }
+
+    // ---- the table ----
+    println!("\n=== F10 — what the missing rate card costs ===");
+    println!(
+        "  {:<20} {:>9} {:>9} {:>9}   (mean over {} seeds)",
+        "arm",
+        "mean",
+        "p95",
+        "offloads",
+        seeds.len()
+    );
+    for sc in [
+        scenario::household_evening_12(SEED),
+        scenario::pair(SEED),
+        scenario::twin_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+        scenario::mixed_hubs(SEED),
+        scenario::isolation(SEED),
+    ] {
+        println!("── {} ──", sc.name);
+        let mut baseline = (0.0f64, 0.0f64);
+        for (i, arm) in arms.iter().enumerate() {
+            let (mut means, mut p95s, mut offs) = (0.0f64, 0.0f64, 0.0f64);
+            for seed in seeds {
+                let r = run(&sc, *arm, seed);
+                let scored = score(&r, GOSSIP_WINDOW_MS, None);
+                means += mean_total_ms(&r) / 1000.0;
+                p95s += scored.records.p95_total_ms / 1000.0;
+                offs += offloads(&r) as f64;
+            }
+            let n = seeds.len() as f64;
+            let (m, p, o) = (means / n, p95s / n, offs / n);
+            if i == 0 {
+                baseline = (m, p);
+                println!("  {:<20} {m:>8.1}s {p:>8.1}s {o:>9.1}", arm.label());
+            } else {
+                println!(
+                    "  {:<20} {m:>8.1}s {p:>8.1}s {o:>9.1}   mean {:+.0}%  p95 {:+.0}%",
+                    arm.label(),
+                    100.0 * (m - baseline.0) / baseline.0.max(0.001),
+                    100.0 * (p - baseline.1) / baseline.1.max(0.001),
+                );
+            }
+        }
+    }
+
+    // ---- the landing question, isolated ----
+    // If the rate card were wired tomorrow, the mesh moves from
+    // `blind-shipped` to `blind-peer-ramp` — the peer ramp stays frozen
+    // either way, because §4.4 measured it protective. That pair, and
+    // not anything against arm 0, is the delta an operator would feel.
+    println!("\n=== F10 — the landing case: wiring the probe, peer ramp left alone ===");
+    println!("  {:<26} {:>9} {:>9}", "fleet", "shipped", "+rate-card");
+    for sc in [
+        scenario::household_evening_12(SEED),
+        scenario::pair(SEED),
+        scenario::twin_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+        scenario::mixed_hubs(SEED),
+        scenario::isolation(SEED),
+    ] {
+        let (mut before, mut after) = (0.0f64, 0.0f64);
+        for seed in seeds {
+            before += mean_total_ms(&run(&sc, Arm::BlindShipped, seed)) / 1000.0;
+            after += mean_total_ms(&run(&sc, Arm::BlindPeerRamp, seed)) / 1000.0;
+        }
+        let n = seeds.len() as f64;
+        let (b, a) = (before / n, after / n);
+        println!(
+            "  {:<26} {b:>8.1}s {a:>8.1}s   {:+.0}%",
+            sc.name,
+            100.0 * (a - b) / b.max(0.001)
+        );
+    }
+
+    // ---- and the flattery, priced ----
+    // The sim builds each node's advertised rate card from the same
+    // `Hardware` its service-time model consumes, so at
+    // `advertised_rate_error: 0.0` a wired probe is *exact truth by
+    // construction* — a real 10-second llama.cpp probe is not. The rows
+    // above must not be read without this sweep (`SimConfig`'s own doc
+    // comment, and note 963a8d88's method rule).
+    //
+    // `blind-shipped` is the control: it consults no rate card, so its
+    // column must be flat across the sweep. If it moves, the harness is
+    // perturbing something other than the thing under test.
+    println!("\n=== F10 — does the win survive a mis-measured probe? (mixed-hubs) ===");
+    println!("  {:<12} {:>9} {:>11} {:>8}", "rate error", "shipped", "+rate-card", "Δ");
+    for err in [0.0_f32, 0.25, 0.5, 1.0] {
+        let (mut before, mut after) = (0.0f64, 0.0f64);
+        for seed in seeds {
+            // Scenario fixed at `SEED`, varying only the run seed —
+            // the same convention as the two tables above and as F9's
+            // table in §4.4, so the ±0% row is directly comparable to
+            // the `mixed-hubs` row of the landing case. (§4.1.2's
+            // sweeps rebuild the fleet per seed instead; the two
+            // conventions give different absolute numbers and must not
+            // be read across.)
+            let sc = scenario::mixed_hubs(SEED);
+            let cfg = SimConfig {
+                advertised_rate_error: err,
+                ..SimConfig::default()
+            };
+            before += mean_total_ms(&run_with(&sc, Arm::BlindShipped, seed, cfg.clone())) / 1000.0;
+            after += mean_total_ms(&run_with(&sc, Arm::BlindPeerRamp, seed, cfg)) / 1000.0;
+        }
+        let n = seeds.len() as f64;
+        let (b, a) = (before / n, after / n);
+        println!(
+            "  ±{:<11.0}% {b:>8.1}s {a:>10.1}s {:>7.0}%",
+            err * 100.0,
+            100.0 * (a - b) / b.max(0.001)
+        );
+    }
+
+    // ---- and the mechanism production would actually ship ----
+    // Everything above prices a rate card measured on the model each
+    // node serves. `run_baseline_benchmark` measures the `Speed::Fast`
+    // slot instead, so a shipped card describes a ~2.5 GB model and
+    // `throughput_factor` extrapolates from it to whatever is being
+    // scored, assuming rate scales as 1/size.
+    //
+    // β = 1.0 is that assumption, and it must reproduce the rows above
+    // exactly — asserted below rather than eyeballed, because the whole
+    // reading of the sweep depends on the knob being an identity there.
+    // Below 1.0 the probe over-states the hardware per GB and every
+    // large candidate is extrapolated low; the clamp is one-sided, so
+    // the error can only push candidates down.
+    const FAST_SLOT_GB: f32 = 2.5;
+    println!("\n=== F10 — the card a SHIPPED probe would advertise (mixed-hubs) ===");
+    println!("   (2.5 GB Fast-slot probe extrapolated to each candidate; β=1 is the linear");
+    println!("    assumption `throughput_factor` already makes, so it must be an identity)");
+    println!("   Latency alone cannot read this table: §4.1.1 established that sending");
+    println!("   knowledge turns to small fast models looks like a large latency win and");
+    println!("   is a quality regression. `downgrades` is the column that tells them apart.");
+    println!(
+        "  {:<14} {:>9} {:>11} {:>8} {:>11} {:>9}",
+        "β (size→rate)", "shipped", "+rate-card", "Δ", "downgrades", "declined"
+    );
+
+    let control = {
+        let (mut before, mut after) = (0.0f64, 0.0f64);
+        for seed in seeds {
+            let sc = scenario::mixed_hubs(SEED);
+            before += mean_total_ms(&run(&sc, Arm::BlindShipped, seed)) / 1000.0;
+            after += mean_total_ms(&run(&sc, Arm::BlindPeerRamp, seed)) / 1000.0;
+        }
+        let n = seeds.len() as f64;
+        (before / n, after / n)
+    };
+
+    for beta in [1.0_f32, 0.9, 0.7, 0.5] {
+        let (mut before, mut after) = (0.0f64, 0.0f64);
+        let (mut down, mut declined) = (0usize, 0usize);
+        for seed in seeds {
+            let sc = scenario::mixed_hubs(SEED);
+            let cfg = SimConfig {
+                probe_baseline_size_gb: Some(FAST_SLOT_GB),
+                probe_sublinearity: beta,
+                ..SimConfig::default()
+            };
+            before += mean_total_ms(&run_with(&sc, Arm::BlindShipped, seed, cfg.clone())) / 1000.0;
+            let wired = run_with(&sc, Arm::BlindPeerRamp, seed, cfg);
+            after += mean_total_ms(&wired) / 1000.0;
+            let scored = score(&wired, GOSSIP_WINDOW_MS, None);
+            down += scored.tier.downgrades;
+            declined += scored.tier.declined_upgrades;
+        }
+        let n = seeds.len() as f64;
+        let (b, a) = (before / n, after / n);
+        println!(
+            "  {beta:<14.1} {b:>8.1}s {a:>10.1}s {:>7.0}% {:>11.1} {:>9.1}",
+            100.0 * (a - b) / b.max(0.001),
+            down as f64 / n,
+            declined as f64 / n,
+        );
+        if (beta - 1.0).abs() < 1e-6 {
+            assert!(
+                (a - control.1).abs() < 0.05 && (b - control.0).abs() < 0.05,
+                "β=1 must reproduce the un-probed rate card exactly \
+                 ({:.2}s/{:.2}s vs control {:.2}s/{:.2}s). `throughput_factor` scales \
+                 linearly on the size ratio, so measuring a smaller model and scaling \
+                 back up is an identity under a linear law — if it is not, this knob \
+                 is perturbing something besides the extrapolation and no row in this \
+                 table can be attributed to it",
+                b,
+                a,
+                control.0,
+                control.1
+            );
+        }
+    }
+}

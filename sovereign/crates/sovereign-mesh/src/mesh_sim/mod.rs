@@ -116,6 +116,50 @@ pub struct SimConfig {
     /// reads the same benchmark through `throughput_factor`, so the
     /// comparison stays fair.
     pub advertised_rate_error: f32,
+    /// Size in GB of the model a shipped probe would actually
+    /// benchmark. `None` — the default — means each node advertises a
+    /// rate card measured on the model it *serves*, which is what
+    /// [`scenario::NodeSpec::benchmark`] builds and what every F10
+    /// number recorded before this knob existed assumed.
+    ///
+    /// **This knob exists because production could not have that rate
+    /// card, and the difference is a mechanism rather than a
+    /// perturbation.** `run_baseline_benchmark`
+    /// (`sovereign-inference/src/benchmark.rs:59`) probes the
+    /// `Speed::Fast` slot — a ~4B model — and stamps that model's size
+    /// into `baseline_size_gb`. `throughput_factor` then extrapolates
+    /// to whatever the peer is being scored for by scaling linearly on
+    /// the size ratio (`scoring.rs:384`). When the two models are the
+    /// same, as they are in this sim, the ratio is 1.0 and the
+    /// extrapolation is inert. When they differ by 8× — a 2.5 GB probe
+    /// standing in for a 21 GB hub — it is the dominant term in the
+    /// score, and no arm recorded before this knob has ever run it.
+    ///
+    /// Paired with [`probe_sublinearity`](SimConfig::probe_sublinearity),
+    /// which is what decides whether the extrapolation is honest.
+    pub probe_baseline_size_gb: Option<f32>,
+    /// How far from linear real throughput-versus-size scaling is, as
+    /// the exponent β in `rate ∝ size^-β`.
+    ///
+    /// The extrapolation in `throughput_factor` assumes **β = 1**:
+    /// halve the model, double the rate. Its own doc comment concedes
+    /// the assumption is wrong ("real-world scaling is sub-linear —
+    /// memory bandwidth dominates") and argues it is good enough for
+    /// ranking because it preserves order across candidate sizes. That
+    /// argument holds when every candidate is extrapolated from the
+    /// same baseline; it does not hold here, because each node probes
+    /// *its own* fast slot and the baselines differ.
+    ///
+    /// At β = 1 this knob is a no-op by construction, which is the
+    /// control every reading of it needs. Below 1 a probe on a small
+    /// model over-states how fast that hardware is per GB, so the
+    /// extrapolated estimate for a large model comes out **low** — and
+    /// the term is clamped to `[FLOOR, 1.0]`, so a systematic
+    /// under-estimate can only push a candidate down. 0.7 is the
+    /// default when the knob is armed: llama.cpp decode is roughly
+    /// bandwidth-bound, which puts real β well below 1 without being
+    /// close to 0.
+    pub probe_sublinearity: f32,
     /// Seconds of model-load time per GB of weights. `0.0` = every node
     /// starts with its model already resident, which is what the sim
     /// assumed before this existed.
@@ -200,6 +244,11 @@ impl Default for SimConfig {
             advertised_rate_error: 0.0,
             advertised_size_error: 0.0,
             model_load_sec_per_gb: 0.0,
+            // Off: each node advertises a rate card for the model it
+            // serves. See the field docs — this is the *sim's*
+            // property, not production's.
+            probe_baseline_size_gb: None,
+            probe_sublinearity: 1.0,
         }
     }
 }
@@ -315,6 +364,57 @@ pub enum Arm {
     /// incapable of preferring a peer on a homogeneous fleet. This arm
     /// is how that claim gets a number instead of an argument.
     BlindObservations,
+    /// Arm 0 with every candidate's advertised `BenchmarkResult`
+    /// removed — F10's second half, in isolation.
+    ///
+    /// **This is not a hypothetical.** No node on this mesh has ever
+    /// advertised a rate card. `run_baseline_benchmark`
+    /// (`sovereign-inference/src/benchmark.rs:59`) has zero callers;
+    /// `MeshInferenceProvider::set_local_benchmark`
+    /// (`peer_inference.rs:808`) has zero callers, so `local_benchmark`
+    /// is `None` for the life of the process; and the gossip builder
+    /// hardcodes `benchmark: None` (`capabilities.rs:194`) under a
+    /// comment promising a `with_benchmark` setter that was never
+    /// written. Both ends of the wire are blind, and two doc comments
+    /// describe the mechanism as if it runs.
+    ///
+    /// The consequence composes with F9's peer half and that is the
+    /// point of the arm. `throughput_factor` (`scoring.rs:362`) has
+    /// exactly two sources and production supplies neither: the
+    /// observed EWMA is gated on `samples >= 5`, which the ranked path
+    /// never reaches, and the benchmark estimate needs the rate card
+    /// that does not exist. Its `(None, None)` branch returns **neutral
+    /// 1.0**. So the term F3 catalogued as "does not discriminate under
+    /// heterogeneity" does not discriminate at *all* in production — it
+    /// is a constant, and every fleet is scored as though every node
+    /// ran at the reference rate.
+    ///
+    /// Separate from [`BlindShipped`](Arm::BlindShipped) for the reason
+    /// the whole `blind-*` family is factored this way: the rate card
+    /// and the ramp both feed `throughput_factor`, so an arm carrying
+    /// both cannot say which one holds the term shut.
+    BlindRateCard,
+    /// What this mesh actually does tonight, as of 2026-07-27:
+    /// [`BlindPeerRamp`](Arm::BlindPeerRamp) plus
+    /// [`BlindRateCard`](Arm::BlindRateCard).
+    ///
+    /// Successor to [`BlindObservations`](Arm::BlindObservations) as
+    /// the as-shipped arm. That one was faithful until F9's local half
+    /// landed and was never faithful about the rate card. The
+    /// three-step correction is worth stating once, because each step
+    /// was found by a different reading and the last one is F10:
+    ///
+    /// 1. arm 0 supplies an exact local in-flight count — production
+    ///    did not, until F9's fix landed. **Closed.**
+    /// 2. arm 0 lets peer `samples` accumulate — production does not,
+    ///    and this was measured *protective* (§4.4), so it stays.
+    /// 3. arm 0 supplies a rate card — production never has. **Open,
+    ///    and this arm is what prices it.**
+    ///
+    /// Compare against this arm, not arm 0 and not `BlindPeerRamp`,
+    /// when the question is "what will this change do on the mesh
+    /// tonight."
+    BlindShipped,
     /// Arm 0 with the staleness removed: the gossiped in-flight count
     /// is the peer's *true* current count. Isolates F1 — the gap
     /// between this and arm 0 is the cost of dead time, and nothing
@@ -598,6 +698,8 @@ impl Arm {
             Arm::BlindLocalLoad => "blind-local-load",
             Arm::BlindPeerRamp => "blind-peer-ramp",
             Arm::BlindObservations => "blind-observations",
+            Arm::BlindRateCard => "blind-rate-card",
+            Arm::BlindShipped => "blind-shipped",
             Arm::FreshSignals => "fresh-signals",
             Arm::TwoChoices => "two-choices",
             Arm::FreshTwoChoices => "fresh+two-choices",
@@ -680,7 +782,24 @@ impl Arm {
     /// can ever start it?". Both are needed because F7's answer to the
     /// first turned out to be counter-intuitive.
     fn blind_peer_samples(&self) -> bool {
-        matches!(self, Arm::BlindPeerRamp | Arm::BlindObservations)
+        matches!(
+            self,
+            Arm::BlindPeerRamp | Arm::BlindObservations | Arm::BlindShipped
+        )
+    }
+
+    /// Whether every candidate — local and peer alike — is scored with
+    /// `benchmark: None`, which is what production does because nothing
+    /// ever measures or gossips one. See
+    /// [`BlindRateCard`](Arm::BlindRateCard).
+    ///
+    /// Applied at both injection sites rather than at the node, because
+    /// the blindness is not a property of the advertiser: the local
+    /// side is missing for a different reason (`set_local_benchmark`
+    /// uncalled) than the peer side (`capabilities.rs` hardcodes
+    /// `None`), and a fix could plausibly land one without the other.
+    fn blind_rate_card(&self) -> bool {
+        matches!(self, Arm::BlindRateCard | Arm::BlindShipped)
     }
 
     /// Whether the origin's *self-observed* in-flight count for a peer
@@ -731,15 +850,17 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 19] = [
+pub const ALL_ARMS: [Arm; 21] = [
     Arm::AsImplemented,
-    // The two F9 arms sit immediately after arm 0 because that is the
-    // order the reading wants: as-designed → as-shipped → candidate
+    // The F9 and F10 arms sit immediately after arm 0 because that is
+    // the order the reading wants: as-designed → as-shipped → candidate
     // changes. They must not displace index 0, which the scoreboard
     // dereferences directly as the baseline.
     Arm::BlindLocalLoad,
     Arm::BlindPeerRamp,
     Arm::BlindObservations,
+    Arm::BlindRateCard,
+    Arm::BlindShipped,
     Arm::FreshSignals,
     Arm::TwoChoices,
     Arm::FreshTwoChoices,
@@ -1181,6 +1302,11 @@ impl Sim {
         // runs recorded before this knob existed.
         let mut rate_rng = Rng::new(seed ^ 0xC0DE_FACE_5A17_3E11);
         let rate_error = cfg.advertised_rate_error.max(0.0);
+        // F10: applied before `rate_error` so the perturbation lands on
+        // the card a shipped probe would have produced, not on the
+        // idealised one.
+        let probe_baseline_gb = cfg.probe_baseline_size_gb;
+        let probe_sublinearity = cfg.probe_sublinearity;
         // A FOURTH stream, for the same reason the third exists: sharing
         // `rate_rng` would make an `advertised_size_error` run shift the
         // rate-card draws, and the two knobs must be independently
@@ -1229,6 +1355,26 @@ impl Sim {
                 // `[1/(1+e), 1+e]`, so a node is as likely to
                 // under-sell itself as to over-sell.
                 benchmark: spec.benchmark().map(|mut b| {
+                    // F10: what a *shipped* probe would have measured.
+                    // The daemon benchmarks its `Speed::Fast` slot, not
+                    // the model it serves knowledge turns from, so the
+                    // advertised card describes a smaller model on the
+                    // same hardware — and `throughput_factor` has to
+                    // extrapolate back up. `rate ∝ size^-β` gives that
+                    // smaller model its rate; β = 1 reproduces the
+                    // linear assumption the extrapolation makes, so the
+                    // whole knob is an identity there and any deviation
+                    // below is the extrapolation error alone.
+                    if let Some(probe_gb) = probe_baseline_gb {
+                        if probe_gb > 0.0 && b.baseline_size_gb > 0.0 {
+                            let shrink = b.baseline_size_gb / probe_gb;
+                            let speedup = shrink.powf(probe_sublinearity);
+                            b.pp_tok_s *= speedup;
+                            b.tg_tok_s *= speedup;
+                            b.baseline_size_gb = probe_gb;
+                            b.baseline_model_id = format!("{}-fast-slot", b.baseline_model_id);
+                        }
+                    }
                     if rate_error > 0.0 {
                         let u = rate_rng.next_f64() as f32;
                         let factor = (1.0 + rate_error).powf(2.0 * u - 1.0);
@@ -1457,7 +1603,16 @@ impl Sim {
                     local: LocalCandidateView {
                         manifest: &node.manifest,
                         observations: &local_obs,
-                        benchmark: node.benchmark.as_ref(),
+                        // F10: `None` on the blind arms, and `None` in
+                        // production unconditionally — `local_benchmark`
+                        // is initialised to `None` at
+                        // `peer_inference.rs:573` and its only writer
+                        // has no callers.
+                        benchmark: if self.arm.blind_rate_card() {
+                            None
+                        } else {
+                            node.benchmark.as_ref()
+                        },
                     },
                     peers: &views,
                 },
@@ -1710,7 +1865,14 @@ impl Sim {
                 gossiped_in_flight,
                 availability,
                 gossip_last_seen_unix: last_seen_unix,
-                benchmark: self.nodes[peer].benchmark.clone(),
+                // F10: gossip carries no benchmark in production
+                // (`capabilities.rs:194`), so every peer reaches the
+                // scorer rate-cardless on the blind arms.
+                benchmark: if self.arm.blind_rate_card() {
+                    None
+                } else {
+                    self.nodes[peer].benchmark.clone()
+                },
                 observations: self.peer_view_observations(origin, peer),
                 manifest: Some(PeerManifestView {
                     manifest: self.nodes[peer].manifest.clone(),

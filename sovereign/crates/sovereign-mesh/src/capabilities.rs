@@ -187,10 +187,29 @@ pub async fn build_local_capabilities(
         // me in distribution" — safe default for nodes that haven't
         // bootstrapped an embed slot yet.
         embed_model,
-        // Benchmark is stamped in by the daemon's startup probe via
-        // a separate `with_benchmark` setter rather than passed
-        // through this constructor — the probe runs once and
-        // persists, while this builder is called every gossip tick.
+        // ALWAYS `None`, and not because this builder declines to set
+        // it. There is no startup probe and no `with_benchmark`
+        // setter; this comment used to describe both as though they
+        // existed (`SCHEDULER_QUALITY.md` F10). Nothing on this mesh
+        // has ever advertised a `BenchmarkResult`.
+        //
+        // The consequence is not cosmetic: `throughput_factor`
+        // (`oicp-types/src/scoring.rs:362`) has two sources and this
+        // shuts one of them, while the other — an observed decode EWMA
+        // — is gated behind a sample count the ranked dispatch path
+        // never accumulates for a peer. So it returns neutral 1.0 for
+        // every peer, and the scheduler's only heterogeneity term is a
+        // constant. §4.5 prices that at −32% mean latency on the one
+        // simulated fleet containing a node slower than the 20 tok/s
+        // reference, and 0% on five others.
+        //
+        // Before wiring this: read §4.5's verdict. The dead
+        // `run_baseline_benchmark` probes the `Speed::Fast` slot, so
+        // filling this field from it would advertise a ~2.5 GB model's
+        // rate and leave `throughput_factor` extrapolating up to a
+        // 21 GB one on a linear size law that is false — measured as a
+        // quality regression wearing a large latency win. The card has
+        // to describe the model being scored.
         benchmark: None,
         // Current local in-flight count for load-aware scheduling.
         // Read directly from the MIP-shared atomic via AppState:
