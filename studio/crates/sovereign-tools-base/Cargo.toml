@@ -27,7 +27,7 @@ toml = { workspace = true }
 tracing = { workspace = true }
 sha2 = { workspace = true }
 # ~/.sovereign resolution for the MCP secret store.
-dirs = "5"
+dirs = "6"
 
 [dev-dependencies]
 tempfile = { workspace = true }

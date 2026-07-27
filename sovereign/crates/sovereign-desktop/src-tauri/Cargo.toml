@@ -73,7 +73,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 # Provenance-preserving PDF export (`commands::export_answer`). Already in
 # the lockfile transitively (pdf-extract) — promoted to a direct dep so the
 # narrow answer+ledger PDF renderer can use it; no new crate, no system lib.
-lopdf = "0.34"
+lopdf = "0.42"
 # Used by `recipe_commands::corpus_import_recipe` to record a
 # tamper-evident sha256 alongside each imported recipe in the
 # user's local registry.
@@ -82,7 +82,7 @@ hostname = { workspace = true }
 # Used only by friendly_names.rs — entropy seed for the
 # adjective+mascot generator. Workspace already pins this for
 # commonwealth crates; keeping the same major.
-rand = "0.8"
+rand = "0.10"
 # Command bridge (src/command_bridge.rs) — debug-only loopback HTTP
 # surface for the Playwright real-mode harness. The module is gated
 # `#[cfg(debug_assertions)]` + SOVEREIGN_COMMAND_BRIDGE=1 at runtime;
