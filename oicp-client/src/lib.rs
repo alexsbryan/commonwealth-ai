@@ -34,6 +34,20 @@ pub struct RemoteApiProvider {
     endpoint: String,
     api_key: Option<String>,
     model_id: String,
+    /// When true, `model_id` is a routing/attribution LABEL rather than
+    /// a name the remote endpoint can resolve, and must never be put on
+    /// the wire as the `model` field.
+    ///
+    /// The mesh scheduler builds one provider per peer with the literal
+    /// id `"mesh-peer"` (`peer_inference.rs::provider_for_peer`), which
+    /// exists so logs and `CompletionResponse::model_id` can say where a
+    /// turn went. It names no model anywhere in the fleet. Sending it as
+    /// `model` puts the receiving node on its explicit-name path, where
+    /// it resolves to nobody and returns `ModelNotLoaded` — the origin
+    /// then books a peer failure and falls back to local, quarantining a
+    /// healthy peer after three strikes. See the regression test
+    /// `an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve`.
+    model_id_is_placeholder: bool,
     context_size: u32,
     /// Query-side instruction prefix for this model, resolved once at
     /// construction from the bundled manifest (empty for chat / non-embedding
@@ -70,6 +84,19 @@ impl RemoteApiProvider {
 
     pub fn new(endpoint: &str, api_key: Option<String>, model_id: &str, context_size: u32) -> Self {
         Self::with_timeout(endpoint, api_key, model_id, context_size, DEFAULT_TIMEOUT)
+    }
+
+    /// Declare that `model_id` is a routing/attribution label, not a
+    /// name the remote can serve. See the field docs on
+    /// `model_id_is_placeholder`.
+    ///
+    /// Opt-in rather than inferred: a provider pointed at a real model
+    /// must keep pinning its name on the wire, which is what the
+    /// 2026-07-23 fast-slot fix (c8b0519b) exists to guarantee. Only the
+    /// caller knows whether the id it supplied names anything.
+    pub fn with_placeholder_model_id(mut self) -> Self {
+        self.model_id_is_placeholder = true;
+        self
     }
 
     /// One `/embeddings` call carrying every text as an array `input`.
@@ -151,6 +178,7 @@ impl RemoteApiProvider {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             api_key,
             model_id: model_id.to_string(),
+            model_id_is_placeholder: false,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
             // that this pure HTTP client no longer computes. Callers that
@@ -182,6 +210,7 @@ impl RemoteApiProvider {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             api_key: Some(bearer),
             model_id: model_id.to_string(),
+            model_id_is_placeholder: false,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
             // that this pure HTTP client no longer computes. Callers that
@@ -236,11 +265,17 @@ impl RemoteApiProvider {
         // Fast requests keep the empty-model + envelope form: a
         // fast-class pick is the desired outcome there, and the
         // FastShort overflow lane still engages daemon-side.
+        // A placeholder id names nothing the remote can resolve, so the
+        // Medium/Slow pin below must not fire for it — an unnamed mesh
+        // dispatch stays unnamed on the wire and routes on the envelope
+        // instead. Every provider pointed at a real model is unaffected
+        // and still pins, which is the fast-slot guarantee.
+        let pinnable = (!self.model_id_is_placeholder).then_some(self.model_id.as_str());
         let model_field = match request.model_id.as_deref() {
             Some(mid) => mid,
             None => match request.preferred_speed {
                 Speed::Fast => "",
-                Speed::Medium | Speed::Slow => self.model_id.as_str(),
+                Speed::Medium | Speed::Slow => pinnable.unwrap_or(""),
             },
         };
         let mut body = serde_json::json!({

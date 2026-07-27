@@ -32,8 +32,15 @@
 #
 # Usage:
 #   scripts/mesh-soak.sh [--nodes N] [--minutes M] [--seed S]
-#                        [--workload crash|ingest|corrupt] [--keep] [--gate]
+#                        [--workload crash|ingest|corrupt|offload] [--keep] [--gate]
 #                        [--with-desktops] [--driver-minutes M] [--iroh]
+#
+#   --workload offload is the cross-node SERVICEABILITY lane: it proves a request
+#     can actually be served by another node, which no other assertion here does.
+#     Needs >=2 nodes and a generative primary (forced, like the ingest lane).
+#     Fast — one warm-up per node, one settle, then N concurrent named turns.
+#     Knobs: MESH_SOAK_OFFLOAD_CONCURRENCY (3), MESH_SOAK_OFFLOAD_SETTLE_SECS (14).
+#     Also runs at the tail of --workload ingest, where the preconditions already hold.
 #
 #   --iroh (SOAK_IROH) runs the transport-migration axis: every node boots with
 #     `[iroh] enabled = true` (all traffic classes route iroh-first, IP fallback
@@ -108,7 +115,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
-case "$WORKLOAD" in crash|ingest|corrupt) ;; *) echo "bad --workload: $WORKLOAD (crash|ingest|corrupt)" >&2; exit 2;; esac
+case "$WORKLOAD" in crash|ingest|corrupt|offload) ;; *) echo "bad --workload: $WORKLOAD (crash|ingest|corrupt|offload)" >&2; exit 2;; esac
 # Normalise SOAK_IROH to a shell flag (0/1) + a TOML bool the config heredoc
 # splices verbatim. Accept the usual truthy spellings so `SOAK_IROH=true` and
 # `--iroh` and `SOAK_IROH=1` all mean the same thing.
@@ -135,7 +142,7 @@ CLI="${SOVEREIGN_CLI:-$ROOT/target/debug/sovereign-cli}"
 # window < 30s (mandatory — else the 30s health-ping starves ingest; see
 # setup-chaos-corpus.sh / chaos_monkey README).
 EMBED_DEFAULT="$ROOT/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf"
-if [ "$WORKLOAD" = "ingest" ] || [ "$DESKTOPS" = 1 ]; then
+if [ "$WORKLOAD" = "ingest" ] || [ "$WORKLOAD" = "offload" ] || [ "$DESKTOPS" = 1 ]; then
   # A generative primary is required: the ingest lane chats, and --with-desktops
   # runs real app users that chat. The embed model stays the small 0.6B (for the
   # embeddings the knowledge path needs).
@@ -231,7 +238,16 @@ EOF
   # detect→escalate→rebuild→recover cycles under the soak.
   local reach_env=""
   [ "$REACH_CHAOS" = 1 ] && reach_env="SOVEREIGN_MESH_WATCHDOG_POLL_SECS=5 SOVEREIGN_MESH_WATCHDOG_GRACE_SECS=8 SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS=20 SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS=45"
-  env $rust_log $reach_env "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
+  # SOVEREIGN_ALLOW_MULTIPLE_DAEMONS is MANDATORY for this harness and was
+  # missing entirely (it appears nowhere else in scripts/ or .github/). The
+  # daemon takes a per-HOME run lock (lifecycle.rs:569-591), so node0 acquires it
+  # and EVERY other node exits with "another daemon already holds the run lock".
+  # The failure was near-invisible: the surviving one-node mesh still passes the
+  # invariant pack, because convergence and pairwise liveness are trivially true
+  # over a single reachable node. A 3-node soak was really a 1-node soak
+  # reporting green. See the bind assertion at the bring-up loop.
+  env SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1 $rust_log $reach_env \
+    "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
   PIDS[$i]=$!
 }
 wait_port() { local i="$1" _; for _ in $(seq 1 40); do
@@ -396,14 +412,51 @@ capture_forensics() {  # capture_forensics <label>
 }
 
 check() {  # check <label> <nodes-csv> <expect-live-csv> ; appends a finding, bumps FAILS
-  local label="$1" nodes="$2" live="$3" out rc
-  out=$("$CLI" mesh check-invariants --nodes "$nodes" --expect-live "$live" 2>&1); rc=$?
-  printf '%s\n' "$out"                       # echo for live visibility
-  if [ "$rc" = 0 ]; then
-    finding "{\"phase\":\"$label\",\"ok\":true,\"violations\":[]}"
-  else
-    # embed the ACTUAL violation text in the finding (not a 'see-stderr' stub)
-    finding "{\"phase\":\"$label\",\"ok\":false,\"detail\":$(printf '%s' "$out" | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))')}"
+  local label="$1" nodes="$2" live="$3" out rc rec
+  # `--json` is load-bearing, not cosmetic. The human branch prints prose, so the
+  # FAILING finding used to carry `detail` and no `violations` key at all — and
+  # `soak_slis` counts a checkpoint only when `violations` is present
+  # (mesh_soak.rs:307). Every failing checkpoint was therefore dropped on the
+  # floor, and `invariant_violation_rate` could never rise above 0.0: the gate
+  # reported perfect invariant health on a run that had just failed. The same
+  # omission hid `founder_degraded`, pinning `founder_degraded_rate` at 0.0 too —
+  # and that SLI is the ONLY assertion --reachability-chaos makes. One flag
+  # revives both.
+  # stderr is kept OUT of the parsed capture. The CLI writes advisories there
+  # (e.g. the SOVEREIGN_*→SVRNMESH_* deprecation bridge), and folding them into
+  # the JSON with 2>&1 makes every parse fail — which turned PASSING checkpoints
+  # into failures on the first run of this rewiring.
+  local errf="$WORK/check-${label//\//_}.err"
+  out=$("$CLI" mesh check-invariants --nodes "$nodes" --expect-live "$live" --json 2>"$errf"); rc=$?
+  # Stamp the checkpoint label into the CLI's own JSON and use it verbatim as the
+  # finding: it already carries violations / ok / founder_degraded / unreachable
+  # in exactly the shape the extractor wants, so there is no second ad-hoc shape
+  # to keep in sync. `phase` is what the coverage accounting counts.
+  # Scan stdout backwards for the last parseable JSON object rather than
+  # assuming the whole stream is JSON — robust to any future preamble.
+  rec=$(printf '%s' "$out" | python3 -c 'import sys,json
+raw=sys.stdin.read()
+d=None
+for line in reversed(raw.splitlines()):
+    line=line.strip()
+    if not line.startswith("{"): continue
+    try:
+        d=json.loads(line); break
+    except Exception: continue
+if d is None:
+    err=open(sys.argv[2]).read() if len(sys.argv)>2 else ""
+    d={"ok":False,"violations":[{"invariant":"check_invariants",
+       "detail":("unparseable check-invariants output: "+raw[:1000]+" | stderr: "+err[:1000])}]}
+d["phase"]=sys.argv[1]
+print(json.dumps(d))' "$label" "$errf")
+  finding "$rec"
+  printf '%s' "$rec" | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+un=d.get("unreachable") or []
+print("  [%s] ok=%s nodes=%s unreachable=%d" % (d.get("phase"), d.get("ok"), d.get("nodes","?"), len(un)))
+for v in (d.get("violations") or []): print("    x %s: %s" % (v.get("invariant"), v.get("detail")))
+for a in (d.get("founder_degraded") or []): print("    ~ founder self-heal degraded: %s" % a)'
+  if [ "$rc" != 0 ]; then
     FAILS=$((FAILS+1))
     capture_forensics "$label"
   fi
@@ -440,6 +493,32 @@ chat_once() {  # chat_once <node> <slo_ms> → echoes "<http_code> <elapsed_ms>"
     -H 'content-type: application/json' \
     -d '{"model":"primary","stream":false,"max_tokens":32,"messages":[{"role":"user","content":"Reply in one short sentence: who is Mr Verloc?"}]}' 2>/dev/null)
   t1=$(date +%s%3N); echo "${code:-000} $(( t1 - t0 ))"
+}
+
+# chat_capture <node> <slo_ms> <outfile> <max_tokens> → echoes "<http_code> <elapsed_ms>"
+#
+# Same call as chat_once but KEEPS the response body. The offload probe needs
+# it: the only client-visible attribution of who actually served a turn is the
+# response's `model` field, which `MeshInferenceProvider::annotate`
+# (peer_inference.rs:1386-1389) rewrites to "<model> @ peer <name>" on a peer
+# serve. chat_once sends the body to /dev/null, which is why this harness could
+# never tell a locally-served turn from an offloaded one.
+chat_capture() {
+  local i="$1" slo="$2" out="$3" mt="${4:-32}" t0 t1 code
+  t0=$(date +%s%3N)
+  code=$(curl -s -m $(( slo/1000 + 10 )) -o "$out" -w '%{http_code}' \
+    -X POST "http://127.0.0.1:$(cport "$i")/v1/chat/completions" \
+    -H 'content-type: application/json' \
+    -d "{\"model\":\"primary\",\"stream\":false,\"max_tokens\":$mt,\"messages\":[{\"role\":\"user\",\"content\":\"Explain in a few sentences why the sky appears blue.\"}]}" 2>/dev/null)
+  t1=$(date +%s%3N); echo "${code:-000} $(( t1 - t0 ))"
+}
+
+# served_model <bodyfile> → echoes the response's `model` field ('' on any error)
+served_model() {
+  python3 -c "import sys,json
+try:
+    print(json.load(open(sys.argv[1])).get('model',''))
+except Exception: print('')" "$1"
 }
 
 # ── grounding oracle (ingest lane) ────────────────────────────────────────────
@@ -517,6 +596,122 @@ grounding_verdict() {
   else
     finding "{\"phase\":\"grounding-verdict\",\"ok\":true,\"verdict\":\"$verdict\"}"
     echo "  ✓ GroundingVerdict: $verdict (no confabulation)"
+  fi
+}
+
+# ── cross-node offload probe: the serviceability gate (--workload offload) ────
+#
+# The gap this closes. Every other assertion in this harness checks that the
+# mesh AGREES about membership; none checks that a request can actually be
+# SERVED by another node. Nothing in the 8250-test suite would fail if peer
+# offload were 100% broken — and for weeks it was: `provider_for_peer` put the
+# placeholder id "mesh-peer" on the wire for every unnamed Normal/Extended
+# dispatch, the receiver resolved it to nobody and 503'd, and the origin
+# quarantined a healthy peer after three strikes. This lane makes that class of
+# outage a red run.
+#
+# How it forces an offload with no new config knob. `locate_named_model`
+# (peer_inference.rs:1489-1522) is the ONE place local in-flight moves the
+# local-vs-peer decision:
+#
+#     if local_inflight <= peer_inflight { Local } else { Peer }   // :1501
+#
+# With an idle peer gossiping current_in_flight=0, a peer wins as soon as the
+# origin has one in-flight turn for the SAME name (the counter is keyed on the
+# requested name at both the write, :1713, and the read, :1493). So N
+# concurrent {"model":"primary"} turns against one node must push at least one
+# onto a peer. `primary` is a mesh-advertised alias (slot_aliases.rs:46-82),
+# emitted as a real manifest row off the Slow slot (oicp_synthesis.rs:149-195).
+#
+# Two preconditions, both load-bearing:
+#   * the PEER's Slow slot must be loaded, or it advertises no `primary` row and
+#     the origin correctly stays local (autostart=false here, so warm it);
+#   * the peer's gossiped in-flight must have settled back to 0, else
+#     local_inflight(1) <= peer_inflight(1) keeps the turn local. The gossip
+#     interval is 10s (gossip.rs:57), so wait past one round.
+#
+# NB the ranked-ANONYMOUS class is deliberately not probed here: it cannot be
+# forced on a homogeneous fleet, because the scorer reads local load from
+# `local_observations`, which nothing on the dispatch path writes
+# (`record_dispatch(None)` has zero callers). Local is therefore scored
+# permanently idle and wins every tie (scheduler_core.rs:117-123). That class is
+# gated in-process instead — sovereign-mesh/tests/chat_completion_e2e.rs,
+# against a mock peer that RESOLVES `model` rather than accepting any body.
+OFFLOAD_CONCURRENCY="${MESH_SOAK_OFFLOAD_CONCURRENCY:-3}"
+OFFLOAD_SETTLE_SECS="${MESH_SOAK_OFFLOAD_SETTLE_SECS:-14}"
+
+run_offload_probe() {
+  local origin=0 peer=1 slo="${MESH_SOAK_CHAT_SLO_MS:-90000}"
+  if [ "$NODES" -lt 2 ]; then
+    # Not applicable, and NOT a pass: a single-node run verifies nothing about
+    # cross-node serving. Recorded so the SLI denominator stays 0 instead of
+    # silently reading as green.
+    finding '{"kind":"offload","applicable":false,"detail":"needs >=2 nodes"}'
+    echo "  ⊘ offload probe: skipped (NODES=$NODES < 2) — asserts nothing"
+    return
+  fi
+
+  log "cross-node offload probe: warm node$peer, then $OFFLOAD_CONCURRENCY concurrent named turns on node$origin"
+
+  # 1. Warm the peer so its Slow slot loads and it advertises `primary`.
+  local w; w=$(chat_capture "$peer" "$slo" "$WORK/warm-peer.json" 16)
+  echo "  warm node$peer → $w  (served by: $(served_model "$WORK/warm-peer.json"))"
+  case "$w" in
+    200\ *) ;;
+    *) finding "{\"phase\":\"offload-serviceable\",\"ok\":false,\"violations\":[{\"invariant\":\"peer_offload_serviceable\",\"detail\":\"peer node$peer cannot serve its own chat ($w) — probe invalid\"}]}"
+       FAILS=$((FAILS+1)); echo "  ✗ offload probe: peer cannot serve locally — nothing to offload TO"; return;;
+  esac
+
+  # 2. Warm the origin too, so slot-load time is not mistaken for queueing and
+  #    the concurrent turns genuinely overlap.
+  local w0; w0=$(chat_capture "$origin" "$slo" "$WORK/warm-origin.json" 16)
+  echo "  warm node$origin → $w0  (served by: $(served_model "$WORK/warm-origin.json"))"
+
+  # 3. Let the peer's gossiped in-flight settle back to 0.
+  echo "  settling ${OFFLOAD_SETTLE_SECS}s for a fresh gossip round (interval 10s)"
+  sleep "$OFFLOAD_SETTLE_SECS"
+
+  # 4. Fire the concurrent turns. Longer max_tokens than chat_once so they
+  #    actually overlap — a turn that finishes before the next starts leaves
+  #    local_inflight at 0 and the probe proves nothing.
+  local pids=() n
+  for n in $(seq 1 "$OFFLOAD_CONCURRENCY"); do
+    ( chat_capture "$origin" "$slo" "$WORK/offload-$n.json" 160 > "$WORK/offload-$n.code" ) &
+    pids+=($!)
+  done
+  for n in "${pids[@]}"; do wait "$n" || true; done
+
+  # 5. Attribute each turn from the response `model` field — the only
+  #    client-visible statement of who served it.
+  local peer_served=0 local_served=0 failed=0 models="" codes="" code m
+  for n in $(seq 1 "$OFFLOAD_CONCURRENCY"); do
+    code=$(cut -d' ' -f1 < "$WORK/offload-$n.code" 2>/dev/null); code="${code:-000}"
+    m=$(served_model "$WORK/offload-$n.json")
+    codes="$codes${codes:+,}$code"
+    models="$models${models:+ | }${m:-<none>}"
+    if [ "$code" != "200" ]; then failed=$((failed+1))
+    elif [ "${m#*@ peer }" != "$m" ]; then peer_served=$((peer_served+1))
+    else local_served=$((local_served+1)); fi
+    echo "  turn $n → HTTP $code  served-by: ${m:-<none>}"
+  done
+
+  finding "{\"kind\":\"offload\",\"applicable\":true,\"origin\":$origin,\"attempts\":$OFFLOAD_CONCURRENCY,\"peer_served\":$peer_served,\"local_served\":$local_served,\"failed\":$failed,\"codes\":\"$codes\"}"
+
+  # Both branches carry `violations` — pass as `[]`, fail as a real entry — so the
+  # verdict feeds the EXISTING `invariant_violation_rate` SLI (mesh_soak.rs:307)
+  # rather than needing a new one. A new SLI would have been the wrong move here:
+  # the rate is only comparable across runs that actually ran the probe, so a
+  # crash-lane baseline would false-alarm every offload run. The hard `ok:false`
+  # (which bumps FAILS and fails the script) is the real gate; the SLI is the trend.
+  local models_json; models_json=$(printf '%s' "$models" | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))')
+  if [ "$peer_served" -gt 0 ]; then
+    finding "{\"phase\":\"offload-serviceable\",\"ok\":true,\"violations\":[],\"detail\":\"$peer_served/$OFFLOAD_CONCURRENCY turns served by a peer (local=$local_served fail=$failed)\",\"models\":$models_json}"
+    echo "  ✓ PeerOffloadServiceable: $peer_served/$OFFLOAD_CONCURRENCY served cross-node"
+  else
+    finding "{\"phase\":\"offload-serviceable\",\"ok\":false,\"violations\":[{\"invariant\":\"peer_offload_serviceable\",\"detail\":\"NO turn was served by a peer (local=$local_served fail=$failed codes=$codes)\"}],\"models\":$models_json}"
+    FAILS=$((FAILS+1))
+    echo "  ✗ PeerOffloadServiceable: every turn stayed local — cross-node serving is broken or never selected"
+    capture_forensics "offload-serviceable"
   fi
 }
 
@@ -619,6 +814,10 @@ run_ingest_workload() {
       grounding_verdict "$target" soft
     fi
   fi
+
+  # Free extra coverage: this lane already has a generative primary loaded on
+  # every node, which is the only precondition the offload probe needs.
+  run_offload_probe
 }
 
 # ── corrupt-persisted-state OS-fault (--workload corrupt) ─────────────────────
@@ -842,7 +1041,19 @@ trap teardown EXIT
 # ── bring up the mesh ─────────────────────────────────────────────────────────
 log "backend=$BACKEND workload=$WORKLOAD nodes=$NODES minutes=$MINUTES seed=$SEED primary=$(basename "$PRIMARY_MODEL") embed=$(basename "$EMBED_MODEL")"
 for i in $(seq 0 $((NODES-1))); do boot_node "$i"; done
-for i in $(seq 0 $((NODES-1))); do wait_port "$i" && echo "  node$i up" || echo "  node$i FAILED to bind"; done
+for i in $(seq 0 $((NODES-1))); do
+  if wait_port "$i"; then
+    echo "  node$i up"
+  else
+    # A node that never bound must FAIL the run, not shrink it. Previously this
+    # printed a line and carried on: the remaining nodes formed a smaller mesh
+    # and every invariant passed over it (convergence and liveness are vacuous
+    # on one reachable node), so a totally failed bring-up looked green.
+    echo "  node$i FAILED to bind — see $WORK/node$i/daemon.*.log"
+    finding "{\"phase\":\"boot\",\"ok\":false,\"violations\":[{\"invariant\":\"all_nodes_booted\",\"detail\":\"node$i never bound its client port\"}]}"
+    FAILS=$((FAILS+1))
+  fi
+done
 
 FKEY=$(jget "$(status_url 0)" 'd["join_key"]')
 if [ "$IROH_ON" = 1 ]; then
@@ -904,6 +1115,8 @@ if [ "$WORKLOAD" = "ingest" ]; then
   run_ingest_workload
 elif [ "$WORKLOAD" = "corrupt" ]; then
   run_corrupt_state_workload
+elif [ "$WORKLOAD" = "offload" ]; then
+  run_offload_probe
 else
 DEADLINE=$(( $(date +%s) + MINUTES*60 )); CYCLE=0
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
@@ -984,7 +1197,14 @@ for line in open(sys.argv[1]):
     try: d = json.loads(line)
     except Exception: continue
     if d.get("kind") == "fault": faults[d.get("action", "?")] += 1
-    if "phase" in d:
+    # A checkpoint is a `phase` record with no `kind`. The forensics marker
+    # carries BOTH (kind=forensics, phase=<the failing label>), so counting on
+    # `phase` alone credited every failure with a phantom extra checkpoint —
+    # and, having no `ok` field, it defaulted to a PASS. A single failed
+    # checkpoint therefore printed as "1/2✓". The SLI was always right (the
+    # forensics record has no `violations` key, so soak_slis excludes it); only
+    # this summary misread.
+    if "phase" in d and "kind" not in d:
         phases[d["phase"]] += 1; runs += 1
         if not d.get("ok", True): pfail[d["phase"]] += 1
 workload = sys.argv[2] if len(sys.argv) > 2 else "crash"
@@ -996,12 +1216,17 @@ print("  faults injected : " + (", ".join(f"{k}×{v}" for k, v in sorted(faults.
 print("  checkpoints     : " + (", ".join(f"{k} {v-pfail[k]}/{v}✓" for k, v in sorted(phases.items())) or "none"))
 print(f"  invariant pack  : {len(INV)} invariants × {runs} checkpoints = {len(INV)*runs} cell-checks")
 print("                    " + ", ".join(INV))
+if workload in ("ingest", "offload"):
+    print("  live this lane  : PeerOffloadServiceable — a named turn actually served by")
+    print("                    ANOTHER node, attributed from the response's own `model`")
+    print("                    field ('@ peer <name>'). The one assertion that fails on a")
+    print("                    total peer-offload outage.")
 if workload == "ingest":
     print("  live this lane  : admission_safety + bounded_fan_out (chat fan-out drives")
     print("                    peer_inflight / fanout_inflight > 0) + IngestProgress +")
     print("                    ForegroundLiveness + GroundingIntegrity/GroundingVerdict")
     print("                    (real generative primary under ingest; grounded RAG turn).")
-else:
+elif workload != "offload":
     print("  inert here      : admission_safety + bounded_fan_out + shared_model_single_host")
     print("                    (cheap embed-only daemons take no peer-inference / run no")
     print("                    shared model) — exercised by --workload ingest + the DST suite.")

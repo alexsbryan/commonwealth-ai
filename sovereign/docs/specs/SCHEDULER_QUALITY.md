@@ -12,6 +12,41 @@ day. Companion to
 [`OICP_RATIONALIZATION.md`](OICP_RATIONALIZATION.md) (which unified the
 scorer but deliberately preserved its shape).
 
+> **Read this before trusting any number below (2026-07-27).** A Phase-0
+> pass to put this programme in contact with reality found that the
+> `mesh-peer` placeholder bug (F8's neighbourhood) was not an isolated
+> defect but an instance of a pattern: **load-bearing signals that nothing
+> writes, and gates that nothing can turn red.** Three findings change how
+> the rest of this document should be read:
+>
+> - **F9** — the scorer's local-load input is never written
+>   (`record_dispatch(None)` has zero callers), so on a homogeneous fleet
+>   the ranked path is *structurally* incapable of preferring a peer. This
+>   undercuts F1's premise and much of §4.1's motivation.
+>   **Priced and half-fixed the same day (§4.4).** The local half landed in
+>   production: −71% mean / −76% p95 under sustained contention, ±1%
+>   everywhere else. The peer half turned out to be *protective* and was
+>   deliberately left alone. The larger consequence is in §4.4's first
+>   paragraph: **arm 0 was never the shipped system**, so every earlier
+>   number in this document compares policies on the mesh as *designed*.
+> - **F10** — `RankObjective::Product` and `TierFloor::None` are hardcoded
+>   in production, so §4.1.1 and §4.1.2 measure policies that **cannot
+>   currently fire outside the simulator**. The calibration contract's
+>   input data (`BenchmarkResult`) is not collected either.
+> - **F11** — what the dispatcher omits from the wire (no `X-Node-Id`, no
+>   bearer) blinds serving-side attribution and admission control, drops
+>   attribution entirely on the streaming path, and makes plaintext-LAN
+>   peer dispatch return 403 — plausibly the reason cross-node inference
+>   has never been observed working here.
+>
+> What landed in the same pass: a cross-node **serviceability** gate, in
+> two places. In-process, a mock peer that *resolves* `model` rather than
+> accepting any body (`sovereign-mesh/tests/chat_completion_e2e.rs`) —
+> verified red against the pre-fix code. In the multi-process soak, a
+> `--workload offload` lane that forces a real cross-node serve and
+> attributes it (`scripts/mesh-soak.sh`). Also repaired: two soak SLIs that
+> were structurally incapable of going non-zero (see §5).
+
 Method: code audit of every decision point from request to dispatch,
 plus two simulation probes that drove a faithful *transcription* of
 the real scoring arithmetic (§3) — and, since S0, a Tier-1 simulator
@@ -49,12 +84,27 @@ relitigate it.
 |---|---|
 | One composed scorer, one file, consumers log the full `ScoreBreakdown` | ✅ Holds |
 | `offload_eligible` as a single shared predicate for both joiner-side gates (`oicp_select.rs:68`) | ✅ Holds |
-| D1 / D2 / D3 split — an inbound peer request is served by `SovereignInferenceAdapter` picking a **local** slot, never re-forwarded | ✅ Verified: no request-ping-pong hazard at N=12 |
+| D1 / D2 / D3 split — an inbound peer request is served by `SovereignInferenceAdapter` picking a **local** slot, never re-forwarded | ⚠️ **Verified for the DESKTOP only** — see the correction below |
 | Ranked failover — a 503 on the best peer tries the next peer, not straight to local (`peer_inference.rs:1522`) | ✅ Holds |
 | RAII in-flight guards, saturating decrements, drop-order documented (`peer_inference.rs:1597`) | ✅ Holds |
 | DST harness for gossip convergence, seeded faults, quiesce-then-assert (`sovereign-mesh/src/dst.rs`) | ✅ The pattern Tier 1 below should copy |
 
-The fragility is not in the code. It is in the **control loop**.
+**Correction to the re-forwarding row (2026-07-27).** This doc previously
+recorded that row as "✅ Verified: no request-ping-pong hazard at N=12".
+That is true of the **desktop** wiring, which puts the raw engine inbound
+(`state.rs:941-953`) and so structurally cannot re-forward. It is
+**unestablished for the CLI daemon**, which puts the `MeshInferenceProvider`
+inbound (`bootstrap.rs:1396-1401` → `daemon.rs:2311-2327`, reached at
+Priority 0 by `routes_inference.rs:171-240`). No hop, TTL or origin field
+exists anywhere in `InferenceRequirements` (`requirements.rs:16-38`), and
+the single-hop guard was **retired on 2026-06-27**
+(`inference_adapter.rs:352-359`) in favour of an envelope-driven gate that
+is hop-blind. The desktop avoids the loop by wiring; the daemon avoids it,
+as far as anyone has checked, by luck. Treat this as an open question, not
+a verified property.
+
+The fragility is not in the code. It is in the **control loop** — and, as
+F9 records, in signals that nothing writes.
 
 ## 2. Findings
 
@@ -88,7 +138,7 @@ decider.**
 ### F2 — The shared "busy" signal is not a busy signal (CRITICAL)
 
 `inference_availability` multiplies into the score
-(`scoring.rs:547`, clamp `[0.2, 1.0]`). It is set from exactly one
+(`scoring.rs:553`, clamp `[0.2, 1.0]`). It is set from exactly one
 place — `POST /internal/node/activity`
 (`commonwealth-api/src/routes_internal/mesh_admin.rs:38`) — mapping
 **human coding activity**: `hot=0.20 warm=0.65 cool=0.85 idle=1.00`.
@@ -98,16 +148,27 @@ the scorer's own units, *one human at the keyboard equals eighty queued
 inference requests*. A hub grinding through twenty peer requests with
 nobody sitting at it advertises `1.00` and looks maximally idle.
 
-In fairness: `current_in_flight` **is** gossiped and **does** override
-the load term (`peer_inference.rs:1085`), so real load is visible — it
-is F1-stale, not absent. It is the availability term that is
+In fairness: a **peer's** `current_in_flight` **is** gossiped and **does**
+override the load term (`scheduler_core.rs:512-521`), so a peer's real load is
+visible — it is F1-stale, not absent. It is the availability term that is
 mis-specified, and it is weighted to dominate.
+
+**Sharpened by F9 (2026-07-27), then closed the same day.** That fairness
+applied only to *peers*. The **local** candidate had no equivalent: its load
+input (`local_observations.in_flight`) was never written at all, so the
+comparison was between a peer whose load is stale and a local side whose load
+was permanently zero. The local half of F9 is now fixed — the scorer reads
+`in_flight_publisher`, which is the **same quantity** a peer gossips — so the
+comparison is finally like-for-like: stale-but-real against fresh-and-real.
+That makes F1 (dead time) the remaining asymmetry rather than one asymmetry
+among two. Read F9 and §4.4 before drawing conclusions from this finding.
 
 > **Caveat on "real load is visible", raised 2026-07-26 and not yet
 > resolved.** That sentence assumes the gossiped counter is a *total*.
 > `MESH_LOAD_AWARENESS.md` and `AppState::current_local_in_flight`
 > state that intent, but every bump site for the counter
-> (`peer_inference.rs::enter_local_total`, six call sites) sits in the
+> (`peer_inference.rs::enter_local_total`, four call sites — `:1735`,
+> `:1822`, `:1864`, `:2309`; this doc previously said six) sits in the
 > joiner-side provider — the **outbound** path. Whether a request
 > arriving *from* a peer also passes through it is the open question,
 > and it is not answerable by reading: it needs two daemons with
@@ -400,6 +461,149 @@ self-heals, because `PeerHealthTracker` quarantines it after a
 threshold and subsequent requests take the `Unknown` path. See §4.3 for
 what shipped and what deliberately did not.
 
+### F9 — The scorer reads a local-load counter that nothing writes (CRITICAL, structural — local half FIXED 2026-07-27)
+
+Found 2026-07-27 while building the Phase-0 cross-node liveness gate. It
+undercuts the premise of F1 and much of §4.1's motivation, so it is recorded
+before the measurement sections rather than appended after them.
+
+> **Status after measurement (2026-07-27, §4.4).** F9 has two halves and they
+> point in **opposite directions**. The local half is a defect and is now fixed
+> in production: wiring the real local in-flight count into the scorer is worth
+> **−71% mean / −76% p95** under sustained contention and is a **no-op (±1%) on
+> every other fleet measured**. The peer half — peer `samples` never leaving 0,
+> pinning `cold_start_weight` at 0.7 — is *protective*: freezing it is worth up
+> to −33% mean latency, and "completing the wiring" would be a regression on
+> four of five fleets. **Do not fix the peer half.** See §4.4 for the table and
+> the arms.
+
+`load_penalty` (`scoring.rs:274-278`) reads `in_flight` from the local
+candidate's observations — `MeshInferenceProvider::local_observations`
+(`peer_inference.rs:407`). That field is bumped only by `record_dispatch(None)`
+→ `observe_dispatch` (`peer_inference.rs:848-856`, `scheduler_core.rs:166-169`).
+
+**`record_dispatch(None)` has zero callers in the repository.** So do
+`record_success(None)` and `record_failure(None)` (`:861-889`). The only call
+site is `record_dispatch(Some(&peer.name))` at `:2173`, the non-streaming
+named-peer arm. `samples` is seeded once to `COLD_START_SAMPLES * 2 = 40` at
+construction (`:557-562`) and never moves again.
+
+There are three local in-flight counters, and the scorer reads the one nobody
+writes:
+
+| counter | written by | read by |
+|---|---|---|
+| `local_inflight_by_model` (`:442`) | `enter_local_inflight` (`:1863`) | **only** `locate_named_model` (`:1493-1499`) |
+| `in_flight_publisher` (`:480`) | `enter_local_total` (`:1888`) | gossip only |
+| `local_observations` (`:407`) | *nothing on the dispatch path* | **the scorer** |
+
+Consequences, all measured from code. On the ranked path the local candidate is
+scored **permanently idle and permanently healthy**: `load_penalty ≡ 1.0`,
+`observation_mult ≡ 1.0`, `cold_start_weight ≡ 1.0`. The design comment at
+`peer_inference.rs:1198-1203` — "so a hot local slot can lose to an idle peer on
+load" — describes behaviour this code cannot exhibit. And `beats_local`
+(`scheduler_core.rs:117-123`) awards every tie to local, because `pick_better`
+returns the incumbent on a full tie (`scoring.rs:458-470`) and
+`candidates_equal` suppresses zero-delta hops (`oicp_select.rs:41-45`).
+
+The arithmetic on a homogeneous, both-idle fleet:
+
+```
+local = claim × 1.15 (Local locality) × 1.0 (cold, seeded 40) × T
+peer  = claim × 1.05 (Near locality)  × 0.7 (cold, samples 0) × 1.0
+        where T = clamp(local_tg_tok_s_ewma / 20, 0.3, 1.0)
+```
+
+A peer wins iff `1.15·T < 1.05 × 0.7 = 0.735`, i.e. `T < 0.639` — **the origin's
+own observed throughput below ~12.8 tok/s**, and `throughput_factor` needs ≥5
+completed local streams to move off neutral at all (`scoring.rs:231`). At
+`T = 1.0` no peer can ever win. The peer's 0.7 cold-start penalty is likewise
+effectively permanent on the streaming path, since nothing calls
+`observe_dispatch` for peers there either.
+
+**So on a homogeneous fleet the ranked path is not mis-tuned — it is
+structurally incapable of preferring a peer.** F1's "dead time exceeds service
+time" and every load-awareness argument in §4 rest on a signal that is never
+written. Tier 1 does not surface this because it constructs observations
+directly instead of letting the dispatch path produce them; that is a gap in the
+sim's fidelity, and the calibration contract's "predict decisions, not seconds"
+gate would not catch it either, because both sides agree — wrongly.
+
+What this does **not** claim: named dispatch is unaffected. `locate_named_model`
+reads `local_inflight_by_model` (`:1493-1499`), which **is** written
+(`enter_local_inflight`, `:1863`) and keyed identically at both ends. That is
+the one path where local load genuinely moves a decision, and it is what the
+Phase-0 soak probe uses to force a real cross-node serve (§5 Tier 2).
+
+**The local half, fixed 2026-07-27** after §4.4 priced it. The gather point
+(`peer_inference.rs`, the `local_obs` binding) now overrides `in_flight` with
+`in_flight_publisher` — the RAII-maintained total this node already gossips.
+Two reasons that beats teaching the dispatch path to call
+`record_dispatch(None)`: it cannot drift out of pairing with the guards that
+already maintain the counter, and it makes both sides of the comparison the
+**same quantity**. A peer's in-flight number is *its* published total
+(`scheduler_core.rs:512` prefers the gossiped count over the self-observed one),
+so scoring local on a private counter was comparing two numbers that only shared
+a name. Pinned by
+`the_local_candidate_is_scored_on_this_nodes_real_in_flight_count`
+(`tests/scheduler_decision_records.rs`), verified red against the pre-fix code
+with the recorded `in_flight` at 0 where 8 was true.
+
+### F10 — The two policies §4.1 measured cannot fire in production (CRITICAL)
+
+`RankObjective::Product` (`peer_inference.rs:1288`) and `TierFloor::None`
+(`:1293`) are **hardcoded** at the production call site. The tier floor
+(`scheduler_core.rs:596-653`) and the predicted-time objective (`:681-726`) are
+therefore unreachable outside Tier 1 and its test arms.
+
+§4.1.1 and §4.1.2 are labelled *measured*, and they were — in the simulator.
+Neither has shipped. Read them as evidence about a policy that **could** be
+adopted, not as a description of how this mesh routes today. §4.3's soft-named
+fallthrough (F8) remains the only item in this document that landed in
+production.
+
+Related, and the reason the calibration contract in §5 cannot yet be honoured:
+it says the service-time model is "fit from data the fleet already collects."
+That data is not collected. `run_baseline_benchmark`
+(`sovereign-inference/src/benchmark.rs:59`) and
+`MeshInferenceProvider::set_local_benchmark` (`peer_inference.rs:808`) have no
+callers, and `NodeCapabilities.benchmark` is hardcoded `None` in the gossip
+builder (`capabilities.rs:191`) — whose comment promises a `with_benchmark`
+setter that does not exist. Every peer is scored with `benchmark: None`.
+
+### F11 — What the dispatcher omits from the wire blinds four surfaces (HIGH)
+
+`provider_for_peer` (`peer_inference.rs:2046-2065`) builds a plain
+`RemoteApiProvider` with no `X-Node-Id` and no bearer. Four consequences, none
+of them local to one module:
+
+1. **Serving-side attribution never fires.** `admission.rs:125` decides
+   `is_peer` by the presence of `X-Node-Id`, so a mesh-dispatched chat is
+   indistinguishable from a local one on the serving node.
+   `peer_inflight_current` stays 0 and `InferenceServed{for_node}`
+   (`routes_inference.rs:872-887`) never emits. This is also why the soak's
+   `admission_safety` invariant is inert for inference.
+2. **Serving-side admission control does not apply to mesh chat at all.**
+   `daemon.max_peer_inflight` (default 1) and `yield_to_foreground_secs` both
+   gate on the same `is_peer` flag (`admission.rs:51-70`), so neither fires for
+   an offloaded turn.
+3. **Streaming loses the origin-side attribution too.** It is computed
+   (`peer_inference.rs:2604-2605`) and then discarded by
+   `complete_stream_with_finish` (`:2755-2760`), which is what the adapter calls
+   (`inference_adapter.rs:1325`); SSE chunks echo the client's own model string
+   (`routes_inference.rs:952`). Only the **non-streaming** response carries
+   `"<model> @ peer <name>"` via `annotate` (`:1386-1389`) — which is precisely
+   why the Phase-0 probe is non-streaming.
+4. **Plaintext LAN peer dispatch cannot work.** `client_auth_layer` admits
+   loopback unconditionally but requires the bearer from any non-loopback caller
+   (`client_auth.rs:143-145,170-176`), and `mesh create`/`join` promotes the bind
+   to `0.0.0.0` and forces a token. A bearer-less dispatch from another machine
+   gets 403. The two paths that work are loopback (the netns soak) and **iroh**,
+   whose acceptor forwards `CLIENT_ALPN` to `127.0.0.1:<client_port>` so it
+   arrives as loopback (`iroh_access.rs:236-239`). This may be the whole reason
+   cross-node inference has never been observed working on this mesh: a
+   plaintext LAN mesh cannot offload regardless of the F8/`mesh-peer` fixes.
+
 ## 3. Measurement — what the probes showed
 
 Two probes drive a faithful transcription of the real arithmetic:
@@ -451,6 +655,16 @@ a transcription of it (`sovereign-mesh/src/mesh_sim/`, feature
 `mesh-sim`; `tests/mesh_sim_scoreboard.rs`). Seed 20260726. **The
 table above is superseded on magnitude and on remedy; two of its three
 readings do not survive.**
+
+> **Read `as-implemented` as as-*designed* (correction, 2026-07-27).** Every
+> table in §3.1 and §4.1.x uses arm 0 as its baseline, and arm 0 gives the
+> decider an exact local queue depth and an accumulating peer history —
+> neither of which the shipped dispatch path produces (F9). The *policy*
+> comparisons below are unaffected: each holds the belief model fixed and
+> varies one policy, which is the comparison they were built to make. What
+> they do not describe is this mesh's behaviour on a given evening. §4.4
+> measures that gap directly, and the arms that model the shipped beliefs
+> are `blind-local-load` / `blind-peer-ramp` / `blind-observations`.
 
 `household-evening-12` (1 hub, 3 desktops, 8 laptops, 30 min, 128
 decisions):
@@ -705,6 +919,11 @@ same number as latency.
 
 ### 4.1.1 The tier floor, and what it costs — MEASURED 2026-07-26
 
+> **Scope (F10): simulator-only.** `TierFloor::None` is hardcoded at the
+> production call site (`peer_inference.rs:1293`), so nothing below has ever
+> influenced a real dispatch. These are results about a policy that could be
+> adopted, not a description of current behaviour.
+
 > `Arm::TierFloor`, `Arm::PredictedTimeTierFloor`,
 > `sovereign-mesh/src/tier.rs`. **This is the blocker above, priced —
 > and it does not clear §4.1 for landing. It reverses part of its
@@ -832,6 +1051,12 @@ a production capture**, which is what lets a Tier-2 run be judged by the
 same ruler.
 
 ### 4.1.2 What the objective is worth, on a second unsaturated fleet — MEASURED 2026-07-27
+
+> **Scope (F10): simulator-only.** `RankObjective::Product` is hardcoded at the
+> production call site (`peer_inference.rs:1288`), so the predicted-time
+> objective cannot fire outside Tier 1. Additionally, per F9, the local
+> candidate's load input is never written — so any conclusion here that depends
+> on local load being observable is a statement about the sim, not the fleet.
 
 > `scenario::mixed_hubs`, `Arm::PredictedTimeTierFloorTwoChoices`,
 > `tests/mesh_sim_scoreboard.rs::does_predicted_time_beat_the_product_where_the_top_band_has_capacity`
@@ -1217,6 +1442,102 @@ emitted and the outcome joined to the right one. Its companion pins the
 degrade path — no worthy peer ⇒ still local, still recorded as a scored
 stay-local rather than a gate.
 
+### 4.4 F9 priced — and the baseline was not the system — MEASURED 2026-07-27
+
+The finding to read first is not about latency. It is that **arm 0 was
+not the shipped system**, and had not been since S0.
+
+`Sim::local_view_observations` handed `rank` an exact local queue depth
+and let peer observations accumulate samples through `observe_dispatch`.
+Production does neither on the ranked path. So every number recorded
+against arm 0 — §3.1, §4.1.1, §4.1.2, §4.1.3, §4.2.1 — is a comparison
+against the mesh as **designed**, not as shipped. Those numbers are not
+wrong, and they are not retracted: "is this policy better than the
+product objective?" is a question about the designed system and arm 0 is
+the right denominator for it. But "what does this mesh do tonight?" was
+never being asked, and F9 is why the answer would have been different.
+
+Four arms now separate the two, because F9's halves bias in **opposite
+directions** and a single total would have netted them out:
+
+| arm | local `in_flight` | peer `samples` | is |
+|---|---|---|---|
+| `as-implemented` | exact | accumulates | the mesh as **designed** |
+| `blind-local-load` | **0** | accumulates | F9's local half alone |
+| `blind-peer-ramp` | exact | **frozen 0** | F9's peer half alone — **and the fix candidate** |
+| `blind-observations` | **0** | **frozen 0** | the mesh as **shipped** |
+
+Mean of 5 seeds, against `as-implemented`:
+
+| scenario | `blind-local-load` | `blind-peer-ramp` | `blind-observations` |
+|---|---|---|---|
+| `household-evening-12` | +0% / +0% | −24% / −32% | −24% / −32% |
+| `pair` | +0% / +0% | −11% / −6% | −11% / −6% |
+| `twin-hubs` | +0% / +1% | +3% / +4% | +3% / +4% |
+| `heterogeneous-fleet` | +1% / +1% | −33% / −34% | −33% / −33% |
+| `isolation` | **+288% / +205%** | +13% / −27% | **+288% / +205%** |
+
+*(mean / p95. `isolation` offloads: 47.4 → 11.6 under a blind local slot.)*
+
+**The local half costs nothing on four fleets and 3.9× on the fifth.**
+That is not a weak finding, it is a *sharp* one: `load_penalty` is
+`1/(1+0.05n)`, so one or two in flight is a 5% nudge that the locality
+bonus (1.15) swamps. Only where the local slot backs up **deeply** does
+the term grow teeth — and that is `isolation`, the sustained-contention
+fleet, which is the case a household hub exists for. F9 is CRITICAL as
+filed, and its blast radius is precisely the case that matters.
+
+**The landing case is unusually clean.** The fix is `blind-peer-ramp`
+(the shipped mesh, plus local load wired) against `blind-observations`
+(the shipped mesh): **−71% mean / −76% p95 on `isolation`, and ±1%
+everywhere else.** A large win where it fires and a no-op where it does
+not — so it landed in production the same day, per §6's arm-first rule.
+
+**The peer half is a brake, not a bug — do not "complete" it.** Freezing
+peer `samples` at 0 pins `cold_start_weight` at 0.7 forever, and that is
+worth −11% to −33% mean latency on three of five fleets (`pair`,
+`household-evening-12`, `heterogeneous-fleet`), against a +3% cost on
+`twin-hubs`. The mechanism is monotone and has three points on it, read
+on `heterogeneous-fleet` p50 at the reference seed: `warm-start` (peers
+always 1.0) 120.7s, `as-implemented` (peers ramp) 33.7s,
+`blind-peer-ramp` (peers always 0.7) 16.9s. The more attractive a peer
+looks, the more this fleet over-offloads and the worse it does.
+
+This is the **second** time this document's obvious fix has been a
+regression — F7's warm-start was the first, at +235%. Both times the
+mechanism that looked like a bug was load-bearing as a *brake*. The
+pattern is worth naming: on a fleet where the peer is not decisively
+better, anything that raises peer scores uniformly buys queueing, not
+throughput. §6's arm-first rule has now paid for itself three times
+(F7, §4.2.1, F9-peer).
+
+**One honest limit.** `throughput_factor` gates its source-of-truth on
+`samples >= THROUGHPUT_OBSERVATION_THRESHOLD` (`scoring.rs:231`), so a
+frozen `samples` also means the mesh **measures peer throughput on every
+stream and then declines to read it** (`ThroughputTarget::Peer` keeps
+`tg_tok_s_ewma` current regardless). The 0.7 brake and the discarded
+throughput signal are entangled in this arm and were not separated. If
+the brake is ever replaced by something deliberate, that separation is
+the first experiment to run — a peer scored on its *observed* rate is a
+different policy from a peer scored at a flat 0.7, and only one of them
+is defensible.
+
+**Gates.** `scripts/sovereign-lint.sh` 0 fail / 173 pre-existing warns (0
+in new code); `scripts/sovereign-test.sh` **8257 pass / 0 fail** (was
+8256 — the one new production test; the sim's own test is behind
+`mesh-sim` and does not run in the default workspace set).
+`mesh_sim_scoreboard` 23 pass / 0 fail (was 22 — new:
+`what_the_scorer_loses_by_never_seeing_its_own_load`, which asserts the
+arm wiring and the one directional claim that is arithmetic rather than
+fleet-specific: zeroing the local count can only *reduce* offload,
+because `load_penalty` is monotonically decreasing in `in_flight`).
+`scheduler_decision_records` 15 pass / 0 fail (was 14), including the
+red-first production pin described in F9. `chat_completion_e2e` 17,
+`load_awareness_e2e` 5, both unchanged — the fix moved no existing
+routing assertion, which is itself the point: no test in the repository
+could distinguish the pre- and post-fix scorer until one was written
+for it.
+
 ## 5. The quality loop
 
 The unlock: **the scheduling decision is a pure function, and the
@@ -1261,6 +1582,66 @@ change.
 
 Extend `mesh-soak-nightly` with load. It currently soaks membership and
 gossip convergence, not scheduling.
+
+#### Tier 2.5 — the cross-node serviceability lane (LANDED 2026-07-27)
+
+`household-bench` was never built, and the gap that mattered turned out not to
+need it. `scripts/mesh-soak.sh --workload offload` boots N **real** daemons on
+one machine inside a rootless netns and asserts the one property nothing else
+did: that a request can actually be **served by another node**.
+
+- **Forcing function, no new knob.** `locate_named_model:1501` prefers a peer as
+  soon as `local_inflight > peer_inflight`, so N concurrent `{"model":"primary"}`
+  turns against one node push at least one onto an idle peer. `primary` is a
+  mesh-advertised alias, so the peer genuinely resolves it.
+- **Attribution.** The non-streaming response's own `model` field, which
+  `annotate` (`peer_inference.rs:1386-1389`) rewrites to `"<model> @ peer <name>"`.
+  No new HTTP surface, no trace capture. (Streaming cannot be used here — F11.)
+- **First observed cross-node serve on this mesh, 2026-07-27:**
+  `turn 2 → HTTP 200 served-by: primary @ peer node1`, 1/3 turns offloaded, two
+  real daemons, real gossip.
+- **Proven not inert.** With `SOVEREIGN_DISABLE_PEER_INFERENCE=1` the same lane
+  goes red (0/3 offloaded, `invariant_violation_rate` 0.0 → 0.5, gate FAIL).
+
+Preconditions the lane handles explicitly: the peer's Slow slot must be warm
+(else it advertises no `primary` row) and its gossiped in-flight must have
+settled to 0 (else the tie goes local). Both are why the probe warms and waits
+rather than firing cold.
+
+The **ranked-anonymous** class deliberately is not probed here — per F9 it
+cannot be forced on a homogeneous fleet — and is gated in-process instead, in
+`sovereign-mesh/tests/chat_completion_e2e.rs`, against a mock peer that
+*resolves* `model` rather than accepting any body. That distinction is the whole
+lesson: the previous mock certified transport, so twelve green e2e tests
+coexisted with a total outage of anonymous offload.
+
+#### Three defects repaired in the gate itself (2026-07-27)
+
+Adding an assertion to a gate that cannot fail would have reproduced the very
+defect this programme exists to eliminate. Found and fixed:
+
+1. **`invariant_violation_rate` could never be non-zero.** `soak_slis` counts a
+   checkpoint only when it carries a `violations` key (`mesh_soak.rs:307`), but
+   the harness emitted that key **only on the passing branch** — a failing
+   checkpoint was silently dropped. `check()` now emits the CLI's `--json`
+   record verbatim, which always carries it. Pinned by
+   `a_failing_checkpoint_is_only_counted_when_it_carries_violations`.
+2. **`founder_degraded_rate` could never be non-zero** either, for the same
+   reason: `founder_degraded` is only in the `--json` branch. The same one-flag
+   change revives it — which matters because that SLI is the *only* assertion
+   `--reachability-chaos` makes.
+3. **Multi-node soaks were secretly single-node.** The daemon takes a per-HOME
+   run lock (`lifecycle.rs:569-591`) and `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS`
+   appeared nowhere in `scripts/` or `.github/`, so node0 took the lock and
+   every other node exited immediately. The surviving one-node mesh still passed
+   the whole invariant pack, because convergence and pairwise liveness are
+   vacuous over a single reachable node. A failed bring-up is now a red run.
+
+Still outstanding, and deliberately not changed: CI remains advisory
+(`continue-on-error: true`, the gate step ends `|| true`, and
+`.github/mesh-slo-baseline.json` does not exist, so `gate_slis` reports
+`first_run` and exits 0 regardless). Enforcement is a separate decision once
+this lane has a track record.
 
 ### The calibration contract
 
@@ -1521,6 +1902,8 @@ so before anyone quotes the number.
 | 4 | Congestion ≠ failure + honour `Retry-After` | quarantines-of-healthy-nodes goes to zero under a shed scenario |
 | 5 | F6 floors: deficit-ordered queue, contribution demoted to surplus | worst-served-origin share and dependency-weighted shed hold under sustained contention |
 | 6 | Enable a finite ceiling; priority classes | hub degradation is shedding-with-recovery, not unbounded queueing — and step 5's floors hold while it sheds |
+| 7 | **F9 local half — LANDED 2026-07-27** | Wire the real local in-flight count into the scorer. Armed first (`blind-local-load` / `blind-peer-ramp` / `blind-observations`), measured at −71% mean / −76% p95 on `isolation` and ±1% on four other fleets, then landed. §4.4 |
+| — | **F9 peer half — DO NOT BUILD** | Priced as *protective*: freezing peer `samples` is worth −11%..−33% mean on three fleets. Completing the wiring is a regression. Second instance of F7's trap. §4.4 |
 
 F3's clamp is the one plausible exception to "arm before landing": a
 term that evaluates to a constant carries zero information, so no
@@ -1567,7 +1950,8 @@ Constants read 2026-07-26, `oicp-types/src/scoring.rs` unless noted:
 | availability clamp | `[0.2, 1.0]` | 547 |
 | composed product | `claim × obs × load × loc × cold × thr × avail` | 548 |
 | failure EMA up / down | `0.9r + 0.1` / `0.9r` | `peer_inference.rs:654` / `:633` |
-| gossiped in-flight overrides self-observed | — | `peer_inference.rs:1085` |
+| gossiped in-flight overrides self-observed (peers only — see F9) | — | `scheduler_core.rs:512-521` |
+| local in-flight, read from the gossip publisher (F9 fix, 2026-07-27) | — | `peer_inference.rs`, the `local_obs` binding |
 | `FAILURE_THRESHOLD` / cooldowns | 3 / 60s +60s → 600s | `peer_health.rs:47-56` |
 | `DEFAULT_GOSSIP_INTERVAL` | 10s | `gossip.rs:57` |
 | `MANIFEST_TTL` | 60s | `peer_inference.rs:63` |

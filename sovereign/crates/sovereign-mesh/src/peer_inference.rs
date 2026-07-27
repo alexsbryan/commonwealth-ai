@@ -1201,6 +1201,10 @@ impl MeshInferenceProvider {
         // v0.3 §7 operational adjustments so a hot local slot can
         // lose to an idle peer on load, and a reliable peer can
         // beat a failure-prone local.
+        //
+        // That first clause was false from June 10th until 2026-07-27
+        // — see F9 — and the fix is at the `local_obs` binding below,
+        // not here.
         // v0.3 §4.3 governance tap: record the requested hint if
         // it's an `x:*` extension. Standardized hints are skipped
         // inside the registry itself. No routing impact — this is
@@ -1211,7 +1215,39 @@ impl MeshInferenceProvider {
                 .await
                 .observe_request(hint, Self::now_unix_secs());
         }
-        let local_obs = self.local_observations.read().await.clone();
+        // F9 (`SCHEDULER_QUALITY.md`) — the local load signal, wired.
+        //
+        // `local_observations.in_flight` has no writer on the dispatch
+        // path: its only mutator is `record_dispatch(None)`, which has
+        // zero callers in the repository. The scorer therefore read a
+        // permanent 0, `load_penalty` was a permanent 1.0, and the
+        // local candidate was scored idle no matter how backed up this
+        // node actually was.
+        //
+        // The true count already exists and needs no new bookkeeping:
+        // `in_flight_publisher` is the RAII-maintained total this node
+        // gossips (`enter_local_total`, saturating on both edges). Two
+        // reasons to prefer it over teaching the dispatch path to call
+        // `record_dispatch(None)`: it cannot drift out of pairing with
+        // the guards that already maintain it, and it makes both sides
+        // of the comparison the SAME quantity — a peer's in-flight
+        // number is *its* published total (`scheduler_core.rs:512`
+        // prefers the gossiped count), so scoring local on a private
+        // counter was comparing two numbers that only shared a name.
+        //
+        // Deliberately NOT fixed alongside it: the peer half of F9
+        // (peer `samples` never leaves 0 on the ranked path, pinning
+        // `cold_start_weight` at 0.7). Tier 1 prices that blindness as
+        // *protective* on four of five fleets — up to -33% mean latency
+        // — because a permanently cold peer is a brake on over-offload.
+        // Completing that wiring is a regression, not a fix; see the
+        // `what_the_scorer_loses_by_never_seeing_its_own_load` arm table
+        // and F7, which is the same trap.
+        let local_obs = {
+            let mut obs = self.local_observations.read().await.clone();
+            obs.in_flight = self.in_flight_publisher.load(Ordering::Relaxed);
+            obs
+        };
         let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
         let now_unix = Self::now_unix_secs();
@@ -2045,6 +2081,11 @@ fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
 /// can't accidentally regress when a new routing path is added.
 fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvider {
     const PEER_CONTEXT: u32 = 32_768;
+    // `"mesh-peer"` is an attribution label, not a servable model name —
+    // it exists so logs and `CompletionResponse::model_id` can say a turn
+    // left this node. `with_placeholder_model_id` is what keeps it off
+    // the wire: sent as `model`, it puts the receiving node on its
+    // explicit-name path, resolves to nobody, and 503s.
     match &peer.transport {
         Some(t) => RemoteApiProvider::with_client_and_bearer(
             url,
@@ -2052,8 +2093,10 @@ fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvid
             t.bearer.clone(),
             "mesh-peer",
             PEER_CONTEXT,
-        ),
-        None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT),
+        )
+        .with_placeholder_model_id(),
+        None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT)
+            .with_placeholder_model_id(),
     }
 }
 
