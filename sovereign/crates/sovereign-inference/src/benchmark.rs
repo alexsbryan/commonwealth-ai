@@ -1,17 +1,40 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Baseline-model throughput probe.
 //!
-//! Runs once at daemon startup (and once more whenever the
-//! [`HardwareProfile`] fingerprint changes — see
+//! **DEAD CODE as of 2026-07-27, and the paragraph below this one is
+//! what it was supposed to do rather than what it does.**
+//! [`run_baseline_benchmark`] has no callers anywhere in the
+//! repository; neither does
+//! `MeshInferenceProvider::set_local_benchmark`, the setter that would
+//! have carried its result; and `sovereign-mesh::capabilities`
+//! hardcodes `benchmark: None` into every gossip tick. No node on this
+//! mesh has ever advertised a `BenchmarkResult`.
+//! (`SCHEDULER_QUALITY.md` F10 / §4.5.)
+//!
+//! *Intended design:* runs once at daemon startup (and once more
+//! whenever the [`HardwareProfile`] fingerprint changes — see
 //! `sovereign-mesh::daemon::EmbeddedDaemon::start_daemon`) to measure
 //! how fast the bundled default model runs on this hardware.
-//! Persisted to disk so subsequent boots don't re-pay the cost.
+//! Persisted to disk so subsequent boots don't re-pay the cost. None
+//! of that startup wiring or persistence was built.
 //!
-//! The result rides the gossiped `NodeCapabilities.benchmark` field
-//! and feeds the scoring pipeline at
+//! The result was to ride the gossiped `NodeCapabilities.benchmark`
+//! field and feed the scoring pipeline at
 //! [`sovereign_core::oicp::throughput_factor`] — the simplest
 //! defensible "how fast is this peer" signal that doesn't require a
-//! cross-model benchmark matrix.
+//! cross-model benchmark matrix. Because it does not, that scoring
+//! term evaluates to a constant 1.0 for every peer in production.
+//!
+//! **Do not fix this by simply adding a call site.** This probe
+//! measures the `Speed::Fast` slot, so it stamps a ~4B model into
+//! `baseline_model_id` / `baseline_size_gb`, and `throughput_factor`
+//! extrapolates from there to whatever model is being scored by
+//! scaling *linearly* on the size ratio. That law is false — decode is
+//! bandwidth-bound and scaling is sub-linear — and §4.5 measures the
+//! error as a one-sided penalty on large models: −56% mean latency
+//! bought with a doubling of declined capability upgrades. An honest
+//! card is worth −32% with no quality cost, but only if it describes
+//! the model being scored. Benchmark per-model, or leave this dead.
 //!
 //! Why a probe and not an estimate from `tflops`: TFLOPS estimates
 //! ignore quantization, KV-cache bandwidth, and thermal headroom —
