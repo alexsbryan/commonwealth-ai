@@ -606,6 +606,57 @@ same number as latency.
 > would reach for first — `CandidateInputs` already carries `in_flight`,
 > `rtt_ms` and both `bench_*` rates, so **the objective is already
 > scoreable against a production capture with no new instrumentation.**
+>
+> **5. F2 × §4.1, the composition that was missing at first landing**
+> (`Arm::PredictedTimeOutboundOnly`). `published_load()` returned `Total`
+> for every arm but one, so the objective had never seen a gossiped count
+> that misses inbound peer work. The structural prior was that it should
+> hurt *more* than the product — the product passes `in_flight` through
+> `load_penalty`, a bounded multiplier, while predicted-time multiplies
+> it by a service time. The prior is **conditionally right, and the
+> condition is the finding**:
+>
+> | fleet | product damage | predicted damage | predicted offload share |
+> |---|---|---|---|
+> | household-evening-12 | +126% | **+0.4%** | 30% |
+> | twin-hubs | +20% | **+0.2%** | 12% |
+> | isolation | +584% | **+627%** | 70% |
+>
+> Exposure tracks how much the objective actually hops: a corrupted
+> peer-queue count cannot damage a decision that stayed local. So
+> predicted-time looks near-immune on the fleets where it declines most
+> offloads and is *worse than the product* on the one fleet where it
+> offloads 70% of traffic. **Do not read the first two rows as
+> robustness.** The regime that concentrates the risk is sustained
+> contention — which is also the only regime where F1 still mattered
+> (+43.8%). Both of §4.1's information dependencies bite in the same
+> place, and that place is where the two-daemon audit stops being
+> "earned" and becomes a prerequisite.
+>
+> **6. Model-load time, the term whose absence would have cost most**
+> (`SimConfig::model_load_sec_per_gb`, `predicted_time::LoadDebt`).
+> `ProviderModel.status.estimated_load_time_sec` existed and the
+> objective ignored it, while the sim charged nothing for paging a model
+> in — so the arm could not have found its own blind spot, exactly as
+> with the exact rate card. Load is now charged **additively, not
+> multiplied by the queue**, because one load warms the slot for
+> everything behind it. The objective absorbs it:
+>
+> | load s/GB (21GB hub) | arm 0 eff | predicted eff |
+> |---|---|---|
+> | 0.0 (preloaded) | 0.33–0.42 | 0.95–0.98 |
+> | 1.0 (~21s) | 0.38–0.42 | 0.90–0.93 |
+> | 3.0 (~63s) | 0.37–0.45 | 0.91–0.97 |
+>
+> Two consequences. The record grew `model_loaded` / `estimated_load_ms`
+> on `CandidateInputs`, under the rule this arm makes explicit: **an
+> objective may not read a signal the record does not carry**, or the
+> decision stops being replayable from a capture. And a cold model with
+> no advertised estimate is charged **zero** — a documented under-charge,
+> because inventing a load time is the same fabrication
+> `Unpredictable::NoThroughput` refuses for decode rates. Manifests
+> should advertise the field; until they do, this objective is
+> optimistic about cold peers in exactly one measurable way.
 
 ### 4.2 Three contained follow-ons, in order
 
@@ -893,7 +944,8 @@ The fourth is the §4.1 candidate itself.
 | `WarmStart` | does F7's self-locking ramp *cost* anything? | Yes, and with the opposite sign to the one the finding implies: removing the penalty is **+235% mean latency**. See F7. |
 | `FreshWarmStart` | is that damage F1's fault? | **No** — the penalty is *larger* under fresh signals (+264%). The offloads lose on their own merits, so the 0.7 floor is compensating for an over-eager objective, not for staleness. This is the arm that stopped a wrong causal claim reaching this doc. |
 | `OutboundOnlyLoad` | would it matter if the gossiped in-flight counter missed inbound peer work? | Yes — **+126% to +584%** mean latency, under-reporting the signal by 67–93%. The two-daemon audit is earned. See F2. |
-| `PredictedTime` | how much of the oracle gap is a **wrong objective** rather than **imperfect information**? | Overwhelmingly the objective: +126%/+200%/+250% against +4.7%/+1.8%/−0.0%. Survives a ±2× mis-rated fleet. **But it routes knowledge turns to 4B laptops**, so it cannot land without a tier floor. Full result in §4.1. |
+| `PredictedTime` | how much of the oracle gap is a **wrong objective** rather than **imperfect information**? | Overwhelmingly the objective: +126%/+200%/+250% against +4.7%/+1.8%/−0.0%. Survives a ±2× mis-rated fleet and up to ~63s of model-load time. **But it routes knowledge turns to 4B laptops**, so it cannot land without a tier floor. Full result in §4.1. |
+| `PredictedTimeOutboundOnly` | does F2's mis-attributed load hurt the new objective more than the product? | **Conditionally, and the condition is the finding**: +0.4%/+0.2% where it offloads 30%/12% of traffic, but **+627% vs the product's +584%** where it offloads 70%. Exposure tracks offload share — the near-immunity is not robustness. §4.1 point 5. |
 
 They all follow one pattern worth naming, because it generalises: **a
 null result is only informative if the knob is proven connected.** Each

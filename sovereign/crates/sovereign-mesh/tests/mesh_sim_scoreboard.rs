@@ -950,8 +950,166 @@ fn how_much_of_predicted_times_win_survives_a_wrong_rate_card() {
     }
 }
 
-/// The default must stay inert, or every number recorded before the
-/// rate-card knob existed silently stops reproducing.
+/// **Does mis-attributed load hurt the new objective MORE than it hurts
+/// the product?**
+///
+/// This closes a real hole in the §4.1 arm as first landed:
+/// `Arm::published_load()` returned `Total` for every arm but one, so
+/// predicted-time had never once seen a gossiped in-flight count that
+/// missed inbound peer work.
+///
+/// The structural prior says it should hurt more. The product passes
+/// `in_flight` through `load_penalty`, a **bounded** multiplier — a
+/// wrong count moves the score a little. The predicted time
+/// **multiplies it by a service time**, so the same wrong count is a
+/// first-order error that scales with the queue. An objective that
+/// trades the product's fudge factors for accuracy is only as good as
+/// the inputs it trusts, and this is the input F2 says may be broken.
+///
+/// Reported, not asserted, apart from the wiring check — the sign of
+/// the comparison is the finding.
+#[test]
+fn does_mis_attributed_load_hurt_predicted_time_more_than_the_product() {
+    let published_sum = |r: &RunReport| -> u64 {
+        candidates(r)
+            .iter()
+            .filter_map(|c| c.inputs.gossiped_in_flight)
+            .map(u64::from)
+            .sum()
+    };
+    for s in [
+        scenario::household_evening_12(SEED),
+        scenario::twin_hubs(SEED),
+        scenario::isolation(SEED),
+    ] {
+        let p_total = run(&s, Arm::PredictedTime, SEED);
+        let p_out = run(&s, Arm::PredictedTimeOutboundOnly, SEED);
+        let a_total = run(&s, Arm::AsImplemented, SEED);
+        let a_out = run(&s, Arm::OutboundOnlyLoad, SEED);
+
+        // Wiring: the composed arm must actually publish less, or a
+        // flat result means "no inbound work existed" rather than "the
+        // objective is robust".
+        assert!(
+            published_sum(&p_out) < published_sum(&p_total),
+            "{}: the composed arm published as much as the honest one — \
+             `published_load()` is not reaching the predicted-time path",
+            s.name
+        );
+
+        let pct = |from: &RunReport, to: &RunReport| {
+            100.0 * (mean_total_ms(to) - mean_total_ms(from)) / mean_total_ms(from).max(1.0)
+        };
+        let product_damage = pct(&a_total, &a_out);
+        let predicted_damage = pct(&p_total, &p_out);
+
+        println!("── F2 × §4.1 — `{}` ──", s.name);
+        println!(
+            "  product:        {:>7.1}s → {:>7.1}s  ({:+.1}%)  offloads {} → {}",
+            mean_total_ms(&a_total) / 1000.0,
+            mean_total_ms(&a_out) / 1000.0,
+            product_damage,
+            offloads(&a_total),
+            offloads(&a_out),
+        );
+        println!(
+            "  predicted-time: {:>7.1}s → {:>7.1}s  ({:+.1}%)  offloads {} → {}",
+            mean_total_ms(&p_total) / 1000.0,
+            mean_total_ms(&p_out) / 1000.0,
+            predicted_damage,
+            offloads(&p_total),
+            offloads(&p_out),
+        );
+        // The exposure is conditional on how much the objective offloads
+        // at all: a wrong peer-queue count cannot hurt a decision that
+        // stayed local. Print the share so the conditional is legible
+        // rather than inferred from two raw counts.
+        let offload_share = |r: &RunReport| {
+            100.0 * offloads(r) as f64 / r.truth.len().max(1) as f64
+        };
+        println!(
+            "  predicted-time offloads {:.0}% of traffic → {}",
+            offload_share(&p_total),
+            if predicted_damage > product_damage + 5.0 {
+                "MORE damage than the product. The multiply-by-service-time exposure is real \
+                 wherever the objective actually hops, so the two-daemon audit is a \
+                 PREREQUISITE for landing §4.1 in this regime, not merely earned."
+            } else if predicted_damage < product_damage - 5.0 {
+                "LESS damage than the product — but not because it is robust. It declines most \
+                 hops on this fleet, so a corrupted peer-queue count has little to corrupt. \
+                 Do NOT read this as the objective being immune."
+            } else {
+                "comparable damage — F2's priority is unchanged by the objective here."
+            }
+        );
+    }
+}
+
+/// **What model-load time does to the objective.** `predict()` charges
+/// it as a single additive term; `SimConfig::model_load_sec_per_gb`
+/// makes the world charge it too.
+///
+/// This term was missing when the arm landed, and its absence was the
+/// most expensive of the three gaps: paging in a 21GB model is tens of
+/// seconds, which dwarfs every other addend. With nothing in the
+/// harness charging for it, the arm could not have found the mistake
+/// itself — the same class of blind spot as the exact rate card.
+///
+/// What to read: whether pricing load changes *where* work goes. A cold
+/// big model should stop being attractive, and a warm small one should
+/// not — so this is also the first knob that gives the objective a
+/// reason to prefer an already-loaded peer.
+#[test]
+fn what_model_load_time_does_to_the_predicted_time_objective() {
+    for s in [
+        scenario::household_evening_12(SEED),
+        scenario::twin_hubs(SEED),
+    ] {
+        println!("── model-load time × §4.1 — `{}` ──", s.name);
+        println!(
+            "  {:>10}  {:>10}  {:>14}  {:>10}",
+            "load s/GB", "arm 0 eff", "predicted eff", "pred mean"
+        );
+        for load in [0.0f64, 1.0, 3.0] {
+            let cfg = SimConfig {
+                model_load_sec_per_gb: load,
+                ..Default::default()
+            };
+            let oracle = run_with(&s, Arm::Oracle, SEED, cfg.clone());
+            let arm0 = run_with(&s, Arm::AsImplemented, SEED, cfg.clone());
+            let pred = run_with(&s, Arm::PredictedTime, SEED, cfg.clone());
+
+            // Wiring: above zero, candidates must actually advertise a
+            // cold model with a load estimate, or the objective is
+            // charging nothing and this row is a duplicate of the first.
+            if load > 0.0 {
+                let cold_advertised = candidates(&pred).iter().any(|c| {
+                    c.inputs.model_loaded == Some(false)
+                        && c.inputs.estimated_load_ms.unwrap_or(0) > 0
+                });
+                assert!(
+                    cold_advertised,
+                    "{}: load {load} s/GB but no candidate advertised a cold model with an \
+                     estimate — the load term is not reaching the record or the objective",
+                    s.name
+                );
+            }
+
+            let o = mean_total_ms(&oracle);
+            let eff = |r: &RunReport| (o / mean_total_ms(r).max(1.0)).clamp(0.0, 1.0);
+            println!(
+                "  {:>10.1}  {:>10.2}  {:>14.2}  {:>9.1}s",
+                load,
+                eff(&arm0),
+                eff(&pred),
+                mean_total_ms(&pred) / 1000.0,
+            );
+        }
+    }
+}
+
+/// The defaults must stay inert, or every number recorded before the
+/// rate-card and load-time knobs existed silently stops reproducing.
 #[test]
 fn a_perfect_rate_card_is_the_default_and_changes_nothing() {
     let s = scenario::household_evening_12(SEED);
@@ -963,6 +1121,7 @@ fn a_perfect_rate_card_is_the_default_and_changes_nothing() {
             SEED,
             SimConfig {
                 advertised_rate_error: 0.0,
+                model_load_sec_per_gb: 0.0,
                 ..Default::default()
             },
         );

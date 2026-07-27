@@ -42,7 +42,7 @@ use crate::oicp_select::{
     score_manifest_for_request, ModelCandidate,
 };
 use crate::predicted_time::{
-    self, LocalOption, PredictInputs, Prediction, RequestShape, Unpredictable,
+    self, LoadDebt, LocalOption, PredictInputs, Prediction, RequestShape, Unpredictable,
 };
 
 /// The name the local node is recorded under in a decision record's
@@ -302,8 +302,14 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
         // that asymmetry between self and peers IS finding F1, so
         // the record states it explicitly (`LoadSource::Local`,
         // `gossip_age_secs: None`) rather than leaving it implied.
-        let candidate_inputs = CandidateInputs::from_observations(local.observations, LoadSource::Local)
+        let mut candidate_inputs = CandidateInputs::from_observations(local.observations, LoadSource::Local)
             .with_benchmark(local.benchmark, now_unix);
+        // §4.1 reads model-load debt, so the record has to carry it —
+        // an objective may not consume a signal a capture cannot replay.
+        if let Some(debt) = LoadDebt::from_manifest(local.manifest, &cand.model_id) {
+            candidate_inputs.model_loaded = Some(debt.model_loaded);
+            candidate_inputs.estimated_load_ms = Some(debt.estimated_load_ms);
+        }
         rec.push_candidate(CandidateRecord {
             kind: CandidateKind::Local,
             name: LOCAL_CANDIDATE_NAME.to_string(),
@@ -343,6 +349,14 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
         rtt_ms: 0,
         pp_tok_s: local.benchmark.map(|b| b.pp_tok_s),
         tg_tok_s: local.benchmark.map(|b| b.tg_tok_s),
+        // Local pays a load too — a node whose own model is evicted is
+        // not free just because it is local, and pretending otherwise
+        // would bias every comparison toward staying home.
+        pending_load_ms: local_cand
+            .as_ref()
+            .and_then(|c| LoadDebt::from_manifest(local.manifest, &c.model_id))
+            .map(|d| d.pending_ms())
+            .unwrap_or(0),
     };
 
     let mut scored: Vec<(usize, ModelCandidate)> = Vec::new();
@@ -485,6 +499,11 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
         candidate_inputs.manifest_age_secs = Some(*manifest_age_secs);
         candidate_inputs.manifest_from_cache = Some(*manifest_from_cache);
         candidate_inputs.rtt_ms = Some(*rtt_ms);
+        let load_debt = LoadDebt::from_manifest(manifest, &cand.model_id);
+        if let Some(debt) = load_debt {
+            candidate_inputs.model_loaded = Some(debt.model_loaded);
+            candidate_inputs.estimated_load_ms = Some(debt.estimated_load_ms);
+        }
         rec.push_candidate(CandidateRecord {
             kind: CandidateKind::Peer,
             name: peer.name.clone(),
@@ -505,6 +524,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             rtt_ms: *rtt_ms,
             pp_tok_s: peer.benchmark.as_ref().map(|b| b.pp_tok_s),
             tg_tok_s: peer.benchmark.as_ref().map(|b| b.tg_tok_s),
+            pending_load_ms: load_debt.map(|d| d.pending_ms()).unwrap_or(0),
         });
     }
 
