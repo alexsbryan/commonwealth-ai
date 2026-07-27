@@ -67,8 +67,10 @@ use crate::decision_log::{
     DECISION_LOG_SCHEMA,
 };
 use crate::oicp_select::offload_eligible;
+use crate::predicted_time;
 use crate::scheduler_core::{
     self, LocalCandidateView, PeerCandidateView, PeerManifestView, RankInputs, RankObjective,
+    RankResult,
 };
 use crate::throughput_tracking::apply_throughput_observation;
 use crate::tier::TierFloor;
@@ -385,6 +387,39 @@ pub enum Arm {
     /// called close, which is a second reason §4.2 step 2 wants §4.1
     /// underneath it.
     PredictedTimeTierFloorTwoChoices,
+    /// **§4.2 step 2 as actually specified** — the arm
+    /// [`PredictedTimeTierFloorTwoChoices`](Arm::PredictedTimeTierFloorTwoChoices)
+    /// is the blunt draft of.
+    ///
+    /// Same composition (predicted time + tier floor + a two-sample
+    /// draw), one difference: the draw is restricted to the **tie
+    /// band** — the head of the ranked list the predictor cannot
+    /// resolve, sized by [`predicted_time::tie_band`] from the rate
+    /// card rather than by a margin constant — and the winner of the
+    /// two is the *less loaded* rather than the better-ranked, since
+    /// rank order inside the band is an order on the one signal the
+    /// band just declared unreadable.
+    ///
+    /// §4.1.2 measured the blunt draw recovering −4% on `twin-hubs`
+    /// and giving back +3% on `mixed-hubs`. This arm is the claim that
+    /// the *qualifier* rather than the sampling is what separates those,
+    /// and §4.1.3 measured it holding on both fleets: `twin-hubs` −4%
+    /// (band ≥2 on 97% of decisions, mean width 2.92 — the blunt draw
+    /// there *was* a near-tie draw) and `mixed-hubs` −8% (band ≥2 on
+    /// 29%, mean width 1.30 — the band collapses toward the leader and
+    /// the objective keeps its win).
+    ///
+    /// **What the same section also measured, and it is the finding
+    /// that stops this arm being a clean win:** the band reads the
+    /// *advertised* rate card, so it only recognises identical hubs
+    /// while they advertise identically. At ±10% rate-card error the
+    /// `twin-hubs` band collapses (2.92 → 1.45) and the −4% recovery
+    /// inverts to +3% against the plain argmax, while the blunt
+    /// sampler — which never consults the card — keeps its whole
+    /// recovery. Neither sampler dominates: this one is the only safe
+    /// choice on a heterogeneous top band, and the blunt one is the
+    /// robust choice on a homogeneous one.
+    PredictedTimeTierFloorWithinNoise,
     /// Not a policy anyone could implement: assigns each request to
     /// whichever node would finish it soonest, with perfect knowledge
     /// of every queue. The denominator of the efficiency ratio.
@@ -411,6 +446,7 @@ impl Arm {
             Arm::TierFloor => "tier-floor",
             Arm::PredictedTimeTierFloor => "predicted-time+tier-floor",
             Arm::PredictedTimeTierFloorTwoChoices => "predicted-time+tier-floor+two-choices",
+            Arm::PredictedTimeTierFloorWithinNoise => "predicted-time+tier-floor+within-noise",
             Arm::Oracle => "oracle",
         }
     }
@@ -423,7 +459,8 @@ impl Arm {
             Arm::PredictedTime
             | Arm::PredictedTimeOutboundOnly
             | Arm::PredictedTimeTierFloor
-            | Arm::PredictedTimeTierFloorTwoChoices => RankObjective::PredictedTime,
+            | Arm::PredictedTimeTierFloorTwoChoices
+            | Arm::PredictedTimeTierFloorWithinNoise => RankObjective::PredictedTime,
             _ => RankObjective::Product,
         }
     }
@@ -435,8 +472,9 @@ impl Arm {
     pub(crate) fn tier_floor(&self, req: &InferenceRequirements) -> TierFloor {
         match self {
             Arm::TierFloor
-    | Arm::PredictedTimeTierFloor
-    | Arm::PredictedTimeTierFloorTwoChoices => TierFloor::from_requirements(req),
+            | Arm::PredictedTimeTierFloor
+            | Arm::PredictedTimeTierFloorTwoChoices
+            | Arm::PredictedTimeTierFloorWithinNoise => TierFloor::from_requirements(req),
             _ => TierFloor::None,
         }
     }
@@ -453,6 +491,17 @@ impl Arm {
             self,
             Arm::TwoChoices | Arm::FreshTwoChoices | Arm::PredictedTimeTierFloorTwoChoices
         )
+    }
+
+    /// Whether the two-sample draw is restricted to the tie band
+    /// (§4.2 step 2 as written) rather than taken over the whole ranked
+    /// list. Checked *before* [`two_choices`](Arm::two_choices) at the
+    /// dispatch site, and kept a separate predicate rather than a flag
+    /// on that one, because the two samplers differ in their winner
+    /// rule as well as their draw set — they are two policies, not one
+    /// policy with a switch.
+    fn within_noise_sampling(&self) -> bool {
+        matches!(self, Arm::PredictedTimeTierFloorWithinNoise)
     }
 
     /// Whether deciders start already believing they have completed
@@ -473,7 +522,7 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 13] = [
+pub const ALL_ARMS: [Arm; 14] = [
     Arm::AsImplemented,
     Arm::FreshSignals,
     Arm::TwoChoices,
@@ -486,6 +535,7 @@ pub const ALL_ARMS: [Arm; 13] = [
     Arm::TierFloor,
     Arm::PredictedTimeTierFloor,
     Arm::PredictedTimeTierFloorTwoChoices,
+    Arm::PredictedTimeTierFloorWithinNoise,
     Arm::Oracle,
 ];
 
@@ -702,6 +752,50 @@ pub struct RunReport {
     /// checked rather than assumed: a column of zeros is a peer no
     /// decider ever tried.
     pub peer_samples: Vec<Vec<u32>>,
+    /// What §4.2 step 2's sampler actually did, as opposed to what its
+    /// arm is named. Zeroed on every arm that does not sample.
+    pub sampler: SamplerTrace,
+}
+
+/// How often the within-noise sampler had a choice, and how often it
+/// used it.
+///
+/// Without this the arm is uninterpretable: `predicted-time+tier-floor`
+/// and `predicted-time+tier-floor+within-noise` can land on nearly the
+/// same mean either because the sampler almost never fires *or* because
+/// it fires constantly and its picks are a wash. Those are opposite
+/// findings and the latency column cannot tell them apart — the same
+/// scoreboard-denominator trap §6 keeps collecting instances of.
+///
+/// It is also the operator-facing number: "how often did my scheduler
+/// have two options it could not tell apart?" is answerable from a
+/// production capture the moment the objective ships, because
+/// `tie_band` rides on the ranking rather than on the simulation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SamplerTrace {
+    /// Decisions that reached the sampler with at least one ranked peer.
+    pub decisions: u64,
+    /// …of those, how many had a band of two or more — the sampler's
+    /// opportunity rate.
+    pub band_at_least_two: u64,
+    /// …of those, how many ended somewhere other than the argmax. The
+    /// difference between this and `band_at_least_two` is the draw
+    /// landing on the leader anyway, which is not a policy no-op: it is
+    /// the sampler declining, and it happens at a rate the band size
+    /// sets.
+    pub moved_off_argmax: u64,
+    /// Sum of band sizes over `decisions`, so a mean is derivable
+    /// without keeping the histogram.
+    pub band_total: u64,
+}
+
+impl SamplerTrace {
+    /// Mean band width across every decision that reached the sampler.
+    /// `None` when it never ran, which reads differently from 1.0 and
+    /// must not be collapsed into it.
+    pub fn mean_band(&self) -> Option<f64> {
+        (self.decisions > 0).then(|| self.band_total as f64 / self.decisions as f64)
+    }
 }
 
 /// Per-request ground truth. Separate from the record stream on
@@ -750,6 +844,7 @@ struct Sim {
     policy_rng: Rng,
     records: Vec<DecisionEvent>,
     truth: Vec<ServedFact>,
+    sampler: SamplerTrace,
 }
 
 /// Run one (scenario, arm, seed) to completion under the default
@@ -775,6 +870,7 @@ pub fn run_with(scenario: &Scenario, arm: Arm, seed: u64, cfg: SimConfig) -> Run
         truth: sim.truth,
         node_names: scenario.nodes.iter().map(|n| n.name.clone()).collect(),
         peer_samples,
+        sampler: sim.sampler,
     }
 }
 
@@ -885,6 +981,7 @@ impl Sim {
             seq: 0,
             world_rng: Rng::new(seed ^ 0xA5A5_5A5A_C3C3_3C3C),
             policy_rng: Rng::new(seed ^ 0x1357_9BDF_2468_ACE0),
+            sampler: SamplerTrace::default(),
             records: Vec::new(),
             truth: Vec::new(),
         }
@@ -1072,14 +1169,16 @@ impl Sim {
         // Arm 0 takes the argmax — that determinism is F5.
         let chosen_view = if result.ranked.is_empty() {
             None
+        } else if self.arm.within_noise_sampling() {
+            Some(self.sample_within_noise(&result))
         } else if self.arm.two_choices() && result.ranked.len() > 1 {
             let a = self.policy_rng.below(result.ranked.len());
             let b = self.policy_rng.below(result.ranked.len());
             // `ranked` is best-first, so the better of two samples is
             // the one with the smaller index.
-            Some(result.ranked[a.min(b)].0)
+            Some(result.ranked[a.min(b)].view_idx)
         } else {
-            Some(result.ranked[0].0)
+            Some(result.ranked[0].view_idx)
         };
 
         let decision_id = result.decision.decision_id.clone();
@@ -1106,6 +1205,58 @@ impl Sim {
                 eligible_peers,
             },
         );
+    }
+
+    /// §4.2 step 2, implemented as written: *sample two among
+    /// candidates whose predictions are within noise, take the less
+    /// loaded.*
+    ///
+    /// Two clauses separate this from the blunt
+    /// [`Arm::PredictedTimeTierFloorTwoChoices`], and §4.1.2 says both
+    /// are load-bearing:
+    ///
+    ///   - the draw is over the **tie band**, not the whole ranked
+    ///     list, so a candidate the objective can genuinely distinguish
+    ///     is never sampled away. On `mixed-hubs` this is what keeps a
+    ///     turn the 34 tok/s hub was measurably better for from landing
+    ///     on the 25 tok/s one.
+    ///   - the winner of the two is the **less loaded**, not the
+    ///     better-ranked. Inside the band, rank order *is* queue order
+    ///     (the band is defined by the uncontended times not
+    ///     separating), so taking the smaller index would be reading
+    ///     the stale signal back out of the very set that was built by
+    ///     setting it aside.
+    ///
+    /// Falls back to the argmax whenever the band holds one candidate
+    /// or the objective produced no band at all — an arm that samples
+    /// must still be a total policy when its prerequisite is absent.
+    fn sample_within_noise(&mut self, result: &RankResult) -> usize {
+        // `None` means the product objective, which has no scale on
+        // which two candidates are close; a band of 1 is the honest
+        // reading, not a degenerate one.
+        let band = result.tie_band.unwrap_or(1).min(result.ranked.len());
+        self.sampler.decisions += 1;
+        self.sampler.band_total += band as u64;
+        if band < 2 {
+            return result.ranked[0].view_idx;
+        }
+        self.sampler.band_at_least_two += 1;
+        let a = self.policy_rng.below(band);
+        let b = self.policy_rng.below(band);
+        let (lo, hi) = (a.min(b), a.max(b));
+        // Rank order goes in first, so an exact `queue_ms` tie keeps
+        // the better-ranked candidate — invariant 5's rule one layer up.
+        let picked = match (result.ranked[lo].predicted, result.ranked[hi].predicted) {
+            (Some(p_lo), Some(p_hi)) if !predicted_time::prefer_less_loaded(&p_lo, &p_hi) => hi,
+            // Includes the unreachable-in-practice case where a band
+            // ≥2 exists without predictions: degrade to the
+            // better-ranked draw rather than panic on a policy detail.
+            _ => lo,
+        };
+        if picked != 0 {
+            self.sampler.moved_off_argmax += 1;
+        }
+        result.ranked[picked].view_idx
     }
 
     /// The origin's view of itself. Load is exact — a node knows its

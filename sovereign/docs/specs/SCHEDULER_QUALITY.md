@@ -901,6 +901,87 @@ metric and obvious in the concentration one — a fourth entry for §6's
 list of scoreboard denominators that need interrogating before they are
 believed.
 
+### 4.1.3 The within-noise sampler, built — and the band's own blind spot
+
+§4.1.2 left the blunt sampler reading two fleets in opposite
+directions and named §4.2 step 2's qualifier — *"among candidates whose
+predictions are within noise"* — as the load-bearing clause. That
+clause is now implemented (`predicted_time::tie_band`,
+`Arm::PredictedTimeTierFloorWithinNoise`) and it does what the clause
+promised on both fleets at once.
+
+**The noise is named, not chosen.** Of `predict`'s four terms exactly
+one is built from a gossiped count that can be seconds stale — `queue =
+in_flight × service`, which is F1 — and `Prediction::uncontended_ms` is
+the other three. Two candidates are within noise of each other when
+their *uncontended* predictions do not separate them: whatever order
+the queue term then imposes is an order on the one signal we know is
+wrong, together, for every decider at once. No constant appears
+anywhere in this, which keeps invariant 1 intact.
+
+| fleet | arm0+floor | predicted+floor | +blunt two-choices | **+within-noise** | band ≥2 | mean band |
+|---|---|---|---|---|---|---|
+| twin-hubs | 31.8s | 32.9s (+3%) | 30.5s (−4%) | **30.5s (−4%)** | 97% | 2.92 |
+| mixed-hubs | 28.1s | 25.7s (−8%) | 28.8s (+3%) | **25.9s (−8%)** | 29% | 1.30 |
+
+Both readings survive, and the two right-hand columns say why rather
+than leaving it inferred. On `twin-hubs` the band is essentially the
+whole band-0 set (mean width 2.92 of 3), which retroactively confirms
+§4.1.2's guess that the blunt draw there *was* a near-tie draw — the two
+arms agree to the tenth of a second because they are running the same
+policy. On `mixed-hubs` the band collapses toward the leader (1.30) and
+the sampler moves off the argmax on only 8% of decisions, so the
+objective keeps its win instead of handing it back.
+
+**The counter-finding, which is the part worth carrying forward.** The
+band asks "are these the same machine?" and answers from the
+*advertised* rate card — a number the candidate states about itself, and
+one `predicted_time` deliberately never corrects (invariant 3 forbids
+substituting a rate; the product objective is the one with an
+error-correcting path, `throughput_factor`'s observed EWMA past five
+samples). So the band recognises identical hubs only while they
+*advertise* identically, and `advertised_rate_error` — the instrument
+note 963a8d88's method rule already required for this arm's inputs —
+prices that assumption:
+
+| twin-hubs, rate-card error | arm0+floor | argmax | blunt | within-noise | mean band |
+|---|---|---|---|---|---|
+| ±0% | 31.8s | 32.9s | 30.5s | **30.5s** (−7% vs argmax) | 2.92 |
+| ±10% | 31.8s | 32.1s | 30.2s | **33.0s** (+3%) | 1.45 |
+| ±25% | 31.8s | 32.1s | 30.2s | **33.0s** (+3%) | 1.45 |
+| ±50% | 34.3s | 32.1s | 30.2s | **32.7s** (+2%) | 1.46 |
+| ±100% | 75.3s | 33.7s | 32.1s | **33.6s** (−0%) | 1.39 |
+
+A cliff, not a decay: ±10% is enough to take the band from 2.92 to 1.45
+and invert the recovery. And it is **not** the safe failure the first
+draft of `tie_band`'s doc comment claimed. A collapsed band still opens
+on ~25% of decisions — on whichever pairs happen to have near-equal
+*perturbed* times — so the sampler goes on firing on noise after it has
+stopped firing on the real ties. The blunt sampler, which never
+consults the rate card, holds its whole recovery across the sweep.
+
+**So neither sampler dominates, and the honest rule is a fleet
+question, not a policy question.** Where the top band is genuinely
+heterogeneous, only the within-noise draw is safe — blunt gives back the
+objective's entire −8%. Where the top band is genuinely homogeneous,
+blunt is both simpler and robust, and within-noise matches it only when
+the rate card is exact. The repair for the gap is not a tolerance
+constant (which would forfeit invariant 1 and merely move the cliff):
+it is giving `tie_band` an observed rate where one exists, which makes
+it §4.2 step 1's problem — and note 963a8d88 already counted the
+observed path carrying only ~5% of scorings in a 30-minute run, so that
+repair is gated on backpressure landing first.
+
+**One instrument note, and it is a fourth entry for §6's
+scoreboard-denominator list.** `SamplerTrace` exists because latency
+alone cannot distinguish "the sampler never fired" from "it fired
+constantly and its picks were a wash" — the two rows would look
+identical and mean opposite things. The band-width and moved-off-argmax
+counters are what turn the `mixed-hubs` row from a coincidence into a
+mechanism, and they are computable from a production capture the moment
+the objective ships, because `tie_band` rides on the ranking rather
+than on the simulation.
+
 ### 4.2 Three contained follow-ons, in order
 
 1. **Fresh backpressure.** Piggyback the serving node's true queue
@@ -911,11 +992,17 @@ believed.
    are within noise, take the less loaded. Small change to the ranked
    selector; largest tail improvement in §3. **Promoted to a
    prerequisite for §4.1's landing, not a follow-on** (§4.1.1
-   consequence 3, measured in §4.1.2). Implement the *within-noise*
-   restriction, never the blunt uniform draw: §4.1.2 measures the blunt
-   version recovering −4% on `twin-hubs` and giving back +3% on
-   `mixed-hubs`, which is a quality-neutral latency regression on any
-   fleet whose top band is not uniform.
+   consequence 3, measured in §4.1.2). **Built and measured in §4.1.3**
+   — read that section before choosing a sampler, because the answer is
+   a fleet question rather than a policy question. Short form: the blunt
+   uniform draw is unusable on a heterogeneous top band (it gives back
+   the objective's entire −8% on `mixed-hubs`), and the within-noise
+   draw fixes exactly that, but its band is computed from the
+   *advertised* rate card and a ±10% error collapses it — so on a
+   homogeneous top band the blunt draw is the robust one. Neither is
+   ready to be the single shipped policy; the thing that would make the
+   within-noise band trustworthy is an observed rate, which is step 1's
+   problem, not step 2's.
 3. **Split congestion from failure.** One enum at the record site —
    `Congested { retry_after }` vs `Failed`. Congestion drives a
    short-half-life per-peer backoff; only failure touches
@@ -1225,7 +1312,7 @@ so before anyone quotes the number.
 
 | # | Step | Exit criterion |
 |---|---|---|
-| 1 | §4.1 predicted-time ranking — **arm done, tier floor done, landing NOT cleared** | ~~efficiency ratio improves~~ and ~~tier floor as a separate explicit input~~ (both done — §4.1.1). What the floor found re-scopes the rest: at constant quality the objective is **~5% worse than the product** on the only fleet whose top band is not saturated, so the landing case has to be rebuilt rather than finished. Prerequisites now, in order: **(a)** a scenario with a capable, *unsaturated* top band — the suite has exactly one and n=1 decides nothing; **(b)** §4.2 step 2 (break the herd) — predicted-time herds *harder* than the product once the floor makes candidates homogeneous; **(c)** the Tier-2 answer-quality gate the sim still cannot supply; **(d)** an **objective tag on `RoutingDecision`** so replay can pick the right policy |
+| 1 | §4.1 predicted-time ranking — **arm done, tier floor done, landing NOT cleared** | ~~efficiency ratio improves~~ and ~~tier floor as a separate explicit input~~ (both done — §4.1.1). What the floor found re-scopes the rest: at constant quality the objective is **~5% worse than the product** on the only fleet whose top band is not saturated, so the landing case has to be rebuilt rather than finished. Prerequisites now, in order: ~~**(a)** a scenario with a capable, *unsaturated* top band~~ (done — `mixed-hubs`, §4.1.2); ~~**(b)** §4.2 step 2 (break the herd)~~ (**built and measured — §4.1.3**, but it did NOT close the way (a) did: the within-noise band is the only sampler safe on a heterogeneous top band, and its band collapses under a ±10% rate-card error, so the sampler choice is still fleet-dependent and the real repair — an observed rate for `tie_band` — is gated behind §4.2 step 1); **(c)** the Tier-2 answer-quality gate the sim still cannot supply; **(d)** an **objective tag on `RoutingDecision`** so replay can pick the right policy |
 | 2 | Fresh backpressure — **demoted** | Against the product objective F1 looked like the median's main cost. Against a *correct* objective it is worth 1.8–4.7% on three fleets and +43.8% on `isolation` alone, so this is now scoped to sustained contention. Exit unchanged: the median gap between the `as-is` and `fresh` arms closes |
 | 3 | Two-choices sampling | herding CoV and p95 improve; the completed-count trade-off is reported, not hidden |
 | 4 | Congestion ≠ failure + honour `Retry-After` | quarantines-of-healthy-nodes goes to zero under a shed scenario |

@@ -267,13 +267,44 @@ pub(crate) struct RankInputs<'a> {
     pub peers: &'a [PeerCandidateView],
 }
 
+/// One peer that survived ranking, in rank order.
+///
+/// A named struct rather than the `(usize, ModelCandidate)` pair it
+/// replaced, because §4.2 step 2's sampler needs a third fact — what
+/// the objective predicted for this candidate — and carrying that in a
+/// parallel `Vec<Prediction>` would let the two lists desync silently.
+/// A desync here does not fail; it dispatches to one peer using another
+/// peer's predicted time, which is the kind of bug that survives a test
+/// suite.
+#[derive(Debug, Clone)]
+pub(crate) struct RankedCandidate {
+    /// Index into [`RankInputs::peers`], so the caller can re-pair this
+    /// with whatever peer representation it owns without this module
+    /// having to name it.
+    pub view_idx: usize,
+    /// The pick the scorer made for this peer.
+    pub candidate: ModelCandidate,
+    /// What §4.1's objective predicted it would cost. `None` under
+    /// [`RankObjective::Product`], which ranks on a dimensionless score
+    /// and so has no time to report.
+    pub predicted: Option<Prediction>,
+}
+
 /// The decision, plus the record that explains it.
 ///
-/// `ranked` holds indices into [`RankInputs::peers`], best-first, so
-/// the caller can re-pair them with whatever peer representation it
-/// owns without this module having to name it.
+/// `ranked` is best-first.
 pub(crate) struct RankResult {
-    pub ranked: Vec<(usize, ModelCandidate)>,
+    pub ranked: Vec<RankedCandidate>,
+    /// How many entries at the head of `ranked` the objective cannot
+    /// tell apart ([`predicted_time::tie_band`]) — the draw set for
+    /// §4.2 step 2, and a glassbox answer to "how many equally good
+    /// options did the scheduler actually have?"
+    ///
+    /// `None` under the product objective, and that is not an omission
+    /// to be filled in later: a dimensionless score has no scale on
+    /// which two candidates can be called close, which is exactly why
+    /// §4.2 step 2 wants §4.1 underneath it.
+    pub tie_band: Option<usize>,
     pub decision: RoutingDecision,
 }
 
@@ -626,12 +657,22 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
     // is in scoring order, which is also the order the candidate
     // records were pushed; both filters below are order-sensitive on
     // exact ties and document why.
-    let winners = match objective {
+    let (winners, tie_band): (Vec<RankedCandidate>, Option<usize>) = match objective {
         // Same tie-break as everywhere else: local wins ties (no
         // round-trip cost, no attribution churn).
         RankObjective::Product => {
             let local_for_cmp = local_cand.clone().unwrap_or_else(local_sentinel);
-            winners_over_local(&local_for_cmp, scored)
+            let winners = winners_over_local(&local_for_cmp, scored)
+                .into_iter()
+                .map(|(view_idx, candidate)| RankedCandidate {
+                    view_idx,
+                    candidate,
+                    // Not "unknown" — this objective produces no time
+                    // at all, and a dimensionless score is not one.
+                    predicted: None,
+                })
+                .collect();
+            (winners, None)
         }
         // §4.1. The `ModelCandidate` rides along as part of the tag so
         // the winning peers come back paired with the pick the scorer
@@ -654,8 +695,13 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
                     })
                     .collect();
             let ranked = predicted_time::faster_than_local(local_option, predicted);
+            // §4.2 step 2's draw set, computed here because here is
+            // where the predictions are — one definition, logged, and
+            // no chance of a sampler re-deriving it differently.
+            let band = predicted_time::tie_band(&ranked);
             tracing::info!(
                 oicp_request_id = %oicp_request_id,
+                tie_band = band,
                 local_predicted_ms = ?match local_option {
                     LocalOption::Predicted(p) => Some(p.total_ms),
                     _ => None,
@@ -668,13 +714,21 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
                 faster_than_local = ranked.len(),
                 "mesh-inference: ranked by predicted time-to-answer (§4.1)"
             );
-            ranked.into_iter().map(|(tagged, _)| tagged).collect()
+            let winners = ranked
+                .into_iter()
+                .map(|((view_idx, candidate), p)| RankedCandidate {
+                    view_idx,
+                    candidate,
+                    predicted: Some(p),
+                })
+                .collect();
+            (winners, Some(band))
         }
     };
     match winners.first() {
-        Some((idx, cand)) => tracing::info!(
-            peer = %peers[*idx].name,
-            peer_pick = %cand.model_id,
+        Some(best) => tracing::info!(
+            peer = %peers[best.view_idx].name,
+            peer_pick = %best.candidate.model_id,
             ranked = winners.len(),
             "mesh-inference: peer(s) selected by OICP (ranked, best-first)"
         ),
@@ -683,7 +737,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
 
     let ranked_names: Vec<String> = winners
         .iter()
-        .map(|(idx, _)| peers[*idx].name.clone())
+        .map(|w| peers[w.view_idx].name.clone())
         .collect();
     let verdict = if ranked_names.is_empty() {
         Verdict::StayLocal
@@ -694,6 +748,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
     };
     RankResult {
         ranked: winners,
+        tie_band,
         decision: rec.finish_at(verdict, &ranked_names, now_unix.saturating_mul(1000)),
     }
 }
@@ -824,7 +879,7 @@ mod tests {
         let peers = vec![peer("hub", 0.95, Some(0))];
         let out = run(&peers);
         assert_eq!(out.ranked.len(), 1);
-        assert_eq!(out.ranked[0].0, 0);
+        assert_eq!(out.ranked[0].view_idx, 0);
         assert!(matches!(out.decision.verdict, Verdict::Peers { .. }));
         // The local candidate is recorded even though it lost.
         assert!(out
@@ -893,9 +948,9 @@ mod tests {
         let peers = vec![peer("busy", 0.95, Some(12)), peer("idle", 0.95, Some(0))];
         let out = run(&peers);
         assert_eq!(out.ranked.len(), 2);
-        assert_eq!(peers[out.ranked[0].0].name, "idle");
-        assert_eq!(peers[out.ranked[1].0].name, "busy");
-        assert!(out.ranked[0].1.score > out.ranked[1].1.score);
+        assert_eq!(peers[out.ranked[0].view_idx].name, "idle");
+        assert_eq!(peers[out.ranked[1].view_idx].name, "busy");
+        assert!(out.ranked[0].candidate.score > out.ranked[1].candidate.score);
     }
 
     #[test]
@@ -1136,7 +1191,10 @@ mod tests {
         assert_eq!(first.decision.verdict, second.decision.verdict);
         assert_eq!(first.decision.ts_unix_ms, second.decision.ts_unix_ms);
         let names = |r: &RankResult| -> Vec<String> {
-            r.ranked.iter().map(|(i, _)| peers[*i].name.clone()).collect()
+            r.ranked
+                .iter()
+                .map(|w| peers[w.view_idx].name.clone())
+                .collect()
         };
         assert_eq!(names(&first), names(&second));
         assert_eq!(

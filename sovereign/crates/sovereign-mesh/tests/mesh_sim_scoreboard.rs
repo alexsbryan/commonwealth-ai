@@ -143,7 +143,10 @@ fn assert_hard_invariants(reports: &[RunReport], scores: &[ArmScore]) {
         // declared, so it is asserted per arm rather than fleet-wide.
         if matches!(
             report.arm,
-            Arm::TierFloor | Arm::PredictedTimeTierFloor | Arm::PredictedTimeTierFloorTwoChoices
+            Arm::TierFloor
+                | Arm::PredictedTimeTierFloor
+                | Arm::PredictedTimeTierFloorTwoChoices
+                | Arm::PredictedTimeTierFloorWithinNoise
         ) {
             // A silent shortfall would satisfy the assertion below for
             // the wrong reason: nothing can be served below its band if
@@ -1747,6 +1750,12 @@ fn does_breaking_the_herd_recover_what_the_floor_costs() {
         Arm::TierFloor,
         Arm::PredictedTimeTierFloor,
         Arm::PredictedTimeTierFloorTwoChoices,
+        // §4.2 step 2 as written. The blunt arm above reads the two
+        // fleets in opposite directions; this one is the claim that
+        // restricting the draw to the tie band keeps BOTH readings —
+        // twin-hubs' recovery and mixed-hubs' win. Printed beside its
+        // predecessor because the comparison is the whole point.
+        Arm::PredictedTimeTierFloorWithinNoise,
     ];
 
     for (label, build) in fleets {
@@ -1755,9 +1764,18 @@ fn does_breaking_the_herd_recover_what_the_floor_costs() {
         for arm in arms {
             let (mut means, mut p95s, mut shares, mut covs) =
                 (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            // Summed across seeds: how often the sampler HAD a choice,
+            // and how often it took one. Without it, "same mean as the
+            // arm below" is ambiguous between "never fired" and "fired
+            // constantly and it was a wash".
+            let (mut fired, mut moved, mut decided, mut band_sum) = (0u64, 0u64, 0u64, 0u64);
             for seed in seeds {
                 let s = build(seed);
                 let report = run(&s, arm, seed);
+                fired += report.sampler.band_at_least_two;
+                moved += report.sampler.moved_off_argmax;
+                decided += report.sampler.decisions;
+                band_sum += report.sampler.band_total;
                 let sc = score(&report, GOSSIP_WINDOW_MS, None);
                 // The floor still has to hold, or the arm is buying its
                 // latency with the quality the floor exists to protect.
@@ -1787,8 +1805,111 @@ fn does_breaking_the_herd_recover_what_the_floor_costs() {
                 mean(&covs),
                 100.0 * (m - base) / base.max(0.001),
             );
+            if decided > 0 {
+                let pct = |n: u64| 100.0 * n as f64 / decided as f64;
+                println!(
+                    "  {:<40}   └─ band ≥2 on {:.0}% of {decided} decisions \
+                     (mean band {:.2}), moved off the argmax on {:.0}%",
+                    "",
+                    pct(fired),
+                    band_sum as f64 / decided as f64,
+                    pct(moved),
+                );
+            }
         }
     }
+}
+
+/// **The within-noise band's stated limit, measured rather than
+/// asserted.**
+///
+/// `predicted_time::tie_band` admits a candidate only when its
+/// *uncontended* prediction does not separate it from the leader's, and
+/// on `twin-hubs` that is every band-0 hub — identical hardware on a
+/// uniform LAN advertises an identical rate card, so nothing separates
+/// them. That identity is precisely the flattering assumption
+/// `advertised_rate_error` exists to price (note 963a8d88's method
+/// rule: an arm must price the harness assumption that most flatters
+/// it, and this arm's band is built out of one). Perturb the card, the
+/// hubs stop looking identical *to the decider*, the band narrows, and
+/// §4.1.2's −4% recovery should decay with it.
+///
+/// The decay is the safe direction — a narrow band falls back to the
+/// argmax, which is the arm this one refines, so the cost is a
+/// forfeited recovery and not a regression. But "conservative" is a
+/// claim about a number, and §6's rule is that claims about numbers get
+/// numbers. A real fleet of near-identical hubs (34 vs 33 tok/s) sits
+/// somewhere on this curve, and this is the table that says where.
+///
+/// Reported, not asserted, apart from the mechanical claim: the band
+/// has to actually narrow, or the paragraph above describes something
+/// the code does not do.
+#[test]
+fn what_the_within_noise_band_costs_when_identical_hubs_stop_looking_identical() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    println!("\n=== twin-hubs: the band is built on an exact rate card — what if it is wrong? ===");
+    println!("   (identical hubs; only what they ADVERTISE is perturbed, never what they serve at)");
+    let mut first_band = None;
+    let mut last_band = 0.0;
+    for err in [0.0_f32, 0.1, 0.25, 0.5, 1.0] {
+        let (mut floor_means, mut argmax_means, mut blunt_means, mut noise_means) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut decided, mut band_sum, mut fired) = (0u64, 0u64, 0u64);
+        for seed in seeds {
+            let s = scenario::twin_hubs(seed);
+            let cfg = SimConfig {
+                advertised_rate_error: err,
+                ..SimConfig::default()
+            };
+            let mean_of = |r: &_| score(r, GOSSIP_WINDOW_MS, None).truth.mean_total_ms / 1000.0;
+            floor_means.push(mean_of(&run_with(&s, Arm::TierFloor, seed, cfg.clone())));
+            argmax_means.push(mean_of(&run_with(
+                &s,
+                Arm::PredictedTimeTierFloor,
+                seed,
+                cfg.clone(),
+            )));
+            blunt_means.push(mean_of(&run_with(
+                &s,
+                Arm::PredictedTimeTierFloorTwoChoices,
+                seed,
+                cfg.clone(),
+            )));
+            let sampled = run_with(&s, Arm::PredictedTimeTierFloorWithinNoise, seed, cfg);
+            decided += sampled.sampler.decisions;
+            band_sum += sampled.sampler.band_total;
+            fired += sampled.sampler.band_at_least_two;
+            noise_means.push(mean_of(&sampled));
+        }
+        let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len().max(1) as f64;
+        let (floor, argmax, blunt, noise) = (
+            mean(&floor_means),
+            mean(&argmax_means),
+            mean(&blunt_means),
+            mean(&noise_means),
+        );
+        let band = band_sum as f64 / decided.max(1) as f64;
+        first_band.get_or_insert(band);
+        last_band = band;
+        println!(
+            "  ±{:>4.0}%  arm0+floor {:>5.1}s  argmax {:>5.1}s  blunt {:>5.1}s  \
+             within-noise {:>5.1}s ({:+.0}% vs argmax)   mean band {:.2}, ≥2 on {:.0}%",
+            err * 100.0,
+            floor,
+            argmax,
+            blunt,
+            noise,
+            100.0 * (noise - argmax) / argmax.max(0.001),
+            band,
+            100.0 * fired as f64 / decided.max(1) as f64,
+        );
+    }
+    let first = first_band.expect("the sweep ran at least one row");
+    assert!(
+        last_band < first,
+        "a perturbed rate card must narrow the band ({first:.2} → {last_band:.2}); if it does \
+         not, the band is not reading the rate card the way tie_band's docs claim"
+    );
 }
 
 /// **The tier floor's flattering assumption, priced.**

@@ -701,6 +701,60 @@ fn build_shards_from_counts(counts: &[u32], eff_weights: &[f64]) -> Vec<NodeShar
         .collect()
 }
 
+/// Parse an EXPLICIT per-device block count list (e.g. `"11,21"` for a 32-layer
+/// model across two devices), in the same device order as `weights` — RPC
+/// workers first, then local. `None` unless the list is well-formed AND tiles
+/// the model exactly: right number of devices, counts summing to `n_layer`.
+///
+/// This exists because the byte-mass apportionment above derives its cut points
+/// from advertised VRAM, so there is otherwise NO way to aim the device boundary
+/// at a chosen layer. Aiming it is the only way to run the discriminating
+/// experiment for the distributed-decode crash: on a hybrid model like
+/// Qwen3.5-4B (32 layers, 3:1 — layers 3/7/11/…/31 are full attention, the rest
+/// Gated DeltaNet), the fault appears at a boundary that lands immediately
+/// before a Gated DeltaNet layer, and `resolve_fused_ops` disables the fused GDN
+/// kernel at exactly that layer. Moving the cut onto an attention layer and
+/// watching whether the fault follows separates "boundary-on-GDN" from "any
+/// boundary at all" in one run each.
+///
+/// Rejecting a malformed list rather than repairing it is deliberate: a split
+/// that silently differs from what the operator asked for would make the
+/// experiment's negative result meaningless.
+pub fn parse_block_split(raw: &str, n_layer: u32, n_devices: usize) -> Option<Vec<u32>> {
+    let counts: Vec<u32> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse::<u32>().ok())
+        .collect::<Option<Vec<u32>>>()?;
+    if counts.len() != n_devices || counts.iter().sum::<u32>() != n_layer {
+        return None;
+    }
+    Some(counts)
+}
+
+/// Build a plan from EXPLICIT per-device block counts, bypassing the byte-mass
+/// apportionment. Shares `build_shards_from_counts` with the computed paths, so
+/// `holds_output` placement, `fraction`, and contiguity are identical — only the
+/// cut points differ. `None` if `counts` doesn't tile `n_layer` across
+/// `weights`. Pure + deterministic.
+pub fn plan_shards_explicit(
+    n_layer: u32,
+    weights: &[f32],
+    counts: &[u32],
+) -> Option<Vec<NodeShard>> {
+    if counts.len() != weights.len() || counts.iter().sum::<u32>() != n_layer {
+        return None;
+    }
+    let wsum_f32: f32 = weights.iter().sum();
+    let w: Vec<f64> = if wsum_f32 > 0.0 {
+        weights.iter().map(|&x| x as f64).collect()
+    } else {
+        vec![1.0; weights.len()]
+    };
+    Some(build_shards_from_counts(counts, &w))
+}
+
 /// The cacheable output head (LM projection) — placed with the last block-holding
 /// device, distinct from `token_embd` (input) which stays on the host CPU.
 pub fn is_output_tensor(name: &str) -> bool {

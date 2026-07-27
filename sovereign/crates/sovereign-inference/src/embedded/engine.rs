@@ -774,9 +774,24 @@ impl EmbeddedLlamaCpp {
         // too — the exact trap behind field reports of an opaque null.
         //   SOVEREIGN_LLAMA_LOGS=1 → full ggml verbosity (deep debugging)
         //   SOVEREIGN_LLAMA_LOGS=0 → silence llama.cpp entirely (old behavior)
-        match std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() {
-            Some("1") => crate::llama::install_log_tracing(),
+        //
+        // `GGML_RPC_DEBUG` implies full verbosity. That is llama.cpp's OWN
+        // documented knob for debugging an RPC worker, and on its own it only
+        // opens the FIRST of three gates: it makes `LOG_DBG` in ggml-rpc.cpp
+        // call `GGML_LOG_DEBUG`, but errors-only mode below then demotes
+        // DEBUG to TRACE, and the daemon's target allowlist drops it again.
+        // An operator who sets it and gets an empty log reads that as "the
+        // worker received no traffic" — a false negative from a disconnected
+        // instrument. Honour the var so it means what upstream says it means.
+        // An explicit `SOVEREIGN_LLAMA_LOGS=0` still wins: asking for silence
+        // is unambiguous, and should not be overridden by a debug var.
+        let llama_logs = std::env::var("SOVEREIGN_LLAMA_LOGS").ok();
+        match llama_logs.as_deref() {
             Some("0") => backend.void_logs(),
+            Some("1") => crate::llama::install_log_tracing(),
+            _ if std::env::var_os("GGML_RPC_DEBUG").is_some() => {
+                crate::llama::install_log_tracing();
+            }
             _ => crate::llama::install_log_tracing_errors_only(),
         }
         let backend = Arc::new(backend);
