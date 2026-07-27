@@ -39,7 +39,7 @@
     HardwareInfo,
     SetupContextWindow,
   } from "../types";
-  import { meshMembership } from "../stores/meshMembership.svelte";
+  import { settingsNav } from "../stores/settingsNav.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import MeshAppsSection from "./MeshAppsSection.svelte";
   import SharingSection from "./SharingSection.svelte";
@@ -47,6 +47,7 @@
   import UpdatesSection from "./UpdatesSection.svelte";
   import SetupReportCard from "./SetupReportCard.svelte";
   import CrashRecordsPanel from "./CrashRecordsPanel.svelte";
+  import HealthPanel from "./HealthPanel.svelte";
   import LessonsPanel from "./LessonsPanel.svelte";
 
   interface Props {
@@ -67,14 +68,16 @@
     | "about";
   let activeTab: Tab = $state("models");
 
-  // A just-completed mesh join queues a navigation to the Mesh tab
-  // (see meshMembership.svelte.ts). Consume it whether this panel was
-  // already open when the join dialog closed or is mounting fresh —
-  // either way the user should land on the mesh state they just
-  // changed, not the default Models tab.
+  // Another surface can ask us to open on a particular tab — a
+  // just-completed mesh join lands on Mesh, the reconnect banner's
+  // "Check my setup" lands on Diagnostics (see settingsNav.svelte.ts).
+  // Consumed whether this panel was already open when the request was
+  // made or is mounting fresh: either way the user should land where
+  // they were pointed, not on the default Models tab.
   $effect(() => {
-    if (meshMembership.settingsNavPending && meshMembership.takeSettingsNav()) {
-      activeTab = "mesh";
+    const requested = settingsNav.pending;
+    if (requested && settingsNav.take()) {
+      activeTab = requested;
     }
   });
 
@@ -1517,8 +1520,13 @@
         </section>
       {/if}
 
-      <!-- ──────────── DIAGNOSTICS (crash & panic records) ──────────── -->
+      <!-- ──────────── DIAGNOSTICS (health check, then crash records) ──────────── -->
+      <!-- HealthPanel leads: it answers "is my install OK?" and hands
+           back a fix the user can perform, so most visits should end
+           there. CrashRecordsPanel below is the archive for when they
+           can't. -->
       {#if activeTab === "diagnostics"}
+        <HealthPanel />
         <CrashRecordsPanel />
       {/if}
 

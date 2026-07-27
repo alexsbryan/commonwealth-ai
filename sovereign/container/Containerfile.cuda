@@ -92,6 +92,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ARG CUDA_ARCHITECTURES="80;86;89;90"
 ENV CUDA_PATH=/usr/local/cuda
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+# Git short-SHA stamp for sovereign-mesh's build.rs (`.git` is not in
+# the build context). The daemon logs it at startup, so a pod running a
+# stale image self-identifies instead of masquerading as a fresh bug
+# (2026-05-16 incident). Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+ARG GIT_SHA=unknown
+ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
 # Link-time discovery of `libcuda.so` (the CUDA driver stub). The
 # devel image ships the stub at /usr/local/cuda/lib64/stubs/libcuda.so
 # but (a) doesn't add the dir to ld's search path, and (b) ships only
@@ -119,7 +125,14 @@ RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
 # `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld — measurable
 # win on the final sovereign-cli link (lancedb + arrow + llama-cpp pull
 # in a lot of object files).
-ENV RUSTFLAGS="-C link-arg=-lnccl -C link-arg=-fuse-ld=lld"
+# Since the vendored llama-cpp-4 dropped `dynamic-link`, ggml/llama link
+# STATICALLY into the Rust binaries — and llama-cpp-sys-4's build.rs
+# emits no CUDA link directives (it only sets GGML_CUDA=ON in cmake; the
+# transitive cudart/cublas deps used to travel inside libggml-cuda.so).
+# Append them here: runtime API (cudart), cuBLAS (+Lt), and the driver
+# API (cuda — VMM cuMem* calls; resolved from the stubs at build time,
+# the real driver mount at runtime).
+ENV RUSTFLAGS="-C link-arg=-lnccl -C link-arg=-fuse-ld=lld -C link-arg=-L/usr/local/cuda/lib64 -C link-arg=-lcudart -C link-arg=-lcublas -C link-arg=-lcublasLt -C link-arg=-lcuda"
 
 # sccache wiring. CARGO_INCREMENTAL=0 is mandatory — sccache can't cache
 # anything while rustc emits per-crate incremental fragments. The CMAKE
@@ -141,8 +154,25 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY commonwealth/        ./commonwealth/
 COPY corpus-engine/       ./corpus-engine/
+# corpus-engine decomposition carve-outs — top-level sibling workspace
+# members since mid-2026; cargo refuses the workspace if any is absent.
+COPY corpus-engine-scip/        ./corpus-engine-scip/
+COPY corpus-engine-atos/        ./corpus-engine-atos/
+COPY corpus-engine-notes/       ./corpus-engine-notes/
+COPY corpus-engine-archaeology/ ./corpus-engine-archaeology/
+COPY corpus-engine-yield/       ./corpus-engine-yield/
+COPY corpus-engine-watchers/    ./corpus-engine-watchers/
 COPY oicp-types/          ./oicp-types/
-COPY sovereign-recipes/wikipedia/data/   ./sovereign-recipes/wikipedia/data/
+COPY oicp-client/         ./oicp-client/
+COPY studio/crates/       ./studio/crates/
+COPY quality/arch-layers/ ./quality/arch-layers/
+# [patch.crates-io] in the root manifest points llama-cpp-4 and
+# lance-linalg at vendor/ — without it cargo resolves the unpatched
+# registry crates (wrong llama.cpp = wrong RPC wire version).
+COPY vendor/              ./vendor/
+# Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
+# OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
+COPY sovereign-recipes/      ./sovereign-recipes/
 # Only copy the parts of sovereign/ that cargo actually needs. Skipping
 # container/, scripts/, docs/, bench/, etc. means edits to those don't
 # invalidate the cargo-build layer (which is the slow one). Workspace
@@ -155,6 +185,11 @@ COPY sovereign/models.toml ./sovereign/models.toml
 COPY sovereign/crates/    ./sovereign/crates/
 COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
+# sovereign-core include_str!s the router exemplar TOMLs + embed cache.
+COPY sovereign/router/    ./sovereign/router/
+# sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
+# do NOT copy all of sovereign/bench (44 MB of gyms/eval banks).
+COPY sovereign/bench/book-report/bench.toml ./sovereign/bench/book-report/bench.toml
 
 # Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over
@@ -222,8 +257,10 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    cargo build --release --bin sovereign-cli \
- && cp /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli \
+    cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm \
+ && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
+ && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
  && sccache --show-stats
 
 # ─── CUDA preflight binary ───────────────────────────────────────────
@@ -292,15 +329,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnccl2 libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
+# All three CLI binaries: `sovereign-cli` is an exec-dispatcher — the
+# `daemon`/`doctor` verbs exec the `sovereign-cli-daemon` sibling and
+# `mesh`/`corpus`/… exec `sovereign-cli-llm`; without the siblings on
+# PATH those verbs fail with "cannot find sibling binary".
+COPY --from=build /usr/local/bin/sovereign-cli        /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon
+COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
-# llama.cpp's shared libs (BUILD_SHARED_LIBS=ON in the build stage). The
-# binary records them as DT_NEEDED with no RPATH (build.rs sets
-# CMAKE_SKIP_INSTALL_RPATH=ON), so they must land in a system search
-# path. The cmake install prefix uses a content-derived hash; glob
-# resolves it without coupling to a specific layout. ldconfig refreshes
-# /etc/ld.so.cache after the copy.
-COPY --from=build /workspace/target/llama-cmake-cache/*/lib/lib*.so* /usr/local/lib/
+# NOTE: no llama.cpp shared-lib copy here anymore. The vendored
+# llama-cpp-4 dropped `dynamic-link` from its default features
+# (vendor/llama-cpp-4/Cargo.toml — "sovereign vendor divergence"), so
+# ggml/llama link STATICALLY into sovereign-cli; there are no
+# libggml*/libllama* .so files to ship, and /workspace/target is a
+# cache mount that never persists into stage layers anyway.
 # Stub libcuda.so so the binary's dynamic linker is satisfied on hosts
 # without a GPU (e.g. local podman smoke tests). On real Vast pods the
 # NVIDIA Container Toolkit bind-mounts the real libcuda.so.1 from the

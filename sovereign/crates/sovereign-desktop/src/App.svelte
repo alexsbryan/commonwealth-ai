@@ -14,6 +14,7 @@
   import { outerWorkScopeStore } from "./lib/stores/outerWorkScope.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import { meshMembership } from "./lib/stores/meshMembership.svelte";
+  import { settingsNav } from "./lib/stores/settingsNav.svelte";
   import { toastStore } from "./lib/stores/toast.svelte";
   import type {
     StepDonePayload,
@@ -421,6 +422,29 @@
     if (view === "settings") view = "chat";
   }
 
+  /// Route the reconnect banner's "Check my setup" into Settings →
+  /// Diagnostics. Both halves of the move live here, together: queuing
+  /// the tab without switching the view would leave a request that
+  /// fires the next time the user opens Settings for an unrelated
+  /// reason.
+  ///
+  /// Refused during setup. The banner is deliberately visible there —
+  /// a daemon crash mid-install deserves a recovery surface — but
+  /// yanking someone out of the wizard would strand them halfway
+  /// through the one flow they have to finish; the banner's Reconnect
+  /// and Report actions still apply.
+  function openDiagnosticsView() {
+    const inSetup =
+      view === "loading" ||
+      view === "welcome" ||
+      view === "setup_plan" ||
+      view === "setup" ||
+      view === "consent";
+    if (inSetup) return;
+    settingsNav.request("diagnostics");
+    view = "settings";
+  }
+
   function clearTaskState() {
     taskSteps = [];
     // Approval + input cards clear themselves when the user actually
@@ -665,7 +689,7 @@
      restarting / unhealthy / failed (silent for healthy + starting).
      Visible across every view, including setup/welcome — a daemon
      crash mid-setup deserves the same recovery surface. -->
-<ReconnectBanner />
+<ReconnectBanner onOpenDiagnostics={openDiagnosticsView} />
 
 <!-- Boot-time notice when the configured chat model can't run on this
      machine's CPU and a dense model was substituted (see model_compat.rs).

@@ -522,3 +522,36 @@ via load-balance skew on the next big-model validation).
   (2) `MeshInferenceProvider` (the provider the daemon actually installs) didn't
   forward `compute_children()`, so `/status` was always empty — added the
   delegation next to `resident_slots`. Daemon restored to its pre-test config.
+- **2026-07-27 — CLOUD TENSOR PEER PROOF (Vast pod over WAN, PASSED).** A $0.055/hr
+  rented RTX 3060 Ti (Vast instance, Quebec — ~900 Mbps, SM86) joined the production
+  mesh as a ggml-RPC tensor worker over iroh and served a shard of the Qwen3.5-4B
+  primary. Full runbook: `docs/CLOUD_TENSOR_PEER.md`. Receipts:
+  - **G1 (mesh + discovery):** pod `mesh join` over the invite's `iroh=` dial info;
+    host `discovered mesh RPC worker … via=iroh-bridge`; pod `/status`
+    `rpc_worker {port:50052, iroh:true}` (loopback bind — plaintext ggml-RPC never
+    leaves the pod); `mesh transport` grade `mixed` with `direct=1` (hole-punch,
+    not relay-only).
+  - **G2 (distributed decode):** byte-mass plan gave the pod 1/32 blocks (its free
+    VRAM advertised 0.64 GB — the 0.8 GB stub primary + CUDA overhead eat the 8 GB
+    card, and the 4 GiB quantize bucket floors it). Warm = 47 s for the pod's
+    4-tensor slice over the WAN (`byte_ranges`). Load 66 s. Canary + 4×128-tok
+    trials via `scripts/measure-distributed-decode.sh` (six guards, VALID):
+    **decode 7.0–7.5 t/s (median ~7.2), TTFT 0.70–1.50 s**, greedy-identical
+    output, placement stable, peer online before+after, host alive after. vs the
+    same-day LAN forced-tunnel baseline 17.35 t/s: the delta is consistent with
+    ~1 WAN round-trip (~70–90 ms Quebec↔host) added per token by the layer-0
+    pipeline crossing. GDN tensor-split pin held on CUDA/WAN (no
+    `resolve_fused_ops` WARN pair, no :498 abort — first cross-vendor
+    Vulkan-host + CUDA-worker split).
+  - **New host knob:** `SOVEREIGN_RPC_WORKER_ALLOWLIST` (comma-separated node-id
+    hex prefixes, discovery-loop filter in `sovereign-cli-daemon`) — needed
+    because BeefyMac still advertised RPC from the morning's GDN work and would
+    have taken a shard into the measured plan.
+  - **Traps for the runbook (all fixed):** pod config requires `[models].embed`;
+    CLI `mesh join`/`rotate` persist via XDG `mesh_data_dir()` while the daemon
+    uses `svrnmesh_root()` (pod fix: symlink; host fix: rotate via
+    `POST /v1/mesh/rotate`, which took effect live); the measure script's SSE
+    reader silently discarded the curl pipe (`python3 - <<heredoc` overrides
+    stdin) — bogus 0-frame INVALIDs until materialized as a file.
+  - Teardown: instance destroyed after ~40 min (≈$0.04 total), join key rotated
+    live via the daemon endpoint, host daemon restored to normal posture.

@@ -5,7 +5,8 @@ Two kinds of docs live here: docs for **using Sovereign**, and docs for **workin
 ## Using Sovereign
 
 - [`FAQ.md`](FAQ.md) — common questions: offline mode, models, ports, the mesh
-- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — symptom-to-fix pairs; run `sovereign doctor` first
+- [`HAVING_TROUBLE.md`](HAVING_TROUBLE.md) — **for people using the desktop app**: the in-app health check, how to send a report, no terminal
+- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — the same failures for whoever maintains the install; symptom-to-fix pairs, run `sovereign doctor` first
 - [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every command and flag
 - [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — index your codebase: symbols, call graphs, search, and the tools your AI harness gets
 - [`FEATURES.md`](FEATURES.md) — what the assistant does beyond the basics

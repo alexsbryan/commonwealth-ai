@@ -12339,6 +12339,7 @@ dependencies = [
  "sovereign-tools",
  "sovereign-workflow",
  "sovereign-workflow-host",
+ "sysinfo 0.35.2",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",

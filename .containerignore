@@ -16,14 +16,12 @@ target/
 # rclone; the host's local cache must never leak into the image.
 sovereign/models/
 
-# Large corpora datasets. Exclude everything under sovereign-recipes/
-# EXCEPT the wikipedia/data/ slice that corpus-engine/build.rs depends
-# on (vital_articles_l1..l5.txt — bundled into the binary via
-# include_bytes!).
-sovereign-recipes/*
-!sovereign-recipes/wikipedia/
-sovereign-recipes/wikipedia/*
-!sovereign-recipes/wikipedia/data/
+# sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
+# build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
+# include_str!s registry.toml + schema/. The tree used to be excluded
+# here when multi-GB bench gyms lived in it — those were evicted to
+# sovereign/bench by the recipes single-source-of-truth refactor, so
+# there is nothing bulky left to skip.
 
 # IDE / editor scratch state.
 .idea/

@@ -13,6 +13,8 @@
   import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight, exportAnswer } from "../api";
+  import type { TurnSnapshot } from "../api";
+  import ReportAnswerDialog from "./ReportAnswerDialog.svelte";
   import { save } from "@tauri-apps/plugin-dialog";
   import { readingSession } from "../stores/readingSession.svelte";
   import type {
@@ -140,6 +142,10 @@
           tokens_used: number;
           coarse_intent?: string;
           self_assessment?: string;
+          // The router's own words for why it chose this route. Not
+          // rendered in the footer, but it is the single most useful
+          // line in a "why did it answer like that?" report.
+          routing_trigger?: string;
           // Folder-ingest v1 §6.3 — per-turn coverage assessment.
           // `kind === "thin"` means at least one folder corpus
           // returned fewer than `thin_threshold` chunks; the chip
@@ -227,6 +233,60 @@
   let originLabel = $derived(
     (metadata?.user_query as string | undefined) ?? "From your question",
   );
+
+  // ── Reporting this answer ─────────────────────────────────────
+  // The one complaint the health check and the crash bundle cannot
+  // answer: "this specific reply was wrong." Everything needed to
+  // debug it is already in this message's persisted metadata — route,
+  // sources, which model (and which peer) answered, whether the
+  // grounding gate fired — so the report is assembled here rather than
+  // asked of the runtime, which keeps only the newest turn of a
+  // conversation, in memory. See `src-tauri/src/turn_report.rs`.
+  let reporting = $state(false);
+
+  let reportSourceTitles = $derived(
+    retrievedChunks.map((c) => c.title).filter((t) => !!t),
+  );
+
+  let reportSnapshot = $derived.by((): TurnSnapshot => {
+    const gate = metadata?.grounding_gate as
+      | { action?: string }
+      | undefined;
+    return {
+      conversation_id: conversationId,
+      message_id: messageId,
+      question: (metadata?.user_query as string | undefined) ?? null,
+      // The prose the user actually read — think blocks excluded,
+      // since a report about a wrong answer is about the answer.
+      answer: proseText,
+      route: provenance?.intent ?? null,
+      coarse_intent: provenance?.coarse_intent ?? null,
+      routing_trigger: provenance?.routing_trigger ?? null,
+      search_method: provenance?.search_method ?? null,
+      answered_by: provenance?.inference_backend ?? null,
+      latency_ms: provenance?.total_latency_ms ?? null,
+      tokens_used: provenance?.tokens_used ?? null,
+      finish_reason: provenance?.finish_reason ?? null,
+      max_tokens_budget: provenance?.max_tokens_budget ?? null,
+      gate_action: gate?.action ?? null,
+      coverage_note: coverageChip || null,
+      sources: (provenance?.sources ?? []).map((s) => ({
+        origin: s.origin,
+        count: s.count,
+        display_name: s.display_name ?? null,
+        from_peer: s.from_peer ?? null,
+      })),
+      retrieved: retrievedChunks.map((c) => ({
+        title: c.title,
+        corpus_id: c.corpus_id ?? null,
+        chunk_id: c.chunk_id ?? null,
+        snippet: c.snippet ?? null,
+      })),
+      // The dialog owns this: it is a question about the user's own
+      // documents and it is theirs to answer, per report.
+      include_source_text: false,
+    };
+  });
 
   // Verification notes as a DISCLOSURE (SOVEREIGN_NOTE_AS_METADATA
   // experiment): the gate's failed claims ride metadata.grounding_gate.
@@ -747,9 +807,29 @@
       >
         {exportLabel}
       </button>
+      <!-- Sits beside Copy and Export rather than behind a menu: the
+           moment someone notices a wrong answer is the moment they
+           will report it, and a report filed a day later loses the
+           note that made it worth having. -->
+      <button
+        type="button"
+        class="msg-action-btn"
+        onclick={() => (reporting = true)}
+        title="Something wrong with this answer? Write a report you can send for help"
+      >
+        Report
+      </button>
     </div>
   {/if}
 </div>
+
+{#if reporting}
+  <ReportAnswerDialog
+    turn={reportSnapshot}
+    sourceTitles={reportSourceTitles}
+    onclose={() => (reporting = false)}
+  />
+{/if}
 
 {#if popoverChunk}
   <SourcePopover

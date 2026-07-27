@@ -2384,12 +2384,139 @@ export interface CrashReportInfo {
   report_path: string;
   /** The project's GitHub Issues URL — open with tauri-plugin-shell. */
   issues_url: string;
+  /** Short speakable handle (e.g. "2AM-QSC") for a report filed
+   *  against one answer. Absent on machine-state reports, which have
+   *  nothing to correlate against. */
+  reference_code?: string;
 }
 
 /** Bundles the latest supervisor crash log + redacted config into a
  *  markdown file the user can review before sending. NO auto-upload. */
 export async function prepareCrashReport(): Promise<CrashReportInfo> {
   return invoke("prepare_crash_report");
+}
+
+// ─── Self-service health check + always-on problem report ─────
+// The crash bundle above only exists once the daemon has already
+// died. These two cover every other way this product fails somebody:
+// slow answers, a wrong answer, peers that vanished, a stalled
+// import. Same posture — a file on the Desktop the user reads before
+// sending, never an auto-upload. See `src-tauri/src/health.rs`.
+
+/** Verdict for one check. `unknown` is honest, not an error: if the
+ *  engine is down we cannot know whether a model is loaded. */
+export type CheckStatus = "ok" | "warn" | "fail" | "unknown";
+
+export interface HealthCheck {
+  /** Stable, greppable id — the handle a support conversation uses.
+   *  e.g. "engine", "model", "mesh", "mesh_peers", "knowledge",
+   *  "disk", "stability". Never reword these in the UI. */
+  id: string;
+  /** Plain-language name to display. */
+  label: string;
+  status: CheckStatus;
+  /** What was observed, in the user's terms. */
+  detail: string;
+  /** What the user can do without a terminal. Present on every
+   *  non-OK check by construction (asserted in the Rust tests). */
+  fix_hint: string | null;
+}
+
+export interface HealthReport {
+  captured_at_unix: number;
+  checks: HealthCheck[];
+}
+
+/** Reasons a report can be filed. Anything unrecognised degrades to
+ *  "other" server-side rather than erroring — a user reporting a
+ *  problem must never be blocked by a bad enum. */
+export type ReportReason =
+  | "crash"
+  | "slow"
+  | "answer"
+  | "mesh"
+  | "import"
+  | "other";
+
+/** Run every user-facing check. Cheap and safe to call on demand;
+ *  each probe is best-effort and an unreachable one reports
+ *  `unknown` rather than failing the whole call. */
+export async function runHealthCheck(): Promise<HealthReport> {
+  return invoke("run_health_check");
+}
+
+/** Write a diagnostic report to the Desktop for any reason. `note` is
+ *  the user's own description of what went wrong — the single most
+ *  valuable field, since it is the only part that says what *should*
+ *  have happened. */
+export async function prepareDiagnosticReport(
+  reason: ReportReason,
+  note?: string,
+): Promise<CrashReportInfo> {
+  return invoke("prepare_diagnostic_report", { reason, note: note ?? null });
+}
+
+// ─── Reporting one specific answer ────────────────────────────
+// The complaint this product actually gets is "it said the wrong
+// thing", and no amount of machine state explains it. The snapshot is
+// assembled on THIS side, from the message the user is pointing at,
+// rather than read back out of the runtime: the runtime keeps only the
+// most recent turn of a conversation, in memory, and only for some
+// registers — the reported turn is routinely older than that and
+// survives restarts only because the message metadata was persisted.
+// See `src-tauri/src/turn_report.rs`.
+
+/** One passage the answer was built from. `snippet` is the passage
+ *  text and must be sent ONLY when the reporter ticked the box; the
+ *  Rust renderer refuses to print it otherwise, but do not rely on
+ *  that — omit it here too. */
+export interface ReportedSource {
+  title: string;
+  corpus_id?: string | null;
+  chunk_id?: number | null;
+  snippet?: string | null;
+}
+
+/** One knowledge base's contribution, mirroring `provenance.sources`. */
+export interface ReportedCorpus {
+  origin: string;
+  count: number;
+  display_name?: string | null;
+  from_peer?: string | null;
+}
+
+/** The reported turn. Every field past the two ids is optional: an
+ *  older message, a naked reply, or an errored stream still produces a
+ *  report — a thinner one, never a fabricated one. */
+export interface TurnSnapshot {
+  conversation_id: string;
+  message_id: string;
+  question?: string | null;
+  answer?: string | null;
+  route?: string | null;
+  coarse_intent?: string | null;
+  routing_trigger?: string | null;
+  search_method?: string | null;
+  answered_by?: string | null;
+  latency_ms?: number | null;
+  tokens_used?: number | null;
+  finish_reason?: string | null;
+  max_tokens_budget?: number | null;
+  gate_action?: string | null;
+  coverage_note?: string | null;
+  sources?: ReportedCorpus[];
+  retrieved?: ReportedSource[];
+  /** The reporter's explicit consent to include passage text. */
+  include_source_text?: boolean;
+}
+
+/** Write a report about one answer to the Desktop, and hand back the
+ *  reference code the user can quote. */
+export async function prepareAnswerReport(
+  turn: TurnSnapshot,
+  note?: string,
+): Promise<CrashReportInfo> {
+  return invoke("prepare_answer_report", { turn, note: note ?? null });
 }
 
 // ─── Crash & panic records (in-app Diagnostics) ───────────────

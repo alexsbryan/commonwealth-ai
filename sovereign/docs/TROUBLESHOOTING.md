@@ -1,5 +1,11 @@
 # Troubleshooting
 
+> **Using the desktop app rather than maintaining it?** Read
+> [HAVING_TROUBLE.md](HAVING_TROUBLE.md) instead. It covers the same
+> failures without a terminal, and it's the page to hand to someone you
+> onboarded. Everything below assumes a shell, a service manager, and
+> that `rm -rf` on the wrong path is your problem to recover from.
+
 Common issues with `sovereign setup`, the daemon, and per-project code intelligence. Run [`sovereign doctor`](CLI_REFERENCE.md#sovereign-doctor) first — it covers most of these automatically. When in doubt, re-running `sovereign setup --reset` is safe.
 
 ← [back to README](../README.md)
