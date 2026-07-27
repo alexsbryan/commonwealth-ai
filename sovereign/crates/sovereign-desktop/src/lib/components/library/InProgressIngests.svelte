@@ -180,7 +180,10 @@
         {:else}
           <PeerAssistOffer
             corpusId={item.corpus_id}
-            surface="folder"
+            surface={item.corpus_id.startsWith("obsidian-vault-")
+              ? "vault"
+              : "folder"}
+            explainWhenUnavailable={true}
             onChange={(d) =>
               (assistDecisions = { ...assistDecisions, [item.corpus_id]: d })}
           />

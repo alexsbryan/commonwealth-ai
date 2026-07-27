@@ -113,4 +113,52 @@ describe("PeerAssistOffer", () => {
     // opt-in via the disclosure.
     expect(vi.mocked(onChange).mock.calls[0][0].enabled).toBe(false);
   });
+
+  // `explainWhenUnavailable` is what ingest surfaces pass. The three
+  // unavailable cases above are indistinguishable to a user when the component
+  // renders nothing — that was the 2026-07-27 Obsidian-vault report ("I didn't
+  // have an option to pull in a peer"). Each must now name its own cause, and
+  // they must NOT be interchangeable: an empty mesh and a dead daemon need
+  // different actions from the user.
+  describe("explainWhenUnavailable", () => {
+    const explainProps = {
+      corpusId: "obsidian-vault-abc",
+      surface: "vault" as const,
+      explainWhenUnavailable: true,
+      onChange: vi.fn(),
+    };
+
+    it("names an unreachable mesh service when the probe throws", async () => {
+      vi.mocked(api.meshAssistEligiblePeers).mockRejectedValue("mesh offline");
+      render(PeerAssistOffer, { props: { ...explainProps } });
+      expect(
+        await screen.findByText(/can't reach the mesh service/i),
+      ).toBeInTheDocument();
+    });
+
+    it("names an empty mesh when grantable but no peers exist", async () => {
+      mockPeers({ grantable: true, peers: [] });
+      render(PeerAssistOffer, { props: { ...explainProps } });
+      expect(
+        await screen.findByText(/no other machines have joined your mesh/i),
+      ).toBeInTheDocument();
+    });
+
+    it("names an unshareable source when peers exist but not grantable", async () => {
+      mockPeers({ grantable: false, peers: eligibleResp.peers });
+      render(PeerAssistOffer, { props: { ...explainProps } });
+      expect(
+        await screen.findByText(/isn't shareable with peers/i),
+      ).toBeInTheDocument();
+    });
+
+    it("still shows the real offer when assist IS available", async () => {
+      mockPeers(eligibleResp);
+      render(PeerAssistOffer, { props: { ...explainProps } });
+      expect(
+        await screen.findByText(/speed this up with your mesh/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/unavailable/i)).toBeNull();
+    });
+  });
 });

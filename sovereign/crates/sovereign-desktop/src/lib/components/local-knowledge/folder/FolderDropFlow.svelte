@@ -162,6 +162,55 @@
   let activeAssistJob = $derived(
     currentCorpusId ? assistProgressStore.get(currentCorpusId) : undefined,
   );
+  /** An Obsidian vault and a plain folder read differently to a user; the
+   *  offer's copy keys off this. Previously hardcoded `"folder"` even for
+   *  vaults. */
+  let assistSurface = $derived<"vault" | "folder">(
+    sourceType === "obsidian" ? "vault" : "folder",
+  );
+  let assistStarting = $state(false);
+  let assistStartError = $state("");
+
+  /**
+   * Issue the grant + start the collaborative ingest for the selected peers.
+   *
+   * Callable BEFORE ingest (from the confirm step, fire-and-forget: a failure
+   * must never block the local ingest) and DURING it (from the ingesting step,
+   * where the user clicked a button and is owed a visible error). `surfaceError`
+   * distinguishes the two — silently swallowing a failure the user explicitly
+   * asked for would be the same glassbox mistake as the offer hiding itself.
+   */
+  async function startAssist(corpusId: string, surfaceError: boolean) {
+    if (!assistDecision.enabled || assistDecision.peerNodeIds.length === 0) {
+      return;
+    }
+    try {
+      const handle = await meshAssistStart(
+        corpusId,
+        assistDecision.peerNodeIds,
+      );
+      assistProgressStore.track({
+        corpus_id: handle.corpus_id,
+        handoff_id: handle.handoff_id,
+        grant_expires_at_ms: handle.grant_expires_at_ms,
+      });
+    } catch (e) {
+      if (surfaceError) throw e;
+      console.warn("peer-assist failed to start; continuing local-only", e);
+    }
+  }
+
+  async function startAssistNow(corpusId: string) {
+    if (!corpusId) return;
+    assistStarting = true;
+    assistStartError = "";
+    try {
+      await startAssist(corpusId, true);
+    } catch (e) {
+      assistStartError = `Couldn't start mesh help: ${e}`;
+    }
+    assistStarting = false;
+  }
   /** The corpus template the user picked on the confirm step. `"notes"`
    *  = the default sample-atlas path; `"governance"` = attach the
    *  community-governance recipe and build the full corpus so the
@@ -255,24 +304,7 @@
     // If the user opted into mesh help, issue the grant + start the
     // collaborative ingest scoped to the selected peers. Failure here never
     // blocks the local ingest — it just finishes on this machine.
-    if (assistDecision.enabled && assistDecision.peerNodeIds.length > 0) {
-      try {
-        const handle = await meshAssistStart(
-          corpusId,
-          assistDecision.peerNodeIds,
-        );
-        assistProgressStore.track({
-          corpus_id: handle.corpus_id,
-          handoff_id: handle.handoff_id,
-          grant_expires_at_ms: handle.grant_expires_at_ms,
-        });
-      } catch (e) {
-        console.warn(
-          "peer-assist failed to start; continuing local-only",
-          e,
-        );
-      }
-    }
+    await startAssist(corpusId, false);
   }
 
   async function kickOffIngest(corpusId: string, useOcr = false) {
@@ -490,8 +522,9 @@
     />
     <PeerAssistOffer
       corpusId={step.corpusId}
-      surface="folder"
+      surface={assistSurface}
       defaultExpanded={step.result.readable.length >= 500}
+      explainWhenUnavailable={true}
       onChange={(d) => (assistDecision = d)}
     />
   {:else if step.kind === "ingesting"}
@@ -501,6 +534,30 @@
         job={activeAssistJob}
         onRevoke={(c) => assistProgressStore.revoke(c)}
       />
+    {:else}
+      <!-- Peer help mid-flight. The pre-scan offer above is not enough: the
+           resume-on-relaunch path jumps straight to `ingesting` and never
+           renders `confirm`, so a long vault re-sync previously had NO way to
+           ask for help (reported 2026-07-27). This is also where the decision
+           is most informed — the user can see the actual rate first. -->
+      <PeerAssistOffer
+        corpusId={step.corpusId}
+        surface={assistSurface}
+        explainWhenUnavailable={true}
+        onChange={(d) => (assistDecision = d)}
+      />
+      {#if assistDecision.enabled && assistDecision.peerNodeIds.length > 0}
+        <button
+          class="lk-btn"
+          onclick={() => startAssistNow(step.kind === "ingesting" ? step.corpusId : "")}
+          disabled={assistStarting}
+        >
+          {assistStarting ? "Starting…" : "Get mesh help"}
+        </button>
+      {/if}
+      {#if assistStartError}
+        <p class="assist-error">{assistStartError}</p>
+      {/if}
     {/if}
     <div class="working-actions">
       <button
@@ -700,6 +757,12 @@
     justify-content: flex-end;
     flex-wrap: wrap;
     margin-top: 16px;
+  }
+
+  .assist-error {
+    font-size: 0.85rem;
+    color: var(--neg-text, #a33);
+    margin: 0.35rem 0 0;
   }
 
   .error-panel {
