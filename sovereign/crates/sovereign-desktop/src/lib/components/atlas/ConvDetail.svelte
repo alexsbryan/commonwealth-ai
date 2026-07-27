@@ -385,8 +385,8 @@
     display: flex;
     flex-direction: column;
     gap: 18px;
-    padding: 28px 32px 44px;
-    max-width: 64rem;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
+    max-width: var(--measure);
     margin: 0 auto;
     font-family: var(--font-sans);
     color: var(--text-primary);
@@ -549,6 +549,9 @@
     font-size: 0.92rem;
     line-height: 1.55;
     color: var(--text-primary);
+    /* RAPTOR summaries are multi-sentence prose; without a cap they run
+       the full content column (~120ch), well past a comfortable measure. */
+    max-width: var(--measure-prose);
   }
   .entity-row {
     display: flex;

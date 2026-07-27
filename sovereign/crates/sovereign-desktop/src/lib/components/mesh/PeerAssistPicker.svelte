@@ -107,7 +107,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--color-border, #999);
+    background: var(--border-bright);
     flex: 0 0 auto;
   }
   .dot.online {

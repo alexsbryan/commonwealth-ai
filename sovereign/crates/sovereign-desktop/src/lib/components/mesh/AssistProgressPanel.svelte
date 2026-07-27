@@ -85,7 +85,7 @@
 
 <style>
   .assist {
-    border: 1px solid var(--color-border, #d8d8d8);
+    border: 1px solid var(--border-mid);
     border-radius: 8px;
     padding: 0.6rem 0.75rem;
     margin: 0.5rem 0;
@@ -108,7 +108,7 @@
   }
   .stop {
     background: none;
-    border: 1px solid var(--color-border, #ccc);
+    border: 1px solid var(--border-mid);
     border-radius: 6px;
     padding: 0.15rem 0.5rem;
     font-size: 0.8rem;
@@ -119,7 +119,7 @@
   .bar {
     height: 6px;
     border-radius: 3px;
-    background: var(--color-border, #e5e5e5);
+    background: var(--border-mid);
     overflow: hidden;
   }
   .fill {

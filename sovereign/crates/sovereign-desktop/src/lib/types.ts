@@ -502,6 +502,13 @@ export type NarrationPhase =
         early_decline: boolean;
       };
     }
+  // The primary slot is cold and must be paged off disk before the
+  // first token can exist. Measured 2026-07-27: 57s cold vs 0.44s warm
+  // on an 18.5 GB model. Emitted only when the slot is genuinely
+  // absent, so a warm turn never renders it. Routed to the `counter`
+  // so the draft station can say WHY it is waiting — before this frame
+  // existed the counter froze for 95s and read as a hang.
+  | { model_load: { model_id: string; size_bytes: number | null } }
   // ── Grounding-gate claim-check frames (the verification counter) ──
   // Live per-claim progress from the gate ladder. Routed to the
   // `counter` context field (never the narration log — see

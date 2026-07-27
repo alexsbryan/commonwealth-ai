@@ -395,7 +395,7 @@
 </script>
 
 <div class="notebook-detail" data-testid="notebook-detail">
-  <header class="nb-header" in:cardReceive={{ key: notebook.id }} out:cardSend={{ key: notebook.id }}>
+  <header class="nb-header page-header" in:cardReceive={{ key: notebook.id }} out:cardSend={{ key: notebook.id }}>
     <button class="back" onclick={onBack} data-testid="notebook-detail-back" aria-label="Back to Library">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6" />
@@ -528,7 +528,7 @@
         </div>
       {:else if enriching}
         {@const frac = enrichStatus?.fraction_complete ?? 0}
-        <div class="pad">
+        <div class="pad page-body page-measure">
           <h2>Building the map…</h2>
           <p class="lede">
             Reading {notebook.name} to extract its entities, claims, and
@@ -554,7 +554,7 @@
           </div>
         </div>
       {:else}
-        <div class="pad empty">
+        <div class="pad empty page-body page-measure">
           <div class="empty-glyph" aria-hidden="true">✦</div>
           <h2>No map yet</h2>
           <p class="lede">
@@ -583,7 +583,7 @@
         onChanged={onChanged}
       />
     {:else if tab === "sources"}
-      <div class="pad">
+      <div class="pad page-body page-measure">
         <h2>Where this came from</h2>
         <div class="source-card">
           <span class="src-icon"><NotebookKindIcon kind={notebook.source_kind} size={20} /></span>
@@ -611,7 +611,7 @@
         {/if}
       </div>
     {:else if tab === "settings"}
-      <div class="pad">
+      <div class="pad page-body page-measure">
         <h2>Notebook settings</h2>
         <p class="lede">
           {notebook.name} was added as a {kindLabel(notebook.source_kind).toLowerCase()}
@@ -677,9 +677,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 12px 18px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    padding-block: 12px 10px;
   }
   .back {
     display: inline-flex;
@@ -873,12 +871,10 @@
     overflow-y: auto;
   }
 
-  .pad {
-    height: 100%;
-    overflow-y: auto;
-    padding: 24px 28px;
-    max-width: 760px;
-  }
+  /* `.pad` carries `.page-body .page-measure` (app.css). It used to be
+     left-aligned at max-width 760 while the Conflicts tab was centred at
+     860 and Explore centred at 920, so the content column jumped
+     horizontally every time you switched tabs of the same notebook. */
   .pad h2 {
     font-size: 1.05rem;
     font-weight: 600;

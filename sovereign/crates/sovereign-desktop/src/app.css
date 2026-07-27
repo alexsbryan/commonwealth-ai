@@ -104,6 +104,19 @@
   --pos-libert-bg:      #E6F1FB;
   --pos-libert-text:    #185FA5;
   --pos-libert-border:  #B5D4F4;
+
+  /* ── Layout scale ──
+     The colour system had 40+ tokens and the layout system had none,
+     so every full-width surface hardcoded its own gutter. Measured
+     across the Library in July 2026: 0 / 16 / 18 / 20 / 24 / 28 / 30 /
+     32px, plus three different content-column widths (760 / 860 / 920
+     / 64rem). The content column visibly jumped as you moved between
+     tabs of the same notebook. These are the one place to change it. */
+  --gutter:        28px;   /* horizontal inset for any full-width surface */
+  --gutter-top:    22px;   /* a page body's leading inset               */
+  --gutter-bottom: 40px;   /* trailing inset — room to scroll past the end */
+  --measure:       920px;  /* content column for scannable/browsable views */
+  --measure-prose: 68ch;   /* long-form reading measure                  */
 }
 
 /* ─── Reset ──────────────────────────────────────────────────── */
@@ -364,4 +377,49 @@ input, textarea, select {
   padding: 0.8em 1em;
   background: none;
   overflow-x: auto;
+}
+
+/* ─── Layout primitives ──────────────────────────────────────────
+   Global (not Svelte-scoped) on purpose: these encode a contract the
+   app's surface hosts share, and a scoped copy per component is
+   exactly how the contract drifted in the first place.
+
+   THE CONTRACT. Every full-width surface host in this app is a
+   bounded, clipping box — `.library-surface`, `.settings-surface`,
+   `.nb-body`, `.app-chrome-content` are all `height:100%` +
+   `overflow:hidden`. That is deliberate: it keeps headers pinned and
+   stops the window itself from scrolling. The cost is that a page body
+   mounted into one of those hosts MUST establish its own scroll
+   container, or its content past the fold is clipped with no way to
+   reach it. In July 2026 the Conflicts panel did exactly that and hid
+   2,442px of governance decisions behind an `overflow-y:auto` that
+   could never fire, because the element it sat on had auto height.
+
+   `.page-body` is that contract in one place. It works both as a flex
+   child (`flex`) and as a block child of a `position:relative` host
+   (`height`), because both host shapes exist in this codebase. Do not
+   re-declare padding/overflow on an element that carries it — a
+   Svelte-scoped rule has higher specificity and will silently win. */
+.page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
+}
+
+/* The centred content column. Pair with `.page-body` when the surface
+   is a document rather than a full-bleed grid. */
+.page-measure {
+  max-width: var(--measure);
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* A page header band: same horizontal gutter as the body beneath it,
+   so the title and the first line of content share a left edge. */
+.page-header {
+  flex-shrink: 0;
+  padding-inline: var(--gutter);
+  border-bottom: 1px solid var(--border);
 }

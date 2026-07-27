@@ -79,9 +79,18 @@ pub(super) fn lookup_slot_size_gb(
 ) -> Option<f64> {
     let file_name = path.file_name()?.to_str()?;
     for profile in manifest.profiles.values() {
-        for s in [&profile.thoughtful, &profile.fast, &profile.embed]
-            .into_iter()
-            .flatten()
+        // `fim` is in the sweep so `svrn setup --repair` applies the
+        // ladder's real size floor to a Mellum2 GGUF instead of the
+        // 1 MB BYOM sentinel — a truncated 7 GB download would
+        // otherwise pass validation and fail at load time.
+        for s in [
+            &profile.thoughtful,
+            &profile.fast,
+            &profile.embed,
+            &profile.fim,
+        ]
+        .into_iter()
+        .flatten()
         {
             if s.file == file_name {
                 return Some(s.size_gb);

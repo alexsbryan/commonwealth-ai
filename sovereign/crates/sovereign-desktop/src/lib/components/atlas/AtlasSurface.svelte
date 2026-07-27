@@ -253,6 +253,23 @@
     showBack={!startingCorpusId}
     onSelectAtom={handleSelectAtom}
   />
+{:else if startingCorpusId}
+  <!-- Scoped mount (a notebook's Explore tab), still resolving which
+       corpus view to route to — `resolveCorpusKind` awaits up to two
+       round-trips. Falling through to `<AtlasIndex/>` here rendered the
+       GLOBAL corpus picker inside a single notebook: wrong content, and
+       its `min-height: 640px` forced the outer scrollbar on and then off
+       again, so every Explore open flashed and jumped. (It also threw on
+       a backend that returns no conv-corpora list.) A quiet placeholder
+       holds the space instead. -->
+  <div class="atlas-resolving" aria-busy="true"></div>
 {:else}
   <AtlasIndex onSelect={handleSelectCorpus} />
 {/if}
+
+<style>
+  .atlas-resolving {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+</style>

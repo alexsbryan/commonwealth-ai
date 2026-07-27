@@ -340,7 +340,12 @@
   }
 </script>
 
-<div class="conflicts">
+<!-- `page-body page-measure` (app.css) rather than local padding/overflow:
+     this mounts bare into NotebookDetail's `.nb-body`, which clips. The
+     local `overflow-y:auto` this replaces sat on an auto-height box and
+     could never fire, so a notebook with more than a screenful of
+     conflicts hid the rest with no scrollbar. -->
+<div class="conflicts page-body page-measure">
   {#if loading}
     <p class="state">Loading…</p>
   {:else if error}
@@ -549,12 +554,9 @@
 </div>
 
 <style>
-  .conflicts {
-    padding: 20px 24px;
-    max-width: 860px;
-    margin: 0 auto;
-    overflow-y: auto;
-  }
+  /* Padding / max-width / scroll all come from `.page-body
+     .page-measure` in app.css. Re-declaring any of them here would
+     silently win on specificity (Svelte scoping adds a class). */
   .state { color: var(--text-secondary, #999); }
   .state.err { color: var(--error, #d27979); }
 
@@ -601,7 +603,7 @@
     background: var(--bg-secondary, #1a1a1a);
     padding: 16px;
   }
-  .crux { margin: 0 0 12px; font-weight: 600; color: var(--text-primary, #eee); }
+  .crux { margin: 0 0 12px; max-width: var(--measure-prose); font-weight: 600; color: var(--text-primary, #eee); }
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 620px) { .sides { grid-template-columns: 1fr; } }
   .side {
@@ -635,7 +637,7 @@
     border: 1px dashed color-mix(in oklch, var(--accent, #c4a46a) 40%, var(--border, #333));
     border-radius: var(--radius, 6px);
   }
-  .decide-summary { margin: 0 0 8px; font-size: 0.9rem; color: var(--text-primary, #eee); }
+  .decide-summary { margin: 0 0 8px; max-width: var(--measure-prose); font-size: 0.9rem; color: var(--text-primary, #eee); }
   .decide-summary em { color: var(--accent, #c4a46a); font-style: normal; }
   .decide textarea {
     width: 100%;

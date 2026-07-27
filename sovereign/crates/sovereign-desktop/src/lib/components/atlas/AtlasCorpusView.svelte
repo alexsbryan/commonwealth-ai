@@ -508,10 +508,10 @@
     line-height: 1.5;
   }
   .atlas-corpus-view {
-    max-width: 920px;
+    max-width: var(--measure);
     width: 100%;
     margin: 0 auto;
-    padding: 32px 32px 16px;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
     color: var(--text-primary);
     font-family: var(--font-sans);
     box-sizing: border-box;
@@ -665,11 +665,21 @@
 
   .atom-scroll {
     /* The internal windowed scroll region — fills the height left by
-       the header/tabs/search above it. */
+       the header/tabs/search above it.
+
+       `min-height` is a FLOOR, not 0. This list is virtualized against
+       its own `clientHeight`; at `min-height: 0` a short window (or a
+       tall open-questions row above) could shrink it to 0px, and the
+       windowing maths then rendered rows into a zero-height box — a
+       blank panel with no scrollbar under a "Showing 200 of 4,312"
+       label. With a floor it keeps a real viewport and the outer
+       `.explore-surface` takes over the overflow instead. */
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 240px;
     overflow-y: auto;
-    scrollbar-gutter: stable;
+    /* `both-edges` so the reserved gutter doesn't shove rows left of
+       the header and search field above them. */
+    scrollbar-gutter: stable both-edges;
   }
 
   .atom-sizer {

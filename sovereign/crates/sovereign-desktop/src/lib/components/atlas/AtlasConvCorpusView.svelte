@@ -246,8 +246,8 @@
     display: flex;
     flex-direction: column;
     gap: 18px;
-    padding: 28px 32px 44px;
-    max-width: 64rem;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
+    max-width: var(--measure);
     margin: 0 auto;
     font-family: var(--font-sans);
     color: var(--text-primary);
@@ -339,8 +339,16 @@
     flex-direction: column;
     gap: 8px;
   }
+  /* NOT `display: contents`. That dissolved the <li>, so `.conv-button`
+     and its own `.entity-row` became independent items of `.conv-list`'s
+     8px flex gap — chips ended up 12px below their own card while
+     unrelated neighbouring cards sat 8px apart, reading as though the
+     chips belonged to the NEXT conversation. (It also drops the li from
+     the accessibility tree in several browsers.) */
   .conv-row {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
   .conv-button {
     width: 100%;
@@ -433,7 +441,8 @@
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
-    margin-top: 4px;
+    /* Spacing from the card above is `.conv-row`'s gap — a margin here
+       would stack on top of it. */
   }
   /* Entity chip — lavender wash. Same colour family as the
    * Conversations tile on AtlasIndex, so the chips read as part

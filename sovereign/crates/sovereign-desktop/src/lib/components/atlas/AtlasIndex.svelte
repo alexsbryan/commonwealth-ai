@@ -496,9 +496,9 @@
 
 <style>
   .atlas-index {
-    max-width: 920px;
+    max-width: var(--measure);
     margin: 0 auto;
-    padding: 40px 32px 80px;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
     color: var(--text-primary);
     font-family: var(--font-sans);
     /* Reserve enough vertical real estate that the page doesn't

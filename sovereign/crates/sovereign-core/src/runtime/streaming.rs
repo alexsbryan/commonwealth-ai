@@ -1020,6 +1020,81 @@ impl Runtime {
         })
     }
 
+    /// Narrate a cold primary slot before synthesis blocks on it.
+    ///
+    /// The wait this covers is the single largest unnarrated stretch in
+    /// a deep turn: 57-95s to page an 18.5 GB model off disk, against
+    /// 0.44s once resident. Both streaming paths call this immediately
+    /// before handing off to the model, so the silence gets a cause
+    /// instead of reading as a hang.
+    ///
+    /// Deliberately bypasses `sessions.try_emit_narration`'s
+    /// suppression window — same reasoning as `EvidenceCheck`. A frame
+    /// whose entire job is to explain a long silence must not be
+    /// dropped for arriving early in the turn.
+    ///
+    /// Asking is side-effect-free: `primary_slot_status()` may not
+    /// force-load a lazy slot to answer, so this can never cause the
+    /// load it reports. `None` = the provider cannot say, and we stay
+    /// quiet rather than narrate a load that may never happen.
+    ///
+    /// It is deliberately NOT `resident_slots()`: that one is sync, and
+    /// the attach-mode desktop — the exact configuration this bug was
+    /// reported from — runs its Runtime in-process against a
+    /// `SplitInferenceProvider` that holds no weights and would answer
+    /// `[]` for every slot. Reading residency through the async method
+    /// lets that provider ask the daemon that actually owns them;
+    /// otherwise this whole frame is a silent no-op precisely where it
+    /// is needed.
+    async fn emit_model_load_narration(
+        &self,
+        session_id: &str,
+        conversation_id: &str,
+        elapsed_ms: u64,
+    ) {
+        let Some(slot) = self.inference.primary_slot_status().await else {
+            return;
+        };
+        // `resident` — nothing to wait for. `transitioning` — a load is
+        // already under way and its cost is not attributable to this
+        // turn. Narrate only what this turn is about to pay.
+        if slot.resident || slot.transitioning {
+            return;
+        }
+        let text = match slot.size_bytes {
+            Some(bytes) => format!(
+                "Loading {} ({:.1} GB) into memory — first deep answer since the model went idle.",
+                slot.model_id,
+                bytes as f64 / 1_073_741_824.0
+            ),
+            None => format!(
+                "Loading {} into memory — first deep answer since the model went idle.",
+                slot.model_id
+            ),
+        };
+        tracing::info!(
+            target: "narration",
+            session_id = %session_id,
+            model_id = %slot.model_id,
+            size_bytes = ?slot.size_bytes,
+            "primary slot cold at synthesis — narrating the load wait"
+        );
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: session_id.to_string(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::ModelLoad {
+                        model_id: slot.model_id,
+                        size_bytes: slot.size_bytes,
+                    },
+                    text,
+                    elapsed_ms,
+                },
+            })
+            .await;
+    }
+
     /// KnowledgeQuery / ComparisonQuery streaming turn. Lifted verbatim
     /// from `handle_message_stream_with_classification` so the dispatcher
     /// reads as a table of contents; behaviour unchanged.
@@ -1458,6 +1533,17 @@ impl Runtime {
                     .await;
             }
         }
+
+        // …and when that cold slot is the actual reason, say so
+        // concretely. The chip above is suppressible and generic; this
+        // one is neither, and it is the only frame in the turn that can
+        // explain a 95s gap before the first token.
+        self.emit_model_load_narration(
+            &_session_id,
+            conversation_id,
+            retrieval_start_at.elapsed().as_millis() as u64,
+        )
+        .await;
 
         let cancel_for_stream = cancel_token.clone();
         tokio::spawn(async move {
@@ -2203,6 +2289,13 @@ impl Runtime {
         _session_id: String,
         cancel_token: tokio_util::sync::CancellationToken,
     ) -> Result<StreamHandle> {
+        // Turn-relative clock for this path's narration frames. The
+        // KnowledgeQuery sibling has carried one (`retrieval_start_at`)
+        // since the counter shipped; the deep path had none, so every
+        // frame it emitted reported `elapsed_ms: 0` and the counter's
+        // footer clock could never anchor to real turn time.
+        let turn_start_at = std::time::Instant::now();
+
         // RetrievalStart — DeepQuery streaming path. Skipped for
         // SimpleQuery because that intent is a quick factual answer
         // and the existing RetrievalComplete narration is also gated
@@ -2256,6 +2349,49 @@ impl Runtime {
                     })
                     .await;
             }
+        }
+
+        // EvidenceCheck — the counter's gather station. Shipped
+        // 2026-07-21 for the KnowledgeQuery path only, because that is
+        // where `plan.shape` already existed; the deep path has been
+        // dark ever since, which is the harder miss of the two — a
+        // REASONING turn is exactly the one with a long silence to
+        // cover. `compute_evidence_shape` is the same pure function the
+        // KQ path's planner calls, over the same `ScoredChunk` slice,
+        // so this reads the evidence without re-deciding anything: no
+        // early-decline branch, no off-target diversion, no routing
+        // effect. `early_decline: false` is therefore a statement of
+        // fact here, not a default — the deep path never arms it.
+        if !matches!(intent, Intent::SimpleQuery) && !kc.chunks.is_empty() {
+            let shape = crate::runtime::evidence::compute_evidence_shape(&kc.chunks, message);
+            let cos_pct = shape.top_cosine.map(|c| (c * 100.0).clamp(0.0, 100.0));
+            let text = match cos_pct {
+                Some(p) => format!(
+                    "{} passages from {} sources — best match {p:.0}%",
+                    shape.count, shape.distinct_sources
+                ),
+                None => format!(
+                    "{} passages from {} sources",
+                    shape.count, shape.distinct_sources
+                ),
+            };
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::EvidenceCheck {
+                            chunks: shape.count,
+                            sources: shape.distinct_sources,
+                            top_similarity: shape.top_cosine,
+                            coverage: shape.query_token_coverage,
+                            early_decline: false,
+                        },
+                        text,
+                        elapsed_ms: turn_start_at.elapsed().as_millis() as u64,
+                    },
+                })
+                .await;
         }
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {
@@ -2375,10 +2511,17 @@ impl Runtime {
 
         // Narration — synthesis-start chip on the DeepQuery /
         // SimpleQuery streaming path. Bridges the silence between
-        // retrieval-complete and the first streamed token. With
-        // primary-slot prewarm in place this is typically a no-op
-        // wait, but it's still the right time to acknowledge the
-        // long phase to the user.
+        // retrieval-complete and the first streamed token.
+        //
+        // This once read "with primary-slot prewarm in place this is
+        // typically a no-op wait". That assumption does not hold and
+        // the comment was load-bearing for the UX: prewarm is wired to
+        // the desktop's window-focus event via `warmup_primary`, whose
+        // trait default is a NO-OP for any provider that doesn't own
+        // local weights — which is exactly the attach-mode desktop
+        // talking to a separate daemon. Measured 2026-07-27: the wait
+        // this "bridges" was 95s of frozen counter. Hence the explicit
+        // cold-slot frame below.
         if matches!(request.preferred_speed, Speed::Slow) {
             let txt = "Generating a deep answer with the primary model.".to_string();
             if let Some(event) = self.sessions.try_emit_narration(
@@ -2394,6 +2537,12 @@ impl Runtime {
                     })
                     .await;
             }
+            self.emit_model_load_narration(
+                &_session_id,
+                conversation_id,
+                turn_start_at.elapsed().as_millis() as u64,
+            )
+            .await;
         }
 
         // 5. Spawn streaming task.

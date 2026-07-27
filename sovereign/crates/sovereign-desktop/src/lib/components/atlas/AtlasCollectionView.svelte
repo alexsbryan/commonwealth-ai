@@ -170,10 +170,10 @@
 
 <style>
   .atlas-collection-view {
-    max-width: 920px;
+    max-width: var(--measure);
     width: 100%;
     margin: 0 auto;
-    padding: 32px 32px 16px;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
     color: var(--text-primary);
     font-family: var(--font-sans);
     box-sizing: border-box;
@@ -275,11 +275,15 @@
     color: var(--danger, #c33);
   }
 
+  /* Floor, not 0 — same collapse hazard as AtlasCorpusView's
+     `.atom-scroll`, and worse here: `.member-row` uses
+     `content-visibility: auto`, so a collapsed viewport skips layout
+     for essentially the whole member list. */
   .member-scroll {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 240px;
     overflow-y: auto;
-    scrollbar-gutter: stable;
+    scrollbar-gutter: stable both-edges;
   }
 
   .member-list {

@@ -57,6 +57,14 @@ pub struct ProfileConfig {
     pub thoughtful: Option<SlotConfig>,
     #[serde(default)]
     pub embed: Option<SlotConfig>,
+    /// Inline-completion (FIM) model. Populated only on the
+    /// `fim_*` ladder pseudo-profiles in `models.toml` — one rung per
+    /// Mellum2 quant — never on a hardware ProfileName. `resolve_slot`
+    /// maps the detected profile to a rung; see the FIM LADDER block
+    /// in `models.toml` for why the ladder is quants of one model
+    /// rather than a per-tier model choice.
+    #[serde(default)]
+    pub fim: Option<SlotConfig>,
 }
 
 /// A single slot's declared model. The fields we read right now

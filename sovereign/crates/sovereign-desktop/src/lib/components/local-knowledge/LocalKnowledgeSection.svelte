@@ -335,23 +335,27 @@
 
 <style>
   .lk-section {
-    padding: 28px 32px 44px;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
     position: relative;
   }
-  /* Embedded mode: rendered inside the Settings Knowledge tab.
-     The outer doc-section already supplies horizontal gutter +
-     vertical rhythm; collapse our own padding so we don't
-     double-indent or push the page longer than necessary.
-     SettingsPanel's `.lk-embed :global(...)` overrides also touch
-     `.head`, `.plate`, and `.plate-head` for the same reason. */
+  /* Embedded mode: the HOST owns the gutter, so collapse ours rather
+     than double-indenting.
+
+     Its only consumer today is AddSheet, whose `.add-body` carries
+     `.page-body` (app.css). Do NOT re-add padding here — that would
+     double it.
+
+     History worth keeping, because it is how this broke: this comment
+     used to name a `.lk-embed :global(.plate*)` override in
+     SettingsPanel as the thing that compensated. SettingsPanel stopped
+     importing this component and `.lk-embed` no longer exists anywhere
+     in the codebase, so `padding: 0` was left standing with no host
+     gutter behind it — the Add sheet rendered flush to both window
+     edges and clipped its third source card. If you move this
+     component to a new host, verify that host supplies a gutter. */
   .lk-section--embedded {
     padding: 0;
   }
-  /* Embedded mode overrides live on the consumer side
-     (SettingsPanel.svelte → `.lk-embed :global(.plate*)`) so the
-     surface-card pattern stays unified across the Knowledge tab.
-     Keeping them here would duplicate rules with the same specificity
-     and produce source-order fights. */
 
   .head {
     margin-bottom: 28px;

@@ -35,7 +35,12 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // stay here (the former is shared with submodules as an ancestor-private).
 mod bootstrap;
 mod build;
-mod lifecycle;
+// `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
+// `svrn setup --fim` rewrites the model config and must bounce the
+// daemon itself — telling the operator to go run `svrn daemon restart`
+// mid-flow would break the one-command promise and leave the verify
+// ladder below with nothing to verify.
+pub(crate) mod lifecycle;
 mod solve_http;
 mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by

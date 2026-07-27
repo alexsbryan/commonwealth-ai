@@ -41,7 +41,7 @@
 </script>
 
 <div class="add-sheet" data-testid="add-sheet">
-  <header class="add-header">
+  <header class="add-header page-header">
     <button class="back" onclick={onClose} data-testid="add-sheet-close" aria-label="Back to Library">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6" />
@@ -64,7 +64,7 @@
     {/each}
   </nav>
 
-  <div class="add-body">
+  <div class="add-body page-body">
     {#if section === "files"}
       <LocalKnowledgeSection embedded {onOpenChatWithSeed} {onDropToChat} />
     {:else if section === "imports"}
@@ -87,7 +87,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 12px 18px 10px;
+    padding-block: 12px 10px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -116,7 +116,8 @@
   .add-nav {
     display: flex;
     gap: 8px;
-    padding: 12px 16px;
+    padding-block: 12px;
+    padding-inline: var(--gutter);
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
     flex-shrink: 0;
@@ -144,9 +145,9 @@
   .an-label { font-weight: 600; font-size: 0.9rem; }
   .an-sub { font-size: 0.76rem; color: var(--text-muted); }
 
-  .add-body {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-  }
+  /* `.add-body` carries `.page-body` (app.css) for its gutter + scroll.
+     All three sections it hosts (LocalKnowledgeSection `embedded`,
+     ImportsTab, KnowledgeStatus) supply zero padding of their own and
+     relied on a host gutter that did not exist — the sheet rendered
+     flush to both window edges, clipping the third source card. */
 </style>

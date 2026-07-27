@@ -191,6 +191,38 @@ pub enum NarrationPhase {
     RoutingCommitted,
     /// Primary-slot synthesis beginning (Slow path).
     PrimarySynthesisStart,
+    /// The primary (deep-reasoning) slot is idle-unloaded, so its
+    /// weights must be read from disk before a single token can exist.
+    /// Measured 2026-07-27 on an 18.5 GB IQ4 35B: 57s cold vs 0.44s
+    /// warm — 130x, and long enough that an unnarrated load is
+    /// indistinguishable from a hang. It was: the counter's stations
+    /// sat frozen for 95s while only its local clock ticked, because
+    /// no frame existed to describe a load. This is that frame.
+    ///
+    /// Emitted immediately before synthesis and ONLY when
+    /// `resident_slots()` reports the slot absent, so the warm path
+    /// (the common case) never renders it.
+    ModelLoad {
+        /// The model about to occupy the slot.
+        model_id: String,
+        /// Weight footprint when the provider can attribute one.
+        ///
+        /// In practice the embedded engine reports `None` here: its
+        /// `ResidentSlot::size_bytes` is the *resident* footprint and is
+        /// only populated while the slot is occupied (`engine.rs`
+        /// ~1841), and this frame by construction fires when it is not.
+        /// The UI therefore degrades to naming the model. Kept as an
+        /// Option rather than dropped because a provider that knows the
+        /// on-disk size can fill it without a contract change — and
+        /// "18.5 GB off disk" explains a 90s wait far better than a
+        /// model id alone.
+        ///
+        /// Deliberately not an ETA under any circumstances: the same
+        /// load measured 15.6s warm-page-cache and 95s under memory
+        /// pressure on one machine in one day. A wrong countdown is
+        /// worse than no countdown.
+        size_bytes: Option<u64>,
+    },
     /// Gap-check fired and found a missing piece.
     GapCheckFired,
     /// Evidence-shape verdict for the turn, emitted right after

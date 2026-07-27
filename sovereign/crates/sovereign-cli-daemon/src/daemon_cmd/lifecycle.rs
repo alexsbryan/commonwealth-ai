@@ -318,7 +318,7 @@ mod stop_daemon_tests {
 /// This is the dev-workflow counterpart to `svrn setup`'s
 /// launchd/systemd registration — when you don't want a service
 /// manager owning lifecycle, `start` gives you a one-liner.
-pub(super) async fn start_daemon() -> i32 {
+pub(crate) async fn start_daemon() -> i32 {
     if wait_for_ready(std::time::Duration::from_millis(200)).await {
         let pid_hint = read_daemon_pid()
             .map(|p| format!(" (pid {p})"))
@@ -663,7 +663,7 @@ extern "C" {
 /// who actually wants strict launchd accounting can run via
 /// `launchctl kickstart -k gui/$(id -u)/com.svrnmesh.daemon`
 /// directly.
-pub(super) async fn restart_daemon() -> i32 {
+pub(crate) async fn restart_daemon() -> i32 {
     eprintln!("restarting the daemon …");
     let stop_rc = stop_daemon().await;
     if stop_rc != 0 {

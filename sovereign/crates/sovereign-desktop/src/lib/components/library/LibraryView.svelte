@@ -103,7 +103,7 @@
   {/key}
 {:else}
   <div class="library" data-testid="library-view">
-    <header class="lib-header">
+    <header class="lib-header page-header">
       <div class="lib-title">
         <h1>Library</h1>
         <p>Everything you can ask and explore.</p>
@@ -116,7 +116,7 @@
       </button>
     </header>
 
-    <div class="lib-body">
+    <div class="lib-body page-body">
       <!-- Live ingests (embed/enrich) surface here with glassbox detail +
            ETA + peer-assist — reachable from the top-of-chat progress
            banner. Shown above the shelf so a first-ever ingest is visible
@@ -206,9 +206,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding: 22px 28px 16px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    padding-block: var(--gutter-top) 16px;
   }
   .lib-title h1 {
     font-size: 1.3rem;
@@ -238,12 +236,8 @@
   }
   .add-btn:hover { background: color-mix(in oklch, var(--accent) 20%, var(--bg-elevated)); }
 
-  .lib-body {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 22px 28px 40px;
-  }
+  /* `.lib-body` carries `.page-body` (app.css) — this was the surface
+     the other Library views were supposed to match and didn't. */
   .muted { color: var(--text-muted); font-size: 0.88rem; }
   .error { color: var(--error); font-size: 0.88rem; }
 

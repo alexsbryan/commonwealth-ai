@@ -59,7 +59,7 @@
 </script>
 
 {#if questions.length > 0}
-  <section class="open-questions" data-testid="notebook-open-questions">
+  <section class="open-questions page-measure" data-testid="notebook-open-questions">
     <StarterChips
       {questions}
       heading="Open questions your sources raise"
@@ -70,7 +70,16 @@
 {/if}
 
 <style>
+  /* Mounts into `.explore-surface`, which supplies no gutter of its own,
+     and StarterChips supplies none either — so this rendered flush at
+     x=0 directly above an atlas view inset by `--gutter` and centred at
+     `--measure`. `.page-measure` (app.css) puts it in the same optical
+     column; `flex-shrink: 0` stops a tall chip row from being squeezed
+     by the atlas view competing for the same flex height. */
   .open-questions {
+    flex-shrink: 0;
+    padding-inline: var(--gutter);
+    padding-top: var(--gutter-top);
     margin-bottom: 16px;
   }
 </style>
