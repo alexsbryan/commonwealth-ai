@@ -44,6 +44,7 @@ use crate::oicp_select::{
 use crate::predicted_time::{
     self, LoadDebt, LocalOption, PredictInputs, Prediction, RequestShape, Unpredictable,
 };
+use crate::tier::TierFloor;
 
 /// The name the local node is recorded under in a decision record's
 /// candidate set. Peers are recorded under their mesh name, which is
@@ -252,6 +253,16 @@ pub(crate) struct RankInputs<'a> {
     /// [`RankObjective::Product`]; the Tier-1 sim passes whatever its
     /// arm calls for.
     pub objective: RankObjective,
+    /// §4.1's capability filter. Production passes
+    /// [`TierFloor::None`] — the floor is a *behavioural* change and
+    /// `SCHEDULER_QUALITY.md` §6 puts behavioural changes into the sim
+    /// as arms before they land — so every arm that predates it keeps
+    /// its recorded numbers exactly.
+    ///
+    /// Deliberately passed in rather than derived from `req` inside
+    /// [`rank`]: derived, it would apply everywhere the moment it
+    /// compiled, and no before/after would exist to price it.
+    pub tier_floor: TierFloor,
     pub local: LocalCandidateView<'a>,
     pub peers: &'a [PeerCandidateView],
 }
@@ -279,6 +290,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
         req,
         needs_forced_choice,
         objective,
+        tier_floor,
         local,
         peers,
     } = inputs;
@@ -286,6 +298,10 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
     // Local is always a candidate. `None` means no loaded model's
     // claims can serve the request — any peer that CAN then wins
     // automatically.
+    // Where the local candidate's record landed, so the tier floor can
+    // come back and read the band it was assigned once the whole
+    // candidate set is known.
+    let mut local_rec_idx: Option<usize> = None;
     let local_cand = score_manifest_for_request(local.manifest, req).map(|c| {
         // Local availability is `None` (neutral): the local node's
         // business is already captured by `observations.in_flight`;
@@ -310,7 +326,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             candidate_inputs.model_loaded = Some(debt.model_loaded);
             candidate_inputs.estimated_load_ms = Some(debt.estimated_load_ms);
         }
-        rec.push_candidate(CandidateRecord {
+        local_rec_idx = Some(rec.push_candidate(CandidateRecord {
             kind: CandidateKind::Local,
             name: LOCAL_CANDIDATE_NAME.to_string(),
             node_id: None,
@@ -321,7 +337,10 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             selected: false,
             score: ScoreRecord::from(&breakdown),
             inputs: candidate_inputs,
-        });
+            // Stamped by `assign_tier_bands` once every candidate is
+            // known — a band is a property of the set, not of one row.
+            tier_band: None,
+        }));
         cand
     });
     tracing::info!(
@@ -363,6 +382,10 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
     // Index-parallel to `scored`: pushed in the same place, so the two
     // cannot drift apart without the push sites disagreeing visibly.
     let mut timing: Vec<PredictInputs> = Vec::new();
+    // Also index-parallel to `scored` — where each scored peer's
+    // candidate record landed, so the tier floor can read back the band
+    // the record was stamped with instead of re-deriving the partition.
+    let mut peer_rec_idx: Vec<usize> = Vec::new();
     for (idx, peer) in peers.iter().enumerate() {
         // Drop quarantined peers from the candidate set. They
         // re-enter automatically once their cooldown expires.
@@ -504,7 +527,7 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             candidate_inputs.model_loaded = Some(debt.model_loaded);
             candidate_inputs.estimated_load_ms = Some(debt.estimated_load_ms);
         }
-        rec.push_candidate(CandidateRecord {
+        peer_rec_idx.push(rec.push_candidate(CandidateRecord {
             kind: CandidateKind::Peer,
             name: peer.name.clone(),
             node_id: Some(peer.node_id_hex.clone()),
@@ -515,7 +538,8 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             selected: false,
             score: ScoreRecord::from(&breakdown),
             inputs: candidate_inputs,
-        });
+            tier_band: None,
+        }));
         scored.push((idx, cand));
         timing.push(PredictInputs {
             // `obs.in_flight` post-override: the number the scorer
@@ -526,6 +550,75 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
             tg_tok_s: peer.benchmark.as_ref().map(|b| b.tg_tok_s),
             pending_load_ms: load_debt.map(|d| d.pending_ms()).unwrap_or(0),
         });
+    }
+
+    // ── The tier floor (§4.1) ───────────────────────────────────────
+    // Capability *filters*; predicted cost ranks whatever survives.
+    // This runs after scoring and before ranking, and it never touches
+    // a score — a candidate is in the feasible set or it is not. Fold
+    // it into a score and it becomes another dimensionless multiplier,
+    // which is the thing §4.1 exists to stop doing.
+    //
+    // Bands are read back off the candidate records, so the partition
+    // a human reads in the log is by construction the partition the
+    // filter applied.
+    let bands = rec.assign_tier_bands();
+    let local_band = local_rec_idx.and_then(|i| bands[i]);
+    let mut local_cand = local_cand;
+    if tier_floor.is_binding() {
+        let admits: Vec<bool> = peer_rec_idx
+            .iter()
+            .map(|&i| tier_floor.admits(bands[i]))
+            .collect();
+        let local_admitted = local_cand.is_some() && tier_floor.admits(local_band);
+        let peers_admitted = admits.iter().filter(|a| **a).count();
+
+        if local_admitted || peers_admitted > 0 {
+            let dropped_peers = admits.len() - peers_admitted;
+            let (kept_scored, kept_timing): (Vec<_>, Vec<_>) = scored
+                .into_iter()
+                .zip(timing)
+                .zip(&admits)
+                .filter(|(_, keep)| **keep)
+                .map(|(pair, _)| pair)
+                .unzip();
+            scored = kept_scored;
+            timing = kept_timing;
+            if !local_admitted && local_cand.is_some() {
+                // Local is below the floor while some peer is not. Drop
+                // it the same way "no loaded model can serve this
+                // request" is dropped — because that is what it means:
+                // the household's own slot policy would not have
+                // answered this turn from this model either. Every
+                // admitted peer now wins automatically, via
+                // `local_sentinel` on the product path and
+                // `LocalOption::Infeasible` on the predicted-time one.
+                local_cand = None;
+            }
+            tracing::info!(
+                oicp_request_id = %oicp_request_id,
+                floor = ?tier_floor,
+                local_band = ?local_band,
+                local_admitted,
+                peers_admitted,
+                dropped_peers,
+                "mesh-inference: tier floor applied (§4.1) — capability filters, cost ranks"
+            );
+        } else {
+            // Nothing satisfies the floor. Band 0 is non-empty whenever
+            // any candidate advertised a size, so reaching here means
+            // NO candidate did — not that the fleet is too small. The
+            // floor declines to make a request unservable over a
+            // missing field: serve it unfiltered and say so. A capture
+            // shows this as a binding floor with no banded candidate.
+            tracing::warn!(
+                oicp_request_id = %oicp_request_id,
+                floor = ?tier_floor,
+                candidates = bands.len(),
+                "mesh-inference: tier floor unsatisfiable — no candidate advertised a size; \
+                 serving unfiltered"
+            );
+        }
     }
 
     // Keep only peers that beat local — ranked best-first. The cascade
@@ -715,6 +808,7 @@ mod tests {
                 req: &req,
                 needs_forced_choice: false,
                 objective: RankObjective::Product,
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &m,
                     observations: &obs,
@@ -830,6 +924,7 @@ mod tests {
                 req: &req,
                 needs_forced_choice: false,
                 objective: RankObjective::Product,
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &m,
                     observations: &obs,
@@ -855,6 +950,7 @@ mod tests {
                 req: &req,
                 needs_forced_choice: true,
                 objective: RankObjective::Product,
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &m,
                     observations: &obs,
@@ -922,6 +1018,7 @@ mod tests {
                     req: &req,
                     needs_forced_choice: false,
                     objective,
+                    tier_floor: TierFloor::None,
                     local: LocalCandidateView {
                         manifest: &m,
                         observations: &obs,
@@ -982,6 +1079,7 @@ mod tests {
                 req: &req,
                 needs_forced_choice: false,
                 objective: RankObjective::PredictedTime,
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &m,
                     observations: &obs,
@@ -1015,6 +1113,7 @@ mod tests {
                 req: &req,
                 needs_forced_choice: false,
                 objective: RankObjective::PredictedTime,
+                tier_floor: TierFloor::None,
                 local: LocalCandidateView {
                     manifest: &m,
                     observations: &obs,

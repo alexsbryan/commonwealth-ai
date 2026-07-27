@@ -1769,9 +1769,9 @@ changed the diagnosis:
 | module | role |
 |---|---|
 | `sovereign-mesh/scheduler_core.rs` | The routing decision as a **pure total function** — `rank(DecisionBuilder, RankInputs) -> RankResult` over a snapshot of what a decider believes, with `now_unix` passed rather than read. `select_peers_ranked` is now gather-then-decide: async I/O above the line, this below it. Also holds the observation feedback (`observe_dispatch` / `observe_success` / `observe_failure`) the provider's `record_*` methods delegate to, so sim and production age their beliefs by one implementation. |
-| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, **model-load time** (`model_load_sec_per_gb`: a cold node advertises `loaded: false` + an estimate and pays it once, attributed to TTFT so the throughput EWMA is not poisoned), ten arms (as-implemented / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / **predicted-time+outbound-only** / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; **three** separate RNG streams — world, policy, and advertised-rate error — so switching arms cannot perturb the world the arms are compared in, and both fidelity knobs default to inert so every number recorded before they existed still reproduces. |
+| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, **model-load time** (`model_load_sec_per_gb`: a cold node advertises `loaded: false` + an estimate and pays it once, attributed to TTFT so the throughput EWMA is not poisoned), thirteen arms (as-implemented / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / predicted-time+outbound-only / **tier-floor** / **predicted-time+tier-floor (§4.1.1)** / **predicted-time+tier-floor+two-choices (§4.1.2)** / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; **four** separate RNG streams — world, policy, advertised-rate error, and advertised-size error — so switching arms cannot perturb the world the arms are compared in, and both fidelity knobs default to inert so every number recorded before they existed still reproduces. |
 | `sovereign-mesh/predicted_time.rs` | The §4.1 candidate objective, and the only ranking in the tree with **no tunable constant**: `predict()` returns `queue + prefill + decode + rtt` as named addends or an `Unpredictable` reason (never a defaulted rate — a guessed rate is a fabricated fact with a unit attached), and `faster_than_local` filters on it. `LocalOption` keeps *unpredictable* local (⇒ no hop) distinct from *infeasible* local (⇒ any feasible peer wins); collapsing those points them in opposite directions. Reads only what a decider can see, so `PredictInputs::from_candidate` scores it against a production capture. |
-| `sovereign-mesh/mesh_sim/scoreboard.rs` | `RecordMetrics` is computable from a **production capture** too (the S1 precondition); `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
+| `sovereign-mesh/mesh_sim/scoreboard.rs` | `RecordMetrics` and `TierMetrics` are computable from a **production capture** too (the S1 precondition) — `TierMetrics` is §5's capability column, counting downgrades and declined upgrades from decision records alone; `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
 
 Run it: `cargo test -p sovereign-mesh --features mesh-sim,treesitter
 --test mesh_sim_scoreboard -- --nocapture` (~0.3s; `sovereign-lint.sh`
@@ -1839,6 +1839,71 @@ floor is a prerequisite, and no §5 metric can see what its absence
 costs. Replay also surfaced a missing field: a `RoutingDecision` does
 not record *which objective* produced its verdict, so a predicted-time
 capture reports scorer agreement 1.000 and policy agreement 0.009.
+
+**The tier floor, and what it did to that claim (`sovereign-mesh/tier.rs`,
+`Arm::TierFloor` + `Arm::PredictedTimeTierFloor`, 2026-07-26 — full
+result in `SCHEDULER_QUALITY.md` §4.1.1).** Capability is now a
+**filter, not a term**: candidates are partitioned into bands derived at
+runtime from the sizes on the manifests a decider currently holds — a
+*relative* edge (`BAND_RATIO`, measured against the band's max),
+recomputed per decision, never an absolute GB threshold or a table of
+model names — and a `Normal`/`Extended` request must be served from
+band 0. The floor is read off `effective_latency_class()`, the same map
+`latency_to_speed` already uses locally, so this is the policy the local
+slot picker has always enforced, finally applied to peers. `TierMetrics`
+adds §5's missing column and splits two hazards that were being counted
+as one: **downgrade** (served below the origin's own local model — a
+real regression, 31% under predicted-time) versus **declined upgrade** (a
+stronger node was feasible, 69%). Both are computed from decision
+records alone, so the identical function scores a production capture.
+Three results change the plan: **(1)** §4.1's headline is not
+quality-constant — on `twin-hubs`, the one fleet whose top band is not
+saturated, arm0+floor is 31.0s against predicted+floor's 32.6s, so at
+constant quality the objective is *~5% worse* than the product, not 200%
+better; **(2)** the floor is *free* where the top band has capacity
+(twin-hubs −2% versus arm 0 with every quality loss eliminated) and
+catastrophic where it is not (household 25.7s → 559.5s) — but
+`queue_wait_ms` by dispatch quartile shows a **flat** service time
+against a queue climbing 241s → 1020s, so that is a capacity fact about
+a one-hub fleet, not a scheduling result, and `heterogeneous-fleet`'s
+queue is already unbounded under arm 0 with no floor at all;
+**(3)** predicted-time *herds harder* than the product once the floor
+makes candidates homogeneous (40/28/10 across three identical hubs
+versus 31/27/18), so §4.2 step 2 is a prerequisite rather than a
+follow-on. `SimConfig::advertised_size_error` prices the floor's own
+self-reported input the way `advertised_rate_error` prices the rate
+card.
+
+**What the objective is actually worth, on a second unsaturated fleet
+(`scenario::mixed_hubs`, `Arm::PredictedTimeTierFloorTwoChoices`,
+2026-07-27 — full result in `SCHEDULER_QUALITY.md` §4.1.2).** Result (1)
+above was n=1 in two ways at once: one fleet, one seed. At five seeds
+across two fleets the answer is **conditional on whether the top band's
+members differ in speed**. `mixed-hubs` is the second unsaturated fleet
+and the deliberate *opposite bracket* to `twin-hubs` — the same 35B (so
+the same band) on 34/25/11 tok/s machines, where `twin-hubs` band 0 is
+three identical hubs. Predicted-time is **+3% (1/5 seeds)** on
+`twin-hubs` and **−8% (5/5 seeds)** on `mixed-hubs`. The mechanism is F3
+and it is not the obvious one: the product already sends **zero** turns
+to the 11 tok/s hub (`throughput_factor` 0.55 is decisive), and its
+whole loss is splitting ~50/50 between the 34 and 25 tok/s hubs, which
+the clamp at 20 tok/s renders identically 1.0 — deleting the slow hub
+leaves predicted-time ahead by 3%, so the win survives deleting the gap
+the scorer *can* see. It is not the harness flattering the objective
+either: under `advertised_rate_error` the win *widens* (−8/−7/−11/−13%
+at ±0/25/50/100%), and the product's one error-correcting path (observed
+decode EWMA past five samples) is shown to carry only ~5% of scorings.
+Result (3)'s remedy is measured rather than inferred: a **blunt**
+two-choices sampler takes `twin-hubs` from +3% to −4% and `mixed-hubs`
+from −8% to +3%, so §4.2 step 2's *"among candidates whose predictions
+are within noise"* is the load-bearing clause, not a refinement — and
+what makes that clause expressible is that predicted times have
+**units**, where a dimensionless product has no scale on which two
+scores can be called close. Saturation is now gated on
+`backlog_depth` (final-quartile queue wait over service time: household
+38 turns, heterogeneous 6.6, twin/mixed both under 1.0); the earlier
+Q1→Q4 3× ratio is kept only as a screen, because it fires on any fleet
+loaded enough to build a queue at all.
 
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a

@@ -71,6 +71,7 @@ use crate::scheduler_core::{
     self, LocalCandidateView, PeerCandidateView, PeerManifestView, RankInputs, RankObjective,
 };
 use crate::throughput_tracking::apply_throughput_observation;
+use crate::tier::TierFloor;
 
 use rng::Rng;
 use scenario::{Arrival, RequestClass, Scenario};
@@ -137,6 +138,24 @@ pub struct SimConfig {
     /// residency, so any load-related finding here is a lower bound on
     /// the real cost.
     pub model_load_sec_per_gb: f64,
+    /// Maximum multiplicative error between the `size_gb` a node
+    /// **advertises** on its manifest and its true weight. `0.0` = a
+    /// perfectly honest fleet.
+    ///
+    /// The tier floor (§4.1.1) reads advertised size, and advertised
+    /// size is the one input to a *quality* gate that a peer states
+    /// about itself. This knob is the same instrument
+    /// [`SimConfig::advertised_rate_error`] is for the rate card, and
+    /// exists for the same reason: the flattering assumption has to be
+    /// priced, not assumed away. Unlike the rate card it moves only
+    /// candidate *banding*, never a score or a service time — so a
+    /// change here is unambiguously the floor mis-classifying somebody.
+    ///
+    /// Two-sided and multiplicative-symmetric, so a node is as likely
+    /// to under-sell itself into a lower band as to over-sell itself
+    /// into the top one. The second is the adversarial direction: it is
+    /// how a 4B talks its way into serving synthesis.
+    pub advertised_size_error: f32,
 }
 
 /// What a node counts when it gossips its in-flight number.
@@ -177,6 +196,7 @@ impl Default for SimConfig {
             // every number recorded before these knobs existed still
             // reproduces exactly.
             advertised_rate_error: 0.0,
+            advertised_size_error: 0.0,
             model_load_sec_per_gb: 0.0,
         }
     }
@@ -297,6 +317,74 @@ pub enum Arm {
     /// accuracy is exactly what it trades the product's fudge factors
     /// for.
     PredictedTimeOutboundOnly,
+    /// Arm 0 **plus §4.1's tier floor** — capability filters the
+    /// candidate set before the product ranks what survives.
+    ///
+    /// Here to separate two costs that would otherwise arrive fused.
+    /// The floor is a policy, not an objective, so it applies to
+    /// whatever ranks behind it; running it over the product first
+    /// answers "what does requiring the top band cost a fleet, on its
+    /// own?" Without this arm, any change in
+    /// [`PredictedTimeTierFloor`](Arm::PredictedTimeTierFloor) could be
+    /// attributed to either half.
+    ///
+    /// Expect it to be *slower* than arm 0 on a single-hub fleet: arm 0
+    /// already prefers the hub (its affinity is the highest score in
+    /// the fleet), and the floor additionally forbids the stay-local
+    /// fallback, so knowledge turns that used to be answered at home
+    /// now queue. That is the mechanism the household-latency price is
+    /// made of, and it belongs in a separate column from §4.1's.
+    TierFloor,
+    /// **The §4.1 landing candidate.** [`PredictedTime`](Arm::PredictedTime)
+    /// with the tier floor in front of it.
+    ///
+    /// `PredictedTime` cannot land as measured: it ranks on time alone,
+    /// which on every fleet here prefers a small fast model, and no §5
+    /// metric can see the cost because the scoreboard measures latency,
+    /// fairness and waste — not answer quality. This arm is the fix and
+    /// its price, together.
+    ///
+    /// The question it exists to answer is not "is it faster" — it will
+    /// not be. It is: **how much of §4.1's win survives being made to
+    /// respect capability?** If the household mean returns to arm 0's
+    /// 25.7s, §4.1's 11.4s was bought by answering hard turns with a 4B
+    /// and the objective is not the improvement it appeared to be. If
+    /// it lands between, the gap is what a correct objective is worth
+    /// *at constant quality*, which is the only version of the claim
+    /// worth putting in the spec.
+    ///
+    /// `twin-hubs` is the fleet where the two should compose rather
+    /// than fight: three identical hubs share the top band, so the
+    /// floor leaves predicted time a real choice to make and should
+    /// spread load across them instead of herding on one.
+    PredictedTimeTierFloor,
+    /// **§4.2 step 2, composed with the §4.1 landing candidate.**
+    /// [`PredictedTimeTierFloor`](Arm::PredictedTimeTierFloor) with the
+    /// two-choices sampler in front of the dispatch.
+    ///
+    /// §4.1.1 found that predicted time *herds harder* than the product
+    /// once the floor makes candidates homogeneous, and named breaking
+    /// the herd a prerequisite for the floor rather than a follow-on.
+    /// This arm is that claim made falsifiable, and the two fleets with
+    /// an unsaturated top band read it in opposite directions:
+    ///
+    ///   - On `twin-hubs` the band is three *identical* hubs, so the
+    ///     sampler's uniform draw over the ranked list **is** a draw
+    ///     over near-ties. If herding is what costs predicted time its
+    ///     few percent there, this arm recovers it.
+    ///   - On `mixed-hubs` the band spans 34 / 25 / 11 tok/s, and a
+    ///     uniform draw throws away exactly the information the
+    ///     objective exists to use. A regression here is not a failure
+    ///     of the arm; it is the measurement that says §4.2 step 2's
+    ///     *"among candidates whose predictions are within noise"* is
+    ///     load-bearing rather than decorative.
+    ///
+    /// Note what makes that predicate expressible at all: predicted
+    /// times are in milliseconds, so "within noise" has units. A
+    /// dimensionless product has no scale on which two scores can be
+    /// called close, which is a second reason §4.2 step 2 wants §4.1
+    /// underneath it.
+    PredictedTimeTierFloorTwoChoices,
     /// Not a policy anyone could implement: assigns each request to
     /// whichever node would finish it soonest, with perfect knowledge
     /// of every queue. The denominator of the efficiency ratio.
@@ -320,6 +408,9 @@ impl Arm {
             Arm::OutboundOnlyLoad => "outbound-only-load",
             Arm::PredictedTime => "predicted-time",
             Arm::PredictedTimeOutboundOnly => "predicted-time+outbound-only",
+            Arm::TierFloor => "tier-floor",
+            Arm::PredictedTimeTierFloor => "predicted-time+tier-floor",
+            Arm::PredictedTimeTierFloorTwoChoices => "predicted-time+tier-floor+two-choices",
             Arm::Oracle => "oracle",
         }
     }
@@ -329,8 +420,24 @@ impl Arm {
     /// ranks the way production does today.
     pub(crate) fn objective(&self) -> RankObjective {
         match self {
-            Arm::PredictedTime | Arm::PredictedTimeOutboundOnly => RankObjective::PredictedTime,
+            Arm::PredictedTime
+            | Arm::PredictedTimeOutboundOnly
+            | Arm::PredictedTimeTierFloor
+            | Arm::PredictedTimeTierFloorTwoChoices => RankObjective::PredictedTime,
             _ => RankObjective::Product,
+        }
+    }
+
+    /// Whether this arm applies §4.1's capability filter before
+    /// ranking. A *policy* dimension, orthogonal to
+    /// [`objective`](Arm::objective) — which is exactly why it is a
+    /// separate method and not another `RankObjective` variant.
+    pub(crate) fn tier_floor(&self, req: &InferenceRequirements) -> TierFloor {
+        match self {
+            Arm::TierFloor
+    | Arm::PredictedTimeTierFloor
+    | Arm::PredictedTimeTierFloorTwoChoices => TierFloor::from_requirements(req),
+            _ => TierFloor::None,
         }
     }
 
@@ -342,7 +449,10 @@ impl Arm {
     }
 
     fn two_choices(&self) -> bool {
-        matches!(self, Arm::TwoChoices | Arm::FreshTwoChoices)
+        matches!(
+            self,
+            Arm::TwoChoices | Arm::FreshTwoChoices | Arm::PredictedTimeTierFloorTwoChoices
+        )
     }
 
     /// Whether deciders start already believing they have completed
@@ -363,7 +473,7 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 10] = [
+pub const ALL_ARMS: [Arm; 13] = [
     Arm::AsImplemented,
     Arm::FreshSignals,
     Arm::TwoChoices,
@@ -373,6 +483,9 @@ pub const ALL_ARMS: [Arm; 10] = [
     Arm::OutboundOnlyLoad,
     Arm::PredictedTime,
     Arm::PredictedTimeOutboundOnly,
+    Arm::TierFloor,
+    Arm::PredictedTimeTierFloor,
+    Arm::PredictedTimeTierFloorTwoChoices,
     Arm::Oracle,
 ];
 
@@ -675,6 +788,12 @@ impl Sim {
         // runs recorded before this knob existed.
         let mut rate_rng = Rng::new(seed ^ 0xC0DE_FACE_5A17_3E11);
         let rate_error = cfg.advertised_rate_error.max(0.0);
+        // A FOURTH stream, for the same reason the third exists: sharing
+        // `rate_rng` would make an `advertised_size_error` run shift the
+        // rate-card draws, and the two knobs must be independently
+        // attributable.
+        let mut size_rng = Rng::new(seed ^ 0x51_2E_FA_11_AC_1D_99_07);
+        let size_error = cfg.advertised_size_error.max(0.0);
         let load_per_gb = cfg.model_load_sec_per_gb.max(0.0);
         let nodes = scenario
             .nodes
@@ -694,6 +813,17 @@ impl Sim {
                             model.status.loaded = false;
                             model.status.estimated_load_time_sec =
                                 Some((spec.size_gb as f64 * load_per_gb).round() as u32);
+                        }
+                    }
+                    // What the node CLAIMS it weighs. Only the tier
+                    // floor consumes this, so any behaviour change under
+                    // the knob is the floor mis-banding somebody — the
+                    // whole point of keeping it out of the score.
+                    if size_error > 0.0 {
+                        if let Some(model) = m.models.first_mut() {
+                            let u = size_rng.next_f64() as f32;
+                            let factor = (1.0 + size_error).powf(2.0 * u - 1.0);
+                            model.size_gb = model.size_gb.map(|s| s * factor);
                         }
                     }
                     m
@@ -927,6 +1057,7 @@ impl Sim {
                     req: &req,
                     needs_forced_choice: false,
                     objective: self.arm.objective(),
+                    tier_floor: self.arm.tier_floor(&req),
                     local: LocalCandidateView {
                         manifest: &node.manifest,
                         observations: &local_obs,

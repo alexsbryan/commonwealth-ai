@@ -517,6 +517,9 @@ What it buys:
   minimizes the same quantity the scheduler estimates (this is what
   makes §5's efficiency ratio possible at all)
 - heterogeneity is handled by construction rather than by a clamp (F3)
+  — **measured**: −8% at constant quality on a fleet whose top band
+  spans 34/25/11 tok/s, and the win is the two hubs the clamp cannot
+  tell apart, not the slow one it can (§4.1.2)
 - `LatencyMatrix`, a dead wire since it was written, acquires an
   obvious consumer
 - speed and quality stop sharing one scalar — capability filters,
@@ -658,6 +661,246 @@ same number as latency.
 > should advertise the field; until they do, this objective is
 > optimistic about cold peers in exactly one measurable way.
 
+### 4.1.1 The tier floor, and what it costs — MEASURED 2026-07-26
+
+> `Arm::TierFloor`, `Arm::PredictedTimeTierFloor`,
+> `sovereign-mesh/src/tier.rs`. **This is the blocker above, priced —
+> and it does not clear §4.1 for landing. It reverses part of its
+> claim.**
+
+**The mechanism, stated first.** Nothing structural separated a 4B from
+a 35B for a synthesis request. `latency_match_score` is symmetric
+(`abs_diff`, `scoring.rs:82`), so a *downgrade* and an *upgrade* score
+identically; and a small model advertises a `Normal` claim alongside its
+`Fast` one (`routes_oicp.rs:80`), so a 4B is a class-matched 1.0
+candidate for a Normal turn. The only separation was `claim_affinity` —
+self-reported, and a ranking multiplier rather than a gate. §4.1 drops
+the multiplier, so the separation goes to zero. **The affinity term was
+an accidental quality brake of the same family as `cold_start_weight`'s
+0.7 floor and a mis-rated rate card**, which is now three sightings of
+one pathology.
+
+The floor makes capability a **filter**: candidates are partitioned into
+bands (relative, computed per decision from the sizes visible then — no
+absolute GB threshold, no table of model names), a `Normal`/`Extended`
+request must be served from band 0, and predicted time ranks whatever
+survives. It is the policy the *local* slot picker has always enforced
+via `latency_to_speed`, finally applied to peers — a node will not
+answer its own synthesis turn from its 4B, then ship it to someone
+else's.
+
+**Two hazards that were being counted as one.** `TierMetrics` splits
+them, and the split matters:
+
+| arm | fleet | downgrade (served below the origin's OWN local model) | declined upgrade (a stronger node was feasible) |
+|---|---|---|---|
+| arm 0 | household | 0% | 54% |
+| predicted-time | household | **31%** | 69% |
+| predicted-time | twin-hubs | 10% | 90% |
+| predicted-time | heterogeneous | 4% | 96% |
+
+Predicted-time serves *every* turn below the best available. Most of
+that is declining an upgrade — the origins are 4B laptops, so those
+users get what they'd have got at home, faster. But 4–31% is a true
+regression, and the two need separate names because only the first
+makes anyone worse off than not offloading.
+
+**What the floor costs — and the answer is a capacity fact, not a
+scheduling one.**
+
+| fleet | arm 0 | arm0+floor | predicted | predicted+floor | top band |
+|---|---|---|---|---|---|
+| household-evening-12 | 25.7s | 559.5s | 11.4s | **559.5s** | 1 hub |
+| heterogeneous-fleet | 40.2s | 120.4s | 11.5s | **120.4s** | 1 hub |
+| twin-hubs | 33.3s | 31.0s | 11.1s | **32.6s** | 3 hubs |
+
+Read the middle rows and the mechanism is invisible; read
+`queue_wait_ms` by dispatch quartile and it is not. Service time is
+**flat** while the queue climbs:
+
+| fleet / arm | queue wait Q1 → Q4 | service | verdict |
+|---|---|---|---|
+| household, predicted+floor | 241s → **1020s** | 26.8s flat | queue unbounded |
+| heterogeneous, predicted+floor | 45s → **182s** | 27.5s flat | queue unbounded |
+| heterogeneous, **arm 0** | 13s → **42s** | 23.5s flat | already unbounded |
+| twin-hubs, predicted+floor | 11.2s → 8.6s | 26.8s flat | **stable** |
+
+A single 35B cannot serve a twelve-node household's knowledge turns.
+That was always true; arm 0 concealed it by letting 62% of turns stay on
+4B laptops, and predicted-time concealed it harder. The floor does not
+cause the saturation — it *reveals* it, and on `heterogeneous-fleet`
+arm 0's own queue is already growing without any floor at all.
+
+**Three consequences, in descending order of how much they change the
+plan.**
+
+1. **§4.1's headline is not a quality-constant number.** "126–250% wrong
+   objective" compares a policy that answers hard turns from a 35B with
+   one that answers them from a 4B. On `twin-hubs` — the one fleet whose
+   top band has capacity, so the only place the comparison is honest —
+   arm0+floor is **31.0s** and predicted+floor is **32.6s**. At constant
+   quality the predicted-time objective is **~5% worse than the
+   product** on that fleet, not 200% better. One fleet is one data
+   point, and the suite has no second fleet with a capable, unsaturated
+   top band; building one is now the highest-value scenario work.
+   *(Built — see §4.1.2, which qualifies this consequence: the sign of
+   the constant-quality result turns out to depend on whether the top
+   band's members differ in speed.)*
+2. **The floor is free where the top band has capacity.** twin-hubs:
+   −2% versus arm 0 *and* every quality loss eliminated (declined
+   upgrades 76 → 0). Strictly better on both axes. So the floor is not
+   the thing that is expensive; a one-hub fleet is.
+3. **Predicted-time herds harder than the product once candidates are
+   homogeneous.** With the floor on twin-hubs, arm0+floor spreads
+   31/27/18 across three identical hubs while predicted+floor spreads
+   40/28/10. Identical hubs differ only by a *stale* gossiped queue
+   count, so the argmax is shared for a whole anti-entropy window —
+   F5 and F1 compounding, in the regime the floor creates. §4.2 step 2
+   (break the herd) is therefore a prerequisite for the floor, not a
+   follow-on.
+
+**Does a lying peer defeat it?** `size_gb` is self-reported, and it is
+the only input to a *quality* gate that a node states about itself — so
+`SimConfig::advertised_size_error` prices the flattery the way
+`advertised_rate_error` prices the rate card. Two-sided, and the
+adversarial direction is a small model over-selling into band 0:
+
+| size error | seeds (of 5) where a non-hub reached band 0 | downgrades | mean |
+|---|---|---|---|
+| ±0% | 0 | 0 | 506.3s |
+| ±25% | 0 | 0 | 506.3s |
+| ±50% | 0 | 0 | 506.3s |
+| ±100% | **1** | 0 | 442.1s |
+
+Robust up to ±50%, and the reason is arithmetic rather than luck: the
+hub is 3.5× the next model against a 2.0× band edge, so a lie has to
+move the *ratio* by 1.75× before it crosses. At ±100% it does, on one
+seed in five. Note the mean *falls* when it happens — an extra band-0
+node relieves the saturated hub, which is a second sighting of the
+capacity finding rather than a benefit of dishonesty. Downgrades stay
+**0** at every level: a mis-advertisement changes which band a node is
+in, and does not defeat the filter itself.
+
+**What this does not settle.** These are all *proxies*: the sim counts
+where capability went, never whether an answer was good. §5's landing
+gate remains a Tier-2 measurement the sim cannot supply. The proxies are
+worth something the latency table was not — `TierMetrics` is computed
+from `RoutingDecision` records alone, so **the identical function scores
+a production capture**, which is what lets a Tier-2 run be judged by the
+same ruler.
+
+### 4.1.2 What the objective is worth, on a second unsaturated fleet — MEASURED 2026-07-27
+
+> `scenario::mixed_hubs`, `Arm::PredictedTimeTierFloorTwoChoices`,
+> `tests/mesh_sim_scoreboard.rs::does_predicted_time_beat_the_product_where_the_top_band_has_capacity`
+> and `::does_breaking_the_herd_recover_what_the_floor_costs`. **§4.1.1
+> consequence 1 was n=1 in two ways at once — one fleet, one seed. Both
+> are now five seeds and two fleets, and the answer is conditional
+> rather than either headline.**
+
+`mixed-hubs` is the second fleet with a capable, unsaturated top band,
+and it is deliberately the *opposite bracket* to `twin-hubs`. Band 0 on
+`twin-hubs` is three **identical** hubs, so a predicted-time objective
+has nothing to discriminate on but a stale gossiped queue count — the
+condition most hostile to it. Band 0 on `mixed-hubs` is the same 35B on
+three different machines, **34 / 25 / 11 tok/s**: real speed variance,
+which is what predicting a completion time is *for*. Neither fleet
+settles the question alone; together they bracket it.
+
+Capacity is arithmetic, not hope — mean service ≈20s / 27s / 62s across
+the three, an aggregate ~0.10 turns/s against an offered knowledge load
+of ~0.035 turns/s, so even a policy that herds every turn onto the
+*fastest* hub runs it at ~70%. Both fleets end their runs less than one
+turn deep in queue, against 6.6 turns for `heterogeneous-fleet` and 38
+for `household` (§4.1.1). That ratio — final-quartile wait over service
+time — is the gate; the Q1→Q4 ratio §4.1.1 printed turns out to be only
+a screen, since it fires on any fleet loaded enough to build a queue at
+all.
+
+**The result, five seeds per fleet, both arms wearing the floor:**
+
+| fleet | band 0 | arm0+floor | predicted+floor | Δ | seeds predicted wins |
+|---|---|---|---|---|---|
+| twin-hubs | 3 × identical | 31.8s | 32.9s | **+3%** | 1/5 |
+| mixed-hubs | 34/25/11 tok/s | 28.1s | **25.7s** | **−8%** | **5/5** |
+
+So the objective's value is a function of whether the top band has
+speed variance, and §4.1.1's −5% was a property of the fleet that
+produced it. Five seeds also shrink that number: +3%, not +5%.
+
+**The mechanism is F3, and it is not the obvious one.** The natural
+reading of `mixed-hubs` is "predicted time avoids the 11 tok/s hub".
+It does not need to — *the product already avoids it*. Served-turn
+counts on band 0, one seed:
+
+| arm | hub-fast (34) | hub-mid (25) | hub-slow (11) |
+|---|---|---|---|
+| arm0+floor | 34 | 36 | **0** |
+| predicted+floor | **45** | 24 | 1 |
+
+`throughput_factor` scores the slow hub 11/20 = 0.55 and that is
+decisive, so none of the −8% comes from the visible gap. The loss is
+the product splitting ~50/50 between two hubs that differ by 36% in
+decode rate, because the clamp at 20 tok/s renders both exactly 1.0.
+Deleting the slow hub entirely (band 0 = 34/25/25, same seed, same
+arrivals, only that node's hardware changed) leaves predicted time
+ahead by 3% — the win survives deleting the gap the scorer can see.
+**F3 was catalogued as "does not discriminate under heterogeneity";
+this is F3 with a price attached, at constant quality.**
+
+**It is not the simulator flattering the objective.** The concern is
+real and specific: `predicted_time` consumes `pp_tok_s` / `tg_tok_s`,
+and this sim's service-time model is computed from those same two
+fields, so on a fleet built out of speed variance the objective starts
+with a perfect world model. `advertised_rate_error` prices it — nodes
+serve at their true rate and advertise a perturbed one:
+
+| rate error | arm0+floor | predicted+floor | Δ | seeds won |
+|---|---|---|---|---|
+| ±0% | 28.1s | 25.7s | −8% | 5/5 |
+| ±25% | 28.1s | 26.1s | −7% | 4/5 |
+| ±50% | 31.2s | 27.7s | −11% | 5/5 |
+| ±100% | 34.1s | 29.6s | −13% | 5/5 |
+
+The win widens, because the perturbation is two-sided and the product
+degrades faster. One asymmetry could have made that unfair — the
+product has an error-correcting path predicted time does not
+(`throughput_factor` prefers the observed decode EWMA past five
+samples; `PredictInputs::from_candidate` reads the advertised benchmark
+and nothing else) — so it is counted rather than argued: the observed
+path carries about **5%** of candidate scorings here, because most
+peers never reach five samples in half an hour. That is F7's ramp
+wearing a different hat, and it means both objectives read the same
+perturbed number in ~95% of decisions.
+
+**§4.2 step 2 is a prerequisite, and its qualifier is the load-bearing
+part.** §4.1.1 inferred the herding consequence from a distribution;
+`Arm::PredictedTimeTierFloorTwoChoices` measures it. The two fleets
+disagree, and the disagreement is the finding:
+
+| fleet | arm0+floor | predicted+floor | +two-choices | top-server share |
+|---|---|---|---|---|
+| twin-hubs | 31.8s | 32.9s (+3%) | **30.5s (−4%)** | 0.38 → 0.31 |
+| mixed-hubs | 28.1s | 25.7s (−8%) | **28.8s (+3%)** | 0.54 → 0.40 |
+
+Sampling recovers the whole herding loss where candidates are
+interchangeable — predicted time goes from worst arm to best — and
+destroys the whole win where they are not. A **blunt** power-of-two
+sampler is therefore a fleet-dependent coin flip, and §4.2 step 2's
+*"among candidates whose predictions are within noise"* is not a
+refinement of that sentence but the whole of it. Note also what makes
+the qualifier expressible at all: predicted times are in milliseconds,
+so "within noise" has units, where a dimensionless product has no scale
+on which two scores can be called close. §4.2 step 2 wants §4.1
+underneath it.
+
+**One instrument note.** `herding_cov` sat at 1.36–1.39 across every
+arm on both fleets while `top_server_share` moved 0.31 → 0.54. The
+policy change these tests exist to detect is invisible to the herding
+metric and obvious in the concentration one — a fourth entry for §6's
+list of scoreboard denominators that need interrogating before they are
+believed.
+
 ### 4.2 Three contained follow-ons, in order
 
 1. **Fresh backpressure.** Piggyback the serving node's true queue
@@ -666,7 +909,13 @@ same number as latency.
    to. Collapses F1's dead time for exactly the peers that matter.
 2. **Break the herd.** Sample two among candidates whose predictions
    are within noise, take the less loaded. Small change to the ranked
-   selector; largest tail improvement in §3.
+   selector; largest tail improvement in §3. **Promoted to a
+   prerequisite for §4.1's landing, not a follow-on** (§4.1.1
+   consequence 3, measured in §4.1.2). Implement the *within-noise*
+   restriction, never the blunt uniform draw: §4.1.2 measures the blunt
+   version recovering −4% on `twin-hubs` and giving back +3% on
+   `mixed-hubs`, which is a quality-neutral latency regression on any
+   fleet whose top band is not uniform.
 3. **Split congestion from failure.** One enum at the record site —
    `Congested { retry_after }` vs `Failed`. Congestion drives a
    short-half-life per-peer backoff; only failure touches
@@ -706,7 +955,9 @@ Scoreboard — this is what makes it a quality loop and not a test suite:
 | **isolation** | Δp95 on an interactive actor when a background actor starts |
 | **herding** | CoV of dispatch counts per gossip window; route-flip rate on identical consecutive requests |
 | **waste** | offloads where round-trip exceeded local service; 503-then-retry; quarantines of healthy nodes |
-| **hard invariants** | assertions, not scores: `LocalOnly` never crossed the wire; `Fast` never offloaded; no request served by a node lacking the claimed capability |
+| **capability** | `TierMetrics` (§4.1.1): **downgrade rate** — served in a weaker band than the origin's own local model, a real regression — and **declined-upgrade rate** — a stronger node was feasible and passed over. Everything else on this table is a cost; this is what was traded for it, and without it a policy that answers hard turns from a 4B reads as an improvement |
+| **saturation** | `queue_wait_ms` by dispatch quartile against a flat service time. Separates "this policy queues" from "this fleet is oversubscribed" — the distinction that decided §4.1.1, where the floor's 559s turned out to be a capacity fact no scheduler can fix |
+| **hard invariants** | assertions, not scores: `LocalOnly` never crossed the wire; `Fast` never offloaded; no request served by a node lacking the claimed capability (the third had no implementation until capability became a banded, recorded property — it is now `TierMetrics::downgrades == 0` under a binding floor, guarded by an `unbanded_decisions == 0` check so it can never pass vacuously) |
 
 ### Tier 2 — `household-bench` (real hardware, plateaus)
 
@@ -944,7 +1195,9 @@ The fourth is the §4.1 candidate itself.
 | `WarmStart` | does F7's self-locking ramp *cost* anything? | Yes, and with the opposite sign to the one the finding implies: removing the penalty is **+235% mean latency**. See F7. |
 | `FreshWarmStart` | is that damage F1's fault? | **No** — the penalty is *larger* under fresh signals (+264%). The offloads lose on their own merits, so the 0.7 floor is compensating for an over-eager objective, not for staleness. This is the arm that stopped a wrong causal claim reaching this doc. |
 | `OutboundOnlyLoad` | would it matter if the gossiped in-flight counter missed inbound peer work? | Yes — **+126% to +584%** mean latency, under-reporting the signal by 67–93%. The two-daemon audit is earned. See F2. |
-| `PredictedTime` | how much of the oracle gap is a **wrong objective** rather than **imperfect information**? | Overwhelmingly the objective: +126%/+200%/+250% against +4.7%/+1.8%/−0.0%. Survives a ±2× mis-rated fleet and up to ~63s of model-load time. **But it routes knowledge turns to 4B laptops**, so it cannot land without a tier floor. Full result in §4.1. |
+| `PredictedTime` | how much of the oracle gap is a **wrong objective** rather than **imperfect information**? | Overwhelmingly the objective: +126%/+200%/+250% against +4.7%/+1.8%/−0.0%. Survives a ±2× mis-rated fleet and up to ~63s of model-load time. **But it routes knowledge turns to 4B laptops**, so it cannot land without a tier floor. Full result in §4.1 — and read §4.1.1 before quoting those percentages, which are not quality-constant. |
+| `TierFloor` | what does requiring the top capability band cost, on its own, before any objective change? | Nothing where the top band has capacity (twin-hubs 33.3s → **31.0s**); everything where it does not (household 25.7s → **559.5s**, one hub). §4.1.1. |
+| `PredictedTimeTierFloor` | how much of §4.1's win survives being made to respect capability? | On the one fleet whose top band is not saturated, **none of it** — arm0+floor 31.0s vs predicted+floor 32.6s, i.e. the objective is ~5% *worse* at constant quality. Every quality loss is eliminated (76 declined upgrades → 0). This is the arm that stopped §4.1 landing on a number that was not measuring what it claimed. |
 | `PredictedTimeOutboundOnly` | does F2's mis-attributed load hurt the new objective more than the product? | **Conditionally, and the condition is the finding**: +0.4%/+0.2% where it offloads 30%/12% of traffic, but **+627% vs the product's +584%** where it offloads 70%. Exposure tracks offload share — the near-immunity is not robustness. §4.1 point 5. |
 
 They all follow one pattern worth naming, because it generalises: **a
@@ -972,7 +1225,7 @@ so before anyone quotes the number.
 
 | # | Step | Exit criterion |
 |---|---|---|
-| 1 | §4.1 predicted-time ranking — **arm done, landing blocked on the tier floor** | ~~efficiency ratio improves~~ (done: 0.29–0.42 → 0.85–0.90 on a mis-rated fleet, 0.95–1.00 on a perfect one). Remaining, and re-scoped by what the arm found: a **tier floor as a separate explicit input**, plus a quality gate — the arm routes knowledge turns to 4B laptops and no §5 metric can see that. Then `ci-bench` core flat; glassbox trace states a predicted time per candidate; an **objective tag on `RoutingDecision`** so replay can pick the right policy |
+| 1 | §4.1 predicted-time ranking — **arm done, tier floor done, landing NOT cleared** | ~~efficiency ratio improves~~ and ~~tier floor as a separate explicit input~~ (both done — §4.1.1). What the floor found re-scopes the rest: at constant quality the objective is **~5% worse than the product** on the only fleet whose top band is not saturated, so the landing case has to be rebuilt rather than finished. Prerequisites now, in order: **(a)** a scenario with a capable, *unsaturated* top band — the suite has exactly one and n=1 decides nothing; **(b)** §4.2 step 2 (break the herd) — predicted-time herds *harder* than the product once the floor makes candidates homogeneous; **(c)** the Tier-2 answer-quality gate the sim still cannot supply; **(d)** an **objective tag on `RoutingDecision`** so replay can pick the right policy |
 | 2 | Fresh backpressure — **demoted** | Against the product objective F1 looked like the median's main cost. Against a *correct* objective it is worth 1.8–4.7% on three fleets and +43.8% on `isolation` alone, so this is now scoped to sustained contention. Exit unchanged: the median gap between the `as-is` and `fresh` arms closes |
 | 3 | Two-choices sampling | herding CoV and p95 improve; the completed-count trade-off is reported, not hidden |
 | 4 | Congestion ≠ failure + honour `Retry-After` | quarantines-of-healthy-nodes goes to zero under a shed scenario |

@@ -288,6 +288,24 @@ pub struct CandidateRecord {
     pub selected: bool,
     pub score: ScoreRecord,
     pub inputs: CandidateInputs,
+    /// Capability band this candidate fell in, `0` = the most capable
+    /// models visible in this decision (`crate::tier`). `None` means
+    /// the candidate advertised no size and could not be banded — which
+    /// a binding [`TierFloor`](crate::tier::TierFloor) treats as
+    /// failing the floor.
+    ///
+    /// Recorded rather than left to be recomputed because the tier
+    /// floor *consumes* it: §4.1's own rule is that an objective may
+    /// not read a signal the record does not carry, or a capture stops
+    /// being replayable for that term. Bands are a property of the
+    /// candidate *set*, so this is stamped after every candidate is
+    /// pushed — see [`DecisionBuilder::assign_tier_bands`].
+    ///
+    /// `serde(default)` so captures written before the tier floor
+    /// existed deserialise unchanged and replay reproduces their old
+    /// verdicts exactly.
+    #[serde(default)]
+    pub tier_band: Option<u32>,
 }
 
 /// A serialisable mirror of `ScoreBreakdown`. Mirrored rather than
@@ -911,8 +929,32 @@ impl DecisionBuilder {
         &self.decision_id
     }
 
-    pub fn push_candidate(&mut self, c: CandidateRecord) {
+    /// Record a scored candidate. Returns its index, so a caller that
+    /// needs to come back and stamp a set-wide property (the tier
+    /// band) can address it without re-deriving the push order.
+    pub fn push_candidate(&mut self, c: CandidateRecord) -> usize {
         self.candidates.push(c);
+        self.candidates.len() - 1
+    }
+
+    /// Partition the candidates pushed so far into capability bands and
+    /// stamp each record's `tier_band`, returning the bands
+    /// index-parallel to [`Self::push_candidate`]'s indices.
+    ///
+    /// Bands are computed from the builder's own records rather than
+    /// from a list the caller assembles in parallel, so the persisted
+    /// band is *by construction* the same partition the filter used.
+    /// The alternative — caller-built sizes plus a caller-built stamp —
+    /// is two orderings that can drift, and a drift here would be
+    /// invisible: the record would explain a decision the decider did
+    /// not take.
+    pub fn assign_tier_bands(&mut self) -> Vec<Option<u32>> {
+        let sizes: Vec<Option<f32>> = self.candidates.iter().map(|c| c.size_gb).collect();
+        let bands = crate::tier::bands(&sizes);
+        for (c, band) in self.candidates.iter_mut().zip(&bands) {
+            c.tier_band = *band;
+        }
+        bands
     }
 
     pub fn exclude(&mut self, name: &str, node_id: Option<String>, reason: ExclusionReason) {
@@ -1104,6 +1146,7 @@ mod tests {
                 &NodeObservations::default(),
                 LoadSource::Local,
             ),
+            tier_band: None,
         }
     }
 

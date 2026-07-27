@@ -135,6 +135,173 @@ fn assert_hard_invariants(reports: &[RunReport], scores: &[ArmScore]) {
             score.records.shed, 0,
             "{arm}: something shed, but no admission gate is enabled (F4's caveat)"
         );
+
+        // §5's third hard invariant — "no request served by a node
+        // lacking the claimed capability" — which had no
+        // implementation until capability became a banded, recorded
+        // property (`crate::tier`). It binds only where a floor is
+        // declared, so it is asserted per arm rather than fleet-wide.
+        if matches!(
+            report.arm,
+            Arm::TierFloor | Arm::PredictedTimeTierFloor | Arm::PredictedTimeTierFloorTwoChoices
+        ) {
+            // A silent shortfall would satisfy the assertion below for
+            // the wrong reason: nothing can be served below its band if
+            // nothing has a band. Every simulated node advertises a
+            // size, so this must be zero, and it is checked first so a
+            // green invariant is never a vacuous one.
+            assert_eq!(
+                score.tier.unbanded_decisions, 0,
+                "{arm}: {} decisions had no banded candidate — the tier invariant below \
+                 would pass vacuously",
+                score.tier.unbanded_decisions
+            );
+            assert_eq!(
+                score.tier.downgrades, 0,
+                "{arm}: {} turns were served in a WEAKER band than the origin's own local \
+                 model despite a binding tier floor — the filter is not doing what the \
+                 arm's latency numbers claim",
+                score.tier.downgrades
+            );
+        }
+    }
+}
+
+/// Is the latency an arm produces **queueing or serving** — and is the
+/// queue stable or growing?
+///
+/// The discriminator that keeps "the tier floor is slow" from being a
+/// conclusion instead of an observation. `queue_wait_ms` already
+/// separates "the node was busy" from "the node was slower"; splitting
+/// it by dispatch quartile adds the second half: a stable queue holds
+/// roughly flat across the run, an **oversubscribed** one climbs
+/// monotonically because arrivals outpace service and the backlog
+/// never drains. The first is a scheduling result. The second is a
+/// capacity fact about the fleet, and no scheduler can fix it.
+fn print_saturation(report: &RunReport) {
+    let Some(s) = saturation(report) else {
+        return;
+    };
+    println!(
+        "      {:<26} queue wait Q1 {:>6.1}s → Q4 {:>6.1}s   (service {:.1}s flat)  {}",
+        report.arm.label(),
+        s.q1_wait_s,
+        s.q4_wait_s,
+        s.service_s,
+        if s.growing() {
+            "← QUEUE GROWING: offered load exceeds capacity"
+        } else {
+            "← queue stable"
+        }
+    );
+}
+
+/// The numbers behind [`print_saturation`], for a caller that needs to
+/// assert on them rather than read them.
+struct Saturation {
+    q1_wait_s: f64,
+    q4_wait_s: f64,
+    service_s: f64,
+}
+
+impl Saturation {
+    /// The discriminator [`print_saturation`] has always printed: a
+    /// backlog that never drains shows up as the last quartile waiting
+    /// several times longer than the first.
+    ///
+    /// It is a *screen*, not a gate. The first quartile of a run that
+    /// starts with every queue empty is always flattering, so the ratio
+    /// fires on any fleet loaded enough to build a queue at all — which
+    /// is most of them. Use [`backlog_depth`](Self::backlog_depth) when
+    /// something has to be decided on the answer.
+    fn growing(&self) -> bool {
+        self.q4_wait_s > 3.0 * self.q1_wait_s.max(0.1)
+    }
+
+    /// How many whole turns deep the queue is by the end of the run —
+    /// final-quartile wait expressed in units of this fleet's own
+    /// service time.
+    ///
+    /// This is the scale-free version of the question, and it separates
+    /// the §4.1.1 fleets cleanly where the ratio does not:
+    /// household+floor waits 1020s against 26.8s of service (**38 turns
+    /// deep**, and climbing), heterogeneous+floor 182s against 27.5s
+    /// (**6.6**), twin-hubs+floor 8.6s against 26.8s (**0.32** — less
+    /// than one turn). A queue that is a fraction of a job deep at the
+    /// end of a run is a scheduling result; one that is dozens deep is
+    /// a fleet that cannot serve its load.
+    fn backlog_depth(&self) -> f64 {
+        self.q4_wait_s / self.service_s.max(0.001)
+    }
+}
+
+fn saturation(report: &RunReport) -> Option<Saturation> {
+    let mut facts: Vec<&sovereign_mesh::mesh_sim::ServedFact> = report
+        .truth
+        .iter()
+        .filter(|f| f.class == RequestClass::Knowledge)
+        .collect();
+    if facts.is_empty() {
+        return None;
+    }
+    facts.sort_by_key(|f| f.dispatched_at_ms);
+    let q = facts.len() / 4;
+    let mean_wait = |slice: &[&sovereign_mesh::mesh_sim::ServedFact]| -> f64 {
+        if slice.is_empty() {
+            return 0.0;
+        }
+        slice.iter().map(|f| f.queue_wait_ms as f64).sum::<f64>() / slice.len() as f64 / 1000.0
+    };
+    let mean_service = |slice: &[&sovereign_mesh::mesh_sim::ServedFact]| -> f64 {
+        if slice.is_empty() {
+            return 0.0;
+        }
+        slice
+            .iter()
+            .map(|f| (f.total_ms.saturating_sub(f.queue_wait_ms)) as f64)
+            .sum::<f64>()
+            / slice.len() as f64
+            / 1000.0
+    };
+    let first = &facts[..q.max(1)];
+    let last = &facts[facts.len() - q.max(1)..];
+    Some(Saturation {
+        q1_wait_s: mean_wait(first),
+        q4_wait_s: mean_wait(last),
+        service_s: mean_service(&facts),
+    })
+}
+
+/// Print the capability columns for a named subset of arms.
+fn print_tier_block(scores: &[ArmScore], arms: &[Arm]) {
+    println!("── capability (§4.1 tier floor) ──");
+    for arm in arms {
+        let Some(s) = scores.iter().find(|s| s.arm == *arm) else {
+            continue;
+        };
+        let t = &s.tier;
+        println!(
+            "  {:<28} p50 {:>5.1}s  mean {:>5.1}s  eff {:>4}  down {:>3.0}%  declUp {:>3.0}%  \
+             off {:>3.0}%  servedBand {:.2}",
+            arm.label(),
+            s.records.p50_total_ms / 1000.0,
+            s.truth.mean_total_ms / 1000.0,
+            s.efficiency_ratio
+                .map(|e| format!("{e:.2}"))
+                .unwrap_or_else(|| "—".into()),
+            100.0 * t.downgrade_rate(),
+            100.0 * t.declined_upgrade_rate(),
+            100.0 * s.records.offloaded as f64 / s.records.decisions.max(1) as f64,
+            t.mean_served_band,
+        );
+        let mut served: Vec<(&String, &usize)> = s.records.served_by.iter().collect();
+        served.sort_by(|a, b| b.1.cmp(a.1));
+        let top: Vec<String> = served
+            .iter()
+            .take(4)
+            .map(|(name, n)| format!("{name}×{n}"))
+            .collect();
+        println!("      served by: {}", top.join("  "));
     }
 }
 
@@ -1155,4 +1322,582 @@ fn runs_are_bit_reproducible() {
         };
         assert_eq!(key(&a), key(&b), "{} is not reproducible", arm.label());
     }
+}
+
+/// **§4.1's landing gate: what does respecting capability cost?**
+///
+/// `Arm::PredictedTime` measured a large latency win and, in the same
+/// run, exposed why it could not ship: ranking on time alone prefers
+/// whichever node answers soonest, and on every fleet here that is a
+/// small fast model. Nothing on §5's scoreboard could see it — latency,
+/// fairness and waste all read the choice as an improvement.
+///
+/// So this test does two things the arm alone could not:
+///
+///   1. **Makes the damage a number.** `declUp%` is the share of turns
+///      that passed over a strictly more capable feasible node. It is
+///      the finding, counted rather than described.
+///   2. **Prices the fix.** `predicted-time+tier-floor` is §4.1 made to
+///      respect capability. The question is not whether it is faster —
+///      it will not be. It is how much of the win survives.
+///
+/// Reported, not asserted, apart from the structural claims: nobody has
+/// agreed a latency threshold for the trade, and asserting one would
+/// invent the very fudge §4.1 exists to remove.
+#[test]
+fn the_tier_floor_prices_capability_against_latency() {
+    let arms = [
+        Arm::AsImplemented,
+        Arm::TierFloor,
+        Arm::PredictedTime,
+        Arm::PredictedTimeTierFloor,
+        Arm::Oracle,
+    ];
+
+    for scenario in [
+        scenario::household_evening_12(SEED),
+        scenario::twin_hubs(SEED),
+        scenario::heterogeneous_fleet(SEED),
+    ] {
+        let (reports, scores) = sweep(&scenario);
+        assert_hard_invariants(&reports, &scores);
+        println!("\n=== {} ===", scenario.name);
+        print_tier_block(&scores, &arms);
+
+        // Whether the floor's latency is a scheduling result or a
+        // capacity fact. Asserting nothing — reading it is the point.
+        println!("── is the latency queueing, and is the queue stable? ──");
+        for arm in [Arm::AsImplemented, Arm::PredictedTime, Arm::PredictedTimeTierFloor] {
+            if let Some(r) = reports.iter().find(|r| r.arm == arm) {
+                print_saturation(r);
+            }
+        }
+
+        let pick = |arm: Arm| {
+            scores
+                .iter()
+                .find(|s| s.arm == arm)
+                .unwrap_or_else(|| panic!("{} was not run", arm.label()))
+        };
+        let arm0 = pick(Arm::AsImplemented);
+        let pred = pick(Arm::PredictedTime);
+        let floor = pick(Arm::PredictedTimeTierFloor);
+
+        let price = |a: &ArmScore, b: &ArmScore| {
+            100.0 * (b.truth.mean_total_ms - a.truth.mean_total_ms) / a.truth.mean_total_ms.max(1.0)
+        };
+        println!(
+            "  §4.1 win vs arm 0: {:+.0}%   ·   what the floor costs §4.1: {:+.0}%   ·   \
+             floor vs arm 0: {:+.0}%",
+            price(arm0, pred),
+            price(pred, floor),
+            price(arm0, floor),
+        );
+        println!(
+            "  quality traded: predicted-time declined {} upgrades ({:.0}%); with the floor, {} ({:.0}%)",
+            pred.tier.declined_upgrades,
+            100.0 * pred.tier.declined_upgrade_rate(),
+            floor.tier.declined_upgrades,
+            100.0 * floor.tier.declined_upgrade_rate(),
+        );
+
+        // The floor's whole promise, and the only thing strong enough
+        // to assert: with it, no turn is served below the best band
+        // that was available to it. Both counts, so a zero in one
+        // cannot hide a non-zero in the other.
+        assert_eq!(
+            floor.tier.downgrades, 0,
+            "{}: tier floor still allowed a downgrade",
+            scenario.name
+        );
+        assert_eq!(
+            floor.tier.declined_upgrades, 0,
+            "{}: tier floor still allowed {} declined upgrades — a binding floor admits \
+             only band 0, so anything served below it means the filter did not run",
+            scenario.name,
+            floor.tier.declined_upgrades
+        );
+        // And the baseline it is measured against must be untouched by
+        // any of it. If adding the floor arms moved arm 0, every
+        // recorded number in §3/§4.1 is invalidated and the comparison
+        // above is meaningless.
+        assert!(
+            arm0.tier.banded_decisions > 0,
+            "{}: arm 0 recorded no banded decisions — the fleet advertises no sizes and \
+             the tier columns are vacuous",
+            scenario.name
+        );
+    }
+}
+
+/// **§4.1.1 consequence 1, with the sample it lacked.**
+///
+/// The one result that changed the plan was a *constant-quality*
+/// comparison: put the tier floor on both arms, so both answer from
+/// band 0, and ask whether ranking on predicted time still beats
+/// ranking on the product. §4.1.1 could only run that comparison on
+/// `twin-hubs`, because it was the suite's only fleet whose top band
+/// could absorb the offered load — everywhere else the floor's latency
+/// is a queue that never drains, and two schedulers inside an unbounded
+/// queue are both just measuring the fleet's capacity. One fleet, one
+/// seed, and a −5% headline that contradicted §4.1's +126–250%.
+///
+/// This widens the sample on both axes that were n=1:
+///
+///   - **Seeds.** Five, per fleet, world and policy both re-seeded.
+///   - **Fleets.** `mixed-hubs` joins it, and it is deliberately the
+///     *opposite* bracket. `twin-hubs` band 0 is three identical hubs,
+///     so predicted time has nothing to discriminate on but a stale
+///     queue count — the condition most hostile to it. `mixed-hubs`
+///     band 0 spans 34 / 25 / 11 tok/s, which is what predicting a
+///     completion time is *for*. If the objective loses on both, the
+///     −5% was not an artifact of homogeneity. If it wins on one, the
+///     honest answer is "it depends on the fleet", and that is a
+///     different plan than either headline implies.
+///
+/// The precondition is asserted rather than assumed, because it is the
+/// only thing that makes the comparison mean anything: both fleets must
+/// still be *unsaturated* under the floor, or this test silently
+/// becomes another capacity measurement. Everything else is reported.
+#[test]
+fn does_predicted_time_beat_the_product_where_the_top_band_has_capacity() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let fleets: [(&str, fn(u64) -> Scenario); 2] = [
+        ("twin-hubs", scenario::twin_hubs),
+        ("mixed-hubs", scenario::mixed_hubs),
+    ];
+
+    for (label, build) in fleets {
+        println!("\n=== {label} — constant quality (both arms wear the tier floor) ===");
+        println!(
+            "  {:<8} {:>18} {:>22} {:>9}  {}",
+            "seed", "arm0+floor mean/p95", "predicted+floor mean/p95", "Δ mean", "top-server share"
+        );
+        let mut base_means = Vec::new();
+        let mut pred_means = Vec::new();
+        let mut pred_wins = 0;
+        for seed in seeds {
+            let s = build(seed);
+            let base_report = run(&s, Arm::TierFloor, seed);
+            let pred_report = run(&s, Arm::PredictedTimeTierFloor, seed);
+            let base = score(&base_report, GOSSIP_WINDOW_MS, None);
+            let pred = score(&pred_report, GOSSIP_WINDOW_MS, None);
+
+            // Constant quality is the premise, not a hope: if either
+            // arm served a turn below the best band available to it,
+            // the latency columns below are comparing two different
+            // products and the whole test is void.
+            for (arm, sc) in [("arm0+floor", &base), ("predicted+floor", &pred)] {
+                assert_eq!(
+                    (sc.tier.downgrades, sc.tier.declined_upgrades),
+                    (0, 0),
+                    "{label}/{seed}: {arm} traded quality ({} downgrades, {} declined \
+                     upgrades) — the constant-quality comparison below is void",
+                    sc.tier.downgrades,
+                    sc.tier.declined_upgrades
+                );
+            }
+
+            // The property the fleet exists to provide. Asserted for
+            // the same reason: an unbounded queue makes both arms
+            // measure capacity instead of policy. Three turns is a
+            // deliberately loose gate — the fleets §4.1.1 called
+            // saturated sit at 6.6 and 38, these two at well under 1 —
+            // so it fails on the thing it is watching for and not on
+            // the ordinary queueing a loaded fleet does.
+            let mut depths = Vec::new();
+            for (arm, report) in [("arm0+floor", &base_report), ("predicted+floor", &pred_report)] {
+                let Some(sat) = saturation(report) else {
+                    continue;
+                };
+                depths.push(sat.backlog_depth());
+                assert!(
+                    sat.backlog_depth() < 3.0,
+                    "{label}/{seed}: {arm} ended the run {:.1} turns deep in queue \
+                     (wait {:.1}s → {:.1}s against {:.1}s of service) — this fleet's top band \
+                     is saturated under the floor, so it cannot host a constant-quality \
+                     comparison of schedulers",
+                    sat.backlog_depth(),
+                    sat.q1_wait_s,
+                    sat.q4_wait_s,
+                    sat.service_s
+                );
+            }
+
+            let b = base.truth.mean_total_ms / 1000.0;
+            let p = pred.truth.mean_total_ms / 1000.0;
+            base_means.push(b);
+            pred_means.push(p);
+            if p < b {
+                pred_wins += 1;
+            }
+            println!(
+                "  {:<8} {:>10.1}s {:>6.1}s {:>14.1}s {:>6.1}s {:>+8.0}%   {:.2} → {:.2}   \
+                 backlog {}",
+                seed % 1000,
+                b,
+                base.records.p95_total_ms / 1000.0,
+                p,
+                pred.records.p95_total_ms / 1000.0,
+                100.0 * (p - b) / b.max(0.001),
+                base.records.top_server_share,
+                pred.records.top_server_share,
+                depths
+                    .iter()
+                    .map(|d| format!("{d:.2}"))
+                    .collect::<Vec<_>>()
+                    .join(" → "),
+            );
+        }
+        let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len() as f64;
+        let (b, p) = (mean(&base_means), mean(&pred_means));
+        println!(
+            "  ── {label}: predicted-time is {:+.0}% vs the product at constant quality \
+             ({:.1}s → {:.1}s), winning {}/{} seeds",
+            100.0 * (p - b) / b.max(0.001),
+            b,
+            p,
+            pred_wins,
+            seeds.len()
+        );
+
+        // Where the work actually went, on one seed. A latency delta
+        // without this is a number without a mechanism.
+        let s = build(SEED);
+        for (arm_label, arm) in [("arm0+floor", Arm::TierFloor), ("pred+floor", Arm::PredictedTimeTierFloor)] {
+            let sc = score(&run(&s, arm, SEED), GOSSIP_WINDOW_MS, None);
+            let mut by: Vec<(&String, &usize)> = sc.records.served_by.iter().collect();
+            by.sort_by(|a, b| b.1.cmp(a.1));
+            let cols: Vec<String> = by.iter().map(|(n, c)| format!("{n}×{c}")).collect();
+            println!("     {arm_label:<12} {}", cols.join("  "));
+        }
+    }
+
+    // **Which half of the fleet's heterogeneity is doing the work?**
+    //
+    // `mixed-hubs` band 0 contains two different gaps: 11 tok/s vs the
+    // rest, which the product *can* see (11/20 scores 0.55), and 34
+    // vs 25 tok/s, which it cannot (`throughput_factor` clamps both to
+    // 1.0). If predicted-time's win survives deleting the first gap,
+    // the mechanism is the clamp — F3 costing real latency — and not
+    // merely "one node was obviously bad".
+    //
+    // The counterfactual is exact: same seed, same arrival stream, same
+    // sizes and therefore the same bands. Only `hub-slow`'s hardware
+    // changes, and arrival generation reads neither field.
+    println!("\n=== mixed-hubs with the slow hub deleted (34/25/25 — every gap invisible to the scorer) ===");
+    let mut no_slow = scenario::mixed_hubs(SEED);
+    let mid = no_slow.nodes[1].hardware;
+    no_slow.nodes[2].hardware = mid;
+    no_slow.name = "mixed-hubs-no-slow".into();
+    let with_slow = scenario::mixed_hubs(SEED);
+    assert_eq!(
+        no_slow.arrivals.len(),
+        with_slow.arrivals.len(),
+        "changing a node's hardware must not change the arrival stream"
+    );
+    for (fleet_label, fleet) in [("34/25/11", &with_slow), ("34/25/25", &no_slow)] {
+        let base = score(&run(fleet, Arm::TierFloor, SEED), GOSSIP_WINDOW_MS, None);
+        let pred = score(
+            &run(fleet, Arm::PredictedTimeTierFloor, SEED),
+            GOSSIP_WINDOW_MS,
+            None,
+        );
+        let (b, p) = (
+            base.truth.mean_total_ms / 1000.0,
+            pred.truth.mean_total_ms / 1000.0,
+        );
+        println!(
+            "  band 0 = {fleet_label}   arm0+floor {:>5.1}s   predicted+floor {:>5.1}s   \
+             Δ {:+.0}%",
+            b,
+            p,
+            100.0 * (p - b) / b.max(0.001)
+        );
+    }
+
+    // **The flattering assumption underneath all of it.**
+    //
+    // `Arm::PredictedTime`'s own doc bounds what may be claimed from
+    // it: the objective consumes `pp_tok_s` / `tg_tok_s` directly, and
+    // this module's service-time model is computed from those same two
+    // fields. On a fleet built out of *speed variance*, that is not a
+    // small caveat — it hands the objective a perfect model of the
+    // world it is predicting, which is exactly the advantage being
+    // measured. A win that only exists at zero rate-card error is a
+    // property of the simulator, not of the objective.
+    //
+    // `advertised_rate_error` is the instrument that already exists for
+    // this: nodes still *serve* at their true rate, they only advertise
+    // a perturbed one. It is two-sided, so it degrades the product's
+    // `throughput_factor` too — the comparison stays fair.
+    //
+    // One asymmetry could have broken that fairness, so it is counted
+    // rather than argued. The product has an error-correcting path the
+    // predicted time does not: `throughput_factor` switches to the
+    // *observed* decode EWMA past five samples, while
+    // `PredictInputs::from_candidate` reads `bench_tg_tok_s` and
+    // nothing else. If that path were hot, the sweep would be
+    // handicapping only one arm. The printed share says it is not —
+    // about 5% of candidate scorings, because most peers never
+    // accumulate five samples in half an hour, which is F7's ramp
+    // wearing a different hat. Both objectives are therefore reading
+    // the same perturbed number in ~95% of decisions.
+    println!("\n=== mixed-hubs: how much of the win survives a wrong rate card? ===");
+    println!("   (both arms wear the floor; nodes serve at the true rate, advertise a perturbed one)");
+    for err in [0.0_f32, 0.25, 0.5, 1.0] {
+        let mut base_means = Vec::new();
+        let mut pred_means = Vec::new();
+        let mut pred_wins = 0;
+        let mut observed = 0usize;
+        let mut estimated = 0usize;
+        for seed in seeds {
+            let s = scenario::mixed_hubs(seed);
+            let cfg = SimConfig {
+                advertised_rate_error: err,
+                ..SimConfig::default()
+            };
+            let base_report = run_with(&s, Arm::TierFloor, seed, cfg.clone());
+            // Which rate did the *product* actually score on? It is the
+            // only one of the two objectives with an error-correcting
+            // path — `throughput_factor` prefers the observed EWMA past
+            // five samples, where `predicted_time` reads
+            // `bench_tg_tok_s` and nothing else. Whether that path was
+            // hot decides how the rows below may be read.
+            for ev in &base_report.records {
+                if let sovereign_mesh::decision_log::DecisionEvent::Decision(d) = ev {
+                    for c in &d.candidates {
+                        match c.score.throughput_source.as_str() {
+                            "observed" => observed += 1,
+                            "benchmark_estimate" => estimated += 1,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            let b = score(&base_report, GOSSIP_WINDOW_MS, None)
+                .truth
+                .mean_total_ms
+                / 1000.0;
+            let p = score(
+                &run_with(&s, Arm::PredictedTimeTierFloor, seed, cfg),
+                GOSSIP_WINDOW_MS,
+                None,
+            )
+            .truth
+            .mean_total_ms
+                / 1000.0;
+            if p < b {
+                pred_wins += 1;
+            }
+            base_means.push(b);
+            pred_means.push(p);
+        }
+        let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len() as f64;
+        let (b, p) = (mean(&base_means), mean(&pred_means));
+        println!(
+            "  rate error ±{:>4.0}%   arm0+floor {:>5.1}s   predicted+floor {:>5.1}s   \
+             Δ {:+.0}%   predicted wins {}/{} seeds   (product scored on observed rate \
+             {:.0}% of the time)",
+            100.0 * err,
+            b,
+            p,
+            100.0 * (p - b) / b.max(0.001),
+            pred_wins,
+            seeds.len(),
+            100.0 * observed as f64 / (observed + estimated).max(1) as f64,
+        );
+    }
+}
+
+/// **Is breaking the herd the prerequisite §4.1.1 said it was?**
+///
+/// §4.1.1's third consequence was that predicted time *concentrates*
+/// harder than the product once the floor makes candidates homogeneous
+/// — 40/28/10 across three identical hubs against the product's
+/// 31/27/18 — and concluded that §4.2 step 2 is a prerequisite for the
+/// floor rather than a follow-on. That was a mechanism inferred from a
+/// distribution. This measures it, by putting the sampler the sim has
+/// had since S0 in front of the §4.1 landing candidate.
+///
+/// The two unsaturated fleets should disagree, and the disagreement is
+/// the finding:
+///
+///   - `twin-hubs` — band 0 is three identical hubs, so a uniform draw
+///     over the ranked list *is* a draw over near-ties. Sampling can
+///     only help, and how much it helps is the price of the herd.
+///   - `mixed-hubs` — band 0 spans 34 / 25 / 11 tok/s, so a uniform
+///     draw discards the information the objective exists to use.
+///
+/// If both improve, §4.2 step 2 can ship as written and blunt. If
+/// `mixed-hubs` regresses, the "within noise" qualifier in §4.2 step 2
+/// is the load-bearing part of that sentence and a blunt sampler is a
+/// quality-neutral latency regression waiting to happen.
+///
+/// Reported, not asserted, other than the floor's own invariant: the
+/// trade between a fleet-mean and a tail has no agreed threshold.
+#[test]
+fn does_breaking_the_herd_recover_what_the_floor_costs() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let fleets: [(&str, fn(u64) -> Scenario); 2] = [
+        ("twin-hubs", scenario::twin_hubs),
+        ("mixed-hubs", scenario::mixed_hubs),
+    ];
+    let arms = [
+        Arm::TierFloor,
+        Arm::PredictedTimeTierFloor,
+        Arm::PredictedTimeTierFloorTwoChoices,
+    ];
+
+    for (label, build) in fleets {
+        println!("\n=== {label} — does sampling break the herd, and what does it cost? ===");
+        let mut baseline = None;
+        for arm in arms {
+            let (mut means, mut p95s, mut shares, mut covs) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for seed in seeds {
+                let s = build(seed);
+                let report = run(&s, arm, seed);
+                let sc = score(&report, GOSSIP_WINDOW_MS, None);
+                // The floor still has to hold, or the arm is buying its
+                // latency with the quality the floor exists to protect.
+                assert_eq!(
+                    (sc.tier.downgrades, sc.tier.declined_upgrades),
+                    (0, 0),
+                    "{label}/{seed}/{}: sampling escaped the tier floor",
+                    arm.label()
+                );
+                means.push(sc.truth.mean_total_ms / 1000.0);
+                p95s.push(sc.records.p95_total_ms / 1000.0);
+                shares.push(sc.records.top_server_share);
+                if let Some(cov) = sc.records.herding_cov {
+                    covs.push(cov);
+                }
+            }
+            let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len().max(1) as f64;
+            let m = mean(&means);
+            let base = *baseline.get_or_insert(m);
+            println!(
+                "  {:<40} mean {:>5.1}s  p95 {:>5.1}s  top-server {:.2}  herding CoV {:.2}   \
+                 {:+.0}% vs arm0+floor",
+                arm.label(),
+                m,
+                mean(&p95s),
+                mean(&shares),
+                mean(&covs),
+                100.0 * (m - base) / base.max(0.001),
+            );
+        }
+    }
+}
+
+/// **The tier floor's flattering assumption, priced.**
+///
+/// `size_gb` is peer-advertised, and it is the *only* input to a
+/// quality gate that a node states about itself. `advertised_rate_error`
+/// exists because a rate card built from the same `Hardware` the sim
+/// serves at is exact truth by construction; the same objection applies
+/// here, and the same instrument answers it.
+///
+/// The adversarial direction is a small model over-selling its way into
+/// the top band — which is exactly how a 4B would come to serve
+/// synthesis despite the floor. Nothing here scores or serves
+/// differently, so any movement is the floor mis-banding somebody and
+/// nothing else.
+///
+/// Reported, not asserted, apart from the knob's own wiring: what
+/// counts as an acceptable mis-banding rate is a policy question nobody
+/// has answered yet.
+#[test]
+fn what_a_dishonest_size_advertisement_does_to_the_tier_floor() {
+    use sovereign_mesh::decision_log::DecisionEvent;
+
+    // Band 0 membership is what the floor reads; everything below it is
+    // scenery. Reported per seed because whether a lie crosses a band
+    // edge depends on which way each node's draw went, and one seed
+    // would report an accident as a property.
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    println!("\n── tier floor under mis-advertised size (household-evening-12) ──");
+    println!("   the floor reads band 0 only. hub 21.0 GB is 3.5x the next model,");
+    println!("   and the band edge is 2.0x — so a lie must move the RATIO by 1.75x to matter.");
+    for err in [0.0_f32, 0.25, 0.5, 1.0] {
+        let mut intruded = 0;
+        let mut downgrades = 0;
+        let mut means = Vec::new();
+        for seed in seeds {
+            let s = scenario::household_evening_12(seed);
+            let cfg = SimConfig {
+                advertised_size_error: err,
+                ..SimConfig::default()
+            };
+            let report = run_with(&s, Arm::PredictedTimeTierFloor, seed, cfg);
+            let sc = score(&report, GOSSIP_WINDOW_MS, None);
+            downgrades += sc.tier.downgrades;
+            means.push(sc.truth.mean_total_ms / 1000.0);
+            // Did anything but the hub reach band 0?
+            let non_hub_in_top = report.records.iter().any(|ev| match ev {
+                DecisionEvent::Decision(d) => d
+                    .candidates
+                    .iter()
+                    .any(|c| c.tier_band == Some(0) && c.name != "hub" && c.name != "local"),
+                _ => false,
+            });
+            if non_hub_in_top {
+                intruded += 1;
+            }
+        }
+        println!(
+            "  size error +/-{:>4.0}%   seeds where a non-hub reached band 0: {}/{}   \
+             downgrades {}   mean {:>6.1}s",
+            100.0 * err,
+            intruded,
+            seeds.len(),
+            downgrades,
+            means.iter().sum::<f64>() / means.len() as f64,
+        );
+        if err == 0.0 {
+            assert_eq!(
+                intruded, 0,
+                "an honest fleet put something other than the 35B hub in the top band"
+            );
+        }
+        // The invariant is about the floor's INTEGRITY, not the fleet's
+        // honesty: whatever the decider believes the bands are, it must
+        // never serve a turn below the origin's own local band. A lie
+        // can move a node between bands; it must not be able to make
+        // the filter stop filtering.
+        assert_eq!(
+            downgrades, 0,
+            "size error +/-{:.0}%: the floor allowed {} downgrades — a mis-advertisement \
+             changed WHICH band a node is in, which is expected, but it must not defeat \
+             the filter itself",
+            100.0 * err,
+            downgrades
+        );
+    }
+
+    // The knob's default must be inert, or every number recorded before
+    // it existed silently changed meaning.
+    let s = scenario::household_evening_12(SEED);
+    let plain = run(&s, Arm::PredictedTimeTierFloor, SEED);
+    let explicit = run_with(
+        &s,
+        Arm::PredictedTimeTierFloor,
+        SEED,
+        SimConfig {
+            advertised_size_error: 0.0,
+            ..SimConfig::default()
+        },
+    );
+    let key = |r: &RunReport| -> Vec<(usize, usize, u64, u64)> {
+        r.truth
+            .iter()
+            .map(|f| (f.origin, f.server, f.dispatched_at_ms, f.total_ms))
+            .collect()
+    };
+    assert_eq!(
+        key(&plain),
+        key(&explicit),
+        "the size-advertisement knob's default is not inert"
+    );
 }
