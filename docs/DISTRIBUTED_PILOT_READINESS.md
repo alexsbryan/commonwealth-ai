@@ -32,6 +32,28 @@ auto-warm → plan-agreement placement → never-wedge fallback) is validated; t
 > P0.6 **BUILT** (`mesh_get_placement` command + placement chips in
 > MeshDiagnosticsPanel; svelte-check clean).
 
+> **Open acceptances as of 2026-07-27 — the builds are done; these RUNS are not:**
+> 1. **P0.1 — split-path distributed DECODE still unmeasured.** The 2026-07-19
+>    correction stands: acceptance3 never generated a token, and every live run
+>    since (GDN A/B, cloud tensor peer) was 4B or merged-file. Re-run the 3-file
+>    split 122B e2e on the current binary (now carrying the flap + retarget
+>    fixes) and capture decode + confirm the distribution HOLDS.
+> 2. **P0.4 — post-abort recovery timing never run live.** `kill -9` the worker
+>    daemon mid-inference at 122B scale → host serves again within N minutes,
+>    no human action. (The compute-child crash-isolation e2e passed, but that is
+>    the opt-in `[compute]` boundary, not the deployed in-process shape.)
+> 3. **P0.5 — dual-restart heal acceptance not yet run** (both machines, mDNS
+>    blocked, restart in any order → mesh re-forms within one anti-entropy
+>    period). Run it on the retarget code path, which replaced the rebuild heal.
+> 4. **P0.6 — live UI acceptance not recorded** (placement transition visible
+>    within one status poll); svelte-check only.
+>
+> **P1 still open:** anchor-profile probe robustness (admission still needs
+> relaxed env settle/flap knobs — REQUIRED for unattended pilot), wire-version
+> handshake, relay-quality warn, warm-progress UX, path-grade observability.
+> Closed since the sweep: stale-bridge dial target (2026-07-26 retarget),
+> mass-aware apportionment (2026-07-21).
+
 ## P0 — blockers for an unsupervised pilot
 
 ### P0.1 Split-GGUF support in the warm plane
@@ -152,7 +174,19 @@ A pilot user watching a silent local-only fallback currently sees only a slower 
   fix for *this* failure; node-id keying is the correctness hardening that
   prevents the whole class. Both are in `sovereign-mesh` (`daemon.rs`,
   `worker_eligibility.rs`); the bootstrap discovery loop was unchanged.
-- **Stale iroh-bridge dial target (OPEN, P0.5-family, isolated 2026-07-19).**
+- **Stale iroh-bridge dial target — FIXED 2026-07-26 (`HttpBridge::retarget`,
+  P0.5-family, isolated 2026-07-19).** The fix inverted the 2026-07-19
+  bridge-rebuild heal: a bridge's loopback **port is its identity**, the peer
+  address it dials is a mutable **attribute**. `IrohTransport::bridge_for` now
+  calls `retarget(EndpointAddr)` on a dial-key change instead of dropping +
+  respawning the bridge — rebuilding minted a NEW ephemeral port, and that port
+  is what plain-TCP clients (ggml rpc-server device lists) hold, so a stable
+  peer read downstream as a stream of different workers (measured on the daily
+  driver: 14 rebuilds in 21min for one unmoved peer; port walked
+  34207→40043→39419→34133→40021). Retargeting keeps the heal (fresh contact from
+  the next connection on) and drops the churn. Paired with `reaffirm_plan` in
+  `sovereign-mesh/daemon.rs`. Committed in 188e9bca. Original finding below for
+  the record:
   Distinct from the flap above and exposed by it: once acceptance3 flipped
   BeefyMac onto the bridge, the bridge dialed node id `161a8706…` and timed out
   on *every* attempt (~13s apart, sustained) while gossip to the peer's *live*
@@ -316,9 +350,9 @@ one liveness truth (P2), which feeds the one observable state (P3) the human see
 ### What each polish item maps to (nothing lost from the audit)
 | Polish item (was M1–M4) | Primitive | Key file:line | State |
 |---|---|---|---|
-| Flap fix (commit) | P2 (already an instance) | daemon.rs `discover_rpc_workers`, worker_eligibility.rs | done, UNCOMMITTED |
+| Flap fix (commit) | P2 (already an instance) | daemon.rs `discover_rpc_workers`, worker_eligibility.rs | done, committed (fbbd9a8b; 2nd layer `reaffirm_plan` + bridge `retarget` in 188e9bca) |
 | Version/ABI handshake | P2 (ABI∈identity) + P1 (caught crash) | rpc_warm_http.rs:220; advert daemon.rs:2014 | missing |
-| Stale iroh-bridge self-heal | P2 (re-resolve on conn event) | iroh.rs:406 (dial-fail logs only), :635 | partial/open |
+| Stale iroh-bridge self-heal | P2 (re-resolve on conn event) | iroh.rs `HttpBridge::retarget` | done 2026-07-26 |
 | Supervision by default | P1 (self-supervised child) | svrnmesh.service:23; setup_cmd/finish.rs:60 | partial (opt-in) |
 | Connection-driven recovery | P1 + P2 (child-exit = the event) | rpc_distribution.rs:293 (15s tick) | missing |
 | Dual-restart heal (mDNS) | P2 (reconcile discovery signals) | gossip.rs:291; daemon.rs:2554 (browse dropped) | partial |
@@ -327,7 +361,7 @@ one liveness truth (P2), which feeds the one observable state (P3) the human see
 | Placement/recovery legibility | P3 (render the state) | MeshDiagnosticsPanel.svelte:78; worker_eligibility.rs | partial |
 | Actionable errors to user | P3 (reason is a field, not a log) | rpc_distribution.rs:823/837/885 | log-only |
 | Relay-quality warning | P3 (annotation) + P2 (path-grade signal) | iroh_access.rs:192 | missing |
-| Mass-aware apportionment | P5 | rpc_warm_cache.rs:543; rpc_distribution.rs:571 | missing |
+| Mass-aware apportionment | P5 | rpc_warm_cache.rs `plan_shards_weighted` | done 2026-07-21 |
 | Bandwidth-aware placement | P5 | rpc_distribution.rs:571 (VRAM-only) | missing |
 | Within-layer expert split | P5 (policy, deferred) | rpc_warm_cache.rs:622 | deferred — measure first |
 | 3+-box validation | exercise, not code | engine N-node rpc_warm_cache.rs:531 | untested |
@@ -522,6 +556,21 @@ via load-balance skew on the next big-model validation).
   (2) `MeshInferenceProvider` (the provider the daemon actually installs) didn't
   forward `compute_children()`, so `/status` was always empty — added the
   delegation next to `resident_slots`. Daemon restored to its pre-test config.
+- **2026-07-21 — BYTE-MASS-AWARE SPLIT LANDED (`plan_shards_weighted`).**
+  Apportions each device a contiguous block range whose BYTES (not block count)
+  are proportional to its VRAM, output head folded onto the host;
+  `plan_shards` becomes the empty-`block_bytes` special case. Motivation:
+  MoE/hybrid models are deeply non-uniform (122B-A10B: routed experts 93% of
+  bytes, 1.23× per-block spread) — a count split can hand a small node a heavy
+  contiguous run and OOM it. This closes Forward-design item (1) and the P5
+  "mass-aware apportionment" table row. Committed.
+- **2026-07-26 — BRIDGE-CHURN FLAP FIXED (`HttpBridge::retarget` +
+  `reaffirm_plan`).** Second layer of the flap class beyond the 2026-07-19
+  stickiness/NodeId fix: the dual-restart heal's bridge REBUILD minted a new
+  loopback port per gossip contact change, so plain-TCP holders (ggml
+  rpc-server device lists) saw a stable peer as a stream of new workers.
+  Retarget swaps the dial target in place, keeping the port. Also closes the
+  P1 "stale iroh-bridge dial target" item. Committed in 188e9bca.
 - **2026-07-27 — CLOUD TENSOR PEER PROOF (Vast pod over WAN, PASSED).** A $0.055/hr
   rented RTX 3060 Ti (Vast instance, Quebec — ~900 Mbps, SM86) joined the production
   mesh as a ggml-RPC tensor worker over iroh and served a shard of the Qwen3.5-4B
