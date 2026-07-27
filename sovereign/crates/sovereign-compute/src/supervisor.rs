@@ -1133,15 +1133,19 @@ mod tests {
             &dir,
             "child.sh",
             &format!(
-                "#!/bin/sh\necho 'SOVEREIGN_COMPUTE_LISTENING {{\"port\":{port},\"pid\":1}}'\nsleep 5\n"
+                "#!/bin/sh\necho 'SOVEREIGN_COMPUTE_LISTENING {{\"port\":{port},\"pid\":1}}'\nsleep 60\n"
             ),
         );
         let mut config = base_config(script, dir.path().join("crashes"), String::new());
+        // Deadlines are generous on purpose: this asserts the handshake is
+        // PARSED and reaches Healthy, not how fast. Under a saturated
+        // --workspace run the Starting → Warming gap has exceeded 1.5s,
+        // which failed the gate on scheduling latency, not on behaviour.
         config.health = HealthTarget::StdoutHandshake {
             health_path: "/health".into(),
-            handshake_deadline: Duration::from_secs(2),
+            handshake_deadline: Duration::from_secs(20),
         };
-        config.ready_deadline = Duration::from_secs(2);
+        config.ready_deadline = Duration::from_secs(20);
 
         let supervisor = Arc::new(Supervisor::new(config));
         let mut states = supervisor.subscribe();
@@ -1150,7 +1154,7 @@ mod tests {
             tokio::spawn(async move { sup.run().await })
         };
 
-        let observed = drain_states(&mut states, 8, Duration::from_millis(1500)).await;
+        let observed = drain_states(&mut states, 8, Duration::from_secs(10)).await;
         assert!(
             observed
                 .iter()
