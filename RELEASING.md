@@ -153,6 +153,34 @@ arches, Linux, and Windows (containerized cargo-xwin + NSIS) — can be built
 and uploaded from one arm64 Mac with `scripts/release-desktop-local.sh` —
 see "Full local release from the arm64 Mac" in the desktop RELEASING.md.
 
+### After promoting: confirm the payload, not just the filename
+
+**A valid signature does not mean you shipped the right build.** The `.sig`
+signs the archive's BYTES; it says nothing about which version those bytes
+contain. An artifact named `svrnmesh_<new>_<arch>.app.tar.gz` that actually
+contains the *previous* build verifies perfectly, installs happily, and puts
+every user who updates into a permanent update loop — they land back on the
+old version, the manifest endpoint keeps offering the new one, forever.
+
+That shipped once (desktop-v0.3.5, 2026-07-27): `target/` isn't cleaned
+between releases, `cargo tauri build` dies in the DMG cosmetic step *before*
+emitting updater artifacts, so the previous version's archive was still on
+disk — and the arch-qualify step stamped the new version's name onto it.
+
+The build and release scripts now assert this themselves and abort on a
+mismatch. To confirm a published release by hand:
+
+```sh
+v=0.3.6   # the version you just published
+curl -sL -o /tmp/a.tar.gz \
+  "https://github.com/alexsbryan/svrnmesh-releases/releases/download/desktop-v$v/svrnmesh_${v}_aarch64.app.tar.gz"
+tar -xzOf /tmp/a.tar.gz '*.app/Contents/Info.plist' \
+  | plutil -extract CFBundleShortVersionString raw -o - -    # MUST print $v
+```
+
+If it prints anything else, unpublish immediately — clients that already
+updated are stuck until a correct build replaces it.
+
 ---
 
 ## How the two coexist on GitHub Releases
