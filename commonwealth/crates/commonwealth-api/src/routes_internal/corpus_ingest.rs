@@ -591,6 +591,81 @@ pub async fn corpus_expand(
 /// [`corpus_engine::CorpusEngine::expand_corpus_to_full`] in the
 /// background. Mirrors [`spawn_corpus_install`]'s lifecycle so the
 /// existing status / progress / cancel plumbing works unchanged.
+// ─── Terminal-outcome bookkeeping, shared by install and expand ──────
+//
+// Install and expand run the same status/progress/poller pipeline, so
+// they must agree on how a terminal outcome is recorded. These three
+// helpers are that agreement in one place; duplicating them is how the
+// expand path came to swallow its failures while install reported them.
+// The governing invariant is documented on `IngestProgress::Failed`.
+
+/// The progress callback both spawn paths install into the engine.
+///
+/// Latest-wins per corpus, with one exception: a terminal `Failed`
+/// record is never overwritten. Each insert runs in its own spawned
+/// task, so ordering against the failure write is NOT guaranteed —
+/// and losing that race would park the corpus on a non-terminal phase
+/// (say "embedding") with no task running to ever advance it, i.e. a
+/// permanent fake spinner in place of the error. Safe across retries
+/// because `clear_stale_failure` runs before a new attempt spawns.
+fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine::ProgressCallback {
+    Box::new(move |p| {
+        let state = state.clone();
+        let corpus_id = corpus_id.clone();
+        // The callback is synchronous but the map needs an async lock.
+        // Spawn a short-lived task; it finishes essentially instantly.
+        tokio::spawn(async move {
+            let mut map = state.inner.corpus_progress.write().await;
+            if matches!(
+                map.get(&corpus_id),
+                Some(corpus_engine::IngestProgress::Failed { .. })
+            ) {
+                return;
+            }
+            map.insert(corpus_id, p);
+        });
+    })
+}
+
+/// Retire a `Failed` record left by a previous attempt, so a retry
+/// starts clean.
+///
+/// The failure record is deliberately sticky — it has to outlive its
+/// task to be reportable at all — which makes the retry responsible for
+/// clearing it. Without this, the stale message would sit in the
+/// snapshot beside live progress and a UI showing "Install failed" would
+/// keep showing it straight through a successful reinstall.
+///
+/// Only `Failed` is swept: in-flight phases cannot be present (the
+/// `active_ingests` guard already returned), and a `Complete` entry is
+/// legitimate history until overwritten.
+async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
+    let mut progress = state.inner.corpus_progress.write().await;
+    if let Some(corpus_engine::IngestProgress::Failed { .. }) = progress.get(corpus_id) {
+        progress.remove(corpus_id);
+    }
+}
+
+/// Record a terminal failure so `/internal/corpus/status` can report it.
+///
+/// Not merely a log line: `active_ingests` has already dropped this
+/// corpus by the time we get here, and `corpus_status` builds its
+/// candidate set from `active_ingests ∪ corpus_progress`. With no entry
+/// the corpus vanishes from the response, and the Desktop poller reads
+/// "present last tick, absent this tick" as SUCCESS — emitting
+/// phase=complete / 100% / "Done" for an install that committed nothing.
+async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
+    state
+        .inner
+        .corpus_progress
+        .write()
+        .await
+        .insert(
+            corpus_id.to_string(),
+            corpus_engine::IngestProgress::Failed { message },
+        );
+}
+
 pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
     let Some(engine) = state.inner.corpus_engine.clone() else {
         return false;
@@ -604,23 +679,13 @@ pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
         active.insert(corpus_id.clone());
     }
 
+    clear_stale_failure(&state, &corpus_id).await;
+
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
     tokio::spawn(async move {
-        let progress_state = state_for_task.clone();
-        let progress_cid = corpus_id_for_task.clone();
-        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
-            let progress_state = progress_state.clone();
-            let progress_cid = progress_cid.clone();
-            tokio::spawn(async move {
-                progress_state
-                    .inner
-                    .corpus_progress
-                    .write()
-                    .await
-                    .insert(progress_cid, p);
-            });
-        });
+        let progress_cb =
+            ingest_progress_callback(state_for_task.clone(), corpus_id_for_task.clone());
 
         let result = engine
             .expand_corpus_to_full(&corpus_id_for_task, Some(progress_cb))
@@ -639,11 +704,18 @@ pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
                 chunks = info.chunks_created,
                 "spawn_corpus_expand: expansion complete"
             ),
-            Err(e) => tracing::warn!(
-                corpus = %corpus_id_for_task,
-                error = %e,
-                "spawn_corpus_expand: expansion failed"
-            ),
+            Err(e) => {
+                // Same contract as the install path: a terminal failure
+                // is RECORDED, not merely logged. Expansion shares the
+                // whole status/progress/poller pipeline, so a log-only
+                // handler here reproduces the identical bug.
+                record_failure(&state_for_task, &corpus_id_for_task, e.to_string()).await;
+                tracing::warn!(
+                    corpus = %corpus_id_for_task,
+                    error = %e,
+                    "spawn_corpus_expand: expansion failed"
+                );
+            }
         }
     });
     true
@@ -695,6 +767,8 @@ pub async fn spawn_corpus_install_outcome(
         }
         active.insert(corpus_id.clone());
     }
+
+    clear_stale_failure(&state, &corpus_id).await;
 
     // Resolve the recipe + apply parameters BEFORE spawning the
     // background task so a parameter mismatch surfaces as a
@@ -748,27 +822,11 @@ pub async fn spawn_corpus_install_outcome(
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
     tokio::spawn(async move {
-        // Progress callback: latest-wins per corpus. We hold the
-        // write lock only for the duration of an insert, so readers
-        // (the GET /internal/corpus/progress route) see an update
-        // on the next tick without blocking the ingest task.
-        let progress_state = state_for_task.clone();
-        let progress_cid = corpus_id_for_task.clone();
-        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
-            let progress_state = progress_state.clone();
-            let progress_cid = progress_cid.clone();
-            // The callback is synchronous but we need an async
-            // lock. Spawn a short-lived task to perform the
-            // insert; it finishes essentially instantly.
-            tokio::spawn(async move {
-                progress_state
-                    .inner
-                    .corpus_progress
-                    .write()
-                    .await
-                    .insert(progress_cid, p);
-            });
-        });
+        // Progress callback: latest-wins per corpus, except that a
+        // terminal failure is never clobbered. See
+        // `ingest_progress_callback`.
+        let progress_cb =
+            ingest_progress_callback(state_for_task.clone(), corpus_id_for_task.clone());
 
         // Respect a recipe's explicit retrieval-only opt-out: a recipe with
         // `[enrichment] enabled = false` skips the default post-install
@@ -1094,11 +1152,17 @@ pub async fn spawn_corpus_install_outcome(
                     "spawn_corpus_install: ingest cancelled"
                 );
             }
-            Err(e) => tracing::warn!(
-                corpus = %corpus_id_for_task,
-                error = %e,
-                "spawn_corpus_install: ingest failed"
-            ),
+            Err(e) => {
+                // Recorded, not merely logged — see `record_failure`.
+                // A log-only handler here is the bug that made every
+                // ingest failure render as a completed install.
+                record_failure(&state_for_task, &corpus_id_for_task, e.to_string()).await;
+                tracing::warn!(
+                    corpus = %corpus_id_for_task,
+                    error = %e,
+                    "spawn_corpus_install: ingest failed"
+                );
+            }
         }
     });
     InstallOutcome::Spawned

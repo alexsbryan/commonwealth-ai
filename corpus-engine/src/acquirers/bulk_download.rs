@@ -119,6 +119,17 @@ impl BulkDownloader {
         let response = request.send().await?;
 
         if !response.status().is_success() && response.status().as_u16() != 206 {
+            let status = response.status().as_u16();
+            // 401/403 is an authorisation problem, not a transport
+            // problem, and its remedy is a human action — so it gets a
+            // message the user can act on rather than a bare status
+            // code. This is the path a gated HuggingFace snapshot takes
+            // (`svrnmesh/sep-index`): the repo metadata reads 200 while
+            // the file itself reads 401, so the refusal only becomes
+            // visible here, partway through an install.
+            if status == 401 || status == 403 {
+                return Err(Error::download_unauthorized(url, status));
+            }
             return Err(Error::Http(response.error_for_status().unwrap_err()));
         }
 

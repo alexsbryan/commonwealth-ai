@@ -159,6 +159,12 @@ fn map_progress(p: &corpus_engine::IngestProgress) -> CorpusIngestProgress {
             (IngestPhase::Enriching, Some(format!("{phase}: {detail}")))
         }
         P::Complete { .. } => (IngestPhase::Complete, None),
+        // The protocol's other terminal phase. `CorpusIngestProgress::detail`
+        // is documented as carrying the error message when
+        // `phase = Failed`, so the engine's message goes there verbatim —
+        // this mapping is what finally lets a peer's poll loop distinguish
+        // a failed ingest from a completed one.
+        P::Failed { message } => (IngestPhase::Failed, Some(message.clone())),
     };
     CorpusIngestProgress {
         phase,

@@ -61,10 +61,29 @@ dedup_by_source = true
 
 # ── Cold-start: prebuilt snapshot on HuggingFace ────────────────────
 #
-# Private repo (Stanford license forbids public redistribution of SEP
-# text — mesh_sharing = false above). Restorers must export HF_TOKEN
-# and be added as collaborators on the svrnmesh org for the GET to
-# succeed.
+# Verified anonymously readable 2026-07-26: `gated: false`, `private:
+# false`, and `resolve/main/<hf_filename>` answers 302→200 for 1.30 GB
+# with no token. Re-check with:
+#   curl -sI "https://huggingface.co/datasets/svrnmesh/sep-index/resolve/main/<hf_filename>"
+#
+# INSTALL DEPENDS ON THIS REPO BEING ANONYMOUSLY READABLE. `sep` is a
+# `catalog_status = "featured"` entry, so the desktop offers it to every
+# user with a one-click Add — and that click resolves to a plain GET of
+# `resolve/main/<hf_filename>`. If the dataset is `private: true` or
+# `gated: manual`, that GET returns 401 `GatedRepo` for anyone without an
+# approved token, and the install fails. Note that gating is invisible
+# upstream of the fetch: `GET /api/datasets/<repo>` still answers 200
+# with full metadata, so nothing at catalog time can tell.
+#
+# A 401/403 here now surfaces as `Error::download_unauthorized` → a
+# terminal `IngestProgress::Failed` → a visible "Install failed" row
+# naming the repo and the remedy. It used to surface as "Done" at 100%
+# (see the note on `IngestProgress::Failed`), which is how this went
+# unnoticed.
+#
+# Keep `mesh_sharing = false` regardless: Stanford's license governs
+# peer REPLICATION of the text, which is a separate question from
+# whether this snapshot is fetchable from its origin.
 #
 # Snapshot 2026-05-23 supersedes 2026-05-22 — content-hash atom ids
 # (Move 6 migration) AND bundles the 1770 sep-<slug> per-article

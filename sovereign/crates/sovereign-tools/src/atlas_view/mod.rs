@@ -42,6 +42,8 @@ pub use conv::{
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
     ConvSummary, SummaryCorrectionView,
 };
-pub use reader::{AtlasCorpusSummary, AtlasViewError, CurationStatus, FileAtlasReader};
+pub use reader::{
+    AtlasCorpusSummary, AtlasMemberSummary, AtlasViewError, CurationStatus, FileAtlasReader,
+};
 pub use stable_key::{compute_stable_key, StableAtomKey};
 pub use subgraph::{AtlasEdge, AtlasNode, AtlasSubgraph, SubgraphCensus, DEFAULT_MAX_NODES};

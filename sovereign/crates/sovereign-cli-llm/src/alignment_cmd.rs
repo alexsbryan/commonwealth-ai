@@ -467,6 +467,10 @@ fn render_ingest_progress(p: &IngestProgress) -> String {
             total_chunks,
             duration_secs,
         } => format!("complete — {total_chunks} chunks in {duration_secs}s"),
+        // The message is the engine error's own text, which for an
+        // authorisation refusal is the remedy — so it goes through
+        // whole rather than being clipped to "failed".
+        IngestProgress::Failed { message } => format!("FAILED — {message}"),
     }
 }
 

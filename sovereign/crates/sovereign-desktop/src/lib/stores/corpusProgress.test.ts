@@ -5,8 +5,14 @@
 // contract is: no rate or no total ⇒ no estimate (null ⇒ "—"), never a made-up
 // number.
 import { describe, it, expect } from "vitest";
-import { etaSecondsFor, formatEta } from "./corpusProgress.svelte";
-import type { CorpusProgressPayload } from "../types";
+import {
+  etaSecondsFor,
+  formatEta,
+  isTerminalPhase,
+  selfPrunes,
+  shouldStore,
+} from "./corpusProgress.svelte";
+import type { CorpusInstallPhase, CorpusProgressPayload } from "../types";
 
 function payload(over: Partial<CorpusProgressPayload> = {}): CorpusProgressPayload {
   return {
@@ -67,5 +73,95 @@ describe("formatEta", () => {
   it("always marks the estimate as approximate with a ~", () => {
     expect(formatEta(45).startsWith("~")).toBe(true);
     expect(formatEta(300).startsWith("~")).toBe(true);
+  });
+});
+
+// The retention policy for terminal phases. This is not cosmetic: a
+// failed install used to be reported as "Done" at 100% (the daemon only
+// logged the error, the corpus dropped out of the status snapshot, and
+// the poller read the disappearance as success). Now that a failure
+// actually reaches the frontend, it has to STAY long enough to be read
+// and acted on — an 800 ms flash of the reason is no better than the
+// silence it replaced.
+describe("terminal phase retention", () => {
+  it("treats complete and failed as the two terminal phases", () => {
+    expect(isTerminalPhase("complete")).toBe(true);
+    expect(isTerminalPhase("failed")).toBe(true);
+  });
+
+  it("treats every working phase as non-terminal", () => {
+    for (const phase of [
+      "downloading",
+      "extracting",
+      "chunking",
+      "embedding",
+      "indexing",
+      "optimizing_index",
+      "enriching_clustering",
+    ]) {
+      expect(isTerminalPhase(phase)).toBe(false);
+    }
+  });
+
+  it("self-prunes a completed install so the row gets out of the way", () => {
+    expect(selfPrunes("complete")).toBe(true);
+  });
+
+  it("does NOT self-prune a failure — it must persist until acted on", () => {
+    expect(selfPrunes("failed")).toBe(false);
+  });
+
+  it("never self-prunes a still-running install", () => {
+    expect(selfPrunes("downloading")).toBe(false);
+    expect(selfPrunes("embedding")).toBe(false);
+  });
+
+  it("only ever self-prunes something terminal", () => {
+    for (const phase of ["complete", "failed", "downloading", "embedding"]) {
+      if (selfPrunes(phase)) expect(isTerminalPhase(phase)).toBe(true);
+    }
+  });
+});
+
+// Dismissal has to be sticky against REPETITION, because a failure is
+// sticky on the daemon side: the record survives in `corpus_progress`
+// until a retry sweeps it, so the desktop's status poller re-emits the
+// identical `failed` payload once a second. A naive dismiss (just delete
+// the entry) is undone within one tick — a button that does nothing.
+describe("shouldStore / dismissal", () => {
+  it("stores a failure the user has not dismissed", () => {
+    const dismissed = new Set<string>();
+    expect(shouldStore({ corpus_id: "sep", phase: "failed" }, dismissed)).toBe(true);
+  });
+
+  it("suppresses every repeat of a dismissed failure", () => {
+    const dismissed = new Set(["sep"]);
+    // The poller repeats once a second; all of them must stay suppressed.
+    for (let i = 0; i < 5; i++) {
+      expect(shouldStore({ corpus_id: "sep", phase: "failed" }, dismissed)).toBe(false);
+    }
+  });
+
+  it("only suppresses the dismissed corpus, not its neighbours", () => {
+    const dismissed = new Set(["sep"]);
+    expect(shouldStore({ corpus_id: "wikipedia", phase: "failed" }, dismissed)).toBe(true);
+  });
+
+  it("revives on a retry, so a NEW failure is shown again", () => {
+    const dismissed = new Set(["sep"]);
+    // A retry starts: the first non-failed payload clears the dismissal…
+    expect(shouldStore({ corpus_id: "sep", phase: "downloading" }, dismissed)).toBe(true);
+    expect(dismissed.has("sep")).toBe(false);
+    // …so if the retry also fails, the user sees it rather than having it
+    // swallowed by their earlier acknowledgement.
+    expect(shouldStore({ corpus_id: "sep", phase: "failed" }, dismissed)).toBe(true);
+  });
+
+  it("never suppresses a non-failed phase", () => {
+    const dismissed = new Set(["sep"]);
+    const phases: CorpusInstallPhase[] = ["downloading", "embedding", "complete"];
+    for (const phase of phases) {
+      expect(shouldStore({ corpus_id: "sep", phase }, dismissed)).toBe(true);
+    }
   });
 });

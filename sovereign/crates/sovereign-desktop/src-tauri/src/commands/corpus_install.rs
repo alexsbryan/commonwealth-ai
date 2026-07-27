@@ -362,6 +362,21 @@ pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppSt
 
             // Emit terminal "complete" for entries that were active last
             // tick but have dropped off this tick.
+            //
+            // SAFETY OF THIS INFERENCE rests on a daemon-side invariant:
+            // `spawn_corpus_install` records a TERMINAL progress entry for
+            // both outcomes — the engine's own `Complete` callback on
+            // success, and `IngestProgress::Failed` on error — and
+            // `corpus_status` keeps any corpus with a progress entry in
+            // its response. So a corpus that disappears has either
+            // finished cleanly or been cancelled; a FAILED one stays
+            // visible and is reported as `failed` below.
+            //
+            // Before that invariant existed, a failure removed the corpus
+            // from the snapshot with no record, and this branch translated
+            // its disappearance into "Done" at 100% — reporting success
+            // for an install that committed nothing. Do not weaken the
+            // daemon side without revisiting this branch.
             for gone in last_seen.difference(&current) {
                 let last_phase = state
                     .install_progress
@@ -489,6 +504,19 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
         ),
         Some(P::Enriching { phase, detail, .. }) => {
             (format!("enriching_{phase}"), 0, Some(detail.clone()))
+        }
+        // Terminal failure. The message is the engine error's own text,
+        // forwarded verbatim — for an authorisation refusal that is the
+        // actionable remedy from `Error::download_unauthorized`, which
+        // is the whole reason it is worth surfacing rather than
+        // collapsing to "install failed".
+        //
+        // Reporting `failed` here is also what stops the poller's
+        // drop-off branch from claiming success later: it only
+        // synthesises a `complete` for corpora whose last known phase
+        // was non-terminal.
+        Some(P::Failed { message }) => {
+            ("failed".to_string(), 0, Some(message.clone()))
         }
         None => {
             // No IngestProgress event yet this session — this is the
@@ -724,4 +752,93 @@ pub async fn get_corpus_progress(
 ) -> Result<Option<CorpusProgressPayload>, String> {
     let map = state.install_progress.read().await;
     Ok(map.get(&corpus_id).cloned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal entry with everything quiet, so each test varies only the
+    /// one field it is about.
+    fn entry(corpus_id: &str, progress: Option<corpus_engine::IngestProgress>) -> CorpusStatusEntry {
+        CorpusStatusEntry {
+            corpus_id: corpus_id.to_string(),
+            active: false,
+            progress,
+            shards_completed: 0,
+            shards_total: 0,
+            committed_iter_pos: 0,
+            canonical_present: false,
+            partition_present: false,
+            canonical_in_progress: false,
+            partition_in_progress: false,
+            estimated_fraction: None,
+            estimated_total_sections: None,
+            estimated_total_articles: None,
+        }
+    }
+
+    /// A `Failed` record must reach the UI as phase `failed` carrying the
+    /// engine's message. The message is the payload the user acts on —
+    /// for an authorisation refusal it is the remedy — so it must survive
+    /// the projection verbatim rather than being replaced by a generic
+    /// "install failed".
+    #[test]
+    fn failed_progress_maps_to_failed_phase_with_its_message() {
+        let payload = status_entry_to_payload(&entry(
+            "sep",
+            Some(corpus_engine::IngestProgress::Failed {
+                message: "Download refused (401) — request access at https://example/repo".into(),
+            }),
+        ));
+        assert_eq!(payload.phase, "failed");
+        assert_eq!(
+            payload.message.as_deref(),
+            Some("Download refused (401) — request access at https://example/repo"),
+            "the remedy must not be swallowed"
+        );
+    }
+
+    /// The phase strings for the two terminal outcomes must be distinct.
+    /// They used to be indistinguishable at this boundary — a failure had
+    /// no representation, so it arrived as `complete`. The frontend keys
+    /// its "Install failed" row and its self-pruning behaviour off this
+    /// exact string pair.
+    #[test]
+    fn failed_and_complete_are_distinguishable_phases() {
+        let failed = status_entry_to_payload(&entry(
+            "sep",
+            Some(corpus_engine::IngestProgress::Failed {
+                message: "boom".into(),
+            }),
+        ));
+        let complete = status_entry_to_payload(&entry(
+            "sep",
+            Some(corpus_engine::IngestProgress::Complete {
+                total_chunks: 10,
+                duration_secs: 1,
+            }),
+        ));
+        assert_eq!(failed.phase, "failed");
+        assert_eq!(complete.phase, "complete");
+        assert_ne!(failed.phase, complete.phase);
+    }
+
+    /// A failure carries no honest completion fraction, so the bar must
+    /// not be left sitting at 100% next to the error text.
+    #[test]
+    fn failed_progress_does_not_report_a_complete_percent() {
+        let payload = status_entry_to_payload(&entry(
+            "sep",
+            Some(corpus_engine::IngestProgress::Failed {
+                message: "boom".into(),
+            }),
+        ));
+        assert!(
+            payload.percent < 100.0,
+            "a failed install must not render as 100%, got {}",
+            payload.percent
+        );
+        assert_eq!(payload.chunks_processed, 0);
+    }
 }

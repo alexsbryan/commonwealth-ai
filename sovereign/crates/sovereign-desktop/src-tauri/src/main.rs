@@ -609,6 +609,7 @@ fn main() -> ExitCode {
             commands::read_get_atom_card,
             commands::read_get_atom_elsewhere,
             atlas_commands::atlas_list_corpora,
+            atlas_commands::atlas_list_members,
             atlas_commands::atlas_list_atoms,
             atlas_commands::atlas_subgraph,
             atlas_commands::atlas_get_atom_detail,

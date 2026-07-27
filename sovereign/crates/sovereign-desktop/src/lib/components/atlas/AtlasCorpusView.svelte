@@ -38,6 +38,11 @@
      *  rather than render a dead no-op. Defaults to true so the standalone
      *  Atlas Inspector keeps its back-to-index affordance. */
     showBack?: boolean;
+    /** Where the back control leads, in the user's words. Defaults to
+     *  the atlas index; a collection notebook passes "Articles",
+     *  because back goes to that notebook's article picker, not out to
+     *  the global index. */
+    backLabel?: string;
     /** Drill into a single atom's detail view. */
     onSelectAtom?: (atomId: string) => void;
   }
@@ -48,6 +53,7 @@
     atomCountsHint,
     onBack,
     showBack = true,
+    backLabel = "Atlas",
     onSelectAtom,
   }: Props = $props();
 
@@ -116,6 +122,13 @@
   });
   let loadingMore = $state(false);
   let error: string | null = $state(null);
+
+  /** Is anything narrowing the list right now? Gates the empty-state
+   *  copy: with no filter applied, "no atoms" is a fact about the
+   *  corpus, not about the user's query. */
+  const filterActive = $derived(
+    activeType !== "all" || debouncedQuery.trim().length > 0,
+  );
 
   // ─── Effects ──────────────────────────────────────────────
   $effect(() => {
@@ -285,13 +298,13 @@
 <div class="atlas-corpus-view">
   <header class="corpus-header">
     {#if showBack}
-      <button class="back-btn" type="button" onclick={onBack} aria-label="Back to atlas index">
+      <button class="back-btn" type="button" onclick={onBack} aria-label={`Back to ${backLabel.toLowerCase()}`}>
         <!-- Lucide: arrow-left -->
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m12 19-7-7 7-7"/>
           <path d="M19 12H5"/>
         </svg>
-        <span>Atlas</span>
+        <span>{backLabel}</span>
       </button>
     {/if}
     <h1 class="corpus-title">{corpusId}</h1>
@@ -374,8 +387,17 @@
     {:else if loading && items.length === 0}
       <div class="status">Loading atoms…</div>
     {:else if items.length === 0}
-      <div class="status empty">
-        No atoms match the current filter.
+      <!-- "Nothing here" and "your filter hid it" call for different
+           actions, so they must not share one line of copy. An empty
+           result with no filter applied means this corpus's map was
+           never built — that read as a filter problem for as long as
+           the two shared a message. -->
+      <div class="status empty" data-testid="atlas-atoms-empty">
+        {#if filterActive}
+          No atoms match the current filter.
+        {:else}
+          This notebook has no atoms yet — its map hasn't been built.
+        {/if}
       </div>
     {:else}
       <!-- The sizer reserves the full scroll height for all `total`

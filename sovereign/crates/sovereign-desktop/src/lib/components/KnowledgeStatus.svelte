@@ -3,7 +3,7 @@
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, meshAssistStart, type NewsworthyStatus } from "../api";
-  import { corpusProgressStore } from "../stores/corpusProgress.svelte";
+  import { corpusProgressStore, isTerminalPhase } from "../stores/corpusProgress.svelte";
   import { assistProgressStore } from "../stores/assistProgress.svelte";
   import PeerAssistOffer from "./mesh/PeerAssistOffer.svelte";
   import AssistProgressPanel from "./mesh/AssistProgressPanel.svelte";
@@ -80,9 +80,7 @@
     corpora.some(
       (c) =>
         c.status === "installing" ||
-        (progress[c.id] &&
-          progress[c.id].phase !== "complete" &&
-          progress[c.id].phase !== "failed"),
+        (progress[c.id] && !isTerminalPhase(progress[c.id].phase)),
     ),
   );
 
@@ -154,9 +152,7 @@
     $effect.root(() => {
       $effect(() => {
         const entries = Object.values(corpusProgressStore.byId);
-        if (
-          entries.some((p) => p.phase === "complete" || p.phase === "failed")
-        ) {
+        if (entries.some((p) => isTerminalPhase(p.phase))) {
           refresh();
         }
       });
@@ -352,9 +348,7 @@
   {#each featuredCorpora as corpus}
     {@const inProgress =
       corpus.status === "installing" ||
-      (progress[corpus.id] &&
-        progress[corpus.id].phase !== "complete" &&
-        progress[corpus.id].phase !== "failed")}
+      (progress[corpus.id] && !isTerminalPhase(progress[corpus.id].phase))}
     <div class="corpus-row">
       <div class="corpus-info">
         <div class="corpus-name">
@@ -374,6 +368,28 @@
         </div>
         <div class="corpus-detail">
           {#if corpus.status === "installed"}
+            <!-- An installed corpus can still have a FAILED operation
+                 against it — most often "Expand to full". That failure
+                 has nowhere else to appear: this branch wins over the
+                 not-installed one below, and the progress banner only
+                 renders non-terminal phases. Without this the expand
+                 button just silently does nothing. -->
+            {#if progress[corpus.id]?.phase === "failed"}
+              <div class="install-failed" data-testid="operation-failed">
+                <span class="failed-title">Last operation failed</span>
+                {#if progress[corpus.id].message}
+                  <p class="failed-reason">{progress[corpus.id].message}</p>
+                {/if}
+                <div class="failed-actions">
+                  <button
+                    class="btn-dismiss"
+                    onclick={() => corpusProgressStore.dismiss(corpus.id)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            {/if}
             {#if !corpus.vector_index_ready}
               <div class="fts-only-notice">
                 <span>Keyword search only</span>
@@ -479,6 +495,32 @@
             {:else}
               Starting…
             {/if}
+          {:else if progress[corpus.id]?.phase === "failed"}
+            <!-- A failed install used to be invisible here: the daemon
+                 only logged it, the corpus dropped out of the status
+                 snapshot, and the poller reported the disappearance as
+                 "Done". Now the reason is shown in place, with the
+                 remedy when the engine could name one. -->
+            <div class="install-failed" data-testid="install-failed">
+              <span class="failed-title">Install failed</span>
+              {#if progress[corpus.id].message}
+                <p class="failed-reason">{progress[corpus.id].message}</p>
+              {/if}
+              <div class="failed-actions">
+                <button
+                  class="action-btn install"
+                  onclick={() => handleInstall(corpus.id)}
+                >
+                  Try again
+                </button>
+                <button
+                  class="btn-dismiss"
+                  onclick={() => corpusProgressStore.dismiss(corpus.id)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
           {:else}
             <span title={corpus.description}>
               ~{corpus.size_compressed_gb} GB download · ~{corpus.size_indexed_gb} GB indexed
@@ -491,9 +533,7 @@
             {#each childrenByParent[corpus.id] as layer}
               {@const layerInProgress =
                 layer.status === "installing" ||
-                (progress[layer.id] &&
-                  progress[layer.id].phase !== "complete" &&
-                  progress[layer.id].phase !== "failed")}
+                (progress[layer.id] && !isTerminalPhase(progress[layer.id].phase))}
               {@const layerInstalled = layer.status === "installed"}
               <button
                 type="button"
@@ -946,6 +986,42 @@
     margin: 6px 0 0;
     font-size: 0.75rem;
     color: var(--error, #ef4444);
+  }
+  .install-failed {
+    margin-top: 6px;
+  }
+  .failed-title {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--error, #ef4444);
+  }
+  /* The remedy text is the point of this block — it can be a couple of
+     sentences (request access here, then set this env var), so it wraps
+     rather than truncating. */
+  .failed-reason {
+    margin: 3px 0 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    white-space: normal;
+  }
+  .failed-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .btn-dismiss {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .btn-dismiss:hover {
+    color: var(--text-secondary);
   }
   .health-chip {
     display: inline-block;

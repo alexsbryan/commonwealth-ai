@@ -393,6 +393,12 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
             } => {
                 println!("  ↳ complete: {total_chunks} chunks in {duration_secs}s");
             }
+            // Print the engine's message in full — for an authorisation
+            // refusal it carries the remedy, which is the one thing the
+            // operator running this command needs.
+            IngestProgress::Failed { message } => {
+                println!("  ↳ FAILED: {message}");
+            }
         },
         CatalogIngestEvent::Enrich(_) => {
             println!("  ↳ enrich…");
