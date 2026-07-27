@@ -457,6 +457,15 @@ pub(crate) struct DistributionPlan {
         crate::llama::sys::ggml_backend_buffer_type_t,
     )>,
     pub(crate) plan: Vec<NodeShard>,
+    /// The `tensor_split` that pins llama.cpp's per-layer device map
+    /// (`model.dev_layer`) to the same cut as the `-ot` overrides. MUST be
+    /// applied together with `overrides`: dev_layer is computed from
+    /// tensor_split over `n_layer + 1` units and never consults overrides, and
+    /// a disagreement straddles a layer across devices — on a hybrid (Gated
+    /// DeltaNet) model that disables the fused GDN kernel and the unfused
+    /// GGML_OP_SET path aborts the host on first distributed decode
+    /// (docs/DISTRIBUTED_GDN_CRASH_STATUS.md). See [`dev_layer_tensor_split`].
+    pub(crate) tensor_split: Vec<f32>,
     pub(crate) assignments: Vec<RpcWarmAssignment>,
     /// Eligible RPC worker peers (anchors lending memory) this plan
     /// distributes onto — the quorum-count input for the shared-model gate.
@@ -627,12 +636,35 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
                 Ok(sizes) => {
                     let mut bb = vec![0u64; n_layer as usize];
                     let mut head = 0u64;
+                    // A hybrid (recurrent) model carries `ssm_*` weights in its
+                    // Gated DeltaNet blocks alongside plain attention blocks.
+                    let mut recurrent = false;
                     for (name, layer, nbytes) in &sizes {
+                        if name.contains(".ssm_") {
+                            recurrent = true;
+                        }
                         match layer {
                             Some(l) if (*l as usize) < bb.len() => bb[*l as usize] += *nbytes,
                             None if is_output_tensor(name) => head += *nbytes,
                             _ => {}
                         }
+                    }
+                    // Byte-mass apportionment is safe on hybrid (recurrent)
+                    // models too, PROVIDED the load also pins `tensor_split` to
+                    // the plan (see `DistributionPlan::tensor_split`). An
+                    // earlier hybrid→count-based forcing here was H3 of the
+                    // 2026-07-27 crash hunt and was FALSIFIED: count-based
+                    // produced the identical 8/24 cut and the identical abort,
+                    // because llama.cpp's per-layer device map follows
+                    // tensor_split (default: advertised free VRAM over
+                    // n_layer+1 units), not our overrides — WHICH apportionment
+                    // rule we use never decided anything.
+                    if recurrent {
+                        tracing::debug!(
+                            model = %key.0,
+                            "plan_distribution: hybrid/recurrent model (ssm_* blocks) — \
+                             byte-mass split, dev_layer pinned via tensor_split"
+                        );
                     }
                     (bb, head)
                 }
@@ -707,6 +739,18 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         }
     };
 
+    // Pin llama.cpp's per-layer device map (`model.dev_layer`) to the SAME cut
+    // the overrides enforce — dev_layer is computed from tensor_split over
+    // n_layer+1 units and never sees the overrides, and one straddled layer is
+    // the distributed-GDN host abort (DISTRIBUTED_GDN_CRASH_STATUS.md §4).
+    let tensor_split = dev_layer_tensor_split(&plan, n_layer);
+    tracing::info!(
+        model = %key.0,
+        split = ?tensor_split,
+        blocks = ?plan.iter().map(|s| s.blocks).collect::<Vec<_>>(),
+        "plan_distribution: dev_layer tensor_split pinned to the shard plan"
+    );
+
     let overrides: Vec<(
         std::ffi::CString,
         crate::llama::sys::ggml_backend_buffer_type_t,
@@ -723,6 +767,7 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         devs,
         overrides,
         plan,
+        tensor_split,
         assignments,
         eligible_workers,
         pooled_vram_bytes,

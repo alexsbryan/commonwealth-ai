@@ -171,6 +171,9 @@ pub struct TestProvider {
     /// ContentFilter, etc.). When None, the trait's default impl
     /// wraps `complete_stream` and appends a synthetic Stop.
     typed_frames: Option<Vec<StreamFrame>>,
+    /// Fires while a generation is genuinely in flight. See
+    /// [`TestProvider::with_on_complete`].
+    on_complete: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Capabilities reported to manifest synthesis. The test rarely
     /// inspects this beyond a sanity check; defaults are conservative.
     capabilities: ProviderCapabilities,
@@ -185,6 +188,7 @@ impl TestProvider {
             stream_chunks: None,
             embed_fn: None,
             typed_frames: None,
+            on_complete: None,
             capabilities: ProviderCapabilities {
                 max_context_tokens: 4_096,
                 supports_structured_output: false,
@@ -239,6 +243,33 @@ impl TestProvider {
         self.typed_frames = Some(frames);
         self
     }
+
+    /// Observation hook, fired at the top of `complete` and
+    /// `complete_stream` — i.e. while a generation is genuinely in
+    /// flight on this provider.
+    ///
+    /// Exists because some process state is only observable *during*
+    /// the serve: an RAII guard that bumps a counter on the way in and
+    /// drops it on the way out leaves nothing to assert on once the
+    /// response has been returned. A caller that samples such a
+    /// counter after `send().await` cannot distinguish "never
+    /// incremented" from "incremented and correctly released".
+    ///
+    /// Caveat: `complete_stream_with_finish` reaches the hook only on
+    /// the path that delegates to `complete_stream`. When
+    /// [`Self::with_typed_frames`] is set it returns those frames
+    /// directly and no generation entry point runs, so the hook does
+    /// not fire.
+    pub fn with_on_complete(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
+        self.on_complete = Some(Arc::new(f));
+        self
+    }
+
+    fn fire_on_complete(&self) {
+        if let Some(f) = self.on_complete.as_ref() {
+            f();
+        }
+    }
 }
 
 impl Default for TestProvider {
@@ -250,6 +281,7 @@ impl Default for TestProvider {
 #[async_trait]
 impl InferenceProvider for TestProvider {
     async fn complete(&self, _req: &CompletionRequest) -> SovResult<CompletionResponse> {
+        self.fire_on_complete();
         match self.complete_text.as_ref() {
             Some(t) => Ok(CompletionResponse {
                 text: t.clone(),
@@ -273,6 +305,7 @@ impl InferenceProvider for TestProvider {
         &self,
         _req: &CompletionRequest,
     ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
+        self.fire_on_complete();
         match self.stream_chunks.as_ref() {
             Some(chunks) => {
                 let items: Vec<SovResult<String>> = chunks.iter().cloned().map(Ok).collect();

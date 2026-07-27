@@ -420,6 +420,63 @@ pub enum Arm {
     /// choice on a heterogeneous top band, and the blunt one is the
     /// robust choice on a homogeneous one.
     PredictedTimeTierFloorWithinNoise,
+    /// **§4.2 step 1.** Arm 0, plus the serving node piggybacking its
+    /// true load on every response it returns.
+    ///
+    /// This is the *implementable* half of
+    /// [`FreshSignals`](Arm::FreshSignals). That arm hands every
+    /// decider the truth about every peer at every instant, which no
+    /// mechanism can deliver — it is an upper bound, and §3.1 priced it
+    /// at −11% p95 on `household-evening-12` and −51% on `twin-hubs`.
+    /// A response can only tell you about the peer that answered it, so
+    /// this arm is fresh exactly where a real implementation would be:
+    ///
+    ///   - **Fresh** for a peer this decider has served a request
+    ///     through, aged from the moment that response came back.
+    ///   - **Stale gossip** for every other peer, unchanged.
+    ///   - **Nothing** for a peer never heard from at all.
+    ///
+    /// The gap `backpressure − fresh-signals` is therefore the part of
+    /// F1 that piggybacking *cannot* reach, and it is the number that
+    /// decides whether the response channel is sufficient or whether
+    /// the gossip interval also has to come down.
+    ///
+    /// **Why it should capture most of the win despite covering fewer
+    /// peers.** The peer a decider is wrong about in the direction that
+    /// costs latency is the peer it keeps choosing — and that is
+    /// precisely the peer it keeps getting responses from. Coverage is
+    /// biased toward the error that matters. If the measured recovery
+    /// is small anyway, that biased coverage is the assumption to
+    /// suspect first, which is why [`BackpressureTrace`] reports the
+    /// coverage rate alongside the latency.
+    ///
+    /// **Known optimism, bounded and one-directional.** The reading is
+    /// delivered at the instant service completes rather than one RTT
+    /// later, so every age here is understated by up to one RTT (single
+    /// -digit to ~100 ms on these fleets) against a gossip interval of
+    /// 10 s. It cannot manufacture a win larger than that; it can only
+    /// make this arm look at most one RTT better than the mechanism
+    /// would be.
+    ResponseBackpressure,
+    /// [`ResponseBackpressure`](Arm::ResponseBackpressure) composed with
+    /// §4.1's landing candidate
+    /// ([`PredictedTimeTierFloor`](Arm::PredictedTimeTierFloor)).
+    ///
+    /// Here because the two objectives consume `in_flight` differently
+    /// enough that a freshness result on arm 0 does not transfer. The
+    /// product passes the count through `load_penalty`, a **bounded**
+    /// multiplier; predicted time **multiplies it by a service time**.
+    /// A stale count is a second-order error for the first and a
+    /// first-order one for the second — the same asymmetry
+    /// [`PredictedTimeOutboundOnly`](Arm::PredictedTimeOutboundOnly)
+    /// exists to price for attribution.
+    ///
+    /// So the delta against `predicted-time+tier-floor` is the direct
+    /// test of §4.2's own claim that step 1 is a **prerequisite** for
+    /// the §4.1 landing rather than an independent improvement. If
+    /// freshness is worth materially more here than it is on arm 0,
+    /// that claim is measured rather than argued.
+    PredictedTimeTierFloorBackpressure,
     /// Not a policy anyone could implement: assigns each request to
     /// whichever node would finish it soonest, with perfect knowledge
     /// of every queue. The denominator of the efficiency ratio.
@@ -447,6 +504,8 @@ impl Arm {
             Arm::PredictedTimeTierFloor => "predicted-time+tier-floor",
             Arm::PredictedTimeTierFloorTwoChoices => "predicted-time+tier-floor+two-choices",
             Arm::PredictedTimeTierFloorWithinNoise => "predicted-time+tier-floor+within-noise",
+            Arm::ResponseBackpressure => "response-backpressure",
+            Arm::PredictedTimeTierFloorBackpressure => "predicted-time+tier-floor+backpressure",
             Arm::Oracle => "oracle",
         }
     }
@@ -460,7 +519,8 @@ impl Arm {
             | Arm::PredictedTimeOutboundOnly
             | Arm::PredictedTimeTierFloor
             | Arm::PredictedTimeTierFloorTwoChoices
-            | Arm::PredictedTimeTierFloorWithinNoise => RankObjective::PredictedTime,
+            | Arm::PredictedTimeTierFloorWithinNoise
+            | Arm::PredictedTimeTierFloorBackpressure => RankObjective::PredictedTime,
             _ => RankObjective::Product,
         }
     }
@@ -474,7 +534,8 @@ impl Arm {
             Arm::TierFloor
             | Arm::PredictedTimeTierFloor
             | Arm::PredictedTimeTierFloorTwoChoices
-            | Arm::PredictedTimeTierFloorWithinNoise => TierFloor::from_requirements(req),
+            | Arm::PredictedTimeTierFloorWithinNoise
+            | Arm::PredictedTimeTierFloorBackpressure => TierFloor::from_requirements(req),
             _ => TierFloor::None,
         }
     }
@@ -483,6 +544,18 @@ impl Arm {
         matches!(
             self,
             Arm::FreshSignals | Arm::FreshTwoChoices | Arm::FreshWarmStart
+        )
+    }
+
+    /// Whether the serving node piggybacks its true load on the
+    /// responses it returns (§4.2 step 1). Deliberately **not** folded
+    /// into [`fresh_signals`](Arm::fresh_signals): that one is an
+    /// oracle and this one is a mechanism, and the whole value of the
+    /// arm is the distance between them.
+    fn response_backpressure(&self) -> bool {
+        matches!(
+            self,
+            Arm::ResponseBackpressure | Arm::PredictedTimeTierFloorBackpressure
         )
     }
 
@@ -522,7 +595,7 @@ impl Arm {
 /// Every arm worth reporting side by side. `PredictedTime` sits last
 /// before `Oracle` because that is the order the §4.1 reading wants:
 /// arm 0 → predicted → perfect information.
-pub const ALL_ARMS: [Arm; 14] = [
+pub const ALL_ARMS: [Arm; 16] = [
     Arm::AsImplemented,
     Arm::FreshSignals,
     Arm::TwoChoices,
@@ -536,6 +609,8 @@ pub const ALL_ARMS: [Arm; 14] = [
     Arm::PredictedTimeTierFloor,
     Arm::PredictedTimeTierFloorTwoChoices,
     Arm::PredictedTimeTierFloorWithinNoise,
+    Arm::ResponseBackpressure,
+    Arm::PredictedTimeTierFloorBackpressure,
     Arm::Oracle,
 ];
 
@@ -668,6 +743,17 @@ struct SimNode {
     /// `fetched_at_ms` per peer; absent = never fetched.
     manifest_fetched_ms: HashMap<usize, u64>,
     gossip: HashMap<usize, Belief>,
+    /// §4.2 step 1: what a peer told us about itself on the last
+    /// response it returned to *us*. Absent for a peer we have never
+    /// dispatched to — which is the whole difference between this
+    /// mechanism and [`Arm::FreshSignals`]'s oracle.
+    ///
+    /// Same [`Belief`] shape as `gossip` on purpose: the two are rival
+    /// readings of one quantity, and `build_peer_views` picks between
+    /// them by measurement time. Populated only under
+    /// [`Arm::response_backpressure`]; every other arm leaves it empty
+    /// and reproduces byte-for-byte.
+    backpressure: HashMap<usize, Belief>,
 }
 
 impl SimNode {
@@ -755,6 +841,11 @@ pub struct RunReport {
     /// What §4.2 step 2's sampler actually did, as opposed to what its
     /// arm is named. Zeroed on every arm that does not sample.
     pub sampler: SamplerTrace,
+    /// How far §4.2 step 1's piggybacked load reading reached.
+    /// `peer_views_with_signal` is populated on **every** arm (it is
+    /// just "did the decider have a load number"); the
+    /// `*_from_response` halves are zero on arms without the mechanism.
+    pub backpressure: BackpressureTrace,
 }
 
 /// How often the within-noise sampler had a choice, and how often it
@@ -787,6 +878,67 @@ pub struct SamplerTrace {
     /// Sum of band sizes over `decisions`, so a mean is derivable
     /// without keeping the histogram.
     pub band_total: u64,
+}
+
+/// Which channel carried the load signal a decision consumed.
+///
+/// The arm's name says a mechanism is *available*; this says whether it
+/// was *used*, which is a different claim and the one the latency table
+/// cannot make on its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LoadSource {
+    /// No load reading at all — a peer this decider has never heard
+    /// from. Distinct from a reading of zero, and scored differently.
+    #[default]
+    None,
+    /// The gossiped counter: the only channel before §4.2 step 1.
+    Gossip,
+    /// Piggybacked on a response this decider received from that peer.
+    Response,
+}
+
+/// How far §4.2 step 1's mechanism actually reached.
+///
+/// A response can only carry news about the peer that sent it, so
+/// [`Arm::ResponseBackpressure`]'s coverage is an *outcome* of the
+/// routing policy rather than a property of the arm — a decider that
+/// stays local learns nothing from anyone. Without these counters a
+/// null result is unreadable: "piggybacking does not help" and
+/// "piggybacking never fired" produce the same latency column and are
+/// opposite findings.
+///
+/// `dispatch_*` is the load-bearing pair. `peer_views_*` is coverage
+/// across the whole candidate set, which is always the weaker number
+/// and would flatter a null result if quoted alone.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BackpressureTrace {
+    /// Peer views built carrying any load signal at all.
+    pub peer_views_with_signal: u64,
+    /// …of those, how many read a response-carried signal.
+    pub peer_views_from_response: u64,
+    /// Dispatches to a peer (not stay-local) that consumed a signal.
+    pub dispatches_with_signal: u64,
+    /// …of those, how many were decided on a response-carried signal.
+    /// This is the number that says whether the mechanism was present
+    /// at the moment it could change an outcome.
+    pub dispatches_from_response: u64,
+}
+
+impl BackpressureTrace {
+    /// Share of peer-dispatches whose load signal came off a response.
+    /// `None` when nothing was dispatched with a signal, which reads
+    /// differently from 0.0 and must not be collapsed into it.
+    pub fn dispatch_coverage(&self) -> Option<f64> {
+        (self.dispatches_with_signal > 0)
+            .then(|| self.dispatches_from_response as f64 / self.dispatches_with_signal as f64)
+    }
+
+    /// Share of scored peer views whose load signal came off a
+    /// response.
+    pub fn view_coverage(&self) -> Option<f64> {
+        (self.peer_views_with_signal > 0)
+            .then(|| self.peer_views_from_response as f64 / self.peer_views_with_signal as f64)
+    }
 }
 
 impl SamplerTrace {
@@ -845,6 +997,7 @@ struct Sim {
     records: Vec<DecisionEvent>,
     truth: Vec<ServedFact>,
     sampler: SamplerTrace,
+    backpressure: BackpressureTrace,
 }
 
 /// Run one (scenario, arm, seed) to completion under the default
@@ -871,6 +1024,7 @@ pub fn run_with(scenario: &Scenario, arm: Arm, seed: u64, cfg: SimConfig) -> Run
         node_names: scenario.nodes.iter().map(|n| n.name.clone()).collect(),
         peer_samples,
         sampler: sim.sampler,
+        backpressure: sim.backpressure,
     }
 }
 
@@ -969,6 +1123,7 @@ impl Sim {
                 peer_health: PeerHealthTracker::new(),
                 manifest_fetched_ms: HashMap::new(),
                 gossip: HashMap::new(),
+                backpressure: HashMap::new(),
             })
             .collect();
         Self {
@@ -982,6 +1137,7 @@ impl Sim {
             world_rng: Rng::new(seed ^ 0xA5A5_5A5A_C3C3_3C3C),
             policy_rng: Rng::new(seed ^ 0x1357_9BDF_2468_ACE0),
             sampler: SamplerTrace::default(),
+            backpressure: BackpressureTrace::default(),
             records: Vec::new(),
             truth: Vec::new(),
         }
@@ -1189,9 +1345,16 @@ impl Sim {
         let (server, ages) = match chosen_view {
             Some(view_idx) => {
                 let peer = views_index_to_node(origin, view_idx);
-                (peer, self.signal_ages(origin, peer))
+                let ages = self.signal_ages(origin, peer);
+                if ages.2 != LoadSource::None {
+                    self.backpressure.dispatches_with_signal += 1;
+                    if ages.2 == LoadSource::Response {
+                        self.backpressure.dispatches_from_response += 1;
+                    }
+                }
+                (peer, ages)
             }
-            None => (origin, (None, None)),
+            None => (origin, (None, None, LoadSource::None)),
         };
         self.dispatch(
             origin,
@@ -1299,8 +1462,14 @@ impl Sim {
                     now / 1000,
                 )
             } else {
-                match self.nodes[origin].gossip.get(&peer) {
-                    Some(b) => (Some(b.in_flight), b.availability, b.received_at_ms / 1000),
+                match self.load_belief(origin, peer) {
+                    Some((b, src)) => {
+                        self.backpressure.peer_views_with_signal += 1;
+                        if src == LoadSource::Response {
+                            self.backpressure.peer_views_from_response += 1;
+                        }
+                        (Some(b.in_flight), b.availability, b.received_at_ms / 1000)
+                    }
                     // Never heard from: no gossiped load signal at
                     // all, which is what a cold peer looks like.
                     None => (None, None, 0),
@@ -1329,14 +1498,55 @@ impl Sim {
         views
     }
 
-    /// True vs recorded age of the load signal behind a dispatch.
-    fn signal_ages(&self, origin: usize, peer: usize) -> (Option<u64>, Option<u64>) {
-        match self.nodes[origin].gossip.get(&peer) {
-            Some(b) => (
+    /// The load reading `origin` would use for `peer` right now, and
+    /// where it came from.
+    ///
+    /// Two rival readings of one quantity: the gossiped belief, and —
+    /// under §4.2 step 1 — whatever the peer said about itself on the
+    /// last response it returned to us. **Newest measurement wins**,
+    /// which is the only rule that needs no tuning constant and the
+    /// only one that cannot be worse than either source alone. A
+    /// gossip record that arrived after our last response but was
+    /// *measured* before it is correctly ignored; `received_at_ms`
+    /// orders arrival, `measured_at_ms` orders truth, and this picks on
+    /// truth.
+    ///
+    /// Returned by value (a `Belief` is a handful of words) so callers
+    /// can keep mutating `self` — the coverage counters at the call
+    /// site are the reason.
+    fn load_belief(&self, origin: usize, peer: usize) -> Option<(Belief, LoadSource)> {
+        let gossiped = self.nodes[origin].gossip.get(&peer);
+        let piggybacked = if self.arm.response_backpressure() {
+            self.nodes[origin].backpressure.get(&peer)
+        } else {
+            None
+        };
+        match (gossiped, piggybacked) {
+            (Some(g), Some(p)) => {
+                if p.measured_at_ms >= g.measured_at_ms {
+                    Some((p.clone(), LoadSource::Response))
+                } else {
+                    Some((g.clone(), LoadSource::Gossip))
+                }
+            }
+            (Some(g), None) => Some((g.clone(), LoadSource::Gossip)),
+            (None, Some(p)) => Some((p.clone(), LoadSource::Response)),
+            (None, None) => None,
+        }
+    }
+
+    /// True vs recorded age of the load signal behind a dispatch, plus
+    /// which channel carried it. Reads through
+    /// [`load_belief`](Sim::load_belief) so the recorded provenance can
+    /// never disagree with the number the scorer actually consumed.
+    fn signal_ages(&self, origin: usize, peer: usize) -> (Option<u64>, Option<u64>, LoadSource) {
+        match self.load_belief(origin, peer) {
+            Some((b, src)) => (
                 Some(self.now_ms.saturating_sub(b.measured_at_ms)),
                 Some(self.now_ms.saturating_sub(b.received_at_ms)),
+                src,
             ),
-            None => (None, None),
+            None => (None, None, LoadSource::None),
         }
     }
 
@@ -1494,6 +1704,26 @@ impl Sim {
             );
             let peer_name = self.nodes[server].name.clone();
             self.nodes[origin].peer_health.record_success(&peer_name);
+            // §4.2 step 1: the response carries the server's own view
+            // of itself. Measured **after** this job left the running
+            // set, because "how loaded am I now that yours is done" is
+            // what the next decision needs — counting the finished job
+            // would make a peer look permanently one-deeper than it is.
+            //
+            // `measured_at_ms == received_at_ms`: the reading rides a
+            // response whose travel time is already charged to the
+            // request, so there is no propagation delay to model. The
+            // residual optimism is bounded by one RTT and documented on
+            // `Arm::ResponseBackpressure`.
+            if self.arm.response_backpressure() {
+                let reading = Belief {
+                    in_flight: self.nodes[server].in_flight(),
+                    availability: self.nodes[server].availability,
+                    received_at_ms: self.now_ms,
+                    measured_at_ms: self.now_ms,
+                };
+                self.nodes[origin].backpressure.insert(server, reading);
+            }
         }
 
         let served_by = if server == origin {

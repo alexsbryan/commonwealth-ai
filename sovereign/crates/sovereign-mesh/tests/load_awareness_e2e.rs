@@ -15,6 +15,20 @@
 //!    `current_local_in_flight` into the gossiped
 //!    `NodeCapabilities.current_in_flight` field — and survives a
 //!    serde round-trip, which is what an actual peer would see.
+//! 4. **Serving an inbound peer request moves that counter.** (1)–(3)
+//!    prove the *pipe* — that whatever the atomic holds reaches a
+//!    peer's scorer. They say nothing about whether the atomic holds
+//!    the node's real load. Property 4 is the one that answers
+//!    `SCHEDULER_QUALITY.md` F2's open caveat: the doc asserts the
+//!    counter is a **total**, and the finding is that every writer
+//!    (`peer_inference.rs::enter_local_total`, four call sites) sits
+//!    in the *outbound* joiner path, while an inbound peer request is
+//!    served at Priority 0 straight off `AppState::local_inference`
+//!    (`routes_inference.rs:171`) with no `MeshInferenceProvider` in
+//!    front of it. A node saturated by peer work would then advertise
+//!    near-zero load, read as idle to every decider, and win more of
+//!    it — priced by `Arm::OutboundOnlyLoad` at +126% mean latency on
+//!    `household-evening-12` and +584% on `isolation`.
 //!
 //! These together prove the founder-side scoring CAN see what a
 //! peer is gossiping. The scoring-side override (preferring the
@@ -24,10 +38,18 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use commonwealth_api::state::AppState;
+use commonwealth_api::server::client_router;
+use commonwealth_api::state::{AppState, LocalInferenceService};
+use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use commonwealth_state::MeshStore;
+use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::capabilities::build_local_capabilities;
+use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+
+mod common;
+use common::{member_with_last_seen, spawn_router, TestProvider};
 
 fn empty_mesh() -> Mesh {
     Mesh {
@@ -145,5 +167,117 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     assert!(
         !json.contains("current_in_flight"),
         "None must be skipped on the wire for byte-economy: {json}"
+    );
+}
+
+/// Property 4 — the inbound half of the load signal.
+///
+/// Drives the real `/v1/chat/completions` route on a real
+/// `client_router`, with the request carrying an `X-Node-Id` that is
+/// **not** this node: the wire shape of one peer asking another to
+/// serve a turn. While the generation is in flight the provider hook
+/// samples the published counter, because sampling it after the
+/// response has returned cannot tell "never incremented" from
+/// "incremented and correctly released".
+///
+/// The assertion is deliberately `>= 1` rather than `== 1`: the
+/// contract is "peer-served work is visible to gossip", not a
+/// particular accounting of guards.
+#[tokio::test]
+async fn serving_an_inbound_peer_request_publishes_in_flight() {
+    let self_id = NodeId::from_u128(0x5EF_u128);
+    let mut members = std::collections::HashMap::new();
+    members.insert(
+        self_id,
+        member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
+    );
+    let mesh = Mesh {
+        id: MeshId::from_u128(77),
+        name: "inbound-load-test".into(),
+        join_key_hash: [3u8; 32],
+        require_encryption: false,
+        members,
+        peers: vec![],
+    };
+
+    // The atomic gossip publishes. Shared with the probe closure
+    // below so the provider can read it mid-serve.
+    let publisher = Arc::new(AtomicU32::new(0));
+    // `u32::MAX` is the "hook never fired" sentinel — it separates
+    // "the counter did not move" from "the request never reached
+    // local_inference at all", which would otherwise both read as a
+    // failure with no way to tell them apart.
+    let observed = Arc::new(AtomicU32::new(u32::MAX));
+    let probe_publisher = Arc::clone(&publisher);
+    let probe_observed = Arc::clone(&observed);
+
+    let provider: Arc<dyn InferenceProvider> = Arc::new(
+        TestProvider::new()
+            .with_model_id("stub-primary")
+            .with_complete_text("ok")
+            .with_on_complete(move || {
+                probe_observed.store(probe_publisher.load(Ordering::Relaxed), Ordering::Relaxed);
+            }),
+    );
+    let adapter: Arc<dyn LocalInferenceService> =
+        Arc::new(SovereignInferenceAdapter::new(provider));
+
+    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
+    let app_registry = Arc::new(AppRegistry::new());
+    // `with_local_inference` goes through `Arc::get_mut` and must run
+    // before anything clones `inner` (see `injection_order.rs`);
+    // `install_in_flight_publisher` is a OnceLock and has no such
+    // ordering constraint, so it follows.
+    let state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None)
+            .with_local_inference(adapter);
+    state.install_in_flight_publisher(Arc::clone(&publisher));
+
+    let addr = spawn_router(client_router(state)).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/v1/chat/completions"))
+        // 32 hex chars, big-endian u128 — `headers::parse_x_node_id`'s
+        // shape. A different id than `self_id`: this is peer traffic.
+        .header("X-Node-Id", format!("{:032x}", 0xBEEF_u128))
+        .json(&serde_json::json!({
+            "model": "stub-primary",
+            "messages": [{"role": "user", "content": "ping"}],
+            "stream": false,
+        }))
+        .send()
+        .await
+        .expect("/v1/chat/completions must be reachable");
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::OK,
+        "setup sanity: the peer request must actually be served locally"
+    );
+
+    let during = observed.load(Ordering::Relaxed);
+    assert_ne!(
+        during,
+        u32::MAX,
+        "setup sanity: the provider hook never fired, so this request \
+         did not reach local_inference and the assertion below would be \
+         measuring nothing"
+    );
+    assert!(
+        during >= 1,
+        "a peer request being served locally must be visible in the \
+         gossiped in-flight count, but the counter read {during} while \
+         generation was in flight. This is SCHEDULER_QUALITY.md F2's \
+         caveat: `current_in_flight` is bumped only by \
+         MeshInferenceProvider::enter_local_total on the OUTBOUND path, \
+         so a node saturated by peer work advertises itself as idle."
+    );
+
+    // The guard must also release, or the node would advertise
+    // permanent load and never be chosen again.
+    assert_eq!(
+        publisher.load(Ordering::Relaxed),
+        0,
+        "the in-flight guard must drop once the response is returned"
     );
 }

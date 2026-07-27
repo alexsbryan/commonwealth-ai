@@ -77,6 +77,13 @@ decider.**
 > costs the **tail**, not the median — the opposite of what §3's
 > transcription reported. And the recorded gossip age understates the
 > true age, because `gossip_last_seen_unix` is receipt time.
+>
+> **Remedy update (§4.2.1):** the finding stands; the proposed fix does
+> not. Piggybacking load onto responses reaches only the peers a
+> decider is already talking to, and F1's cost lives in the peers it is
+> **not** — measured at 4–7% coverage and ±3% latency on three fleets.
+> F1 is a property of the channel that reaches everybody, so its repair
+> has to be one too.
 
 ### F2 — The shared "busy" signal is not a busy signal (CRITICAL)
 
@@ -357,6 +364,41 @@ about who gets *served* under contention, F7 is about who ever gets
 > (≈92%) still score from the benchmark estimate under warm-start, so
 > the source flip is a minority effect and the latency delta is
 > dominated by `cold_start_weight` itself.
+
+### F8 — A soft named target bypassed the scheduler entirely (HIGH, FIXED 2026-07-27)
+
+Every finding above is about how the scorer *ranks*. This one is about
+traffic the scorer never saw.
+
+`select_route` short-circuits on a named target **before** ranking
+(`peer_inference.rs`, `DecisionPath::NamedModel`), and that is correct
+for a **hard** target — an explicit `model_id` from the caller is a
+constraint, and silent substitution was the original bug on that path.
+But the same branch also carried the **soft** target: a node configured
+with a shared-model primary (`shared_model_id`), which is a
+*preference*. When that model resolved to nobody — the cluster is
+forming, the host is down — the fallback chain was
+`[named] -> LocalFallback` on the streaming path, and a bare
+`return self.local.complete()` on the non-streaming one.
+
+The household consequence is the sharpest in this document, because it
+fails hardest exactly where the household invested most. A 4B laptop
+configured to send its primary turn into a shared 122B, on a mesh that
+also has a 35B hub: while the cluster forms, that laptop answers from
+its **own 4B** and the hub sits idle. Nothing is bought. No latency is
+saved (local is not faster than a free LAN peer at that size gap), no
+privacy is honoured (the envelope already said `MeshAllowed` — it had
+to, or `shared_primary_id` would not have fired), and the user gets a
+markedly worse answer for no reason. It is not a quality/latency
+trade-off the scorer got wrong; it is a decision the scorer was never
+asked to make.
+
+Scale note, and the reason this is HIGH rather than CRITICAL: the
+persistent form is the `Unknown` case above. The transient form — a
+named host that resolves and then fails every address mid-cascade —
+self-heals, because `PeerHealthTracker` quarantines it after a
+threshold and subsequent requests take the `Unknown` path. See §4.3 for
+what shipped and what deliberately did not.
 
 ## 3. Measurement — what the probes showed
 
@@ -988,6 +1030,10 @@ than on the simulation.
    depth and estimated wait on every response, including the 503 body.
    No extra round-trips; instantly fresh for any peer recently spoken
    to. Collapses F1's dead time for exactly the peers that matter.
+   **Measured 2026-07-27 (§4.2.1) and it does not — the last sentence
+   is the part that fails. Do not build it as written.** The mechanism
+   works; its coverage is set by traffic density, and at household
+   density there is nothing for it to reach.
 2. **Break the herd.** Sample two among candidates whose predictions
    are within noise, take the less loaded. Small change to the ranked
    selector; largest tail improvement in §3. **Promoted to a
@@ -1013,6 +1059,163 @@ than on the simulation.
 
 Priority classes ([`MESH_INFERENCE.md`](MESH_INFERENCE.md) Increment 4)
 land after (3), never before — shedding without (3) manufactures F4.
+
+### 4.2.1 Step 1 measured before it was built — and it does not pay
+
+`fresh-signals` is the arm half this document leans on, and it is not a
+policy anyone can ship: it hands every decider the truth about every
+peer at every instant. Step 1 proposes to collect that win by
+piggybacking the serving node's load onto responses it already sends.
+Those are not the same thing, and §6's arm-first rule is what caught
+the difference: `Arm::ResponseBackpressure` is the mechanism with its
+real reach — fresh for a peer this decider has served a request
+through, stale gossip for everyone else, newest measurement winning
+where both exist.
+
+Five seeds per fleet, `tests/mesh_sim_scoreboard.rs`
+(`what_does_piggybacked_backpressure_recover_of_fresh_signals`):
+
+| fleet | arm 0 mean / p95 | backpressure | fresh-signals | coverage | median true signal age |
+|---|---|---|---|---|---|
+| household-evening-12 | 24.9 / 74.0 s | 25.3 / 76.7 s (**+1.6% / +3.7%**) | 22.6 / 61.8 s (−9.0% / −16.5%) | **6%** | 14.1 → 13.0 s |
+| twin-hubs | 31.7 / 68.7 s | 30.9 / 65.3 s (−2.6% / −4.9%) | 28.3 / 56.5 s (−10.7% / −17.7%) | **7%** | 14.3 → 13.2 s |
+| mixed-hubs | 22.9 / 52.3 s | 22.9 / 53.1 s (+0.1% / +1.5%) | 20.5 / 40.9 s (−10.5% / −21.9%) | **4%** | 14.8 → 14.4 s |
+| isolation | 86.7 / 257.8 s | 84.5 / 265.3 s (−2.5% / +2.9%) | 85.2 / 260.3 s (−1.8% / +0.9%) | **46%** | 15.0 → **10.4 s** |
+
+**The mechanism is not broken — it is unreached.** `isolation` is the
+control: a background actor dispatching every ~8s against a
+household's ~4 min. Coverage moves 4% → 46% and the median true signal
+age drops 15.0 → 10.4 s, which is the piggyback doing exactly what step
+1 says it does. So low coverage on the other three fleets is a fact
+about **traffic**, not about the wiring.
+
+**Why coverage is 4–7% at household density, arithmetically.** A
+response is fresher than gossip only in the window between it landing
+and the next gossip round — at most one 10 s interval. A decider makes
+~41 peer-dispatches per 30-minute run while gossip delivers ~180
+measurements per peer over the same span. The response reading is the
+newest one for a few percent of decisions because that is the share of
+decisions that fall inside those windows. Nothing about the rule is
+conservative: it is the ratio of the two rates.
+
+**And where coverage is high, the freshness is worth nothing.** On
+`isolation`, `fresh-signals` itself buys −1.8% mean and +0.9% p95. That
+fleet's problem is capacity, not information — no scheduler fixes an
+oversubscribed queue, which is the reading `print_saturation` exists to
+make. Step 1 therefore lands in a scissor: **at the densities where it
+fires, information is not the constraint; at the densities where
+information is the constraint, it does not fire.**
+
+**The deeper reason, and it is the part that generalises.** F1's win
+lives in gossip's staleness about peers a decider is *not* currently
+talking to — a herd forms because everyone's picture of the peer they
+are all about to choose is 10–30 s old. A response can only carry news
+about a peer you already chose. The channel is structurally blind to
+the population the finding is about. That is not fixable by making the
+response carry more; it is fixable only by shortening the interval on
+the channel that reaches everybody.
+
+**Objective sensitivity, checked and negative.** §4.2 predicted step 1
+would matter *more* to §4.1's objective, because the product bounds
+`in_flight` through `load_penalty` while predicted time multiplies it
+by a service time — the same asymmetry
+`predicted-time+outbound-only` prices for attribution. Measured
+(`is_fresh_backpressure_worth_more_to_predicted_time_than_to_the_product`),
+the two deltas are indistinguishable: on `twin-hubs`, −2.6% mean under
+the product against −2.5% under predicted-time+floor; on `mixed-hubs`,
++0.1% against −0.1%. The asymmetry is real in the arithmetic and
+invisible at 4–7% coverage, because a first-order error on 6% of
+decisions is smaller than a second-order error on all of them.
+
+**Two caveats, one of which is a genuine unmeasured upside.**
+
+- **The 503 half is untestable here**, exactly as F4 is: no admission
+  gate runs in the sim, so no request is ever shed. A shed is the one
+  case where the response arrives about a peer you were *about to keep
+  hammering*, and it is also the case §4.2 step 3 needs. Nothing above
+  prices it. It is the reason step 1 is *deferred* rather than
+  *retired*.
+- **The sim flatters the mechanism twice.** The reading is delivered at
+  completion rather than one RTT later, and `load_belief` compares
+  **true** measurement times — which a real client cannot do, since
+  `gossip_last_seen_unix` is receipt time and understates gossip's age
+  (§3.1). A production implementation choosing between the two
+  channels would over-value gossip relative to this simulation. Every
+  number above is an upper bound on the real mechanism.
+
+**Consequence for the ordering.** §4.1.3's conclusion — that the
+within-noise band is untrustworthy until the rate is observed, and that
+the repair is "gated on backpressure landing first" — has lost its
+carrier. Step 1 will not deliver an observed rate to the peers whose
+banding is in question, for the same coverage reason. Either that
+repair finds a different channel, or the band stays advertised-rate
+based with the ±10% cliff §4.1.3 measured. Step 3 (splitting congestion
+from failure) is now the first item in §4.2 with an unfalsified claim,
+and it is the one that carries the 503 body step 1 wanted anyway — so
+the piggybacked reading should ride along **there**, on the shed path,
+where its coverage is by construction 100% of the decisions that matter.
+
+### 4.3 The soft-named fallthrough — LANDED 2026-07-27
+
+F8's fix, and the first item in this document to land **in production**
+rather than as a Tier-1 arm. §6's arm-first rule does not gate it: it
+changes a fallback *chain*, not a scheduling *policy*. The scorer's
+objective, weights and gates are untouched — production still ranks on
+`RankObjective::Product` with `TierFloor::None`, exactly as §4.1
+requires until the Tier-2 gate exists. What changed is which requests
+reach the scorer at all.
+
+**The rule.** A soft named target that resolves to nobody now falls
+THROUGH to ranked mesh selection, with local as the last rung rather
+than the second. Both surfaces: `select_route`'s
+`NamedModelLocation::Unknown` + `soft` arm (streaming), and `complete`'s
+shared-primary preamble (non-streaming). On the non-streaming path the
+fix is structural rather than additive — *not* rewriting `model_id`
+leaves the request on the ranked path that already ran a few lines
+below, so the early `return` simply goes away.
+
+**The carve-out that keeps it honest.** A hard target — an explicit
+caller-supplied `model_id` — still fails loudly. It is a constraint, not
+a preference, and it must never be silently served by whatever the
+scorer happens to like. Pinned by
+`hard_named_target_still_fails_loudly_rather_than_falling_through`.
+
+**Why it is recordable.** A fallthrough emits a second decision record
+on a new `DecisionPath::NamedFallthrough`, sharing the request's
+`oicp_request_id` with the `NamedModel` record that named the missing
+model. Two records, one story: *the target resolved to nobody, and then
+the scorer ran.* Neither alone can answer "why did my 122B request get
+answered by the 35B?". The plan joins its **outcome** to the
+fallthrough record, because the ranked scorer is what picked the
+server — joining it to the named record would attribute a serve to a
+decision that scored nothing. The path is kept distinct from
+`RankedOicp` (rather than reusing it) so a scoreboard can count
+"how often is the shared cluster unavailable?" without that traffic
+disappearing into the ordinary ranked population; `decision_replay`
+admits both, since a fallthrough's candidates carry real breakdowns.
+
+**Deliberately NOT done — the `Peer` + soft case.** When the named host
+*resolves* and then fails every address mid-cascade, the plan still ends
+at `LocalFallback`. Landing the fallthrough there needs something this
+architecture does not have: per-**step** decision attribution. A plan
+carries one `decision_id`, chosen up front, and a cascade whose named
+step and ranked steps came from two different decisions cannot say which
+one to credit without lying about one of them. The gap is also the
+transient one (see F8's scale note) — `PeerHealthTracker` quarantines
+the failing host, after which the persistent `Unknown` path applies.
+Per-step attribution is the prerequisite; it is not on this critical
+path.
+
+**Gates.** `scripts/sovereign-lint.sh` 0 fail / 175 pre-existing warns
+(0 in new code); `scripts/sovereign-test.sh` **8223 pass / 0 fail** (was
+8219 — the four new e2e tests in
+`sovereign-mesh/tests/scheduler_decision_records.rs` §9). The e2e proves
+the headline claim end-to-end against a real `MeshInferenceProvider`:
+shared primary configured, nobody advertising it, a free peer on the
+mesh ⇒ **the peer serves and local does not**, with both records
+emitted and the outcome joined to the right one. Its companion pins the
+degrade path — no worthy peer ⇒ still local, still recorded as a scored
+stay-local rather than a gate.
 
 ## 5. The quality loop
 
