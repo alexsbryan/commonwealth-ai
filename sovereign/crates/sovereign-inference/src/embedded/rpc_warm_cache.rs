@@ -755,44 +755,6 @@ pub fn plan_shards_explicit(
     Some(build_shards_from_counts(counts, &w))
 }
 
-/// Per-device BLOCK-COUNT fractions for `plan`, in device order — the value to
-/// hand llama.cpp as `tensor_split` so its own per-layer device assignment
-/// agrees with the `-ot` overrides built from the same plan.
-///
-/// This exists because `-ot` moves tensor BUFFERS only. llama.cpp keeps a
-/// separate notion of which device owns layer `il`, derived from the device list
-/// + `tensor_split`; with no `tensor_split` it falls back to a VRAM-proportional
-/// default. On a heterogeneous mesh the two rules round differently and the cut
-/// points disagree by a layer — measured 2026-07-27 on Qwen3.5-4B across
-/// RuggedFox+BeefyMac: device weights 40 GB / 116 GB put llama.cpp's cut at
-/// 40/156 ≈ 25.6% of 32 layers ≈ 8.2 (so layer 8 → RPC0) while the byte-mass
-/// plan gives RPC0 exactly 25.0% (blocks 0..=7, so `blk.8.*` → local). That one
-/// layer has its OPS on one device and its WEIGHTS on the other, which is
-/// exactly what `resolve_fused_ops` reports. On a hybrid model the straddled
-/// layer is a Gated DeltaNet layer, its fused kernel is disabled, and the
-/// unfused path's `GGML_OP_SET` reaches the RPC worker with a `buffer == nullptr
-/// && data == nullptr` dst — which passes `create_node`'s asymmetric guard
-/// (ggml-rpc.cpp:1285 only rejects null-buffer-with-non-null-data) and
-/// segfaults the worker in the backend's set op.
-///
-/// Deriving both from one plan removes the disagreement at the source rather
-/// than steering around it. Empty when no device holds blocks. Pure.
-pub fn tensor_split_from_plan(plan: &[NodeShard]) -> Vec<f32> {
-    let total: u32 = plan
-        .iter()
-        .filter_map(|s| s.blocks.map(|(a, b)| b - a + 1))
-        .sum();
-    if total == 0 {
-        return Vec::new();
-    }
-    plan.iter()
-        .map(|s| {
-            let n = s.blocks.map(|(a, b)| b - a + 1).unwrap_or(0);
-            n as f32 / total as f32
-        })
-        .collect()
-}
-
 /// The cacheable output head (LM projection) — placed with the last block-holding
 /// device, distinct from `token_embd` (input) which stays on the host CPU.
 pub fn is_output_tensor(name: &str) -> bool {
@@ -861,6 +823,47 @@ pub fn override_patterns(plan: &[NodeShard]) -> Vec<(String, usize)> {
     out
 }
 
+/// The `tensor_split` that makes llama.cpp's PER-LAYER device map agree with
+/// `plan` — required alongside the `-ot` overrides, not optional.
+///
+/// llama.cpp keeps two placement systems that never talk to each other. Our
+/// `-ot` overrides place the WEIGHTS; `model.dev_layer(il)` — which
+/// `resolve_fused_ops` consults to decide whether fused kernels stay enabled —
+/// is computed at load from `tensor_split` (advertised free memory when unset)
+/// over **`n_layer + 1` units**, the output head counting as the extra unit
+/// (llama-model.cpp: `act_gpu_layers = min(n_gpu_layers, n_layer + 1)`, then
+/// `upper_bound(splits, il / act_gpu_layers)`). Overrides are never consulted.
+/// Left unpinned, dev_layer's boundary can straddle our cut by one layer; on a
+/// hybrid (Gated DeltaNet) model one straddled layer disables the fused GDN
+/// kernel globally, the unfused path emits `GGML_OP_SET`, and the first
+/// distributed decode kills the host at ggml-rpc.cpp:498
+/// (docs/DISTRIBUTED_GDN_CRASH_STATUS.md).
+///
+/// So hand llama.cpp cut points that sit HALFWAY between our block boundaries
+/// in `(n_layer + 1)`-unit space: a device whose last block is `b` gets its
+/// upper cut at `b + 0.5` — strictly between layer `b` and layer `b + 1`, so no
+/// float tie can flip a layer (a cut at exactly `b + 1` would tie against
+/// `upper_bound`'s strict `>`). The output-holding device's cut extends to
+/// `n_layer + 1`, landing the output unit exactly where [`override_patterns`]
+/// pins `output.weight`. Returns per-device weights in plan device order
+/// (llama.cpp normalizes internally); blockless devices get zero width. Pure.
+pub fn dev_layer_tensor_split(plan: &[NodeShard], n_layer: u32) -> Vec<f32> {
+    let n_dev = plan.iter().map(|s| s.device_index + 1).max().unwrap_or(0);
+    let mut out = vec![0.0f32; n_dev];
+    let mut prev_cut = 0.0f32;
+    for d in 0..n_dev {
+        let shard = plan.iter().find(|s| s.device_index == d);
+        let cut = match shard.and_then(|s| s.blocks) {
+            Some(_) if shard.is_some_and(|s| s.holds_output) => (n_layer + 1) as f32,
+            Some((_, last)) => last as f32 + 0.5,
+            None => prev_cut,
+        };
+        out[d] = cut - prev_cut;
+        prev_cut = cut;
+    }
+    out
+}
+
 /// Read the transformer block count (`<arch>.block_count`) from a GGUF's metadata
 /// — needed to plan the per-block split before the model is loaded. `None` if
 /// absent / not a u32.
@@ -909,6 +912,93 @@ mod tests {
         // downstream the empty-warm guard turns that into a loud refusal.
         let t1 = mk("t-00001-of-00002.gguf");
         assert_eq!(shard_files(&t1), vec![t1.clone()]);
+    }
+
+    /// Verbatim replica of llama.cpp's layer→device assignment
+    /// (llama-model.cpp `get_layer_buft_list`, llama-cpp-sys-4 0.4.2): cumulative
+    /// sum → normalize → `upper_bound(splits, il / (n_layer + 1))`. `il == n_layer`
+    /// is the output head (`dev_output`). Assumes `n_gpu_layers ≥ n_layer + 1`
+    /// (we pass 999), so `i_gpu_start == 0`.
+    fn llama_dev_layer(tensor_split: &[f32], il: u32, n_layer: u32) -> usize {
+        let mut splits = tensor_split.to_vec();
+        let mut sum = 0.0f32;
+        for s in splits.iter_mut() {
+            sum += *s;
+            *s = sum;
+        }
+        for s in splits.iter_mut() {
+            *s /= sum;
+        }
+        let v = il as f32 / (n_layer + 1) as f32;
+        splits
+            .iter()
+            .position(|&s| s > v) // std::upper_bound: first element strictly greater
+            .expect("il < n_layer + 1 ⇒ v < 1.0 = last split point")
+    }
+
+    /// Every layer (and the output unit) must land on the device the plan
+    /// assigned — this is the invariant whose violation was the distributed-GDN
+    /// host abort (DISTRIBUTED_GDN_CRASH_STATUS.md §4).
+    fn assert_dev_layer_agrees(plan: &[NodeShard], n_layer: u32) {
+        let split = dev_layer_tensor_split(plan, n_layer);
+        for il in 0..n_layer {
+            let want = tensor_device("blk.x.weight", Some(il), plan)
+                .expect("plan covers every block");
+            let got = llama_dev_layer(&split, il, n_layer);
+            assert_eq!(got, want, "layer {il} straddles: plan={want} dev_layer={got}");
+        }
+        let want_out = plan.iter().find(|s| s.holds_output).unwrap().device_index;
+        assert_eq!(llama_dev_layer(&split, n_layer, n_layer), want_out, "output unit");
+    }
+
+    #[test]
+    fn dev_layer_split_agrees_on_the_crash_repro_cut() {
+        // The exact 2026-07-27 repro: Qwen3.5-4B, 32 layers, RPC0 blocks 0..=7,
+        // Vulkan0 blocks 8..=31 + output. Layer 8 (a Gated DeltaNet layer) is the
+        // one llama.cpp put on RPC0 while our -ot put its weights on Vulkan0.
+        let plan = vec![
+            NodeShard { device_index: 0, blocks: Some((0, 7)), holds_output: false, fraction: 0.25 },
+            NodeShard { device_index: 1, blocks: Some((8, 31)), holds_output: true, fraction: 0.75 },
+        ];
+        assert_dev_layer_agrees(&plan, 32);
+        // And the specific regression layer, named:
+        let split = dev_layer_tensor_split(&plan, 32);
+        assert_eq!(llama_dev_layer(&split, 8, 32), 1, "layer 8 must be Vulkan0");
+    }
+
+    #[test]
+    fn naive_block_count_weights_reproduce_the_off_by_one() {
+        // Documents WHY the midpoint math is load-bearing: the naive pin
+        // (H2, 2026-07-27) passed block-count fractions [8, 24] ≡ [0.25, 0.75].
+        // Over llama.cpp's n_layer+1 = 33 units, 0.25 × 33 = 8.25 → layer 8
+        // lands on device 0 — the byte-identical warning H2 observed.
+        assert_eq!(llama_dev_layer(&[8.0, 24.0], 8, 32), 0, "the falsified H2 pin straddles");
+        // The corrected split puts the cut at 7.5/33 → layer 8 on device 1.
+        assert_eq!(llama_dev_layer(&[7.5, 25.5], 8, 32), 1);
+    }
+
+    #[test]
+    fn dev_layer_split_agrees_across_shapes() {
+        // Three devices, uneven cut (the 122B-style multi-worker case).
+        assert_dev_layer_agrees(&plan_shards(48, &[0.3, 0.2, 0.5]), 48);
+        // A blockless middle device (quarantined worker got weight ~0).
+        let plan = vec![
+            NodeShard { device_index: 0, blocks: Some((0, 10)), holds_output: false, fraction: 0.34 },
+            NodeShard { device_index: 1, blocks: None, holds_output: false, fraction: 0.0 },
+            NodeShard { device_index: 2, blocks: Some((11, 31)), holds_output: true, fraction: 0.66 },
+        ];
+        assert_dev_layer_agrees(&plan, 32);
+        // Single device degenerate case.
+        assert_dev_layer_agrees(&plan_shards(32, &[1.0]), 32);
+        // Boundary at every possible cut point of a small model: no layer count
+        // or cut position may straddle.
+        for cut in 1..8u32 {
+            let plan = vec![
+                NodeShard { device_index: 0, blocks: Some((0, cut - 1)), holds_output: false, fraction: 0.5 },
+                NodeShard { device_index: 1, blocks: Some((cut, 7)), holds_output: true, fraction: 0.5 },
+            ];
+            assert_dev_layer_agrees(&plan, 8);
+        }
     }
 
     #[test]

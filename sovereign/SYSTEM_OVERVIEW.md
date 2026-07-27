@@ -1719,6 +1719,7 @@ deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 |---|---|---|
 | Joiner decides a turn is offload-*eligible* | `sovereign-mesh/oicp_select.rs::offload_eligible` | SLOT_POLICY §5: `privacy == MeshAllowed && latency_class != Fast`. One predicate, shared by `select_peers_ranked` and `shared_primary_id`; replaced the old privacy-gate + `preferred_speed != Slow` pair (the Speed shadow no longer gates routing) |
 | Joiner picks peer-vs-local for an eligible turn | `sovereign-mesh/peer_inference.rs::select_peers_ranked` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability); forced-choice sentinels exclude peers not advertising `x:forced_choice` |
+| Joiner resolves a *named* target | `sovereign-mesh/peer_inference.rs::locate_named_model` | Name resolution + min-in-flight tiebreak, **not** the scorer. **Hard** (caller-supplied `model_id`) is a constraint: unknown ⇒ error, never substitution. **Soft** (configured `shared_model_id`) is a preference: unknown ⇒ falls THROUGH to `select_peers_ranked` with local as the last rung, recorded on `DecisionPath::NamedFallthrough` (SCHEDULER_QUALITY F8 / §4.3, 2026-07-27) |
 | Hub picks a local model for a peer request | `commonwealth-api/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
@@ -1770,7 +1771,7 @@ changed the diagnosis:
 | module | role |
 |---|---|
 | `sovereign-mesh/scheduler_core.rs` | The routing decision as a **pure total function** — `rank(DecisionBuilder, RankInputs) -> RankResult` over a snapshot of what a decider believes, with `now_unix` passed rather than read. `select_peers_ranked` is now gather-then-decide: async I/O above the line, this below it. Also holds the observation feedback (`observe_dispatch` / `observe_success` / `observe_failure`) the provider's `record_*` methods delegate to, so sim and production age their beliefs by one implementation. |
-| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, **model-load time** (`model_load_sec_per_gb`: a cold node advertises `loaded: false` + an estimate and pays it once, attributed to TTFT so the throughput EWMA is not poisoned), thirteen arms (as-implemented / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / predicted-time+outbound-only / **tier-floor** / **predicted-time+tier-floor (§4.1.1)** / **predicted-time+tier-floor+two-choices (§4.1.2)** / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; **four** separate RNG streams — world, policy, advertised-rate error, and advertised-size error — so switching arms cannot perturb the world the arms are compared in, and both fidelity knobs default to inert so every number recorded before they existed still reproduces. |
+| `sovereign-mesh/mesh_sim/` (feature `mesh-sim`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, **model-load time** (`model_load_sec_per_gb`: a cold node advertises `loaded: false` + an estimate and pays it once, attributed to TTFT so the throughput EWMA is not poisoned), sixteen arms (as-implemented / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / predicted-time+outbound-only / **tier-floor** / **predicted-time+tier-floor (§4.1.1)** / **predicted-time+tier-floor+two-choices (§4.1.2)** / **predicted-time+tier-floor+within-noise (§4.1.3)** / **response-backpressure (§4.2.1)** / predicted-time+tier-floor+backpressure / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it. No extra dependencies; **four** separate RNG streams — world, policy, advertised-rate error, and advertised-size error — so switching arms cannot perturb the world the arms are compared in, and both fidelity knobs default to inert so every number recorded before they existed still reproduces. |
 | `sovereign-mesh/predicted_time.rs` | The §4.1 candidate objective, and the only ranking in the tree with **no tunable constant**: `predict()` returns `queue + prefill + decode + rtt` as named addends or an `Unpredictable` reason (never a defaulted rate — a guessed rate is a fabricated fact with a unit attached), and `faster_than_local` filters on it. `LocalOption` keeps *unpredictable* local (⇒ no hop) distinct from *infeasible* local (⇒ any feasible peer wins); collapsing those points them in opposite directions. Reads only what a decider can see, so `PredictInputs::from_candidate` scores it against a production capture. |
 | `sovereign-mesh/mesh_sim/scoreboard.rs` | `RecordMetrics` and `TierMetrics` are computable from a **production capture** too (the S1 precondition) — `TierMetrics` is §5's capability column, counting downgrades and declined upgrades from decision records alone; `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
 
@@ -1905,6 +1906,31 @@ scores can be called close. Saturation is now gated on
 38 turns, heterogeneous 6.6, twin/mixed both under 1.0); the earlier
 Q1→Q4 3× ratio is kept only as a screen, because it fires on any fleet
 loaded enough to build a queue at all.
+
+**Fresh backpressure measured before it was built — and deferred
+(`Arm::ResponseBackpressure`, 2026-07-27 — full result in
+`SCHEDULER_QUALITY.md` §4.2.1).** §4.2 step 1 proposed collecting
+`fresh-signals`' −9..−22% p95 by piggybacking the serving node's load
+onto responses it already sends. The arm is that mechanism with its
+*real* reach — fresh only for a peer this decider has actually served a
+request through — and it does not pay: **+1.6/−2.6/+0.1% mean** across
+household-evening-12 / twin-hubs / mixed-hubs at **4–7% dispatch
+coverage**, against fresh-signals' −9 to −11%. The mechanism is not
+broken, it is *unreached*: on `isolation` (a background actor
+dispatching every ~8s) coverage rises to **46%** and the median true
+signal age drops 15.0 → 10.4s, so coverage is a property of traffic
+density, not of wiring. The two densities form a scissor — where it
+fires the fleet is capacity-bound (fresh-signals itself buys −1.8%
+there), and where information binds it does not fire. The structural
+reason generalises: a response can only carry news about a peer you
+**already chose**, and F1's cost lives in the peers you did not. §4.2's
+prediction that freshness matters more to the predicted-time objective
+(bounded `load_penalty` vs. a first-order queue term) is real in the
+arithmetic and invisible at this coverage: −2.6% vs −2.5% on twin-hubs.
+Deferred rather than retired because the **503 body** — the case where
+the reading is about a peer you were about to keep hammering — is
+untestable in a sim with no admission gate, exactly as F4 is; the
+piggyback should ride §4.2 step 3's shed path instead.
 
 **Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
 distributed primary stratifies into anchors (hold the RPC layer-split) + a

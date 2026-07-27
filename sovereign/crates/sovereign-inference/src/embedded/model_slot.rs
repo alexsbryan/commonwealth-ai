@@ -875,27 +875,22 @@ impl ModelSlot {
                 );
                 model_params = model_params
                     .with_devices(&dist.devs)
-                    .with_tensor_buft_overrides(&dist.overrides);
-                // Pin llama.cpp's OWN per-layer device assignment to the SAME
-                // plan the overrides came from. `-ot` moves tensor buffers; it
-                // does not move `dev_layer`, which llama.cpp derives from the
-                // device list + tensor_split — and with tensor_split unset it
-                // uses a VRAM-proportional default that rounds differently than
-                // our byte-mass plan. One layer then has its ops on one device
-                // and its weights on the other; on a hybrid model that is a
-                // Gated DeltaNet layer whose cross-device fused op reaches the
-                // RPC worker with a null-null dst and segfaults it. See
-                // `tensor_split_from_plan` for the measured numbers.
-                let split = tensor_split_from_plan(&dist.plan);
-                if !split.is_empty() {
-                    tracing::info!(
-                        ?split,
-                        "distributed load: pinning tensor_split to the shard plan \
-                         (keeps llama.cpp's per-layer device assignment in agreement \
-                          with the -ot overrides)"
-                    );
-                    model_params = model_params.with_tensor_split(&split);
-                }
+                    .with_tensor_buft_overrides(&dist.overrides)
+                    // The tensor_split pin is MANDATORY alongside the
+                    // overrides: llama.cpp computes its per-layer device map
+                    // (`model.dev_layer`, consulted by `resolve_fused_ops`)
+                    // from tensor_split over n_layer+1 units — the output head
+                    // is the extra unit — and never from the overrides. Unpinned
+                    // (or pinned to naive block FRACTIONS, the 2026-07-27 H2
+                    // attempt: 0.25×33 = 8.25 straddles layer 8), dev_layer
+                    // disagrees with the -ot cut by one layer, the fused GDN
+                    // kernel is disabled, and the unfused GGML_OP_SET path
+                    // aborts the host on first distributed decode.
+                    // `dist.tensor_split` puts each cut point HALFWAY between
+                    // block boundaries in (n_layer+1)-unit space, so dev_layer
+                    // reproduces the plan exactly (see `dev_layer_tensor_split`
+                    // and docs/DISTRIBUTED_GDN_CRASH_STATUS.md).
+                    .with_tensor_split(&dist.tensor_split);
             }
             LoadPlacement::InsufficientCluster { eligible, quorum } => {
                 // Shared-model host can't form the cluster yet — do NOT load (a

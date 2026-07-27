@@ -2022,3 +2022,234 @@ fn what_a_dishonest_size_advertisement_does_to_the_tier_floor() {
         "the size-advertisement knob's default is not inert"
     );
 }
+
+/// **§4.2 step 1, priced: what does the *implementable* half of fresh
+/// signals actually buy?**
+///
+/// `fresh-signals` is the arm every other finding in this file leans
+/// on, and it is not a policy anybody can ship. It hands every decider
+/// the truth about every peer at every instant. §3.1 priced it at −11%
+/// p95 on `household-evening-12` and −51% on `twin-hubs`, and §4.2
+/// step 1 proposes to collect that by piggybacking the serving node's
+/// load on the responses it already sends.
+///
+/// Those are not the same thing, and the difference is not a detail. A
+/// response can only carry news about the peer that *answered*, so the
+/// mechanism is fresh on a subset of the candidate set and stale
+/// everywhere else. `response-backpressure` is that subset made
+/// explicit. Read the three arms as a bracket:
+///
+///   - `as-implemented → response-backpressure` — what the mechanism
+///     is worth.
+///   - `response-backpressure → fresh-signals` — what it cannot reach,
+///     and therefore what a shorter gossip interval would still have
+///     to buy.
+///
+/// The **recovery** column is the ratio of the two, and it is the
+/// number §4.2 step 1 should be judged on. A recovery near 1.0 means
+/// the response channel is sufficient and the gossip interval can be
+/// left alone. Near 0.0 means the win lives entirely in peers a
+/// decider never talks to, and the proposal is aimed at the wrong
+/// place.
+///
+/// The coverage line is not decoration. A null result here has two
+/// incompatible explanations — the mechanism fired and did not help,
+/// or it never fired — and the latency column cannot tell them apart.
+/// That is F7's lesson, and the wiring assertions below are the part
+/// of this test that is allowed to fail the build.
+#[test]
+fn what_does_piggybacked_backpressure_recover_of_fresh_signals() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let fleets: [(&str, fn(u64) -> Scenario); 4] = [
+        ("household-evening-12", scenario::household_evening_12),
+        ("twin-hubs", scenario::twin_hubs),
+        ("mixed-hubs", scenario::mixed_hubs),
+        // The density control. A response can only be fresher than
+        // gossip inside the window between it landing and the next
+        // gossip round, so this mechanism's coverage is a function of
+        // how often a decider talks to the *same* peer — a property of
+        // the traffic, not of the code. `isolation` carries a
+        // background actor dispatching every ~8s against a household's
+        // ~4 min, which is the widest density contrast the scenario set
+        // offers. If coverage does not move across this span, low
+        // coverage is not a traffic artifact.
+        ("isolation", scenario::isolation),
+    ];
+    let arms = [
+        Arm::AsImplemented,
+        Arm::ResponseBackpressure,
+        Arm::FreshSignals,
+    ];
+
+    for (label, build) in fleets {
+        println!("\n=== {label} — §4.2 step 1: fresh where a response can reach ===");
+        let mut cells: Vec<(f64, f64)> = Vec::new();
+        for arm in arms {
+            let (mut means, mut p95s, mut ages) = (Vec::new(), Vec::new(), Vec::new());
+            let (mut with_signal, mut from_response, mut offs) = (0u64, 0u64, 0usize);
+            for seed in seeds {
+                let s = build(seed);
+                let report = run(&s, arm, seed);
+                with_signal += report.backpressure.dispatches_with_signal;
+                from_response += report.backpressure.dispatches_from_response;
+                offs += offloads(&report);
+                let sc = score(&report, GOSSIP_WINDOW_MS, None);
+                means.push(sc.truth.mean_total_ms / 1000.0);
+                p95s.push(sc.records.p95_total_ms / 1000.0);
+                ages.push(sc.truth.median_true_signal_age_ms / 1000.0);
+            }
+            let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len().max(1) as f64;
+            let (m, p95) = (mean(&means), mean(&p95s));
+            cells.push((m, p95));
+            println!(
+                "  {:<24} mean {:>5.1}s  p95 {:>5.1}s  median signal age {:>5.1}s  \
+                 {:>3.0}% of {} peer-dispatches decided on a response",
+                arm.label(),
+                m,
+                p95,
+                mean(&ages),
+                100.0 * from_response as f64 / with_signal.max(1) as f64,
+                with_signal,
+            );
+
+            // The wiring checks. Both directions, because "the arm did
+            // nothing" and "the arm is not connected" print the same
+            // latency row and mean opposite things.
+            match arm {
+                Arm::AsImplemented | Arm::FreshSignals => assert_eq!(
+                    from_response, 0,
+                    "{label}/{}: a non-backpressure arm consumed a response-carried \
+                     signal — the arm predicate leaks",
+                    arm.label()
+                ),
+                Arm::ResponseBackpressure => {
+                    assert!(offs > 0, "{label}: no offloads, so this fleet cannot test §4.2 step 1");
+                    assert!(
+                        from_response > 0,
+                        "{label}: the backpressure arm never consumed a response-carried \
+                         signal despite {offs} offloads — the mechanism is not wired"
+                    );
+                }
+                _ => unreachable!("arms list is closed"),
+            }
+        }
+
+        let (base_m, base_p95) = cells[0];
+        let (bp_m, bp_p95) = cells[1];
+        let (fresh_m, fresh_p95) = cells[2];
+        // Recovery: how much of the oracle-freshness win the mechanism
+        // collects. `None` when fresh-signals did not win by enough to
+        // divide by — a **relative** floor, not an absolute one,
+        // because a saturated fleet's 86s baseline turns a 1.5s wobble
+        // into "recovers 305%". That is a denominator artifact, and
+        // §6 has collected enough of those.
+        let recovery = |base: f64, bp: f64, fresh: f64| {
+            let gap = base - fresh;
+            (gap.abs() >= 0.02 * base.abs()).then(|| 100.0 * (base - bp) / gap)
+        };
+        let show = |r: Option<f64>| match r {
+            Some(v) => format!("{v:.0}%"),
+            None => "n/a (fresh signals bought <2% here — no gap to recover)".to_string(),
+        };
+        println!(
+            "  → mean: {:+.1}% vs arm 0 (fresh-signals {:+.1}%) — recovers {}",
+            100.0 * (bp_m - base_m) / base_m.max(0.001),
+            100.0 * (fresh_m - base_m) / base_m.max(0.001),
+            show(recovery(base_m, bp_m, fresh_m)),
+        );
+        println!(
+            "  → p95:  {:+.1}% vs arm 0 (fresh-signals {:+.1}%) — recovers {}",
+            100.0 * (bp_p95 - base_p95) / base_p95.max(0.001),
+            100.0 * (fresh_p95 - base_p95) / base_p95.max(0.001),
+            show(recovery(base_p95, bp_p95, fresh_p95)),
+        );
+    }
+}
+
+/// **Is §4.2 step 1 a prerequisite for §4.1, or an independent
+/// improvement?**
+///
+/// §4.2 asserts the first: the tier floor's relaxation rule and the
+/// within-noise band both want an *observed* rate rather than an
+/// advertised one, and §4.1.3 closed on exactly that sentence. But
+/// there is a sharper reason to expect it, and it is measurable here.
+///
+/// The two objectives consume `in_flight` differently. The product
+/// passes it through `load_penalty`, a **bounded** multiplier — a
+/// stale count moves the score a little. Predicted time **multiplies
+/// it by a service time**, so a stale count is a first-order error
+/// that scales with the queue. The same asymmetry
+/// `predicted-time+outbound-only` exists to price for load
+/// *attribution* should appear here for load *staleness*.
+///
+/// So: run the mechanism under both objectives and compare the two
+/// deltas. If freshness is worth materially more to predicted time
+/// than to the product, §4.2's ordering is measured rather than
+/// argued, and the two changes should land together. If the deltas
+/// match, they are independent and can be sequenced by cost.
+///
+/// Reported, not asserted, apart from the tier floor's own invariant —
+/// a freshness change must not become a quality change by relaxing the
+/// floor through the back door.
+#[test]
+fn is_fresh_backpressure_worth_more_to_predicted_time_than_to_the_product() {
+    let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
+    let fleets: [(&str, fn(u64) -> Scenario); 2] = [
+        ("twin-hubs", scenario::twin_hubs),
+        ("mixed-hubs", scenario::mixed_hubs),
+    ];
+    // (objective label, without the mechanism, with it)
+    let pairs = [
+        ("product (arm 0)", Arm::AsImplemented, Arm::ResponseBackpressure),
+        (
+            "predicted-time+floor",
+            Arm::PredictedTimeTierFloor,
+            Arm::PredictedTimeTierFloorBackpressure,
+        ),
+    ];
+
+    for (label, build) in fleets {
+        println!("\n=== {label} — what is a fresh load count worth, per objective? ===");
+        for (objective, without, with) in pairs {
+            let cell = |arm: Arm| {
+                let (mut means, mut p95s) = (Vec::new(), Vec::new());
+                for seed in seeds {
+                    let s = build(seed);
+                    let report = run(&s, arm, seed);
+                    let sc = score(&report, GOSSIP_WINDOW_MS, None);
+                    // Only the floor arms owe the floor's invariant.
+                    // Arm 0 declines upgrades by design — it has no
+                    // floor to escape, and asserting on it would be
+                    // asserting that the baseline is the treatment.
+                    if matches!(
+                        arm,
+                        Arm::PredictedTimeTierFloor | Arm::PredictedTimeTierFloorBackpressure
+                    ) {
+                        assert_eq!(
+                            (sc.tier.downgrades, sc.tier.declined_upgrades),
+                            (0, 0),
+                            "{label}/{seed}/{}: a freshness arm escaped the tier floor",
+                            arm.label()
+                        );
+                    }
+                    means.push(sc.truth.mean_total_ms / 1000.0);
+                    p95s.push(sc.records.p95_total_ms / 1000.0);
+                }
+                let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len().max(1) as f64;
+                (mean(&means), mean(&p95s))
+            };
+            let (m0, p0) = cell(without);
+            let (m1, p1) = cell(with);
+            println!(
+                "  {:<22} mean {:>5.1}s → {:>5.1}s ({:+.1}%)   p95 {:>5.1}s → {:>5.1}s ({:+.1}%)",
+                objective,
+                m0,
+                m1,
+                100.0 * (m1 - m0) / m0.max(0.001),
+                p0,
+                p1,
+                100.0 * (p1 - p0) / p0.max(0.001),
+            );
+        }
+    }
+}
