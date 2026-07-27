@@ -201,6 +201,22 @@ if [[ "$TARGET" != "$HOST_TRIPLE" ]]; then
 fi
 
 # ─── Build ───────────────────────────────────────────────────────────
+# Clear LAST run's updater archives first, so "the archive exists" below can
+# only ever mean "THIS run produced it".
+#
+# Why this exists (desktop-v0.3.5, 2026-07-27): the target dir is not cleaned
+# between releases, and on the normal local path `cargo tauri build` dies in
+# the DMG cosmetic step BEFORE emitting updater artifacts. So the previous
+# version's `svrnmesh.app.tar.gz` was still sitting here, the recovery pass
+# below skipped itself because `*.app.tar.gz` matched THAT file, and the
+# arch-qualify step then stamped the freshly-built app's version onto the
+# stale tarball. desktop-v0.3.5 shipped a byte-identical copy of the 0.3.3
+# payload — correctly signed (the .sig signs bytes, and those bytes really
+# were 0.3.3), so every downstream check passed. Users who updated landed on
+# 0.3.3, the endpoint kept offering 0.3.5, and the update loop never
+# terminated.
+rm -f "$OUT_DIR"/macos/*.app.tar.gz "$OUT_DIR"/macos/*.app.tar.gz.sig
+
 # Capture cargo's real exit code. Do NOT pipe this through `tee`/`| …`
 # or chain it with `; echo` — a pipeline's status is the LAST stage's, so
 # either masks a failed build as success (observed 2026-06-18: a failed
@@ -294,11 +310,32 @@ if [[ -f "$OUT_DIR/macos/$APP_NAME.app.tar.gz" ]]; then
         *)                    ARCH_SUFFIX="$(uname -m)" ;;
     esac
     (( UNIVERSAL )) && ARCH_SUFFIX=universal
+
+    # The name we are about to stamp comes from the freshly-built .app, but the
+    # BYTES come from the tarball. Never assume they agree — read the version
+    # back out of the archive and refuse to label a payload as something it is
+    # not. This is the assertion that would have caught the desktop-v0.3.5
+    # mislabel (see the rm above) even if the staleness itself slipped through.
+    TAR_VERSION="$(tar xzfO "$OUT_DIR/macos/$APP_NAME.app.tar.gz" \
+        "$APP_NAME.app/Contents/Info.plist" 2>/dev/null \
+        | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null || true)"
+    if [[ -z "$TAR_VERSION" ]]; then
+        log "ERROR: cannot read CFBundleShortVersionString from inside $OUT_DIR/macos/$APP_NAME.app.tar.gz — refusing to arch-qualify an unverifiable archive." >&2
+        exit 1
+    fi
+    if [[ "$TAR_VERSION" != "$VERSION" ]]; then
+        log "ERROR: updater archive contains version $TAR_VERSION but the built app is $VERSION." >&2
+        printf '  The archive is stale — it is NOT this build. Labelling it "%s" would ship\n' "$VERSION" >&2
+        printf '  a %s payload under a %s name, and it would verify cleanly (the .sig signs\n' "$TAR_VERSION" "$VERSION" >&2
+        printf '  bytes, not versions). Delete %s/macos/*.app.tar.gz* and re-run.\n' "$OUT_DIR" >&2
+        exit 1
+    fi
+
     for ext in app.tar.gz app.tar.gz.sig; do
         src="$OUT_DIR/macos/$APP_NAME.$ext"
         [[ -f "$src" ]] && cp "$src" "$OUT_DIR/macos/${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.$ext"
     done
-    log "Updater artifacts arch-qualified: ${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz(.sig)"
+    log "Updater artifacts arch-qualified: ${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz(.sig) (verified: archive contains $TAR_VERSION)"
 fi
 
 # ─── Surface results ─────────────────────────────────────────────────

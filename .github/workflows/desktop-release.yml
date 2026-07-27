@@ -531,6 +531,17 @@ jobs:
             # already qualified (idempotent re-runs)
             [[ "$base" == *"_${ARCH_SUFFIX}" ]] && continue
             VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/$base.app/Contents/Info.plist")"
+            # The name comes from the freshly-built .app; the bytes come from the
+            # tarball. A restored cache can leave an older archive here, and
+            # labelling it with the new version ships a stale payload that passes
+            # every downstream check (the .sig signs bytes, not versions) — see
+            # desktop-v0.3.5, 2026-07-27, cut on the local path. Verify, don't assume.
+            TAR_VERSION="$(tar -xzOf "$f" '*.app/Contents/Info.plist' 2>/dev/null \
+              | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null || true)"
+            if [[ "$TAR_VERSION" != "$VERSION" ]]; then
+              echo "::error::$f contains version '${TAR_VERSION:-<unreadable>}' but the built app is $VERSION — stale updater archive, refusing to mislabel it." >&2
+              exit 1
+            fi
             mv "$f" "$BUNDLE/${base}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz"
             if [[ -f "$f.sig" ]]; then
               mv "$f.sig" "$BUNDLE/${base}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz.sig"

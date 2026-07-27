@@ -157,6 +157,26 @@ EOF
             die "signature key mismatch on $f: $KEY_ID != $EXPECTED_KEY_ID (wrong TAURI_SIGNING_PRIVATE_KEY?)"
         fi
         printf '  ok (sig %s)  %s\n' "$KEY_ID" "$f"
+    elif [[ "$f" == *.app.tar.gz ]]; then
+        # Assert the PAYLOAD is the version we are shipping — the filename is
+        # constructed from $VERSION, so it proves nothing on its own.
+        #
+        # desktop-v0.3.5 (2026-07-27) shipped a byte-identical copy of the
+        # 0.3.3 payload under a 0.3.5 name. Every check here passed: the file
+        # existed, and the signature was valid — because the .sig signs BYTES,
+        # and those bytes genuinely were a correctly-signed 0.3.3 build. Users
+        # who updated landed back on 0.3.3 and the update prompt never cleared.
+        # The build script now refuses to create such a file; this is the
+        # independent gate, and the only one that runs under --upload-only.
+        TAR_VERSION="$(tar -xzOf "$f" '*.app/Contents/Info.plist' 2>/dev/null \
+            | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null || true)"
+        if [[ -z "$TAR_VERSION" ]]; then
+            die "cannot read the app version inside $f — refusing to upload an unverifiable payload."
+        fi
+        if [[ "$TAR_VERSION" != "$VERSION" ]]; then
+            die "$f contains version $TAR_VERSION, not $VERSION. This is a STALE artifact from an earlier build — uploading it would ship $TAR_VERSION to everyone as $VERSION, and it would verify cleanly. Rebuild that leg (the target dir was not cleaned between releases)."
+        fi
+        printf '  ok %9s  %s  (payload %s)\n' "$(du -h "$f" | cut -f1)" "$f" "$TAR_VERSION"
     else
         printf '  ok %9s  %s\n' "$(du -h "$f" | cut -f1)" "$f"
     fi
