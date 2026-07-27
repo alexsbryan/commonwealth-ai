@@ -642,7 +642,43 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
                 }
             };
             let byte_aware = !block_bytes.is_empty();
-            let computed = plan_shards_weighted(n_layer, &weights, &block_bytes, head_bytes);
+            // Diagnostic override: `SOVEREIGN_RPC_BLOCK_SPLIT=11,21` pins the
+            // per-device block counts (device order: RPC workers first, then
+            // local), bypassing the VRAM-derived apportionment. The computed
+            // split's cut points follow advertised VRAM, so without this there
+            // is no way to AIM the device boundary at a chosen layer — which is
+            // what separates "the distributed-decode fault follows a boundary
+            // that lands on a Gated DeltaNet layer" from "any RPC boundary
+            // faults". A malformed or non-tiling value is REFUSED (warned, then
+            // ignored) rather than repaired: a run that silently used a
+            // different split than the operator asked for would make the
+            // experiment's result meaningless.
+            let explicit = std::env::var("SOVEREIGN_RPC_BLOCK_SPLIT").ok().and_then(|raw| {
+                match parse_block_split(&raw, n_layer, weights.len()) {
+                    Some(counts) => plan_shards_explicit(n_layer, &weights, &counts),
+                    None => {
+                        tracing::warn!(
+                            raw = %raw,
+                            n_layer,
+                            devices = weights.len(),
+                            "SOVEREIGN_RPC_BLOCK_SPLIT ignored — must be one count per device, \
+                             summing to n_layer; falling back to the computed split"
+                        );
+                        None
+                    }
+                }
+            });
+            let computed = match explicit {
+                Some(plan) => {
+                    tracing::warn!(
+                        blocks = ?plan.iter().map(|s| s.blocks).collect::<Vec<_>>(),
+                        "SOVEREIGN_RPC_BLOCK_SPLIT active — placement is PINNED by env, \
+                         NOT derived from VRAM (diagnostic mode)"
+                    );
+                    plan
+                }
+                None => plan_shards_weighted(n_layer, &weights, &block_bytes, head_bytes),
+            };
 
             // Glassbox: log the resulting per-device byte balance so an operator
             // can see WHY each node got its range — and spot a residual overflow a

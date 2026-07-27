@@ -301,6 +301,22 @@ impl Prediction {
     pub fn service_ms(&self) -> f64 {
         self.prefill_ms + self.decode_ms
     }
+
+    /// The prediction with the guessed term taken out: what this
+    /// candidate would cost with nobody ahead of it.
+    ///
+    /// The split matters because the four terms are not equally
+    /// trustworthy. `load`, `prefill`, `decode` and `rtt` come from the
+    /// advertised rate card, the load estimate and the RTT probe;
+    /// `queue` is `in_flight × service`, and `in_flight` is a gossiped
+    /// count that can be seconds stale — F1, the defect this whole
+    /// document is organised around. So this is the part of the
+    /// prediction a decider is *not* guessing at, and comparing two
+    /// candidates on it asks the capability question free of the
+    /// congestion one.
+    pub fn uncontended_ms(&self) -> f64 {
+        self.total_ms - self.queue_ms
+    }
 }
 
 /// Predicted time to answer, from what a decider can see.
@@ -432,6 +448,94 @@ pub fn faster_than_local<T>(
     // this is cheap insurance rather than dead defence.)
     winners.sort_by(|(_, a), (_, b)| a.total_ms.total_cmp(&b.total_ms));
     winners
+}
+
+/// How many candidates at the head of a ranking are separated from the
+/// best one by nothing but a number the decider is guessing at — §4.2
+/// step 2's *"candidates whose predictions are within noise"*.
+///
+/// **The noise is named, not chosen, and there is no constant here**
+/// (invariant 1). Of `predict`'s four terms exactly one is built from a
+/// gossiped count that can be seconds stale — `queue = in_flight ×
+/// service` — and [`Prediction::uncontended_ms`] is the rest. Two
+/// candidates are therefore within noise of each other when their
+/// uncontended predictions do not separate them: whatever order the
+/// queue term then imposes is an order on the one signal known to be
+/// wrong, and F1 is precisely the finding that it *is* wrong, together,
+/// for every decider at once.
+///
+/// §4.1.2 measured why the width has to come from the rate card rather
+/// than from a margin:
+///
+///   - `twin-hubs` band 0 is three *identical* hubs on a uniform LAN,
+///     so every uncontended prediction is equal, the whole band is in
+///     play, and this behaves like the blunt sampler that recovered
+///     −4% there.
+///   - `mixed-hubs` band 0 spans 34 / 25 / 11 tok/s, so the uncontended
+///     predictions separate strictly, the band collapses to the leader,
+///     and the objective's −8% win is not sampled away. That is the
+///     +3% regression the blunt arm paid, declined.
+///
+/// Returned as a **prefix length**, and it is a prefix by construction
+/// because the run stops at the first candidate that fails the test —
+/// deliberately, and this is the one place the definition is narrower
+/// than its own principle. A genuinely capable candidate sitting far
+/// down the list behind a large queue would pass the uncontended test,
+/// but its `total_ms` says a *lot* of work is already committed to it,
+/// and a count of five is not plausibly a stale zero. The run keeps the
+/// cases where the queue signal is doing the separating and drops the
+/// ones where it is merely large.
+///
+/// **Known limit, and it is sharper than "conservative" — §4.1.3
+/// measured it and the first draft of this paragraph was wrong.** The
+/// band decides "are these the same machine?" from the *advertised*
+/// rate card, which is a number the candidate states about itself and
+/// this module deliberately never corrects (invariant 3: no defaulting,
+/// no substituted rates — where the product objective does have an
+/// error-correcting path in `throughput_factor`'s observed EWMA). So
+/// two hubs that are identical in fact but differ in what they claim
+/// separate strictly, and the band collapses. On `twin-hubs` a mere
+/// ±10% rate-card error takes the mean band from 2.92 to 1.45 — a
+/// cliff, not a decay.
+///
+/// That is *not* a safe failure: the collapsed band still opens on ~25%
+/// of decisions, on whichever pairs happen to have near-equal
+/// *perturbed* times, so the sampler keeps firing on noise while no
+/// longer firing on the real ties. Measured cost is ~+3% against the
+/// plain argmax, where the blunt uniform sampler — which never consults
+/// the rate card at all — holds its full recovery. Fixing this means
+/// giving the band an observed rate when one exists, not a tolerance
+/// constant.
+///
+/// Zero for an empty ranking; never zero otherwise, since the leader is
+/// trivially within noise of itself.
+pub fn tie_band<T>(ranked: &[(T, Prediction)]) -> usize {
+    let Some((_, leader)) = ranked.first() else {
+        return 0;
+    };
+    let ceiling = leader.uncontended_ms();
+    ranked
+        .iter()
+        .take_while(|(_, p)| p.uncontended_ms() <= ceiling)
+        .count()
+}
+
+/// Of two candidates the prediction cannot tell apart, the one to take
+/// — §4.2 step 2's *"take the less loaded"*. `true` keeps `a`.
+///
+/// "Loaded" is `queue_ms` rather than the raw in-flight count, because
+/// a count has no scale: three jobs on a 34 tok/s hub is less work
+/// ahead of you than two on an 11 tok/s one, and the count cannot say
+/// so. Preferring the smaller queue also picks the candidate whose
+/// prediction leans least on the stale number — with less committed
+/// ahead of you there is less for a missed gossip round to be wrong
+/// about.
+///
+/// Ties keep `a`, so a caller that passes the better-ranked candidate
+/// first gets the better-ranked one back on an exact tie — invariant 5's
+/// rule applied one layer up.
+pub fn prefer_less_loaded(a: &Prediction, b: &Prediction) -> bool {
+    a.queue_ms <= b.queue_ms
 }
 
 #[cfg(test)]
@@ -751,5 +855,128 @@ mod tests {
         let obs = sovereign_core::oicp::NodeObservations::default();
         let ci = CandidateInputs::from_observations(&obs, LoadSource::Local);
         assert_eq!(PredictInputs::from_candidate(&ci).rtt_ms, 0);
+    }
+
+    // ── §4.2 step 2: the tie band ───────────────────────────────
+    // These are the two fleets of §4.1.2 reduced to their arithmetic.
+    // If the band admits `mixed-hubs`' second hub, the sampler built on
+    // it gives back the objective's whole win; if it refuses
+    // `twin-hubs`' identical ones, there is no herd-breaking left to do.
+
+    /// Rank three candidates by `total_ms`, the way
+    /// [`faster_than_local`] hands them over.
+    fn band_of(cands: Vec<(&'static str, PredictInputs)>) -> (usize, Vec<&'static str>) {
+        let scored: Vec<_> = cands
+            .into_iter()
+            .map(|(n, i)| (n, predict(&i, shape())))
+            .collect();
+        let ranked = faster_than_local(LocalOption::Infeasible, scored);
+        let order = ranked.iter().map(|(n, _)| *n).collect();
+        (tie_band(&ranked), order)
+    }
+
+    /// `twin-hubs`: same rate card, different queues. The queue is the
+    /// stale term, so it must not separate them — the whole band is in
+    /// play however deep the (believed) queues are.
+    #[test]
+    fn identical_rate_cards_are_all_within_noise_however_their_queues_differ() {
+        let (band, order) = band_of(vec![
+            ("busy", inputs(2, 8, 1_000.0, 100.0)),
+            ("idle", inputs(0, 8, 1_000.0, 100.0)),
+            ("mid", inputs(1, 8, 1_000.0, 100.0)),
+        ]);
+        assert_eq!(order, vec!["idle", "mid", "busy"]);
+        assert_eq!(band, 3, "identical hardware must not be separated by a gossiped count");
+    }
+
+    /// `mixed-hubs`: same model, different machines. The rate card is
+    /// the trustworthy term, so it *must* separate them — this is the
+    /// −8% the blunt sampler gave back.
+    #[test]
+    fn a_slower_machine_is_not_within_noise_of_a_faster_one() {
+        let (band, order) = band_of(vec![
+            ("hub-fast", inputs(0, 8, 1_000.0, 100.0)),
+            ("hub-mid", inputs(0, 8, 800.0, 74.0)),
+            ("hub-slow", inputs(0, 8, 400.0, 33.0)),
+        ]);
+        assert_eq!(order, vec!["hub-fast", "hub-mid", "hub-slow"]);
+        assert_eq!(
+            band, 1,
+            "a real throughput difference is signal, not noise — sampling it away is the regression"
+        );
+    }
+
+    /// A candidate that is genuinely more capable but *looks* worse
+    /// because of its queue is exactly the case the band exists for:
+    /// admitted, and then the less-loaded rule decides.
+    #[test]
+    fn a_faster_machine_hiding_behind_its_queue_is_still_within_noise() {
+        let (band, order) = band_of(vec![
+            // Nearly the same predicted total, reached two ways.
+            ("slow-idle", inputs(0, 8, 500.0, 52.0)),
+            ("fast-queued", inputs(1, 8, 1_000.0, 100.0)),
+        ]);
+        assert_eq!(order, vec!["slow-idle", "fast-queued"]);
+        assert_eq!(band, 2);
+    }
+
+    /// The one place the definition is deliberately narrower than its
+    /// own principle: a candidate whose uncontended time qualifies but
+    /// which sits far down the list behind a large queue is NOT
+    /// admitted, because a count of two is not plausibly a stale zero.
+    /// The run stops at the first candidate it cannot admit.
+    #[test]
+    fn the_band_is_a_prefix_and_stops_at_the_first_candidate_it_refuses() {
+        let (band, order) = band_of(vec![
+            ("fast-idle", inputs(0, 8, 1_000.0, 100.0)),
+            ("slow-idle", inputs(0, 8, 500.0, 50.0)),
+            ("fast-swamped", inputs(2, 8, 1_000.0, 100.0)),
+        ]);
+        assert_eq!(order, vec!["fast-idle", "slow-idle", "fast-swamped"]);
+        assert_eq!(
+            band, 1,
+            "'slow-idle' closes the run, so 'fast-swamped' is never reached despite qualifying"
+        );
+    }
+
+    #[test]
+    fn an_empty_ranking_has_no_band() {
+        let empty: Vec<((), Prediction)> = Vec::new();
+        assert_eq!(tie_band(&empty), 0);
+    }
+
+    /// "Less loaded" is queue *time*, not a count: three jobs on a fast
+    /// machine is less work ahead of you than two on a slow one, and a
+    /// count cannot say so.
+    #[test]
+    fn prefer_less_loaded_reads_queue_time_and_not_the_job_count() {
+        let three_on_fast = predict(&inputs(3, 8, 1_000.0, 100.0), shape()).unwrap();
+        let two_on_slow = predict(&inputs(2, 8, 500.0, 50.0), shape()).unwrap();
+        assert!(three_on_fast.queue_ms < two_on_slow.queue_ms);
+        assert!(prefer_less_loaded(&three_on_fast, &two_on_slow));
+    }
+
+    /// Ties keep the first argument, so a caller that passes the
+    /// better-ranked candidate first gets it back — invariant 5's rule
+    /// one layer up.
+    #[test]
+    fn prefer_less_loaded_keeps_the_first_argument_on_an_exact_tie() {
+        let a = predict(&inputs(1, 8, 1_000.0, 100.0), shape()).unwrap();
+        let b = predict(&inputs(1, 8, 1_000.0, 100.0), shape()).unwrap();
+        assert!(prefer_less_loaded(&a, &b));
+        assert!(prefer_less_loaded(&b, &a));
+    }
+
+    /// `uncontended_ms` is the prediction minus the one term built from
+    /// a gossiped count — stated as an identity so a refactor of
+    /// `predict`'s addends cannot silently change what the band means.
+    #[test]
+    fn uncontended_is_the_prediction_minus_the_guessed_term() {
+        let p = predict(&cold(inputs(4, 8, 1_000.0, 100.0), 42_000), shape()).unwrap();
+        assert_eq!(p.uncontended_ms(), p.total_ms - p.queue_ms);
+        assert_eq!(
+            p.uncontended_ms(),
+            p.load_ms + p.prefill_ms + p.decode_ms + p.rtt_ms
+        );
     }
 }

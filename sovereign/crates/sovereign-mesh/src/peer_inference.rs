@@ -1259,7 +1259,13 @@ impl MeshInferenceProvider {
         }
 
         // ── Decide ──────────────────────────────────────────────
-        let RankResult { ranked, decision } = scheduler_core::rank(
+        // `tie_band` is `None` here by construction — production ranks
+        // on the product objective, which has no scale on which two
+        // candidates are "close". It becomes readable the moment
+        // production adopts §4.1, and not before.
+        let RankResult {
+            ranked, decision, ..
+        } = scheduler_core::rank(
             rec,
             RankInputs {
                 now_unix,
@@ -1298,7 +1304,12 @@ impl MeshInferenceProvider {
         let mut owned: Vec<Option<PeerInferenceEndpoint>> = peers.into_iter().map(Some).collect();
         let winners: Vec<(PeerInferenceEndpoint, ModelCandidate)> = ranked
             .into_iter()
-            .filter_map(|(idx, cand)| owned.get_mut(idx).and_then(Option::take).map(|p| (p, cand)))
+            .filter_map(|w| {
+                owned
+                    .get_mut(w.view_idx)
+                    .and_then(Option::take)
+                    .map(|p| (p, w.candidate))
+            })
             .collect();
 
         let decision_id = decision.decision_id.clone();
