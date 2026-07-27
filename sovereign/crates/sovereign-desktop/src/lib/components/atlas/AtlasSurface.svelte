@@ -10,30 +10,44 @@
   import { onMount } from "svelte";
   import AtlasIndex from "./AtlasIndex.svelte";
   import AtlasCorpusView from "./AtlasCorpusView.svelte";
+  import AtlasCollectionView from "./AtlasCollectionView.svelte";
   import AtlasConvCorpusView from "./AtlasConvCorpusView.svelte";
   import AtomDetail from "./AtomDetail.svelte";
   import ConvDetail from "./ConvDetail.svelte";
   import type { AtomType } from "../../types";
-  import { atlasListConvCorpora } from "../../api";
+  import { atlasListConvCorpora, atlasListMembers } from "../../api";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
-  type CorpusKind = "atom" | "conv";
+  type CorpusKind = "atom" | "conv" | "collection";
 
   type Selection = {
     corpusId: string;
     /** Which Atlas surface this corpus belongs to. Drives the
      *  router below: "atom" → AtlasCorpusView (atoms.json), "conv"
-     *  → AtlasConvCorpusView (SQLite-backed tiered enrichment). */
+     *  → AtlasConvCorpusView (SQLite-backed tiered enrichment),
+     *  "collection" → AtlasCollectionView (an article picker over
+     *  `<id>-<slug>` member atlases; SEP). */
     kind: CorpusKind;
     /** Per-type counts captured from the picker, so the corpus view
      *  can render tab badges without re-fetching the summary. */
     atomCounts?: Partial<Record<AtomType, number>>;
     totalAtoms?: number;
-    /** When set + kind=atom, render the atom detail view. */
+    /** When set + kind=collection, the member atlas being explored.
+     *  Every atlas call below addresses THIS id, not `corpusId` —
+     *  `corpusId` stays the collection so "back" returns to the
+     *  picker rather than out of the notebook. */
+    memberId?: string;
+    /** When set + kind=atom|collection, render the atom detail view. */
     atomId?: string;
     /** When set + kind=conv, render the conv detail view. */
     convUuid?: string;
   };
+
+  /** The corpus whose atoms are on screen: the chosen member inside a
+   *  collection, the corpus itself everywhere else. */
+  function atomCorpusOf(s: Selection): string {
+    return s.memberId ?? s.corpusId;
+  }
 
   interface Props {
     /** When set, scope the surface to a single corpus: seed `selection`
@@ -93,15 +107,26 @@
     }
   });
 
-  /** Conv corpora (SQLite tiered enrichment) vs atom corpora
-   *  (atoms.json). A corpus listed by `atlasListConvCorpora` is conv;
-   *  everything else (the common case — folders, documents, catalog
-   *  corpora) routes to the atom browser. Best-effort: any failure
-   *  defaults to "atom". */
+  /** Which Explore surface a corpus wants.
+   *
+   *  Conv corpora (SQLite tiered enrichment) are listed by
+   *  `atlasListConvCorpora`. Collection corpora own no atoms of their
+   *  own — their map lives in `<id>-<slug>` member atlases — and
+   *  `atlasListMembers` returns those; a non-empty result IS the
+   *  signal. Everything else (the common case — folders, documents,
+   *  catalog corpora) routes to the atom browser. Best-effort: any
+   *  failure defaults to "atom". */
   async function resolveCorpusKind(corpusId: string): Promise<CorpusKind> {
     try {
       const convs = await atlasListConvCorpora();
       if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
+    } catch {
+      // Fall through — a conv-listing failure shouldn't hide a
+      // perfectly good atom or collection atlas.
+    }
+    try {
+      const members = await atlasListMembers(corpusId);
+      if (members.length > 0) return "collection";
     } catch {
       // Fall through to the atom default.
     }
@@ -120,12 +145,34 @@
     }
   }
 
-  function handleSelectCorpus(corpusId: string, kind: CorpusKind) {
+  async function handleSelectCorpus(corpusId: string, kind: CorpusKind) {
+    // Show the corpus immediately with the picker's own classification,
+    // then upgrade to "collection" if this corpus turns out to keep its
+    // map in member atlases. Without the re-resolve, picking a
+    // collection from the standalone index lands on the empty atom
+    // browser — the exact dead end this surface exists to remove.
     selection = { corpusId, kind };
+    if (kind !== "atom") return;
+    const resolved = await resolveCorpusKind(corpusId);
+    if (resolved === "collection" && selection?.corpusId === corpusId) {
+      selection = { corpusId, kind: "collection" };
+    }
+  }
+
+  /** Open one article's atlas inside a collection. */
+  function handleSelectMember(memberCorpusId: string) {
+    if (!selection || selection.kind !== "collection") return;
+    selection = { corpusId: selection.corpusId, kind: "collection", memberId: memberCorpusId };
+  }
+
+  /** Back out of a member's atlas to the article picker. */
+  function handleBackToCollection() {
+    if (!selection) return;
+    selection = { corpusId: selection.corpusId, kind: "collection" };
   }
 
   function handleSelectAtom(atomId: string) {
-    if (!selection || selection.kind !== "atom") return;
+    if (!selection || selection.kind === "conv") return;
     selection = { ...selection, atomId };
   }
 
@@ -136,11 +183,13 @@
 
   function handleBackFromAtom() {
     if (!selection) return;
-    // Drop the atomId but keep the corpus context, so the user
-    // returns to the browse view with their filter intact.
+    // Drop the atomId but keep the corpus context — including which
+    // member of a collection we were inside — so the user returns to
+    // the browse view with their filter intact.
     selection = {
       corpusId: selection.corpusId,
       kind: selection.kind,
+      memberId: selection.memberId,
       atomCounts: selection.atomCounts,
       totalAtoms: selection.totalAtoms,
     };
@@ -155,9 +204,9 @@
   }
 </script>
 
-{#if selection?.atomId && selection.kind === "atom"}
+{#if selection?.atomId && selection.kind !== "conv"}
   <AtomDetail
-    corpusId={selection.corpusId}
+    corpusId={atomCorpusOf(selection)}
     atomId={selection.atomId}
     onBack={handleBackFromAtom}
     onSelectAtom={handleSelectAtom}
@@ -176,6 +225,24 @@
     onBack={resetToRoot}
     showBack={!startingCorpusId}
     onSelectConv={handleSelectConv}
+  />
+{:else if selection?.kind === "collection" && selection.memberId}
+  <!-- One article's atlas. Back leads to the article picker — which
+       exists even in a scoped notebook mount, so `showBack` is true
+       here regardless of `startingCorpusId`. -->
+  <AtlasCorpusView
+    corpusId={selection.memberId}
+    onBack={handleBackToCollection}
+    showBack={true}
+    backLabel="Articles"
+    onSelectAtom={handleSelectAtom}
+  />
+{:else if selection?.kind === "collection"}
+  <AtlasCollectionView
+    corpusId={selection.corpusId}
+    onSelectMember={handleSelectMember}
+    onBack={resetToRoot}
+    showBack={!startingCorpusId}
   />
 {:else if selection}
   <AtlasCorpusView

@@ -17,9 +17,9 @@
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
-    AtlasCorpusSummary, AtomDetail, AtomFilter, AtomListPage, ConvCorpusSummary, ConvDetailView,
-    ConvEntityChip, ConvListPage, ConvRaptorNodeView, ConvSummary, FileAtlasReader, PageCursor,
-    SummaryCorrectionView,
+    AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
+    ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
+    ConvSummary, FileAtlasReader, PageCursor, SummaryCorrectionView,
 };
 use tauri::State;
 
@@ -61,6 +61,31 @@ pub async fn atlas_list_corpora(
         .list_corpora()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
+}
+
+/// List the **member atlases** of a collection corpus — the sibling
+/// `<corpus_id>-<slug>` indexes that carry the map when the parent's
+/// own atlas is empty (SEP: one atlas per encyclopedia entry).
+///
+/// Drives a collection notebook's Explore tab, which opens as an
+/// article picker rather than an atom list. An empty result is the
+/// answer for every ordinary corpus — that is exactly how the
+/// frontend decides which Explore surface to render, so this must
+/// never error for a non-collection corpus.
+#[tauri::command]
+pub async fn atlas_list_members(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<Vec<AtlasMemberSummary>, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    reader
+        .list_members(&corpus_id)
+        .await
+        .map_err(|e| format!("atlas_list_members: {e}"))
 }
 
 /// Browse atoms within one corpus — filterable by type, searchable

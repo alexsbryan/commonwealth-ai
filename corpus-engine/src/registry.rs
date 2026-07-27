@@ -799,6 +799,77 @@ sha256 = ""
         assert!(catalog.iter().any(|c| c.id == "gutenberg-work"));
     }
 
+    /// `sep` must stay in the SAME catalog tier as `wikipedia`.
+    ///
+    /// `catalog_status` is the only thing that decides which rail a
+    /// corpus lands in on the desktop's Settings → Knowledge surface:
+    /// `KnowledgeStatus.svelte` filters `featured` into the primary list
+    /// with a working Add button and `preview` into a disabled
+    /// "Coming soon" rail. So demoting this one string is enough to
+    /// remove SEP from the picker entirely — silently, with no compile
+    /// error and no other test noticing, since nothing else asserted on
+    /// `catalog_status`.
+    ///
+    /// Pinned because "SEP is offerable alongside Wikipedia" is a
+    /// product commitment, not an incidental registry value.
+    #[test]
+    fn sep_is_featured_alongside_wikipedia() {
+        let registry = RecipeRegistry::from_bundled(None);
+        let catalog = registry.catalog();
+        let tier = |id: &str| {
+            catalog
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("{id} missing from the catalog"))
+                .catalog_status
+                .clone()
+        };
+        assert_eq!(
+            tier("sep").as_deref(),
+            Some("featured"),
+            "SEP must stay in the featured rail — `preview` renders it as a \
+             disabled 'Coming soon' chip that cannot be installed"
+        );
+        assert_eq!(
+            tier("sep"),
+            tier("wikipedia"),
+            "SEP and Wikipedia are both first-class offerings; they must \
+             share a tier so they render in the same rail"
+        );
+    }
+
+    /// A featured corpus is one-click installable, so it must be
+    /// installable WITHOUT credentials the desktop never collects. The
+    /// app reads `HF_TOKEN` from its process environment only — there is
+    /// no token field anywhere in the UI — so a featured recipe whose
+    /// prebuilt snapshot sits behind a private or gated HuggingFace repo
+    /// is un-installable for everyone who isn't the publisher.
+    ///
+    /// This test can't reach the network, so it pins the invariant it
+    /// CAN check: every featured recipe that declares `[prebuilt]` names
+    /// a repo, so the anonymous-readability check has something concrete
+    /// to run against (see the comment block in
+    /// `sovereign-recipes/sep/recipe.toml`). `svrnmesh/sep-index` was
+    /// gated `manual` until 2026-07-26, which is exactly how SEP came to
+    /// look broken.
+    #[test]
+    fn featured_prebuilt_entries_name_their_snapshot_repo() {
+        let registry = RecipeRegistry::from_bundled(None);
+        for entry in registry.list_entries() {
+            if entry.catalog_status.as_deref() != Some("featured") {
+                continue;
+            }
+            if let Some(prebuilt) = entry.prebuilt.as_ref() {
+                assert!(
+                    !prebuilt.hf_repo.trim().is_empty(),
+                    "featured recipe '{}' declares [prebuilt] with no hf_repo — \
+                     nothing can verify the snapshot is anonymously fetchable",
+                    entry.id
+                );
+            }
+        }
+    }
+
     /// Every snapshot entry must have a compile-time bundled TOML so
     /// `fetch_recipe` can fall back when the registry URL is unreachable
     /// (recipe not yet pushed to GitHub, air-gapped use, captive-portal

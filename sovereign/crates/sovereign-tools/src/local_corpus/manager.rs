@@ -2239,6 +2239,15 @@ fn ingest_progress_to_local(p: corpus_engine::progress::IngestProgress) -> Local
             phase_label: format!("Done in {duration_secs}s"),
             current_file: None,
         },
+        // The local-corpus vocabulary already has a terminal error
+        // phase, so a failed ingest maps onto it rather than being
+        // laundered into an `Ingesting` row with a scary label.
+        // `recoverable: true` — the user can retry the import; nothing
+        // was committed, so there is no partial state to unwind.
+        Failed { message } => LocalCorpusProgress::Error {
+            message,
+            recoverable: true,
+        },
     }
 }
 

@@ -2200,6 +2200,23 @@ export interface AtlasCorpusSummary {
   display_icon?: string;
 }
 
+/** One article in a *collection* notebook's Explore picker. Mirrors
+ *  the Rust `AtlasMemberSummary`.
+ *
+ *  A collection corpus is ingested as one index but enriched per
+ *  article: SEP's paragraphs live in `sep`, its map lives in 1,769
+ *  `sep-<slug>` member atlases. Picking a row here opens that
+ *  member's own atlas in the ordinary corpus view. */
+export interface AtlasMemberSummary {
+  /** The member's own corpus id (`sep-abduction`). */
+  corpus_id: string;
+  /** Slug-derived title (`sep-logic-modal` → "Logic Modal"). Derived,
+   *  not authoritative — nothing on disk carries the upstream title. */
+  title: string;
+  total_atoms: number;
+  last_extracted_unix?: number;
+}
+
 /** Server-side filter for `atlas_list_atoms`. All fields are
  *  independent — unset = "match anything". */
 export interface AtomFilter {

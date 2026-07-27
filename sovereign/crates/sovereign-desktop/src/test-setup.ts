@@ -18,3 +18,18 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
   emit: vi.fn(async () => {}),
 }));
+
+// jsdom ships no ResizeObserver, and components that measure their own
+// layout (the atlas views size their virtual scroll window from it)
+// throw on mount without it. A no-op observer is the honest stub: jsdom
+// reports zero-size boxes anyway, so a "real" implementation would only
+// ever deliver zeros. Components must therefore not depend on a resize
+// callback firing for their content to render — which is the behaviour
+// we want to hold them to.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

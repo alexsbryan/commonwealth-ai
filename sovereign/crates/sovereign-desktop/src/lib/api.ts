@@ -43,6 +43,7 @@ import type {
   LegacyDocumentEntry,
   BootstrapSnapshot,
   AtlasCorpusSummary,
+  AtlasMemberSummary,
   AtomFilter,
   AtomListPage,
   AtlasSubgraph,
@@ -2072,6 +2073,20 @@ export async function recipeAuthorBuildPrelude(
  *  corpus_id for stable rendering. */
 export async function atlasListCorpora(): Promise<AtlasCorpusSummary[]> {
   return invoke("atlas_list_corpora");
+}
+
+/** List a *collection* corpus's member atlases — the `<id>-<slug>`
+ *  siblings that hold the map when the parent's own atlas is empty
+ *  (SEP: one atlas per encyclopedia entry). Members with zero atoms
+ *  are omitted server-side.
+ *
+ *  Returns `[]` for every ordinary corpus — that empty result is how
+ *  the Explore surface decides it is NOT a collection, so callers
+ *  should treat it as "not a collection", never as an error. */
+export async function atlasListMembers(
+  corpusId: string,
+): Promise<AtlasMemberSummary[]> {
+  return invoke("atlas_list_members", { corpusId });
 }
 
 /** Browse atoms within one corpus. Filter + paginate server-side.

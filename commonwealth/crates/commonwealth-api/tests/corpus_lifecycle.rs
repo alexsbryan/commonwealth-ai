@@ -81,6 +81,30 @@ fn fast_mock_embed_fn() -> corpus_engine::types::EmbedFn {
     })
 }
 
+/// A mock embed whose failure is switchable at runtime via `fail`.
+///
+/// When armed, every embed call returns `Err`, so the ingest gets all
+/// the way past recipe resolution and task spawn and *then* dies —
+/// which is the shape of every real mid-install failure (a gated
+/// snapshot download, a checksum mismatch, a full disk). Disarming it
+/// lets the same engine succeed on a retry, so one test can exercise
+/// fail → retry → complete without swapping engines.
+fn switchable_failing_embed_fn(fail: Arc<std::sync::atomic::AtomicBool>) -> corpus_engine::types::EmbedFn {
+    Arc::new(move |text: &str| {
+        let fail = Arc::clone(&fail);
+        let v = mock_embedding(text);
+        Box::pin(async move {
+            if fail.load(std::sync::atomic::Ordering::SeqCst) {
+                Err(corpus_engine::Error::Embed(
+                    "simulated mid-install embed failure".into(),
+                ))
+            } else {
+                Ok(v)
+            }
+        })
+    })
+}
+
 /// Write a minimal recipe.toml + a JSONL source file in `dir` and
 /// return the recipe dir + source path. The recipe uses the `jsonl`
 /// extractor + `paragraph` chunker so 500 docs produce ≈ 500 chunks
@@ -819,6 +843,155 @@ async fn install_unresolvable_recipe_is_404_not_silent_success() {
         msg.contains("no-such-corpus-xyz"),
         "error body should name the corpus, got: {msg}"
     );
+}
+
+/// A mid-install failure must be REPORTED as a failure and must keep the
+/// corpus visible in `/internal/corpus/status`.
+///
+/// The bug this guards: `spawn_corpus_install` used to handle a failed
+/// ingest with nothing but a `tracing::warn!`. Because it had already
+/// removed the corpus from `active_ingests`, and because nothing wrote a
+/// terminal record into `corpus_progress`, the corpus vanished from this
+/// route's response entirely. The Desktop poller reads "present last
+/// tick, absent this tick" as SUCCESS and emits phase=complete /
+/// percent=100 / "Done" — so a 401 on a gated snapshot, and every other
+/// ingest failure, rendered in the UI as a finished install that had
+/// installed nothing. Found while auditing why `sep` could not be added.
+///
+/// Two assertions carry the fix, and both must hold:
+///   1. the progress record is `Failed` with a non-empty message, and
+///   2. the corpus is STILL an entry in `/internal/corpus/status` —
+///      absence is precisely what the poller mistranslates.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn failed_ingest_reports_failed_and_stays_visible() {
+    let tmp = TempDir::new().unwrap();
+    let corpus_id = "failcorpus";
+    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 20, true);
+    let fail = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let state = test_state(&tmp, switchable_failing_embed_fn(Arc::clone(&fail)));
+
+    let (status, body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "install POST itself should succeed — the failure is asynchronous; body: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let resp: InstallResp = serde_json::from_slice(&body).unwrap();
+    assert!(resp.spawned, "a task should have spawned");
+    assert_eq!(resp.corpus_id, corpus_id);
+
+    // (1) The failure is recorded as a terminal progress entry.
+    let snapshot = wait_until_progress(
+        &state,
+        |s| matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        Duration::from_secs(60),
+        "terminal Failed record",
+    )
+    .await;
+    let Some(IngestProgress::Failed { message }) = snapshot.progress.get(corpus_id) else {
+        panic!("expected a Failed record, got {snapshot:?}");
+    };
+    assert!(
+        !message.trim().is_empty(),
+        "the failure message is shown to the user verbatim, so it must not be blank"
+    );
+
+    // (2) The corpus must not have disappeared from /status.
+    let (st, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
+    assert_eq!(st, StatusCode::OK);
+    let statuses: StatusResponse = serde_json::from_slice(&body).unwrap();
+    let entry = statuses
+        .entries
+        .iter()
+        .find(|e| e.corpus_id == corpus_id)
+        .unwrap_or_else(|| {
+            panic!(
+                "a failed corpus MUST remain an entry in /internal/corpus/status — \
+                 its disappearance is what the Desktop poller reports as \"Done\". \
+                 entries = {:?}",
+                statuses.entries
+            )
+        });
+    assert!(
+        matches!(entry.progress, Some(IngestProgress::Failed { .. })),
+        "the surviving entry must carry the Failed phase, got {:?}",
+        entry.progress
+    );
+    assert!(
+        !entry.active,
+        "the task is over — it must not still claim to be active"
+    );
+    assert!(
+        !entry.canonical_present,
+        "a failed ingest must not leave a canonical index behind"
+    );
+}
+
+/// Retrying after a failure must retire the stale failure record, so a
+/// UI that shows "Install failed" stops showing it once the corpus
+/// installs. The `Failed` entry is deliberately sticky (it has to
+/// outlive its task to be reportable at all), which makes the retry
+/// path responsible for clearing it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retry_after_failure_clears_the_stale_failure_record() {
+    let tmp = TempDir::new().unwrap();
+    let corpus_id = "retrycorpus";
+    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 20, true);
+    let fail = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let state = test_state(&tmp, switchable_failing_embed_fn(Arc::clone(&fail)));
+
+    // First attempt: armed to fail.
+    let (status, _) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    wait_until_progress(
+        &state,
+        |s| matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        Duration::from_secs(60),
+        "first attempt fails",
+    )
+    .await;
+
+    // Disarm, then retry the same corpus on the same engine.
+    fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    let (status, body) = post_json(
+        internal_router(state.clone()),
+        "/internal/corpus/install",
+        &serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a retry after failure must be accepted; body: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let resp: InstallResp = serde_json::from_slice(&body).unwrap();
+    assert!(
+        resp.spawned,
+        "the previous failure must not block a retry — the corpus was removed \
+         from active_ingests when its task ended"
+    );
+
+    // The stale Failed record must be gone: the retry either progresses
+    // or completes, but it never keeps reporting the old failure.
+    wait_until_progress(
+        &state,
+        |s| !matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        Duration::from_secs(60),
+        "stale failure cleared by retry",
+    )
+    .await;
 }
 
 /// A benign idempotent second install (corpus already in flight) stays a

@@ -49,6 +49,34 @@ pub struct AtlasCorpusSummary {
     pub display_icon: Option<String>,
 }
 
+/// One row in a **collection** notebook's member picker.
+///
+/// Some corpora are ingested as one index but enriched per *article*:
+/// SEP's 182k paragraphs live in the `sep` index, while its atlas is
+/// 1,769 sibling `sep-<slug>` indexes, one per encyclopedia entry (see
+/// `sovereign-recipes/sep/recipe.toml`, `[enrichment]`). The parent's
+/// own `atoms.json` is empty, so the ordinary atom browser has nothing
+/// to show; the map lives in the members. This row is what the picker
+/// renders so the user can choose an article and explore *its* atlas.
+///
+/// `title` is derived from the member id, because nothing on disk
+/// carries a human title: the member's `chapters.json` names sections
+/// (`"## Section 001"`), and the parent's chunk titles are the slug
+/// itself. So `sep-logic-modal` renders as "Logic Modal", not the
+/// upstream "Modal Logic". Deriving is honest about what we have; a
+/// title map would need a network fetch we deliberately don't do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtlasMemberSummary {
+    /// The member's own corpus id (`sep-abduction`) — the id every
+    /// downstream atlas call takes.
+    pub corpus_id: String,
+    /// Slug-derived display title (`sep-abduction` → "Abduction").
+    pub title: String,
+    pub total_atoms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_extracted_unix: Option<u64>,
+}
+
 /// Forward-compat field on per-atom DTOs. Phase 1 always emits
 /// [`CurationStatus::Generated`]; Phase 2 starts populating the other
 /// variants. Putting the field through the wire today means the UI
@@ -142,11 +170,8 @@ impl FileAtlasReader {
                 continue;
             };
             // Same filtering as `compute_atlas_status` — internal /
-            // tier-2 mirror dirs aren't corpora.
-            if name.starts_with('.') || name.starts_with('_') {
-                continue;
-            }
-            if name.ends_with("-tier2") {
+            // tier-2 mirror / shard-partition dirs aren't corpora.
+            if !is_browsable_corpus_dir(name) {
                 continue;
             }
             let atlas_dir = path.join(ATLAS_DIRNAME);
@@ -200,6 +225,145 @@ impl FileAtlasReader {
             "atlas_view:list_corpora: enumerated installed atlases",
         );
         Ok(summaries)
+    }
+
+    /// Return one [`AtlasMemberSummary`] per **member atlas** of a
+    /// collection corpus — the sibling indexes named
+    /// `<parent_corpus_id>-<slug>` that carry a non-empty atlas.
+    ///
+    /// This is the read behind a collection notebook's Explore tab
+    /// (see [`AtlasMemberSummary`] for why SEP is shaped this way).
+    /// Members with a zero-atom atlas are omitted: they are enrichment
+    /// scaffolds that never produced a map, and offering them would
+    /// walk the user into the empty view this picker exists to avoid.
+    ///
+    /// Cheaper than [`list_corpora`](Self::list_corpora) despite the
+    /// same shape — it stats only the prefixed subset — and shares the
+    /// same `_summary.json` sidecar cache, so a picker open after the
+    /// Library shelf has already listed corpora is all cache hits.
+    ///
+    /// An empty result is the honest answer for an ordinary corpus:
+    /// "this notebook is not a collection".
+    pub async fn list_members(
+        &self,
+        parent_corpus_id: &str,
+    ) -> Result<Vec<AtlasMemberSummary>, AtlasViewError> {
+        let entries = match std::fs::read_dir(&self.indexes_dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(AtlasViewError::IndexesDir(e)),
+        };
+
+        let prefix = format!("{parent_corpus_id}-");
+        let mut candidates: Vec<(String, PathBuf)> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !name.starts_with(&prefix) || !is_browsable_corpus_dir(name) {
+                continue;
+            }
+            let atlas_dir = path.join(ATLAS_DIRNAME);
+            if !atlas_dir.is_dir() {
+                continue;
+            }
+            candidates.push((name.to_string(), atlas_dir));
+        }
+
+        let scanned = candidates.len();
+        let mut handles = Vec::with_capacity(scanned);
+        for (corpus_id, atlas_dir) in candidates {
+            let parent = parent_corpus_id.to_string();
+            let h = tokio::task::spawn_blocking(move || {
+                let result = summarise_corpus(&corpus_id, &atlas_dir);
+                (parent, corpus_id, atlas_dir, result)
+            });
+            handles.push(h);
+        }
+
+        let mut members = Vec::with_capacity(scanned);
+        for h in handles {
+            match h.await {
+                Ok((parent, corpus_id, _, Ok(summary))) => {
+                    if summary.total_atoms == 0 {
+                        continue;
+                    }
+                    members.push(AtlasMemberSummary {
+                        title: member_title(&parent, &corpus_id),
+                        corpus_id,
+                        total_atoms: summary.total_atoms,
+                        last_extracted_unix: summary.last_extracted_unix,
+                    });
+                }
+                Ok((_, corpus_id, atlas_dir, Err(e))) => {
+                    tracing::warn!(
+                        corpus_id = %corpus_id,
+                        atlas_dir = %atlas_dir.display(),
+                        error = %e,
+                        "atlas_view:list_members: skipping member, summary unreadable",
+                    );
+                }
+                Err(join_err) => {
+                    tracing::warn!(
+                        error = %join_err,
+                        "atlas_view:list_members: per-member task panicked or was cancelled",
+                    );
+                }
+            }
+        }
+
+        members.sort_by(|a, b| a.title.cmp(&b.title).then_with(|| a.corpus_id.cmp(&b.corpus_id)));
+        // Glassbox: `scanned` vs `members` is the "how many scaffolds
+        // never produced a map" number an operator needs when a
+        // collection looks thinner than the ingest promised.
+        tracing::debug!(
+            parent = %parent_corpus_id,
+            scanned,
+            with_atoms = members.len(),
+            "atlas_view:list_members: enumerated member atlases",
+        );
+        Ok(members)
+    }
+}
+
+/// Directory-name filter shared by the corpus and member walks:
+/// internal dirs (`.`/`_` prefixed), tier-2 mirrors, and shard
+/// partitions are storage internals, not browsable corpora.
+fn is_browsable_corpus_dir(name: &str) -> bool {
+    !name.starts_with('.')
+        && !name.starts_with('_')
+        && !name.ends_with("-tier2")
+        && !name.contains("-partition-")
+}
+
+/// `("sep", "sep-logic-modal")` → `"Logic Modal"`.
+///
+/// Slug-derived because no human title exists on disk — see
+/// [`AtlasMemberSummary`]. A member id that somehow lacks the parent
+/// prefix falls back to the whole id, so the row is never blank.
+fn member_title(parent_corpus_id: &str, corpus_id: &str) -> String {
+    let slug = corpus_id
+        .strip_prefix(&format!("{parent_corpus_id}-"))
+        .unwrap_or(corpus_id);
+    let mut title = String::with_capacity(slug.len());
+    for (i, word) in slug.split(['-', '_']).filter(|w| !w.is_empty()).enumerate() {
+        if i > 0 {
+            title.push(' ');
+        }
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            title.extend(first.to_uppercase());
+            title.push_str(chars.as_str());
+        }
+    }
+    if title.is_empty() {
+        corpus_id.to_string()
+    } else {
+        title
     }
 }
 
@@ -589,5 +753,121 @@ mod tests {
         let (category, icon) = read_display_meta(&atlas_dir);
         assert!(category.is_none());
         assert!(icon.is_none());
+    }
+
+    // ─── Collection members (SEP-shaped corpora) ──────────────
+
+    #[tokio::test]
+    async fn list_members_returns_prefixed_atlases_with_atoms() {
+        let (tmp, reader) = make_reader();
+        // The parent's own atlas is empty — the SEP shape exactly.
+        write_atoms(&tmp.path().join("sep").join("atlas"), vec![]);
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-logic-modal").join("atlas"),
+            vec![sample_entity(2, "Necessity"), sample_entity(3, "Possibility")],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(
+            members.iter().map(|m| m.corpus_id.as_str()).collect::<Vec<_>>(),
+            vec!["sep-abduction", "sep-logic-modal"],
+        );
+        assert_eq!(members[0].title, "Abduction");
+        assert_eq!(members[1].title, "Logic Modal");
+        assert_eq!(members[1].total_atoms, 2);
+    }
+
+    #[tokio::test]
+    async fn list_members_omits_zero_atom_scaffolds() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        // Scaffolded but never extracted — offering it would walk the
+        // user straight into the empty view this picker exists to avoid.
+        write_atoms(&tmp.path().join("sep-scaffold-only").join("atlas"), vec![]);
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_excludes_parent_and_unrelated_corpora() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep").join("atlas"),
+            vec![sample_entity(1, "Philosophy")],
+        );
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(2, "Earth")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(3, "Abduction")],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_skips_tier2_mirrors_and_shard_partitions() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("sep-abduction").join("atlas"),
+            vec![sample_entity(1, "Abduction")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-abduction-tier2").join("atlas"),
+            vec![sample_entity(2, "Mirror")],
+        );
+        write_atoms(
+            &tmp.path().join("sep-partition-0").join("atlas"),
+            vec![sample_entity(3, "Shard")],
+        );
+
+        let members = reader.list_members("sep").await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].corpus_id, "sep-abduction");
+    }
+
+    #[tokio::test]
+    async fn list_members_is_empty_for_an_ordinary_corpus() {
+        let (tmp, reader) = make_reader();
+        write_atoms(
+            &tmp.path().join("wikipedia").join("atlas"),
+            vec![sample_entity(1, "Earth")],
+        );
+        // The honest answer for "wikipedia is not a collection".
+        assert!(reader.list_members("wikipedia").await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_members_returns_empty_when_indexes_dir_missing() {
+        let reader = FileAtlasReader::new(PathBuf::from("/this/path/does/not/exist/xyz"));
+        assert!(reader.list_members("sep").await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn member_title_humanises_the_slug() {
+        assert_eq!(member_title("sep", "sep-abduction"), "Abduction");
+        assert_eq!(member_title("sep", "sep-logic-modal"), "Logic Modal");
+        assert_eq!(
+            member_title("sep", "sep-african-sage_philosophy"),
+            "African Sage Philosophy",
+        );
+        // Non-ASCII first letters must not be dropped or panic.
+        assert_eq!(member_title("sep", "sep-épistémologie"), "Épistémologie");
+        // No prefix to strip → the whole id, never a blank row.
+        assert_eq!(member_title("sep", "orphan"), "Orphan");
+        assert_eq!(member_title("sep", "sep-"), "sep-");
     }
 }

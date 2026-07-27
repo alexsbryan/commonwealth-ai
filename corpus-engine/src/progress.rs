@@ -209,6 +209,31 @@ pub enum IngestProgress {
         total_chunks: u64,
         duration_secs: u64,
     },
+    /// Terminal failure: the ingest returned `Err` and committed
+    /// nothing. Deliberately not emitted for
+    /// [`crate::Error::Cancelled`] — a user-requested stop is not a
+    /// failure, and the daemon clears that corpus's progress entry
+    /// rather than recording one.
+    ///
+    /// This variant exists because the vocabulary could previously
+    /// express success but not failure, so a failed ingest had nowhere
+    /// to be recorded. `spawn_corpus_install` logged a `tracing::warn!`
+    /// and removed the corpus from `active_ingests`; the corpus then
+    /// vanished from `/internal/corpus/status`, and the Desktop
+    /// poller's "entry disappeared from the snapshot" branch reported
+    /// the disappearance as `complete` at 100% ("Done"). Every ingest
+    /// failure — a 401 on a gated snapshot, a sha256 mismatch, a full
+    /// disk — rendered as a successful install that installed nothing.
+    /// Observed against `sep` (the gated `svrnmesh/sep-index` dataset)
+    /// on 2026-07-26.
+    ///
+    /// `message` is the `Display` form of the `Error` that ended the
+    /// ingest and is shown to the user verbatim, so errors that can
+    /// reach here should read as guidance rather than as a bare status
+    /// code (see [`crate::Error::DownloadUnauthorized`]).
+    Failed {
+        message: String,
+    },
 }
 
 /// Thread-safe progress callback. Must be `Sync` because the engine's

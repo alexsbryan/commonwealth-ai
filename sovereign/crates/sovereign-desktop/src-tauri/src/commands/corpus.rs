@@ -178,6 +178,20 @@ pub(crate) fn ingest_progress_to_payload(
             message: Some(format!("Done in {duration_secs}s")),
             ..Default::default()
         },
+        // The live-event twin of the polling path's `Failed` arm in
+        // `corpus_install::status_entry_to_payload`. Both must agree on
+        // the phase string and on forwarding the message unmodified —
+        // the frontend keys its "Install failed" row off `"failed"`, and
+        // the message is the reason (and often the remedy) the user
+        // acts on. `percent` stays 0: a failure has no completion.
+        IngestProgress::Failed { message } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            phase: "failed".into(),
+            percent: 0.0,
+            chunks_processed: 0,
+            message: Some(message.clone()),
+            ..Default::default()
+        },
     }
 }
 
@@ -414,12 +428,35 @@ pub async fn notebook_list(
         None => HashMap::new(),
     };
 
-    // Explorable set — union of corpora with an `atoms.json` atlas and
-    // corpora with conv-tiered enrichment. Both lookups are best-effort.
+    // Explorable set — union of three things, all best-effort:
+    //
+    //   1. corpora whose own atlas holds at least one atom;
+    //   2. *collection* corpora — an empty parent atlas whose map lives
+    //      in `<id>-<slug>` member indexes (SEP: one atlas per entry);
+    //   3. corpora with conv-tiered enrichment.
+    //
+    // The atom count is the gate, not the presence of an `atlas/` dir:
+    // `sep/atlas/atoms.json` is a 44-byte `{"atoms":[]}`, and counting
+    // that as explorable is what shipped the Explore tab straight into
+    // "No atoms match the current filter" with nothing to match.
     let mut explorable: HashSet<String> = HashSet::new();
     let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
     if let Ok(atom_corpora) = reader.list_corpora().await {
-        explorable.extend(atom_corpora.into_iter().map(|c| c.corpus_id));
+        // Top-level notebook ids, so a member atlas can name its parent.
+        let notebook_ids: HashSet<&str> = installed
+            .iter()
+            .filter(|i| !i.is_shard && i.parent_corpus_id.is_none())
+            .map(|i| i.corpus_id.as_str())
+            .collect();
+        for c in &atom_corpora {
+            if c.total_atoms == 0 {
+                continue;
+            }
+            explorable.insert(c.corpus_id.clone());
+            if let Some(parent) = collection_parent_of(&c.corpus_id, &notebook_ids) {
+                explorable.insert(parent.to_string());
+            }
+        }
     }
     let conv_store = state.sqlite_store.read().await.as_ref().map(Arc::clone);
     if let Some(store) = conv_store {
@@ -527,6 +564,23 @@ pub async fn notebook_list(
     );
 
     Ok(notebooks)
+}
+
+/// Which installed notebook, if any, owns `corpus_id` as a *member*
+/// atlas — the collection relationship behind SEP's `sep-<slug>`
+/// per-article maps.
+///
+/// Walks the id's hyphen boundaries and takes the LONGEST prefix that
+/// names an installed notebook, so an id like `sep-logic-modal`
+/// resolves to `sep` and never to a shorter accidental match. Returns
+/// `None` for a top-level corpus or one whose prefix names nothing
+/// installed — the ordinary case.
+fn collection_parent_of<'a>(corpus_id: &'a str, notebook_ids: &HashSet<&str>) -> Option<&'a str> {
+    corpus_id
+        .match_indices('-')
+        .rev()
+        .map(|(idx, _)| &corpus_id[..idx])
+        .find(|prefix| notebook_ids.contains(prefix))
 }
 
 /// Build the IVF-PQ vector index for an installed corpus in the background.
@@ -659,4 +713,43 @@ pub async fn ingest_document(
         source,
         chunks_created,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids<'a>(v: &[&'a str]) -> HashSet<&'a str> {
+        v.iter().copied().collect()
+    }
+
+    #[test]
+    fn member_atlas_resolves_to_its_installed_collection() {
+        let installed = ids(&["sep", "wikipedia"]);
+        assert_eq!(collection_parent_of("sep-abduction", &installed), Some("sep"));
+        assert_eq!(
+            collection_parent_of("sep-logic-modal", &installed),
+            Some("sep"),
+        );
+    }
+
+    #[test]
+    fn top_level_and_unrelated_ids_have_no_collection_parent() {
+        let installed = ids(&["sep", "wikipedia"]);
+        assert_eq!(collection_parent_of("sep", &installed), None);
+        assert_eq!(collection_parent_of("wikipedia", &installed), None);
+        // Hyphenated, but nothing installed claims the prefix.
+        assert_eq!(collection_parent_of("obsidian-vault-x", &installed), None);
+    }
+
+    #[test]
+    fn the_longest_installed_prefix_wins() {
+        // Both are installed notebooks; the member belongs to the more
+        // specific one, never to the shorter accidental match.
+        let installed = ids(&["sep", "sep-logic"]);
+        assert_eq!(
+            collection_parent_of("sep-logic-modal", &installed),
+            Some("sep-logic"),
+        );
+    }
 }
