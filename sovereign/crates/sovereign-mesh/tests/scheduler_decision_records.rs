@@ -706,3 +706,210 @@ async fn fleet_snapshots_are_rate_limited_not_per_request() {
     );
     assert_eq!(capture.decisions().len(), 3);
 }
+
+// ── 9. A soft named target that resolves to nobody falls THROUGH ─
+//
+// The household case this exists for: a laptop configured to send its
+// primary turn into a shared 122B, on a mesh that also has a 35B hub.
+// While the shared cluster is forming (or its host is down) the old
+// code dropped that laptop to its OWN 4B and left the hub idle — a
+// pure loss, since no latency was bought and no privacy honoured. The
+// named target is soft, i.e. a preference, so the correct degradation
+// is the ranked mesh, with local as the LAST rung rather than the
+// second one.
+//
+// A hard (`model_id`-named) target is unaffected and must stay so:
+// an explicit name still fails loudly rather than being silently
+// substituted. That is asserted in `hard_named_*` below.
+
+/// The one decision on `path`, and a readable panic when the
+/// fallthrough produced the wrong number of them.
+fn only_decision_on(capture: &CaptureDecisionSink, path: DecisionPath) -> RoutingDecision {
+    let mut ds: Vec<RoutingDecision> = capture
+        .decisions()
+        .into_iter()
+        .filter(|d| d.path == path)
+        .collect();
+    assert_eq!(
+        ds.len(),
+        1,
+        "expected exactly one {path:?} decision, got {}: {:#?}",
+        ds.len(),
+        capture.decisions()
+    );
+    ds.remove(0)
+}
+
+const SHARED_PRIMARY: &str = "glm-5.2-distributed";
+
+#[tokio::test]
+async fn forming_shared_model_falls_through_to_the_mesh_not_to_the_local_model() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("hub", addr, 12)]);
+    // Configured to prefer a shared model that nobody in this mesh
+    // advertises — the cluster is forming, or its host is down.
+    provider.set_shared_model_id(Some(SHARED_PRIMARY.into()));
+
+    let (mut stream, attribution) = provider
+        .complete_stream_with_id(&mesh_request())
+        .await
+        .expect("an unavailable soft primary must not fail the request");
+
+    // THE assertion: the free hub served, not this node's own model.
+    assert!(
+        attribution.contains("@ peer hub"),
+        "a forming shared model must degrade to the mesh, not to local; got {attribution:?}"
+    );
+    let mut body = String::new();
+    while let Some(chunk) = stream.next().await {
+        body.push_str(&chunk.unwrap());
+    }
+    assert_eq!(body, PEER_TEXT);
+    drop(stream);
+
+    // Two records, one story, joined by request: the named target
+    // resolved to nobody, and THEN the scorer ran. Neither alone can
+    // answer "why did my 122B request get answered by the 35B?".
+    let named = only_decision_on(&capture, DecisionPath::NamedModel);
+    match &named.verdict {
+        Verdict::NamedUnknown { model_id } => assert_eq!(model_id, SHARED_PRIMARY),
+        other => panic!("expected the named target to resolve to nobody, got {other:?}"),
+    }
+    assert!(
+        named.candidates.is_empty(),
+        "name resolution scores nothing — inventing candidates would pollute the scoreboard"
+    );
+
+    let fell_through = only_decision_on(&capture, DecisionPath::NamedFallthrough);
+    match &fell_through.verdict {
+        Verdict::Peers { ranked } => assert_eq!(ranked, &vec!["hub".to_string()]),
+        other => panic!("expected the fallthrough to rank the hub, got {other:?}"),
+    }
+    // Local competed on the fallthrough and lost on score — it was
+    // not skipped, and it was not preferred by fiat.
+    let names: Vec<&str> = fell_through
+        .candidates
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert!(names.contains(&"local"), "local must compete: {names:?}");
+    assert!(names.contains(&"hub"), "hub must compete: {names:?}");
+
+    // The outcome joins to the FALLTHROUGH record, because the ranked
+    // scorer is what picked the server. Joining it to the named record
+    // would attribute a serve to a decision that scored nothing.
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.decision_id, fell_through.decision_id,
+        "the outcome must join to the decision that actually chose"
+    );
+    match &outcome.served_by {
+        ServedBy::Peer { name, .. } => assert_eq!(name, "hub"),
+        other => panic!("expected peer service, got {other:?}"),
+    }
+}
+
+/// The degrade path must survive the fallthrough: with nobody on the
+/// mesh worth crossing to, an unavailable shared primary still serves
+/// locally. This is the regression the fallthrough could plausibly
+/// introduce — a request that used to end at local now taking a
+/// pointless network hop, or failing outright.
+#[tokio::test]
+async fn forming_shared_model_with_no_worthy_peer_still_serves_locally() {
+    let (provider, capture) = build(vec![dead_peer_endpoint("unreachable")]);
+    provider.set_shared_model_id(Some(SHARED_PRIMARY.into()));
+
+    let (mut stream, attribution) = provider
+        .complete_stream_with_id(&mesh_request())
+        .await
+        .expect("no worthy peer must still produce an answer");
+    assert!(
+        !attribution.contains("@ peer"),
+        "nothing on this mesh could serve it; got {attribution:?}"
+    );
+    let mut body = String::new();
+    while let Some(chunk) = stream.next().await {
+        body.push_str(&chunk.unwrap());
+    }
+    assert_eq!(body, "local answer");
+    drop(stream);
+
+    // Still recorded as a fallthrough that considered the mesh and
+    // declined it — "the mesh lost" and "the mesh was never asked"
+    // stay distinguishable.
+    let fell_through = only_decision_on(&capture, DecisionPath::NamedFallthrough);
+    assert!(
+        matches!(fell_through.verdict, Verdict::StayLocal),
+        "expected a scored stay-local, got {:?}",
+        fell_through.verdict
+    );
+    assert_eq!(fell_through.excluded.len(), 1);
+    assert_eq!(fell_through.excluded[0].name, "unreachable");
+    assert_eq!(
+        fell_through.excluded[0].reason,
+        ExclusionReason::ManifestUnavailable
+    );
+}
+
+/// The same rule on the non-streaming surface. Before this, `complete`
+/// returned local the moment the shared primary was unavailable,
+/// without ever consulting the scorer — and emitted no decision record
+/// at all, so the loss was invisible.
+#[tokio::test]
+async fn non_streaming_complete_also_falls_through_to_the_mesh() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("hub", addr, 6)]);
+    provider.set_shared_model_id(Some(SHARED_PRIMARY.into()));
+
+    // The mock peer speaks SSE only, so the transport attempt fails
+    // and the cascade lands on local. What is under test is the
+    // DECISION — that the scorer ran and chose the hub — not the mock's
+    // ability to answer a non-streaming call.
+    let _ = provider.complete(&mesh_request()).await;
+
+    let fell_through = only_decision_on(&capture, DecisionPath::NamedFallthrough);
+    match &fell_through.verdict {
+        Verdict::Peers { ranked } => assert_eq!(ranked, &vec!["hub".to_string()]),
+        other => panic!("expected the fallthrough to rank the hub, got {other:?}"),
+    }
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(outcome.decision_id, fell_through.decision_id);
+}
+
+/// The carve-out that keeps the fallthrough honest: a HARD named
+/// target — an explicit `model_id` from the caller — is a constraint,
+/// not a preference. It must still fail loudly rather than being
+/// silently served by whatever the scorer likes. Silent substitution
+/// was the original bug on this path; the soft fallthrough must not
+/// reintroduce it.
+#[tokio::test]
+async fn hard_named_target_still_fails_loudly_rather_than_falling_through() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("hub", addr, 6)]);
+
+    let request = CompletionRequest {
+        model_id: Some("a-model-nobody-has".into()),
+        ..mesh_request()
+    };
+    // `expect_err` is unavailable here: the Ok half is a boxed stream,
+    // which is not `Debug`.
+    let err = match provider.complete_stream_with_id(&request).await {
+        Ok(_) => panic!("an explicit model_id nobody advertises must be an error"),
+        Err(e) => e,
+    };
+    assert!(
+        format!("{err}").contains("a-model-nobody-has"),
+        "the error must name the model the caller asked for; got {err}"
+    );
+
+    // One record, on the named path. No fallthrough was attempted.
+    let named = only_decision_on(&capture, DecisionPath::NamedModel);
+    assert!(matches!(named.verdict, Verdict::NamedUnknown { .. }));
+    assert!(
+        !capture
+            .decisions()
+            .iter()
+            .any(|d| d.path == DecisionPath::NamedFallthrough),
+        "a hard target must never fall through to the scorer"
+    );
+}

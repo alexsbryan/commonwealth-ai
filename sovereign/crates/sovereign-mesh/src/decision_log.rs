@@ -245,6 +245,17 @@ pub enum DecisionPath {
     /// `locate_named_model` — an explicit `model_id` (or a configured
     /// shared-model primary) names the target.
     NamedModel,
+    /// A **soft** named target (a configured shared-model primary)
+    /// resolved to nobody, so selection fell THROUGH to the ranked
+    /// scorer instead of collapsing to this node's own model. The
+    /// candidates on this record are real — the scorer ran — which is
+    /// why replay admits it alongside [`Self::RankedOicp`]. It is kept
+    /// distinct so a scoreboard can answer "how often is the shared
+    /// cluster unavailable?" without that traffic disappearing into
+    /// the ordinary ranked population. Pairs with the `NamedModel`
+    /// record emitted for the same `oicp_request_id`, which is what
+    /// names the model that went missing.
+    NamedFallthrough,
 }
 
 /// The request-side facts that constrained this decision. Everything

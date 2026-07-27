@@ -344,7 +344,15 @@ pub fn replay_decision(decision: &RoutingDecision) -> Result<DecisionReplay, Ski
     if let Verdict::Gated { gate } = &decision.verdict {
         return Err(SkipReason::Gated(gate.clone()));
     }
-    if decision.path != DecisionPath::RankedOicp {
+    // `NamedFallthrough` is a ranked decision that happened to be
+    // reached from a named target that resolved to nobody — the
+    // scorer ran and the candidates carry real breakdowns, so it is
+    // in the replay's domain. Only `NamedModel` (name resolution plus
+    // a min-in-flight tiebreak, never scored) is out.
+    if !matches!(
+        decision.path,
+        DecisionPath::RankedOicp | DecisionPath::NamedFallthrough
+    ) {
         return Err(SkipReason::NamedPath);
     }
     if decision.candidates.is_empty() {

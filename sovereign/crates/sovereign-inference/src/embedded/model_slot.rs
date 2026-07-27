@@ -876,6 +876,26 @@ impl ModelSlot {
                 model_params = model_params
                     .with_devices(&dist.devs)
                     .with_tensor_buft_overrides(&dist.overrides);
+                // Pin llama.cpp's OWN per-layer device assignment to the SAME
+                // plan the overrides came from. `-ot` moves tensor buffers; it
+                // does not move `dev_layer`, which llama.cpp derives from the
+                // device list + tensor_split — and with tensor_split unset it
+                // uses a VRAM-proportional default that rounds differently than
+                // our byte-mass plan. One layer then has its ops on one device
+                // and its weights on the other; on a hybrid model that is a
+                // Gated DeltaNet layer whose cross-device fused op reaches the
+                // RPC worker with a null-null dst and segfaults it. See
+                // `tensor_split_from_plan` for the measured numbers.
+                let split = tensor_split_from_plan(&dist.plan);
+                if !split.is_empty() {
+                    tracing::info!(
+                        ?split,
+                        "distributed load: pinning tensor_split to the shard plan \
+                         (keeps llama.cpp's per-layer device assignment in agreement \
+                          with the -ot overrides)"
+                    );
+                    model_params = model_params.with_tensor_split(&split);
+                }
             }
             LoadPlacement::InsufficientCluster { eligible, quorum } => {
                 // Shared-model host can't form the cluster yet — do NOT load (a
