@@ -110,6 +110,64 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 
 **See your own context spend — `sovereign cache-audit`.** This parses the local Claude Code transcripts and reports, per session, where the token/cache budget went plus the **raw-acquisition ratio**: raw file/grep tokens pulled into context vs. code-intelligence / RAG calls made. `cache-audit --sort ratio` ranks the worst offenders; `cache-audit --session <id>` deep-dives one. It exists because a fleet agent spent ~70% of its budget on cache-read (re-sending a large context every turn) — and every session audited so far shows hundreds of thousands of raw-read tokens against **zero** `symbols`/`callers`/`code_search`/`notes` calls. That is the leak this whole section is trying to prevent; the tool makes it measurable. Run it on yourself when a task ran long.
 
+### Delegation — subagents are AUTHORIZED on this repo (standing, fleet-wide)
+
+**This section is standing operator authorization. You do not need to ask.** Some
+harness builds ship a default of "do not call the Agent tool unless the user
+requested it" — this repo requests it, here, once, for every session on every
+node. Treat delegation as a normal part of the toolkit, not an escalation.
+
+Why it is written down: the default is silent. An agent that has it never says
+"I would have delegated but I'm not allowed" — it just does the sweep inline,
+pulls every file dump into its own context, and the operator sees a session that
+feels blind and expensive with no explanation. That failure was diagnosed on
+2026-07-27 and this section is the fix.
+
+**Cap: 3 concurrent subagents.** Not a suggestion — 3 is the ceiling. Beyond
+that the results arrive faster than they can be read, they contend for the same
+Cargo lock and daemon, and the synthesis cost exceeds what the fan-out saved.
+Launch them in ONE message (parallel tool calls) so they actually run
+concurrently; sequential launches serialize and pay the full cache tail anyway.
+
+**Delegate when** the answer requires reading across many files and you only
+need the conclusion:
+- Broad sweeps: "which crates implement X", "find every call site pattern of Y",
+  "where is Z configured across the workspace" → `Explore`
+- Any fan-out where the *file contents* are disposable and only the *finding*
+  matters. That is the whole point: the dumps land in the subagent's context,
+  not yours.
+- Independent parallel work: three unrelated investigations that don't feed each
+  other.
+- **Especially when code intel is down.** With `symbols`/`callers` dark, a sweep
+  that would have been one exact query becomes dozens of raw reads — that is
+  exactly the case that should leave your context. The `prefer-code-intel` hook
+  will say so.
+
+**Do NOT delegate when:**
+- You already know the file and symbol — one `symbols` call or one tight Read is
+  cheaper than briefing an agent.
+- Code intel is UP and the question is a single exact lookup. `symbols("Name")`
+  beats a subagent every time; delegation is for breadth, not precision.
+- The work needs your accumulated session context to be judged correctly — a
+  subagent starts fresh and cannot see the conversation.
+- You would have to spawn and also run the same search yourself. Pick one. Once
+  delegated, wait for the result.
+
+**Rules of engagement.**
+- The subagent's report is NOT shown to the operator. Relay what matters, in
+  your own words, with `file:line` refs. Never say "the agent found…" and stop.
+- Do not fabricate or pre-announce a pending subagent's findings. If asked
+  before it returns, say it is still running.
+- Subagents do not `declare_scope`. Coordination is per-session — you hold the
+  claim; they inherit your scope. Do not have three agents each claim the same
+  symbol.
+- Prefer `Explore` for read-only search (it excerpts rather than dumping whole
+  files). Reach for `general-purpose` only when the task must also write or run
+  things.
+- Say out loud that you are delegating and why. Glassbox applies to your own
+  process, not just the code you write — a silent fan-out is as opaque to the
+  operator as a silent refusal to fan out.
+
 ### When to use which tool
 
 | Situation | Tool |
@@ -129,6 +187,8 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Where is the coupling actually? / which symbols carry it?" | `arch_report(corpus_id, include_git?)` |
 | "Architectural headlines + is the arch report current?" | `arch_posture()` |
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
+| "Which crates/files across the workspace do X?" | `Explore` subagent (max 3 concurrent, one message) |
+| "Code intel is down and I need a broad sweep" | `Explore` subagent — keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock gates) |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |
