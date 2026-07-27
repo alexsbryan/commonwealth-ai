@@ -178,8 +178,58 @@ tar -xzOf /tmp/a.tar.gz '*.app/Contents/Info.plist' \
   | plutil -extract CFBundleShortVersionString raw -o - -    # MUST print $v
 ```
 
-If it prints anything else, unpublish immediately — clients that already
-updated are stuck until a correct build replaces it.
+If it prints anything else, the release needs repair before more clients
+update into the loop.
+
+### Repairing a mislabeled updater archive — repackage, do NOT rebuild
+
+The failure is narrow: `cargo tauri build` produced a correct `.app` (the DMG
+proves it) and only failed to re-emit the version-less `svrnmesh.app.tar.gz`.
+So the *right bits are already published* — inside the DMG. Rebuilding is both
+unnecessary (hours) and **wrong**: `main` has usually moved past the release
+tag, so a rebuild ships different code under a published version number, which
+is exactly what `release-all.sh`'s already-published guard exists to prevent.
+
+Repackage the published bundle instead. This is what fixed desktop-v0.3.5
+(2026-07-27), start to finish in minutes:
+
+```sh
+v=0.3.5
+for arch in aarch64 x64; do
+  curl -sL -o "$arch.dmg" \
+    "https://github.com/alexsbryan/svrnmesh-releases/releases/download/desktop-v$v/svrnmesh_${v}_${arch}.dmg"
+  hdiutil attach "$arch.dmg" -nobrowse -readonly -mountpoint "mnt-$arch"
+  ditto "mnt-$arch/svrnmesh.app" "stage-$arch/svrnmesh.app"   # ditto: preserves perms + signature
+  hdiutil detach "mnt-$arch"
+  ( cd "stage-$arch" && COPYFILE_DISABLE=1 tar -czf "../svrnmesh_${v}_${arch}.app.tar.gz" svrnmesh.app )
+  cargo tauri signer sign "svrnmesh_${v}_${arch}.app.tar.gz"   # reads TAURI_SIGNING_PRIVATE_KEY{,_PASSWORD}
+done
+gh release upload "desktop-v$v" --repo alexsbryan/svrnmesh-releases --clobber \
+  svrnmesh_${v}_*.app.tar.gz svrnmesh_${v}_*.app.tar.gz.sig
+```
+
+`COPYFILE_DISABLE=1` keeps bsdtar from injecting AppleDouble (`._*`) entries —
+Tauri's Rust tar writer emits none, and the archive must match. The only
+remaining difference from a Tauri-built archive is trailing slashes on
+directory entries; extraction is identical.
+
+Then verify against the **published** URL (not your local copy), and confirm
+the signature key ID still matches the one clients already trust — a
+mismatched key makes the update silently unacceptable to every existing
+install:
+
+```sh
+python3 - svrnmesh_${v}_aarch64.app.tar.gz.sig <<'EOF'
+import base64, sys
+sig = base64.b64decode(open(sys.argv[1]).read()).decode()
+print(base64.b64decode(sig.strip().splitlines()[1])[2:10][::-1].hex().upper())
+EOF
+# must equal the key ID derived from tauri.conf.json's plugins.updater.pubkey
+```
+
+Do **not** unpublish as a first move. Unpublishing removes the DMG that is the
+only surviving copy of the correct bundle, and strands clients with no release
+to move to. Repair in place; unpublish only if the `.app` itself is bad.
 
 ---
 
