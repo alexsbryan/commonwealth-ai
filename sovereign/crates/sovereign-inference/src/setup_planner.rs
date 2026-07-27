@@ -41,6 +41,66 @@ impl std::ops::Deref for PrimaryOption {
 pub enum SlotKind {
     Fast,
     Embed,
+    /// Inline-completion model. Unlike Fast/Embed this does NOT read
+    /// `[profiles.<hardware-tier>.fim]` — no such row exists. It reads
+    /// the `fim_*` ladder pseudo-profiles via [`fim_rung_for_profile`].
+    Fim,
+}
+
+// ─── FIM ladder ───────────────────────────────────────────────────
+//
+// One model (Mellum2-12B-A2.5B-Instruct), four quants. See the FIM
+// LADDER block in `models.toml` for why it is quants-of-one rather
+// than a model-per-tier: Mellum2 has no smaller sibling, and lean
+// mode (primary and `[models.fim].path` are the same file) means the
+// rung is bounded by total memory, not by headroom left over after a
+// separate chat primary.
+
+/// The rungs, smallest first. `(cli_name, manifest_profile)` — the
+/// CLI name is what `svrn setup --fim --quant <q>` accepts and what
+/// the setup banner prints; the manifest profile is the key in
+/// `models.toml`. Ordering is load-bearing: [`next_fim_rung`] walks
+/// it to suggest the next step up.
+pub const FIM_RUNGS: &[(&str, &str)] = &[
+    ("mxfp4_moe", "fim_mxfp4_moe"),
+    ("q4_k_m", "fim_q4_k_m"),
+    ("q6_k", "fim_q6_k"),
+    ("q8_0", "fim_q8_0"),
+];
+
+/// Which rung a hardware profile gets by default.
+///
+/// The floor is MXFP4_MOE (7.03 GB) because that is the smallest
+/// Mellum2 artifact that exists — there is no 1–3 GB rung to fall
+/// back to, so `cpu_only` and `low_mem` get the same one. The step to
+/// Q4_K_M at `default` (8–19 GB) and Q6_K at `high`/`very_high` tracks
+/// total memory, not free-VRAM-after-primary: in lean mode the FIM
+/// model IS the resident model.
+pub fn fim_rung_for_profile(profile: &ProfileName) -> &'static str {
+    match profile {
+        ProfileName::CpuOnly | ProfileName::LowMem => "mxfp4_moe",
+        ProfileName::Default => "q4_k_m",
+        ProfileName::High | ProfileName::VeryHigh => "q6_k",
+    }
+}
+
+/// Resolve a rung by its CLI name (`"q6_k"`). `None` for an unknown
+/// name — callers turn that into a usage error listing [`FIM_RUNGS`].
+pub fn fim_slot_for_rung(rung: &str) -> Option<SlotConfig> {
+    let (_, manifest_profile) = FIM_RUNGS.iter().find(|(name, _)| *name == rung)?;
+    DEFAULT_MANIFEST
+        .profiles
+        .get(*manifest_profile)
+        .and_then(|p| p.fim.clone())
+}
+
+/// The next rung up from `rung`, or `None` at the top. Drives the
+/// "try this next" line in the setup banner — a concrete upgrade the
+/// operator can act on, rather than a vague "you can change models".
+pub fn next_fim_rung(rung: &str) -> Option<(&'static str, SlotConfig)> {
+    let idx = FIM_RUNGS.iter().position(|(name, _)| *name == rung)?;
+    let (next_name, _) = FIM_RUNGS.get(idx + 1)?;
+    fim_slot_for_rung(next_name).map(|slot| (*next_name, slot))
 }
 
 /// Build the curated list of primary-model options for the user's
@@ -128,16 +188,26 @@ pub fn resolve_slot(profile: &ProfileName, kind: SlotKind) -> Option<SlotConfig>
         ProfileName::High => "high",
         ProfileName::VeryHigh => "very_high",
     };
+    // FIM resolves off the ladder, not off the hardware profile's own
+    // table — `[profiles.high.fim]` intentionally does not exist. Doing
+    // this before the profile lookup keeps the fallback below (which
+    // reaches for `default.fast` / `default.embed`) from silently
+    // returning a chat model for a FIM request.
+    if let SlotKind::Fim = kind {
+        return fim_slot_for_rung(fim_rung_for_profile(profile));
+    }
     let prof_cfg = DEFAULT_MANIFEST.profiles.get(profile_name)?;
     let slot = match kind {
         SlotKind::Fast => prof_cfg.fast.clone(),
         SlotKind::Embed => prof_cfg.embed.clone(),
+        SlotKind::Fim => unreachable!("handled above"),
     };
     slot.or_else(|| {
         let default = DEFAULT_MANIFEST.profiles.get("default")?;
         match kind {
             SlotKind::Fast => default.fast.clone(),
             SlotKind::Embed => default.embed.clone(),
+            SlotKind::Fim => unreachable!("handled above"),
         }
     })
 }
@@ -303,6 +373,118 @@ fn reject_non_binary_content_type(resp: &reqwest::Response, url: &str) -> Result
 
 fn has_content(p: &Path) -> bool {
     p.metadata().map(|m| m.len() > 0).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod fim_ladder_tests {
+    use super::*;
+
+    const ALL_PROFILES: [ProfileName; 5] = [
+        ProfileName::CpuOnly,
+        ProfileName::LowMem,
+        ProfileName::Default,
+        ProfileName::High,
+        ProfileName::VeryHigh,
+    ];
+
+    /// Every rung named in `FIM_RUNGS` must actually resolve against
+    /// the bundled manifest. This is the test that fails loudly if
+    /// someone renames a `[profiles.fim_*]` table without updating the
+    /// ladder — the alternative is a runtime "no FIM model available"
+    /// on a user's machine during onboarding.
+    #[test]
+    fn every_rung_resolves_in_the_bundled_manifest() {
+        for (cli_name, manifest_profile) in FIM_RUNGS {
+            let slot = fim_slot_for_rung(cli_name)
+                .unwrap_or_else(|| panic!("rung {cli_name} ({manifest_profile}) did not resolve"));
+            assert!(!slot.file.is_empty(), "rung {cli_name} has no file");
+            assert!(!slot.hf_url.is_empty(), "rung {cli_name} has no hf_url");
+            assert!(slot.size_gb > 0.0, "rung {cli_name} has no size");
+        }
+    }
+
+    /// Mellum2-only is an operator constraint, not an accident: the
+    /// daemon's marker probe refuses a model whose vocab lacks atomic
+    /// FIM markers, so a well-meaning swap to some other coder GGUF
+    /// would produce a 503 at completion time rather than a build
+    /// error. Pin it here where the failure is cheap.
+    #[test]
+    fn every_rung_is_mellum2() {
+        for (cli_name, _) in FIM_RUNGS {
+            let slot = fim_slot_for_rung(cli_name).expect("rung resolves");
+            assert_eq!(
+                slot.base_name, "Mellum2-12B-A2.5B",
+                "rung {cli_name} left the Mellum2 family"
+            );
+        }
+    }
+
+    /// The ladder must be ordered smallest-first — `next_fim_rung`
+    /// walks it as a monotonic upgrade path, so an out-of-order entry
+    /// would recommend a *downgrade* as the next step to try.
+    #[test]
+    fn rungs_are_ordered_smallest_first() {
+        let sizes: Vec<f64> = FIM_RUNGS
+            .iter()
+            .map(|(n, _)| fim_slot_for_rung(n).expect("rung resolves").size_gb)
+            .collect();
+        for pair in sizes.windows(2) {
+            assert!(
+                pair[0] < pair[1],
+                "ladder is not ascending: {:?} then {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    #[test]
+    fn every_hardware_profile_maps_to_a_resolvable_rung() {
+        for p in ALL_PROFILES {
+            let rung = fim_rung_for_profile(&p);
+            assert!(
+                fim_slot_for_rung(rung).is_some(),
+                "{p:?} maps to unknown rung {rung}"
+            );
+            assert!(
+                resolve_slot(&p, SlotKind::Fim).is_some(),
+                "resolve_slot(Fim) returned None for {p:?}"
+            );
+        }
+    }
+
+    /// `resolve_slot(Fim)` must never fall through to the `default`
+    /// profile's fast/embed slot the way Fast/Embed do — that fallback
+    /// would hand back a Qwen chat model for a FIM request, and the
+    /// failure would surface as garbage ghost text rather than a clear
+    /// refusal.
+    #[test]
+    fn fim_never_falls_back_to_a_chat_slot() {
+        for p in ALL_PROFILES {
+            let slot = resolve_slot(&p, SlotKind::Fim).expect("resolves");
+            assert_eq!(slot.base_name, "Mellum2-12B-A2.5B", "{p:?} got a non-FIM slot");
+        }
+    }
+
+    #[test]
+    fn next_rung_walks_up_and_stops_at_the_top() {
+        let (first, _) = FIM_RUNGS[0];
+        let (second, next_slot) = next_fim_rung(first).expect("a rung above the floor exists");
+        assert_eq!(second, FIM_RUNGS[1].0);
+        assert!(next_slot.size_gb > fim_slot_for_rung(first).unwrap().size_gb);
+
+        let (top, _) = FIM_RUNGS[FIM_RUNGS.len() - 1];
+        assert!(
+            next_fim_rung(top).is_none(),
+            "top rung {top} should have nothing above it"
+        );
+    }
+
+    #[test]
+    fn unknown_rung_names_resolve_to_none() {
+        assert!(fim_slot_for_rung("q3_k_s").is_none());
+        assert!(next_fim_rung("not-a-rung").is_none());
+    }
 }
 
 #[cfg(test)]

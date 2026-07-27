@@ -330,9 +330,9 @@
 
 <style>
   .atom-detail {
-    max-width: 920px;
+    max-width: var(--measure);
     margin: 0 auto;
-    padding: 32px 32px 80px;
+    padding: var(--gutter-top) var(--gutter) var(--gutter-bottom);
     color: var(--text-primary);
     font-family: var(--font-sans);
   }
@@ -568,6 +568,7 @@
     font-size: 0.85rem;
     line-height: 1.5;
     color: var(--text-primary);
+    max-width: var(--measure-prose);
   }
 
   .related-row {
@@ -633,6 +634,18 @@
     border-radius: var(--radius);
     font-size: 0.82rem;
     align-items: center;
+  }
+  /* A grid item's automatic minimum size is its min-content width, so a
+     long `peer_canonical_name` widened the 1fr track past the content
+     column. Nothing here sets `overflow-x`, and `.nb-body` clips, so the
+     row was cut off with no scrollbar and no ellipsis. */
+  .cross-row > * {
+    min-width: 0;
+  }
+  .peer-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .peer-corpus { color: var(--text-muted); }

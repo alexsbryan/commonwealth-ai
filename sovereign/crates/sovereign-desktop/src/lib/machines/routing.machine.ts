@@ -205,6 +205,12 @@ export interface CounterState {
     coverage: number;
     earlyDecline: boolean;
   } | null;
+  /** Cold-slot load in progress. The primary model is being paged off
+   *  disk before synthesis can produce a single token — measured at
+   *  57-95s against 0.44s warm. Set by `model_load`; never cleared,
+   *  because once a turn has paid this wait the explanation stays
+   *  true for that turn's timeline. Absent on every warm turn. */
+  modelLoad: { modelId: string; sizeBytes: number | null } | null;
   /** elapsed_ms of the most recent counter-relevant frame. */
   elapsedMs: number;
 }
@@ -265,6 +271,11 @@ function isEvidenceCheck(phase: NarrationEvent["phase"]): phase is {
     typeof phase === "object" && phase !== null && "evidence_check" in phase
   );
 }
+function isModelLoad(
+  phase: NarrationEvent["phase"],
+): phase is { model_load: { model_id: string; size_bytes: number | null } } {
+  return typeof phase === "object" && phase !== null && "model_load" in phase;
+}
 
 /** True when the frame belongs to the verification counter (routed to
  *  `counter`, kept out of `narrationLog` — same contract as the
@@ -275,7 +286,8 @@ export function isCounterFrame(phase: NarrationEvent["phase"]): boolean {
     isClaimVerdict(phase) ||
     isClaimRevisionStart(phase) ||
     isClaimCheckComplete(phase) ||
-    isEvidenceCheck(phase)
+    isEvidenceCheck(phase) ||
+    isModelLoad(phase)
   );
 }
 
@@ -296,8 +308,17 @@ export function applyCounter(
     retrieval: null,
     check: null,
     evidence: null,
+    modelLoad: null,
     elapsedMs: 0,
   };
+  if (isModelLoad(phase)) {
+    const p = phase.model_load;
+    return {
+      ...base,
+      modelLoad: { modelId: p.model_id, sizeBytes: p.size_bytes },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
   if (isEvidenceCheck(phase)) {
     const p = phase.evidence_check;
     return {

@@ -192,11 +192,11 @@
 
 <style>
   .offer {
-    border: 1px solid var(--color-border, #d8d8d8);
+    border: 1px solid var(--border-mid);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
     margin: 0.5rem 0;
-    background: var(--color-surface-alt, rgba(0, 0, 0, 0.02));
+    background: var(--bg-secondary);
   }
   .unavailable {
     display: flex;

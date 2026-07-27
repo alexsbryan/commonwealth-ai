@@ -42,6 +42,7 @@ mod args;
 mod byom;
 mod catalog;
 mod download;
+mod fim;
 mod finish;
 mod opencode;
 
@@ -54,6 +55,29 @@ use finish::finish_with_paths;
 pub(crate) use download::download_with_progress;
 
 pub async fn run_setup(args: &[String]) -> i32 {
+    // `--fim` is a different destination, not a modifier on the
+    // wizard — dispatch BEFORE the deprecation shim below. Two
+    // reasons: the shim announces "use `svrn daemon --setup-only`",
+    // which is wrong advice for a flag that has nothing to do with
+    // first-boot model setup; and it force-appends `--wizard-only`,
+    // whose meaning in the FIM path ("the daemon is about to boot,
+    // don't restart it") must stay under the caller's control.
+    if args.iter().any(|a| a == "--fim") {
+        let opts = match parse_args(args) {
+            Ok(o) => o,
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                print_usage();
+                return 2;
+            }
+        };
+        if opts.help {
+            print_usage();
+            return 0;
+        }
+        return fim::run_fim_setup(&opts).await;
+    }
+
     // Phase 4: `svrn setup` is now a wizard-only shim. The
     // service-install + opencode + doctor steps that used to run
     // here moved out — service registration is now `sovereign
@@ -284,6 +308,19 @@ struct Opts {
     /// this mode and points the user at `svrn install-service`
     /// for service registration.
     wizard_only: bool,
+    /// Run the inline-completion onboarding (`fim::run_fim_setup`)
+    /// instead of the model wizard. Not a modifier on the wizard —
+    /// a different destination, which is why `run_setup` dispatches
+    /// on it before the deprecation shim.
+    fim: bool,
+    /// FIM ladder rung name (`"q6_k"`), when the operator overrode
+    /// the hardware-derived pick. `None` = use
+    /// `fim_rung_for_profile`. Only meaningful with `fim`.
+    quant: Option<String>,
+    /// With `fim`: stop after the daemon is verified, leave the
+    /// editor alone. For headless/CI hosts and for operators who
+    /// manage their extensions themselves.
+    skip_editor: bool,
 }
 
 // ─── Model catalog + picker ───────────────────────────────────────
@@ -620,6 +657,72 @@ mod tests {
     fn parse_args_defaults_wizard_only_off() {
         let opts = parse_args(&s(&[])).unwrap();
         assert!(!opts.wizard_only);
+    }
+
+    // ── --fim ──────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_args_recognizes_fim_and_its_modifiers() {
+        let opts = parse_args(&s(&["--fim", "--quant", "q8_0", "--skip-editor", "-y"])).unwrap();
+        assert!(opts.fim);
+        assert_eq!(opts.quant.as_deref(), Some("q8_0"));
+        assert!(opts.skip_editor);
+        assert!(opts.yes);
+    }
+
+    #[test]
+    fn parse_args_defaults_fim_off() {
+        let opts = parse_args(&s(&[])).unwrap();
+        assert!(!opts.fim);
+        assert!(opts.quant.is_none());
+        assert!(!opts.skip_editor);
+    }
+
+    /// `--quant Q6_K` is what an operator copies off the setup
+    /// banner, which prints the manifest's display spelling. Rejecting
+    /// it over a case mismatch would be a gratuitous failure in the
+    /// middle of onboarding.
+    #[test]
+    fn parse_args_accepts_display_case_quant() {
+        let opts = parse_args(&s(&["--fim", "--quant", "Q6_K"])).unwrap();
+        assert_eq!(opts.quant.as_deref(), Some("q6_k"));
+    }
+
+    /// A typo'd rung must fail at parse time, not after a multi-GB
+    /// download resolves to nothing.
+    #[test]
+    fn parse_args_rejects_unknown_quant_and_lists_the_rungs() {
+        let err = parse_args(&s(&["--fim", "--quant", "q3_k_s"])).unwrap_err();
+        assert!(err.contains("q3_k_s"), "error should echo the input: {err}");
+        assert!(err.contains("q6_k"), "error should list valid rungs: {err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_dangling_quant() {
+        let err = parse_args(&s(&["--fim", "--quant"])).unwrap_err();
+        assert!(err.contains("--quant"), "error: {err}");
+    }
+
+    /// `--quant` / `--skip-editor` without `--fim` would silently do
+    /// nothing — the wizard has no FIM step to modify. Fail loudly so
+    /// a typo'd invocation isn't mistaken for a completed FIM setup.
+    #[test]
+    fn parse_args_rejects_fim_modifiers_without_fim() {
+        let err = parse_args(&s(&["--quant", "q6_k"])).unwrap_err();
+        assert!(err.contains("--fim"), "error: {err}");
+        let err = parse_args(&s(&["--skip-editor"])).unwrap_err();
+        assert!(err.contains("--fim"), "error: {err}");
+    }
+
+    /// The `daemon --setup-only --fim` path prepends `--wizard-only`;
+    /// both must survive parsing together, because `wizard_only` is
+    /// what stops the FIM path from restarting the daemon that is
+    /// currently booting it.
+    #[test]
+    fn parse_args_allows_fim_alongside_wizard_only() {
+        let opts = parse_args(&s(&["--wizard-only", "--fim"])).unwrap();
+        assert!(opts.fim);
+        assert!(opts.wizard_only);
     }
 
     #[test]

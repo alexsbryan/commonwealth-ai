@@ -712,6 +712,30 @@ pub trait InferenceProvider: Send + Sync {
         Vec::new()
     }
 
+    /// State of the deep-reasoning ("primary") slot — the answer to
+    /// "will the next synthesis pay a model load before its first
+    /// token?". `None` means unknown, and callers MUST NOT narrate a
+    /// load they cannot confirm.
+    ///
+    /// Exists separately from [`Self::resident_slots`] because that one
+    /// is sync and contractually non-blocking, which a remote forwarder
+    /// cannot satisfy while also telling the truth: it owns no weights,
+    /// so the only honest answer requires asking the node that does.
+    /// This method is async precisely so such a provider can ask.
+    ///
+    /// Called once per deep turn, immediately before a multi-second
+    /// synthesis, so one localhost round-trip is noise against the wait
+    /// it explains. Implementors must still fail soft — a provider that
+    /// cannot answer returns `None` rather than blocking the turn.
+    ///
+    /// The default serves providers that own their weights: read the
+    /// sync report and pick the primary row.
+    async fn primary_slot_status(&self) -> Option<ResidentSlot> {
+        self.resident_slots()
+            .into_iter()
+            .find(|s| s.role == "primary")
+    }
+
     /// Live status of any supervised compute children this provider routes to
     /// (DISTRIBUTED_PILOT_READINESS.md P1). Default empty — only the
     /// compute-routing facade has children; every other provider inherits

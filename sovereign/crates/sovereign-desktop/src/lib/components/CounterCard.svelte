@@ -36,7 +36,13 @@
 
   const station: StationId = $derived.by(() => {
     if (counter?.check) return "check";
-    if (heartbeat || counter?.retrieval?.complete) return "draft";
+    // `modelLoad` advances the station on its own: retrieval is
+    // necessarily finished by the time synthesis asks for the slot, and
+    // `retrieval_complete` rides the suppressible narration path (it is
+    // dropped under 1.5s or past the per-turn cap). Keying the draft
+    // station off it alone would strand a cold turn on "Gather".
+    if (heartbeat || counter?.retrieval?.complete || counter?.modelLoad)
+      return "draft";
     return "gather";
   });
   const stationIdx = $derived(STATIONS.findIndex((s) => s.id === station));
@@ -44,6 +50,16 @@
   const retrieval = $derived(counter?.retrieval ?? null);
   const check = $derived(counter?.check ?? null);
   const evidence = $derived(counter?.evidence ?? null);
+  // Cold-slot load. Present only when the backend reported the primary
+  // slot absent at synthesis — the one wait long enough (57-95s
+  // measured) to read as a hang, and previously the only major phase
+  // of a turn with no frame of its own.
+  const modelLoad = $derived(counter?.modelLoad ?? null);
+  const modelLoadSize = $derived(
+    modelLoad?.sizeBytes != null
+      ? `${(modelLoad.sizeBytes / 1_073_741_824).toFixed(1)} GB`
+      : null,
+  );
   // "best match 34%" — only when a semantic score exists (vector-scored
   // retrieval); FTS-only turns show counts without a percentage.
   const evidenceMatch = $derived(
@@ -171,11 +187,32 @@
               <span class="num token-count">{heartbeat.tokens.toLocaleString()}</span>
             {/key}
             {heartbeat.tokens === 1 ? "token" : "tokens"}
+          {:else if modelLoad}
+            loading the model into memory&hellip;
           {:else}
             Warming up the primary model&hellip;
           {/if}
         </div>
-        {#if evidence?.earlyDecline}
+        {#if modelLoad}
+          <!-- Named cause beats a spinner: this wait runs to minutes on
+               a cold slot, and saying why is the difference between
+               patience and a force-quit.
+
+               The size branch is the fallback-first case today: the
+               embedded engine only reports `size_bytes` for a RESIDENT
+               slot, and this line exists precisely because the slot is
+               not. So expect the model-id-only form until a provider
+               supplies an on-disk size. Both forms are honest.
+
+               No ETA, ever — the same load measured 15.6s with a warm
+               page cache and 95s under memory pressure. -->
+          <div class="stage-sub" data-testid="counter-model-load-sub">
+            {modelLoadSize
+              ? `${modelLoad.modelId} · ${modelLoadSize} off disk`
+              : `${modelLoad.modelId} off disk`} — first deep answer since
+            it went idle
+          </div>
+        {:else if evidence?.earlyDecline}
           <div class="stage-sub" data-testid="counter-early-decline-sub">
             sources don't cover this — answering with a provenance caveat
           </div>

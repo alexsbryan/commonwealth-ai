@@ -560,6 +560,41 @@ describe("applyCounter — verification-counter reducer", () => {
     expect(applied?.evidence?.topSimilarity).toBeNull();
   });
 
+  it("model_load fills modelLoad and routes to the counter, not the log", () => {
+    const phase = {
+      model_load: {
+        model_id: "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+        size_bytes: 18_525_200_896,
+      },
+    };
+    const applied = applyCounter(null, frame(phase, 12_400));
+    expect(applied?.modelLoad).toEqual({
+      modelId: "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+      sizeBytes: 18_525_200_896,
+    });
+    expect(applied?.elapsedMs).toBe(12_400);
+    // Counter frame contract: never double-rendered as a narration chip.
+    expect(applyNarration([], frame(phase))).toEqual([]);
+  });
+
+  it("model_load survives later counter frames — the wait stays explained", () => {
+    const loading = applyCounter(
+      null,
+      frame({ model_load: { model_id: "primary-35b", size_bytes: null } }),
+    );
+    // A null size is legal (engine didn't know); the frame still explains
+    // the wait, so the field must be present with sizeBytes null.
+    expect(loading?.modelLoad).toEqual({
+      modelId: "primary-35b",
+      sizeBytes: null,
+    });
+    const checking = applyCounter(
+      loading,
+      frame({ claim_check_start: { claims: ["a"], recheck: false } }),
+    );
+    expect(checking?.modelLoad?.modelId).toBe("primary-35b");
+  });
+
   it("the audit-open frame (empty claims) opens check without wiping a later list", () => {
     const opened = applyCounter(
       null,

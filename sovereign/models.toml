@@ -409,6 +409,92 @@ code        = 2
 creative    = 2
 
 # ─────────────────────────────────────────────────────────────────────────────
+# FIM LADDER — inline completion (`svrn setup --fim`)
+#
+# These are NOT hardware ProfileName variants. They are four rungs of ONE
+# model (JetBrains Mellum2-12B-A2.5B-Instruct) differing only by quant.
+# `resolve_slot(profile, SlotKind::Fim)` maps the detected hardware profile
+# to a rung; `svrn setup --fim --quant <q>` addresses a rung by name. The
+# ladder lives here — and only here — so the recommended rung, the
+# `--quant` vocabulary, and the "next rung to try" hint all read the same
+# table instead of three drifting copies.
+#
+# WHY ONE FAMILY. Inline completion is served by a FIM prompt built from
+# the model's own special tokens (`<fim_prefix>`/`<fim_suffix>`/
+# `<fim_middle>`, disambiguated from StarCoder2 by `<|im_start|>` — see
+# FIM_MARKER_TABLE in sovereign-inference/src/fim.rs). The daemon probes
+# the vocab at install and REFUSES the slot when no marker set tokenizes
+# atomically, so an arbitrary chat GGUF is not a substitute. Mellum2 is
+# the validated family here; Mellum2 Instruct Q6_K is the artifact
+# `scripts/fim-smoke.sh` exercises.
+#
+# WHY 12B EVERYWHERE (no small rung). Mellum2-12B-A2.5B is an MoE with
+# 2.5B active params — it generates at ~2.5B speed while the weights sit
+# at 12B size. There is no smaller Mellum2. That is what makes lean mode
+# (below) the right default rather than a compromise.
+#
+# LEAN MODE. `svrn setup --fim` points BOTH `[models].primary` and
+# `[models.fim].path` at the same file, so `ModelsSection::fast_path()`
+# (which falls back to `primary` when `fast` is unset) equals the FIM
+# path and `install_fim_slot` takes its alias branch: completions are
+# served from the always-resident fast slot, ONE copy in RAM. The
+# alternative — a dedicated pinned `fim` slot beside a separate chat
+# primary — needs 7–13 GB of headroom ON TOP of the primary, which the
+# `high` (16.3 GB primary in a 20–23 GB band) and `very_high` (20.5 GB
+# primary in a ≥24 GB band) tiers do not have. Measured, not assumed.
+#
+# `family` is deliberately unset: there is no `ModelFamily::Mellum2`
+# variant, so a string here would silently parse to `Unknown` and imply a
+# quirks mapping that does not exist. Quirks come from the GGUF header.
+# Sizes below are `content-length` from the HF resolve endpoint.
+
+[profiles.fim_mxfp4_moe.fim]
+repo      = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-MXFP4_MOE"
+file      = "Mellum2-12B-A2.5B-Instruct-MXFP4_MOE.gguf"
+quant     = "MXFP4_MOE"
+size_gb   = 7.03
+thinking  = false
+hf_url    = "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-MXFP4_MOE"
+base_name = "Mellum2-12B-A2.5B"
+[profiles.fim_mxfp4_moe.fim.capabilities]
+code = 3
+
+[profiles.fim_q4_k_m.fim]
+repo      = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
+file      = "Mellum2-12B-A2.5B-Instruct-Q4_K_M.gguf"
+quant     = "Q4_K_M"
+size_gb   = 8.07
+thinking  = false
+hf_url    = "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
+base_name = "Mellum2-12B-A2.5B"
+[profiles.fim_q4_k_m.fim.capabilities]
+code = 3
+
+# The validated rung: what `scripts/fim-smoke.sh` runs and what the
+# extension README recommends.
+[profiles.fim_q6_k.fim]
+repo      = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K"
+file      = "Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+quant     = "Q6_K"
+size_gb   = 10.88
+thinking  = false
+hf_url    = "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K"
+base_name = "Mellum2-12B-A2.5B"
+[profiles.fim_q6_k.fim.capabilities]
+code = 4
+
+[profiles.fim_q8_0.fim]
+repo      = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q8_0"
+file      = "Mellum2-12B-A2.5B-Instruct-Q8_0.gguf"
+quant     = "Q8_0"
+size_gb   = 12.93
+thinking  = false
+hf_url    = "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q8_0"
+base_name = "Mellum2-12B-A2.5B"
+[profiles.fim_q8_0.fim.capabilities]
+code = 4
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BYOM EXAMPLES
 # Users replace any slot by dropping a [[user_slots]] entry. The family field
 # drives all defaults; quirks_override patches only what differs.
