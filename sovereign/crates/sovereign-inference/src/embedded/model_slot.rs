@@ -1319,11 +1319,39 @@ impl ModelSlot {
         context_size: u32,
         n_seq_max: u32,
         n_ubatch: u32,
+        n_gpu_layers: u32,
     ) -> Result<Self> {
         let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        let wants_gpu = !force_cpu && cfg!(any(target_os = "macos", target_os = "linux"));
+        // `&& n_gpu_layers > 0` matches the three sibling sites (`ModelSlot::load`,
+        // `EmbedSlot::load`, `RerankSlot::load`). This constructor was the only one
+        // deciding on the OS alone, and that is a bug: `HardwareProfile::detect` has
+        // ALREADY resolved whether this host has a usable GPU, and on an Intel Mac it
+        // answers "no" on purpose ("Metal + llama.cpp on discrete AMD GPUs produces
+        // garbage output" — see hardware.rs::detect_gpu), yielding n_gpu_layers == 0.
+        //
+        // Ignoring that put the companion slot's KV cache in a Metal buffer on a
+        // machine whose weights are entirely on CPU. Metal buffers are only shared
+        // (host-addressable) when the device reports `hasUnifiedMemory`; on a Mac with
+        // a discrete GPU they are private, and ggml then services every KV read/write
+        // by wrapping the HOST pointer in an MTLBuffer via `newBufferWithBytesNoCopy:`,
+        // which returns nil for a non-page-aligned pointer:
+        //
+        //   ggml-metal-device.m:1743  GGML_ASSERT(buf_src)  ggml_metal_buffer_set_tensor
+        //   ggml-metal-device.m:1800  GGML_ASSERT(buf_dst)  ggml_metal_buffer_get_tensor
+        //
+        // GGML_ASSERT(nil) calls abort(), so the daemon died with SIGABRT mid-request —
+        // observed six times in one morning on a MacBookPro16,1 (2026-07-27), five on
+        // the set path and one on the get path. Apple Silicon takes the memcpy fast
+        // path in both functions and never reaches that code, which is why the crash
+        // was invisible on the machines we develop on.
+        //
+        // Scope: this changes behaviour ONLY where n_gpu_layers == 0 — hosts already
+        // determined to have no usable GPU. Apple Silicon (999) and Linux-with-GPU are
+        // bit-identical to before.
+        let wants_gpu =
+            !force_cpu && cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
 
         let n_threads = llama_threads_for_host();
 

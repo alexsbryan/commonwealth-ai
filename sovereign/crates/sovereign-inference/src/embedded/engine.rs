@@ -926,6 +926,7 @@ impl EmbeddedLlamaCpp {
                 FAST_SHORT_N_CTX,
                 FAST_SHORT_N_SEQ_MAX,
                 FAST_SHORT_N_UBATCH,
+                n_gpu_layers,
             ) {
                 Ok(slot) => {
                     let slot = Arc::new(slot);
@@ -1046,6 +1047,7 @@ impl EmbeddedLlamaCpp {
                     context_size,
                     /* n_seq_max */ 1,
                     /* n_ubatch */ 512,
+                    n_gpu_layers,
                 )?;
                 tracing::info!(
                     slot = "primary",
@@ -1102,6 +1104,7 @@ impl EmbeddedLlamaCpp {
                     context_size,
                     /* n_seq_max */ 1,
                     /* n_ubatch */ 512,
+                    n_gpu_layers,
                 ) {
                     Ok(slot) => (Some(slot), Some(primary_p.to_path_buf())),
                     Err(e) => {
