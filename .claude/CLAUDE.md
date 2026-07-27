@@ -75,7 +75,12 @@ recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
   hold the state; your encode-time writes are the strong path
   (auto-distilled frames recall ~17% and never authorize a split). A
   wrap-up request should be a final small upsert, not a from-scratch write.
-- **As the successor:** the boot hook injects the newest frame. Work from it
+- **As the successor:** the boot hook injects the frame **index** (one line
+  per live frame), and the first prompt injects the top-ranked frame whole.
+  If that frame is not the work you are continuing, the index is right there
+  — `sovereign session frames` lists them, `sovereign session frames <id>`
+  reads one. Do NOT hunt with `grep`/`ls` over `~/.sovereign/sessions`; that
+  hunt is the 5,872-token failure this surface replaced. Work from the frame
   plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
   specs the frame summarizes. After your first work stretch, self-measure:
   `sovereign cache-audit --ramp --session <your-id>` — gate ≤5k raw tokens,
@@ -281,6 +286,8 @@ If the daemon's watcher isn't reachable (`never_run` / `stale` for too long), in
 ./scripts/sovereign-test.sh --human --filter <pattern>         # name filter
 ./scripts/sovereign-test.sh                                    # raw Tier 2 JSONL (daemon mode)
 ```
+
+**A zero-test run is never green.** `pass: 0  fail: 0` exits **4** with a banner naming the resolved scope — a scoped or filtered run that matches nothing verified nothing, and used to print "✓ All green" (note 8def98d7). Pass `--allow-empty` only when you genuinely expect an empty scope. Exit **5** means the run's results could not be attributed (a concurrent nextest run overwrote the shared junit report) — the counts are not yours; re-run, or use `--engine cargo`.
 
 The script writes adapter logs to `target/sovereign-test/latest/cargo.{jsonl,raw.log,exit}` so failure triage doesn't require re-running cargo. Each invocation runs in its own scratch dir under `target/sovereign-test/.runs/` to avoid colliding with the daemon's watcher run.
 

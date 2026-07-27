@@ -6,9 +6,12 @@
 # read two architecture docs, inject one budgeted artifact at session start:
 #
 #   Tier 0 — brain health: is the daemon up, how many MCP tools are live.
-#   Tier 2 — the latest session frame (if fresh): the predecessor session's
-#            goal / position / next actions, so a new window resumes work
-#            instead of re-deriving it. See docs/specs/SESSION_CONTINUITY.md.
+#   Tier 2 — the session-frame INDEX: one line per live frame, so a new window
+#            can see what work is in flight and dereference the frame it is
+#            actually continuing (`sovereign session frames <id>`). A resumed
+#            session gets its OWN frame injected whole instead — no selection
+#            is involved there, so none can be wrong.
+#            See docs/specs/SESSION_CONTINUITY.md and MEMORY_MODEL §5 E5.
 #   Tier 1 — the working-set brief (`sovereign code brief`): recent activity,
 #            relevant notes, drift posture — token-budgeted.
 #
@@ -38,7 +41,6 @@ export SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}"
 export SOVEREIGN_NO_STALE_WARN=1
 
 exec python3 - <<'PY' 2>/dev/null
-import glob
 import json
 import os
 import re
@@ -84,7 +86,11 @@ prov = {
     "frame_chars_injected": 0,
     "frame_truncated": False,
     "frame_candidates": 0,
-    "frame_selection": "newest_mtime",
+    # index | own_full — which of the two Tier-2 shapes this boot injected.
+    # Phase 1 recorded "newest_mtime" here; that selector is gone.
+    "frame_selection": "none",
+    "repo": "",
+    "branch": "",
     "brief_chars": 0,
     "brief_truncated": False,
     "payload_chars": 0,
@@ -121,47 +127,107 @@ except Exception:
     emit(f"_brain: daemon not reachable on :{PORT} — code intel is dark; "
          f"start it: `sovereign daemon start`; `sovereign doctor` diagnoses_\n")
 
-# ── Tier 2: latest session frame (the handoff) ──────────────────────────
+# ── Tier 2: the frame INDEX (the handoff pointer) ───────────────────────
 #
-# Selection is still newest-mtime — a KNOWN gap (MEMORY_MODEL §5 E5 R1): under
-# concurrent workstreams the newest frame is often another thread's, and the
-# successor pays ramp tokens hunting for the right one. `frame_selection` and
-# `frame_candidates` are recorded so the mis-injection rate is measurable
-# BEFORE we redesign selection.
-frames = glob.glob(os.path.join(SESSIONS_ROOT, "*", "frame.md"))
-fresh = [(os.path.getmtime(p), p) for p in frames
-         if time.time() - os.path.getmtime(p) < FRAME_MAX_AGE_DAYS * 86400]
-prov["frame_candidates"] = len(fresh)
-if fresh:
-    mtime, path = max(fresh)
-    age_h = (time.time() - mtime) / 3600
-    prov["frame_session"] = os.path.basename(os.path.dirname(path))
-    prov["frame_is_own"] = prov["frame_session"] == session_id
-    prov["frame_age_s"] = int(time.time() - mtime)
+# WHAT CHANGED AND WHY (MEMORY_MODEL §5 E5 Phase 2). This tier used to inject
+# the frame with the newest mtime, whole. Under concurrent workstreams that is
+# the successor's frame only by luck, and a WRONG frame costs more than none:
+# session 40ab6490 was handed another thread's and burned 5,872 ramp tokens
+# hunting for the right one by hand.
+#
+# SessionStart has no prompt, which is *why* selection fell back to recency —
+# there is nothing here to select against. So it no longer tries. It injects
+# the index: one line per live frame (~200 tokens for the lot, against 1–2k
+# for one possibly-wrong frame), each dereferenceable with
+# `sovereign session frames <id>`. Full-frame injection moves to the first
+# UserPromptSubmit, where the prompt exists (inject-notes.sh).
+#
+# The ONE case that still injects a frame whole is a resume/compact of a
+# session's OWN frame: no selection is involved, so no selection can be wrong.
+
+
+def git(*args):
     try:
-        with open(path) as f:
+        p = subprocess.run(["git", *args], capture_output=True, text=True, timeout=3)
+        return p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+repo = os.path.basename(git("rev-parse", "--show-toplevel"))
+branch = git("rev-parse", "--abbrev-ref", "HEAD")
+prov["repo"] = repo
+prov["branch"] = branch
+
+# Own frame on resume/compact — inject it whole, it is definitionally correct.
+own = os.path.join(SESSIONS_ROOT, session_id, "frame.md") if session_id else ""
+if own and os.path.isfile(own):
+    try:
+        with open(own) as f:
             frame = f.read()
+        prov["frame_selection"] = "own_full"
+        prov["frame_session"] = session_id
+        prov["frame_is_own"] = True
+        prov["frame_age_s"] = int(time.time() - os.path.getmtime(own))
         prov["frame_chars_full"] = len(frame)
         m = re.search(r"^provenance:\s*(\S+)", frame, re.M)
         prov["frame_provenance"] = m.group(1) if m else "unknown"
         if len(frame) > FRAME_BUDGET_CHARS:
             frame = (frame[:FRAME_BUDGET_CHARS].rstrip()
                      + f"\n\n_[frame truncated at {FRAME_BUDGET_CHARS} chars — "
-                       f"read the rest on demand: `Read {path}`]_")
+                       f"read the rest on demand: `Read {own}`]_")
             prov["frame_truncated"] = True
         prov["frame_chars_injected"] = len(frame)
-        emit(f"### Latest session frame ({age_h:.0f}h old — cross-check `## Next` "
-             f"against recent commits before acting)\n")
+        emit("### Your own session frame (resumed — this is the state you banked)\n")
         emit(frame)
         emit("")
-        if prov["frame_candidates"] > 1 and not prov["frame_is_own"]:
-            emit(f"_{prov['frame_candidates']} frames are live; this is the most "
-                 f"recently written, NOT necessarily your predecessor's. If it "
-                 f"describes work you are not continuing, ignore it — "
-                 f"`ls -t ~/.sovereign/sessions/*/frame.md` lists the others._\n")
     except Exception as e:
-        emit(f"_frame at {path} unreadable ({type(e).__name__})_\n")
-# No fresh frame is normal (first boot, or >14d idle) — say nothing.
+        emit(f"_own frame at {own} unreadable ({type(e).__name__})_\n")
+else:
+    prov["frame_selection"] = "index"
+    try:
+        p = subprocess.run(
+            ["sovereign", "session", "frames", "--json",
+             "--repo", repo, "--branch", branch,
+             "--limit", "8", "--max-age-days", str(FRAME_MAX_AGE_DAYS)],
+            capture_output=True, text=True, timeout=10,
+        )
+        doc = json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip() else {}
+        cands = doc.get("candidates") or []
+        prov["frame_candidates"] = doc.get("count", len(cands))
+        if cands:
+            # Rendered here rather than shelling a second time for the human
+            # view; `sovereign session frames` is the authoritative renderer
+            # and prints the same facts.
+            lines = [f"### Live session frames ({prov['frame_candidates']}) — "
+                     f"read one in full: `sovereign session frames <id>`\n"]
+            for c in cands:
+                sig = c.get("signals") or {}
+                marks = []
+                if sig.get("branch_match"):
+                    marks.append("this branch")
+                if sig.get("in_flight"):
+                    marks.append("in-flight")
+                mark = f" · {' · '.join(marks)}" if marks else ""
+                age = c.get("age_s") or 0
+                age_s = (f"{age // 60}m" if age < 3600
+                         else f"{age // 3600}h" if age < 86400
+                         else f"{age // 86400}d")
+                lines.append(
+                    f"- `{c.get('short_id', '')}` · {age_s}{mark} · "
+                    f"{c.get('next_items', 0)} next — {c.get('goal', '')}"
+                )
+            lines.append("\n_None of these is injected: pick the one that "
+                         "describes work you are continuing. Your predecessor's "
+                         "frame is usually the top entry._\n")
+            block = "\n".join(lines)
+            prov["frame_chars_injected"] = len(block)
+            emit(block)
+        # No fresh frame is normal (first boot, or >14d idle) — say nothing.
+    except FileNotFoundError:
+        emit("_frame index unavailable (`sovereign` not on PATH)_\n")
+    except Exception as e:
+        emit(f"_frame index unavailable ({type(e).__name__})_\n")
 
 # ── Tier 1: working-set brief ───────────────────────────────────────────
 spent = sum(len(p) + 1 for p in out)

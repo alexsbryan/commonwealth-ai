@@ -350,19 +350,47 @@ anyway.
   out of 53,918t ramp raw — 31% of ramp was the two mechanical wastes**, and
   5,872t of the frame-hunt was `40ab6490` alone, confirming the hand read.
 
-**Phase 2 (not built): frame selection + dereference.** `sovereign session
-frames` (list in-flight) + `frames <id>` (read one) as the dereference verb;
-boot injects the *index* (~200 tokens of one-liners) instead of a possibly-wrong
-1-2k frame; full-frame injection moves to the first `UserPromptSubmit`, where
-the prompt exists and `inject-notes.sh` already does relevance matching —
-SessionStart has no prompt, which is *why* selection fell back to recency.
-Start with in-flight + branch + recency; build a ranker only if the classifier
-says selection is still wrong (measure before tuning, as in E2).
+**Phase 2 (frame selection + dereference): SHIPPED 2026-07-26.** R3 is closed
+and R1's selector is gone.
 
-Gate: median ramp raw for frame-booted successors below 10k with no
-regression in successor error rate. Design constraint inherited from E1's
-diffusion failure: whatever lands must be harness- or tool-shaped, not a
-protocol paragraph asking agents to read less.
+- **`sovereign session frames`** — the index: one line per live frame
+  (id, age, branch, status, provenance, next-count, goal), in selection
+  order. **`sovereign session frames <id>`** — the dereference verb, prints
+  one frame whole. Both are pure filesystem reads over
+  `~/.sovereign/sessions/*/frame.md`, so they work with the daemon down.
+- **`session-boot.sh` injects the index, not a frame** (~1.4KB / ~350 tokens
+  for 8 entries, against ~4.5KB for one possibly-wrong frame). The single
+  exception is a resume/compact of a session's OWN frame, which is injected
+  whole — no selection is involved there, so none can be wrong.
+- **Full-frame injection moved to the first `UserPromptSubmit`**
+  (`inject-notes.sh`), where the prompt exists. Once per session, marked by
+  `~/.sovereign/sessions/<id>/frame-inject.json`, which records the chosen
+  frame, the candidate count, and every ranking signal — the provenance
+  `--ramp --classify` needs to grade selection. The frame and notes payloads
+  share one budget on that turn (frame ≤4500, notes ≤3200) so turn one cannot
+  re-create the Phase 1 spill.
+
+**Ranking is lexicographic: branch match → prompt overlap → recency.** No
+weights; every signal is emitted in `--json` whether it was used or not, so
+"would a different order have picked a different frame?" stays answerable
+against real sessions (E2's measure-before-tuning rule).
+
+**Correction to this section's own sketch, made against the live store.** The
+plan said "in-flight + branch + recency". In-flight is now *recorded but not
+ranked on*, for two reasons visible the moment the index ran over the real 23
+frames: (1) `status` is free text — the store carries `in-flight`,
+`completed`, AND `work-complete-uncommitted` — so a predicate over it is a
+guess about a string; (2) sorting in-flight first buried the frame the
+successor actually needed. The session that built Phase 2 was handed a
+`completed` frame whose `## Next` *was* the entire task; ranked below every
+in-flight frame it fell past the 8-line cut and would not have been shown at
+all. A completed frame is the normal good handoff — completion is what let
+the donor write down what comes next.
+
+Gate (unchanged, still to be measured): median ramp raw for frame-booted
+successors below 10k with no regression in successor error rate. Design
+constraint inherited from E1's diffusion failure: whatever lands must be
+harness- or tool-shaped, not a protocol paragraph asking agents to read less.
 
 ---
 

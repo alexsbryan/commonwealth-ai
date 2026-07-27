@@ -29,6 +29,8 @@
 #
 # Exit code: non-zero on any test failure or build error (nextest's
 # native exit code is preserved; doctest failures are folded in too).
+# Exit 4 specifically means NO TESTS MATCHED — a zero-test run is never
+# reported as green (`--no-tests=fail`, see the argv note below).
 
 set -uo pipefail
 
@@ -115,7 +117,15 @@ if [[ $WANT_FEATURES -eq 1 ]]; then
 fi
 
 # Build nextest argv.
-nextest_argv=(nextest run --profile "$PROFILE")
+#
+# `--no-tests=fail` is load-bearing, not a default restatement. nextest's own
+# default is `auto`, which DOWNGRADES a zero-test run to a warning + exit 0
+# whenever the caller passed a filter — precisely the case where an empty run
+# is most likely and most misleading. This script's only verdict signal is the
+# exit code, so under `auto` a mistyped or mis-scoped `--filter` prints
+# "✓ All green" having run nothing (the sibling fail-open fixed in
+# sovereign-test.sh the same day; note 8def98d7). Exit 4 = no tests to run.
+nextest_argv=(nextest run --profile "$PROFILE" --no-tests=fail)
 if [[ ${#PACKAGES[@]} -eq 0 ]]; then
     nextest_argv+=(--workspace)
 else
@@ -169,7 +179,17 @@ if [[ $HUMAN -eq 1 ]]; then
         fi
         printf " %-14s  %s\n" "elapsed:" "${elapsed_ms}ms"
         echo
-        if [[ $final_exit -eq 0 ]]; then
+        if [[ $nextest_exit -eq 4 ]]; then
+            # Distinct from a failure: nothing failed, nothing ran. Say the
+            # scope, because the scope is what the caller got wrong.
+            echo " ✘ NOT GREEN — no tests matched. A zero-test run verifies NOTHING."
+            echo
+            printf "   %-10s %s\n" "scope:" "${PACKAGES[*]:---workspace}"
+            printf "   %-10s %s\n" "filter:" "${FILTER:-<none>}"
+            echo
+            echo "   Nextest filters use the E-DSL, not a bare substring:"
+            echo "     $0 --human --filter 'test(/<pattern>/)'"
+        elif [[ $final_exit -eq 0 ]]; then
             echo " ✓ All green."
         else
             echo " ✘ Failures above. Rerun a filter:"
