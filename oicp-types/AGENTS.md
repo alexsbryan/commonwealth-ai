@@ -16,8 +16,8 @@ tools for this codebase. **Use MCP tools before reading files.**
 | `project_context` | Architecture and conventions for a topic |
 | `read_notes` | Decisions and invariants from prior sessions |
 | `write_note` | Record a decision, invariant, todo, or failed attempt |
-| `lint_status` | Check for compile errors (do not run `cargo check` via shell) |
-| `test_status` | Check test results (do not run `cargo test` via shell) |
+| `lint_status` | Dormant — watchers are off here; use `scripts/sovereign-lint.sh` |
+| `test_status` | Dormant — watchers are off here; use `scripts/sovereign-test.sh` |
 
 ## Required session start
 
@@ -31,14 +31,23 @@ Call graph tools are not available (SCIP not enabled). Use `code_search` to find
 
 ## Build and test feedback
 
-The sovereign watcher runs continuously in the background. **Do not run `cargo check`,
-`cargo build`, `cargo test`, or `cargo clippy` directly** — they contend with the watcher
-for the Cargo file lock and stall both processes.
+The lint/test watchers are **off in this repo by design** — `.sovereign/sovereign.toml`
+declares `[watchers] enabled = false` (they OOM'd the daemon under a resident model).
+So `lint_status` / `test_status` have nothing to report and `sovereign doctor` treats
+the opt-out as a pass. Do not try to repair them, and do not open a session by
+diagnosing them.
 
-- Check compile status: `lint_status` — response includes `age_seconds`, `watched_scope`,
-and `watcher_active` so you can confirm the result covers your changes.
-- Check test status: `test_status` — if stale, call `run_tests` then poll.
-- Only fall back to `cargo` commands when `lint_status` returns `watcher_active: false`.
+The gate is the two scripts, run **inside the toolbox** (on the Fedora host
+`llama-cpp-sys-4` cannot build — no clang):
+
+```bash
+toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
+toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
+```
+
+Gate on the **exit code**. Both scripts write the raw cargo output under `target/`
+so a failure can be triaged without re-running cargo. Doctests are off by default
+in the test script (CI runs them); the banner says so when they are skipped.
 
 ## Session discipline
 

@@ -1172,6 +1172,33 @@ fn expand_home(p: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    /// `ComputeSection`'s fields carry `#[serde(default)]` with no
+    /// `skip_serializing_if`, so `save_to` materializes `distributed_primary =
+    /// false` literally into every config it writes.
+    ///
+    /// This is stated as a test because it KILLS an attractive design. It is
+    /// tempting to make the compute-child containment auto-arm — "default it on
+    /// when the node is a shared-model host, unless the operator explicitly said
+    /// false" — but with the flag written out explicitly there is no way to
+    /// distinguish "unset" from "deliberately false". An `Option<bool>`
+    /// migration would not fire on any existing config, including the one that
+    /// motivated it, and an auto-arm that ignores an explicit `false` is not a
+    /// default, it is an override of a stated choice. Containment is therefore
+    /// enforced by a boot guard that REFUSES and names the fix, not by silently
+    /// changing what the operator asked for.
+    #[test]
+    fn compute_section_is_serialized_explicitly_so_unset_is_not_recoverable() {
+        let toml = toml::to_string_pretty(&ComputeSection::default()).expect("serialize");
+        assert!(
+            toml.contains("distributed_primary = false"),
+            "expected an explicit `distributed_primary = false` in:\n{toml}"
+        );
+        assert!(
+            toml.contains("enabled = false"),
+            "expected an explicit `enabled = false` in:\n{toml}"
+        );
+    }
+
     fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
         ModelsSection {
             primary: PathBuf::from(primary),

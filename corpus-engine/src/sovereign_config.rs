@@ -37,6 +37,34 @@ pub struct SovereignConfig {
 
     /// Lint runner configuration. Absent means the lint watcher is unconfigured.
     pub lint_runner: Option<RunnerConfig>,
+
+    /// Whether background watchers are wanted here at all.
+    #[serde(default)]
+    pub watchers: WatchersConfig,
+}
+
+/// Opt-out switch for the background lint/test watchers.
+///
+/// ## Why this exists (2026-07-28)
+///
+/// Watchers are OPTIONAL. Before this, "off" could only be expressed by
+/// deleting or commenting out the `[lint_runner]`/`[test_runner]` sections —
+/// which is indistinguishable from "someone forgot to configure them". So
+/// every surface that could see the absence treated it as a defect: `doctor`
+/// raised a warning advising you to restore the config, and the status tools'
+/// hint told you to put it back. On a workspace where the watchers are off
+/// deliberately (this one — disabled 2026-05-31 after the parallel cargo fan
+/// OOM'd the daemon under a resident model) that is a permanent false alarm,
+/// and a check that always warns is a check nobody reads.
+///
+/// `enabled = false` says "off on purpose" so the tooling can stop asking.
+/// Leaving it unset preserves the old inference, so a workspace that DOES want
+/// watchers still gets told when they are missing.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WatchersConfig {
+    /// `false` = deliberately off; `true` = wanted; absent = infer from
+    /// whether a runner section is present.
+    pub enabled: Option<bool>,
 }
 
 /// Configuration for a single subprocess-based watcher (test or lint runner).
@@ -103,6 +131,20 @@ impl SovereignConfig {
             }
         }
     }
+
+    /// True when this workspace has explicitly opted out of background
+    /// watchers (`[watchers] enabled = false`).
+    ///
+    /// Callers use this to tell "off on purpose" from "not set up yet": the
+    /// former is a supported posture and must not be reported as a fault.
+    pub fn watchers_disabled(&self) -> bool {
+        self.watchers.enabled == Some(false)
+    }
+
+    /// True when a runner is configured for either watcher.
+    pub fn any_runner_configured(&self) -> bool {
+        self.test_runner.is_some() || self.lint_runner.is_some()
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -125,6 +167,45 @@ mod tests {
         let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
         assert!(cfg.test_runner.is_none());
         assert!(cfg.lint_runner.is_none());
+    }
+
+    #[test]
+    fn watchers_disabled_only_when_explicitly_false() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(dir.path(), "[watchers]\nenabled = false\n");
+        let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
+        assert!(cfg.watchers_disabled());
+        assert!(!cfg.any_runner_configured());
+    }
+
+    #[test]
+    fn watchers_absent_is_not_disabled() {
+        // Back-compat: a workspace that never heard of [watchers] must keep
+        // the old inference, so "you forgot to configure them" still warns.
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(dir.path(), "[commonwealth]\nurl = \"http://localhost:9741\"\n");
+        let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
+        assert!(!cfg.watchers_disabled());
+    }
+
+    #[test]
+    fn watchers_enabled_true_is_not_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(dir.path(), "[watchers]\nenabled = true\n");
+        let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
+        assert!(!cfg.watchers_disabled());
+    }
+
+    #[test]
+    fn watchers_key_coexists_with_runner_sections() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(
+            dir.path(),
+            "[watchers]\nenabled = false\n\n[lint_runner]\ncommand = \"scripts/sovereign-lint.sh\"\n",
+        );
+        let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
+        assert!(cfg.watchers_disabled());
+        assert!(cfg.any_runner_configured());
     }
 
     #[test]

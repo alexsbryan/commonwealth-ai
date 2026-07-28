@@ -27,7 +27,9 @@ recent_changes(hours: 24)
 
 - `corpus-engine`: test with `--features treesitter`
 - `sovereign`, `commonwealth`: test without feature flags
-- Do NOT run `cargo check/test` directly — it contends with the sovereign watcher
+- Build and test through `scripts/sovereign-lint.sh` / `scripts/sovereign-test.sh`
+  (inside `toolbox run -c sovereign-vulkan`). The lint/test watchers are off by
+  design here, so `lint_status`/`test_status` are dormant — that is not a fault.
 
 ## Architecture
 

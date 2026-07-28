@@ -193,7 +193,40 @@ pub enum SupervisorState {
         reason: String,
         last_crash_log: Option<PathBuf>,
     },
+    /// Not spawning: an external precondition is unmet (see [`SpawnGate`]).
+    /// NOT a crash and NOT a restart — the restart counter must not move.
+    GateHeld { reason: String },
 }
+
+/// Verdict from a [`SpawnGate`], consulted immediately before every spawn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpawnVerdict {
+    /// Spawn now.
+    Allow,
+    /// Do not spawn yet. `reason` is operator-facing and is published once per
+    /// distinct reason, so a hold is never silent but a 2s poll never spams.
+    Hold { reason: String },
+}
+
+/// An optional external precondition on spawning.
+///
+/// A `Hold` parks the run loop — re-polled every [`SPAWN_GATE_POLL`] — WITHOUT
+/// spawning and WITHOUT touching the crash-loop ceiling: a spawn we chose not to
+/// make is not a crash.
+///
+/// This exists because the supervisor and the thing that knows whether a spawn
+/// can possibly succeed are different components on different clocks. The
+/// supervisor respawns with IDENTICAL argv, and the compute child re-reads its
+/// distribution handoff from disk on every spawn — so when a handoff names an
+/// RPC worker that has died, each restart re-dials the corpse and re-aborts,
+/// forever, on a budget only the daemon's discovery loop can refresh. Measured
+/// live 2026-07-28: three futile respawns in 48 s, ~1/5 of the crash-loop
+/// budget spent on spawns that could not possibly succeed.
+pub type SpawnGate = Arc<dyn Fn() -> SpawnVerdict + Send + Sync>;
+
+/// How often a held gate is re-polled. Short enough that recovery is prompt,
+/// long enough that holding costs nothing.
+const SPAWN_GATE_POLL: Duration = Duration::from_secs(2);
 
 /// Internal reason a supervise-loop iteration ended. Used to decide
 /// whether to count toward the crash-loop ceiling and what reason to
@@ -258,6 +291,9 @@ pub struct Supervisor {
     /// with negligible hold time, so contention against
     /// `stderr_tail()` readers is fine.
     stderr_ring: Arc<Mutex<VecDeque<String>>>,
+    /// Optional precondition consulted before EVERY spawn, including the
+    /// supervisor's own crash restarts. `None` = today's behaviour exactly.
+    spawn_gate: Option<SpawnGate>,
 }
 
 impl Supervisor {
@@ -276,11 +312,77 @@ impl Supervisor {
             terminate_tx,
             terminate_rx: AsyncMutex::new(Some(terminate_rx)),
             stderr_ring,
+            spawn_gate: None,
         }
+    }
+
+    /// Install a spawn precondition.
+    ///
+    /// Consumes `self`, so a gated supervisor is gated for life — there is no
+    /// window in which a respawn slips past a gate that was about to be
+    /// installed.
+    pub fn with_spawn_gate(mut self, gate: SpawnGate) -> Self {
+        self.spawn_gate = Some(gate);
+        self
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<SupervisorState> {
         self.state_tx.subscribe()
+    }
+
+    /// Block until the gate allows a spawn (immediate when there is no gate).
+    ///
+    /// `false` means the run loop must exit for good. Both `terminate()` and
+    /// `request_reconnect()` break a hold: the first because a gate must never
+    /// be able to wedge a slot the manager is trying to replace, the second
+    /// because an explicit operator action outranks a heuristic.
+    async fn await_spawn_gate(
+        &self,
+        reconnect_rx: &mut mpsc::UnboundedReceiver<()>,
+        terminate_rx: &mut mpsc::UnboundedReceiver<()>,
+    ) -> bool {
+        let Some(gate) = self.spawn_gate.as_ref() else {
+            return true;
+        };
+        // Publish once per DISTINCT reason: a 2s poll must not flood a
+        // 64-slot broadcast channel and lag every collector on it.
+        let mut announced: Option<String> = None;
+        loop {
+            match gate() {
+                SpawnVerdict::Allow => {
+                    if announced.is_some() {
+                        info!(target: "compute_child", "supervisor: spawn gate released");
+                    }
+                    return true;
+                }
+                SpawnVerdict::Hold { reason } => {
+                    if announced.as_deref() != Some(reason.as_str()) {
+                        warn!(
+                            target: "compute_child",
+                            %reason,
+                            "supervisor: spawn gate HELD — not respawning (this does NOT \
+                             count against the crash-loop budget)"
+                        );
+                        self.broadcast(SupervisorState::GateHeld {
+                            reason: reason.clone(),
+                        });
+                        announced = Some(reason);
+                    }
+                }
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(SPAWN_GATE_POLL) => {}
+                _ = terminate_rx.recv() => return false,
+                r = reconnect_rx.recv() => {
+                    return match r {
+                        // Operator override: spawn regardless of the gate.
+                        Some(()) => true,
+                        // All handles dropped — shut down.
+                        None => false,
+                    };
+                }
+            }
+        }
     }
 
     /// Latest stderr lines, oldest-first. Bounded by
@@ -349,6 +451,15 @@ impl Supervisor {
         let mut attempt: u32 = 0;
 
         loop {
+            // Before anything else: may we spawn at all? A respawn into a
+            // worker set that is known-gone cannot succeed and only burns
+            // crash-loop budget.
+            if !self
+                .await_spawn_gate(&mut reconnect_rx, &mut terminate_rx)
+                .await
+            {
+                return;
+            }
             self.broadcast(SupervisorState::Starting);
             let spawn_instant = Instant::now();
             let (mut child, port_rx) = match self.spawn_child().await {
@@ -893,6 +1004,171 @@ mod tests {
             }
         }
         out
+    }
+
+    /// A gate that is always closed must park the supervisor: no spawns, and —
+    /// the load-bearing half — no movement on the crash-loop ceiling. The
+    /// ceiling exists to stop a loop burning CPU on spawns that keep failing;
+    /// a spawn we deliberately declined costs nothing and must not consume it.
+    /// Without this the futile-respawn fix would trade three wasted spawns for
+    /// a slot wedged in `Failed`.
+    #[tokio::test]
+    async fn a_held_spawn_gate_does_not_spawn_and_does_not_burn_crash_budget() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        // Marker file: written once per spawn. Must never appear.
+        let marker = dir.path().join("spawned");
+        let script = write_script(
+            &dir,
+            "daemon.sh",
+            &format!("#!/bin/sh\ntouch {}\nexit 1\n", marker.display()),
+        );
+        let config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+
+        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
+            SpawnVerdict::Hold {
+                reason: "no eligible workers".to_string(),
+            }
+        })));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        let observed = drain_states(&mut states, 4, Duration::from_millis(600)).await;
+        assert!(
+            observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::GateHeld { .. })),
+            "expected a GateHeld state, got {observed:?}"
+        );
+        assert!(
+            !marker.exists(),
+            "the gate was held but a child was spawned anyway"
+        );
+        assert!(
+            !observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Failed { .. })),
+            "a held gate must not trip the crash-loop ceiling, got {observed:?}"
+        );
+
+        run_handle.abort();
+    }
+
+    /// Anti-wedge. A gate must never be able to hold a slot the manager is
+    /// trying to replace — without this the gate is a foot-gun that can strand
+    /// a `terminate()` forever.
+    #[tokio::test]
+    async fn terminate_releases_a_held_spawn_gate() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
+        let config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+
+        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
+            SpawnVerdict::Hold {
+                reason: "permanently held".to_string(),
+            }
+        })));
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        // Let it settle into the hold, then ask it to stop.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        supervisor.terminate();
+
+        let exited = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+        assert!(
+            exited.is_ok(),
+            "run() must return promptly when terminated during a gate hold"
+        );
+    }
+
+    /// An explicit operator action outranks a heuristic: `request_reconnect`
+    /// spawns even while the gate says hold.
+    #[tokio::test]
+    async fn request_reconnect_breaks_a_held_spawn_gate() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
+        let config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+
+        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
+            SpawnVerdict::Hold {
+                reason: "held".to_string(),
+            }
+        })));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        supervisor.request_reconnect();
+
+        let observed = drain_states(&mut states, 6, Duration::from_millis(800)).await;
+        assert!(
+            observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Healthy { .. })),
+            "reconnect must override the gate and spawn, got {observed:?}"
+        );
+
+        run_handle.abort();
+    }
+
+    /// Regression anchor: with no gate installed the run loop behaves exactly
+    /// as it always has.
+    #[tokio::test]
+    async fn no_gate_is_exactly_todays_behaviour() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
+        let config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+
+        let supervisor = Arc::new(Supervisor::new(config));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        let observed = drain_states(&mut states, 6, Duration::from_millis(800)).await;
+        assert!(
+            observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Healthy { .. })),
+            "expected Healthy with no gate, got {observed:?}"
+        );
+        assert!(
+            !observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::GateHeld { .. })),
+            "an ungated supervisor must never publish GateHeld"
+        );
+
+        run_handle.abort();
     }
 
     #[tokio::test]

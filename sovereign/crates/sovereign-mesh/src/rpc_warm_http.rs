@@ -891,6 +891,23 @@ async fn orchestrate_warm(
                             already = stats.tensors_already_present,
                             "rpc-warm: worker shard warm"
                         );
+                        // Feed the eligibility gate positive liveness. Keyed on
+                        // `worker_node` ALONE, and deliberately BEFORE the
+                        // `if let` below: that one also requires `ep`, which is
+                        // `None` for the raw-IP fallback candidate, so hanging
+                        // this off the same guard would silently skip exactly
+                        // the transfers that took the fallback path.
+                        //
+                        // A peer is least able to answer an 800ms /status probe
+                        // precisely while it is absorbing gigabytes from us, so
+                        // "this worker just carried a multi-GB transfer" is both
+                        // stronger evidence than the probe and available exactly
+                        // when the probe fails.
+                        if let Some(node) = worker_node {
+                            if let Some(el) = crate::worker_eligibility::global() {
+                                el.note_alive(node, &endpoint, std::time::Instant::now());
+                            }
+                        }
                         if let (Some(node), Some(ep)) = (worker_node, ep.as_ref()) {
                             daemon.note_model_transfer_success(node, ep).await;
                         }

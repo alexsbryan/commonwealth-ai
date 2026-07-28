@@ -8,6 +8,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::discovery_policy;
 use super::lifecycle::daemon_pid_path;
 use super::provider::LlamaCppFactory;
 use super::warn_orphaned_indexes;
@@ -390,6 +391,22 @@ fn worker_allowlist() -> Option<Vec<String>> {
     (!list.is_empty()).then_some(list)
 }
 
+/// The manually configured RPC workers (`SOVEREIGN_RPC_WORKERS`, comma
+/// separated). These never enter the eligible-worker snapshot — discovery only
+/// ever adds to them — so any gate reading that snapshot has to union them back
+/// in or it would permanently hold a manual setup.
+fn env_rpc_workers() -> Vec<String> {
+    std::env::var("SOVEREIGN_RPC_WORKERS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub(super) fn spawn_rpc_worker_discovery(
     daemon: Arc<EmbeddedDaemon>,
@@ -417,6 +434,25 @@ pub(super) fn spawn_rpc_worker_discovery(
         let daemon_for_disco = Arc::clone(&daemon);
         let engine_for_reload = engine_handle.clone();
         let distributed_slot = distributed_slot.clone();
+        // Close the loop between the two independent respawn authorities. The
+        // supervisor restarts a crashed child with identical argv, and the
+        // child re-reads its handoff from disk — so when the workers it names
+        // are gone, every restart re-dials a corpse and re-aborts on a budget
+        // only THIS loop can refresh (3 futile respawns in 48s, 2026-07-28).
+        // The gate lets the supervisor ask us before paying for that.
+        if std::env::var("SOVEREIGN_COMPUTE_SPAWN_GATE").as_deref() == Ok("0") {
+            tracing::warn!(
+                target: "compute_child",
+                "distributed primary: spawn gate DISABLED by SOVEREIGN_COMPUTE_SPAWN_GATE=0"
+            );
+        } else if let Some(slot) = &distributed_slot {
+            let snap = Arc::clone(&snapshot);
+            slot.set_spawn_gate(Arc::new(move |pinned: &[String]| {
+                let eligible = snap.read().map(|v| v.clone()).unwrap_or_default();
+                let env = env_rpc_workers();
+                discovery_policy::spawn_gate_verdict(pinned, &eligible, &env)
+            }));
+        }
         // Distributed-primary child state, shared with the warm task because a
         // warm can take minutes of GGUF transfer and must never block the 15s
         // discovery tick.
@@ -443,7 +479,10 @@ pub(super) fn spawn_rpc_worker_discovery(
                 let mut last_loaded: Vec<String> = Vec::new();
                 let mut current: Vec<String> = Vec::new();
                 let mut stable_since = std::time::Instant::now();
-                const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
+                // When the eligible set first went EMPTY. Retiring the child is
+                // gated on this persisting, because the peer most likely to look
+                // absent is the one busy serving our own model warm.
+                let mut empty_since: Option<std::time::Instant> = None;
                 // Designated-host pin (parsed once). When present + eligible it wins;
                 // otherwise the host role is the elected leader of the anchors.
                 let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
@@ -464,9 +503,12 @@ pub(super) fn spawn_rpc_worker_discovery(
                     // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
                     let mut raw = daemon_for_disco.discover_rpc_workers().await;
                     if let Some(list) = &allowlist {
-                        raw.retain(|w| {
+                        let keep_node = |hex: &str| {
+                            list.iter().any(|p| hex.starts_with(p.as_str()))
+                        };
+                        raw.workers.retain(|w| {
                             let hex = w.node_id.to_hex();
-                            let keep = list.iter().any(|p| hex.starts_with(p.as_str()));
+                            let keep = keep_node(&hex);
                             if !keep {
                                 tracing::debug!(
                                     worker = %hex,
@@ -476,9 +518,13 @@ pub(super) fn spawn_rpc_worker_discovery(
                             }
                             keep
                         });
+                        // The unconfirmed set must be filtered by the SAME rule,
+                        // or an allowlist-excluded peer could hold eligibility
+                        // state it is never allowed to have.
+                        raw.unconfirmed.retain(|n| keep_node(&n.to_hex()));
                     }
                     let now = std::time::Instant::now();
-                    eligibility.observe(&raw, now);
+                    eligibility.observe_outcome(&raw, now);
                     let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
                     if let Ok(mut w) = snapshot.write() {
                         *w = workers.clone();
@@ -486,13 +532,25 @@ pub(super) fn spawn_rpc_worker_discovery(
                     if workers != current {
                         tracing::info!(
                             eligible = workers.len(),
-                            discovered = raw.len(),
+                            discovered = raw.workers.len(),
+                            // `unconfirmed` vs `polled` is what makes an
+                            // "eligible=0 discovered=0" line readable: it says
+                            // whether we heard "no worker" or heard nothing.
+                            unconfirmed = raw.unconfirmed.len(),
+                            polled = raw.polled,
                             workers = ?workers,
                             "mesh RPC eligible-worker set changed"
                         );
                         current = workers.clone();
                         stable_since = std::time::Instant::now();
                     }
+                    // Maintained every tick, not just on change, so the grace
+                    // measures how long the set has ACTUALLY been empty.
+                    empty_since = if current.is_empty() {
+                        empty_since.or_else(|| Some(std::time::Instant::now()))
+                    } else {
+                        None
+                    };
                     // Host-role decision, re-evaluated every tick over gossiped
                     // membership — this is the failover mechanism. A non-host anchor
                     // still discovers + keeps its eligibility warm above, but does NOT
@@ -551,86 +609,134 @@ pub(super) fn spawn_rpc_worker_discovery(
                     // caches make the re-plan fast. A pure grow (new workers, all loaded
                     // ones still present) keeps the anti-thrash STABLE debounce.
                     let shrank = last_loaded.iter().any(|w| !current.contains(w));
-                    // Only the host distributes. A non-host anchor keeps its worker
-                    // discovery + eligibility warm (above) so that, the moment it's
-                    // elected host, `changed` vs its empty `last_loaded` triggers an
-                    // immediate assemble on the already-settled survivors.
-                    if am_host && changed && (shrank || stable_since.elapsed() >= STABLE) {
-                        if shrank {
-                            let lost: Vec<&String> = last_loaded
-                                .iter()
-                                .filter(|w| !current.contains(*w))
-                                .collect();
-                            tracing::info!(
+                    if am_host && changed && shrank {
+                        let lost: Vec<&String> = last_loaded
+                            .iter()
+                            .filter(|w| !current.contains(*w))
+                            .collect();
+                        tracing::info!(
                             ?lost,
                             "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
                         );
-                        }
-                        match (&distributed_slot, &engine_for_reload) {
-                            // ── Child mode: the primary lives in a supervised
-                            // child, so a worker-set change is a KILL + RESPAWN,
-                            // never an in-place reload. An in-place reload has to
-                            // free the old sharded model's buffers on workers that
-                            // may already be gone, and ggml's RPC client aborts the
-                            // process on a dead endpoint — that is exactly how the
-                            // daemon died on 2026-07-27 (note c4ef6fa0), from this
-                            // very code path.
-                            (Some(slot), _) => {
-                                if child_busy.load(std::sync::atomic::Ordering::SeqCst) {
+                    }
+                    match (&distributed_slot, &engine_for_reload) {
+                        // ── Child mode: the primary lives in a supervised
+                        // child, so a worker-set change is a KILL + RESPAWN,
+                        // never an in-place reload. An in-place reload has to
+                        // free the old sharded model's buffers on workers that
+                        // may already be gone, and ggml's RPC client aborts the
+                        // process on a dead endpoint — that is exactly how the
+                        // daemon died on 2026-07-27 (note c4ef6fa0), from this
+                        // very code path.
+                        //
+                        // The decision itself is `discovery_policy` — pure, so it
+                        // can be exercised without a mesh. Only the EFFECTS live
+                        // here.
+                        (Some(slot), _) => {
+                            let tick = discovery_policy::TickInputs {
+                                am_host,
+                                busy: child_busy.load(std::sync::atomic::Ordering::SeqCst),
+                                current: &current,
+                                last_loaded: &last_loaded,
+                                retry_due,
+                                stable_for: stable_since.elapsed(),
+                                empty_for: empty_since.map(|t| t.elapsed()),
+                                child_age: slot.spawned_at().map(|t| t.elapsed()),
+                            };
+                            match discovery_policy::decide_child_action(&tick) {
+                                discovery_policy::ChildAction::Hold => {}
+                                discovery_policy::ChildAction::Busy => {
                                     tracing::debug!(
                                         "distributed primary: warm/respawn already in flight — skipping this tick"
                                     );
-                                } else if current.is_empty() {
-                                    // No eligible workers: stay unavailable
-                                    // rather than fall back to a local load that
-                                    // would starve the host.
-                                    slot.retire("no eligible RPC workers");
+                                }
+                                // Stay unavailable rather than fall back to a
+                                // local load that would starve the host.
+                                discovery_policy::ChildAction::Retire { reason } => {
+                                    slot.retire(&reason);
                                     if let Ok(mut st) = child_state.lock() {
                                         st.attempted.clear();
                                         st.retry_at = None;
                                     }
-                                } else {
-                                    child_busy
-                                        .store(true, std::sync::atomic::Ordering::SeqCst);
+                                }
+                                // Deliberately does NOT clear `attempted`.
+                                // Leaving it populated is what keeps `changed`
+                                // true so the grace is re-evaluated every tick —
+                                // and what makes recovery free: when the worker
+                                // returns, `current == attempted`, the tick is a
+                                // plain Hold, and the still-serving child is
+                                // never disturbed.
+                                discovery_policy::ChildAction::WaitForWorkers {
+                                    empty_for_secs,
+                                    child_age_secs,
+                                } => {
+                                    tracing::info!(
+                                        target: "compute_child",
+                                        empty_for_secs,
+                                        child_age_secs,
+                                        "distributed primary: eligible set is empty — holding the \
+                                         child while the grace burns down (a peer busy serving our \
+                                         own warm looks absent)"
+                                    );
+                                }
+                                discovery_policy::ChildAction::Respawn { workers } => {
+                                    child_busy.store(true, std::sync::atomic::Ordering::SeqCst);
                                     // Record the attempt BEFORE it runs, so the
                                     // next tick compares against it and does not
                                     // queue a second warm behind this one.
                                     if let Ok(mut st) = child_state.lock() {
-                                        st.attempted = current.clone();
+                                        st.attempted = workers.clone();
                                         st.retry_at = None;
                                     }
                                     let slot = Arc::clone(slot);
                                     let child_state = Arc::clone(&child_state);
                                     let child_busy = Arc::clone(&child_busy);
-                                    let workers = current.clone();
                                     // Detached: warming seeds every worker's
                                     // shard and can take minutes of GGUF
                                     // transfer. The 15s tick must keep running
                                     // (host election, eligibility) throughout.
                                     tokio::spawn(async move {
-                                        respawn_distributed_primary(
-                                            slot,
-                                            workers,
-                                            child_state,
-                                        )
-                                        .await;
+                                        respawn_distributed_primary(slot, workers, child_state)
+                                            .await;
                                         child_busy
                                             .store(false, std::sync::atomic::Ordering::SeqCst);
                                     });
                                 }
                             }
-                            (None, Some(engine)) => {
-                                tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
-                                match engine.reload_primary().await {
-                                    Ok(()) => last_loaded = current.clone(),
-                                    Err(e) => {
-                                        tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
+                        }
+                        // ── In-process arm. Deliberately NOT sharing the policy
+                        // function above: its consequences are different in kind
+                        // (this `reload_primary` is the uncatchable GGML_ABORT of
+                        // P0.4), and a shared decision would invite treating the
+                        // two paths as interchangeable.
+                        //
+                        // Only the host distributes. A non-host anchor keeps its
+                        // worker discovery + eligibility warm (above) so that, the
+                        // moment it's elected host, `changed` vs its empty
+                        // `last_loaded` triggers an immediate assemble on the
+                        // already-settled survivors.
+                        (None, engine) => {
+                            if am_host
+                                && changed
+                                && (shrank
+                                    || stable_since.elapsed() >= discovery_policy::STABLE)
+                            {
+                                match engine {
+                                    Some(engine) => {
+                                        tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
+                                        match engine.reload_primary().await {
+                                            Ok(()) => last_loaded = current.clone(),
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
+                                            }
+                                        }
                                     }
+                                    // No primary handle (provider build failed) —
+                                    // keep the snapshot fresh so a later manual
+                                    // load still picks workers up.
+                                    None => last_loaded = current.clone(),
                                 }
                             }
-                            // No primary handle (provider build failed) — keep the
-                            // snapshot fresh so a later manual load still picks workers up.
-                            (None, None) => last_loaded = current.clone(),
                         }
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(15)).await;
@@ -770,6 +876,81 @@ async fn respawn_distributed_primary(
             refuse(&slot, &child_state, &format!("worker warm failed: {error}"));
         }
     }
+}
+
+/// How often the refresher re-derives the manifest to check that no transition
+/// was missed. Slow enough to be free, fast enough that a missed event is a
+/// minute of wrongness rather than an outage.
+const MANIFEST_RECONCILE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Keep the mesh self-manifest in step with the distributed primary's lifecycle.
+///
+/// `build_self_manifest` is a SNAPSHOT of the local provider, taken once in
+/// `MeshInferenceProvider::with_peer_source`. At that moment the distributed
+/// slot has never spawned (`DynamicChildSlot::new` deliberately does not spawn),
+/// so `is_serving()` is false, the Slow tier answers with the small FAST model,
+/// and the heavyweight primary is absent from the manifest entirely. Minutes
+/// later the discovery tick warms the workers and respawns the child into
+/// Serving — and nothing rebuilds the snapshot. `locate_named_model` then
+/// returns Unknown and every request that NAMES the shared model 503s from a
+/// perfectly healthy cluster, which defeats the point of sharing a model on a
+/// mesh. Observed live 2026-07-28 (note c5678d34); the same failure shape as
+/// 2026-05-20, which was fixed only for the hot-load path.
+///
+/// Driven by the lifecycle watch rather than a timer, because the requirement is
+/// symmetry, not freshness: advertise exactly what we can serve. A RETIRED or
+/// Failed child must stop being advertised as promptly as a Serving one starts,
+/// or peers route into a guaranteed `ComputeUnavailable` — and `retire()` runs
+/// on every empty-worker tick and every warm refusal, so that window is not
+/// hypothetical.
+pub fn spawn_self_manifest_refresh(
+    mesh_provider: Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
+    distributed_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
+) {
+    let Some(slot) = distributed_slot else {
+        tracing::debug!(
+            target: "compute_child",
+            "self-manifest refresh: no distributed-primary slot — the manifest has no \
+             lifecycle-gated rows to track"
+        );
+        return;
+    };
+    crate::supervise::spawn_supervised("self_manifest_refresh", move || {
+        let mesh = Arc::clone(&mesh_provider);
+        let slot = Arc::clone(&slot);
+        async move {
+            let mut rx = slot.subscribe();
+            // `subscribe()` returns a receiver marked-seen, so `changed()` awaits
+            // the NEXT transition. A transition between provider construction and
+            // this point would otherwise be invisible forever — hence one
+            // unconditional reconcile before the loop. Do not drop this as
+            // redundant: it is the boot-race fix.
+            mesh.refresh_self_manifest_because("startup reconcile");
+            loop {
+                tokio::select! {
+                    changed = rx.changed() => {
+                        if changed.is_err() {
+                            // Slot dropped — the daemon is shutting down.
+                            break;
+                        }
+                        // Extract before any await: holding a watch borrow across
+                        // one deadlocks the publisher.
+                        let (lifecycle, reason) = {
+                            let st = rx.borrow_and_update();
+                            (st.lifecycle.as_str(), st.last_transition_reason.clone())
+                        };
+                        mesh.refresh_self_manifest_because(&format!(
+                            "compute child {lifecycle} ({reason})"
+                        ));
+                    }
+                    _ = tokio::time::sleep(MANIFEST_RECONCILE) => {
+                        // Detector, not mechanism — see `reconcile_self_manifest`.
+                        mesh.reconcile_self_manifest();
+                    }
+                }
+            }
+        }
+    });
 }
 
 /// Spawn the deferred slot-alias push + in-flight-publisher install onto AppState.

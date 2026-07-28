@@ -1,97 +1,162 @@
-#!/usr/bin/env bash
-# sovereign-cargo-check-adapter — translates `cargo check --message-format json`
-# output to Tier 2 lint events.
-#
-# Usage: cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter [workspace]
-#
-# Reads JSON-per-line cargo compiler messages from stdin and writes Tier 2
-# lint events to stdout. Non-JSON lines (cargo progress output) are ignored.
-#
-# Tier 2 event schema:
-#   {"t":"fail","n":"<file>","out":"<message>","line":<N>,"col":<N>}
-#   {"t":"warn","n":"<file>","out":"<message>","line":<N>,"col":<N>}
-#   {"t":"pass","n":"<workspace>"}     (emitted once at the end on success)
-#   {"t":"summary","pass":0,"fail":<F>,"warn":<W>,"ms":0}
+#!/usr/bin/env python3
+"""sovereign-cargo-check-adapter — translate `cargo check --message-format json`
+into Tier 2 lint events.
 
-set -uo pipefail
+Usage: cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter [workspace]
 
-workspace="${1:-unknown}"
-fail_count=0
-warn_count=0
-pass_count=0
+Tier 2 event schema (one JSON object per stdout line):
+  {"t":"fail","n":"<file>","out":"<message>","line":<N>,"col":<N>}
+  {"t":"warn","n":"<file>","out":"<message>","line":<N>,"col":<N>}
+  {"t":"pass","n":"<workspace>"}     (emitted once at the end, ONLY on success)
+  {"t":"summary","pass":<N>,"fail":<F>,"warn":<W>,"ms":0}
 
-while IFS= read -r line; do
-    # Skip non-JSON lines (cargo build progress, etc.).
-    if [[ "${line:0:1}" != "{" ]]; then
-        continue
-    fi
+## Why this reads more than compiler diagnostics (2026-07-28)
 
-    reason=$(echo "$line" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reason',''))" 2>/dev/null) || continue
+The prior version counted ONLY `compiler-message` records with level=error.
+Every other way a check can fail was invisible to it, so the stream still ended
+`{"t":"pass"}` / `pass:1 fail:0` and the adapter exited 0:
 
-    if [[ "$reason" != "compiler-message" ]]; then
-        continue
-    fi
+  - a build-script failure (`error: failed to run custom build command for
+    llama-cpp-sys-4` — what you get running this on the Fedora host, where
+    there is no clang to link with),
+  - a cargo-level argument error (`the package X does not contain this
+    feature: Y`), which dies before a single crate is compiled,
+  - link errors, OOM-killed rustc, cargo panics.
 
-    level=$(echo "$line" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-msg = d.get('message', {})
-print(msg.get('level', ''))
-" 2>/dev/null) || continue
+That is a fail-OPEN gate: the caller sees green for a build that never
+happened. It cost real time on 2026-07-28 (note 73bb9404) and it is the same
+class as the empty-run bug the test runner fixed in note 8def98d7 — a runner
+that reports success for having verified nothing.
 
-    if [[ "$level" != "error" && "$level" != "warning" ]]; then
-        continue
-    fi
+Two signals close it, because neither alone covers every case:
 
-    # Extract file, line, col, and the human-readable message.
-    event=$(echo "$line" | python3 -c "
-import sys, json, re
+  1. `{"reason":"build-finished","success":false}` — cargo's own verdict.
+     Authoritative when the build got far enough to emit it.
+  2. Plain-text lines beginning with `error` on the merged stderr. Cargo's own
+     errors are never JSON, and the argument-error case dies BEFORE any
+     build-finished record exists, so signal 1 never arrives.
 
-d = json.load(sys.stdin)
-msg = d.get('message', {})
-level = msg.get('level', '')
-text = msg.get('rendered', msg.get('message', ''))
+When the build failed but produced no rustc diagnostics we synthesize exactly
+one `fail` event carrying the captured cargo error text, so a JSONL consumer
+(the daemon's lint_status) sees red and a human sees WHY. We do not simply
+count plain-text `error` lines: cargo also prints "could not compile `foo` due
+to N previous errors" alongside the real diagnostics, and counting both would
+double-report every ordinary compile failure.
+"""
 
-# Get first span for file location.
-spans = msg.get('spans', [])
-file_path = ''
-line_no = None
-col_no = None
-for span in spans:
-    if span.get('is_primary', False):
-        file_path = span.get('file_name', '')
-        line_no = span.get('line_start')
-        col_no = span.get('column_start')
-        break
-if not file_path and spans:
-    file_path = spans[0].get('file_name', '')
-    line_no = spans[0].get('line_start')
-    col_no = spans[0].get('column_start')
+import json
+import sys
 
-t = 'fail' if level == 'error' else 'warn'
-out = {'t': t, 'n': file_path or 'unknown', 'out': text.strip()}
-if line_no is not None:
-    out['line'] = line_no
-if col_no is not None:
-    out['col'] = col_no
-print(json.dumps(out))
-" 2>/dev/null) || continue
+# Cargo prints its own failures as plain text on stderr, which the caller merges
+# into stdout with 2>&1. Keep a bounded window of that text for the synthesized
+# event — enough to name the cause, not so much that one event carries a whole
+# build log.
+MAX_ERROR_LINES = 40
 
-    echo "$event"
 
-    if [[ "$level" == "error" ]]; then
-        ((fail_count++)) || true
-    else
-        ((warn_count++)) || true
-    fi
-done
+def main() -> int:
+    workspace = sys.argv[1] if len(sys.argv) > 1 else "unknown"
 
-# Emit summary.
-if [[ $fail_count -eq 0 ]]; then
-    echo "{\"t\":\"pass\",\"n\":\"${workspace}\"}"
-    ((pass_count++)) || true
-fi
-echo "{\"t\":\"summary\",\"pass\":${pass_count},\"fail\":${fail_count},\"warn\":${warn_count},\"ms\":0}"
+    fail_count = 0
+    warn_count = 0
+    pass_count = 0
+    build_failed = False
+    cargo_errors: list[str] = []
+    out = sys.stdout
 
-# Exit non-zero if there were errors.
-[[ $fail_count -eq 0 ]]
+    for raw in sys.stdin:
+        line = raw.strip()
+        if not line:
+            continue
+
+        if not line.startswith("{"):
+            # Non-JSON: cargo progress ("Compiling foo v0.1.0", "Finished ...")
+            # plus cargo's own error text. Only the latter is a signal.
+            if line.startswith("error"):
+                build_failed = True
+            if build_failed and len(cargo_errors) < MAX_ERROR_LINES:
+                cargo_errors.append(line)
+            continue
+
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+
+        reason = d.get("reason", "")
+
+        if reason == "build-finished":
+            if not d.get("success", True):
+                build_failed = True
+            continue
+
+        if reason != "compiler-message":
+            continue
+
+        msg = d.get("message", {}) or {}
+        level = msg.get("level", "")
+        if level not in ("error", "warning"):
+            continue
+
+        text = msg.get("rendered") or msg.get("message") or ""
+
+        # Prefer the primary span for the location; fall back to the first span.
+        spans = msg.get("spans", []) or []
+        span = next((s for s in spans if s.get("is_primary")), None)
+        if span is None and spans:
+            span = spans[0]
+
+        event = {
+            "t": "fail" if level == "error" else "warn",
+            "n": (span or {}).get("file_name") or "unknown",
+            "out": text.strip(),
+        }
+        if span and span.get("line_start") is not None:
+            event["line"] = span["line_start"]
+        if span and span.get("column_start") is not None:
+            event["col"] = span["column_start"]
+
+        out.write(json.dumps(event, separators=(",", ":")) + "\n")
+
+        if level == "error":
+            fail_count += 1
+        else:
+            warn_count += 1
+
+    # A build that failed without attributable diagnostics still has to be red.
+    if build_failed and fail_count == 0:
+        detail = "\n".join(cargo_errors).strip() or (
+            "cargo reported the build as failed but emitted no diagnostics"
+        )
+        out.write(
+            json.dumps(
+                {"t": "fail", "n": "<cargo>", "out": detail},
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
+        fail_count += 1
+
+    if fail_count == 0:
+        out.write(json.dumps({"t": "pass", "n": workspace}, separators=(",", ":")) + "\n")
+        pass_count += 1
+
+    out.write(
+        json.dumps(
+            {
+                "t": "summary",
+                "pass": pass_count,
+                "fail": fail_count,
+                "warn": warn_count,
+                "ms": 0,
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+
+    return 1 if fail_count else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

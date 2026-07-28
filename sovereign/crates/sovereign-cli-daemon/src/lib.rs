@@ -24,6 +24,12 @@ mod setup_config;
 pub(crate) mod supervise;
 mod watcher_supervisor;
 
+/// Keep the mesh self-manifest in step with the distributed primary's
+/// lifecycle. Re-exported so the acceptance test can drive the REAL wiring
+/// rather than a copy of it — the bug this closes was a missing subscription,
+/// which a reimplementation in the test would silently paper over.
+pub use daemon_cmd::bootstrap::spawn_self_manifest_refresh;
+
 use sovereign_cli_shared::tracing_init::init_tracing;
 
 /// Default tracing allowlist for `sovereign-cli-daemon daemon run`.

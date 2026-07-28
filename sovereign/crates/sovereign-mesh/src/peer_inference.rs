@@ -526,12 +526,61 @@ impl MeshInferenceProvider {
     /// scorer immediately see the new lineup. Cheap: the manifest is a
     /// flat list pulled from `EmbeddedLlamaCpp::loaded_models`; no I/O.
     pub fn refresh_self_manifest(&self) {
+        self.refresh_self_manifest_because("slot mutation");
+    }
+
+    /// As [`Self::refresh_self_manifest`], carrying WHY.
+    ///
+    /// Glassbox: an operator reading the log must be able to attribute a change
+    /// in what this node advertises to the event that caused it — not merely
+    /// observe that one happened. The causes are few and all interesting: a slot
+    /// hot-loaded, a compute child reaching Serving, a child retired.
+    pub fn refresh_self_manifest_because(&self, cause: &str) {
         let new_manifest = build_self_manifest(self.local.as_ref());
         tracing::info!(
+            target: "compute_child",
             models = new_manifest.models.len(),
-            "mesh-inference: self_manifest refreshed (post slot mutation)"
+            %cause,
+            "mesh-inference: self_manifest refreshed"
         );
         self.self_manifest.store(Arc::new(new_manifest));
+    }
+
+    /// Recompute the manifest and republish ONLY if the advertised id set has
+    /// drifted from what is currently published. Returns whether it republished.
+    ///
+    /// This is a detector for our own bug, not a delivery mechanism. Every path
+    /// that changes what the local provider can serve is supposed to call
+    /// [`Self::refresh_self_manifest_because`]; a `true` here means one of them
+    /// did not, so it logs at WARN with both id sets. That invalidation set has
+    /// now been incomplete twice — 2026-05-20 (hot-loaded extras) and 2026-07-28
+    /// (a compute child reaching Serving after boot) — each time discovered only
+    /// when a user's request 503'd against a healthy node.
+    pub fn reconcile_self_manifest(&self) -> bool {
+        let published: Vec<String> = {
+            let cur = self.self_manifest.load();
+            let mut ids: Vec<String> = cur.models.iter().map(|m| m.id.clone()).collect();
+            ids.sort();
+            ids
+        };
+        let fresh_manifest = build_self_manifest(self.local.as_ref());
+        let fresh: Vec<String> = {
+            let mut ids: Vec<String> = fresh_manifest.models.iter().map(|m| m.id.clone()).collect();
+            ids.sort();
+            ids
+        };
+        if fresh == published {
+            return false;
+        }
+        tracing::warn!(
+            target: "compute_child",
+            ?published,
+            ?fresh,
+            "mesh-inference: self_manifest had DRIFTED — a state change did not publish. \
+             Republishing; the missing refresh call is a bug worth finding"
+        );
+        self.self_manifest.store(Arc::new(fresh_manifest));
+        true
     }
 
     /// Constructor exposed for tests and alternative wirings: pass
@@ -3014,7 +3063,145 @@ fn effective_peer_in_flight(self_observed: u32, gossiped: Option<u32>) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use sovereign_core::error::Error;
+    use sovereign_core::types::Depth;
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+    /// A local provider whose advertised lineup FLIPS at runtime — the shape of
+    /// a compute child that reaches Serving minutes after the daemon booted.
+    /// Before the flip it answers the Slow tier with a small model and offers no
+    /// extras, exactly as `ComputeRoutedProvider` does while its child is not
+    /// yet serving.
+    struct LateLoadingProvider {
+        serving: Arc<AtomicBool>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for LateLoadingProvider {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Slow,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+
+        fn model_id_for(&self, speed: Speed) -> String {
+            match speed {
+                Speed::Slow | Speed::Medium if self.serving.load(Ordering::SeqCst) => {
+                    "big-late-model".to_string()
+                }
+                _ => "small-fast-model".to_string(),
+            }
+        }
+
+        fn extras_inventory(&self) -> Vec<(String, String)> {
+            if self.serving.load(Ordering::SeqCst) {
+                vec![("big-late-model".to_string(), "big-late-model".to_string())]
+            } else {
+                Vec::new()
+            }
+        }
+    }
+
+    struct NoPeers;
+
+    #[async_trait]
+    impl PeerEndpointSource for NoPeers {
+        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+            Vec::new()
+        }
+    }
+
+    fn late_loading_mip() -> (Arc<AtomicBool>, MeshInferenceProvider) {
+        let serving = Arc::new(AtomicBool::new(false));
+        let local = Arc::new(LateLoadingProvider {
+            serving: Arc::clone(&serving),
+        });
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        (serving, mip)
+    }
+
+    fn advertises(mip: &MeshInferenceProvider, id: &str) -> bool {
+        mip.self_manifest.load().models.iter().any(|m| m.id == id)
+    }
+
+    /// The 2026-07-28 regression, at the unit level: a model that becomes
+    /// serveable AFTER the manifest snapshot must become advertised when the
+    /// refresh runs — otherwise `locate_named_model` misses and every request
+    /// naming it 503s from a healthy node.
+    #[test]
+    fn refreshing_the_self_manifest_advertises_a_late_loading_model() {
+        let (serving, mip) = late_loading_mip();
+        assert!(
+            !advertises(&mip, "big-late-model"),
+            "nothing should advertise a model the provider cannot serve yet"
+        );
+
+        serving.store(true, Ordering::SeqCst);
+        assert!(
+            !advertises(&mip, "big-late-model"),
+            "the manifest is a SNAPSHOT — it must not change until refreshed"
+        );
+
+        mip.refresh_self_manifest_because("compute child serving (test)");
+        assert!(advertises(&mip, "big-late-model"));
+    }
+
+    /// Symmetry: a slot that stops serving must stop being advertised, or peers
+    /// route into a guaranteed ComputeUnavailable.
+    #[test]
+    fn refreshing_un_advertises_a_model_that_stopped_serving() {
+        let (serving, mip) = late_loading_mip();
+        serving.store(true, Ordering::SeqCst);
+        mip.refresh_self_manifest_because("serving");
+        assert!(advertises(&mip, "big-late-model"));
+
+        serving.store(false, Ordering::SeqCst);
+        mip.refresh_self_manifest_because("retired");
+        assert!(!advertises(&mip, "big-late-model"));
+    }
+
+    /// The detector. `reconcile` republishes only on drift, and says so; a
+    /// second call must be a no-op, so a 60s tick never spams the log.
+    #[test]
+    fn reconcile_republishes_only_when_a_transition_was_missed() {
+        let (serving, mip) = late_loading_mip();
+
+        assert!(
+            !mip.reconcile_self_manifest(),
+            "no drift, nothing to republish"
+        );
+
+        // Flip WITHOUT refreshing — i.e. simulate the missing publish call.
+        serving.store(true, Ordering::SeqCst);
+        assert!(
+            mip.reconcile_self_manifest(),
+            "a missed transition must be detected and repaired"
+        );
+        assert!(advertises(&mip, "big-late-model"));
+
+        assert!(
+            !mip.reconcile_self_manifest(),
+            "reconcile must be idempotent — the second call is a no-op"
+        );
+    }
 
     #[test]
     fn gossiped_in_flight_overrides_self_observed() {

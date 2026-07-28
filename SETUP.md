@@ -90,8 +90,7 @@ can type `svrn`:
 ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/svrn
 ```
 
-Then wire the daemon's lint/test watcher to the workspace and confirm it's all
-real:
+Then point the daemon at the workspace and confirm it's all real:
 
 ```sh
 ./scripts/bootstrap.sh                   # points the daemon at this workspace

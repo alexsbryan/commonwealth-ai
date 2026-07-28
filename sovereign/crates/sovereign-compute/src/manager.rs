@@ -36,7 +36,9 @@ use tracing::{info, warn};
 use crate::child::{ChildLifecycle, ChildProvider, ChildRuntimeState};
 use crate::client::ComputeChildClient;
 use crate::distribution::DistributionHandoff;
-use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
+use crate::supervisor::{
+    HealthTarget, SpawnGate, SpawnVerdict, Supervisor, SupervisorConfig, SupervisorState,
+};
 
 /// Per-child supervision handles retained by the manager.
 struct ManagedChild {
@@ -294,6 +296,11 @@ struct ChildSpec {
     env: Vec<(String, String)>,
     /// Handshake + model-load budget; see the two constants above.
     load_deadline: Duration,
+    /// Precondition the supervisor consults before every spawn of this child,
+    /// including its own crash restarts. `None` for static slots and mocks —
+    /// only the distributed primary has an external reason a respawn could be
+    /// provably futile.
+    spawn_gate: Option<SpawnGate>,
 }
 
 impl ChildSpec {
@@ -324,6 +331,7 @@ impl ChildSpec {
             args,
             env: Vec::new(),
             load_deadline: DEFAULT_LOAD_DEADLINE,
+            spawn_gate: None,
         }
     }
 
@@ -372,6 +380,7 @@ impl ChildSpec {
             args,
             env: vec![("SOVEREIGN_RPC_ASSUME_WARMED".to_string(), "1".to_string())],
             load_deadline: DISTRIBUTED_LOAD_DEADLINE,
+            spawn_gate: None,
         }
     }
 
@@ -397,6 +406,9 @@ impl ChildSpec {
             args,
             env: Vec::new(),
             load_deadline: DEFAULT_LOAD_DEADLINE,
+            // Ungated by construction: a mock child dials nothing, so there is
+            // no external precondition that could make its spawn futile.
+            spawn_gate: None,
         }
     }
 }
@@ -475,7 +487,10 @@ fn spawn_managed(
         stderr_ring_lines: 200,
     };
 
-    let supervisor = Arc::new(Supervisor::new(config));
+    let supervisor = Arc::new(match spec.spawn_gate.clone() {
+        Some(gate) => Supervisor::new(config).with_spawn_gate(gate),
+        None => Supervisor::new(config),
+    });
     let state_rx = sink.tx.subscribe();
     let collector = tokio::spawn(collect_lifecycle(
         spec.name.clone(),
@@ -561,6 +576,23 @@ async fn collect_lifecycle(name: String, supervisor: Arc<Supervisor>, sink: Life
                 port = None;
                 pid = None;
                 (ChildLifecycle::Failed, reason.clone(), false, Some(reason))
+            }
+            // A held gate is NOT a restart: deliberately no `restarts += 1`
+            // (contrast the `Restarting` arm above). We are between children
+            // for an external reason, which is `Restarting` as far as routing
+            // is concerned — the facade fail-fasts either way — but counting it
+            // would misreport a healthy wait as instability. No new
+            // `ChildLifecycle` variant, so `/status` and the desktop are
+            // unchanged; the reason string carries the glassbox.
+            SupervisorState::GateHeld { reason } => {
+                port = None;
+                pid = None;
+                (
+                    ChildLifecycle::Restarting,
+                    reason.clone(),
+                    false,
+                    Some(reason),
+                )
             }
         };
 
@@ -652,7 +684,22 @@ pub struct DynamicChildSlot {
     provider: Arc<ChildProvider>,
     /// The generation currently running; `None` once retired.
     current: Mutex<Option<ManagedChild>>,
+    /// When the live generation was spawned; `None` once retired. Read by the
+    /// daemon's discovery loop so it cannot tear down a child that has only just
+    /// started — a distributed child is still walking its shards seconds in.
+    spawned_at: Mutex<Option<std::time::Instant>>,
+    /// Precondition consulted before every spawn of this slot's child,
+    /// INCLUDING the supervisor's own crash restarts. Installed by the daemon's
+    /// discovery loop, which is the only component that knows which RPC workers
+    /// are currently eligible. Takes the endpoints the LIVE handoff pinned, so
+    /// the verdict is about the worker set this generation will actually dial.
+    gate: Mutex<Option<PinnedSpawnGate>>,
 }
+
+/// A [`SpawnGate`] that has not yet been bound to a worker set: the daemon
+/// supplies the policy, the slot supplies the endpoints of whichever handoff is
+/// live when a spawn is attempted.
+pub type PinnedSpawnGate = Arc<dyn Fn(&[String]) -> SpawnVerdict + Send + Sync>;
 
 impl DynamicChildSlot {
     /// Create the slot WITHOUT spawning anything. The provider is live
@@ -672,7 +719,24 @@ impl DynamicChildSlot {
             live_generation: Arc::new(AtomicU64::new(0)),
             provider,
             current: Mutex::new(None),
+            spawned_at: Mutex::new(None),
+            gate: Mutex::new(None),
         })
+    }
+
+    /// Install the spawn precondition for this slot's children.
+    ///
+    /// Separate from construction because the knowledge is: the slot is built
+    /// during provider assembly, while the eligible-worker snapshot the gate
+    /// reads only exists once the discovery loop starts.
+    /// How long the live generation has been running, or `None` when the slot
+    /// holds no child.
+    pub fn spawned_at(&self) -> Option<std::time::Instant> {
+        *self.spawned_at.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn set_spawn_gate(&self, gate: PinnedSpawnGate) {
+        *self.gate.lock().unwrap_or_else(|e| e.into_inner()) = Some(gate);
     }
 
     /// The primary GGUF this slot's child loads — the daemon warms against
@@ -684,6 +748,28 @@ impl DynamicChildSlot {
     /// The stable routing handle. Valid across respawns.
     pub fn provider(&self) -> Arc<ChildProvider> {
         Arc::clone(&self.provider)
+    }
+
+    /// Subscribe to this slot's lifecycle transitions.
+    ///
+    /// The channel is owned by the SLOT, not by a generation, so the receiver
+    /// survives every respawn and retire — the same guarantee [`Self::provider`]
+    /// gives the routing facade.
+    ///
+    /// Exists because what this node ADVERTISES has to track what it can
+    /// actually serve. The mesh self-manifest is a snapshot taken at daemon
+    /// construction, when this slot has deliberately not spawned yet
+    /// ([`Self::new`]), so the heavyweight model is absent from it and every
+    /// request that names the shared model 503s from a healthy cluster (live
+    /// 2026-07-28, note c5678d34). A subscriber can now rebuild on the
+    /// transition instead of guessing at an interval — and, just as important,
+    /// UN-advertise on retire, so peers never route into a slot that is parked.
+    ///
+    /// The receiver starts marked-seen: `changed()` awaits the NEXT transition.
+    /// A subscriber that must not miss the current state should read it once
+    /// (`borrow_and_update`) before its first await.
+    pub fn subscribe(&self) -> watch::Receiver<ChildRuntimeState> {
+        self.tx.subscribe()
     }
 
     /// The slot's addressable model id (== its name).
@@ -721,13 +807,26 @@ impl DynamicChildSlot {
             handoff = %self.spec.handoff_path.display(),
             "distributed primary: respawning the child across the warmed worker set"
         );
-        let spec = ChildSpec::distributed_primary(
+        let mut spec = ChildSpec::distributed_primary(
             &self.name,
             &self.spec.model,
             self.spec.context_size,
             self.spec.n_gpu_layers,
             &self.spec.handoff_path,
         );
+        // Bind the gate to THIS generation's warmed endpoints — deliberately
+        // the handoff's set (what the child will dial), not the discovery
+        // loop's `attempted` set, which can legitimately be a superset when a
+        // worker went ineligible between planning and warming.
+        spec.spawn_gate = self
+            .gate
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .map(|g| {
+                let pinned = handoff.endpoints.clone();
+                Arc::new(move || g(&pinned)) as SpawnGate
+            });
         self.swap_generation(spec);
         Ok(())
     }
@@ -767,6 +866,8 @@ impl DynamicChildSlot {
             &self.crash_log_dir,
             sink,
         ));
+        *self.spawned_at.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(std::time::Instant::now());
     }
 
     /// Respawn this slot with a model-free **mock** child.
@@ -795,6 +896,7 @@ impl DynamicChildSlot {
         if let Some(previous) = current.take() {
             previous.supervisor.terminate();
         }
+        *self.spawned_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
         info!(
             target: "compute_child",
             child = %self.name,
@@ -1308,6 +1410,42 @@ mod distributed_slot_tests {
         assert_eq!(status.last_transition_reason, "no eligible RPC workers");
         assert_eq!(status.name, "shared-122b");
         assert!(!slot.provider().is_serving());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A subscriber taken before anything spawns must still receive the slot's
+    /// terminal transition.
+    ///
+    /// This is the seam the mesh self-manifest refresher hangs off. Its job is
+    /// symmetric — advertise the model when the child serves, and STOP
+    /// advertising it when the slot is parked — so a subscription that only
+    /// survived while a child happened to be alive would leave peers routing
+    /// into a retired slot. The channel is owned by the slot, not by a
+    /// generation, and this pins that.
+    #[tokio::test]
+    async fn subscribe_survives_retire_and_delivers_the_terminal_transition() {
+        let dir = scratch("subscribe");
+        let slot = DynamicChildSlot::new(
+            spec(&dir),
+            PathBuf::from("/nonexistent-binary"),
+            dir.clone(),
+        );
+
+        // Subscribed before any generation exists.
+        let mut rx = slot.subscribe();
+        assert_eq!(rx.borrow_and_update().lifecycle, ChildLifecycle::Starting);
+
+        slot.retire("no eligible RPC workers");
+
+        rx.changed().await.expect("slot alive, transition delivered");
+        let st = rx.borrow_and_update();
+        assert_eq!(st.lifecycle, ChildLifecycle::Failed);
+        assert_eq!(st.last_transition_reason, "no eligible RPC workers");
+        assert!(
+            st.client.is_none(),
+            "a retired slot must not hand out a client"
+        );
+        drop(st);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

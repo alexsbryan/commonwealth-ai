@@ -108,6 +108,15 @@
 #                           verified nothing (see "Empty-run guard" below).
 #                           Pass this only when you genuinely expect a scope
 #                           with no tests.
+#   --doctests              Also run `cargo test --doc`. OFF by default: it
+#                           costs 17.4s of a 63s warm workspace run (measured
+#                           2026-07-28) and this workspace collects ZERO
+#                           runnable doctests, so locally it is pure tax.
+#                           nextest cannot run doctests, so this pass is the
+#                           only thing that would execute one — CI passes it
+#                           (.github/workflows/ci.yml). When it is off the
+#                           banner and the JSONL summary say so explicitly.
+#   --no-doctests           Explicit form of the default.
 #   -h, --help              This message.
 #
 # Outputs Tier 2 JSONL events on stdout (one per line):
@@ -157,6 +166,23 @@ NEXTEST_PROFILE="default"
 # later, from the resolved package selection — see "Feature selection".
 WANT_FEATURES=1
 EXTRA_FEATURES=""
+# Whether to run the `cargo test --doc` pass alongside nextest.
+#
+# nextest cannot run doctests, so this pass is the only thing that would
+# execute one. It used to be unconditional and was described as "~4s of pure
+# insurance" — but MEASURED 2026-07-28 it is 17.4s of a 63s warm workspace
+# gate (28%), and it runs ZERO doctests because the workspace has none
+# collectable. That is a lot of iteration tax for insurance against a file
+# nobody has written yet.
+#
+# It cannot be auto-detected cheaply: static scanning finds 25 candidate
+# fences (vendored crates, `rust,ignore` blocks) while cargo itself collects
+# 0 runnable doctests, so any grep-based guess just runs the pass anyway.
+# So it is an explicit choice — OFF for local iteration, ON in CI (see
+# .github/workflows/ci.yml) — and, critically, the run REPORTS which it did.
+# A gate that quietly verifies less than you think is the exact failure class
+# this script's empty-run guard exists to prevent.
+DOCTESTS=0
 
 print_help() {
     sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
@@ -193,6 +219,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --keep-logs) KEEP_LOGS=1; shift ;;
         --allow-empty) ALLOW_EMPTY=1; shift ;;
+        --doctests) DOCTESTS=1; shift ;;
+        --no-doctests) DOCTESTS=0; shift ;;
         -h|--help) print_help; exit 0 ;;
         *)
             echo "sovereign-test: unknown arg '$1' (use --help)" >&2
@@ -527,19 +555,24 @@ if [[ "$ENGINE" == "nextest" ]]; then
     fi
 
     # Doctest pass — appended to the same log and JSONL stream, through the
-    # libtest adapter (cargo test --doc still speaks libtest).
+    # libtest adapter (cargo test --doc still speaks libtest). Opt-in; see
+    # the DOCTESTS default above for why.
     doc_exit_file="${RUN_DIR}/doc.exit"
-    (
-        cd "$REPO_ROOT"
-        cargo "${doc_argv[@]}" </dev/null 2>&1 | tee -a "$raw_log" | "$ADAPTER" "monorepo" >> "$out_jsonl"
-        echo "${PIPESTATUS[0]}" > "$doc_exit_file"
-    )
+    if [[ $DOCTESTS -eq 1 ]]; then
+        (
+            cd "$REPO_ROOT"
+            cargo "${doc_argv[@]}" </dev/null 2>&1 | tee -a "$raw_log" | "$ADAPTER" "monorepo" >> "$out_jsonl"
+            echo "${PIPESTATUS[0]}" > "$doc_exit_file"
+        )
+    fi
 
     elapsed_ms=$(( $(date +%s%N) / 1000000 - start_ms ))
     exit_val=$(cat "$exit_file" 2>/dev/null || echo 1)
-    doc_exit=$(cat "$doc_exit_file" 2>/dev/null || echo 1)
-    # First non-zero wins, so a green nextest run can't mask a red doctest.
-    [[ "$exit_val" == "0" ]] && exit_val="$doc_exit"
+    if [[ $DOCTESTS -eq 1 ]]; then
+        doc_exit=$(cat "$doc_exit_file" 2>/dev/null || echo 1)
+        # First non-zero wins, so a green nextest run can't mask a red doctest.
+        [[ "$exit_val" == "0" ]] && exit_val="$doc_exit"
+    fi
 else
     (
         cd "$REPO_ROOT"
@@ -713,7 +746,12 @@ fi
 # the --human banner) can tell an empty run from a green one too.
 empty_json=false
 [[ $EMPTY_RUN -eq 1 ]] && empty_json=true
-final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms},\"empty\":${empty_json}}"
+# `doctests` rides the summary for the same reason `empty` does: a daemon-mode
+# consumer never sees the --human banner and must still be able to tell what
+# this run actually covered.
+doctests_json=false
+[[ $DOCTESTS -eq 1 ]] && doctests_json=true
+final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms},\"empty\":${empty_json},\"doctests\":${doctests_json}}"
 
 if [[ $HUMAN -eq 1 ]]; then
     {
@@ -724,7 +762,15 @@ if [[ $HUMAN -eq 1 ]]; then
         # Name the executor: two engines that agree are a stronger signal than
         # one, but only if you can tell which one produced the number.
         if [[ "$ENGINE" == "nextest" ]]; then
-            printf " %-12s  %s\n" "engine:" "nextest (+ cargo doctest pass)"
+            if [[ $DOCTESTS -eq 1 ]]; then
+                printf " %-12s  %s\n" "engine:" "nextest (+ cargo doctest pass)"
+            else
+                # Named explicitly: nextest cannot run doctests, so with the
+                # pass off this run verified none. Say it rather than let a
+                # green banner imply coverage it does not have.
+                printf " %-12s  %s\n" "engine:" "nextest"
+                printf " %-12s  %s\n" "doctests:" "SKIPPED (--doctests to include; CI runs them)"
+            fi
         else
             printf " %-12s  %s\n" "engine:" "cargo"
         fi

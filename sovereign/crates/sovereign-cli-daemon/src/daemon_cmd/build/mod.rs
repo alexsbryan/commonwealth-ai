@@ -15,5 +15,6 @@
 //! phases. This startup path has no GGUF-free CI coverage, so extraction
 //! is limited to relocations the compiler can fully type-check.
 
+pub mod containment;
 pub mod inference;
 pub mod preflight;

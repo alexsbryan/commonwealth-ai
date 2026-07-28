@@ -33,8 +33,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // the separable lifecycle / workspace / provider / worker / tool-registry
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
-mod bootstrap;
-mod build;
+pub(crate) mod bootstrap;
+pub(crate) mod build;
+mod discovery_policy;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
 // daemon itself — telling the operator to go run `svrn daemon restart`
@@ -671,6 +672,15 @@ async fn run_daemon(args: &[String]) -> i32 {
     // unconditionally (harmless on a node that never distributes) so both
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
     sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+
+    // Must be installed BEFORE discovery starts spawning the child: the
+    // manifest is a boot-time snapshot taken while the slot is still unspawned,
+    // so without this the node never advertises the model its child ends up
+    // serving, and every request that names it 503s.
+    bootstrap::spawn_self_manifest_refresh(
+        Arc::clone(&mesh_provider),
+        distributed_primary_slot.clone(),
+    );
 
     bootstrap::spawn_rpc_worker_discovery(
         Arc::clone(&daemon),
