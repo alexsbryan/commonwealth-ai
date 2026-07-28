@@ -17,7 +17,7 @@ either way:
 - **Email** — svrnmesh@proton.me.
 
 Please include enough to reproduce: what you did, what happened, the version
-(`sovereign --version`, or `git rev-parse --short HEAD` for a source build), and
+(`svrn --version`, or `git rev-parse --short HEAD` for a source build), and
 your platform. A proof of concept helps, but a clear description is enough to
 start.
 

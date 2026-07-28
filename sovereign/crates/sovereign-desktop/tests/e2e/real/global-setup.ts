@@ -91,10 +91,20 @@ const MANAGED_DAEMON = process.env.SOVEREIGN_REAL_ALLOW_ATTACH !== "1";
 // against a 9B+ daemon, or via SOVEREIGN_REAL_CHAT_MODEL. Phase 3 bench replays also
 // override the model via that env so score deltas isolate transport, not model.
 const DEFAULT_CHAT_MODEL = path.join(REPO_ROOT, "sovereign/models/Qwen3.5-2B.Q6_K.gguf");
-const DEFAULT_EMBED_MODEL = path.join(
-  REPO_ROOT,
+// First candidate that exists on disk wins. A single hardcoded path rotted
+// silently once already: this pointed at `Qwen3-Embedding-0.6B-Q8_0.gguf`
+// long after the models dir had settled on `qwen-embedding-0.6b.gguf`, so
+// EVERY real-mode run died in bakeProfile() with "model not found" unless
+// the caller happened to set SOVEREIGN_REAL_EMBED_MODEL — which is a large
+// part of why this suite stopped being run at all. Both names are kept so a
+// machine holding either one boots; the fallback keeps the error message
+// naming a concrete path.
+const EMBED_MODEL_CANDIDATES = [
+  "sovereign/models/qwen-embedding-0.6b.gguf",
   "sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf",
-);
+].map((rel) => path.join(REPO_ROOT, rel));
+const DEFAULT_EMBED_MODEL =
+  EMBED_MODEL_CANDIDATES.find((p) => fs.existsSync(p)) ?? EMBED_MODEL_CANDIDATES[0];
 
 function portInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -209,6 +219,10 @@ async function ingestFixtureCorpus(): Promise<void> {
     console.log(`[real-setup] fixture corpus already present (${corpusId})`);
   }
 
+  // Checked on the reuse path too: a corpus stranded by an earlier run
+  // is still listed by `lc_list`, so "already present" is not health.
+  await assertCorpusPromoted(corpusId, "fixture corpus");
+
   fs.writeFileSync(
     FIXTURE_INFO,
     JSON.stringify(
@@ -222,6 +236,116 @@ async function ingestFixtureCorpus(): Promise<void> {
       2,
     ),
   );
+}
+
+/// Assert an ingest actually PROMOTED, not merely that it reported
+/// Complete.
+///
+/// A terminal Complete event is not proof the corpus exists. Ingest
+/// fills `<indexes>/<id>-partition-<node>/` and only the finaliser
+/// materialises the canonical `<indexes>/<id>/`; when a sidecar writer
+/// reaches that directory first, promotion can fail, the finalise
+/// failure is a WARN, and the job still emits Complete. The result is
+/// a corpus retrieval can see (it enumerates directories and keys off
+/// each meta's `corpus_id`, which the partition also declares) but the
+/// reading surface cannot resolve (`open_index_for_corpus` matches by
+/// directory name) — so every citation into it dereferences to null,
+/// and in Attach mode that null is indistinguishable from a missing
+/// chunk. See corpus-engine note 79fdd04c.
+///
+/// Three checks, because the two obvious ones both pass while broken:
+///   1. `_corpus_meta.json`, NOT directory existence — a stranded
+///      corpus still has a canonical DIRECTORY full of sidecars.
+///   2. no leftover `<id>-partition-*` sibling.
+///   3. an actual chunk deref through `read_get_chunk`, the same
+///      command the reading desk uses.
+///
+/// This runs unconditionally after every ingest rather than waiting
+/// for a turn to happen to cite the broken corpus. The reactive
+/// version is what let the bug ship: it was caught only because one
+/// run's citations happened to land there.
+async function assertCorpusPromoted(corpusId: string, label: string): Promise<void> {
+  const indexesDir = path.join(HOME, ".sovereign", "indexes");
+  const indexRoot = path.join(indexesDir, corpusId);
+
+  if (!fs.existsSync(path.join(indexRoot, "_corpus_meta.json"))) {
+    const siblings = fs.existsSync(indexesDir)
+      ? fs.readdirSync(indexesDir).filter((n) => n.startsWith(corpusId))
+      : [];
+    const contents = fs.existsSync(indexRoot) ? fs.readdirSync(indexRoot).join(", ") : "(absent)";
+    throw new Error(
+      `${label}: ingest reported Complete but the corpus was never promoted to canonical. ` +
+        `${indexRoot} holds [${contents}] with no _corpus_meta.json. ` +
+        `Sibling dirs: [${siblings.join(", ")}]. ` +
+        `The Lance data is stranded in the partition — retrieval will find it, the ` +
+        `reading surface will not, and every citation into it will deref to null.`,
+    );
+  }
+
+  const stranded = fs
+    .readdirSync(indexesDir)
+    .filter((n) => n.startsWith(`${corpusId}-partition-`));
+  if (stranded.length > 0) {
+    throw new Error(
+      `${label}: canonical promoted but partition(s) left behind: [${stranded.join(", ")}]. ` +
+        `Either the merge did not consume them or a second ingest raced this one.`,
+    );
+  }
+
+  // An EMPTY corpus is not a broken one. `next_chunk_id` is the
+  // persisted high-water mark `insert_batch` allocates from, so a value
+  // of 1 means no chunk was ever inserted — there is nothing to
+  // dereference and a deref probe would report a false strand. This is
+  // not hypothetical: the governance fixture is two .md files under a
+  // `folder` corpus that admits only pdf+txt, so it extracts zero
+  // documents and lands in `ensure_empty_index` (see the sibling case
+  // in corpus-engine/tests/ingest_failure_modes.rs).
+  //
+  // Say so loudly rather than passing quietly. A corpus that ingested
+  // nothing is its own problem — the specs above it are asserting
+  // against an empty index — and silence is how that keeps surviving.
+  const meta = JSON.parse(fs.readFileSync(path.join(indexRoot, "_corpus_meta.json"), "utf8"));
+  const nextChunkId = typeof meta.next_chunk_id === "number" ? meta.next_chunk_id : 1;
+  if (nextChunkId <= 1) {
+    console.warn(
+      `[real-setup] ⚠ ${label} (${corpusId}) INGESTED ZERO CHUNKS — canonical is ` +
+        `promoted and well-formed, but next_chunk_id=${nextChunkId} means no chunk was ` +
+        `ever inserted. Any spec asserting chunk-backed behaviour for this corpus is ` +
+        `passing against an empty index. Skipping the deref probe (nothing to deref).`,
+    );
+    return;
+  }
+
+  // The production surface, not a filesystem proxy for it.
+  //
+  // Probe a range rather than one id: the first chunk of a fresh index
+  // is id 1 (not 0), and a corpus that has been deduped or
+  // delta-updated may have no low ids left. A stranded corpus returns
+  // null for every id, so the distinction this check cares about
+  // survives the range.
+  const probes = [1, 2, 3, 4, 5].filter((id) => id < nextChunkId);
+  const seen: Record<number, unknown> = {};
+  let readable = false;
+  for (const chunkId of probes) {
+    const chunk = await invoke<{ content: string } | null>("read_get_chunk", {
+      corpusId,
+      chunkId,
+    });
+    seen[chunkId] = chunk;
+    if (chunk && typeof chunk.content === "string" && chunk.content.length > 0) {
+      readable = true;
+      break;
+    }
+  }
+  if (!readable) {
+    throw new Error(
+      `${label}: canonical exists but read_get_chunk(${corpusId}, …) resolved no chunk ` +
+        `in ids ${probes.join("/")} — got ${JSON.stringify(seen)}. The reading surface ` +
+        `cannot resolve a corpus that ingest says it created; in Attach mode this ` +
+        `surfaces to the UI as an indistinguishable null.`,
+    );
+  }
+  console.log(`[real-setup] ${label} promoted + readable ✓ (${corpusId})`);
 }
 
 /// Wait for a local-corpus ingest job to reach a terminal event on its
@@ -285,19 +409,16 @@ async function plantGovernanceCorpus(): Promise<void> {
   // Overlay the checked-in post-build atlas. Path mirrors the desktop's
   // `atlas_dir(corpus_id)` = `<data.dir>/indexes/<id>/atlas`, where
   // data.dir is the test HOME's `.sovereign` (see the managed daemon config
-  // in bakeProfile). Fail loudly if the ingest didn't land where we expect,
-  // rather than silently overlaying into a dir the desktop won't read.
+  // in bakeProfile).
+  //
+  // Gate on promotion, not on `fs.existsSync(indexRoot)`. That older
+  // check passed for a STRANDED corpus — the canonical directory exists
+  // and is full of sidecars, it just has no chunks — and then this
+  // function would overlay an atlas into it, cementing exactly the
+  // atlas-without-_corpus_meta.json shape found on the operator's real
+  // install (~/.sovereign/indexes/enron-sample-tiny, 2026-07-27).
+  await assertCorpusPromoted(corpusId, "governance corpus");
   const indexRoot = path.join(HOME, ".sovereign", "indexes", corpusId);
-  if (!fs.existsSync(indexRoot)) {
-    const listed = fs.existsSync(path.join(HOME, ".sovereign", "indexes"))
-      ? fs.readdirSync(path.join(HOME, ".sovereign", "indexes")).join(", ")
-      : "(no indexes dir)";
-    throw new Error(
-      `governance overlay: expected index root ${indexRoot} after ingest, ` +
-        `but it is missing. Indexes present: ${listed}. The daemon's index ` +
-        `layout may not be <data.dir>/indexes/<id>.`,
-    );
-  }
   const atlasDir = path.join(indexRoot, "atlas");
   fs.mkdirSync(atlasDir, { recursive: true });
   for (const f of ["atoms.json", "edges.json", "governance_oplog.jsonl"]) {

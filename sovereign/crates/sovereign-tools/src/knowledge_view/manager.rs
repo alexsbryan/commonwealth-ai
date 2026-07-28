@@ -146,6 +146,46 @@ struct CachedDigest {
     body: String,
 }
 
+/// Per-view outcome of [`KnowledgeViewManager::init`].
+///
+/// `init` deliberately does NOT abort when a single view fails to ingest — one
+/// unreadable view must not cost a process its other views. But "keep going"
+/// used to mean "log a warning and return `Ok(())`", which made a failed view
+/// indistinguishable from a healthy one at the call site. The failure then
+/// surfaced far away and much later, as a view with no index directory or a
+/// silently missing landscape digest.
+///
+/// Returning the outcome keeps the resilience and removes the silence: callers
+/// decide whether a partial init is acceptable, and a test can assert on the
+/// actual ingest error instead of on a downstream symptom.
+#[derive(Debug, Default, Clone)]
+pub struct InitReport {
+    /// View ids that ingested successfully.
+    pub ingested: Vec<String>,
+    /// `(view_id, error)` for each view whose ingest failed.
+    pub failed: Vec<(String, String)>,
+}
+
+impl InitReport {
+    /// True when every registered view ingested.
+    ///
+    /// Callers that only depend on SOME views should prefer
+    /// [`Self::failure_for`]: a view can fail for entirely legitimate reasons
+    /// (no notes database on this machine, an empty conversation history), and
+    /// demanding a clean sweep turns those into false alarms.
+    pub fn is_clean(&self) -> bool {
+        self.failed.is_empty()
+    }
+
+    /// The error recorded for `view_id`, or `None` if it ingested.
+    pub fn failure_for(&self, view_id: &str) -> Option<&str> {
+        self.failed
+            .iter()
+            .find(|(v, _)| v == view_id)
+            .map(|(_, e)| e.as_str())
+    }
+}
+
 impl KnowledgeViewManager {
     /// Construct a manager, register the SQLite acquirer, and spawn
     /// the background debouncer task.
@@ -292,18 +332,26 @@ impl KnowledgeViewManager {
     /// manifest check. Per-view mutex ensures a concurrent
     /// background-spawned init + manual enrich() serialise rather
     /// than race.
-    pub async fn init(&self) -> CorpusResult<()> {
+    /// A failed view is recorded in the returned [`InitReport`] rather than
+    /// aborting the loop — see that type for why the outcome is returned
+    /// instead of being logged and dropped.
+    pub async fn init(&self) -> CorpusResult<InitReport> {
         let view_ids: Vec<String> = {
             let guard = self.views.read().await;
             guard.keys().cloned().collect()
         };
+        let mut report = InitReport::default();
         for view_id in view_ids {
             tracing::info!(view_id, "KnowledgeViewManager: ensuring view is ingested");
-            if let Err(e) = self.ingest_view(&view_id).await {
-                tracing::warn!(view_id, error = %e, "ingest failed");
+            match self.ingest_view(&view_id).await {
+                Ok(()) => report.ingested.push(view_id),
+                Err(e) => {
+                    tracing::warn!(view_id, error = %e, "ingest failed");
+                    report.failed.push((view_id, e.to_string()));
+                }
             }
         }
-        Ok(())
+        Ok(report)
     }
 
     /// Spawn `init()` on a detached tokio task. Use from process
@@ -345,7 +393,22 @@ impl KnowledgeViewManager {
             }
             tracing::info!("knowledge_view: starting background init");
             match self.init().await {
-                Ok(()) => tracing::info!("knowledge_view: init complete"),
+                Ok(report) if report.is_clean() => {
+                    tracing::info!(
+                        views = report.ingested.len(),
+                        "knowledge_view: init complete"
+                    )
+                }
+                // Partial init: the healthy views are usable, but name the
+                // broken ones here. Their landscape digests will be missing
+                // until a later write triggers the debouncer, and without this
+                // line the only symptom is a digest that never appears.
+                Ok(report) => tracing::warn!(
+                    ingested = report.ingested.len(),
+                    failed = ?report.failed,
+                    "knowledge_view: init partially failed; digests for the failed \
+                     views will be missing until a later write triggers the debouncer"
+                ),
                 Err(e) => tracing::warn!(
                     error = %e,
                     "knowledge_view: init failed; landscape digests will be missing \
@@ -958,12 +1021,33 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
 
 // ── Recipe → temp TOML (for CorpusSpec::RecipePath) ─────────
 
+/// Materialise `recipe` as a TOML file for `CorpusSpec::RecipePath`.
+///
+/// The filename is scoped to the CURRENT PROCESS (`<id>-<pid>.toml`), and that
+/// is load-bearing, not cosmetic. It used to be `<id>.toml` — one fixed path per
+/// view id, shared by every Sovereign process on the machine. `std::fs::write`
+/// truncates, so whenever two processes ingested the same view concurrently
+/// (daemon `spawn_init` + a CLI invocation + the desktop, or — how this was
+/// caught — nextest running one process per test), one process read a truncated
+/// or foreign recipe. The ingest then failed, `init()` swallowed the error, and
+/// the only visible symptom was a view with no index directory much later.
+///
+/// Why pid alone is sufficient uniqueness: within a process, two ingests of the
+/// same view cannot overlap — `ingest_view` holds that view's `entry.lock` for
+/// the whole call — and two different views produce different `id` components.
+/// So the only unserialised dimension was across processes, which the pid closes
+/// while keeping the file count bounded at one per view per process (a unique
+/// name per *call* would leak a file on every debouncer-triggered re-ingest).
+///
+/// The file deliberately persists after ingest, as it always has: this function
+/// does not own the recipe's lifetime, and a stale file from a dead process is
+/// harmless — it is always written before it is read.
 fn recipe_to_tempfile(recipe: &Recipe) -> CorpusResult<PathBuf> {
     let toml_text = toml::to_string(recipe)
         .map_err(|e| CorpusError::Recipe(format!("serialize recipe: {e}")))?;
     let dir = std::env::temp_dir().join("sovereign-knowledge-view-recipes");
     std::fs::create_dir_all(&dir).map_err(CorpusError::Io)?;
-    let path = dir.join(format!("{}.toml", recipe.corpus.id));
+    let path = dir.join(format!("{}-{}.toml", recipe.corpus.id, std::process::id()));
     std::fs::write(&path, toml_text).map_err(CorpusError::Io)?;
     Ok(path)
 }
@@ -980,6 +1064,36 @@ mod tests {
     use corpus_engine::enrichment::skeleton::{
         CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
     };
+
+    /// Guards the fix for the cross-process recipe clobber: the materialised
+    /// recipe path must be scoped to this process, and must differ per view.
+    ///
+    /// A regression here is invisible in normal runs — reverting to a shared
+    /// `<id>.toml` still passes every functional test and only shows up as an
+    /// intermittent, far-away "no index directory for view" panic when two
+    /// processes ingest the same view at once. So assert on the path itself.
+    #[test]
+    fn recipe_path_is_scoped_to_this_process_and_view() {
+        let db = std::path::Path::new("/tmp/does-not-need-to-exist.db");
+        let personal = recipe_to_tempfile(&personal_knowledge_recipe(db))
+            .expect("materialise personal recipe");
+        let conversation = recipe_to_tempfile(&conversation_history_recipe(db, &[]))
+            .expect("materialise conversation recipe");
+
+        let pid = std::process::id().to_string();
+        for path in [&personal, &conversation] {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            assert!(
+                name.contains(&pid),
+                "recipe filename must carry the pid or concurrent processes \
+                 clobber each other's recipe; got {name}"
+            );
+        }
+        assert_ne!(
+            personal, conversation,
+            "different views must not share a recipe path"
+        );
+    }
 
     fn fixture_skeleton() -> FieldSkeleton {
         FieldSkeleton {

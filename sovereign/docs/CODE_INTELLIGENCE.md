@@ -17,7 +17,7 @@ That does several things in one pass:
 - Detects the languages in the repo and builds a symbol index from a tree-sitter parse, stored as a LanceDB index under `~/.sovereign/indexes/<name>/`.
 - Exports a SCIP call graph, if the language's exporter is installed — for Rust that's `rust-analyzer scip`. The graph is a SQLite database (`scip_graph.db`) next to the symbol index, and it's what makes `callers`, `callees`, and `blast` exact rather than grep-shaped. A missing exporter is a warning, not a failure: you still get symbols and search, just no call graph for that language.
 - Writes a generated `.sovereign/SOVEREIGN.md` (a short map of the repo), the `.sovereign/` config directory, and an `AGENTS.md`.
-- Wires up your AI harness — a `.claude/settings.json` or `.opencode/config.json` pointing at the local MCP server — so the tools appear without you configuring anything.
+- Wires up your AI harness — a `.mcp.json` or `.opencode/opencode.json` pointing at the local MCP server — so the tools appear without you configuring anything.
 - Registers the project with the daemon so it stays fresh, which is the next section.
 
 The common flags are `--name <id>` to set the index name (it defaults to the folder), `--no-scip` to skip the call graph, `--workspace-root <dir>` for a monorepo (it finds the workspaces under that path), and `--port` if your MCP server isn't on 9741. The full list is in [CLI_REFERENCE](CLI_REFERENCE.md#sovereign-project).

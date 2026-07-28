@@ -1438,7 +1438,7 @@ There is no interactive REPL. Bare `sovereign` prints usage and
 exits; use `svrn chat` for the interactive shell, which
 streams through the daemon's `/v1/chat/completions`. `project init`
 prompts for AI-assistant harness (Claude Code / opencode / both /
-skip) and writes `.opencode/config.json` + `AGENTS.md` and installs
+skip) and writes `.opencode/opencode.json` + `AGENTS.md` and installs
 the ATOS opencode plugin.
 
 The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its
@@ -2833,6 +2833,7 @@ Default ports:
 | See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md`                          |
+| Point an outside tool (Claude Code, Codex, an Ollama client, an OpenAI SDK, an editor) at the daemon | `docs/INTEROP.md` — task-oriented recipes per socket; `docs/INTEGRATION_SURFACES.md` for which surfaces are contracts |
 | Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |

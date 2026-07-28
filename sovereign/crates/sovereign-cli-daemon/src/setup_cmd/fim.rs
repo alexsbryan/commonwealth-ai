@@ -931,9 +931,16 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
         }
         EditorOutcome::Unavailable(why) => {
             println!("  Editor: not installed \u{2014} {why}.");
-            println!("          Build and install it yourself:");
+            println!("          Completions are still being served at");
+            println!(
+                "            http://127.0.0.1:{}/v1/completions",
+                plan.client_port
+            );
+            println!("          To get the extension: download the .vsix from the project's");
+            println!("          GitHub releases (tag `svrn-fim-*`) and run");
+            println!("            code --install-extension <downloaded>.vsix");
+            println!("          From a source checkout you can build it instead:");
             println!("            cd packages/vscode-sovereign && npm install && npm run package");
-            println!("            code --install-extension sovereign-fim-0.1.0.vsix");
         }
     }
 }

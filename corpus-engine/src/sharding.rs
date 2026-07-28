@@ -27,14 +27,49 @@ use crate::types::{ChunkRange, IndexInfo, IndexStats, ShardInfo};
 /// copying tens of gigabytes of chunks into a fresh LanceDB index only
 /// to end up with the same content.
 ///
+/// # The canonical directory is a shared address
+///
+/// `<index_dir>/<corpus_id>/` is not owned by ingest. While ingest is
+/// still filling the partition, other subsystems are already writing
+/// into that same directory: the SCIP reindexer (`scip_graph.db`), the
+/// enrichment sink (`_enrichment_state.json`), the watched-folder
+/// machinery (`_watched_folder_state.json`), the atlas builder
+/// (`atlas/`), the asset cache (`assets/`). Which of them lands before
+/// the promote is a race.
+///
+/// Refusing whenever the destination already holds a same-named entry
+/// loses that race *permanently*: the Lance data stays in the
+/// partition, the ingest job still emits its Complete event, retrieval
+/// still finds the chunks (it enumerates directories and keys off each
+/// meta's `corpus_id`), but the reading surface — which resolves
+/// canonical by directory name — cannot deref a single citation.
+/// Observed on a real install; see note 79fdd04c.
+///
+/// So promotion is **merge-tolerant per entry kind**:
+///
+/// | collision | resolution |
+/// |---|---|
+/// | `_corpus_meta.json`, `chunks.lance` | refuse — a real ambiguity about which index *is* the corpus |
+/// | two plain directories | recurse, so unrelated siblings on both sides survive |
+/// | two byte-identical files | drop the partition copy |
+/// | two `*.jsonl` logs | union — canonical lines, then unseen partition lines |
+/// | anything else (`*.lance` datasets, state files, symlinks) | newest mtime keeps the name; the loser is preserved as `<name>.superseded` |
+///
+/// No collision is ever resolved by deleting bytes.
+///
 /// Errors out (without touching either path) when:
 ///   - the source does not exist, does not contain `_corpus_meta.json`,
 ///     or is a file rather than a directory;
-///   - the output path already exists (caller should use the full
-///     `merge_shards` path to fold into existing canonical data).
+///   - the output already holds its own `_corpus_meta.json` — that is a
+///     finalized corpus, and the caller should use the full
+///     `merge_shards` path to fold into it.
 ///
 /// The rename falls back to copy-then-remove when source and output are
 /// on different filesystems (common when `index_dir` is a bind mount).
+///
+/// `merge_shards` routes its single-shard fast path through here, and
+/// `merge_partitions_into_canonical` routes through *that*, so every
+/// promotion path in the system inherits this behaviour.
 pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
     if !source.is_dir() {
         return Err(Error::NoShardsFound(format!(
@@ -79,45 +114,32 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
             std::fs::remove_dir_all(source)?;
         }
     } else {
-        // Slow path: output dir already exists (typically holds a
-        // SCIP sidecar from the daemon's Reindexer). Move the
-        // partition's contents into it without touching unrelated
-        // siblings — `scip_graph.db` / `.rebuild.lock` must survive.
-        // Per-entry rename inside the same filesystem stays atomic.
-        for entry in std::fs::read_dir(source)? {
-            let entry = entry?;
-            let from = entry.path();
-            let to = output.join(entry.file_name());
-            if to.exists() {
-                // A genuinely-conflicting entry (e.g. an existing
-                // `chunks.lance` from a prior aborted ingest) — refuse
-                // rather than silently overwrite.
-                return Err(Error::Database(format!(
-                    "promote_single_shard: cannot merge {} into {} — \
-                     destination already has an entry named {:?}",
-                    source.display(),
-                    output.display(),
-                    entry.file_name(),
-                )));
-            }
-            if let Err(e) = std::fs::rename(&from, &to) {
-                tracing::warn!(
-                    from = %from.display(),
-                    to = %to.display(),
-                    error = %e,
-                    "promote_single_shard: per-entry rename failed, falling back to copy"
-                );
-                if entry.file_type()?.is_dir() {
-                    copy_dir_recursive(&from, &to)?;
-                    std::fs::remove_dir_all(&from)?;
-                } else {
-                    std::fs::copy(&from, &to)?;
-                    std::fs::remove_file(&from)?;
-                }
-            }
-        }
-        // Source dir is empty after the loop; drop it.
+        // Slow path: the output dir already exists and may already
+        // hold entries written by the other subsystems described
+        // above. Merge per entry kind rather than refusing wholesale
+        // — unrelated siblings on both sides must survive, and a
+        // sidecar collision must never strand the corpus.
+        //
+        // Scan for the refusal case FIRST. `read_dir` order is
+        // arbitrary, so detecting it mid-loop would refuse only after
+        // having already moved some entries — leaving the partition
+        // half-drained and the canonical half-populated, a worse
+        // state than either input.
+        refuse_on_corpus_data_collision(source, output)?;
+        let mut tally = MergeTally::default();
+        merge_into_existing_dir(source, output, &mut tally)?;
+        // Source dir is empty after the merge; drop it.
         std::fs::remove_dir(source).ok();
+        tracing::info!(
+            source = %source.display(),
+            output = %output.display(),
+            moved = tally.moved,
+            merged_dirs = tally.merged_dirs,
+            identical = tally.identical,
+            unioned_lines = tally.unioned_lines,
+            superseded = tally.superseded,
+            "promote_single_shard: merged partition into a canonical dir that already had entries"
+        );
     }
 
     // Rewrite meta to drop partition-specific fields and mark complete.
@@ -142,6 +164,297 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
         serde_json::to_string_pretty(&meta)
             .map_err(|e| Error::Serialization(format!("write meta: {e}")))?,
     )?;
+    Ok(())
+}
+
+/// Entries that ARE the corpus rather than a sidecar of it. A
+/// same-name collision on one of these means two candidate indexes
+/// claim the same corpus, and no rule short of a human can say which
+/// one is real — so promotion refuses and touches nothing.
+const CORPUS_DATA_ENTRIES: [&str; 2] = ["_corpus_meta.json", "chunks.lance"];
+
+/// Suffix for the copy that loses a same-name collision. Nothing reads
+/// it back; it exists so promotion never destroys bytes and an
+/// operator can diff the two afterwards.
+const SUPERSEDED_SUFFIX: &str = "superseded";
+
+/// Ceiling on how much of a colliding sidecar we will read into memory
+/// to compare or union. Past it the entry degrades to the opaque
+/// newest-wins rule, which needs only metadata.
+const SIDECAR_INSPECT_CAP_BYTES: u64 = 32 * 1024 * 1024;
+
+/// What a merge-tolerant promote actually did, logged as one line.
+/// Promotion into a non-empty directory is exactly the situation where
+/// a silent outcome is unacceptable — this is the receipt.
+#[derive(Default)]
+struct MergeTally {
+    /// Entries with no counterpart in the destination.
+    moved: usize,
+    /// Directories present on both sides, merged child by child.
+    merged_dirs: usize,
+    /// Collisions where both copies had the same bytes.
+    identical: usize,
+    /// Lines appended to destination `*.jsonl` logs.
+    unioned_lines: usize,
+    /// Collisions resolved by mtime, loser preserved beside the winner.
+    superseded: usize,
+}
+
+/// Refuse — before a single byte has moved — when both sides hold the
+/// same piece of corpus data. Two `chunks.lance` under one corpus id
+/// is a real ambiguity about which index *is* the corpus, and no rule
+/// short of a human can settle it.
+fn refuse_on_corpus_data_collision(source: &Path, output: &Path) -> Result<()> {
+    for name in CORPUS_DATA_ENTRIES {
+        let dest = output.join(name);
+        if source.join(name).symlink_metadata().is_ok()
+            && dest.symlink_metadata().is_ok()
+            && !is_stale_symlink(&dest, source)
+        {
+            return Err(corpus_data_collision(source, output, name));
+        }
+    }
+    Ok(())
+}
+
+/// True when a destination symlink cannot survive the promote: it
+/// already dangles, or it resolves inside the partition that is about
+/// to be consumed.
+///
+/// Such a link is not content, and treating it as content is actively
+/// harmful — the mtime rule would keep the link and move the real file
+/// aside, leaving the canonical index with a broken entry exactly where
+/// readers expect data. Links into the partition are what a hand-repair
+/// of an earlier strand leaves behind, so promotion meets them on
+/// precisely the corpora that most need repairing.
+fn is_stale_symlink(link: &Path, source: &Path) -> bool {
+    if !link.symlink_metadata().is_ok_and(|m| m.is_symlink()) {
+        return false;
+    }
+    match (std::fs::canonicalize(link), std::fs::canonicalize(source)) {
+        // Dangles already.
+        (Err(_), _) => true,
+        (Ok(target), Ok(src)) => target.starts_with(src),
+        (Ok(_), Err(_)) => false,
+    }
+}
+
+fn corpus_data_collision(source: &Path, output: &Path, name: &str) -> Error {
+    Error::Database(format!(
+        "promote_single_shard: cannot merge {} into {} — both hold corpus data named \
+         {name:?}. Sidecar collisions are merged, but promotion will not guess which of \
+         two indexes is the corpus; remove or rename one.",
+        source.display(),
+        output.display(),
+    ))
+}
+
+/// Move every entry of `source` into the already-populated `output`,
+/// resolving name collisions per the table on `promote_single_shard`.
+///
+/// Recurses only into plain directories present on both sides. Symlinks
+/// are opaque on purpose: following one would let a link back into
+/// `source` (an operator hand-repair we have seen in the wild) turn the
+/// walk into a loop, and `Path::is_dir` follows links where
+/// `symlink_metadata` does not.
+fn merge_into_existing_dir(source: &Path, output: &Path, tally: &mut MergeTally) -> Result<()> {
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let from = entry.path();
+        let name = entry.file_name();
+        let to = output.join(&name);
+
+        let Ok(to_meta) = std::fs::symlink_metadata(&to) else {
+            // No counterpart in the destination — the common case.
+            move_entry(&from, &to, entry.file_type()?.is_dir())?;
+            tally.moved += 1;
+            continue;
+        };
+        // A destination link that dangles or points into the
+        // partition is not content — drop it and let the real entry
+        // take the name.
+        if is_stale_symlink(&to, source) {
+            std::fs::remove_file(&to)?;
+            move_entry(&from, &to, entry.file_type()?.is_dir())?;
+            tally.moved += 1;
+            continue;
+        }
+
+        let from_meta = std::fs::symlink_metadata(&from)?;
+        let name_str = name.to_string_lossy();
+
+        // Belt-and-suspenders: the top-level pre-flight already
+        // refused this case atomically. Kept so a nested occurrence
+        // can never be silently resolved by the mtime rule.
+        if CORPUS_DATA_ENTRIES.contains(&name_str.as_ref()) {
+            return Err(corpus_data_collision(source, output, &name_str));
+        }
+
+        // A `*.lance` directory is a dataset whose manifest names the
+        // files it owns. Interleaving two of them yields a dataset
+        // pointing at fragments from the other — so it stays an
+        // all-or-nothing unit even though it is a directory.
+        let both_plain_dirs =
+            from_meta.is_dir() && to_meta.is_dir() && !name_str.ends_with(".lance");
+        if both_plain_dirs {
+            merge_into_existing_dir(&from, &to, tally)?;
+            std::fs::remove_dir(&from).ok();
+            tally.merged_dirs += 1;
+            continue;
+        }
+
+        if from_meta.is_file() && to_meta.is_file() {
+            if files_identical(&from, &to)? {
+                std::fs::remove_file(&from)?;
+                tally.identical += 1;
+                continue;
+            }
+            if name_str.ends_with(".jsonl") {
+                if let Some(appended) = union_jsonl(&from, &to)? {
+                    tally.unioned_lines += appended;
+                    continue;
+                }
+            }
+        }
+
+        supersede(&from, &to, &from_meta, &to_meta, tally)?;
+    }
+    Ok(())
+}
+
+/// Resolve an opaque collision: the more recently written side keeps
+/// the canonical name, the other is preserved beside it as
+/// `<name>.superseded`.
+fn supersede(
+    from: &Path,
+    to: &Path,
+    from_meta: &std::fs::Metadata,
+    to_meta: &std::fs::Metadata,
+    tally: &mut MergeTally,
+) -> Result<()> {
+    // No usable mtime (exotic filesystem): the partition is this
+    // ingest's own output, so it wins the tie.
+    let partition_wins = match (from_meta.modified(), to_meta.modified()) {
+        (Ok(f), Ok(t)) => f >= t,
+        _ => true,
+    };
+
+    let (Some(parent), Some(name)) = (to.parent(), to.file_name()) else {
+        return Err(Error::Database(format!(
+            "promote_single_shard: cannot place a superseded copy beside {}",
+            to.display()
+        )));
+    };
+    let aside = unique_aside_path(parent, &name.to_string_lossy())?;
+
+    if partition_wins {
+        std::fs::rename(to, &aside)?;
+        move_entry(from, to, from_meta.is_dir())?;
+    } else {
+        move_entry(from, &aside, from_meta.is_dir())?;
+    }
+    tally.superseded += 1;
+
+    tracing::warn!(
+        kept = if partition_wins { "partition" } else { "canonical" },
+        canonical = %to.display(),
+        preserved_as = %aside.display(),
+        "promote_single_shard: name collision resolved by mtime — the losing copy was \
+         preserved, not deleted"
+    );
+    Ok(())
+}
+
+/// First free `<name>.superseded[.N]` under `dir`. A corpus can be
+/// promoted more than once over its life; each loser needs its own
+/// resting place or the second promote silently overwrites the first.
+fn unique_aside_path(dir: &Path, name: &str) -> Result<PathBuf> {
+    let base = format!("{name}.{SUPERSEDED_SUFFIX}");
+    let mut candidate = dir.join(&base);
+    for n in 1..1000 {
+        if candidate.symlink_metadata().is_err() {
+            return Ok(candidate);
+        }
+        candidate = dir.join(format!("{base}.{n}"));
+    }
+    Err(Error::Database(format!(
+        "promote_single_shard: {} already has 1000 superseded copies of {name}",
+        dir.display()
+    )))
+}
+
+/// Byte-compare two regular files. Capped: a collision between two
+/// large sidecars degrades to "different" rather than reading both
+/// into memory.
+fn files_identical(a: &Path, b: &Path) -> Result<bool> {
+    let (len_a, len_b) = (a.metadata()?.len(), b.metadata()?.len());
+    if len_a != len_b || len_a > SIDECAR_INSPECT_CAP_BYTES {
+        return Ok(false);
+    }
+    Ok(std::fs::read(a)? == std::fs::read(b)?)
+}
+
+/// Union two append-only JSONL logs: the destination keeps its lines
+/// and order, then gains every partition line it did not already have.
+/// Consumes the source file on success.
+///
+/// Returns `None` — leaving both files in place for the caller to
+/// resolve by mtime — when either side is not UTF-8 or is too large to
+/// hold in memory.
+fn union_jsonl(from: &Path, to: &Path) -> Result<Option<usize>> {
+    if from.metadata()?.len() > SIDECAR_INSPECT_CAP_BYTES
+        || to.metadata()?.len() > SIDECAR_INSPECT_CAP_BYTES
+    {
+        return Ok(None);
+    }
+    let (Ok(existing), Ok(incoming)) = (std::fs::read_to_string(to), std::fs::read_to_string(from))
+    else {
+        return Ok(None);
+    };
+
+    let seen: std::collections::HashSet<&str> = existing.lines().collect();
+    let mut appended = String::new();
+    let mut count = 0usize;
+    for line in incoming.lines() {
+        if line.trim().is_empty() || seen.contains(line) {
+            continue;
+        }
+        appended.push_str(line);
+        appended.push('\n');
+        count += 1;
+    }
+
+    if !appended.is_empty() {
+        let mut merged = String::with_capacity(existing.len() + appended.len() + 1);
+        merged.push_str(&existing);
+        if !existing.is_empty() && !existing.ends_with('\n') {
+            merged.push('\n');
+        }
+        merged.push_str(&appended);
+        std::fs::write(to, merged)?;
+    }
+    std::fs::remove_file(from)?;
+    Ok(Some(count))
+}
+
+/// Rename `from` onto `to`, falling back to copy-then-remove across
+/// filesystem boundaries.
+fn move_entry(from: &Path, to: &Path, is_dir: bool) -> Result<()> {
+    if let Err(e) = std::fs::rename(from, to) {
+        tracing::warn!(
+            from = %from.display(),
+            to = %to.display(),
+            error = %e,
+            "promote_single_shard: per-entry rename failed, falling back to copy"
+        );
+        if is_dir {
+            copy_dir_recursive(from, to)?;
+            std::fs::remove_dir_all(from)?;
+        } else {
+            std::fs::copy(from, to)?;
+            std::fs::remove_file(from)?;
+        }
+    }
     Ok(())
 }
 
@@ -1828,6 +2141,295 @@ mod tests {
         );
         // Source untouched.
         assert!(source_path.exists());
+    }
+
+    /// Stamp an explicit mtime so collision-resolution tests assert a
+    /// direction rather than racing the clock.
+    fn set_mtime_secs_ago(path: &Path, secs: u64) {
+        let f = std::fs::File::options().write(true).open(path).unwrap();
+        let when = std::time::SystemTime::now() - std::time::Duration::from_secs(secs);
+        f.set_times(std::fs::FileTimes::new().set_modified(when))
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_merges_colliding_state_sidecar() {
+        // THE observed production failure (note 79fdd04c): the
+        // enrichment sink writes `_enrichment_state.json` into the
+        // canonical dir while ingest is still filling the partition,
+        // and the partition carries its own copy. Refusing here left
+        // the corpus's Lance data stranded in the partition forever
+        // while the ingest job still reported Complete.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 4).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(&canonical).unwrap();
+        std::fs::write(
+            canonical.join("_enrichment_state.json"),
+            br#"{"status":"Running"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            source_path.join("_enrichment_state.json"),
+            br#"{"status":"Complete"}"#,
+        )
+        .unwrap();
+        set_mtime_secs_ago(&canonical.join("_enrichment_state.json"), 600);
+
+        promote_single_shard(&source_path, &canonical)
+            .expect("a colliding state sidecar must not strand the corpus");
+
+        // The corpus landed and is readable — the whole point.
+        let promoted = CorpusIndex::open(&canonical).await.unwrap();
+        assert_eq!(promoted.info().await.unwrap().chunk_count, 4);
+        assert!(!source_path.exists(), "partition should be consumed");
+
+        // Newest copy holds the canonical name; the older one was
+        // preserved rather than deleted.
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("_enrichment_state.json")).unwrap(),
+            r#"{"status":"Complete"}"#,
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("_enrichment_state.json.superseded")).unwrap(),
+            r#"{"status":"Running"}"#,
+            "the losing copy must be preserved beside the winner",
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_merges_colliding_atlas_dir() {
+        // The collision that actually broke the operator's install:
+        // `atlas/` exists on BOTH sides. A filename allowlist would
+        // have missed it — directories must merge child by child so
+        // entries unique to either side survive.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 3).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(canonical.join("atlas")).unwrap();
+        // Canonical-only marker: must survive.
+        std::fs::write(canonical.join("atlas/.read_v2"), b"").unwrap();
+        std::fs::write(canonical.join("atlas/atoms.json"), b"{\"v\":\"old\"}").unwrap();
+        set_mtime_secs_ago(&canonical.join("atlas/atoms.json"), 600);
+
+        std::fs::create_dir_all(source_path.join("atlas")).unwrap();
+        std::fs::write(source_path.join("atlas/atoms.json"), b"{\"v\":\"new\"}").unwrap();
+        // Partition-only file: must land.
+        std::fs::write(source_path.join("atlas/edges.json"), b"[]").unwrap();
+
+        promote_single_shard(&source_path, &canonical).expect("colliding atlas dirs must merge");
+
+        let promoted = CorpusIndex::open(&canonical).await.unwrap();
+        assert_eq!(promoted.info().await.unwrap().chunk_count, 3);
+
+        assert!(
+            canonical.join("atlas/.read_v2").exists(),
+            "canonical-only atlas entry must survive the merge",
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("atlas/edges.json")).unwrap(),
+            "[]",
+            "partition-only atlas entry must land",
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("atlas/atoms.json")).unwrap(),
+            "{\"v\":\"new\"}",
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("atlas/atoms.json.superseded")).unwrap(),
+            "{\"v\":\"old\"}",
+        );
+        assert!(!source_path.exists(), "partition should be consumed");
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_unions_colliding_jsonl_and_collapses_identical_files() {
+        // Append-only logs union instead of one shadowing the other,
+        // and a byte-identical collision leaves no `.superseded`
+        // litter behind.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 2).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(&canonical).unwrap();
+        std::fs::write(canonical.join("oplog.jsonl"), "{\"a\":1}\n{\"b\":2}\n").unwrap();
+        std::fs::write(source_path.join("oplog.jsonl"), "{\"b\":2}\n{\"c\":3}\n").unwrap();
+        std::fs::write(canonical.join("field_skeleton.json"), b"same-bytes").unwrap();
+        std::fs::write(source_path.join("field_skeleton.json"), b"same-bytes").unwrap();
+
+        promote_single_shard(&source_path, &canonical).expect("promote with jsonl + identical file");
+
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("oplog.jsonl")).unwrap(),
+            "{\"a\":1}\n{\"b\":2}\n{\"c\":3}\n",
+            "union keeps canonical order and appends only unseen lines",
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("field_skeleton.json")).unwrap(),
+            "same-bytes",
+        );
+        assert!(
+            !canonical.join("field_skeleton.json.superseded").exists(),
+            "identical copies collapse — no superseded litter",
+        );
+        assert!(!canonical.join("oplog.jsonl.superseded").exists());
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_keeps_lance_datasets_whole() {
+        // A `*.lance` directory is a dataset whose manifest names the
+        // fragments it owns. Merging two of them child-by-child would
+        // produce a dataset referencing files it does not own — so it
+        // is resolved as an opaque unit even though it is a directory.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 2).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(canonical.join("atlas/atoms.lance/_versions")).unwrap();
+        std::fs::write(
+            canonical.join("atlas/atoms.lance/_versions/1.manifest"),
+            b"canonical-manifest",
+        )
+        .unwrap();
+        std::fs::write(
+            canonical.join("atlas/atoms.lance/canonical-only.bin"),
+            b"c",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(source_path.join("atlas/atoms.lance/_versions")).unwrap();
+        std::fs::write(
+            source_path.join("atlas/atoms.lance/_versions/1.manifest"),
+            b"partition-manifest",
+        )
+        .unwrap();
+        std::fs::write(
+            source_path.join("atlas/atoms.lance/partition-only.bin"),
+            b"p",
+        )
+        .unwrap();
+
+        promote_single_shard(&source_path, &canonical).expect("colliding lance datasets");
+
+        // Whichever side won, the surviving dataset is exactly one of
+        // them — never a mixture — and the other is preserved intact.
+        let winner = canonical.join("atlas/atoms.lance");
+        let loser = canonical.join("atlas/atoms.lance.superseded");
+        assert!(loser.is_dir(), "the losing dataset must be preserved whole");
+
+        let has_canonical_file = winner.join("canonical-only.bin").exists();
+        let has_partition_file = winner.join("partition-only.bin").exists();
+        assert!(
+            has_canonical_file ^ has_partition_file,
+            "a Lance dataset must not be interleaved: canonical-only={has_canonical_file} \
+             partition-only={has_partition_file}",
+        );
+        assert_eq!(
+            loser.join("canonical-only.bin").exists(),
+            has_partition_file,
+            "the loser holds exactly the files the winner does not",
+        );
+        assert!(loser.join("_versions/1.manifest").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn promote_single_shard_replaces_symlinks_into_the_partition() {
+        // The shape a hand-repaired strand is actually in: someone
+        // symlinked canonical entries at the partition's real files to
+        // get retrieval working again. Those links dangle the instant
+        // the partition is consumed, so treating them as content would
+        // hand the operator a canonical index with broken entries
+        // where the data should be.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 3).await;
+        std::fs::create_dir_all(source_path.join("atlas")).unwrap();
+        std::fs::write(source_path.join("atlas/atoms.json"), b"real-atoms").unwrap();
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(canonical.join("atlas")).unwrap();
+        std::os::unix::fs::symlink(
+            source_path.join("atlas/atoms.json"),
+            canonical.join("atlas/atoms.json"),
+        )
+        .unwrap();
+        // A link that is already dangling — same rule.
+        std::os::unix::fs::symlink(
+            source_path.join("atlas/gone.json"),
+            canonical.join("atlas/edges.json"),
+        )
+        .unwrap();
+        std::fs::write(source_path.join("atlas/edges.json"), b"real-edges").unwrap();
+
+        promote_single_shard(&source_path, &canonical).expect("promote past partition symlinks");
+
+        for (name, want) in [("atoms.json", "real-atoms"), ("edges.json", "real-edges")] {
+            let path = canonical.join("atlas").join(name);
+            assert!(
+                !path.symlink_metadata().unwrap().is_symlink(),
+                "{name} must be the real file, not a link",
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), want);
+        }
+        assert!(
+            !canonical.join("atlas/atoms.json.superseded").exists(),
+            "a stale link is not content — nothing to supersede",
+        );
+        assert_eq!(
+            CorpusIndex::open(&canonical)
+                .await
+                .unwrap()
+                .info()
+                .await
+                .unwrap()
+                .chunk_count,
+            3,
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_still_refuses_colliding_corpus_data() {
+        // Merge-tolerance is for SIDECARS. Two `chunks.lance` under
+        // the same corpus id is a real ambiguity about which index is
+        // the corpus, and promotion must not guess. (The destination
+        // deliberately has no `_corpus_meta.json`, so the early guard
+        // does not fire and we reach the per-entry rule.)
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 5).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(canonical.join("chunks.lance")).unwrap();
+        std::fs::write(canonical.join("chunks.lance/data.bin"), b"prior-ingest").unwrap();
+
+        let err = promote_single_shard(&source_path, &canonical).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("both hold corpus data"),
+            "unexpected error: {msg}"
+        );
+
+        // The refusal is atomic: nothing moved in either direction, so
+        // the operator resolves this from two intact inputs rather
+        // than from a half-drained partition. (`read_dir` order is
+        // arbitrary — without a pre-flight scan the loop would have
+        // moved `_corpus_meta.json` across before noticing.)
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("chunks.lance/data.bin")).unwrap(),
+            "prior-ingest",
+        );
+        assert!(source_path.join("_corpus_meta.json").exists());
+        assert!(
+            !canonical.join("_corpus_meta.json").exists(),
+            "a refused promote must not leave entries behind in the destination",
+        );
     }
 
     #[tokio::test]

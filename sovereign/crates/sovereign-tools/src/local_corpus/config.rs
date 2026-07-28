@@ -436,8 +436,38 @@ pub struct EnrichmentConfig {
 
 // ─── Defaults ────────────────────────────────────────────────────────
 
+/// The v1 format breadth Sovereign can actually extract: PDF + plain text +
+/// markdown + Word docs + EPUBs + saved web pages. Each extension dispatches in
+/// `extract_stage::extract_one`; everything else falls into
+/// `skipped_by_extension`.
+///
+/// ONE list, shared by every folder-backed corpus default, because the two
+/// defaults drifting apart is a shipped bug and not a hypothetical: drag-drop
+/// (`document_folder`) admitted only `pdf` + `txt` while `watched_folder`
+/// admitted this full set. The same folder of `.md` notes therefore ingested
+/// correctly as a watched folder and produced a silently EMPTY corpus via
+/// drag-drop — extraction supported markdown the whole time; only this list
+/// disagreed. Found 2026-07-28 by the real-mode desktop e2e gate, which caught
+/// the governance fixture (two `.md` files) ingesting zero chunks.
+///
+/// Add a format here only once `extract_one` genuinely handles it.
+pub const DEFAULT_FOLDER_EXTENSIONS: &[&str] = &[
+    "pdf", "txt", "md", "docx", "epub", "html", "htm", "mhtml",
+];
+
+/// `DEFAULT_FOLDER_EXTENSIONS` as owned strings, for config construction.
+fn default_folder_extensions() -> Vec<String> {
+    DEFAULT_FOLDER_EXTENSIONS
+        .iter()
+        .map(|e| (*e).to_string())
+        .collect()
+}
+
 impl LocalCorpusConfig {
-    /// Default config for a drag-dropped documents folder (PDFs + TXT).
+    /// Default config for a drag-dropped documents folder.
+    ///
+    /// Admits the full [`DEFAULT_FOLDER_EXTENSIONS`] set — see that constant for
+    /// why this is shared with `watched_folder` rather than spelled out again.
     pub fn document_folder(path: PathBuf, display_name: String) -> Self {
         let canon = canonical_or_as_is(&path);
         let id = corpus_id_for("folder", &canon);
@@ -446,7 +476,7 @@ impl LocalCorpusConfig {
             display_name,
             root_path: canon,
             source_type: LocalCorpusSourceType::DocumentFolder,
-            extensions: vec!["pdf".into(), "txt".into()],
+            extensions: default_folder_extensions(),
             chunker: ChunkerKind::Paragraph {
                 max_chars: 2048,
                 overlap_chars: 256,
@@ -496,21 +526,10 @@ impl LocalCorpusConfig {
             display_name,
             root_path: canon,
             source_type: LocalCorpusSourceType::WatchedFolder(watched),
-            // v1 format breadth: PDF + plain text + markdown +
-            // Word docs + EPUBs + saved web pages. Each extension
-            // dispatches in `extract_stage::extract_one`; everything
-            // else falls into `skipped_by_extension` and surfaces in
+            // v1 format breadth — see `DEFAULT_FOLDER_EXTENSIONS`. Anything
+            // outside it falls into `skipped_by_extension` and surfaces in
             // watched-folder status.
-            extensions: vec![
-                "pdf".into(),
-                "txt".into(),
-                "md".into(),
-                "docx".into(),
-                "epub".into(),
-                "html".into(),
-                "htm".into(),
-                "mhtml".into(),
-            ],
+            extensions: default_folder_extensions(),
             chunker: ChunkerKind::Paragraph {
                 max_chars: 2048,
                 overlap_chars: 256,
@@ -897,7 +916,26 @@ mod tests {
         );
         assert!(cfg.write_back.is_none());
         assert!(cfg.enrichment.is_none());
-        assert_eq!(cfg.extensions, vec!["pdf".to_string(), "txt".to_string()]);
+        // Drag-drop admits the same formats a watched folder does. Pinned as an
+        // equality rather than a literal list (that literal lives in
+        // `watched_folder_default_extensions_and_scope`) because the bug being
+        // guarded is precisely the two DRIFTING APART: drag-drop shipped with
+        // only pdf+txt, so a folder of .md notes ingested silently empty while
+        // the identical folder worked as a watched folder.
+        assert!(
+            cfg.extensions.contains(&"md".to_string()),
+            "drag-dropped markdown must be ingested, not silently skipped"
+        );
+        assert_eq!(
+            cfg.extensions,
+            LocalCorpusConfig::watched_folder(
+                PathBuf::from("/tmp/some-folder"),
+                "City council 2024".into(),
+                WatchedFolderConfig::default(),
+            )
+            .extensions,
+            "drag-drop and watched-folder format support must not drift apart"
+        );
         assert_eq!(cfg.scope, CorpusScope::Local);
         assert!(cfg.id.starts_with("folder-"));
         assert!(!cfg.watcher.enabled);

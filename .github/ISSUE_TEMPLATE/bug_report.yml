@@ -51,7 +51,7 @@ body:
     attributes:
       label: Version
       description: >
-        `sovereign --version`, the release tag (e.g. cli-v0.1.18), or `git
+        `svrn --version`, the release tag (e.g. cli-v0.1.18), or `git
         rev-parse --short HEAD` if you built from source.
     validations:
       required: true
@@ -70,12 +70,12 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `sovereign doctor` (optional)
+      label: Output of `svrn doctor` (optional)
       description: >
         Only useful if the bug involves the running daemon, mesh, models, or
         code intelligence — it reports on a live stack, so skip it for build
-        errors or a fresh checkout. If it applies, `sovereign doctor` (or
-        `sovereign doctor --json`) captures what the daemon sees.
+        errors or a fresh checkout. If it applies, `svrn doctor` (or
+        `svrn doctor --json`) captures what the daemon sees.
       render: text
   - type: textarea
     id: logs

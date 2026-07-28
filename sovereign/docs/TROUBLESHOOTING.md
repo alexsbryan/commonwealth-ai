@@ -74,7 +74,7 @@ client_port = 19741
 internal_port = 19742
 ```
 
-Restart the daemon. Update any `.opencode/config.json` / `.claude/settings.json` that reference the old port (re-run `sovereign project init` and it'll pick up the new port).
+Restart the daemon. Update any `.opencode/opencode.json` / `.mcp.json` that reference the old port (re-run `sovereign project init` and it'll pick up the new port).
 
 ## Project init
 

@@ -8,7 +8,7 @@ If what you want is to pool machines with people you trust, the Sovereign side i
 
 ## How it works
 
-A mesh is symmetric — there is no master node, and every node runs the same code. Nodes find each other over mDNS on a local network, or through gossip across a Tailscale or WireGuard network. From there Commonwealth assigns model layers to machines by capacity, routes each request to a node that can serve it, shares knowledge indexes where the source license allows, and replicates shared state. When a machine sleeps or drops off, the remaining nodes notice and the mesh reforms around them. It serves an OpenAI-compatible API on `localhost:9741`, so a client that speaks that protocol can use the mesh as one local model. The capability-aware routing is described in [oicp-v0.3.md](docs/oicp-v0.3.md).
+A mesh is symmetric — there is no master node, and every node runs the same code. Nodes find each other over mDNS on a local network, or through gossip across a Tailscale or WireGuard network. From there Commonwealth assigns model layers to machines by capacity, routes each request to a node that can serve it, shares knowledge indexes where the source license allows, and replicates shared state. When a machine sleeps or drops off, the remaining nodes notice and the mesh reforms around them. It serves an OpenAI-compatible API on `localhost:9741`, so a client that speaks that protocol can use the mesh as one local model. The capability-aware routing is described in [oicp-v0.4.md](docs/oicp-v0.4.md).
 
 The trust model is social rather than cryptographic: you join a mesh because someone you know invited you. It does not try to defend against malicious nodes. There is no token, no blockchain, and no central registry — each node holds all the state there is.
 

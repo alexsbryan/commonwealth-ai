@@ -33,11 +33,9 @@ fn opencode_config_path() -> PathBuf {
 pub(super) fn opencode_config_snippet(client_port: u16) -> String {
     let value = serde_json::json!({
         "mcp": {
-            "servers": {
-                "sovereign": {
-                    "type": "http",
-                    "url": format!("http://localhost:{client_port}/mcp")
-                }
+            "sovereign": {
+                "type": "remote",
+                "url": format!("http://localhost:{client_port}/mcp")
             }
         },
         "provider": {
@@ -57,10 +55,13 @@ pub(super) fn opencode_config_snippet(client_port: u16) -> String {
 /// Behaviour matrix (decided so a re-run of `svrn setup` is
 /// always safe and never clobbers third-party config):
 ///   - file missing               → create with our entries only.
-///   - file present, no overlap   → merge: add `mcp.servers.sovereign`
-///                                  and `provider.commonwealth`,
-///                                  leave everything else untouched.
+///   - file present, no overlap   → merge: add `mcp.sovereign` and
+///                                  `provider.commonwealth`, leave
+///                                  everything else untouched.
 ///   - file present, our entries  → noop, return `AlreadyConfigured`.
+///   - file present, legacy entry → rewrite: drop `mcp.servers.sovereign`
+///                                  (the pre-2026-07-28 shape opencode
+///                                  rejects) and write `mcp.sovereign`.
 ///   - file present, parse error  → bail (the user has invalid JSON;
 ///                                  we shouldn't try to "fix" it).
 pub(super) fn install_opencode_config(client_port: u16) -> Result<OpencodeInstall, String> {
@@ -98,21 +99,23 @@ pub(super) fn install_opencode_config_at(
 
     // Detect already-configured to give the user a "nothing to do"
     // banner instead of pretending we did work.
-    let same_mcp = cfg
-        .pointer("/mcp/servers/sovereign/url")
-        .and_then(|v| v.as_str())
-        == Some(mcp_url.as_str());
+    let same_mcp = cfg.pointer("/mcp/sovereign/url").and_then(|v| v.as_str())
+        == Some(mcp_url.as_str())
+        && cfg.pointer("/mcp/sovereign/type").and_then(|v| v.as_str()) == Some("remote");
     let same_provider = cfg
         .pointer("/provider/commonwealth/options/baseURL")
         .and_then(|v| v.as_str())
         == Some(base_url.as_str());
-    if same_mcp && same_provider {
+    // A leftover `mcp.servers` from the pre-2026-07-28 shape must be
+    // cleaned up even when the rest already matches — see below.
+    let has_legacy = cfg.pointer("/mcp/servers/sovereign").is_some();
+    if same_mcp && same_provider && !has_legacy {
         return Ok(OpencodeInstall::AlreadyConfigured(path.to_path_buf()));
     }
 
-    // Walk into mcp.servers.sovereign and provider.commonwealth,
-    // creating intermediate objects only as needed. Other keys at
-    // each level are preserved verbatim.
+    // Walk into mcp.sovereign and provider.commonwealth, creating
+    // intermediate objects only as needed. Other keys at each level
+    // are preserved verbatim.
     let obj = cfg.as_object_mut().expect("verified above");
     let mcp = obj
         .entry("mcp".to_string())
@@ -120,15 +123,29 @@ pub(super) fn install_opencode_config_at(
     let mcp_obj = mcp
         .as_object_mut()
         .ok_or_else(|| "`mcp` is not an object".to_string())?;
-    let servers = mcp_obj
-        .entry("servers".to_string())
-        .or_insert_with(|| serde_json::json!({}));
-    let servers_obj = servers
-        .as_object_mut()
-        .ok_or_else(|| "`mcp.servers` is not an object".to_string())?;
-    servers_obj.insert(
+
+    // Evict the shape we used to write. `mcp` is a FLAT map of
+    // name → McpLocalConfig | McpRemoteConfig (opencode SDK
+    // `Config.mcp`), so an `mcp.servers` key parses as a server
+    // *named* "servers" with no `type` — which fails opencode's
+    // schema and takes the whole config down with it. Writing the
+    // correct key while leaving the old one behind would therefore
+    // still leave the user broken.
+    let drop_servers = mcp_obj
+        .get_mut("servers")
+        .and_then(|s| s.as_object_mut())
+        .map(|s| {
+            s.remove("sovereign");
+            s.is_empty()
+        })
+        .unwrap_or(false);
+    if drop_servers {
+        mcp_obj.remove("servers");
+    }
+
+    mcp_obj.insert(
         "sovereign".to_string(),
-        serde_json::json!({ "type": "http", "url": mcp_url }),
+        serde_json::json!({ "type": "remote", "url": mcp_url }),
     );
 
     let provider = obj

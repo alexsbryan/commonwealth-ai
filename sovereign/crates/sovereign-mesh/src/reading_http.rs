@@ -301,7 +301,7 @@ async fn get_chunk(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return not_found(&format!("corpus open: {e}")),
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
     };
     let mut rows = match index.chunks_by_ids(&[chunk_id]).await {
         Ok(r) => r,
@@ -332,7 +332,7 @@ async fn get_neighbors(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return not_found(&format!("corpus open: {e}")),
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
     };
     let window = match index.neighbors(chunk_id, radius).await {
         Ok(Some(w)) => w,
@@ -427,7 +427,7 @@ async fn get_atom_elsewhere(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return not_found(&format!("corpus open: {e}")),
+        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
     };
     let Some((atlas_dir, _)) = atlas_dir_for_corpus(&engine, &corpus).await else {
         return not_found("corpus not installed or atlas missing");
@@ -730,6 +730,74 @@ pub(crate) async fn maybe_resolve_conversation_meta(
         updated_at,
         segments,
     })
+}
+
+/// Classify an `open_index_for_corpus` failure into "the caller asked for a
+/// corpus that isn't here" (404) versus "this corpus IS here and I could not
+/// open it" (503).
+///
+/// Why this exists: every one of these handlers used to answer `not_found` for
+/// both, and the desktop's `daemon_reading_get` maps ANY 404 to `Ok(None)` —
+/// which the frontend renders as a plain "no such chunk". So a structurally
+/// broken index was indistinguishable from an absent one, in Attach mode,
+/// which is the mode every shipped desktop runs. The specific fault that hid
+/// behind it: a solo ingest whose `promote_single_shard` refused a non-empty
+/// canonical dir, leaving all the Lance data in `<corpus>-partition-*` and the
+/// canonical dir without `_corpus_meta.json`. Retrieval still found the chunks
+/// (`installed_indexes()` enumerates directories and keys off each meta's
+/// `corpus_id`, which the partition carries), so every citation resolved to a
+/// silent null while search looked perfectly healthy.
+///
+/// The un-promoted case gets named explicitly rather than folded into a generic
+/// 503: it is the difference between "your disk is corrupt" and "finalise never
+/// ran, the data is right there".
+fn corpus_open_failure(
+    engine: &corpus_engine::CorpusEngine,
+    corpus: &str,
+    err: &dyn std::fmt::Display,
+) -> axum::response::Response {
+    let canonical = engine.canonical_path(corpus);
+
+    if !canonical.join("_corpus_meta.json").exists() {
+        if let Some(partition) = stranded_partition(engine, corpus) {
+            return service_unavailable(&format!(
+                "corpus '{corpus}' has un-promoted ingest data at {} — the canonical \
+                 index at {} is missing _corpus_meta.json, so finalise_solo_ingest \
+                 never completed. Search may still work (it resolves corpora by \
+                 metadata, not directory name) while every citation into this corpus \
+                 fails to dereference. Underlying open error: {err}",
+                partition.display(),
+                canonical.display(),
+            ));
+        }
+        if !canonical.exists() {
+            return not_found(&format!("corpus '{corpus}' is not installed: {err}"));
+        }
+    }
+
+    service_unavailable(&format!(
+        "corpus '{corpus}' is installed at {} but its index could not be opened: {err}",
+        canonical.display(),
+    ))
+}
+
+/// A `<corpus>-partition-*` sibling that carries `_corpus_meta.json` — i.e. a
+/// completed ingest whose promotion to canonical never landed.
+fn stranded_partition(
+    engine: &corpus_engine::CorpusEngine,
+    corpus: &str,
+) -> Option<std::path::PathBuf> {
+    let prefix = format!("{corpus}-partition-");
+    std::fs::read_dir(engine.index_dir())
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&prefix))
+                && p.join("_corpus_meta.json").exists()
+        })
 }
 
 fn not_found(msg: &str) -> axum::response::Response {

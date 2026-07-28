@@ -386,23 +386,35 @@ mod tests {
     fn walks_and_filters_by_extension() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("a.txt"), b"hello").unwrap();
-        fs::write(dir.path().join("b.md"), b"world").unwrap(); // not in allow-list
+        fs::write(dir.path().join("b.md"), b"world").unwrap();
         fs::write(dir.path().join("c.pdf"), b"not a real pdf").unwrap();
+        fs::write(dir.path().join("d.xyz"), b"unsupported").unwrap();
 
         let cfg = make_folder_config(dir.path());
         let scanner = PreScanner::new(&cfg);
         let result = scanner.run_blocking(|_, _| {});
 
-        // `.md` is outside the allow-list for DocumentFolder — counted
-        // as ignored. `.pdf` is in the list but pdf-extract can't parse
-        // it (not a real PDF) — that lands it in `scanned_pdfs` so the
-        // OCR pipeline gets a chance to recover it. `.txt` is readable.
-        assert_eq!(result.readable.len(), 1);
-        assert_eq!(result.readable[0].display_name, "a");
+        // `.txt` AND `.md` are both readable. Markdown used to be outside the
+        // DocumentFolder allow-list, and this test asserted that — encoding the
+        // bug as the spec. A drag-dropped folder of `.md` notes therefore
+        // ingested silently empty while the identical folder worked as a
+        // watched folder; see `DEFAULT_FOLDER_EXTENSIONS` in `config.rs`.
+        //
+        // `.pdf` is in the list but pdf-extract can't parse it (not a real
+        // PDF) — that lands it in `scanned_pdfs` so the OCR pipeline gets a
+        // chance to recover it. `.xyz` is genuinely unsupported, and is here so
+        // this test still proves the filter REJECTS something rather than
+        // silently degrading into "accepts everything".
+        let mut readable: Vec<&str> = result
+            .readable
+            .iter()
+            .map(|r| r.display_name.as_str())
+            .collect();
+        readable.sort_unstable();
+        assert_eq!(readable, vec!["a", "b"]);
         assert_eq!(result.scanned_pdfs.len(), 1);
         assert!(result.corrupt_files.is_empty());
-        // `.md` doesn't match the DocumentFolder allow-list.
-        assert_eq!(result.ignored_types, 1);
+        assert_eq!(result.ignored_types, 1, "`.xyz` must be ignored");
     }
 
     #[test]

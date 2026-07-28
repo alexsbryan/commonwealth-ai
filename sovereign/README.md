@@ -4,7 +4,7 @@ svrnmesh is an AI assistant that runs on your own computer. Ask it to write, to 
 
 Its optional mesh, **cmnwlth**, lets you pool machines with people you trust to run models no single one of you could hold alone ([more below](#cmnwlth)).
 
-Pre-release, source-available for audit under [AGPL-3.0-or-later](../LICENSE). Reading, building, and taking it apart is welcome; the contribution process is coming soon.
+Pre-release, source-available for audit under [AGPL-3.0-or-later](../LICENSE). Reading, building, and taking it apart is welcome. [CONTRIBUTING.md](../CONTRIBUTING.md) states what I can merge today — recipes, documentation, and interop configs are open.
 
 ## Quick start
 

@@ -57,6 +57,15 @@ use tempfile::TempDir;
 /// pragmatic workaround that keeps the E2E coverage without
 /// requiring a global test-runner flag. Held across the entire
 /// test body, including the splice.
+///
+/// SCOPE, because assuming otherwise cost a real debugging session: this mutex
+/// is PROCESS-LOCAL. nextest runs one process per test, so under the default
+/// runner it serialises nothing — every test in this file takes an uncontended
+/// lock in its own process. It only bites under `--engine cargo`, which runs a
+/// binary's tests as threads. Anything these tests share OUTSIDE the process
+/// (a fixed path under `std::env::temp_dir()`, say) is therefore completely
+/// unprotected by it, and must carry its own uniqueness — see
+/// `recipe_to_tempfile` in `knowledge_view/manager.rs`.
 static INGEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
@@ -285,7 +294,16 @@ async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
     // Run initial ingest — acquirer materialises memories → JSONL,
     // extractor parses, passthrough chunker emits one chunk per
     // memory, embedder runs the zero-vector stub, LanceDB writes.
-    manager.init().await.expect("init ingests empty views");
+    // Only personal-knowledge is seeded here, so require only that one.
+    // conversation-history (no messages) and institutional-notes (no notes db)
+    // legitimately have nothing to ingest in this fixture — asserting a clean
+    // sweep would make their expected emptiness look like a defect.
+    let report = manager.init().await.expect("init ingests empty views");
+    assert_eq!(
+        report.failure_for(VIEW_PERSONAL_KNOWLEDGE),
+        None,
+        "the view this test plants a skeleton into must ingest"
+    );
 
     // Plant a skeleton directly on disk so the splice path has
     // something to read. (Full enrichment with the inference stub is
@@ -635,7 +653,21 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
         )
         .await,
     );
-    manager.init().await.expect("ingest views");
+    // Assert on the ingest OUTCOME, not on a downstream symptom. When
+    // conversation-history's ingest failed, `init` still returned Ok and this
+    // test died 5 lines later inside `plant_conversation_skeleton` with "no
+    // index directory for view 'conversation-history'" — which describes the
+    // wreckage, not the cause. `report.failed` carries the real error.
+    let report = manager.init().await.expect("ingest views");
+    for view in [VIEW_PERSONAL_KNOWLEDGE, "conversation-history"] {
+        assert_eq!(
+            report.failure_for(view),
+            None,
+            "'{view}' must ingest before its skeleton is planted"
+        );
+    }
+    // institutional-notes is NOT required: the notes db above is an empty file
+    // with no `notes` table, so its ingest is expected to fail and be skipped.
 
     // Plant skeletons that share a "purpose / meaningful work"
     // axis and an "autonomy" axis across two different views.

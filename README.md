@@ -53,11 +53,11 @@ svrn mesh join <key>    # on each machine you're pooling in
 
 ## Going deeper
 
-New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Building an integration? [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
+New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
 
 ## Contributing
 
-One steward now, opening toward a commons, but I'm not merging outside PRs yet: the architecture and principles are still settling, and I want that foundation solid before I start adjudicating what merges. So a bug report or an idea is the best way in right now, always welcome; code contribution opens as the ground firms up and the team grows. [CONTRIBUTING.md](./CONTRIBUTING.md) is how, [GOVERNANCE.md](./GOVERNANCE.md) is who decides and where it's headed. Security or privacy: [SECURITY.md](./SECURITY.md), not the tracker.
+One steward now, opening toward a commons. Recipes, documentation fixes, and interop configs are open for pull requests today; core architecture isn't yet, because the principles are still settling and I want that foundation solid before I start adjudicating what merges. Bug reports and ideas are always welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) is the full and only statement of what I can merge — including [how to contribute a recipe](./CONTRIBUTING.md#contributing-a-recipe), the easiest way in. [GOVERNANCE.md](./GOVERNANCE.md) is who decides and where it's headed. Stuck on something? [SUPPORT.md](./SUPPORT.md) is where to start. Security or privacy: [SECURITY.md](./SECURITY.md), not the tracker.
 
 ---
 

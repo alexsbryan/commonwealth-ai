@@ -2,33 +2,53 @@
 
 Thanks for being here — genuinely. This started as one person building AI tools
 for people, by people, and the whole point is that it gets better together. So
-first, the honest version: the most useful thing you can do right now probably
-isn't a pull request. Let me explain how this works, because being straight
-about it up front saves us both time.
+first, the honest version: some doors are open and some aren't yet, and I'd
+rather tell you which is which up front than have you find out from a closed PR.
 
 The short version: the assistant runs on your own machine, nothing phones home,
 and every answer traces back to a source. Changes that hold that line and come
-with a test proving they work are the easiest to merge.
+with a test proving they work are the easiest to merge. If you want the
+shortest path in, it's [a recipe](#contributing-a-recipe).
 
-## How contribution works right now
+## What I can merge today
 
 The code is AGPL — yours to run, read, fork, and change, forever. That door's
-open and stays open. But I want to be completely straight with you, because it
-saves everyone the wasted effort: **for now, I'm not merging pull requests from
-outside the core team. Not the big ones, not the one-liners — not yet.**
+open and stays open. Pull requests are open too, but not yet for everything, and
+I'd rather draw that line clearly than waste your afternoon.
 
-Here's the honest why. The architecture and the principles this thing is built
-on are still settling; `sovereign/SYSTEM_OVERVIEW.md` and
+**Open now:**
+
+- **Recipes.** A recipe turns a source into a searchable, cited corpus, and it's
+  one TOML file. The schema is generated from the code and test-gated, so review
+  is mechanical rather than a matter of taste — which is exactly why this is the
+  first door open. See [Contributing a recipe](#contributing-a-recipe).
+- **Documentation fixes.** Typos, wrong commands, stale paths, a walkthrough
+  that doesn't work on your machine. Send the PR; you don't need to file an
+  issue first.
+- **Client configs and interop.** If you got Commonwealth working with a tool
+  [INTEROP.md](./docs/INTEROP.md) doesn't cover, add it. Real config that you
+  actually ran beats a guess, so say which version you tested against.
+
+**Not yet:**
+
+- Core architecture, new crates, and changes to the runtime, inference, or mesh.
+
+Here's the honest why for that last line. The architecture and the principles
+this thing is built on are still settling; `sovereign/SYSTEM_OVERVIEW.md` and
 `sovereign/ARCH_PRINCIPLES.md` are living documents right now, not stone. Until
-that foundation is solid, I have no fair way to decide what belongs and what
-doesn't — and I'd rather say that out loud than accept your PR today and turn
-away an identical one next month for reasons I couldn't put into words. Settle
-the ground first, open the gates second. It isn't aloofness and it isn't
+that foundation is solid I have no fair way to decide what belongs and what
+doesn't — and I'd rather say so than accept your PR today and turn away an
+identical one next month for reasons I couldn't put into words. Settle the
+ground first, open the gates wider second. It isn't aloofness and it isn't
 forever; it's the difference between pouring a foundation and hosting a hundred
 contractors in the framing. [GOVERNANCE.md](./GOVERNANCE.md) tells the rest of
 the story.
 
-None of that means go away — it means the useful energy goes here:
+If you want to work on something in the "not yet" list, open an issue describing
+what you're trying to do. Sometimes the answer is "actually, yes" — and if it
+isn't, the issue is still how the roadmap gets steered.
+
+Other useful energy, no PR required:
 
 - **Report a bug.** Use the bug template — it asks for your version and platform
   up front; `svrn doctor` output helps if the daemon, mesh, or models are
@@ -36,19 +56,82 @@ None of that means go away — it means the useful energy goes here:
 - **Float an idea or a feature request.** Through the issue template. Describe
   what you're trying to do, not just the fix you have in mind. A thumbs-up on
   someone else's is a vote (see [GOVERNANCE.md](./GOVERNANCE.md)).
-- **Spot a wrong turn in the docs?** Tell me in an issue and I'll fix it fast —
-  yes, even the typos. For now the reliable path is an issue, not a PR.
-- **Want to actually build?** That's the whole goal, and it opens as the
-  foundation firms up and the team grows. Show up in the issues and discussions,
-  share what you learn running a real mesh, and when there's real trust and real
-  room, you get pulled in — a seat at the table, and the CLA that comes with it.
-  The alpha-collaborator signup on the site is how you knock.
+- **Run a real mesh and say what broke.** This is worth more than it sounds.
+  Most of what's hard here only shows up on someone else's hardware.
 
 Same refrain as everywhere else: be patient, be constructive, then when this
 actually works, demand the best.
 
 For anything security- or privacy-related — including a way data could leave a
 machine unexpectedly — don't open a public issue. See [SECURITY.md](./SECURITY.md).
+
+## Contributing a recipe
+
+A recipe turns a source — a public archive, a dataset, an API — into a
+searchable, cited corpus. It's one TOML file describing six stages, and no Rust:
+
+```toml
+[corpus]
+id = "my-corpus"
+name = "Human-readable name"
+description = "One sentence on what's in it and who it's for."
+license = "CC-BY-SA-4.0"      # the SOURCE's license, not ours
+mesh_sharing = true
+
+[acquire]                      # where the bytes come from
+type = "bulk_download"
+
+[extract]                      # bytes → text
+type = "markdown"
+
+[chunk]                        # text → retrievable units
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+```
+
+Two files change: `sovereign-recipes/<id>/recipe.toml`, and a matching
+`[[recipes]]` entry in `sovereign-recipes/registry.toml` — the canonical catalog
+that `corpus-engine` vendors at build time. Start by copying the closest
+existing recipe; [`GETTING_STARTED.md`](./sovereign-recipes/GETTING_STARTED.md)
+walks the first one, and [`SCHEMA.md`](./sovereign-recipes/SCHEMA.md) is the
+field reference — it's generated from the code and test-gated, so it can't drift
+from what the loader accepts.
+
+**Run these before you open the PR.** They're the same checks review runs, so
+there's no reason to find out from me:
+
+```sh
+svrn recipe validate sovereign-recipes/<id>/recipe.toml
+svrn recipe test sovereign-recipes/<id>/recipe.toml
+```
+
+**Get the licensing right — it's the part I can't fix for you.** The `license`
+field is the *source's* license, and two flags decide what peers may do with the
+result:
+
+- `mesh_sharing` — may a peer **copy** the built index? Set it `false` when the
+  source license forbids redistribution. The Stanford Encyclopedia recipe is the
+  worked example: freely searchable, not redistributable.
+- `query_sharing` — may a peer **search** it and receive cited snippets back?
+  Narrower than copying, and often the right answer when `mesh_sharing` is false.
+- `scope = "local"` — never advertised to peers at all. Right for anything
+  personal.
+
+If you don't have the right to redistribute a source, that isn't a blocker — it's
+a `mesh_sharing = false` recipe, and those are welcome. Please don't submit a
+recipe pointing at something you can't legally redistribute while marked as
+though you can.
+
+**Prebuilt indexes.** Large corpora ship a pre-built index so nobody has to
+embed 51,000 articles on a laptop. The registry entry carries a `[recipes.prebuilt]`
+block naming a Hugging Face repo, filename, sha256, and the embedding model it
+was built with — restore refuses on a model mismatch rather than corrupting
+silently. If your corpus is big enough that a cold build is painful, publish the
+index to Hugging Face and reference it there. This is the cheapest way to make a
+corpus genuinely usable by someone else.
 
 ## Getting set up
 
@@ -74,35 +157,43 @@ daemon's lint/test watcher to the workspace.
 
 ## The development loop
 
-Open the PR whenever you're ready — CI runs the full gate for you (a workspace
-build, the test suite, a deterministic mesh fault-injection suite, and an
-architecture gate) and reports back right on the PR. You don't have to reproduce
-any of it by hand.
+Open the PR whenever you're ready and CI reports back on it. Be aware of exactly
+what it does and doesn't cover, so a green check doesn't tell you more than it
+means.
 
-If you'd rather be sure before you push, these are the same commands CI runs:
+**What CI blocks on today** (`.github/workflows/ci.yml`, aggregated by `ci-ok`):
+`fmt` (rustfmt, pinned toolchain), `desktop` (svelte-check + vitest + the
+Playwright suite), and `test` (`./scripts/sovereign-test.sh --human` over the
+whole workspace). A separate workflow, `docs-reconcile`, checks that every repo
+path cited by the narrative docs still resolves.
+
+**What is currently shelved** — commented out in `ci.yml` since 2026-07-14 and
+gating nothing: the structural gates (arch, layer, lock, boundary), `cargo deny`,
+the clippy count-ratchet, and the deterministic mesh fault-injection suite. They
+still work locally, and running them is the difference between "CI is green" and
+"this is actually clean":
 
 ```sh
-cargo check --workspace --all-targets
-cargo test --workspace
-cargo fmt --all --check              # blocking; the toolchain is pinned (rust-toolchain.toml)
-cargo run -p xtask -- quality        # every local gate, one summary table
+cargo run -p xtask -- quality        # every structural gate, one summary table
 ```
 
-`cargo xtask quality` bundles the sub-second structural gates: arch-gate
-(file-size ratchet), docs-gate (every path the narrative docs cite must
-resolve), boundary-gate (the studio package stays liftable), layer-gate
-(dependency direction per `quality/ARCH_LAYERS.toml` + god-crate fan-in
-caps), and lock-gate (no new duplicate crate versions). Each failure message
-ends with the exact command that fixes it; baselines live under
-`quality/baselines/` and may only shrink (see ARCH_PRINCIPLES §8.6).
+`cargo xtask quality` bundles arch-gate (file-size ratchet), docs-gate (every
+path the narrative docs cite must resolve), boundary-gate (the studio package
+stays liftable), layer-gate (dependency direction per `quality/ARCH_LAYERS.toml`
+plus god-crate fan-in caps), and lock-gate (no new duplicate crate versions).
+Each failure message ends with the exact command that fixes it; baselines live
+under `quality/baselines/` and may only shrink (see ARCH_PRINCIPLES §8.6).
 
-Clippy runs in CI as a count ratchet (lint-gate): existing warnings are
-grandfathered per crate/lint, so you only need to care about warnings YOUR
-change introduces — the gate names them. The lane is advisory during its
-burn-in month, blocking after. There's a friendlier test wrapper the
-maintainer uses day to day, `./scripts/sovereign-test.sh --human`, which
-prints a compact summary and takes `--package <crate>` / `--filter
-<pattern>` to narrow a run; it's optional.
+If you'd rather be sure before you push:
+
+```sh
+./scripts/sovereign-lint.sh --human   # workspace check, friendly summary
+./scripts/sovereign-test.sh --human   # the same suite CI runs
+```
+
+Both take `--package <crate>` / `--filter <pattern>` to narrow a run. Note that a
+run matching zero tests exits non-zero on purpose — a filtered run that verified
+nothing is not a pass.
 
 ## What makes a change easy to merge
 

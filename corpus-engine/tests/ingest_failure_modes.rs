@@ -212,6 +212,123 @@ async fn ingest_adapts_to_actual_embedding_dimensions() {
     assert!(indexes_dir.join("test_corpus").exists());
 }
 
+/// Ingest into a canonical directory another subsystem already owns.
+///
+/// Ingest fills `<index_dir>/<corpus>-partition-<node>/` and only
+/// `finalise_solo_ingest` materialises the canonical `<corpus>/`. That
+/// directory is a shared address — the enrichment sink, the
+/// watched-folder machinery, the atlas builder and the SCIP reindexer
+/// all write into it while ingest is still running — so promotion has
+/// to merge into a non-empty destination rather than assume it owns
+/// the path.
+///
+/// WHAT THIS TEST DOES AND DOES NOT PIN. It exercises the real
+/// `ingest()` → `finalise_solo_ingest()` → `promote_single_shard()`
+/// path and asserts three things end to end: the corpus reaches
+/// canonical, every pre-existing sidecar survives, and BOTH corpus
+/// surfaces resolve it afterwards.
+///
+/// That last assertion is the load-bearing one. `installed_indexes()`
+/// (retrieval) enumerates directories and keys each one off its meta's
+/// `corpus_id` — which a partition also declares — while
+/// `open_index_for_corpus` (the reading surface) matches by directory
+/// name. When promotion fails they disagree, and that disagreement is
+/// the whole user-visible bug: retrieval cites chunks the reading desk
+/// then cannot dereference. A test that checked only
+/// `installed_indexes()` would have stayed green through the entire
+/// incident.
+///
+/// It does NOT reproduce the historical refusal (note 79fdd04c).
+/// Verified by running it against the pre-fix `sharding.rs`: it passes
+/// there too. The old code refused only when the SAME entry name
+/// existed on both sides, and a plain recipe ingest puts just
+/// `_corpus_meta.json` and `chunks.lance` in the partition — both of
+/// which promotion still refuses to merge by design. The production
+/// failure needed `_enrichment_state.json` in the partition as well,
+/// which only the watched-folder path (enrichment sink active) writes.
+/// The refusal itself is pinned by the `promote_single_shard_*` tests
+/// in `sharding.rs`, which do fail without the fix.
+#[tokio::test]
+async fn ingest_promotes_into_a_canonical_dir_another_subsystem_owns() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let parquet_path = dir.path().join("fixture.parquet");
+    make_tiny_parquet(&parquet_path);
+    let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
+
+    // Lose the race on purpose: the canonical dir already holds the
+    // sidecars other subsystems drop there mid-ingest.
+    let canonical = indexes_dir.join("test_corpus");
+    std::fs::create_dir_all(canonical.join("atlas")).unwrap();
+    std::fs::write(
+        canonical.join("_enrichment_state.json"),
+        br#"{"status":"Running"}"#,
+    )
+    .unwrap();
+    std::fs::write(canonical.join("_watched_folder_state.json"), br#"{}"#).unwrap();
+    std::fs::write(canonical.join("atlas/.read_v2"), b"").unwrap();
+    std::fs::write(canonical.join("scip_graph.db"), b"sqlite-stub").unwrap();
+
+    let embed_fn: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
+    let engine = build_engine(embed_fn, recipes_dir, indexes_dir.clone());
+
+    let result = engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("ingest itself must succeed");
+    assert!(result.chunks_created > 0);
+
+    // The corpus landed in canonical, not just its sidecars.
+    assert!(
+        canonical.join("_corpus_meta.json").exists(),
+        "promotion must materialise the canonical meta",
+    );
+    assert!(canonical.join("chunks.lance").exists());
+
+    // Every pre-existing sidecar survived — promotion must not have
+    // bulldozed the directory it merged into.
+    for sidecar in [
+        "_enrichment_state.json",
+        "_watched_folder_state.json",
+        "scip_graph.db",
+        "atlas/.read_v2",
+    ] {
+        assert!(
+            canonical.join(sidecar).exists(),
+            "{sidecar} must survive promotion",
+        );
+    }
+
+    // No partition left stranded beside the canonical.
+    let strays: Vec<_> = std::fs::read_dir(&indexes_dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with("test_corpus-partition-"))
+        .collect();
+    assert!(
+        strays.is_empty(),
+        "partition must be consumed, found stranded: {strays:?}",
+    );
+
+    // ── The divergence check ──
+    // Retrieval and the reading surface resolve corpora by different
+    // strategies. Asserting only the first is what let this ship.
+    let installed = engine.installed_indexes().await.unwrap();
+    assert!(
+        installed.iter().any(|i| i.corpus_id == "test_corpus"),
+        "retrieval must see the corpus",
+    );
+    let index = engine
+        .open_index_for_corpus("test_corpus")
+        .await
+        .expect("the READING surface must resolve it too — this is the assertion that fails when the partition is stranded");
+    assert!(index.info().await.unwrap().chunk_count > 0);
+}
+
 /// The cleanup path. The pre-flight succeeds, but the embed function
 /// blows up partway through the chunk loop. We must remove the
 /// partial index directory before propagating the error.

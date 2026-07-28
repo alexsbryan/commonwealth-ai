@@ -5,6 +5,11 @@ which are internals that happen to be visible. Read this before
 writing an integration — it exists so you don't spend a day on a
 surface that was never meant to hold your weight.
 
+If you just want to point a tool you already run at a local daemon —
+Claude Code, Codex, an Ollama client, an OpenAI SDK, your editor —
+start with [INTEROP.md](./INTEROP.md) and come back here before you
+build anything load-bearing.
+
 ## Build on these
 
 **OpenAI-compatible inference API** — `:9741` serves
@@ -75,6 +80,13 @@ manifest documents.
 
 **iroh encrypted transport** (`cwth/http/0` ALPNs) — feature-gated,
 excluded from default builds.
+
+**`[[inference.backends]]` in `sovereign-server.toml`** — the only
+way to put Sovereign in front of an external OpenAI-compatible server
+(vLLM, SGLang, llama.cpp, TGI, a LiteLLM proxy). Real and working, but
+`sovereign-server` is build-from-source and not one of the three
+shipped binaries, so treat the key names as unsettled. Documented in
+[INTEROP.md](./INTEROP.md#9-going-the-other-way).
 
 **The desktop command bridge on `:9745`** — a debug-build-only,
 env-gated Playwright test harness. It must never ship enabled in a

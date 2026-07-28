@@ -1094,14 +1094,18 @@ fast_model = "Qwen/Qwen3-1.7B-GGUF"
 primary_model = "Qwen/Qwen3-14B-GGUF"
 embed_model = "Qwen/Qwen3-Embedding-0.6B-GGUF"
 
-# Or point at an existing inference endpoint:
-# mode = "remote"
+# Or point at an existing inference endpoint. The shipped shape is a list of
+# [[inference.backends]], NOT a `mode` key — see sovereign-server.toml and
+# docs/INTEROP.md §9 for the config the loader actually accepts:
+# [[inference.backends]]
+# name     = "vllm-cluster"
+# type     = "remote"
 # endpoint = "http://vllm-cluster:8000/v1"
-
-# Or hybrid:
-# mode = "hybrid"
-# local_fast = "Qwen/Qwen3-1.7B-GGUF"
-# remote_primary = "http://vllm-cluster:8000/v1"
+# model_id = "Qwen3-32B"
+# priority = 2
+#
+# Hybrid is the same list with an "embedded" entry alongside; priority
+# (lower wins) decides which is tried first.
 
 [store]
 mode = "postgres"
