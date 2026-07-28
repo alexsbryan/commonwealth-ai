@@ -38,6 +38,7 @@
 //   node tests/e2e/scripts/sabotage.mjs --suite real
 //   node tests/e2e/scripts/sabotage.mjs --json out.json
 //   node tests/e2e/scripts/sabotage.mjs --allow-dirty   # see SAFETY
+//   node tests/e2e/scripts/sabotage.mjs --bank ./exploratory-bank.mjs
 //
 // Exit 0 only when every selected mutant was CAUGHT.
 // Exit 1 on any SURVIVED or STALE. Exit 2 on a safety failure (see below).
@@ -62,8 +63,6 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BANK } from "../sabotage-bank.mjs";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const BACKUP_DIR = path.join(CRATE_ROOT, "test-artifacts", ".sabotage");
@@ -84,6 +83,12 @@ const value = (name, fallback) => {
 const ONLY = value("--only", null);
 const SUITE = value("--suite", "synthetic");
 const JSON_OUT = value("--json", null);
+// An alternate bank. The committed one is a regression floor; an exploratory
+// bank (e.g. source-first mutants aimed at finding holes rather than
+// confirming coverage) can be run without touching it.
+const BANK_PATH = value("--bank", path.join(__dirname, "../sabotage-bank.mjs"));
+
+const { BANK } = await import(new URL(`file://${path.resolve(BANK_PATH)}`).href);
 
 if (!CONFIG_FOR_SUITE[SUITE]) {
   console.error(`unknown --suite ${SUITE} (expected: ${Object.keys(CONFIG_FOR_SUITE).join(", ")})`);
