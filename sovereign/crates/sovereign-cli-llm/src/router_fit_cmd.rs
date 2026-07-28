@@ -306,6 +306,22 @@ async fn cmd_fit(args: &[String]) -> i32 {
             .join("models")
             .join(&slot.file)
     });
+    // What was ACTUALLY loaded, which `--embed-model` can make
+    // different from what models.toml prescribes. Every number below
+    // is a property of this file, so this — not `slot.file` — is what
+    // the report and the drift baseline must carry: two runs against
+    // two different GGUFs recorded under one prescribed name would be
+    // declared comparable, and their cosines are not.
+    //
+    // The file NAME rather than the path: an absolute path would make
+    // every cross-machine comparison unattributable, and by this
+    // repo's convention one filename is one model.
+    let measured_model = model_path
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| slot.file.clone());
+    let is_override = measured_model != slot.file;
+
     if !model_path.is_file() {
         eprintln!(
             "router fit: prescribed embed model not found:\n  {}\n\
@@ -321,8 +337,15 @@ async fn cmd_fit(args: &[String]) -> i32 {
             "router fit: {} cases from {} bank(s), embedding with {} …",
             cases.len(),
             files.len(),
-            slot.file
+            measured_model
         );
+        if is_override {
+            eprintln!(
+                "router fit: NOTE --embed-model overrides the prescribed {}. \
+                 These numbers describe {}, not production.",
+                slot.file, measured_model
+            );
+        }
     }
     let provider: Arc<dyn InferenceProvider> =
         match EmbedOnlyProvider::load(&model_path, embed_family) {
@@ -500,9 +523,19 @@ async fn cmd_fit(args: &[String]) -> i32 {
     }
 
     // ── Drift against the last recorded run ──────────────────────
+    // Repo-relative: this snapshot gets committed, and an absolute
+    // path would bake one developer's home directory into a shared
+    // artifact and re-diff on every other machine. Comparability keys
+    // on `bank_digest`, so these paths are for the human reading the
+    // JSON — which is exactly why they should read the same everywhere.
+    let bank_names: Vec<String> = files
+        .iter()
+        .map(|f| f.strip_prefix(&root).unwrap_or(f).display().to_string())
+        .collect();
+
     let snapshot = FitSnapshot {
-        embed_model: slot.file.clone(),
-        banks: files.iter().map(|f| f.display().to_string()).collect(),
+        embed_model: measured_model.clone(),
+        banks: bank_names.clone(),
         bank_digest: bank_digest(&raw_banks),
         axes: reports.clone(),
     };
@@ -549,8 +582,9 @@ async fn cmd_fit(args: &[String]) -> i32 {
 
     if opts.json {
         let payload = serde_json::json!({
-            "embed_model": slot.file,
-            "banks": files.iter().map(|f| f.display().to_string()).collect::<Vec<_>>(),
+            "embed_model": measured_model,
+            "prescribed_embed_model": slot.file,
+            "banks": bank_names,
             "bank_digest": snapshot.bank_digest,
             "cases_total": cases.len(),
             "skipped": skipped.iter().map(|(id, ax)| serde_json::json!({"id": id, "axis": ax})).collect::<Vec<_>>(),
@@ -560,7 +594,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
         });
         println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
     } else {
-        print_human(&reports, &shipped, &skipped, &slot.file);
+        print_human(&reports, &shipped, &skipped, &measured_model);
         match &drift {
             Some(d) => print_drift(d, &dir),
             None if !opts.no_drift => println!(
@@ -791,12 +825,31 @@ fn print_drift(d: &DriftReport, dir: &Path) {
     }
 
     if !d.attributable() {
+        // Name the reason that actually applies. Listing both every
+        // time would teach the reader to skip the line, which is how a
+        // caveat stops being read at all.
+        let why = match (d.same_model(), d.same_bank()) {
+            (false, false) => {
+                "the encoder AND the bank both changed — two encoders' cosines are\n  \
+                 coordinates in different spaces, and a different bank asks different\n  \
+                 questions"
+            }
+            (false, true) => {
+                "the encoder changed — cosines from two models are coordinates in\n  \
+                 different spaces, so subtracting them yields a number, not a\n  \
+                 measurement"
+            }
+            _ => {
+                "the bank changed — adding or editing cases moves separation\n  \
+                 legitimately, which is better measurement rather than drift"
+            }
+        };
         println!(
-            "\n  ! NOT ATTRIBUTABLE. What follows are real differences between two\n  \
-               runs, but not between two measurements of the same thing: cosines\n  \
-               from another encoder live in another space, and another bank asks\n  \
-               other questions. Nothing below is called a regression. Once the\n  \
-               change is deliberate, re-record with --save-baseline."
+            "\n  ! NOT ATTRIBUTABLE: {why}.\n  \
+               What follows are real differences between two runs, but not between\n  \
+               two measurements of the same thing, so nothing below is called a\n  \
+               regression. Once the change is deliberate, re-record the baseline\n  \
+               with --save-baseline."
         );
     }
     println!();

@@ -40,6 +40,7 @@ run](#what-ci-does-not-run), which is the most important section here.
 | Demo reel | `npm run demo` | 9 product beats; a failed beat exports no clip | no |
 | a11y | `npm run a11y` | Accessibility report | no |
 | Soak / chaos / personas | `npm run soak` · `chaos` · `personas.mjs` | Long-run stability and answer quality | no |
+| **Production boot chain** | `scripts/wizard-verify.sh` | The path a **shipped install** actually takes: fresh wizard → `complete_setup` → supervised relaunch → `current_exe() --daemon-child` → Attach. Linux-only (`unshare`). | no |
 | Whole-stack smoke | `scripts/desktop-smoke.sh` | All of the above, budgeted, in one run | no |
 
 ### What the three Playwright configs are for
@@ -56,6 +57,40 @@ lives, not by how it is named.
 
 `real` and `faults` are separate configs because the fault specs kill processes
 and own ports — they cannot share a run with anything.
+
+### Fidelity — how far each layer sits from what a user runs
+
+The layer table says what each suite *proves*. This says how much that proof is
+worth for the **shipped** app, which is a different question and the one that
+actually governs confidence.
+
+| | Layer | Backend | Boot mode |
+|---|---|---|---|
+| F0 | vitest | jsdom | none |
+| F1 | synthetic e2e | mocked Tauri over `vite dev` | none |
+| F2 | real-mode e2e | real desktop binary + fixture daemon | `Local{DesktopLegacy}` / forced-local |
+| F3 | attach real-mode / demo | real daemon, real models | `Attach` |
+| F4 | fault suite | supervised child daemon | supervisor, **`SOVEREIGN_CLI_PATH` branch** |
+| F5 | `wizard-verify.sh` | real binary, private netns | supervisor, **`current_exe() --daemon-child`** |
+| — | packaged `.dmg`/`.exe`/`.AppImage` on a clean machine | — | **nothing automated** |
+
+**CI stops at F1.** Production is F5 (`supervisor_setup.rs:39-46` — supervised
+is the default since 2026-07-18; `:102-109` — a *fresh* boot is
+`Fresh`/`DesktopLegacy` and falls through to the wizard unsupervised, so the
+supervised chain only engages from the **second** launch onward).
+
+Two consequences worth stating plainly:
+
+- **F1 cannot assert that any answer is correct.** Every "answer" in the
+  synthetic suite is a string the test injected via `chat.api.completeMessage()`.
+  It tests the UI's reaction to fabricated events — a legitimate thing to test,
+  and not a thing to draw product confidence from.
+- **F4 and F5 exercise different branches of the same function.**
+  `resolve_daemon_child()` (`supervisor_setup.rs:64-79`) prefers
+  `SOVEREIGN_CLI_PATH` when set. Every supervised lane in the repo sets it
+  (`faults/spawn.ts:151`, `tests/e2e/scripts/lib/harness.mjs:257`) except
+  `wizard-verify.sh`, which unsets it. So F5 is the *only* coverage of the
+  branch a packaged install takes, and it is Linux-only.
 
 ---
 
@@ -183,10 +218,12 @@ floor 0.8): no rubric or judge change may score runs without passing it. See
 - **`scripts/desktop-smoke.sh`** — the whole-stack run, fail-fast and budgeted.
   Phase 0 (lint + svelte-check + vitest + synthetic e2e + desktop unit tests) is
   a **hard stop**; 1 perf, 2 daemon quality, 3 desktop-layer bridge routing, 5
-  safety soak share the resident daemon; **Phase 4 runs last** because it owns
-  its own hermetic `:9741` for managed real-mode + faults. Budgets are tunable
-  per phase (`SMOKE_P<n>_SECS`), and skipped phases are always reported — no
-  silent gaps. Exit 1 = a gate failed, 2 = hard stop or setup error.
+  safety soak share the resident daemon; **Phase 4** runs after them because it
+  owns its own hermetic `:9741` for managed real-mode + faults; **Phase 6 runs
+  last** — `wizard-verify.sh` in a private netns, which needs no port handoff at
+  all. Budgets are tunable per phase (`SMOKE_P<n>_SECS`), and skipped phases are
+  always reported — no silent gaps. Exit 1 = a gate failed, 2 = hard stop or
+  setup error.
 - **`scripts/desktop-soak.py`** — the canonical desktop chaos + persona soak
   (`--mode dual|chaos|persona`); builds HEAD, restarts the daemon, health-gates.
 - **`npm run demo`** → `npm run demo:export` — the product reel as an acceptance
@@ -219,5 +256,20 @@ Stated plainly, because the gap is the thing most likely to bite you:
   `suite: "synthetic"`, so nothing has yet measured whether the real-mode and
   fault layers above would catch anything. Those are the layers CI never runs.
 
+- **An instrument that is on no map runs nowhere.** `wizard-verify.sh` — the
+  only coverage of the packaged boot chain (F5 above) — sat referenced by
+  `DAEMON_RESILIENCE.md` and by nothing executable from 2026-07-18 until
+  2026-07-28, despite catching a ship-blocking bug on its first run:
+  `mirror_to_setup_config`'s no-op short-circuit meant fresh desktop-only
+  installs never wrote `config.toml`, so supervision would never have engaged
+  for them. Unit tests were green; the journey was broken. It is now
+  `desktop-smoke.sh` Phase 6. **When you add a harness, add it to the layer
+  table in the same commit** — that table is the only thing standing between a
+  good instrument and this outcome. `daemon-soak.sh`, `daemon-supervised.sh`
+  and `mesh-soak.sh` are still off it.
+
 If you are about to cut a release, `scripts/desktop-smoke.sh` is the closest
-thing to a complete answer, and it is not cheap. Budget for it.
+thing to a complete answer, and it is not cheap. Budget for it — and read its
+scoreboard for `SKIP` rows, not just the final verdict. On macOS and Windows,
+Phase 6 always skips, which means the boot chain those users run is verified on
+no machine you own.

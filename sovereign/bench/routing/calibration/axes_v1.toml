@@ -50,6 +50,17 @@
 #   correct behaviour is to fall through to the cascade. Firing here is
 #   an error and is counted as a false positive.
 #
+# * AT LEAST FIVE CASES PER CLASS PER AXIS
+#   (`router_calibration::MIN_CASES_PER_CLASS`). The first real run of
+#   this bank, on 2026-07-28, had three or four cases on each binary
+#   axis and fitted the archive gate to a margin of -0.101 and the scope
+#   gate to -0.152 — thresholds that score perfectly and admit queries
+#   where the NEGATIVE class won. `FitReport::underpowered()` now flags
+#   any axis under the floor, and the report says to grow the bank
+#   rather than move the constant. Adding a case is cheap; a constant
+#   moved on four samples is the fit-on-your-own-test-set failure this
+#   whole bank exists to avoid.
+#
 # ── What is NOT here ──────────────────────────────────────────────
 #
 # The archive and locator axes keep their existing held-out guards in
@@ -285,6 +296,48 @@ query = "what is a transformer, in the machine-learning sense?"
 expect = "abstain"
 note = "Plain world question. Blocked by the absolute floor rather than the margin; a regression here means the prefixed embedding space shifted."
 
+[[case]]
+id = "loc_your_second_option"
+axis = "locator"
+query = "go back to the second option you listed"
+expect = "conversation"
+note = "Replay of the assistant's own prior turn, phrased as an imperative. The imperative surface is the trap: `exemplars.toml` carries a conation row that steals exactly this shape, so this case sits on the axis's nearest documented confusion without echoing it."
+
+[[case]]
+id = "loc_did_i_contradict"
+axis = "locator"
+query = "did I contradict myself anywhere above?"
+expect = "conversation"
+note = "A consistency check over the turns already in context — answerable ONLY from this thread, and a shape no exemplar covers. If the locator floor is really about in-context questions rather than about a handful of memorised phrasings, this must clear it."
+
+[[case]]
+id = "loc_what_were_the_three"
+axis = "locator"
+query = "what were the three things you just listed?"
+expect = "conversation"
+note = "Enumeration replay. Distinguished from loc_your_second_option by asking for the whole set rather than one member, which is the sub-shape the exemplar bank labels C."
+
+[[case]]
+id = "loc_abstain_across_all_chats"
+axis = "locator"
+query = "across all our chats, what have I asked about most?"
+expect = "abstain"
+note = "The exemplar file states the rule outright: archive-recall shapes must NOT be tagged as locator, because they search the conversation CORPUS rather than this thread. Firing here would answer a corpus question from the message list and confidently miss everything the user actually said."
+
+[[case]]
+id = "loc_abstain_summarize_pasted"
+axis = "locator"
+query = "summarise the document I pasted in"
+expect = "abstain"
+note = "Self-referential to this thread and still not a locator question: the ask is a transformation of in-context content, not recall of it. Firing hard-commits to MetalingualQuery at confidence 0.95 and throws away the summarisation. The hardest negative here, because every surface cue points the wrong way."
+
+[[case]]
+id = "loc_abstain_notes_not_chat"
+axis = "locator"
+query = "what did I write in my notes about the schema?"
+expect = "abstain"
+note = "Personal, past, and first-person — but the referent is a notes corpus, not this conversation. Belongs to the scope axis. Included so the locator's positives cannot be satisfied by 'first-person plus past tense' alone."
+
 # ══════════════════════════════════════════════════════════════════
 # ARCHIVE AXIS — past conversations vs this thread vs the world
 # ══════════════════════════════════════════════════════════════════
@@ -317,6 +370,48 @@ query = "what's the population of Lisbon?"
 expect = "abstain"
 note = "Shares the salient entity with arc_lisbon_trip and nothing else. Tests that the axis keys on the archive-search FRAME, not on topical overlap."
 
+[[case]]
+id = "arc_first_mention_abroad"
+axis = "archive"
+query = "when did I first bring up the idea of moving abroad?"
+expect = "archive"
+note = "First-occurrence search over the archive — a shape the shipped exemplars do not cover, which run to yes/no probes and aggregate summaries. Only a corpus search can answer it; the answer is a point in history, not a theme."
+
+[[case]]
+id = "arc_which_conversation_was_that"
+axis = "archive"
+query = "we worked out a sourdough schedule at some point — which conversation was that in?"
+expect = "archive"
+note = "Asks the archive to IDENTIFY a conversation rather than to recall its content. Included because the retrieval is identical while the question shape is not, so it tests whether the axis generalises past 'what did I say about X'."
+
+[[case]]
+id = "arc_advice_i_ignored"
+axis = "archive"
+query = "what advice have you given me before that I clearly didn't take?"
+expect = "archive"
+note = "Aggregate over prior conversations from the ASSISTANT's side of them. The exemplars are almost entirely about what the user said; if the axis has quietly learned 'first person plus past' rather than 'search the archive', this is where it shows."
+
+[[case]]
+id = "arc_abstain_still_unclear"
+axis = "archive"
+query = "I'm still not clear on the second thing you explained"
+expect = "abstain"
+note = "This thread, phrased as a complaint rather than a question. A false positive sends a live confusion to archive retrieval and answers with something the user said months ago — the asymmetric error the 0.50 floor was raised for on 2026-07-26."
+
+[[case]]
+id = "arc_abstain_forward_looking"
+axis = "archive"
+query = "what should I do about the roof next spring?"
+expect = "abstain"
+note = "Deeply personal and firmly in the future. The sharpest available discriminator between this axis and the scope axis: scope should own it, archive must not, and nothing in the surface form separates them except tense."
+
+[[case]]
+id = "arc_abstain_remember_bait"
+axis = "archive"
+query = "do you remember what transformers are?"
+expect = "abstain"
+note = "Lexical bait. \"Do you remember\" is the archive vocabulary and the question is pure world knowledge. If the axis fires on this it has learned the words rather than the frame, which is precisely the failure the embedding gate replaced a keyword matcher to avoid."
+
 # ══════════════════════════════════════════════════════════════════
 # SCOPE AXIS — personal vs external
 # ══════════════════════════════════════════════════════════════════
@@ -342,6 +437,55 @@ query = "explain how transformers work"
 expect = "abstain"
 note = "No personal signal at all. The absolute floor exists to stop a no-signal query drifting personal just because that centroid sat marginally closer."
 
+[[case]]
+id = "scope_what_i_keep_getting_wrong"
+axis = "scope"
+query = "what do I keep getting wrong, based on everything I've told you?"
+expect = "personal"
+note = "Self-assessment that is only answerable from user-owned corpora. Names its own evidence source, which is the strongest possible personal signal short of saying the word."
+
+[[case]]
+id = "scope_why_stop_freelancing"
+axis = "scope"
+query = "why did I say I wanted to stop freelancing?"
+expect = "personal"
+note = "Recall of a stated personal reason. Paired deliberately with scope_abstain_generic_advice below: same domain, same vocabulary, opposite scope. The pair is this axis's tightest margin test."
+
+[[case]]
+id = "scope_harder_on_myself"
+axis = "scope"
+query = "am I harder on myself than I am on other people?"
+expect = "personal"
+note = "Introspective and comparative, with no retrieval verb anywhere in it. The exemplars lean on 'what did I say' phrasing; this one has none, so it tests whether the axis has learned self-reference or just a query template."
+
+[[case]]
+id = "scope_dreading_whats_coming"
+axis = "scope"
+query = "what have I got coming up that I said I was dreading?"
+expect = "personal"
+note = "Personal, forward-looking, and grounded in something the user stated earlier. Included as the future-tense positive: unlike the archive axis, scope is not a claim about tense, and this case is what proves it."
+
+[[case]]
+id = "scope_abstain_generic_advice"
+axis = "scope"
+query = "how do most people decide when to quit a job?"
+expect = "abstain"
+note = "The negative half of the scope_why_stop_freelancing pair. Near-total topical overlap; the only difference is whose life is being asked about. A false positive restricts a general question to the user's own corpora and returns nothing useful."
+
+[[case]]
+id = "scope_abstain_about_you"
+axis = "scope"
+query = "what do you think about remote work?"
+expect = "abstain"
+note = "Second person. Personal in grammar, about the ASSISTANT in fact. Every shipped negative is an impersonal world question, so nothing in the exemplar bank rules this out — which is exactly why it belongs here."
+
+[[case]]
+id = "scope_abstain_hypothetical_i"
+axis = "scope"
+query = "if I moved to Lisbon, what visa would I need?"
+expect = "abstain"
+note = "Two first-person pronouns and no personal history whatsoever — the answer is an external fact about visa rules. The sharpest negative available for an axis whose positive class is saturated with the word \"I\"."
+
 # ══════════════════════════════════════════════════════════════════
 # CURRENT-INFO AXIS — needs live data vs evergreen
 # ══════════════════════════════════════════════════════════════════
@@ -366,6 +510,55 @@ axis = "current_info"
 query = "how does oil pricing actually work?"
 expect = "abstain"
 note = "Mechanism question — evergreen despite the market vocabulary. The hardest negative for this axis: topical overlap with cur_brent_price is near-total."
+
+[[case]]
+id = "cur_central_bank_head"
+axis = "current_info"
+query = "who's running the central bank in Argentina these days?"
+expect = "current"
+note = "Incumbent identity. Changes without warning and lives outside any installed corpus, so a confident stale answer is indistinguishable from a correct one — the exact failure this axis exists to prevent."
+
+[[case]]
+id = "cur_site_still_down"
+axis = "current_info"
+query = "is the site still down?"
+expect = "current"
+note = "Six words, no named entity, no date. The degenerate lower bound for the positive class: if the axis needs a temporal keyword to fire, this is where it will miss."
+
+[[case]]
+id = "cur_did_they_release"
+axis = "current_info"
+query = "did they end up releasing the thing they announced in the spring?"
+expect = "current"
+note = "Past-tense verb, present-tense question. The answer is 'has it happened yet', which is time-sensitive; a tense-based heuristic reads it as history and gets it backwards."
+
+[[case]]
+id = "cur_situation_now"
+axis = "current_info"
+query = "what's the situation on the ground in Port-au-Prince now?"
+expect = "current"
+note = "Live situational report. Sits close to the evergreen exemplars about regional history, so it tests whether the axis separates 'about a place' from 'about that place right now'."
+
+[[case]]
+id = "cur_abstain_world_cup_month"
+axis = "current_info"
+query = "is the World Cup in June or July next year?"
+expect = "abstain"
+note = "A scheduled future date does not change day-to-day, so it is evergreen — the carve-out the shipped negatives state explicitly. Phrased as a disjunction rather than the exemplars' \"when is the next…\" so it tests the rule and not the template."
+
+[[case]]
+id = "cur_abstain_pound_after_2019"
+axis = "current_info"
+query = "what happened to the Lebanese pound after 2019?"
+expect = "abstain"
+note = "\"What happened\" plus a currency plus a recent year — every surface cue of a live-markets question, and a settled historical one. Sending it to an external search wastes a tool call and answers a worse question."
+
+[[case]]
+id = "cur_abstain_how_to_check_version"
+axis = "current_info"
+query = "how would I check whether a package has a newer version?"
+expect = "abstain"
+note = "A method question ABOUT currency rather than a request FOR current data. Saturated with the positive class's vocabulary while being permanently answerable; the sharpest negative on this axis."
 
 # ══════════════════════════════════════════════════════════════════
 # EFFORT AXIS — deep slot vs fast slot
@@ -396,3 +589,52 @@ axis = "effort"
 query = "thanks, that's helpful"
 expect = "abstain"
 note = "Pure acknowledgement. The degenerate lower bound for this axis."
+
+[[case]]
+id = "eff_not_the_summary"
+axis = "effort"
+query = "I don't want the summary version — take it apart properly."
+expect = "high"
+note = "A depth request with NO topic at all. The axis's stated claim is that it reads request SHAPE rather than subject matter; every shipped exemplar carries a topic, so this is the only case that actually tests the claim."
+
+[[case]]
+id = "eff_every_angle_incl_against"
+axis = "effort"
+query = "cover every angle on this, including the ones that argue against it"
+expect = "high"
+note = "Exhaustiveness plus an adversarial-completeness clause. Escalating is right: the fast slot reliably produces the one-sided version of this answer."
+
+[[case]]
+id = "eff_cpu_every_stage"
+axis = "effort"
+query = "lay out how a modern CPU actually executes an instruction — every stage, nothing hand-waved"
+expect = "high"
+note = "The topic-bearing positive, kept so the class is not all bare depth requests. Technical rather than historical, unlike every shipped exemplar, which is where a topic-keyed axis would fail."
+
+[[case]]
+id = "eff_dont_skip_boring"
+axis = "effort"
+query = "go through the whole argument and don't skip the parts that are boring"
+expect = "high"
+note = "Exhaustiveness expressed as a negative constraint. Included because the shipped exemplars all ask for completeness affirmatively (\"complete\", \"exhaustive\", \"in depth\") and a bank that only ever says it one way measures one phrasing."
+
+[[case]]
+id = "eff_abstain_exhaustive_but_shallow"
+axis = "effort"
+query = "list every country in South America"
+expect = "abstain"
+note = "The trap case for this axis, and the reason it is worth calibrating at all: \"every\" is the positive class's strongest lexical marker, and the request is a long ANSWER requiring no reasoning. Output length is not effort. A false positive here loads the deep slot to recite twelve names."
+
+[[case]]
+id = "eff_abstain_quick_sanity"
+axis = "effort"
+query = "quick sanity check — did I get the units right there?"
+expect = "abstain"
+note = "Explicitly scoped as cheap by the user. If the axis cannot honour a stated low-effort request it will escalate against the user's own instruction, which is worse than merely being wrong."
+
+[[case]]
+id = "eff_abstain_reformat"
+axis = "effort"
+query = "can you put that last bit in a table?"
+expect = "abstain"
+note = "A formatting request: imperative, references prior content, requires no new reasoning. Sits near the locator axis's positives and must fire on neither."

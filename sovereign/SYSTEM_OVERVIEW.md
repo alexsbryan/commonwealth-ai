@@ -942,6 +942,83 @@ the unprefixed space collapses world negatives into the positive range —
 at 5/6 held-out positives and **0/20 false positives**, re-runnable via
 `tests/archive_axis_live.rs --ignored`.
 
+**Threshold calibration — `svrn router fit` (2026-07-28).** The six gates
+above ship **twelve hand-picked constants**, each calibrated against
+Qwen3-Embedding-0.6B and justified in prose. Two of those decisions turned
+on thousandths — an archive negative held out "by only 0.002 of margin", a
+tool gate hijacked by "0.011 of cosine noise" — and both were found days
+late, by hand, from a bench regression. Nothing said which of the remaining
+constants was one embedding-model change from the same fate.
+
+Three pieces close that. **(1)** `router_axis.rs` extracts the shared
+decision rule — `AxisScore{sim_positive, sim_negative}` + `AxisGate{min_sim,
+min_margin}` + `cushion()`, the signed distance to the boundary — and
+*separates scoring from gating* on all six axes
+(`score_from_embedding` / `classify_*`). That is what makes a threshold
+sweep pure arithmetic: one embedding pass over a bank makes the whole
+threshold space searchable. **(2)** `router_calibration.rs` sweeps it
+exhaustively, with candidate thresholds at the **midpoints between observed
+scores** rather than the prior art's random linspace — exact optimum, maximum
+headroom, and never a threshold placed *on* an observation (in f32,
+`0.50 - 0.46 = 0.0399999…`, which does not clear a 0.04 gate: the
+subtraction moves the boundary, not the comparison). Objectives are
+`SafeRecall` (default — it encodes the asymmetry every axis documents),
+`Accuracy` (for prior-art comparison) and `MaxCoverage` (the intent axis).
+**(3)** `sovereign/bench/routing/calibration/axes_v1.toml`, a bank
+deliberately authored to **fail somewhere**: 74 cases, every one carrying a
+`note`, of which 32 are `expect = "abstain"` — the repo previously had no
+abstention test anywhere.
+
+Two guards make the tool refuse to lie about its own power. A margin floor
+is **clamped to ≥ 0**: an unconstrained sweep over four cases happily fitted
+archive to `-0.101` and scope to `-0.152`, gates that score perfectly and
+fire when the *negative* class won. And `FitReport::underpowered()` flags
+any axis with fewer than five cases in either class
+(`MIN_CASES_PER_CLASS`), printing "read the shipped numbers, not the fitted
+gate" — the fit-on-your-own-test-set failure the prior art commits by
+reporting its headline on the same 66 rows it tuned on. **The command
+writes no constant**; it names the constant and the file and stops.
+
+**Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
+the failure this system actually has is that the ground moves while the
+constants stay still — a new encoder, a re-quantised one, an edited exemplar
+bank shifts every cosine without touching a line of `scope_classifier.rs`.
+So `--save-baseline` records the run as a dated `FitSnapshot` under
+`sovereign/bench/routing/baselines/<bank>-fit/`, reusing `bench all`'s
+existing dated-JSON + `latest.json` convention rather than adding a metrics
+pipeline, and every later run diffs the shipped gate's **cushions and
+separation** against it. A regression is only *claimed* when the encoder and
+the bank are both unchanged (both recorded — the bank by content digest);
+otherwise the deltas print as evidence and the report says why they are not
+attributable. A moved constant is named rather than blamed, unless the edit
+cost errors. Exit codes: `0` clean · `3` a gate is movable · `4` drift
+regression.
+
+The **first baseline is recorded** (2026-07-28) against the prescribed
+`Qwen3-Embedding-0.6B-Q8_0.gguf` over all 74 cases. Why the *prescribed*
+model and not whatever is to hand: the same bank scored under the f16
+`qwen-embedding-0.6b.gguf` moves `separation` by **0.000–0.004** per axis —
+small, and **no decision changes** (identical errors and coverage on all
+six), so the two quantisations are interchangeable *for routing*. But 0.004
+is four times `DRIFT_EPS`, so treating them as one encoder would manufacture
+a "regression" on four axes the first time anyone switched. Hence the
+comparability key stays the exact model file, and the baseline is pinned to
+the one production runs. (The equivalence itself was measured with this
+tool — a cross-encoder run prints the deltas as evidence precisely so
+questions like this get answered with numbers.)
+
+**Routing metrics past exact-match (`eval_cmd/routing_metrics.rs`).** The
+five routing banks score 96/96, so accuracy stopped being informative.
+`RoutingMetrics` adds what accuracy hides: **layer attribution** (which
+decisions the embed router owned versus which woke a ~1.2–2.4s LLM call —
+the number a threshold fit can actually move), per-intent
+precision/recall/F1, and ranked `expected → actual` confusions. It renders
+under `eval run --routing-only` and its one-line `headline()` carries into
+the `bench all` rollup. Deliberately **no abstention metric** there: the
+full cascade always returns an intent, so abstention is not observable at
+that layer — it is a property of the individual gates, and it is measured
+where it exists, by `router fit`.
+
 **Pre-built router-embed cache (`router_embed_cache.rs`).** The five boot
 classifiers embed ~350 static exemplars at every process start — ~5.7s on Apple
 Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`

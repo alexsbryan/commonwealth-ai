@@ -22,7 +22,8 @@
 #
 # Phases (soft budgets, tunable via SMOKE_P<n>_SECS env). Executed order groups
 # by daemon topology — 1,2,3,5 share the resident daemon on :9741, then 4 runs
-# LAST because it owns its OWN hermetic :9741 daemon (managed real-mode):
+# after them because it owns its OWN hermetic :9741 daemon (managed real-mode),
+# and 6 runs last inside a private netns (it needs no port handoff at all):
 #   0  static & render     ~30m  lint(compile) + svelte-check + vitest + synthetic e2e + desktop unit tests   [HARD STOP]
 #   1  perf baseline       ~10m  daemon surface + throughput_probe x2 slots + mtp accept-rate + TTFI
 #   2  daemon quality      ~25m  inner-chaos --calibrate (gate judge) + sovereign-ci-bench.sh --quick
@@ -31,6 +32,11 @@
 #   5  safety soak    reserves-4  eval inner-chaos --minutes <remaining, minus Phase-4 reserve>
 #   4  real-binary e2e     ~50m  MANAGED real-mode: frees :9741, runs test:e2e:real + test:e2e:faults
 #                                against SOVEREIGN_REAL_CHAT_MODEL, then restores the resident daemon
+#   6  production boot     ~15m  scripts/wizard-verify.sh — fresh wizard -> complete_setup -> supervised
+#                                relaunch -> `current_exe() --daemon-child` -> Attach. The ONLY lane that
+#                                reaches that branch; everything else that supervises pins
+#                                SOVEREIGN_CLI_PATH. Linux isolates via netns; macOS/other frees :9741
+#                                around the drive (same handoff as phase 4) and restores it after.
 #
 # Usage:
 #   scripts/desktop-smoke.sh [--budget-secs N] [--quick] [--capture-baseline]
@@ -78,6 +84,7 @@ TARGET_PRIMARY="$SHIPPED_PRIMARY"   # --primary <path> overrides (e.g. run the 2
 : "${SMOKE_P4_SECS:=3000}"
 # P5 consumes whatever budget remains (min SMOKE_P5_MIN_SECS).
 : "${SMOKE_P5_MIN_SECS:=600}"
+: "${SMOKE_P6_SECS:=900}"
 # perf tolerance bands (regression if breached)
 : "${PERF_TPS_DROP_PCT:=15}"     # decode tok/s may not drop >15%
 : "${PERF_TTFT_RISE_PCT:=30}"    # TTFT may not rise >30%
@@ -441,6 +448,55 @@ phase4() {
   [ "$fail" -eq 0 ] && record "4 real-e2e" "PASS" "$secs" "${detail:-invariants+faults clean}" || record "4 real-e2e" "FAIL" "$secs" "$detail"
 }
 
+# ── Phase 6: the production boot chain ───────────────────────────────────────
+# Every OTHER supervised lane in the repo pins SOVEREIGN_CLI_PATH
+# (faults/spawn.ts:151, tests/e2e/scripts/lib/harness.mjs:257), which sends
+# supervisor_setup::resolve_daemon_child() down branch 1 — "point at a CLI
+# build". A packaged install has no such env var and takes branch 2,
+# `current_exe() --daemon-child` (supervisor_setup.rs:74-78). wizard-verify.sh
+# unsets the var, so it is the ONLY thing that exercises the branch every
+# shipped user runs. It was orphaned until 2026-07-28: referenced by
+# DAEMON_RESILIENCE.md and by nothing executable, despite catching a real
+# ship-blocking bug on its first run (fresh desktop-only installs never wrote
+# config.toml, so supervision would never have engaged for them).
+#
+# It self-wraps in `unshare -r -n`, so it owns a private netns and never
+# contends for :9741 — hence no port handoff here, and it is safe to run after
+# phase 4 has restored the resident daemon.
+phase6() {
+  phase_enabled 6 || { record "6 prod-boot" "SKIP" 0 "disabled"; return 0; }
+  log "PHASE 6 — production boot chain (fresh wizard → complete_setup → --daemon-child → Attach)"
+  [ -n "$DRY_RUN" ] && { record "6 prod-boot" "DRY" 0 "scripts/wizard-verify.sh in a private netns"; return 0; }
+  [ -x "$DESKTOP_BIN" ] || { record "6 prod-boot" "SKIP" 0 "desktop binary missing (run --build)"; return 0; }
+  # Linux runs wizard-verify inside a private netns, so :9741/:9745 are
+  # structurally free and no handoff is needed. Everywhere else the drive
+  # enforces free ports itself and refuses to start otherwise — so free
+  # them the same way phase 4 does, and restore afterwards.
+  local netns="" t0 secs rc; t0=$(date +%s)
+  [ "$(uname -s)" = "Linux" ] && command -v unshare >/dev/null 2>&1 && netns=1
+  if [ -z "$netns" ]; then
+    log "  no netns on $(uname -s) — freeing :9741 for the drive"
+    if ! stop_resident_daemon; then
+      record "6 prod-boot" "SKIP" "$(( $(date +%s)-t0 ))" "could not free :9741 (--no-daemon-manage) — boot chain UNVERIFIED"
+      return 0
+    fi
+  fi
+  run_capped "$SMOKE_P6_SECS" scripts/wizard-verify.sh > "$ART/p6-wizard-verify.log" 2>&1
+  rc=$?
+  [ -z "$netns" ] && restore_resident_daemon
+  secs=$(( $(date +%s) - t0 ))
+  case "$rc" in
+    0) log "  production boot chain: PASS"
+       record "6 prod-boot" "PASS" "$secs" "supervised relaunch verified (branch-2 --daemon-child)" ;;
+    # wizard-verify exits 2 for a missing binary/GGUF — a prerequisite gap, not
+    # a regression. Same treatment phase 4 gives a missing desktop binary.
+    2) warn "  wizard-verify prerequisites missing (see p6-wizard-verify.log)"
+       record "6 prod-boot" "SKIP" "$secs" "prerequisite missing (rc=2) — boot chain UNVERIFIED" ;;
+    *) err "  production boot chain FAILED (see p6-wizard-verify.log)"
+       record "6 prod-boot" "FAIL" "$secs" "wizard-verify rc=$rc" ;;
+  esac
+}
+
 # ── Phase 5: safety soak (consumes remaining budget) ─────────────────────────
 phase5() {
   phase_enabled 5 || { record "5 safety" "SKIP" 0 "disabled"; return 0; }
@@ -448,6 +504,9 @@ phase5() {
   # Phase 4 (managed real-mode) runs AFTER us — reserve its allotment
   # (invariant pack + fault suite + margin) so the soak can't starve it.
   if phase_enabled 4 && [ -x "$DESKTOP_BIN" ]; then rem=$(( rem - SMOKE_P4_SECS - 1200 - 120 )); fi
+  # Phase 6 also runs after us — reserve it too, or the soak starves the one
+  # lane that covers the packaged boot chain.
+  if phase_enabled 6 && [ -x "$DESKTOP_BIN" ]; then rem=$(( rem - SMOKE_P6_SECS )); fi
   if [ "$rem" -lt "$SMOKE_P5_MIN_SECS" ]; then record "5 safety" "SKIP" 0 "out of budget (${rem}s left after P4 reserve)"; warn "  budget too tight for soak after reserving Phase 4 — skipping"; return 0; fi
   local mins=$(( rem/60 - 1 )); [ "$mins" -gt 40 ] && mins=40   # cap a smoke soak at 40m
   log "PHASE 5 — safety soak (inner-chaos --minutes $mins)"
@@ -506,13 +565,15 @@ if [ -z "$DRY_RUN" ]; then
 fi
 # Order groups by daemon topology: phases 1,2,3,5 share the resident daemon on
 # :9741; phase 4 (managed real-mode) owns its OWN hermetic :9741 daemon, so it
-# runs LAST — it frees the resident daemon and restores it at the very end,
-# where nothing downstream depends on that restart.
+# runs after them — it frees the resident daemon and restores it at the end.
+# Phase 6 runs in a private netns and touches no shared port, so it goes last
+# where a failure cannot cost any other lane its daemon.
 phase1
 phase2
 phase3
 phase5
 phase4
+phase6
 
 print_scoreboard
 exit "$OVERALL_RC"

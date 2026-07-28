@@ -1,0 +1,177 @@
+{
+  "embed_model": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+  "banks": [
+    "sovereign/bench/routing/calibration/axes_v1.toml"
+  ],
+  "bank_digest": "3a04e3e7e1987dbe",
+  "axes": {
+    "archive": {
+      "current": {
+        "min_sim": 0.5,
+        "min_margin": 0.04,
+        "fired_correct": 3,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 2,
+        "weakest_accept": 0.04855275,
+        "nearest_miss": -0.026172139
+      },
+      "best": {
+        "min_sim": 0.46754462,
+        "min_margin": 0.0016967952,
+        "fired_correct": 4,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 1,
+        "weakest_accept": 0.012131065,
+        "nearest_miss": -0.012131065
+      },
+      "cases_scored": 10,
+      "gates_evaluated": 66,
+      "positives": 5,
+      "negatives": 5
+    },
+    "current_info": {
+      "current": {
+        "min_sim": 0.5,
+        "min_margin": 0.04,
+        "fired_correct": 3,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 2,
+        "weakest_accept": 0.00014996529,
+        "nearest_miss": -0.04252267
+      },
+      "best": {
+        "min_sim": 0.47881365,
+        "min_margin": 0.023028865,
+        "fired_correct": 3,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 2,
+        "weakest_accept": 0.021336317,
+        "nearest_miss": -0.021336317
+      },
+      "cases_scored": 10,
+      "gates_evaluated": 88,
+      "positives": 5,
+      "negatives": 5
+    },
+    "effort": {
+      "current": {
+        "min_sim": 0.3,
+        "min_margin": 0.04,
+        "fired_correct": 5,
+        "false_positive": 1,
+        "mislabelled": 0,
+        "abstained_correct": 4,
+        "missed": 0,
+        "weakest_accept": 0.01716026,
+        "nearest_miss": -0.046335973
+      },
+      "best": {
+        "min_sim": 0.4820912,
+        "min_margin": 0.025412142,
+        "fired_correct": 5,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 0,
+        "weakest_accept": 0.032196462,
+        "nearest_miss": -0.029083252
+      },
+      "cases_scored": 10,
+      "gates_evaluated": 77,
+      "positives": 5,
+      "negatives": 5
+    },
+    "intent": {
+      "current": {
+        "min_sim": 0.55,
+        "min_margin": 0.1,
+        "fired_correct": 2,
+        "false_positive": 1,
+        "mislabelled": 2,
+        "abstained_correct": 6,
+        "missed": 13,
+        "weakest_accept": 0.003943704,
+        "nearest_miss": -0.014265545
+      },
+      "best": {
+        "min_sim": 0.36322027,
+        "min_margin": 0.21954331,
+        "fired_correct": 2,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 7,
+        "missed": 15,
+        "weakest_accept": 0.005066216,
+        "nearest_miss": -0.005066216
+      },
+      "cases_scored": 24,
+      "gates_evaluated": 625,
+      "positives": 17,
+      "negatives": 7
+    },
+    "locator": {
+      "current": {
+        "min_sim": 0.5,
+        "min_margin": 0.02,
+        "fired_correct": 2,
+        "false_positive": 2,
+        "mislabelled": 0,
+        "abstained_correct": 3,
+        "missed": 3,
+        "weakest_accept": 0.11447917,
+        "nearest_miss": -0.02772975
+      },
+      "best": {
+        "min_sim": 0.31387845,
+        "min_margin": 0.17813063,
+        "fired_correct": 2,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 3,
+        "weakest_accept": 0.03064686,
+        "nearest_miss": -0.03064686
+      },
+      "cases_scored": 10,
+      "gates_evaluated": 55,
+      "positives": 5,
+      "negatives": 5
+    },
+    "scope": {
+      "current": {
+        "min_sim": 0.45,
+        "min_margin": 0.02,
+        "fired_correct": 5,
+        "false_positive": 2,
+        "mislabelled": 0,
+        "abstained_correct": 3,
+        "missed": 0,
+        "weakest_accept": 0.05784625,
+        "nearest_miss": -0.03505513
+      },
+      "best": {
+        "min_sim": 0.21056388,
+        "min_margin": 0.22419149,
+        "fired_correct": 4,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 5,
+        "missed": 1,
+        "weakest_accept": 0.009673506,
+        "nearest_miss": -0.009673506
+      },
+      "cases_scored": 10,
+      "gates_evaluated": 99,
+      "positives": 5,
+      "negatives": 5
+    }
+  }
+}

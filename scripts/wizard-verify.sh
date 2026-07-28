@@ -14,11 +14,21 @@
 #   4. the child daemon owns :9741 + the pidfile + the flock,
 #   5. the new instance logs the supervised Attach switch.
 #
-# Isolation: self-wraps in `unshare -r -n` (private netns) so
-# :9741/:9745 are free and the run can never touch a live daemon or
-# mesh. X11/Wayland still work (filesystem sockets), so two brief app
-# windows may appear. Requires the DEBUG desktop build (the command
-# bridge is #[cfg(debug_assertions)]) and the small soak models.
+# Isolation, per platform:
+#   Linux  — self-wraps in `unshare -r -n` (private netns) so :9741/:9745
+#            are structurally free and the run can never touch a live
+#            daemon or mesh. X11/Wayland still work (filesystem sockets).
+#   macOS  — no netns exists. Isolation is a throwaway HOME plus
+#            SOVEREIGN_IROH=off, and the port guarantee drops from
+#            structural to CHECKED: the drive refuses to start unless
+#            :9741 and :9745 are both free. Stop the resident daemon
+#            first (`sovereign daemon stop`), or let
+#            scripts/desktop-smoke.sh Phase 6 do the handoff for you.
+# Force the checked path anywhere with WIZARD_VERIFY_NO_NETNS=1.
+#
+# Two brief app windows may appear on either platform. Requires the DEBUG
+# desktop build (the command bridge is #[cfg(debug_assertions)]) and the
+# small soak models.
 #
 # Provenance: the first run of this drive (2026-07-18) caught a real
 # pre-existing bug — `mirror_to_setup_config`'s no-op short-circuit
@@ -33,16 +43,56 @@
 # Attach-switch line lands ~2s after :9741 readiness — poll it.
 set -uo pipefail
 
-# ── Self-wrap into a private netns ───────────────────────────────────
-if [[ "${WIZARD_VERIFY_NS:-}" != "1" ]]; then
-  exec unshare -r -n env WIZARD_VERIFY_NS=1 "$0" "$@"
-fi
-ip link set lo up
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ── Isolation: netns on Linux, checked ports elsewhere ───────────────
+NETNS=""
+if [[ "$(uname -s)" == "Linux" && "${WIZARD_VERIFY_NO_NETNS:-}" != "1" ]]; then
+  if [[ "${WIZARD_VERIFY_NS:-}" != "1" ]]; then
+    exec unshare -r -n env WIZARD_VERIFY_NS=1 "$0" "$@"
+  fi
+  ip link set lo up
+  NETNS=1
+fi
+
+port_live() {  # port_live <port>
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    curl -sf -m 1 "http://127.0.0.1:$1/v1/models" >/dev/null 2>&1
+  fi
+}
+
+if [[ -z "$NETNS" ]]; then
+  for _p in 9741 9745; do
+    if port_live "$_p"; then
+      echo "[verify] :$_p is in use, and this host has no netns isolation."
+      echo "[verify] This drive needs :9741 and :9745 free. Stop the resident"
+      echo "[verify] daemon first:  sovereign daemon stop"
+      exit 2
+    fi
+  done
+  echo "[verify] no netns on $(uname -s) — isolation is fresh HOME + free ports (checked)"
+fi
+
 BIN="${DESKTOP_BIN:-$REPO_ROOT/target/debug/sovereign-desktop}"
-PRIMARY_GGUF="${PRIMARY_GGUF:-$REPO_ROOT/models/bonsai-8b.gguf/Bonsai-8B-Q1_0.gguf}"
-EMBED_GGUF="${EMBED_GGUF:-$REPO_ROOT/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf}"
+
+# First-existing-of, because the model tree has moved under this script
+# before. The pre-2026-07-28 defaults pointed at $REPO_ROOT/models/<dir>/,
+# which stopped existing when the GGUFs moved to sovereign/models/ — so
+# the drive exited 2 on every host and, being orphaned, nobody saw it.
+# Keep these in step with tests/e2e/real/faults/spawn.ts:28-33.
+pick_gguf() {  # pick_gguf <candidate>... — first that exists, else $1
+  local c; for c in "$@"; do [[ -f "$c" ]] && { echo "$c"; return 0; }; done
+  echo "$1"
+}
+PRIMARY_GGUF="${PRIMARY_GGUF:-$(pick_gguf \
+  "$REPO_ROOT/sovereign/models/Qwen3.5-2B.Q6_K.gguf" \
+  "$REPO_ROOT/models/bonsai-8b.gguf/Bonsai-8B-Q1_0.gguf")}"
+EMBED_GGUF="${EMBED_GGUF:-$(pick_gguf \
+  "$REPO_ROOT/sovereign/models/qwen-embedding-0.6b.gguf" \
+  "$REPO_ROOT/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" \
+  "$REPO_ROOT/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf")}"
 FRESH="$(mktemp -d /tmp/wizard-verify.XXXXXX)"
 LOG="$FRESH/desktop.log"
 
@@ -56,6 +106,23 @@ export SOVEREIGN_IROH=off
 export RUST_BACKTRACE=1
 unset SOVEREIGN_FORCE_LOCAL SOVEREIGN_USE_SUPERVISOR SOVEREIGN_CLI_PATH 2>/dev/null || true
 
+# ── Portable process identity ────────────────────────────────────────
+# macOS `ps -E` does NOT expose another process's environment (SIP), so
+# the old "scan /proc/<pid>/environ for HOME=$FRESH" cannot work there.
+# A pre-run snapshot is portable and strictly stronger: anything that
+# appears afterwards is ours by construction, and we additionally assert
+# the parent/child link rather than mere co-existence.
+PRE_PIDS=" $(pgrep -f "sovereign-desktop" 2>/dev/null | tr '\n' ' ') "
+new_desktop_pids() {
+  local p out=""
+  for p in $(pgrep -f "sovereign-desktop" 2>/dev/null); do
+    [[ "$PRE_PIDS" == *" $p "* ]] || out+="$p "
+  done
+  echo "$out"
+}
+proc_cmd()  { ps -o command= -p "$1" 2>/dev/null; }
+proc_ppid() { ps -o ppid= -p "$1" 2>/dev/null | tr -d '[:space:]'; }
+
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ✓ $*"; }
 bad() { FAIL=$((FAIL+1)); echo "  ✘ $*"; }
@@ -64,13 +131,10 @@ declare -a KILL_PIDS=()
 cleanup() {
   local p
   for p in "${KILL_PIDS[@]:-}"; do [[ -n "$p" ]] && kill -9 "$p" 2>/dev/null; done
-  # Belt-and-braces: kill anything whose env carries OUR fresh HOME
-  # (never pkill by name — a live desktop may run the same binary).
-  for p in $(pgrep -f "sovereign-desktop" 2>/dev/null); do
-    if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -q "^HOME=$FRESH$"; then
-      kill -9 "$p" 2>/dev/null
-    fi
-  done
+  # Belt-and-braces: kill anything that APPEARED during this run (never
+  # pkill by name — a live desktop may run the same binary, and on macOS
+  # we cannot read its env to tell them apart).
+  for p in $(new_desktop_pids); do kill -9 "$p" 2>/dev/null; done
   if [[ ${FAIL:-0} -eq 0 ]]; then
     rm -rf "$FRESH"
   else
@@ -118,17 +182,13 @@ else
 fi
 
 # ── 3: new instance + --daemon-child appear ────────────────────────
+# Identity by pre-snapshot difference + cmdline (portable), never by
+# /proc/<pid>/environ — see PRE_PIDS above.
 APP2=""; CHILD=""
 for i in $(seq 1 90); do
-  for p in $(pgrep -f "sovereign-desktop" 2>/dev/null); do
+  for p in $(new_desktop_pids); do
     [[ "$p" == "$APP1" ]] && continue
-    if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -q "^HOME=$FRESH$"; then
-      if tr '\0' ' ' < "/proc/$p/cmdline" | grep -q -- "--daemon-child"; then
-        CHILD="$p"
-      else
-        APP2="$p"
-      fi
-    fi
+    if proc_cmd "$p" | grep -q -- "--daemon-child"; then CHILD="$p"; else APP2="$p"; fi
   done
   [[ -n "$APP2" && -n "$CHILD" ]] && break
   sleep 1
@@ -137,6 +197,16 @@ done
 [[ -n "$CHILD" ]] && KILL_PIDS+=("$CHILD")
 if [[ -n "$APP2" ]]; then ok "relaunched desktop instance running (pid $APP2)"; else bad "no relaunched desktop instance found"; fi
 if [[ -n "$CHILD" ]]; then ok "supervised --daemon-child running (pid $CHILD)"; else bad "no --daemon-child process found"; fi
+# Stronger than co-existence: the daemon child must have been spawned BY
+# the relaunched instance, which is what "supervised" actually means.
+if [[ -n "$APP2" && -n "$CHILD" ]]; then
+  CHILD_PPID="$(proc_ppid "$CHILD")"
+  if [[ "$CHILD_PPID" == "$APP2" ]]; then
+    ok "daemon child is parented by the relaunched instance"
+  else
+    bad "child $CHILD ppid=$CHILD_PPID != relaunched instance $APP2"
+  fi
+fi
 
 # ── 4: child owns :9741 + pidfile + flock + mirrored config ────────
 READY=""
@@ -144,7 +214,7 @@ for i in $(seq 1 120); do
   curl -sf -m 2 http://127.0.0.1:9741/v1/models >/dev/null 2>&1 && { READY=1; break; }
   sleep 1
 done
-if [[ -n "$READY" ]]; then ok ":9741 serving in the netns"; else bad ":9741 never answered"; fi
+if [[ -n "$READY" ]]; then ok ":9741 serving (supervised child)"; else bad ":9741 never answered"; fi
 # write_pidfile is the LAST bootstrap step (daemon_cmd/mod.rs) — poll.
 PIDFILE=""
 for i in $(seq 1 40); do
