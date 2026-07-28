@@ -221,7 +221,15 @@ async function ingestFixtureCorpus(): Promise<void> {
 
   // Checked on the reuse path too: a corpus stranded by an earlier run
   // is still listed by `lc_list`, so "already present" is not health.
-  await assertCorpusPromoted(corpusId, "fixture corpus");
+  await assertCorpusPromoted(corpusId, "fixture corpus", {
+    // Three .txt files, each well under the 2048-char paragraph chunker's
+    // limit, so one chunk apiece is the floor.
+    minChunks: 3,
+    why:
+      "This is the sealed corpus the grounded-answer and citation specs read from " +
+      "(real-knowledge-golden, chat-citation, corpus-filter). Empty or short means " +
+      "those specs are asserting over content that is not there.",
+  });
 
   fs.writeFileSync(
     FIXTURE_INFO,
@@ -236,6 +244,24 @@ async function ingestFixtureCorpus(): Promise<void> {
       2,
     ),
   );
+}
+
+/// What a fixture must actually CONTAIN for the specs above it to mean
+/// anything.
+///
+/// Declared per fixture and asserted at setup, because "the ingest
+/// reported Complete" and "the corpus holds the documents the specs
+/// interrogate" are different claims, and the suite only ever checked
+/// the first. A fixture that silently loses its content turns every
+/// spec above it into a test of nothing that still reports green.
+interface FixtureExpectation {
+  /// Minimum dereferenceable chunks. `0` is legal for a fixture that is
+  /// SUPPOSED to be empty, and stating it is mandatory — emptiness is
+  /// never inferred from finding nothing.
+  minChunks: number;
+  /// What this fixture is for, quoted back in the failure so whoever
+  /// hits it knows what broke rather than just which number moved.
+  why: string;
 }
 
 /// Assert an ingest actually PROMOTED, not merely that it reported
@@ -253,18 +279,23 @@ async function ingestFixtureCorpus(): Promise<void> {
 /// and in Attach mode that null is indistinguishable from a missing
 /// chunk. See corpus-engine note 79fdd04c.
 ///
-/// Three checks, because the two obvious ones both pass while broken:
+/// Four checks, because the obvious ones all pass while broken:
 ///   1. `_corpus_meta.json`, NOT directory existence — a stranded
 ///      corpus still has a canonical DIRECTORY full of sidecars.
 ///   2. no leftover `<id>-partition-*` sibling.
-///   3. an actual chunk deref through `read_get_chunk`, the same
+///   3. the fixture holds AT LEAST the content it declared (`expect`).
+///   4. an actual chunk deref through `read_get_chunk`, the same
 ///      command the reading desk uses.
 ///
 /// This runs unconditionally after every ingest rather than waiting
 /// for a turn to happen to cite the broken corpus. The reactive
 /// version is what let the bug ship: it was caught only because one
 /// run's citations happened to land there.
-async function assertCorpusPromoted(corpusId: string, label: string): Promise<void> {
+async function assertCorpusPromoted(
+  corpusId: string,
+  label: string,
+  expect: FixtureExpectation,
+): Promise<void> {
   const indexesDir = path.join(HOME, ".sovereign", "indexes");
   const indexRoot = path.join(indexesDir, corpusId);
 
@@ -292,26 +323,46 @@ async function assertCorpusPromoted(corpusId: string, label: string): Promise<vo
     );
   }
 
-  // An EMPTY corpus is not a broken one. `next_chunk_id` is the
-  // persisted high-water mark `insert_batch` allocates from, so a value
-  // of 1 means no chunk was ever inserted — there is nothing to
-  // dereference and a deref probe would report a false strand. This is
-  // not hypothetical: the governance fixture is two .md files under a
-  // `folder` corpus that admits only pdf+txt, so it extracts zero
-  // documents and lands in `ensure_empty_index` (see the sibling case
-  // in corpus-engine/tests/ingest_failure_modes.rs).
+  // Does the fixture actually hold what the specs above it assume?
   //
-  // Say so loudly rather than passing quietly. A corpus that ingested
-  // nothing is its own problem — the specs above it are asserting
-  // against an empty index — and silence is how that keeps surviving.
+  // `next_chunk_id` is the persisted high-water mark `insert_batch`
+  // allocates from, and the first chunk of a fresh index is id 1 — so
+  // the chunk count is `next_chunk_id - 1`, and a value of 1 means
+  // nothing was ever inserted.
+  //
+  // This is a HARD FAILURE against the declared `minChunks`, not a
+  // warning. It was a warning for exactly one run, because the
+  // governance fixture was genuinely empty (two .md files under a
+  // `folder` corpus that admitted only pdf+txt) and a hard gate would
+  // have blocked on a known-broken fixture. That is now fixed
+  // (`DEFAULT_FOLDER_EXTENSIONS`), so the warning has done its job and
+  // must become an assertion: a fixture quietly losing its content is
+  // precisely how a suite goes on passing while testing nothing.
+  //
+  // `minChunks: 0` is legal but must be stated by the caller. Empty is
+  // a claim a fixture makes on purpose, never something inferred from
+  // finding nothing there.
   const meta = JSON.parse(fs.readFileSync(path.join(indexRoot, "_corpus_meta.json"), "utf8"));
   const nextChunkId = typeof meta.next_chunk_id === "number" ? meta.next_chunk_id : 1;
-  if (nextChunkId <= 1) {
-    console.warn(
-      `[real-setup] ⚠ ${label} (${corpusId}) INGESTED ZERO CHUNKS — canonical is ` +
-        `promoted and well-formed, but next_chunk_id=${nextChunkId} means no chunk was ` +
-        `ever inserted. Any spec asserting chunk-backed behaviour for this corpus is ` +
-        `passing against an empty index. Skipping the deref probe (nothing to deref).`,
+  const chunkCount = Math.max(0, nextChunkId - 1);
+  if (chunkCount < expect.minChunks) {
+    throw new Error(
+      `${label} (${corpusId}): FIXTURE UNDER-INGESTED — holds ${chunkCount} chunk(s), ` +
+        `declared minimum ${expect.minChunks} (next_chunk_id=${nextChunkId}). ` +
+        `${expect.why}\n` +
+        `Every spec asserting chunk-backed behaviour for this corpus would be passing ` +
+        `against an index that does not contain what it is supposed to contain. Failing ` +
+        `here, loudly, is the point — a green suite over an empty fixture is worse than ` +
+        `a red one. Check the extension allow-list for this source type ` +
+        `(DEFAULT_FOLDER_EXTENSIONS in sovereign-tools/src/local_corpus/config.rs) and ` +
+        `the extractor dispatch in extract_stage::extract_one.`,
+    );
+  }
+  if (chunkCount === 0) {
+    // Declared-empty: legal, but never silent.
+    console.log(
+      `[real-setup] ${label} (${corpusId}) is DECLARED EMPTY (minChunks: 0) — ` +
+        `promoted and well-formed, no chunks to deref.`,
     );
     return;
   }
@@ -345,7 +396,10 @@ async function assertCorpusPromoted(corpusId: string, label: string): Promise<vo
         `surfaces to the UI as an indistinguishable null.`,
     );
   }
-  console.log(`[real-setup] ${label} promoted + readable ✓ (${corpusId})`);
+  console.log(
+    `[real-setup] ${label} promoted + readable ✓ (${corpusId}, ${chunkCount} chunks ` +
+      `>= declared ${expect.minChunks})`,
+  );
 }
 
 /// Wait for a local-corpus ingest job to reach a terminal event on its
@@ -417,7 +471,16 @@ async function plantGovernanceCorpus(): Promise<void> {
   // function would overlay an atlas into it, cementing exactly the
   // atlas-without-_corpus_meta.json shape found on the operator's real
   // install (~/.sovereign/indexes/enron-sample-tiny, 2026-07-27).
-  await assertCorpusPromoted(corpusId, "governance corpus");
+  await assertCorpusPromoted(corpusId, "governance corpus", {
+    // charter.md + minutes.md. These ingested ZERO chunks until
+    // `document_folder` was given the same extension breadth as
+    // `watched_folder` — this minimum is the regression guard for that.
+    minChunks: 2,
+    why:
+      "governance.real.spec.ts drives the Conflicts tab over this corpus. The atlas " +
+      "overlaid on top of it is checked in, so the tab renders even when the corpus " +
+      "underneath ingested nothing — which is exactly how this stayed invisible.",
+  });
   const indexRoot = path.join(HOME, ".sovereign", "indexes", corpusId);
   const atlasDir = path.join(indexRoot, "atlas");
   fs.mkdirSync(atlasDir, { recursive: true });
