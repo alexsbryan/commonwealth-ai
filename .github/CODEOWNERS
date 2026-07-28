@@ -47,3 +47,10 @@
 # Architecture contracts — the compass documents. Review with extra care.
 /sovereign/SYSTEM_OVERVIEW.md   @alexsbryan
 /sovereign/ARCH_PRINCIPLES.md   @alexsbryan
+
+# Recipes — open to outside pull requests (CONTRIBUTING.md). Review is mostly
+# mechanical (`svrn recipe validate` / `svrn recipe test`), with one thing that
+# is not: `license`, `mesh_sharing`, and `query_sharing` must match what the
+# source actually permits. That judgement is the reason this is still owned.
+/sovereign-recipes/             @alexsbryan
+/sovereign-recipes/registry.toml @alexsbryan

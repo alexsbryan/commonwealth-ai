@@ -9,10 +9,13 @@ function, no framework, no build step.
 landing/
 ├── index.html         ← the page (CSS inlined, ~10 KB before fonts)
 ├── favicon.svg
-├── install.sh         ← placeholder curl-pipe target ("coming soon")
+├── install.sh         ← the real curl-pipe installer (pulls from svrnmesh-releases)
 ├── robots.txt
 ├── api/
-│   └── subscribe.js   ← POST /api/subscribe, forwards to Resend Audiences
+│   ├── subscribe.js   ← POST /api/subscribe, forwards to Resend Audiences
+│   └── desktop/
+│       ├── download.js ← GET /download/:platform → newest desktop-v* asset
+│       └── updater.js  ← Tauri updater manifest
 ├── scripts/
 │   └── dev-server.js  ← local preview without vercel CLI
 ├── package.json       ← no runtime deps; type:module for the dev server
@@ -77,8 +80,10 @@ Listmonk (self-hosted), or your own Postgres/KV.
 The page is hand-written HTML. Edit `index.html`. The CSS is inlined inside
 a single `<style>` block at the top of `<head>` — no preprocessing.
 
-GitHub links currently point at `github.com/alexsbryan/sovereign`. Update
-them in three places when the canonical URL changes:
+GitHub links currently point at `github.com/alexsbryan/svrnmesh-releases` — the
+public releases shelf, which is where the "report a bug" link in the footer
+lands while the source repo is invite-only. Update them in three places when the
+canonical URL changes:
 - the `<a>` tags in the hero and footer of `index.html`
 - the `install.sh` banner
 - `package.json` (if you add a `repository` field)

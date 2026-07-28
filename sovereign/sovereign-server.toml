@@ -24,6 +24,33 @@ model = "models/fast.gguf"
 # primary_model = "models/primary.gguf"
 context_size = 2048
 
+# Multi-backend routing. Declaring [[inference.backends]] OVERRIDES the
+# single-model form above entirely. Backends compose into a health-checked
+# router that falls back by priority (lower wins), so a remote GPU box can
+# serve the heavy model while a local GGUF covers it when that box is down.
+#
+# This is the only place an external OpenAI-compatible server (vLLM, SGLang,
+# llama.cpp's server, TGI, Ollama, a LiteLLM proxy) can be wired in — the
+# main `svrn daemon` is embedded-only. See docs/INTEROP.md §9.
+#
+# [[inference.backends]]
+# name          = "local"
+# type          = "embedded"                 # "embedded" | "remote"
+# primary_model = "models/primary.gguf"
+# priority      = 1
+#
+# [[inference.backends]]
+# name          = "vllm-box"
+# type          = "remote"
+# endpoint      = "http://gpu-host:8000/v1"  # default http://localhost:8000/v1
+# api_key       = "sk-..."                   # optional
+# model_id      = "Qwen3-32B"                # default "default"
+# context_size  = 32768
+# priority      = 2
+#
+# An unrecognised `type` only warns — it does not fail startup, so a typo
+# silently drops that backend.
+
 [store]
 mode = "sqlite"
 path = "data/sovereign.db"

@@ -816,26 +816,37 @@ vector = false
         println!("    \u{2713} .claude/settings.json");
     }
 
-    // .opencode/config.json + AGENTS.md
+    // .opencode/opencode.json + AGENTS.md
     if write_opencode {
         let opencode_dir = repo_root.join(".opencode");
         if let Err(e) = std::fs::create_dir_all(&opencode_dir) {
             eprintln!("    \u{26a0} Cannot create .opencode/: {e}");
         } else {
-            let config_path = opencode_dir.join("config.json");
+            // Inside a project `.opencode/` dir opencode reads ONLY
+            // `opencode.json` / `opencode.jsonc`. We wrote `config.json`
+            // until 2026-07-28, which it silently ignores — so migrate
+            // the old name rather than leaving a file that looks live.
+            let config_path = opencode_dir.join("opencode.json");
+            let legacy_path = opencode_dir.join("config.json");
             let generated =
                 generate_opencode_config(port, commonwealth_url.as_deref(), &commonwealth_models);
-            let final_content = if config_path.exists() {
-                match std::fs::read_to_string(&config_path) {
-                    Ok(existing) => merge_opencode_config(&existing, &generated),
-                    Err(_) => generated,
-                }
-            } else {
-                generated
+            let merge_base = std::fs::read_to_string(&config_path)
+                .or_else(|_| std::fs::read_to_string(&legacy_path))
+                .ok();
+            let final_content = match merge_base {
+                Some(existing) => merge_opencode_config(&existing, &generated),
+                None => generated,
             };
             match std::fs::write(&config_path, &final_content) {
-                Ok(()) => println!("    \u{2713} .opencode/config.json"),
-                Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/config.json: {e}"),
+                Ok(()) => {
+                    println!("    \u{2713} .opencode/opencode.json");
+                    if legacy_path.exists() && std::fs::remove_file(&legacy_path).is_ok() {
+                        println!(
+                            "    \u{2713} removed .opencode/config.json (opencode never read it)"
+                        );
+                    }
+                }
+                Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/opencode.json: {e}"),
             }
 
             // ATOS opencode plugin — the binary embeds the

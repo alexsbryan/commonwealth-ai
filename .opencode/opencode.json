@@ -4,7 +4,7 @@
   ],
   "mcp": {
     "sovereign": {
-      "type": "http",
+      "type": "remote",
       "url": "http://localhost:9741/mcp"
     }
   },

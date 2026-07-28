@@ -224,3 +224,74 @@ async fn get_neighbors_returns_center_with_empty_prev_and_next_for_single_chunk_
         "single-chunk corpus → empty next; got {next:?}"
     );
 }
+
+/// A corpus whose ingest completed but whose promotion to canonical never
+/// landed must NOT read as "chunk absent".
+///
+/// This is the regression test for the fault the real-mode e2e suite caught on
+/// 2026-07-27. `promote_single_shard` refuses a canonical dir that already
+/// holds a colliding entry (observed live: an `atlas/` directory written before
+/// promote ran), so all the Lance data stays in `<corpus>-partition-*` and the
+/// canonical dir never gets `_corpus_meta.json`. Retrieval still finds the
+/// chunks — `installed_indexes()` enumerates directories and keys off each
+/// meta's `corpus_id` — so search looks healthy while every citation into the
+/// corpus fails to dereference.
+///
+/// It stayed invisible because this router answered 404 for the open failure and
+/// the desktop's `daemon_reading_get` maps ANY 404 to `Ok(None)` -> `null`. In
+/// Attach mode, which is the mode every shipped desktop runs, a structurally
+/// broken index was therefore indistinguishable from a missing chunk and the
+/// real error text never reached the desktop, its logs, or this suite. So the
+/// assertion that matters is the STATUS CLASS (5xx, not 404) plus the diagnosis
+/// actually naming the un-promoted partition.
+#[tokio::test]
+async fn get_chunk_reports_unpromoted_partition_instead_of_masquerading_as_absent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+
+    // The completed ingest, still sitting in its partition dir.
+    install_one_chunk_corpus(&indexes, "sep-partition-node-aaaa", "SEP", CHUNK_TEXT).await;
+    // The canonical dir, pre-populated with the entry that made promote refuse
+    // and WITHOUT `_corpus_meta.json` — exactly the shape observed on disk.
+    std::fs::create_dir_all(indexes.join("sep").join("atlas")).unwrap();
+
+    let recipes = tmp.path().join("recipes");
+    std::fs::create_dir_all(&recipes).unwrap();
+    let engine = Arc::new(
+        CorpusEngine::new(recipes, indexes, mock_embed_fn())
+            .with_embedding_model("qwen3-embedding-0.6b"),
+    );
+    let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+    daemon.set_corpus_engine(engine).await;
+
+    let addr = spawn_router(reading_router(Arc::clone(&daemon))).await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/internal/corpus/sep/chunks/0"))
+        .send()
+        .await
+        .expect("reading_router reachable");
+
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let err = body["error"].as_str().unwrap_or("");
+
+    assert_ne!(
+        status,
+        reqwest::StatusCode::NOT_FOUND,
+        "an un-promoted partition is an infrastructure fault, not an absent \
+         chunk — 404 here is what the desktop silently turns into `null`. Body: {body}"
+    );
+    assert!(
+        status.is_server_error(),
+        "expected a 5xx so the desktop surfaces the message; got {status}. Body: {body}"
+    );
+    assert!(
+        err.contains("un-promoted"),
+        "the diagnosis must name the actual fault so an operator can act on it; got: {err}"
+    );
+    assert!(
+        err.contains("sep-partition-node-aaaa"),
+        "the diagnosis must name WHERE the stranded data is; got: {err}"
+    );
+}

@@ -929,20 +929,70 @@ fn find_opencode_skill_dir() -> Option<PathBuf> {
     None
 }
 
+/// Does this SKILL.md carry the frontmatter a loader needs?
+///
+/// A skill is a markdown file whose YAML frontmatter declares at least
+/// `name`. opencode parses the frontmatter and `safeParse`-fails
+/// **silently** when `name` is absent — the skill is dropped with no
+/// diagnostic at all. So a SKILL.md with no frontmatter is not "a bit
+/// stale", it is a file that never loads, and reporting its mere
+/// existence as health is a false green (ARCH §9).
+///
+/// Returns `Err(reason)` describing the first thing that would make a
+/// loader reject it.
+fn skill_frontmatter_ok(body: &str) -> Result<(), String> {
+    let body = body.strip_prefix('\u{feff}').unwrap_or(body);
+    let rest = body
+        .strip_prefix("---\n")
+        .or_else(|| body.strip_prefix("---\r\n"))
+        .ok_or_else(|| "no YAML frontmatter — the file must open with `---`".to_string())?;
+    let end = rest
+        .find("\n---\n")
+        .or_else(|| rest.find("\n---\r\n"))
+        .ok_or_else(|| "frontmatter is never closed with `---`".to_string())?;
+    let front = &rest[..end];
+
+    let has_key = |k: &str| {
+        front
+            .lines()
+            .any(|l| l.trim_start().starts_with(&format!("{k}:")) && l.split_once(':').is_some_and(|(_, v)| !v.trim().is_empty()))
+    };
+    if !has_key("name") {
+        return Err("frontmatter has no non-empty `name:` — loaders drop the skill silently".into());
+    }
+    if !has_key("description") {
+        return Err("frontmatter has no non-empty `description:`".into());
+    }
+    Ok(())
+}
+
 fn check_skill_file() -> CheckResult {
     match find_opencode_skill_dir() {
         Some(skill_dir) => {
             let skill_md = skill_dir.join("SKILL.md");
-            if skill_md.exists() {
-                CheckResult {
-                    name: "skill_file",
-                    layer: Layer::Omo,
-                    status: CheckStatus::Passed,
-                    message: format!("SKILL.md present at {}", skill_md.display()),
-                    repair: Repair::None,
-                }
-            } else {
-                CheckResult {
+            // Existence is not health — read it and validate.
+            match std::fs::read_to_string(&skill_md) {
+                Ok(body) => match skill_frontmatter_ok(&body) {
+                    Ok(()) => CheckResult {
+                        name: "skill_file",
+                        layer: Layer::Omo,
+                        status: CheckStatus::Passed,
+                        message: format!("SKILL.md valid at {}", skill_md.display()),
+                        repair: Repair::None,
+                    },
+                    Err(why) => CheckResult {
+                        name: "skill_file",
+                        layer: Layer::Omo,
+                        status: CheckStatus::Failed,
+                        message: format!("{}: {why}", skill_md.display()),
+                        repair: Repair::Manual(
+                            "Add YAML frontmatter with `name:` and `description:` — \
+                             without it the skill is silently discarded"
+                                .into(),
+                        ),
+                    },
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => CheckResult {
                     name: "skill_file",
                     layer: Layer::Omo,
                     status: CheckStatus::Failed,
@@ -950,7 +1000,14 @@ fn check_skill_file() -> CheckResult {
                     repair: Repair::Manual(
                         "Copy SKILL.md from sovereign/.opencode/skills/sovereign-code/".into(),
                     ),
-                }
+                },
+                Err(e) => CheckResult {
+                    name: "skill_file",
+                    layer: Layer::Omo,
+                    status: CheckStatus::Failed,
+                    message: format!("cannot read {}: {e}", skill_md.display()),
+                    repair: Repair::None,
+                },
             }
         }
         None => CheckResult {
@@ -965,27 +1022,79 @@ fn check_skill_file() -> CheckResult {
     }
 }
 
-fn check_hook_config() -> CheckResult {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let hook_file = cwd.join(".opencode").join("oh-my-opencode.jsonc");
-    if hook_file.exists() {
-        CheckResult {
-            name: "hook_config",
-            layer: Layer::Omo,
-            status: CheckStatus::Passed,
-            message: "oh-my-opencode.jsonc present".into(),
-            repair: Repair::None,
+/// Is the opencode config opencode ACTUALLY reads registering us, in
+/// the shape it actually accepts?
+///
+/// This replaced a check for `.opencode/oh-my-opencode.jsonc`, a file
+/// nothing has ever read. The real config is
+/// `<config_dir>/opencode/opencode.json`, and `mcp` there is a flat
+/// map of name → server whose `type` is `local` or `remote`. We shipped
+/// `mcp.servers.sovereign` with `type: "http"` until 2026-07-28, which
+/// opencode rejects — and no check noticed, because the old one only
+/// asked whether an unrelated file existed.
+fn check_opencode_config() -> CheckResult {
+    let path = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("opencode")
+        .join("opencode.json");
+
+    let result = |status, message, repair| CheckResult {
+        name: "opencode_config",
+        layer: Layer::Omo,
+        status,
+        message,
+        repair,
+    };
+
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(r) => r,
+        Err(_) => {
+            return result(
+                CheckStatus::Warning,
+                format!("{} not found — opencode not configured", path.display()),
+                Repair::Manual("Run `svrn setup` to write it".into()),
+            );
         }
-    } else {
-        CheckResult {
-            name: "hook_config",
-            layer: Layer::Omo,
-            status: CheckStatus::Warning,
-            message: "oh-my-opencode.jsonc not found".into(),
-            repair: Repair::Manual(
-                "Copy from sovereign/.opencode/oh-my-opencode.jsonc template".into(),
+    };
+    let cfg: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            return result(
+                CheckStatus::Failed,
+                format!("{} is not valid JSON: {e}", path.display()),
+                Repair::Manual("Fix the JSON by hand; setup refuses to overwrite it".into()),
+            );
+        }
+    };
+
+    if cfg.pointer("/mcp/servers/sovereign").is_some() {
+        return result(
+            CheckStatus::Failed,
+            format!(
+                "{} uses the legacy `mcp.servers.sovereign` shape — opencode reads `mcp` as a \
+                 flat name → server map, so this entry fails its schema and the server is not \
+                 registered",
+                path.display()
             ),
-        }
+            Repair::Manual("Re-run `svrn setup` — it now rewrites this entry".into()),
+        );
+    }
+    match cfg.pointer("/mcp/sovereign/type").and_then(|v| v.as_str()) {
+        Some("remote") => result(
+            CheckStatus::Passed,
+            format!("opencode registers sovereign at {}", path.display()),
+            Repair::None,
+        ),
+        Some(other) => result(
+            CheckStatus::Failed,
+            format!("`mcp.sovereign.type` is \"{other}\" — opencode accepts only \"local\" or \"remote\""),
+            Repair::Manual("Re-run `svrn setup`".into()),
+        ),
+        None => result(
+            CheckStatus::Warning,
+            format!("{} has no `mcp.sovereign` entry", path.display()),
+            Repair::Manual("Run `svrn setup` to add it".into()),
+        ),
     }
 }
 
@@ -1990,7 +2099,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
 
     if opencode_available {
         results.push(check_skill_file());
-        results.push(check_hook_config());
+        results.push(check_opencode_config());
         results.push(check_mcp_live().await);
     }
 
@@ -2100,7 +2209,6 @@ debounce_ms = 800
 "#;
 
 const SKILL_MD_TEMPLATE: &str = include_str!("../../../.opencode/skills/sovereign-code/SKILL.md");
-const HOOK_CONFIG_TEMPLATE: &str = include_str!("../../../.opencode/oh-my-opencode.jsonc");
 
 // ── Inline repair helpers ─────────────────────────────────────────────────────
 
@@ -2141,11 +2249,21 @@ fn attempt_write_runner_config(sovereign_dir: &std::path::Path) {
     }
 }
 
-/// Write the OmO SKILL.md to `.opencode/skills/sovereign-code/SKILL.md`
-/// under the current working directory.
+/// Write the OmO SKILL.md to `.opencode/skills/sovereign-code/SKILL.md`.
+///
+/// Writes into the directory `check_skill_file` actually inspected when
+/// there is one, falling back to cwd. They used to disagree — the check
+/// walks UP from cwd, the writer always wrote INTO cwd — so running
+/// `--fix` from a monorepo subdirectory could create a second skill dir
+/// that the check would never look at.
 fn attempt_write_skill_file() {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let skill_dir = cwd.join(".opencode").join("skills").join("sovereign-code");
+    let skill_dir = find_opencode_skill_dir().unwrap_or_else(|| {
+        std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(".opencode")
+            .join("skills")
+            .join("sovereign-code")
+    });
     if let Err(e) = std::fs::create_dir_all(&skill_dir) {
         println!(
             "  ✗ skill_file: could not create directory {}: {e}",
@@ -2155,7 +2273,19 @@ fn attempt_write_skill_file() {
     }
     let skill_md = skill_dir.join("SKILL.md");
     if skill_md.exists() {
-        println!("  – skill_file: already exists at {}", skill_md.display());
+        // Present but unloadable is the interesting case, and it is not
+        // ours to silently overwrite — the user may have edited it.
+        match std::fs::read_to_string(&skill_md) {
+            Ok(body) => match skill_frontmatter_ok(&body) {
+                Ok(()) => println!("  – skill_file: already valid at {}", skill_md.display()),
+                Err(why) => println!(
+                    "  – skill_file: {} exists but will not load ({why}); \
+                     edit it or delete it and re-run --fix",
+                    skill_md.display()
+                ),
+            },
+            Err(e) => println!("  ✗ skill_file: cannot read {}: {e}", skill_md.display()),
+        }
         return;
     }
     match std::fs::write(&skill_md, SKILL_MD_TEMPLATE) {
@@ -2163,32 +2293,6 @@ fn attempt_write_skill_file() {
         Err(e) => println!(
             "  ✗ skill_file: could not write {}: {e}",
             skill_md.display()
-        ),
-    }
-}
-
-/// Write the OmO hook config to `.opencode/oh-my-opencode.jsonc`
-/// under the current working directory.
-fn attempt_write_hook_config() {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let opencode_dir = cwd.join(".opencode");
-    if let Err(e) = std::fs::create_dir_all(&opencode_dir) {
-        println!(
-            "  ✗ hook_config: could not create directory {}: {e}",
-            opencode_dir.display()
-        );
-        return;
-    }
-    let hook_file = opencode_dir.join("oh-my-opencode.jsonc");
-    if hook_file.exists() {
-        println!("  – hook_config: already exists at {}", hook_file.display());
-        return;
-    }
-    match std::fs::write(&hook_file, HOOK_CONFIG_TEMPLATE) {
-        Ok(_) => println!("  ✓ hook_config: wrote {}", hook_file.display()),
-        Err(e) => println!(
-            "  ✗ hook_config: could not write {}: {e}",
-            hook_file.display()
         ),
     }
 }
@@ -2266,25 +2370,28 @@ async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
     }
 
     // ── Inline repairs for checks that need file-writing logic ───
+    let mut repaired_inline: Vec<&str> = Vec::new();
     for r in fixable.iter() {
         match r.name {
             "test_runner" | "lint_runner" => {
                 attempt_write_runner_config(sovereign_dir);
+                repaired_inline.push(r.name);
             }
             "skill_file" => {
                 attempt_write_skill_file();
-            }
-            "hook_config" => {
-                attempt_write_hook_config();
+                repaired_inline.push(r.name);
             }
             _ => {}
         }
     }
 
     // ── Print manual hints ────────────────────────────────────────
+    // Anything just repaired inline is excluded: printing "do X
+    // yourself" directly under "✓ wrote X" is how `--fix` used to read.
     let manual: Vec<_> = fixable
         .iter()
         .filter(|r| matches!(r.repair, Repair::Manual(_)))
+        .filter(|r| !repaired_inline.contains(&r.name))
         .collect();
     if !manual.is_empty() {
         println!("\n  Manual repairs needed:");

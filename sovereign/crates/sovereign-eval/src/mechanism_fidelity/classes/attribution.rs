@@ -177,16 +177,24 @@ impl ReasoningClass for AttributionSupport {
 mod tests {
     use super::*;
     use std::io::Write;
+    use tempfile::TempDir;
 
-    /// Write a tiny atoms.json fixture and return its corpus root. Each call
-    /// gets a UNIQUE dir: `File::create` truncates, so sharing one path races a
-    /// concurrent reader to an empty parse (an empty claim set → `probes[0]`
-    /// panics). Unique dirs remove the shared mutable state entirely.
-    fn fixture_corpus() -> std::path::PathBuf {
-        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!("mf_attribution_unit_fixture_{n}"));
-        let atlas = root.join("atlas");
+    /// Write a tiny atoms.json fixture and return its corpus root, as a live
+    /// `TempDir` guard the caller must hold: the directory is removed on drop,
+    /// so binding only the `PathBuf` would read an already-deleted corpus.
+    ///
+    /// A process-local counter is NOT sufficient uniqueness here, which is what
+    /// the previous version assumed. nextest runs one process per test, so every
+    /// test in this module started its counter at 0 and all three shared
+    /// `mf_attribution_unit_fixture_0`. `File::create` truncates, so a
+    /// concurrent reader parsed an empty claim set — an intermittent failure
+    /// that only ever showed up in a full-suite run and always passed in
+    /// isolation. Proven 2026-07-28: a clean nextest run over these three tests
+    /// created exactly ONE fixture directory. `TempDir` is unique per process by
+    /// construction, so the shared mutable path is gone rather than narrowed.
+    fn fixture_corpus() -> TempDir {
+        let root = tempfile::tempdir().unwrap();
+        let atlas = root.path().join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
             "schema_version": 1,
@@ -221,7 +229,7 @@ mod tests {
     #[test]
     fn mines_claims_and_excludes_cheatable_and_nonclaims() {
         let corpus = fixture_corpus();
-        let claims = mine_claims(&corpus, false);
+        let claims = mine_claims(corpus.path(), false);
         let ids: Vec<&str> = claims.iter().map(|c| c.id.as_str()).collect();
         // The two genuine claims survive; the cheatable one (excerpt ==
         // content) and the non-Claim atom are excluded.
@@ -238,7 +246,7 @@ mod tests {
     fn probe_shape_and_oracle() {
         let corpus = fixture_corpus();
         let cls = AttributionSupport;
-        let probes = cls.build_probes(10, 0, Some(corpus.as_path()));
+        let probes = cls.build_probes(10, 0, Some(corpus.path()));
         // 2 mined claims × (full×4 + control×3) = 14 probes.
         assert_eq!(probes.len(), 14);
 
@@ -264,7 +272,7 @@ mod tests {
     fn control_cannot_cheat() {
         let corpus = fixture_corpus();
         let cls = AttributionSupport;
-        let probes = cls.build_probes(10, 0, Some(corpus.as_path()));
+        let probes = cls.build_probes(10, 0, Some(corpus.path()));
 
         // Within a case, stripped base and stripped dir_p1 prompts are
         // byte-identical — the blindfold control cannot see the negation.

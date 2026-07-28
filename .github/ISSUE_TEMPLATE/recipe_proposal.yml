@@ -1,0 +1,63 @@
+name: Recipe proposal (a corpus you want)
+description: Propose a source that should become a searchable, cited corpus.
+labels: ["area: recipes", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Recipes are open for pull requests — if you can write the TOML, send it
+        straight to a PR and skip this form. See
+        [Contributing a recipe](https://github.com/alexsbryan/commonwealth-ai/blob/main/CONTRIBUTING.md#contributing-a-recipe).
+
+
+        Use this form when you want a corpus to exist but would rather not build
+        it yourself, or when you're unsure whether the licensing works.
+  - type: input
+    id: source
+    attributes:
+      label: What's the source?
+      description: Name it and link it — the dump, dataset, archive, or API.
+      placeholder: e.g. the Stanford Encyclopedia of Philosophy
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would you ask it?
+      description: >
+        A couple of real questions you'd want answered from this corpus. This is
+        the most useful part of the form — it tells us whether retrieval over it
+        would actually work.
+    validations:
+      required: true
+  - type: dropdown
+    id: redistribution
+    attributes:
+      label: Can the source be redistributed?
+      description: >
+        Best guess is fine. This decides `mesh_sharing`, not whether we accept
+        the recipe — non-redistributable sources are welcome, they just build
+        locally instead of shipping a prebuilt index.
+      options:
+        - "Yes — permissive or open license (CC-BY, CC0, public domain, ...)"
+        - "Searchable but not redistributable (license forbids copying the text)"
+        - "No / unsure"
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License, if you know it
+      placeholder: e.g. CC-BY-SA-4.0
+  - type: input
+    id: size
+    attributes:
+      label: Rough size
+      description: Helps judge whether it needs a prebuilt index on Hugging Face.
+      placeholder: e.g. ~2 GB of HTML, ~50k documents
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is a source I have the right to point at, and I'm not asking anyone to redistribute something they can't

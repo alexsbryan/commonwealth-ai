@@ -31,6 +31,13 @@
           - "**/*.md"
           - "docs/**"
 
+# Recipes are open to outside PRs (CONTRIBUTING.md), so they are the label
+# most likely to arrive from someone who has never touched this repo before.
+"area: recipes":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "sovereign-recipes/**"
+
 "area: ci":
   - changed-files:
       - any-glob-to-any-file:

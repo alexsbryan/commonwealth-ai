@@ -908,9 +908,17 @@ mod tests {
         assert!(matches!(result, OpencodeInstall::Created(_)));
         let content = std::fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // `mcp` is a FLAT map of name → server (opencode SDK
+        // `Config.mcp`), and the only valid `type` discriminators are
+        // "local" and "remote". Verified against opencode 1.14.48.
         assert_eq!(
-            parsed["mcp"]["servers"]["sovereign"]["url"],
+            parsed["mcp"]["sovereign"]["url"],
             "http://localhost:9741/mcp"
+        );
+        assert_eq!(parsed["mcp"]["sovereign"]["type"], "remote");
+        assert!(
+            parsed["mcp"]["servers"].is_null(),
+            "must not reintroduce the nested `mcp.servers` shape opencode rejects"
         );
         assert_eq!(
             parsed["provider"]["commonwealth"]["options"]["baseURL"],
@@ -930,9 +938,7 @@ mod tests {
               "model": { "id": "auto" },
               "skills": [".opencode/skills/sovereign-code"],
               "mcp": {
-                "servers": {
-                  "github": { "type": "http", "url": "https://example.com/mcp" }
-                }
+                "github": { "type": "remote", "url": "https://example.com/mcp" }
               },
               "provider": {
                 "openrouter": { "npm": "@openrouter/ai-sdk", "options": {} }
@@ -948,7 +954,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         // Our entries are present.
         assert_eq!(
-            parsed["mcp"]["servers"]["sovereign"]["url"],
+            parsed["mcp"]["sovereign"]["url"],
             "http://localhost:9741/mcp"
         );
         assert_eq!(
@@ -956,10 +962,7 @@ mod tests {
             "http://localhost:9741/v1"
         );
         // Existing entries survived.
-        assert_eq!(
-            parsed["mcp"]["servers"]["github"]["url"],
-            "https://example.com/mcp"
-        );
+        assert_eq!(parsed["mcp"]["github"]["url"], "https://example.com/mcp");
         assert_eq!(
             parsed["provider"]["openrouter"]["npm"],
             "@openrouter/ai-sdk"
@@ -989,8 +992,78 @@ mod tests {
         let parsed: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            parsed["mcp"]["servers"]["sovereign"]["url"],
+            parsed["mcp"]["sovereign"]["url"],
             "http://localhost:9999/mcp"
+        );
+    }
+
+    /// Until 2026-07-28 we wrote `mcp.servers.sovereign` with
+    /// `type: "http"`. opencode's `mcp` is a flat name → server map and
+    /// its only discriminators are "local"/"remote", so that entry
+    /// parses as a server *named* "servers" with no `type` — a schema
+    /// failure that takes the whole config down. Writing the correct
+    /// key is therefore not enough; the old one has to go, or the user
+    /// stays broken after re-running setup.
+    #[test]
+    fn opencode_install_evicts_the_legacy_servers_shape() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        std::fs::write(
+            &path,
+            r#"{
+              "mcp": {
+                "servers": {
+                  "sovereign": { "type": "http", "url": "http://localhost:9741/mcp" }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let result = install_opencode_config_at(&path, 9741).unwrap();
+        assert!(
+            matches!(result, OpencodeInstall::MergedInto(_)),
+            "a legacy entry is work to do, not AlreadyConfigured"
+        );
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(parsed["mcp"]["sovereign"]["type"], "remote");
+        assert!(
+            parsed["mcp"]["servers"].is_null(),
+            "the legacy `mcp.servers` object must be gone, not merely shadowed"
+        );
+    }
+
+    /// Eviction must not eat a peer's unrelated entry that happens to
+    /// live under the same bad key.
+    #[test]
+    fn opencode_install_keeps_foreign_entries_under_legacy_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("opencode.json");
+        std::fs::write(
+            &path,
+            r#"{
+              "mcp": {
+                "servers": {
+                  "sovereign": { "type": "http", "url": "http://localhost:9741/mcp" },
+                  "github": { "type": "http", "url": "https://example.com/mcp" }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        install_opencode_config_at(&path, 9741).unwrap();
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(parsed["mcp"]["sovereign"]["type"], "remote");
+        assert!(parsed["mcp"]["servers"]["sovereign"].is_null());
+        // Not ours to delete or migrate.
+        assert_eq!(
+            parsed["mcp"]["servers"]["github"]["url"],
+            "https://example.com/mcp"
         );
     }
 

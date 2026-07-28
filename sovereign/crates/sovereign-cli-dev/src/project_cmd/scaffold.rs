@@ -238,7 +238,7 @@ architect.
     )
 }
 
-/// Generate `.opencode/config.json` — registers the sovereign MCP server and,
+/// Generate `.opencode/opencode.json` — registers the sovereign MCP server and,
 /// when Commonwealth is configured, a custom OpenAI-compatible provider backed
 /// by the OICP mesh. Models are populated from live OICP capabilities when
 /// available; falls back to a single `"auto"` entry otherwise.
@@ -247,13 +247,14 @@ pub(super) fn generate_opencode_config(
     commonwealth_url: Option<&str>,
     commonwealth_models: &[String],
 ) -> String {
+    // `mcp` is a FLAT map of name → McpLocalConfig | McpRemoteConfig
+    // (opencode SDK `Config.mcp`); the only valid `type` discriminators
+    // are "local" and "remote". Verified against opencode 1.14.48.
     let mut config = serde_json::json!({
         "mcp": {
-            "servers": {
-                "sovereign": {
-                    "type": "http",
-                    "url": format!("http://localhost:{port}/mcp")
-                }
+            "sovereign": {
+                "type": "remote",
+                "url": format!("http://localhost:{port}/mcp")
             }
         }
     });
@@ -296,22 +297,29 @@ pub(super) fn merge_opencode_config(existing: &str, generated: &str) -> String {
         Err(_) => return generated.to_string(),
     };
 
-    if let Some(new_servers) = new
-        .get("mcp")
-        .and_then(|m| m.get("servers"))
-        .and_then(|s| s.as_object())
-    {
+    if let Some(new_servers) = new.get("mcp").and_then(|m| m.as_object()) {
         let mcp = base
             .as_object_mut()
             .unwrap()
             .entry("mcp")
             .or_insert_with(|| serde_json::json!({}));
-        let servers = mcp
-            .as_object_mut()
-            .unwrap()
-            .entry("servers")
-            .or_insert_with(|| serde_json::json!({}));
-        if let Some(map) = servers.as_object_mut() {
+        if let Some(map) = mcp.as_object_mut() {
+            // Evict our pre-2026-07-28 `mcp.servers.sovereign` entry.
+            // opencode reads `mcp` as a flat name → server map, so a
+            // `servers` key parses as a typeless server and fails the
+            // whole config's schema — writing the right key while
+            // leaving the old one behind still leaves the user broken.
+            let drop_servers = map
+                .get_mut("servers")
+                .and_then(|s| s.as_object_mut())
+                .map(|s| {
+                    s.remove("sovereign");
+                    s.is_empty()
+                })
+                .unwrap_or(false);
+            if drop_servers {
+                map.remove("servers");
+            }
             for (k, v) in new_servers {
                 map.insert(k.clone(), v.clone());
             }
@@ -736,11 +744,46 @@ mod tests {
     fn opencode_config_no_commonwealth() {
         let s = generate_opencode_config(9741, None, &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
-        assert_eq!(
-            v["mcp"]["servers"]["sovereign"]["url"],
-            "http://localhost:9741/mcp"
+        assert_eq!(v["mcp"]["sovereign"]["url"], "http://localhost:9741/mcp");
+        assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
+        assert!(
+            v["mcp"]["servers"].is_null(),
+            "must not reintroduce the nested `mcp.servers` shape opencode rejects"
         );
         assert!(v.get("provider").is_none());
+    }
+
+    /// The generator emitted `mcp.servers.sovereign` with `type: "http"`
+    /// until 2026-07-28. Both are invalid: `mcp` is a flat name → server
+    /// map and the discriminators are "local"/"remote". A merge must
+    /// evict the old entry, not sit beside it.
+    #[test]
+    fn merge_opencode_evicts_legacy_servers_shape() {
+        let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"}}}}"#;
+        let generated = generate_opencode_config(9741, None, &[]);
+        let merged = merge_opencode_config(existing, &generated);
+        let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
+        assert!(
+            v["mcp"]["servers"].is_null(),
+            "the legacy `mcp.servers` object must be gone, not merely shadowed"
+        );
+    }
+
+    /// Eviction is surgical: a peer's entry parked under the same bad
+    /// key is not ours to delete.
+    #[test]
+    fn merge_opencode_keeps_foreign_entries_under_legacy_key() {
+        let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"},"github":{"type":"http","url":"https://example.com/mcp"}}}}"#;
+        let generated = generate_opencode_config(9741, None, &[]);
+        let merged = merge_opencode_config(existing, &generated);
+        let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(v["mcp"]["sovereign"]["type"], "remote");
+        assert!(v["mcp"]["servers"]["sovereign"].is_null());
+        assert_eq!(
+            v["mcp"]["servers"]["github"]["url"],
+            "https://example.com/mcp"
+        );
     }
 
     #[test]
@@ -790,7 +833,7 @@ mod tests {
 
     #[test]
     fn merge_opencode_preserves_other_providers() {
-        let existing = r#"{"mcp":{"servers":{}},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
+        let existing = r#"{"mcp":{},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
         let generated = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
@@ -806,7 +849,7 @@ mod tests {
 
     #[test]
     fn merge_opencode_no_commonwealth_in_generated_leaves_existing_provider_intact() {
-        let existing = r#"{"mcp":{"servers":{}},"provider":{"commonwealth":{"name":"old"}}}"#;
+        let existing = r#"{"mcp":{},"provider":{"commonwealth":{"name":"old"}}}"#;
         // generate without commonwealth URL → no provider key in generated
         let generated = generate_opencode_config(9741, None, &[]);
         let merged = merge_opencode_config(existing, &generated);
