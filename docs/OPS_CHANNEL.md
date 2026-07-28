@@ -56,6 +56,16 @@ default svrn-ops client key (RuggedFox); pass a different pubkey as `$1` to
 authorize another client. It derives the forced-command path from its own repo
 location — no hardcoded home directory.
 
+**The listener is tailnet-only.** The generated `sshd_config` carries
+`ListenAddress <tailscale-ip>` + `ListenAddress 127.0.0.1`, so the channel
+never answers on the LAN or any other interface. The address is resolved at
+setup time (`tailscale ip -4`, then an `inet 100.*` interface scan); if none is
+found the script **exits rather than falling back to `0.0.0.0`**, and it fails
+loudly afterward if sshd nonetheless bound `*:2222`. Override deliberately with
+`OPS_LISTEN_ADDR=<ip>`. Consequence: if the tailnet address ever changes, sshd
+cannot bind and the channel goes down — **re-run the script**, which is also
+the documented repair.
+
 What it sets up: `~/.svrn-ops/` (host key, sshd_config, single-key
 `authorized_keys`) + `~/Library/LaunchAgents/com.svrn.ops-sshd.plist` running
 `/usr/sbin/sshd -D` on port 2222 as the login user.
@@ -79,10 +89,12 @@ Notes:
 ## Client setup (RuggedFox) — DONE 2026-07-27
 
 - Key: `~/.ssh/svrn_ops_ed25519` (pubkey above).
-- `~/.ssh/config` has `Host beefymac-ops` → `192.168.1.2` **port 2222**,
-  `IdentitiesOnly`, `BatchMode`, 5s timeout. **IP, not `.local`** — mDNS is
-  deliberately blocked during the P0.5 heal test, and the channel must
-  survive that.
+- `~/.ssh/config` has `Host beefymac-ops` → **`100.104.36.28`** (BeefyMac's
+  tailnet address) **port 2222**, `IdentitiesOnly`, `BatchMode`, 5s timeout.
+  **IP, not `.local`** — mDNS is deliberately blocked during the P0.5 heal
+  test, and the channel must survive that.
+  - Updated 2026-07-27: was `192.168.1.2` (LAN). The server now binds the
+    tailnet address only, so the LAN IP will refuse the connection.
 
 ## Verification (run from RuggedFox after server setup)
 
