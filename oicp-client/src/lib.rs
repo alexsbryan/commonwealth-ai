@@ -948,6 +948,30 @@ impl InferenceProvider for RemoteApiProvider {
         }
     }
 
+    /// The model this provider talks to.
+    ///
+    /// Was inheriting the trait default, `"unknown"` — while the id sat
+    /// right there in `self.model_id`, and `capabilities()` two methods
+    /// up was already reading its sibling field. The cost was not
+    /// cosmetic: the inherited `complete_stream_with_id` stamps this
+    /// onto every streamed response's provenance, and the mesh builds
+    /// one of these per peer specifically so a turn can say where it
+    /// went (`peer_inference::provider_for_peer`). A placeholder id is
+    /// still the right answer here for exactly that reason — see
+    /// `model_id_is_placeholder`, which governs the WIRE, not
+    /// attribution.
+    fn model_id_for(&self, _speed: Speed) -> String {
+        self.model_id.clone()
+    }
+
+    /// Was inheriting `None` despite `context_size` being a field —
+    /// the same oversight as `model_id_for`. `None` reads as "no window
+    /// known", which switches the runtime's budget-aware compaction to
+    /// its blind fallback.
+    fn effective_context_size(&self) -> Option<u32> {
+        Some(self.context_size)
+    }
+
     /// POSTs to the daemon's loopback warmup endpoint
     /// (`/internal/inference/warmup`, see
     /// `commonwealth-api::routes_internal::mesh_admin::inference_warmup`).
@@ -1442,45 +1466,274 @@ mod tests {
         );
     }
 
-    /// `SplitInferenceProvider` must actually ISSUE the warm request,
-    /// not inherit the trait's silent `Ok(())`. This is the second bug
-    /// of that exact shape on this provider (see `primary_slot_status`),
-    /// and both were invisible because the default returns success — so
-    /// the test asserts the wire behaviour, which is the only thing a
-    /// no-op cannot fake. A one-shot TCP listener stands in for the
-    /// daemon so this stays dependency-free and offline.
+    // ═══════════════════════════════════════════════════════════════
+    // ATTACH-MODE CONFORMANCE
+    //
+    // `SplitInferenceProvider` is the provider the SHIPPED desktop
+    // runs: the supervisor spawns a child daemon and the app rewrites
+    // its own boot mode to Attach, so this wrapper — not the embedded
+    // engine — serves virtually every real user.
+    //
+    // The recurring defect on it is never a wrong implementation. It is
+    // a MISSING one. `InferenceProvider` defaults 21 of its 25 methods,
+    // and 16 of those defaults return `Ok(())` / `None` / `vec![]` /
+    // `"unknown"` — plausible answers that actually mean "I don't
+    // know". Inherit one by accident and the wrapper reports success
+    // while doing nothing, forwarding to no one, with the correct
+    // implementation sitting one field away on `self.chat`. Rust emits
+    // no diagnostic: the code compiles exactly as written. Three
+    // shipped bugs came from this — `primary_slot_status`,
+    // `warmup_primary`, `complete_stream_with_finish`.
+    //
+    // So these assert WIRE BEHAVIOUR, which is the only thing a silent
+    // no-op cannot fake: a method that falls through to the default
+    // never opens a socket, and a synthesised terminal frame never
+    // carries the wire's own values. Asserting the URL-building helper
+    // instead is what let `warmup_primary` ship broken — that test
+    // passed on the one sound link of a three-link chain.
+    // ═══════════════════════════════════════════════════════════════
+
+    /// A one-shot loopback daemon: serves `responses` in order, then
+    /// hands back every request line it saw.
+    ///
+    /// Raw TCP on purpose — `oicp-client` is a contract crate with no
+    /// dev-dependencies, and pulling an HTTP mock framework in to
+    /// exercise four verbs is a worse trade than this much `std`.
+    struct MockDaemon {
+        port: u16,
+        server: std::thread::JoinHandle<Vec<String>>,
+    }
+
+    impl MockDaemon {
+        fn serving(responses: Vec<String>) -> Self {
+            use std::io::{Read, Write};
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let mut seen = Vec::new();
+                for body in responses {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        break;
+                    };
+                    let mut buf = [0u8; 8192];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    seen.push(
+                        String::from_utf8_lossy(&buf[..n])
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .to_string(),
+                    );
+                    let _ = stream.write_all(body.as_bytes());
+                    let _ = stream.flush();
+                }
+                seen
+            });
+            Self { port, server }
+        }
+
+        /// The Attach-mode provider, pointed at this mock.
+        fn attach_provider(&self) -> SplitInferenceProvider {
+            SplitInferenceProvider::new(
+                &format!("http://127.0.0.1:{}/v1", self.port),
+                "chat-model".to_string(),
+                "embed-model".to_string(),
+                8192,
+                String::new(),
+            )
+        }
+
+        /// Request lines observed, in order. Consumes the mock.
+        fn request_lines(self) -> Vec<String> {
+            self.server.join().unwrap()
+        }
+    }
+
+    fn http_ok(content_type: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n\
+             Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    /// What a real daemon emits for a TRUNCATED generation: two tokens,
+    /// `finish_reason: "length"`, and a usage record. Truncation is the
+    /// case that matters — a synthesised terminal frame reports it as a
+    /// clean stop, and the caller cannot tell the difference.
+    fn sse_truncated_generation() -> String {
+        [
+            r#"data: {"choices":[{"delta":{"content":"held "},"finish_reason":null}]}"#,
+            "",
+            r#"data: {"choices":[{"delta":{"content":"token"},"finish_reason":"length"}],"usage":{"prompt_tokens":7,"completion_tokens":2,"total_tokens":9}}"#,
+            "",
+            "data: [DONE]",
+            "",
+        ]
+        .join("\n")
+    }
+
+    fn a_request() -> CompletionRequest {
+        let mut request = CompletionRequest::default();
+        request.prompt = "anything".into();
+        request
+    }
+
     #[tokio::test]
-    async fn split_provider_actually_sends_the_warmup_request() {
-        use std::io::{Read, Write};
+    async fn attach_warmup_reaches_the_daemon() {
+        let daemon = MockDaemon::serving(vec![http_ok("application/json", r#"{"latency_ms":0}"#)]);
 
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let server = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 2048];
-            let n = stream.read(&mut buf).unwrap();
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 16\r\n\r\n{\"latency_ms\":0}")
-                .unwrap();
-            stream.flush().unwrap();
-            String::from_utf8_lossy(&buf[..n]).to_string()
-        });
+        daemon.attach_provider().warmup_primary().await.unwrap();
 
+        assert_eq!(
+            daemon.request_lines(),
+            vec!["POST /internal/inference/warmup HTTP/1.1"],
+            "the trait default is a silent Ok(()) — the ONLY proof of a real \
+             warm-up is that a request left the process"
+        );
+    }
+
+    #[tokio::test]
+    async fn attach_slot_status_asks_the_node_that_owns_the_weights() {
+        let body = r#"{"inference":{"resident":[
+            {"role":"fast","model_id":"fast-4b","resident":true},
+            {"role":"primary","model_id":"deep-35b","resident":false,
+             "size_bytes":18525200896,"transitioning":false}]}}"#;
+        let daemon = MockDaemon::serving(vec![http_ok("application/json", body)]);
+
+        let slot = daemon
+            .attach_provider()
+            .primary_slot_status()
+            .await
+            .expect("this provider owns no weights, so it must ASK — the default reads its own empty resident_slots() and answers None forever");
+
+        assert_eq!(slot.model_id, "deep-35b");
+        assert!(
+            !slot.resident,
+            "a COLD primary is the whole point of the call; the cold row must \
+             survive the round-trip verbatim"
+        );
+        assert_eq!(slot.size_bytes, Some(18_525_200_896));
+        assert_eq!(daemon.request_lines(), vec!["GET /status HTTP/1.1"]);
+    }
+
+    #[tokio::test]
+    async fn attach_streaming_reports_the_wires_finish_reason_not_a_synthesised_stop() {
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "text/event-stream",
+            &sse_truncated_generation(),
+        )]);
+        let provider = daemon.attach_provider();
+
+        let mut stream = provider
+            .complete_stream_with_finish(&a_request())
+            .await
+            .unwrap();
+        let (mut text, mut finish) = (String::new(), None);
+        while let Some(frame) = stream.next().await {
+            match frame {
+                StreamFrame::Token(t) => text.push_str(&t),
+                StreamFrame::Finish { reason, usage } => finish = Some((reason, usage)),
+                StreamFrame::Error(e) => panic!("unexpected stream error: {e}"),
+            }
+        }
+
+        assert_eq!(text, "held token");
+        let (reason, usage) = finish.expect("every stream must end with a terminal frame");
+        assert_eq!(
+            reason,
+            FinishReason::Length,
+            "the trait default appends Finish{{Stop}} it never observed, making a \
+             max_tokens truncation indistinguishable from a clean finish"
+        );
+        assert_eq!(
+            usage.map(|u| u.total_tokens),
+            Some(9),
+            "the default drops usage entirely, so token accounting reads None"
+        );
+    }
+
+    #[tokio::test]
+    async fn attach_streaming_with_id_names_the_model_and_keeps_the_finish_reason() {
+        // The composed default (`complete_stream_with_id_and_finish`)
+        // is only as honest as the two methods it calls. It needs no
+        // forward of its own — but that is a CONSEQUENCE of the other
+        // two being right, so it is pinned rather than assumed.
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "text/event-stream",
+            &sse_truncated_generation(),
+        )]);
+        let provider = daemon.attach_provider();
+
+        let (mut stream, model_id) = provider
+            .complete_stream_with_id_and_finish(&a_request())
+            .await
+            .unwrap();
+        assert_eq!(
+            model_id, "chat-model",
+            "\"unknown\" here poisons the provenance of every streamed response"
+        );
+
+        let mut finish = None;
+        while let Some(frame) = stream.next().await {
+            if let StreamFrame::Finish { reason, .. } = frame {
+                finish = Some(reason);
+            }
+        }
+        assert_eq!(finish, Some(FinishReason::Length));
+    }
+
+    /// The methods answered from the provider's own fields. No daemon:
+    /// reaching the network here would itself be the bug.
+    #[test]
+    fn attach_answers_from_its_own_state_without_the_unknown_sentinels() {
         let provider = SplitInferenceProvider::new(
-            &format!("http://127.0.0.1:{port}/v1"),
+            "http://127.0.0.1:1/v1",
             "chat-model".to_string(),
             "embed-model".to_string(),
-            4096,
+            8192,
             String::new(),
         );
-        provider.warmup_primary().await.unwrap();
 
-        let request = server.join().unwrap();
-        assert!(
-            request.starts_with("POST /internal/inference/warmup "),
-            "warm-up must reach the daemon's warmup route; got request line: {}",
-            request.lines().next().unwrap_or("<empty>")
+        assert_eq!(provider.model_id_for(Speed::Slow), "chat-model");
+        assert_eq!(provider.model_id_for(Speed::Fast), "chat-model");
+        assert_eq!(
+            provider.embed_model_id(),
+            "embed-model",
+            "\"unknown\" is the documented 'cannot verify' sentinel — returning it \
+             here would silently disable the persisted-embedding staleness guard"
         );
+        assert_eq!(provider.effective_context_size(), Some(8192));
+    }
+
+    /// A LEDGER of the defaults this provider still inherits — not an
+    /// endorsement of them. Each line is a known gap in Attach mode,
+    /// recorded so it is countable instead of invisible.
+    ///
+    /// If you implement one of these, this test FAILS. That failure is
+    /// the point: delete the line, and the gap is gone from the ledger
+    /// too. A silent gap is what produced the three bugs above.
+    #[tokio::test]
+    async fn attach_remaining_gaps_are_recorded_not_forgotten() {
+        let provider = SplitInferenceProvider::new(
+            "http://127.0.0.1:1/v1",
+            "chat-model".to_string(),
+            "embed-model".to_string(),
+            8192,
+            String::new(),
+        );
+
+        // Heuristic, not the daemon's real BPE vocab: Attach and Local
+        // therefore budget context differently for the same text.
+        assert_eq!(provider.count_tokens("12345678"), 2);
+        // The Settings "you can raise ctx to N" ceiling is absent.
+        assert_eq!(provider.n_ctx_train_for_primary(), None);
+        // Extras loaded on the daemon are invisible to the desktop.
+        assert!(provider.extras_inventory().is_empty());
+        // Honest here, unlike the others: this provider genuinely holds
+        // no slots. It is `primary_slot_status` that must not be
+        // derived from it — see the dedicated test above.
+        assert!(provider.resident_slots().is_empty());
     }
 
     #[test]

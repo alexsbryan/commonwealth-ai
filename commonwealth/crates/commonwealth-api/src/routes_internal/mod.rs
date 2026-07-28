@@ -1,8 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Internal API surface (mTLS, port 9742). Façade module — handlers
+//! Internal API surface (port 9742, peer-reachable). Façade module — handlers
 //! live in endpoint-scoped submodules; this file re-exports them so
 //! `server.rs` and the integration tests keep their existing import
 //! paths.
+//!
+//! TRUST POSTURE — read this before putting anything expensive here.
+//! This header said "mTLS" until 2026-07-27 and there is no TLS
+//! anywhere in `server.rs`: `serve()` binds both listeners with plain
+//! `TcpListener` + `axum::serve`. What actually guards this port is
+//! the admission gate plus each handler's own mesh-id/join-key check —
+//! NOT transport authentication. So treat every route here as
+//! reachable by any peer that can route to this host, and do not mount
+//! anything whose cost an unauthenticated caller shouldn't be able to
+//! trigger. (`/internal/inference/warmup` was exactly that mistake: an
+//! 18.5 GB model load, one unauthenticated POST away, on a port
+//! described as mTLS-protected. It now lives on the client router.)
 //!
 //! The four shared wire types kept here (`IngestPartitionRequest`,
 //! `IngestPartitionResponse`, `ErrorBody`, plus the submodule
