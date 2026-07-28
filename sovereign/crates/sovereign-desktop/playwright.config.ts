@@ -46,7 +46,13 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
+    // CI normally forbids reuse so a run can never inherit a stale server it
+    // did not start. `sabotage.mjs` is the one exception: it invokes Playwright
+    // ~26 times in a row and owns the dev server's lifecycle itself (starts it,
+    // waits for readiness, kills the process group at the end), so the reuse is
+    // explicit rather than inherited. Without this it pays a Vite cold start
+    // per mutant, which measured as most of its wall clock.
+    reuseExistingServer: !process.env.CI || process.env.SABOTAGE_SHARED_SERVER === "1",
     timeout: 60_000,
     stdout: "pipe",
     stderr: "pipe",

@@ -170,7 +170,12 @@ export async function assertTurnInvariants(
         chunk,
         `dangling citation: read_get_chunk(${c.corpus_id}, ${c.chunk_id}) returned null`,
       ).toBeTruthy();
-      expect((chunk as { content: string }).content.length).toBeGreaterThan(0);
+      expect(
+        (chunk as { content: string }).content.length,
+        `citation resolved to an empty chunk: read_get_chunk(${c.corpus_id}, ` +
+          `${c.chunk_id}) returned a record with no content — the handle is ` +
+          `live but the text behind it is gone`,
+      ).toBeGreaterThan(0);
     }
   }
 

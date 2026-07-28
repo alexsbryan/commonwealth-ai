@@ -20,6 +20,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "test:e2e:faults": "playwright test -c playwright.faults.config.ts",
+    "sabotage": "node tests/e2e/scripts/sabotage.mjs",
+    "sabotage:list": "node tests/e2e/scripts/sabotage.mjs --list",
     "demo": "playwright test -c playwright.demo.config.ts",
     "demo:export": "node tests/e2e/scripts/demo-export.mjs",
     "test:journeys": "playwright test -c playwright.real.config.ts tests/e2e/real/journeys/",

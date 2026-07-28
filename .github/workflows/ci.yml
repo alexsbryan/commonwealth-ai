@@ -204,6 +204,21 @@ jobs:
       # empty) plus xvfb. That belongs in a nightly, not here.
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
+      # Negative controls: break the product on purpose, require the specs
+      # that claim to cover it to go red. Everything above measures what the
+      # suite REACHED; this is the only step that measures what it would
+      # CATCH — a spec can satisfy every coverage metric we have while
+      # asserting nothing.
+      #
+      # Each mutant is a real, compiling edit to real source, applied and
+      # reverted in-process (tests/e2e/sabotage-bank.mjs declares them). Exit
+      # is non-zero when a mutant SURVIVES — i.e. the product was broken and
+      # the gate stayed green — or when one goes STALE because the code moved
+      # out from under it.
+      #
+      # Runs after the suite deliberately: a red suite makes every verdict
+      # here meaningless, and the script refuses to start on a red baseline.
+      - run: npm run sabotage
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
