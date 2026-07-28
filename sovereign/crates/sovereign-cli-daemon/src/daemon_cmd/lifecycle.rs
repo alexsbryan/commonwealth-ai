@@ -914,6 +914,14 @@ fn log_shutdown_context(signal: &'static str, path: &'static str) {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     if jetsam_risk && signal == "SIGTERM" {
+        // Platform-correct forensics pointer: during the 2026-07-27
+        // post-mortem this line said "inspect Console.app" on a Linux
+        // box — misdirecting exactly the person doing memory forensics.
+        let where_to_look = if cfg!(target_os = "macos") {
+            "inspect Console.app for 'low memory' or 'memorystatus'"
+        } else {
+            "check `journalctl -k` / `dmesg` for oom-kill and `coredumpctl list`"
+        };
         tracing::warn!(
             signal,
             path,
@@ -921,7 +929,8 @@ fn log_shutdown_context(signal: &'static str, path: &'static str) {
             ppid,
             rss_mb = rss_mb.unwrap_or(0),
             at_unix = now_unix,
-            "daemon: shutdown signal received — peak RSS suggests possible jetsam/OOM trigger; inspect Console.app for 'low memory' or 'memorystatus' around this timestamp"
+            "daemon: shutdown signal received — peak RSS suggests possible jetsam/OOM trigger; {} around this timestamp",
+            where_to_look
         );
     } else {
         tracing::info!(

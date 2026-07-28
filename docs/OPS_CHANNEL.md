@@ -116,9 +116,13 @@ shows one line per call including the rejected `uname -a`.
   (`logs 50; rm -rf /`) rejected by numeric validation, audit log correct, `kill9 dry`
   correct. Bonus: `exe-info` immediately caught a live stale-binary condition
   (running daemon's exe `(deleted)` after a rebuild).
-- **Pending:** live e2e against BeefyMac — run the no-sudo server block above
-  (user-level sshd on 2222; Remote Login stays off — port 22 was refused as of
-  2026-07-27 and can stay that way), then the Verification block.
+- **2026-07-27 — live e2e against BeefyMac PASSED** (tailnet bind
+  `100.104.36.28:2222`; Remote Login stayed off, port 22 still refused): `ping`
+  OK; `uname -a` rejected exit 1; bare login ran the forced command (no shell);
+  `daemon-kill9 dry` reported pid without killing; `exe-info` + `logs` streamed
+  real state. Bonus finding #2: BeefyMac's daemon is ALSO running a stale
+  binary (exe mtime 17:09 vs process start ~4h earlier) — both machines need a
+  daemon restart in knockout Phase 0.
 
 ## Notes
 

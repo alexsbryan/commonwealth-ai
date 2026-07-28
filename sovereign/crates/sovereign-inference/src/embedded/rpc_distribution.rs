@@ -794,6 +794,12 @@ pub(crate) enum LoadPlacement {
     /// a later reload (on the next worker-set change) retries. The shared model
     /// reports "forming" until quorum + memory are met.
     InsufficientCluster { eligible: usize, quorum: u32 },
+    /// Placement fell back to local, but the model would not fit beside the
+    /// host (local-fit gate). The host does NOT load — the 2026-07-27
+    /// incident is a 91 GB fallback load starving the desktop compositor on
+    /// unified memory. Same recovery as `InsufficientCluster`: stay
+    /// unavailable; a later reload (next worker-set change) retries.
+    LocalUnfit { need_mb: u64, usable_mb: u64 },
 }
 
 /// The placement decision as a PURE function of its inputs — split out so the
@@ -841,6 +847,123 @@ fn rpc_min_pooled_bytes() -> u64 {
         .and_then(|v| v.trim().parse::<f64>().ok())
         .map(|gb| (gb * 1024.0 * 1024.0 * 1024.0) as u64)
         .unwrap_or(0)
+}
+
+// ── Local-fit gate ──────────────────────────────────────────────────────
+//
+// 2026-07-27 incident: a fault-tolerance test killed every RPC worker, the
+// daemon restarted, placement fell back to LocalOnly, and the shared 122B
+// primary lazily loaded ~91 GB beside the desktop. On unified memory the
+// compositor's GPU allocations starved (`amdgpu: CS rejected (-12)`),
+// gnome-shell aborted, and systemd tore down the entire user session.
+//
+// "Never wedge" must not mean "load anything locally". A model this large
+// only ever resolves LocalOnly as a *fallback* (no workers / plan failure /
+// warm failure), and the resilient fallback is the one InsufficientCluster
+// already models: do NOT load, stay unavailable, retry on the next
+// worker-set change. The gate below turns a LocalOnly resolution into
+// LocalUnfit when the model would not fit beside the host.
+
+/// Only models at or above this size are gated (default 32 GiB, via
+/// `SOVEREIGN_LOCAL_FIT_MIN_GB`). Below it, existing behaviour is
+/// untouched — tight-but-working small-box configs must not regress.
+fn local_fit_min_bytes() -> u64 {
+    std::env::var("SOVEREIGN_LOCAL_FIT_MIN_GB")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|&gb| gb > 0.0)
+        .map(|gb| (gb * 1024.0 * 1024.0 * 1024.0) as u64)
+        .unwrap_or(32 * 1024 * 1024 * 1024)
+}
+
+/// Operator escape hatch: `SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1` disables the
+/// gate entirely (mirrors `SOVEREIGN_SKIP_VRAM_CHECK` for the preflight).
+fn local_fit_skip() -> bool {
+    std::env::var("SOVEREIGN_LOCAL_FIT_CHECK_SKIP")
+        .or_else(|_| std::env::var("SOVEREIGN_SKIP_LOCAL_FIT_CHECK"))
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Memory reserved for everything that is not this model: the desktop
+/// compositor's GPU allocations (the 2026-07-27 casualty), other daemon
+/// slots, and the OS. `max(8 GiB, total/8)`, overridable via
+/// `SOVEREIGN_LOCAL_FIT_RESERVE_GB`.
+fn local_fit_reserve_bytes(total_bytes: u64) -> u64 {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    std::env::var("SOVEREIGN_LOCAL_FIT_RESERVE_GB")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|&gb| gb >= 0.0)
+        .map(|gb| (gb * GIB as f64) as u64)
+        .unwrap_or_else(|| (total_bytes / 8).max(8 * GIB))
+}
+
+/// Shortfall report when a local load would not fit. MiB so the numbers
+/// drop straight into logs and error strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LocalFitShortfall {
+    pub(crate) need_mb: u64,
+    pub(crate) usable_mb: u64,
+}
+
+/// PURE fit verdict: `None` = fits. Estimated footprint is weights +
+/// weights/8 (the KV proxy `capacity.rs` back-fit at 32K context) + 1 GiB
+/// scratch — deliberately the same shape as `estimate_slot_vram` so the
+/// preflight and this runtime gate can't drift far apart.
+pub(crate) fn local_fit_verdict(
+    model_bytes: u64,
+    available_bytes: u64,
+    reserve_bytes: u64,
+) -> Option<LocalFitShortfall> {
+    const MIB: u64 = 1024 * 1024;
+    let need = model_bytes + model_bytes / 8 + 1024 * MIB;
+    let usable = available_bytes.saturating_sub(reserve_bytes);
+    (need > usable).then_some(LocalFitShortfall {
+        need_mb: need / MIB,
+        usable_mb: usable / MIB,
+    })
+}
+
+/// Resolve a would-be LocalOnly placement through the fit gate. Small
+/// models (or a skipped/failed sensor) pass straight through; a gated
+/// model that doesn't fit resolves to `LocalUnfit` — same no-load,
+/// stay-unavailable, retry-on-worker-change behaviour as
+/// `InsufficientCluster`. Glassbox: every refusal logs the numbers.
+fn gate_local(model_bytes: u64) -> LoadPlacement {
+    if model_bytes < local_fit_min_bytes() || local_fit_skip() {
+        return LoadPlacement::LocalOnly;
+    }
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    let (available, total) = (sys.available_memory(), sys.total_memory());
+    if available == 0 || total == 0 {
+        tracing::warn!(
+            model_mb = model_bytes / (1024 * 1024),
+            "local-fit gate: memory sensor returned zero — cannot judge fit; \
+             allowing the local load (never brick loading on a failed sensor)"
+        );
+        return LoadPlacement::LocalOnly;
+    }
+    match local_fit_verdict(model_bytes, available, local_fit_reserve_bytes(total)) {
+        None => LoadPlacement::LocalOnly,
+        Some(shortfall) => {
+            tracing::warn!(
+                model_mb = model_bytes / (1024 * 1024),
+                need_mb = shortfall.need_mb,
+                usable_mb = shortfall.usable_mb,
+                available_mb = available / (1024 * 1024),
+                reserve_mb = local_fit_reserve_bytes(total) / (1024 * 1024),
+                "local-fit gate: refusing local fallback load — model would starve \
+                 the host (2026-07-27 session-kill class); staying unavailable until \
+                 the cluster re-forms. SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides."
+            );
+            LoadPlacement::LocalUnfit {
+                need_mb: shortfall.need_mb,
+                usable_mb: shortfall.usable_mb,
+            }
+        }
+    }
 }
 
 /// The never-wedge decision tree. Distribute ONLY a distributable (primary) slot,
@@ -911,6 +1034,7 @@ fn summarize_placement(placement: &LoadPlacement) -> sovereign_core::traits::Slo
         LoadPlacement::LocalOnly => bare("local"),
         LoadPlacement::StreamSplit => bare("stream-split"),
         LoadPlacement::InsufficientCluster { .. } => bare("forming"),
+        LoadPlacement::LocalUnfit { .. } => bare("unfit-local"),
         LoadPlacement::OwnedOverrides(dist) => {
             let ep: std::collections::HashMap<usize, String> = dist
                 .assignments
@@ -991,7 +1115,7 @@ fn resolve_placement_inner(
     );
 
     let auto_warm = match decision {
-        PlacementDecision::LocalOnly => return LoadPlacement::LocalOnly,
+        PlacementDecision::LocalOnly => return gate_local(model_bytes),
         PlacementDecision::StreamSplit => {
             // Publish the workers so the stream path can enumerate + split them.
             register_rpc_workers();
@@ -1009,7 +1133,7 @@ fn resolve_placement_inner(
             "wanted to distribute a large primary but couldn't plan the shards (no RPC \
              device, GGUF block count unreadable, or unmappable worker) — loading local-only"
         );
-        return LoadPlacement::LocalOnly;
+        return gate_local(model_bytes);
     };
 
     // Quorum + pooled-memory gate (shared-model host): never attempt a load the
@@ -1046,7 +1170,7 @@ fn resolve_placement_inner(
     let Some(orchestrator) = RPC_WARM_ORCHESTRATOR.get() else {
         // classify_placement only returns auto_warm when an orchestrator is
         // present, so this is unreachable in practice — but never wedge.
-        return LoadPlacement::LocalOnly;
+        return gate_local(model_bytes);
     };
     let req = RpcWarmPlan {
         model_path: model_path.to_path_buf(),
@@ -1068,10 +1192,10 @@ fn resolve_placement_inner(
         Err(e) => {
             tracing::warn!(
                 error = %e,
-                "auto-warm failed — loading the primary local-only (never wedge); a later \
-                 reload will retry once the worker(s) are reachable"
+                "auto-warm failed — falling back to local (never wedge, fit-gated); a \
+                 later reload will retry once the worker(s) are reachable"
             );
-            LoadPlacement::LocalOnly
+            gate_local(model_bytes)
         }
     }
 }
@@ -1386,6 +1510,54 @@ mod rpc_prune_tests {
             classify_placement(true, true, large, safe, false, false),
             LocalOnly
         );
+    }
+
+    #[test]
+    fn local_fit_verdict_replays_the_2026_07_27_incident() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // The incident, in the gate's own units: an ~84 GiB 122B GGUF, a
+        // 128 GiB box with ~110 GiB available, default reserve 16 GiB
+        // (total/8). Estimated need = 84 + 84/8 + 1 = ~95.5 GiB against
+        // 94 GiB usable → REFUSED. This exact load reached ~91 GB RSS and
+        // killed the desktop session; the verdict must never let it through.
+        let shortfall = local_fit_verdict(84 * GIB, 110 * GIB, 16 * GIB)
+            .expect("the incident load must be refused");
+        assert!(shortfall.need_mb > shortfall.usable_mb);
+
+        // The same model on a box with genuine headroom (e.g. a 256 GiB
+        // host with 200 GiB available) fits — the gate protects the host,
+        // it does not ban big models.
+        assert_eq!(local_fit_verdict(84 * GIB, 200 * GIB, 32 * GIB), None);
+
+        // The canonical 35B primary (~20 GiB) beside a desktop on a 64 GiB
+        // box: need ≈ 23.5 GiB vs 40−8 = 32 GiB usable → fits. Existing
+        // working configs must not regress.
+        assert_eq!(local_fit_verdict(20 * GIB, 40 * GIB, 8 * GIB), None);
+
+        // Reserve is honoured: same numbers with the reserve eating the
+        // margin flips the verdict.
+        assert!(local_fit_verdict(20 * GIB, 25 * GIB, 8 * GIB).is_some());
+
+        // Saturating: reserve larger than available must not underflow.
+        assert!(local_fit_verdict(1 * GIB, 2 * GIB, 10 * GIB).is_some());
+    }
+
+    #[test]
+    fn local_unfit_placement_reports_unfit_local_mode() {
+        // Glassbox: /status must say WHY the shared model is unavailable —
+        // "unfit-local" is distinct from "forming" (cluster short) so an
+        // operator can tell "waiting for workers" from "refused to starve
+        // the host".
+        let summary = summarize_placement(&LoadPlacement::LocalUnfit {
+            need_mb: 97_792,
+            usable_mb: 96_256,
+        });
+        assert_eq!(summary.mode, "unfit-local");
+        let forming = summarize_placement(&LoadPlacement::InsufficientCluster {
+            eligible: 0,
+            quorum: 1,
+        });
+        assert_eq!(forming.mode, "forming");
     }
 
     #[test]
