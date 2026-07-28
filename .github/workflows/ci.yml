@@ -120,7 +120,7 @@ jobs:
       desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -179,7 +179,7 @@ jobs:
         working-directory: sovereign/crates/sovereign-desktop
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -219,7 +219,7 @@ jobs:
       # Runs after the suite deliberately: a red suite makes every verdict
       # here meaningless, and the script refuses to start on a red baseline.
       - run: npm run sabotage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -400,7 +400,7 @@ jobs:
       # another day of burned allowance.
       - name: Upload test adapter logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sovereign-test-logs
           path: target/sovereign-test/latest/
