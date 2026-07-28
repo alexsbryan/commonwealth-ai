@@ -11,6 +11,8 @@ Within this project you consult with SYSTEM_OVERVIEW.md to understand the system
 
 A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MCP transport exposes **38 tools** — 32 canonical plus 6 deprecated aliases (see below). That covers code intelligence (`symbols`, `callers`, `callees`, `blast`, `code_search`, `facts`, `capability_map`, `arch_report`, `arch_posture`), notes (`note`, `notes`, `retire_note`, `briefing`, `session_state`), coordination (`work_in_flight`, `declare_scope`, `release_scope`), drift (`drift_findings`, `drift_posture`, `atos_verify`), build feedback (`lint_status`, `get_lint_output`, `build`), and `solve`.
 
+The build-feedback three are **dormant in this repo** — the lint/test watchers are off by design, so they have nothing to report. That is a supported posture, not a fault; see "Compilation and test feedback" for the gate that replaces them.
+
 A handful of tools are **CLI-only** — `sovereign tools list` shows them but they are NOT on the MCP surface, and calling one over MCP returns tool-not-found: `test_status`, `run_tests`, `get_run_output`, `recent_changes`, `project_context`, `session_reflection`. Reach those via `sovereign tools call <name>`.
 
 Don't trust this paragraph over the wire: `tools/list` is the authoritative answer, and the served set is `registry ∩ allowlist`, so it varies by which server you're talking to (`svrn daemon` serves the largest set).
@@ -286,76 +288,63 @@ The drift toolchain (`drift_posture`, `drift_findings`) is recent and known to b
 
 The bar for reflecting on drift tools is *lower* than for code-intelligence tools: it's a young surface, and silence is the failure mode that's hardest to detect later.
 
-### Compilation and test feedback — use the watcher, not Bash
+### Compilation and test feedback — run the scripts
 
-**DO NOT run `cargo build`, `cargo check`, `cargo test`, or `cargo clippy` via Bash** in projects with a running sovereign watcher. Running these directly contends with the background watcher for the Cargo file lock — one blocks the other and you idle doing nothing.
+**The watchers are OFF here, deliberately, and that is fine.** `.sovereign/sovereign.toml` declares `[watchers] enabled = false` (disabled 2026-05-31: the parallel cargo fan OOM'd the daemon under a resident big model). So `lint_status`/`test_status` have nothing to report, `doctor` reports the opt-out as **Passed**, and none of this needs investigating. Do not open a session by diagnosing the watcher, and do not restore the runner config unless you actually intend to run watchers.
+
+**The gate is the two scripts. Run them inside the toolbox.**
+
+```bash
+toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
+toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
+```
+
+On the Fedora HOST these cannot work — `llama-cpp-sys-4`'s build script has no clang and dies on `stdbool.h`. The lint script now reports that as a build failure and names the toolbox; before 2026-07-28 it printed `pass: 1 fail: 0` and exited 101 at the same time (note 73bb9404).
+
+**DO NOT run `cargo build`, `cargo check`, `cargo test`, or `cargo clippy` via Bash** when a watcher IS running in some other workspace — direct calls contend with it for the Cargo file lock and you idle doing nothing. With watchers off (the case here) bare cargo is safe, but prefer the scripts: they resolve the repo's real feature contract and carry guards bare cargo has no equivalent of (below).
 
 **Feature-unification hygiene — narrow `-p` builds thrash the shared target.** The watcher, scripts, CI, and any build that includes the daemon/server/CLI siblings resolve `corpus-engine` with `treesitter` ON. A bare `cargo check -p corpus-engine` or `-p sovereign-mesh` resolves it OFF, so cargo rebuilds corpus-engine + its ~17 dependents — and rebuilds them AGAIN on the next workspace-set build (measured: ~80s per flip for check alone, 2026-07-02). When you must build one of those crates solo, pass the matching feature (`-p corpus-engine --features treesitter`, `-p sovereign-mesh --features treesitter`). For iterating on the DEPLOYED daemon, use `scripts/dev-release.sh`, not plain `cargo build --release` — true release carries thin-LTO + codegen-units=1 and pays ~7.5 min per one-line change; the script overrides those knobs via env (a custom cargo profile is NOT possible: llama-cpp-sys-4's build script panics under any custom profile — see the script header).
 
-The watcher runs continuously. After you finish editing a file, `lint_status` often already reflects your changes. `lint_status` and `get_lint_output` ARE on the MCP surface — call them directly. `test_status` and `run_tests` are CLI-only: `sovereign tools call test_status`.
+**"Does this compile?"** — `./scripts/sovereign-lint.sh --human`. It scopes to the crates owning your uncommitted changes plus their direct workspace dependents, which is what you want mid-edit. Add `--full` for the whole workspace before a push. The banner always names the scope it checked, so a scoped clean run cannot be mistaken for a repo-wide guarantee. Warm: ~5s full workspace, less when scoped.
 
-**Daemon-side watcher setup.** The long-running `sovereign daemon run` starts the lint/test watcher only when a workspace is configured. Either set `SOVEREIGN_WORKSPACE_DIR=<path>` in the launchd/systemd environment, or write the path to `~/.sovereign/workspace` (single-line text file). The daemon then loads `<workspace>/.sovereign/sovereign.toml` and runs the configured `[lint_runner]` / `[test_runner]` commands. The committed workspace-root config uses `scripts/sovereign-lint.sh` which fan-runs `cargo check` over corpus-engine + sovereign + commonwealth in parallel — one env var lights up coverage for all three. After changing the workspace config, restart the daemon (per `reference_daemon_restart_lwcr.md`: `launchctl bootout` + `bootstrap`).
+**"Do tests pass?"** — `./scripts/sovereign-test.sh --human`. Warm full workspace ~45s (~8.4k tests). `--package <crate>` / `--changed` / `--filter <test-name>` scope it down; `--filter` matches the TEST NAME, not the file name.
 
-**Read the `watcher` object before `status`.** Every `lint_status`/`test_status`/`build` response carries a `watcher` health object: `{live, reason, configured, heartbeat_age_secs, hint}`. It is the authoritative liveness signal — driven by the coordinator's heartbeat (a sidecar file the daemon stamps, readable cross-process by the CLI), not a one-shot bool. When `watcher.live` is **false**, the `status`/results below are *orphaned* — no watcher is running to keep them current — and you must NOT trust them. `watcher.reason` says why (`not_configured` / `watcher_dead` / `unknown`) and `watcher.hint` says exactly what to do. In that case `status` itself is reported as **`watcher_down`** rather than `fresh_*`/`stale`, so a days-old failing run can never masquerade as a current `fresh_failing` again.
+Both exit non-zero on failure and both write a raw cargo log for triage, so a failure never needs a second run to diagnose. Gate on the exit code.
 
-**When the watcher is down, fall back to the FULL-workspace scripts — never narrow `cargo`.** `watcher_down` (or `watcher.reason ∈ {not_configured, watcher_dead, unknown}`) means run `scripts/sovereign-lint.sh --human` and `scripts/sovereign-test.sh --human`, which cover the same `cargo --workspace` surface the watcher does. Do NOT substitute a scoped `cargo -p <crate>` / `--test <name>` call — it under-covers the workspace and lets regressions in untouched crates accrete. The daemon's `WatcherSupervisor` self-heals a dead watcher within ~75s; if `watcher_down` persists, `sovereign daemon restart`. `sovereign doctor`'s `watcher_live` check probes this same signal.
+**Reading the results — three guards bare cargo does not have:**
 
-**Decision tree — "does this compile?"**
+- **A zero-test run is never green.** `pass: 0 fail: 0` exits **4** with a banner naming the resolved scope. A filtered run that matched nothing verified nothing (note 8def98d7). `--allow-empty` opts out.
+- **Unattributable results exit 5.** A concurrent nextest run overwrote the shared JUnit report, so the counts are not yours. Re-run, or `--engine cargo`.
+- **A failed build is a failure, not a pass.** Both scripts now report build-script failures, bad feature flags, and link errors as errors. (Until 2026-07-28 the lint adapter counted only rustc diagnostics and reported everything else as green.)
 
-The workspace-level `status` field answers "is the watcher idle and clean across everything?" — useful for final pre-commit checks. The new **per-file query mode** answers "are MY files clean?" — useful during active editing, since the watcher may still be running the full workspace check long after the crate containing your edits has finished.
+**Doctests are OFF by default in the test script** and the banner says so. `cargo test --doc` costs 17.4s of a 63s warm run and this workspace collects zero runnable doctests (measured 2026-07-28); nextest cannot run doctests at all, so CI passes `--doctests` to keep the insurance. Add `--doctests` locally if you wrote one.
 
-1. **Active editing** — call `lint_status --changed` (or `lint_status --files a.rs,b.rs` for an explicit set). The response includes `files[]` with one entry per queried path. Read each entry's `status`:
-   - `fresh_passing` → that file compiles cleanly as of `checked_at_unix`
-   - `fresh_failing` → that file has errors; check the filtered `errors[]` for the diagnostics
-   - `stale` → file's mtime is newer than the last run; watcher hasn't seen this edit yet
-   - `never_checked` → no run has covered this file (file may be outside watched scope)
-
-   The top-level `status` is still the workspace-wide answer when you want it. `--changed` auto-derives the file list from `git diff --name-only HEAD` + untracked `.rs` files.
-
-2. **Pre-commit / pre-push** — plain `lint_status` (no flags). Workspace-wide:
-   - `fresh_passing` → clean, keep going
-   - `fresh_failing` → errors are already in the response, fix them
-   - `stale` → watcher queued but run not done yet; call again in ~15s.
-   - `running` → check again in ~15s (or use `--changed` to get a per-file answer against the *prior* completed run while this one finishes)
-   - `watcher_down` → no live watcher (see `watcher.reason`/`hint`); the run is orphaned. Run `scripts/sovereign-lint.sh --human` (NOT narrow `cargo`).
-   - `never_run` → no run yet; see `watcher.reason`. If `not_configured`, restore `.sovereign/sovereign.toml.with-watchers`; else `scripts/sovereign-lint.sh --human`.
-
-**Decision tree — "do tests pass?"**
-1. `test_status`
-   - `fresh_passing` → safe to proceed
-   - `fresh_failing` → failures are in the response
-   - `stale` → call `run_tests` (returns immediately), then poll `test_status` every ~30s.
-   - `running` → poll `test_status` every ~30s
-   - `watcher_down` → no live watcher (see `watcher.reason`/`hint`); the run is orphaned. Run `scripts/sovereign-test.sh --human` (NOT a scoped `cargo test -p <crate>` / `--test <name>` — it under-covers and lets bugs accrete).
-   - `never_run` → no run yet; see `watcher.reason`. If `not_configured`, restore `.sovereign/sovereign.toml.with-watchers`; else `scripts/sovereign-test.sh --human`.
-
-**Only call `get_lint_output` / `get_run_output`** when `output_truncated: true` in the status response. The errors are already in `lint_status` / `test_status` for the common case.
-
-**Never poll in a tight loop.** Use ScheduleWakeup with a 30-60s delay between checks, or continue other work and check back.
+**If you want the watchers back** (`lint_status`, `test_status`, `run_tests`, `build`, and per-file `--changed` queries): set `[watchers] enabled = true` in `.sovereign/sovereign.toml`, uncomment the `[lint_runner]`/`[test_runner]` sections, and restart the daemon. Then read the `watcher` health object on every response *before* `status` — `watcher.live == false` means the results are orphaned and `status` reports `watcher_down` rather than a stale `fresh_*`. Note the surfaces differ: `lint_status` and `get_lint_output` are on MCP and can be called directly, while `test_status` and `run_tests` are CLI-only (`sovereign tools call test_status`). Nothing else in this file depends on that path.
 
 ### Definition of done — every feature push
 
-Before declaring a feature complete, **both** must be `fresh_passing`:
-
-1. `sovereign tools call lint_status` — `cargo check --workspace --features corpus-engine/treesitter`
-2. `sovereign tools call test_status` — `cargo test --workspace --features corpus-engine/treesitter` (~55s warm, ~4-5min cold)
-
-Both cover every member of the monorepo Cargo workspace (22 crates as of 2026-05-10).
-
-If the daemon's watcher isn't reachable (`never_run` / `stale` for too long), invoke directly:
+Before declaring a feature complete, **both must exit 0**, run inside the toolbox:
 
 ```bash
-./scripts/sovereign-test.sh --human                            # full repo, friendly summary
+toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
+toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
+```
+
+Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus `sovereign-mesh/mesh-sim` on the lint side). Warm cost: lint ~5s, tests ~45s. Cold, from an empty target dir, the workspace check is ~3m30s and the wrapper adds under a second — the scripts are not what makes a cold build slow.
+
+Scoping flags for iteration, not for the final gate:
+
+```bash
 ./scripts/sovereign-test.sh --human --package sovereign-cli    # one crate
-./scripts/sovereign-test.sh --human --filter <pattern>         # name filter
+./scripts/sovereign-test.sh --human --filter <test-name>       # TEST name, not file name
 ./scripts/sovereign-test.sh                                    # raw Tier 2 JSONL (daemon mode)
 ```
 
-**A zero-test run is never green.** `pass: 0  fail: 0` exits **4** with a banner naming the resolved scope — a scoped or filtered run that matches nothing verified nothing, and used to print "✓ All green" (note 8def98d7). Pass `--allow-empty` only when you genuinely expect an empty scope. Exit **5** means the run's results could not be attributed (a concurrent nextest run overwrote the shared junit report) — the counts are not yours; re-run, or use `--engine cargo`.
+`--package sovereign-compute` fails on feature scoping (`does not contain this feature: corpus-engine/treesitter`) — use plain `cargo test -p sovereign-compute` there.
 
-The script writes adapter logs to `target/sovereign-test/latest/cargo.{jsonl,raw.log,exit}` so failure triage doesn't require re-running cargo. Each invocation runs in its own scratch dir under `target/sovereign-test/.runs/` to avoid colliding with the daemon's watcher run.
+Both scripts write adapter logs (`target/sovereign-test/latest/`, `target/sovereign-lint/latest/`) including the raw cargo output, so triaging a failure never requires re-running cargo.
 
-`sovereign-test.sh` and `sovereign-lint.sh` exercise the same `cargo --workspace` invocation shape — when one passes and the other fails, the discrepancy is the bug, not the runner.
+The two runners are meant to exercise the same `cargo --workspace` surface — when one passes and the other fails, the discrepancy is the bug, not the runner. One known, deliberate exception: lint checks `sovereign-mesh/mesh-sim` and the test run does not, so the scheduler simulator is compiled but never exercised.
 
 ### Index freshness
 

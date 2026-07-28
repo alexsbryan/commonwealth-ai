@@ -46,10 +46,22 @@ mesh that this node is "hot" (`inference_availability = 0.20`). Peers route
 inference requests to idle nodes automatically. You'll see this in the daemon
 logs as "activity level transition".
 
-## Compilation and test feedback
+## Build and test feedback
 
-The sovereign watcher runs continuously. After editing:
-- `lint_status` — check for errors (don't run `cargo check` via bash)
-- `test_status` — check test results (don't run `cargo test` via bash)
+The lint/test watchers are **off in this repo by design** — `.sovereign/sovereign.toml`
+declares `[watchers] enabled = false` (they OOM'd the daemon under a resident model).
+So `lint_status` / `test_status` have nothing to report and `sovereign doctor` treats
+the opt-out as a pass. Do not try to repair them, and do not open a session by
+diagnosing them.
 
-Only fall back to `cargo` commands if `lint_status` returns `never_run`.
+The gate is the two scripts, run **inside the toolbox** (on the Fedora host
+`llama-cpp-sys-4` cannot build — no clang):
+
+```bash
+toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
+toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
+```
+
+Gate on the **exit code**. Both scripts write the raw cargo output under `target/`
+so a failure can be triaged without re-running cargo. Doctests are off by default
+in the test script (CI runs them); the banner says so when they are skipped.

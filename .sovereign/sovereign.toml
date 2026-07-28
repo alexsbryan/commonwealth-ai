@@ -1,6 +1,13 @@
 [commonwealth]
 url = "http://localhost:9741"
 
+# Watchers are OFF here on purpose. This declares it, so `doctor` and the
+# status tools report a supported posture instead of a standing warning
+# advising you to restore a config that was removed deliberately. Flip to
+# `true` (and uncomment a runner below) if you want them back.
+[watchers]
+enabled = false
+
 # ── lint/test watchers DISABLED (2026-05-31) ──
 # The parallel `cargo test`/`cargo check` fan over three workspaces
 # (corpus-engine + sovereign + commonwealth) spikes 10-15GB of rustc.

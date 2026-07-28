@@ -397,6 +397,20 @@ fn check_project_indexed() -> CheckResult {
     }
 }
 
+/// Shared wording for the three watcher checks when a workspace has opted
+/// out via `[watchers] enabled = false`. Watchers are optional; a workspace
+/// that declared them off is CORRECT, not degraded, so these report Passed
+/// with no repair. Reporting a permanent warning for a deliberate posture
+/// trains the reader to ignore doctor output, which costs far more than the
+/// nag ever bought.
+const WATCHERS_OFF_MSG: &str =
+    "watchers disabled by config ([watchers] enabled = false) — \
+     scripts/sovereign-lint.sh and scripts/sovereign-test.sh are the gate";
+
+fn watchers_opted_out(sovereign_dir: &std::path::Path) -> bool {
+    corpus_engine::SovereignConfig::load_or_default(sovereign_dir).watchers_disabled()
+}
+
 fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult {
     let cfg = corpus_engine::SovereignConfig::load_or_default(sovereign_dir);
     if cfg.test_runner.is_some() {
@@ -405,6 +419,14 @@ fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
             message: "test_runner configured in sovereign.toml".into(),
+            repair: Repair::None,
+        }
+    } else if cfg.watchers_disabled() {
+        CheckResult {
+            name: "test_runner",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: WATCHERS_OFF_MSG.into(),
             repair: Repair::None,
         }
     } else {
@@ -426,6 +448,14 @@ fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
             message: "lint_runner configured in sovereign.toml".into(),
+            repair: Repair::None,
+        }
+    } else if cfg.watchers_disabled() {
+        CheckResult {
+            name: "lint_runner",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: WATCHERS_OFF_MSG.into(),
             repair: Repair::None,
         }
     } else {
@@ -450,7 +480,20 @@ fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
 /// died/never started" state a config-presence check structurally
 /// cannot see — the exact blind spot behind the watcher silently going
 /// stale.
-async fn check_watcher_live() -> CheckResult {
+async fn check_watcher_live(sovereign_dir: &std::path::Path) -> CheckResult {
+    // Opted out: don't probe, don't warn. Probing would report
+    // `not_configured` and advise restoring a config the operator
+    // deliberately removed.
+    if watchers_opted_out(sovereign_dir) {
+        return CheckResult {
+            name: "watcher_live",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: WATCHERS_OFF_MSG.into(),
+            repair: Repair::None,
+        };
+    }
+
     let resp = http_post_json(
         "http://localhost:9741/mcp",
         serde_json::json!({
@@ -671,6 +714,94 @@ async fn check_daemon_memory(client_url: &str) -> CheckResult {
 /// daemon manually in a terminal is a legitimate dev mode — but the
 /// consequence is named: no auto-restart after a crash/jetsam. The
 /// repair is executable so `doctor --fix` converges the box.
+/// Is a distributed primary allowed to run inside the daemon's own process?
+///
+/// Pure config read, deliberately OUTSIDE the `:9741` reachability gate. Two
+/// reasons, both learned the hard way: after the boot guard landed, a hazardous
+/// config makes the daemon REFUSE to start — so a check that needed a live
+/// daemon would report `Skipped` exactly when the operator needs the answer —
+/// and it must also work after an abort, when the daemon is down for the very
+/// reason being diagnosed.
+///
+/// It calls the same pure predicate the boot guard enforces, so doctor and the
+/// daemon can never disagree about what is safe.
+fn check_distributed_primary_contained() -> CheckResult {
+    use crate::daemon_cmd::build::containment::{
+        classify_containment, ContainmentVerdict, OVERRIDE_ENV,
+    };
+
+    let name = "distributed_primary_contained";
+    let Ok(config) = sovereign_core::setup_config::SetupConfig::load() else {
+        return CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no readable sovereign config — nothing to assess".into(),
+            repair: Repair::None,
+        };
+    };
+
+    let verdict = classify_containment(
+        config.compute.enabled && config.compute.distributed_primary,
+        config.shared_model.role,
+        false, // self node id is not resolved here; the role term carries it
+        std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok(),
+        std::env::var(OVERRIDE_ENV).is_ok(),
+    );
+
+    let armed_toml = "[compute]\nenabled = true\ndistributed_primary = true";
+    match verdict {
+        ContainmentVerdict::Armed => CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: "distributed primary runs in a supervised compute child — \
+                      a worker-loss ggml abort kills the child, not the daemon"
+                .into(),
+            repair: Repair::None,
+        },
+        ContainmentVerdict::NotApplicable => CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: "this node does not host a mesh-distributed primary".into(),
+            repair: Repair::None,
+        },
+        ContainmentVerdict::Warn => CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "shared-model ANCHOR with no compute-child containment — if this \
+                      node wins the host election it will hold the split in-process, \
+                      where a departing worker aborts the whole daemon (SIGABRT)"
+                .into(),
+            repair: Repair::Manual(armed_toml.into()),
+        },
+        ContainmentVerdict::RefuseOverridden => CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "in-process distributed primary permitted by {OVERRIDE_ENV} — a worker \
+                 leaving the mesh will abort this daemon (exit 134)"
+            ),
+            repair: Repair::Manual(armed_toml.into()),
+        },
+        ContainmentVerdict::Refuse => CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: "shared-model HOST with the distributed primary IN-PROCESS — a \
+                      worker leaving the mesh drives an in-place reload whose teardown \
+                      frees buffers on the departed worker, and ggml aborts the daemon \
+                      (SIGABRT, exit 134; confirmed live 2026-07-27). The daemon will \
+                      refuse to start in this configuration"
+                .into(),
+            repair: Repair::Manual(armed_toml.into()),
+        },
+    }
+}
+
 fn check_daemon_supervised() -> CheckResult {
     if crate::service_install::service_installed() {
         CheckResult {
@@ -2051,8 +2182,11 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_notes_db());
     results.push(check_test_runner(sovereign_dir));
     results.push(check_lint_runner(sovereign_dir));
-    results.push(check_watcher_live().await);
+    results.push(check_watcher_live(sovereign_dir).await);
     results.push(check_log_dir_size());
+    // Config-only, and intentionally not gated on the daemon being up — see the
+    // function's doc comment.
+    results.push(check_distributed_primary_contained());
 
     // Freshness pipeline: registry-level checks that report on the
     // daemon's project watchers and the integrity of their SCIP

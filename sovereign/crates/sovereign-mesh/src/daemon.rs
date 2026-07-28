@@ -225,6 +225,16 @@ pub struct EmbeddedDaemon {
     /// e2e). Keyed by the worker's stable mesh node_id. `std::sync` lock — never
     /// held across an await (read to a clone, decide, write the result).
     rpc_worker_sticky: std::sync::RwLock<std::collections::HashMap<NodeId, StickyEndpoint>>,
+    /// Peers we have EVER confirmed an RPC worker on, and when.
+    ///
+    /// Independent of `rpc_worker_sticky` on purpose. That map's hold budget is
+    /// about endpoint STABILITY and it drops a bridged worker on its first miss
+    /// (`sticky_endpoint`), so using it as the "do we know this peer?" set would
+    /// make an unconfirmed hold last exactly one tick — useless for the bridged,
+    /// multi-tick starvation that is the actual 2026-07-28 incident. This map
+    /// answers a different question: have we ever seen a worker here, so that an
+    /// unanswered probe is reportable as `unconfirmed` rather than as absence.
+    rpc_worker_last_seen: std::sync::RwLock<std::collections::HashMap<NodeId, std::time::Instant>>,
 }
 
 enum DaemonState {
@@ -399,6 +409,7 @@ impl EmbeddedDaemon {
             mesh_store: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -436,6 +447,7 @@ impl EmbeddedDaemon {
             mesh_store: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
+            rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -1854,7 +1866,7 @@ impl EmbeddedDaemon {
             .collect()
     }
 
-    pub async fn discover_rpc_workers(&self) -> Vec<crate::worker_eligibility::DiscoveredWorker> {
+    pub async fn discover_rpc_workers(&self) -> crate::worker_eligibility::DiscoveryOutcome {
         // The raw-TCP rpc-server needs the peer's DIRECT IP. The `/status` probe
         // URL host is unreliable for this: when `status_probe` is routed over iroh,
         // the probe authority is a loopback proxy (`127.0.0.1:<ephemeral>`), which
@@ -1898,7 +1910,12 @@ impl EmbeddedDaemon {
             let state = self.state.read().await;
             match &*state {
                 DaemonState::Running { app_state, .. } => app_state.clone(),
-                DaemonState::Stopped => return Vec::new(),
+                // The scan did not run at all — `scanned: false` says this tick
+                // is evidence about NOTHING, rather than silently reading as
+                // "every worker is gone".
+                DaemonState::Stopped => {
+                    return crate::worker_eligibility::DiscoveryOutcome::default()
+                }
             }
         };
         let transport = app_state.peer_transport();
@@ -1932,7 +1949,7 @@ impl EmbeddedDaemon {
             .build()
         {
             Ok(c) => c,
-            Err(_) => return Vec::new(),
+            Err(_) => return crate::worker_eligibility::DiscoveryOutcome::default(),
         };
 
         // Node ids of the currently gossip-Online members — used to prune sticky
@@ -1941,6 +1958,16 @@ impl EmbeddedDaemon {
         // re-affirmed from stale cache.
         let online_ids: std::collections::HashSet<NodeId> =
             members.iter().map(|m| m.node_id).collect();
+        // Snapshot of the worker history, read once: membership here is what
+        // makes an unanswered probe reportable as "no statement" instead of
+        // "absent".
+        let known_workers: std::collections::HashMap<NodeId, std::time::Instant> = self
+            .rpc_worker_last_seen
+            .read()
+            .map(|m| m.clone())
+            .unwrap_or_default();
+        let polled = members.len();
+        let mut unconfirmed: Vec<NodeId> = Vec::new();
         let mut out = Vec::new();
         for m in members {
             let name = m.name.clone();
@@ -2068,10 +2095,18 @@ impl EmbeddedDaemon {
                 }
             }
             let Some(choice) = sticky_endpoint(prev.as_ref(), fresh, flip_threshold) else {
-                // Nothing to hold (no prior direct-ip, or the hold budget is spent)
-                // — the worker is genuinely absent this tick.
+                // Nothing to hold (no prior direct-ip, or the hold budget is
+                // spent). We could not CONFIRM a worker here — which is not the
+                // same statement as "there is no worker here". The peer passed
+                // the gossip-Online + dialable filter above, so if we have ever
+                // seen a worker on it, report the tick as unconfirmed and let
+                // the eligibility layer hold its prior state (bounded by
+                // `absence_grace`) rather than record a flap.
                 if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
                     sticky.remove(&node_id);
+                }
+                if known_workers.contains_key(&node_id) {
+                    unconfirmed.push(node_id);
                 }
                 continue;
             };
@@ -2109,6 +2144,9 @@ impl EmbeddedDaemon {
             if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
                 sticky.insert(node_id, choice.clone());
             }
+            if let Ok(mut seen) = self.rpc_worker_last_seen.write() {
+                seen.insert(node_id, std::time::Instant::now());
+            }
             out.push(crate::worker_eligibility::DiscoveredWorker {
                 node_id,
                 endpoint: choice.endpoint,
@@ -2119,7 +2157,20 @@ impl EmbeddedDaemon {
         if let Ok(mut sticky) = self.rpc_worker_sticky.write() {
             sticky.retain(|nid, _| online_ids.contains(nid));
         }
-        out
+        // Same pruning for the worker-history map, and it is load-bearing: a
+        // peer gossip has dropped is no longer "known", so it stops being
+        // eligible for an unconfirmed hold and its absence becomes POSITIVE
+        // evidence on the next tick. That is what keeps `kill -9` of a worker
+        // daemon converging at the pre-2026-07-28 speed (P0.4 acceptance).
+        if let Ok(mut seen) = self.rpc_worker_last_seen.write() {
+            seen.retain(|nid, _| online_ids.contains(nid));
+        }
+        crate::worker_eligibility::DiscoveryOutcome {
+            workers: out,
+            unconfirmed,
+            polled,
+            scanned: true,
+        }
     }
 
     /// Which mesh member owns `endpoint` (a discovered `ip:port` ggml-RPC

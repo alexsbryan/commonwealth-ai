@@ -367,8 +367,13 @@ jobs:
       #     codegen. Nothing was reused between them. Benches — the one target
       #     class the test build does not cover — get their own cheap
       #     incremental check below.
+      # `--doctests` is explicit here because it is OFF by default locally:
+      # nextest cannot run doctests, and the `cargo test --doc` pass costs
+      # 17.4s of a 63s warm run while this workspace collects zero runnable
+      # doctests (measured 2026-07-28). Local iteration should not pay that,
+      # but CI must — otherwise the first doctest anyone writes runs nowhere.
       - name: Test workspace (scripts/sovereign-test.sh)
-        run: ./scripts/sovereign-test.sh --human
+        run: ./scripts/sovereign-test.sh --human --doctests
       # Benches are the only --all-targets class `cargo test` does not build,
       # and bench code rots silently. Incremental against the artifacts the
       # test build just produced, so this is seconds, not a second compile.

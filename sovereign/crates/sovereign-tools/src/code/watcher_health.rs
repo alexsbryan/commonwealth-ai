@@ -119,16 +119,20 @@ impl WatcherReason {
     pub fn hint(self) -> Option<&'static str> {
         match self {
             WatcherReason::Live | WatcherReason::LegacyActive => None,
+            // Deliberately NOT phrased as a defect. Watchers are optional;
+            // most workspaces here run without them (see WatchersConfig in
+            // corpus-engine's sovereign_config). Telling every caller to go
+            // restore a config the operator removed on purpose is noise, and
+            // noise on every single call is how a real signal gets ignored.
+            // State the gate, don't campaign for the watcher.
             WatcherReason::NotConfigured => Some(
-                "No lint/test runner is configured for this scope. Restore \
-                 `.sovereign/sovereign.toml.with-watchers` (or add the \
-                 [lint_runner]/[test_runner] section) and restart the daemon. \
-                 Until then, get EQUAL coverage by running the full-workspace \
-                 scripts `scripts/sovereign-lint.sh --human` and \
-                 `scripts/sovereign-test.sh --human` — do NOT substitute a \
-                 narrow `cargo -p <crate>` / `--test <name>` call, which \
-                 under-covers the workspace and lets bugs accrete. \
-                 `sovereign doctor` confirms the config state.",
+                "No lint/test runner is configured for this scope — watchers \
+                 are optional and this is a supported posture, not a fault. \
+                 The gate is `scripts/sovereign-lint.sh --human` and \
+                 `scripts/sovereign-test.sh --human`, which cover the same \
+                 `cargo --workspace` surface. Do NOT substitute a narrow \
+                 `cargo -p <crate>` / `--test <name>` call — it under-covers \
+                 the workspace and lets bugs accrete.",
             ),
             WatcherReason::WatcherDead => Some(
                 "A runner is configured but the watcher coordinator is not \

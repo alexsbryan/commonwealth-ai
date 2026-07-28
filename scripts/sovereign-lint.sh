@@ -48,13 +48,56 @@
 #   {"t":"pass","n":"<crate-or-monorepo>"}
 #   {"t":"fail","n":"<file>","out":"<error>","line":<N>,"col":<N>}
 #   {"t":"warn","n":"<file>","out":"<warning>","line":<N>,"col":<N>}
-#   {"t":"summary","pass":<N>,"fail":<N>,"warn":<N>,"ms":<N>}
+#   {"t":"summary","pass":<N>,"fail":<N>,"warn":<N>,"ms":<N>,"scope":"<what>"}
+#
+# ## Flags
+#
+#   --human   Human-readable banner instead of raw JSONL. This is the
+#             interactive/gate form documented in CLAUDE.md; until 2026-07-28
+#             the flag did not exist and was silently ignored, so the
+#             documented gate invocation printed raw JSONL and any typo'd flag
+#             was swallowed too. Unknown flags are now a usage error.
+#   --full    Force a workspace check (same as SOVEREIGN_LINT_FULL=1).
+#
+# ## Exit codes
+#
+#   0   checked clean
+#   1   errors found (or the build failed)
+#   2   usage error
+#   *   cargo's own exit code when it failed without attributable diagnostics
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-check-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+HUMAN=0
+for arg in "$@"; do
+    case "$arg" in
+        --human) HUMAN=1 ;;
+        --full)  SOVEREIGN_LINT_FULL=1 ;;
+        -h|--help)
+            cat <<'USAGE'
+sovereign-lint.sh — cargo check, scoped to what you changed.
+
+  --human   Human-readable banner instead of Tier 2 JSONL.
+  --full    Check the whole workspace (same as SOVEREIGN_LINT_FULL=1).
+
+Scope defaults to the crates owning your uncommitted changes plus their
+direct workspace dependents. For a pre-push gate use --full.
+
+Exit: 0 clean · 1 errors/build failed · 2 usage · else cargo's own code.
+USAGE
+            exit 0
+            ;;
+        *)
+            echo "sovereign-lint: unknown argument '$arg'" >&2
+            echo "usage: sovereign-lint.sh [--human] [--full]" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # ── 1. Discover changed paths ──────────────────────────────────────────────
 if [[ -n "${SOVEREIGN_LINT_FULL:-}" ]]; then
@@ -233,6 +276,150 @@ if [[ ! -x "$ADAPTER" ]]; then
     (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" 2>&1)
     exit $?
 fi
+
+# ── 6. Run, then decide the verdict HERE — not in the adapter ──────────────
+#
+# The script owns the final answer because it is the only party that sees both
+# cargo's exit code and the event stream. Until 2026-07-28 it exited
+# PIPESTATUS[0] but let the adapter's JSONL speak for itself, so a build-script
+# failure on the host (no clang → cargo exit 101) shipped `{"t":"pass"}` /
+# `pass:1 fail:0` alongside that 101. The exit code was right and every human-
+# and machine-readable surface said green (note 73bb9404).
+#
+# The adapter now reports build failures itself, so the cross-check below
+# should never fire. It stays anyway: a disagreement between cargo's exit code
+# and the event stream is precisely the bug we just fixed, and a gate that can
+# only fail CLOSED is worth the six lines. `tee` keeps the raw cargo output for
+# triage so diagnosing a failure never costs a second full check.
+RUN_DIR="${REPO_ROOT}/target/sovereign-lint/latest"
+mkdir -p "$RUN_DIR"
+raw_log="${RUN_DIR}/cargo.raw.log"
+out_jsonl="${RUN_DIR}/lint.jsonl"
+
+start_ns=$(date +%s%N)
 (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" --message-format json 2>&1) \
-    | "$ADAPTER" "$label"
-exit "${PIPESTATUS[0]}"
+    | tee "$raw_log" \
+    | "$ADAPTER" "$label" > "$out_jsonl"
+cargo_exit="${PIPESTATUS[0]}"
+elapsed_ms=$(( ($(date +%s%N) - start_ns) / 1000000 ))
+
+# Counts come from the adapter's summary record — one python pass, no
+# fork-per-line (that pattern cost 38s on a 6s workspace check; see the
+# adapter header and scripts/sovereign-test.sh's aggregator).
+counts="$(python3 -c '
+import json, sys
+p = f = w = 0
+for line in open(sys.argv[1], errors="replace"):
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    if d.get("t") == "summary":
+        p += d.get("pass", 0); f += d.get("fail", 0); w += d.get("warn", 0)
+print("%d %d %d" % (p, f, w))
+' "$out_jsonl" 2>/dev/null || echo "0 0 0")"
+read -r total_pass total_fail total_warn <<< "$counts"
+
+final_exit=0
+disagreement=""
+if [[ "$total_fail" -gt 0 ]]; then
+    final_exit=1
+elif [[ "$cargo_exit" != "0" ]]; then
+    # Fail closed: cargo said no, the stream showed nothing to blame.
+    final_exit="$cargo_exit"
+    disagreement="cargo exited ${cargo_exit} but no failure was attributed to any file"
+fi
+
+if [[ $HUMAN -eq 0 ]]; then
+    # Daemon mode: stream the events, replacing the adapter's ms=0 summary
+    # with the real elapsed time and the scope that was actually checked.
+    grep -v '"t":"summary"' "$out_jsonl" || true
+    printf '{"t":"summary","pass":%d,"fail":%d,"warn":%d,"ms":%d,"scope":"%s"}\n' \
+        "$total_pass" "$total_fail" "$total_warn" "$elapsed_ms" "$label"
+    exit "$final_exit"
+fi
+
+echo
+echo "═══════════════════════════════════════════════════════════════"
+echo " sovereign-lint — cargo check"
+echo "═══════════════════════════════════════════════════════════════"
+# Name the scope every time. A change-scoped run and a workspace gate are
+# different guarantees, and the caller cannot tell them apart from a ✓.
+if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
+    printf " %-12s  %s\n" "scope:" "WORKSPACE (all crates)"
+else
+    printf " %-12s  %s\n" "scope:" "${#crates[@]} crate(s) — $label"
+fi
+printf " %-12s  %s\n" "features:" "$features"
+printf " %-12s  %s\n" "errors:" "$total_fail"
+printf " %-12s  %s\n" "warnings:" "$total_warn"
+printf " %-12s  %s\n" "elapsed:" "${elapsed_ms}ms"
+printf " %-12s  %s\n" "cargo exit:" "$cargo_exit"
+echo
+
+if [[ -n "$disagreement" ]]; then
+    echo " ✘ BUILD FAILED — $disagreement."
+    echo
+    echo "   This is a build/toolchain failure, not a code diagnostic:"
+    echo "   a failed build script, a bad feature flag, or a missing linker."
+    echo "   Running on the Fedora HOST rather than inside the toolbox is the"
+    echo "   usual cause — llama-cpp-sys-4 cannot link without clang:"
+    echo
+    echo "     toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human"
+    echo
+    echo "   Raw cargo output: $raw_log"
+    echo
+elif [[ "$total_fail" -gt 0 ]]; then
+    echo " ✘ $total_fail error(s):"
+    echo
+    python3 -c '
+import json, sys
+for line in open(sys.argv[1], errors="replace"):
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    if d.get("t") != "fail":
+        continue
+    loc = d.get("n", "?")
+    if d.get("line") is not None:
+        loc += ":%s" % d["line"]
+        if d.get("col") is not None:
+            loc += ":%s" % d["col"]
+    print("   %s" % loc)
+    for l in (d.get("out") or "").splitlines()[:12]:
+        print("     %s" % l)
+    print()
+' "$out_jsonl" 2>/dev/null || true
+    # A `<cargo>` attribution means the toolchain failed, not your code. On this
+    # host that is almost always "ran outside the toolbox" — llama-cpp-sys-4
+    # needs clang and the C headers to build. Say so, rather than leaving the
+    # reader to infer it from a build-script backtrace.
+    if grep -q '"n":"<cargo>"' "$out_jsonl" 2>/dev/null; then
+        echo "   ── This is a BUILD/TOOLCHAIN failure, not a code diagnostic."
+        echo "      Most likely you are on the Fedora host. Use the toolbox:"
+        echo
+        echo "        toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human"
+        echo
+    fi
+    echo "   Raw cargo output: $raw_log"
+    echo
+else
+    if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
+        echo " ✓ Workspace checks clean."
+    else
+        # Never let a scoped pass read as a whole-repo guarantee.
+        echo " ✓ Clean — but only for $label."
+        echo "   Cross-crate breakage outside that set is NOT covered."
+        echo "   Pre-push: ./scripts/sovereign-lint.sh --human --full"
+    fi
+    echo
+fi
+
+exit "$final_exit"

@@ -41,9 +41,14 @@ auto-warm → plan-agreement placement → never-wedge fallback) is validated; t
 >    whole window. Treat that as a FLOOR, not a comparison to the 17.3 tok/s of
 >    2026-07-19: no priming call preceded it (prior runs logged ~56s of page-in
 >    for the ~66GB local share) and the window was 18s, so it is a cold number
->    that also carries the child's HTTP hop. **Still owed:** a primed,
->    steady-state split-path decode measurement, in-process and in-child, so the
->    boundary's actual throughput tax is known rather than guessed.
+>    that also carries the child's HTTP hop. **Primed in-child number taken
+>    2026-07-28: 10.02 tok/s over a 139.7s window (1400 tokens)** — but the run
+>    was link-degraded (`ss -tin` on the child's socket: rtt 15.9ms vs minrtt
+>    1.9ms, 427 retrans, 308 dsack dups, host on Wi-Fi), and this file's own
+>    reference for congested Wi-Fi is ~10 tok/s, so the number characterizes the
+>    LINK, not the boundary. **Still owed:** the same measurement on a wired host,
+>    in-process AND in-child, so the boundary's throughput tax is isolated rather
+>    than confounded.
 > 2. **P0.4 — RUN LIVE 2026-07-28 under `[compute] distributed_primary`, PASSED
 >    (see the validation-log entry).** `kill -9` of the worker daemon mid-decode
 >    at split-122B scale: the host daemon SURVIVED (`NRestarts=0`, no
@@ -51,11 +56,14 @@ auto-warm → plan-agreement placement → never-wedge fallback) is validated; t
 >    retired rather than local-loading, and the host re-formed the cluster and
 >    served again **without human action** once the worker was back — 12m46s
 >    worker-restart → serving, of which ~4.5 min was one wasted warm cycle (open
->    item 2 in that entry). **Still not run for the deployed IN-PROCESS shape**,
+>    item 2 in that entry). **RE-RUN 2026-07-28 after the hardening sweep: the
+>    wasted warm cycle and the crash-loop respawns are gone** — kill → serving
+>    again in **2m35s**, one respawn, zero re-warms, zero eligibility flaps, and
+>    the worker restarted itself (~5s, new pid), so the whole cycle was
+>    unattended end to end. **Still not run for the deployed IN-PROCESS shape**,
 >    where the same kill is expected to remain fatal (that is the abort this
 >    boundary exists to contain); the in-process path's contract is still host
->    supervision + `Restart=on-failure`. Worker restart itself was manual —
->    BeefyMac's daemon has no `KeepAlive`.
+>    supervision + `Restart=on-failure`.
 > 3. **P0.5 — dual-restart heal acceptance not yet run** (both machines, mDNS
 >    blocked, restart in any order → mesh re-forms within one anti-entropy
 >    period). Run it on the retarget code path, which replaced the rebuild heal.
@@ -153,6 +161,27 @@ evaluated and rejected (all asserts in void paths). Requirements:
   **Consequence:** under `[compute] distributed_primary` the response to a
   worker-set change is kill + respawn of the child (`DynamicChildSlot`), never
   an in-place reload — and the abort, if one still happens, lands in the child.
+- **Shrink-to-ZERO now carries a grace (2026-07-28), shrink-to-a-subset does
+  not.** The two cases differ in what fast action buys. A *partial* shrink has
+  survivors to re-form on, so pruning immediately is real value and the fast
+  path stays. A shrink to *zero* has nothing to re-form on: the fast path buys
+  literally nothing, and it cost a full three-minute warm cycle live on
+  2026-07-28 when a peer that was alive throughout — busy serving our own 21 GB
+  warm, which is exactly when its `/status` probe cannot answer inside 800 ms —
+  read as absent and the next tick retired a child that had been serving for
+  eight seconds. The child arm now requires the empty set to persist
+  (`RETIRE_GRACE`, 90 s) *and* the child to be older than `MIN_CHILD_LIFETIME`
+  (120 s). The in-process arm is untouched: it has no retire branch at all, so
+  the abort-face reasoning above never has to be re-weighed.
+- **Containment is now enforced at boot, not merely documented (2026-07-28).**
+  A node declaring `[shared_model] role = "host"` without
+  `[compute] distributed_primary` REFUSES to start and prints the two-line fix
+  (`build/containment.rs`; `role = "anchor"` warns instead, since the hazard is
+  one host election away). There is no safe runtime action once a sharded worker
+  departs — the reload aborts and so does the teardown — so admission is the
+  only place left to intervene. `sovereign doctor`'s
+  `distributed_primary_contained` reports the same verdict from the same pure
+  predicate, and deliberately runs with the daemon down.
 - **Acceptance:** `kill -9` of the worker daemon mid-inference on the host = host
   serves again (local-only or re-distributed) within N minutes with no human action.
 
@@ -695,7 +724,8 @@ via load-balance skew on the next big-model validation).
   child serving again 15:50:04 → a real request answered from the distributed
   122B at 15:50:28.
   - **Three rough edges found (notes `491c1e51`, `c5678d34`); 1 and 2 block an
-    unattended pilot.**
+    unattended pilot.** — **ALL THREE CLOSED and verified live 2026-07-28; see
+    the HARDENING SWEEP VERIFICATION entry below.**
     1. **Named-model routing 503s for the distributed primary.** `model:
        "Qwen3.5-122B-…-00001-of-00003"` → 503 *"no node in this mesh advertises
        model X"*, while `/v1/models` lists that exact id and the UNNAMED request
@@ -730,4 +760,73 @@ via load-balance skew on the next big-model validation).
     confirmatory, not an acceptance criterion. `kill -9` does not remove the
     worker's log file, so a post-mortem `logs N` suffices — no live tail needed.
     BeefyMac did not auto-restart (no `KeepAlive`), which the channel established
-    empirically rather than by asking.
+    empirically rather than by asking. **Superseded 2026-07-28 (see next entry):
+    the worker now DOES come back on its own, ~5s after `kill -9`, under a new
+    pid.**
+- **2026-07-28 — HARDENING SWEEP VERIFICATION (all three rough edges CLOSED).**
+  The five checks owed by the replay above, run against the (uncommitted)
+  hardening sweep — binaries deployed 12:07–12:17, daemon started 12:19:24 and
+  never restarted since. RuggedFox host + BeefyMac worker, `[compute]
+  distributed_primary = true`, `SOVEREIGN_RPC_BLOCK_SPLIT=12,36`, allowlist
+  `b88252e4`. Cold form-up: worker discovered 12:19:57 → Probationary → Eligible
+  12:20:27 → warm `written=0 already=69` (cache-HIT again) → child spawned
+  12:24:41 → **serving 12:27:01** (2m20s load).
+  - **Finding 1 (named-model 503) CLOSED — with a causal receipt.** The
+    self-manifest is now rebuilt on every child lifecycle transition, not once at
+    boot: `self_manifest refreshed models=5 cause=compute child warming` →
+    `models=6 cause=compute child serving` at 12:27:01.144, 2ms after the
+    `warming→serving` transition. `model:
+    "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003"` now returns **200** (content
+    `ROUTED`, `model` field echoing the exact id) where it 503'd that morning.
+    The refresh is symmetric: on `serving→degraded→restarting` the manifest drops
+    back to `models=5`, so the named request returns a **clean 503 in 56ms**
+    ("no node in this mesh advertises model X") instead of hanging or falling back
+    to a local load. The 503 is now *correct*, not accidental.
+  - **Finding 2 (busy worker looks dead; warm tears down its own result) CLOSED.**
+    Across the entire kill/recover cycle: **0** `worker-eligibility: state change`
+    events and **0** quarantine events — the worker never went Eligible→Absent, so
+    no re-plan and no re-seed were triggered. `worker-eligibility: warm transfer
+    succeeded — treating this peer as alive` is the new liveness evidence path and
+    fires on the cold warm. Convergence took **zero** extra warm cycles and the
+    **first** respawn cycle, against the replay's wasted warm and *third* cycle.
+  - **Finding 3 (three crash-loop respawns) CLOSED.** Exactly **1** respawn
+    between kill and recovery (pid 1288906), against three (421574/422017/422106)
+    in the replay. `RETIRE_GRACE=90s` / `MIN_CHILD_LIFETIME=120s` / `STABLE=20s`
+    in `daemon_cmd/discovery_policy.rs` are what buy this.
+  - **Containment re-proven, not assumed.** The only ESTABLISHED socket to
+    `192.168.1.2:50052` was owned by the `--compute-child` both before the kill
+    (pid 1280037, fd 20) and after recovery (pid 1288906, fd 23). The daemon held
+    no RPC socket at any point.
+  - **The kill.** `kill -9` of the worker daemon at 19:34:43.154Z, mid-stream (43
+    content frames already delivered). **Daemon pid 1258441 survived:
+    `ActiveState=active`, `NRestarts=0`, MainPID unchanged, and `0` occurrences of
+    `GGML_ABORT`/`SIGABRT`/`signal 6` in its unit since boot** — where the
+    identical chain on 2026-07-27 gave exit 134/SIGABRT and collapsed the GNOME
+    session. The child died instead; the client got a terminal `data:
+    {"error":{"message":"compute child stream transport error…"}}` then `[DONE]`
+    at 19:34:51.7Z (the 8.6s gap is again ggml's abort handler shelling out to
+    gdb). Lifecycle, fully narrated in the log:
+    `serving → degraded (1 failed health probe) → restarting (daemon exited by
+    signal) → starting → warming`.
+  - **Recovery: one cycle, unattended.** BeefyMac's daemon came back on its own
+    (pid 47775 → 77036) ~5s after the kill — it is now supervised, correcting the
+    previous entry. Child reached serving again at **12:37:18 (2m35s after the
+    kill)**, manifest went back to `models=6`, and a named request answered
+    `RECOVERED` (200). The child then survived **13** consecutive discovery ticks
+    with **0** respawns — the "does the post-warm child survive the next tick?"
+    question the replay left open.
+  - **Throughput: primed steady-state 10.02 tok/s** over a **139.7s** decode
+    window (1400 tokens, after a priming call), vs the replay's cold 9.15 (17.7s)
+    and 2026-07-19's primed 17.3. **The gap is NOT chargeable to the compute-child
+    boundary on this evidence — the link was degraded.** `ss -tin` on the child's
+    own RPC socket during the run: `rtt 15.928/8.971ms` against `minrtt 1.862ms`
+    (8.5× the floor, mdev nearly 60% of the mean), `427` retransmit events /
+    324KB, `dsack_dups:308`, `reordering:17`, `delivery_rate 19.6Mbps`; the host
+    routes to the worker over Wi-Fi (`dev wlp192s0`). This file's own reference
+    points are 17.5 tok/s on a good direct-ip link and **~10 on congested Wi-Fi**
+    — 10.02 lands exactly on the latter. **The boundary's real throughput tax
+    therefore remains unmeasured** and needs a wired host to isolate; do not read
+    this number as a boundary cost. (Synthetic RTT probing is not available as a
+    substitute: the Mac exposes only :50052 on the LAN, and llama.cpp's rpc-server
+    serves one connection at a time, so every probe connect times out while the
+    child holds the slot — `ss -tin` on the live socket is the measurement.)

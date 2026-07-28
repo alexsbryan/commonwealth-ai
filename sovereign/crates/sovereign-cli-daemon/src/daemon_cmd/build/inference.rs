@@ -67,6 +67,15 @@ pub(crate) fn load_provider(
     // distributed model in behind our back (which would double the footprint
     // AND put ggml's abort-happy RPC client back in the control plane).
     let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
+    // The other half of the same admission question: `child_owns_primary` says
+    // the abort is contained; this says whether running WITHOUT that
+    // containment is survivable on this node. The guard below fires when
+    // containment IS armed and `fast` aliases `primary`; this one fires when it
+    // is NOT armed and should be. Kept adjacent so both `[compute]` rules read
+    // as one block.
+    if !super::containment::check_containment(config, None) {
+        return Err(());
+    }
     if child_owns_primary && config.models.fast_path() == config.models.primary.as_path() {
         eprintln!(
             "error: [compute] distributed_primary = true requires a DISTINCT small `fast` model."

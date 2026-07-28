@@ -1,6 +1,14 @@
 [commonwealth]
 url = "http://localhost:9741"
 
+# This is the OPT-IN copy of the config. Copying it over
+# .sovereign/sovereign.toml turns the watchers on; the committed default has
+# `enabled = false`. Stating it explicitly (rather than relying on the runner
+# sections being present) keeps doctor and the status tools agreeing with
+# whichever file is in place.
+[watchers]
+enabled = true
+
 [test_runner]
 command = "scripts/sovereign-test.sh"
 working_dir = "."

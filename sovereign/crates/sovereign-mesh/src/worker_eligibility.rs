@@ -65,6 +65,67 @@ pub struct DiscoveredWorker {
     pub endpoint: String,
 }
 
+/// One discovery tick's FULL statement — including what it could not determine.
+///
+/// A bare `Vec<DiscoveredWorker>` erased the difference between "the peer
+/// answered: no RPC worker" and "the peer never answered", and the eligibility
+/// gate read both as absence. On 2026-07-28 a peer that was alive the whole time
+/// — serving OUR 21GB model warm, which is exactly when its `/status` probe is
+/// least likely to answer inside an 800 ms budget — went `Eligible → Absent` on
+/// starved probes. Under the anchor profile (one strike) that quarantined it for
+/// 60 s and forced a fresh 300 s settle, and the next tick retired a compute
+/// child that had been serving for eight seconds.
+///
+/// THE CONTRACT, which is the whole point of this type:
+/// - in `workers` → confirmed present, dial it;
+/// - in `unconfirmed` → NO STATEMENT. Gossip still lists the peer; we simply
+///   could not confirm. Hold the prior state.
+/// - in NEITHER → confirmed ABSENT. Gossip dropped the peer, which is positive
+///   evidence, so `kill -9` of a worker daemon still converges at today's speed
+///   (the P0.4 acceptance criterion).
+/// - `scanned == false` → the scan could not run at all; NOTHING in this tick is
+///   evidence about ANY worker.
+#[derive(Debug, Clone, Default)]
+pub struct DiscoveryOutcome {
+    /// Workers confirmed dialable this tick.
+    pub workers: Vec<DiscoveredWorker>,
+    /// Peers we hold worker history for and polled, but could not confirm.
+    pub unconfirmed: Vec<NodeId>,
+    /// Gossip-online, dialable, anchor-capable peers considered this tick.
+    /// Distinguishes "we polled nobody" from "we polled one and it went quiet" —
+    /// the ambiguity that made the incident's `eligible=0 discovered=0` log line
+    /// unreadable.
+    pub polled: usize,
+    /// Whether the scan ran at all.
+    pub scanned: bool,
+}
+
+impl DiscoveryOutcome {
+    /// An outcome with FULL evidence: every worker not listed is confirmed
+    /// absent. This is what a caller that genuinely knows the complete set
+    /// asserts — and what the legacy [`WorkerEligibility::observe`] shim builds.
+    pub fn complete(workers: Vec<DiscoveredWorker>) -> Self {
+        let polled = workers.len();
+        Self {
+            workers,
+            unconfirmed: Vec::new(),
+            polled,
+            scanned: true,
+        }
+    }
+}
+
+/// What one tick says about one tracked worker. See [`DiscoveryOutcome`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Evidence {
+    /// Confirmed dialable.
+    Present,
+    /// No statement either way — freeze this worker's state machine.
+    Unconfirmed,
+    /// Positive grounds to believe it is gone.
+    Absent,
+}
+
 /// Robust, operator-overridable defaults. Read once at construction. Mirrors the
 /// `SOVEREIGN_RPC_*` env-knob convention used elsewhere in the RPC path.
 #[derive(Debug, Clone)]
@@ -79,6 +140,13 @@ pub struct EligibilityConfig {
     pub initial_cooldown: Duration,
     /// Cap on quarantine duration so genuine recovery isn't masked forever.
     pub max_cooldown: Duration,
+    /// How long a worker may stay UNCONFIRMED before its absence is believed.
+    ///
+    /// Bounds the benefit of the doubt: a peer whose probe we starved keeps its
+    /// state, but a peer that is genuinely dead still leaves. `0` disables the
+    /// hold entirely — every non-present tick is read as absence, which is
+    /// exactly the pre-2026-07-28 behaviour.
+    pub absence_grace: Duration,
 }
 
 impl Default for EligibilityConfig {
@@ -89,6 +157,11 @@ impl Default for EligibilityConfig {
             flap_window: Duration::from_secs(600),
             initial_cooldown: Duration::from_secs(60),
             max_cooldown: Duration::from_secs(600),
+            // ~8 discovery ticks. Comfortably outlasts the multi-tick probe
+            // starvation observed while a peer served a 21GB warm, and is well
+            // under the 300s anchor settle it exists to protect — while still
+            // bounded, so a dead-but-gossip-online worker leaves in ~2 min.
+            absence_grace: Duration::from_secs(120),
         }
     }
 }
@@ -107,6 +180,13 @@ impl EligibilityConfig {
     /// The stricter eligibility profile for shared-model anchors. Same flap
     /// window + cooldown backoff as the casual-worker [`default`](Self::default),
     /// but a longer settle and a one-strike flap threshold (see the consts).
+    ///
+    /// NOTE: this constructor is NOT the live path. The daemon applies the
+    /// anchor profile by setting `SOVEREIGN_RPC_WORKER_SETTLE_SECS` /
+    /// `..._FLAP_THRESHOLD` from the shared-model role (`bootstrap.rs`), which
+    /// [`Self::from_env`] then reads on top of [`Self::default`]. The values
+    /// agree today because both read the consts above; changing THIS function
+    /// alone will not change daemon behaviour.
     pub fn anchor() -> Self {
         Self {
             settle: Duration::from_secs(ANCHOR_SETTLE_SECS),
@@ -126,6 +206,7 @@ impl EligibilityConfig {
             flap_window: env_secs("SOVEREIGN_RPC_WORKER_FLAP_WINDOW_SECS", d.flap_window),
             initial_cooldown: env_secs("SOVEREIGN_RPC_WORKER_COOLDOWN_SECS", d.initial_cooldown),
             max_cooldown: env_secs("SOVEREIGN_RPC_WORKER_MAX_COOLDOWN_SECS", d.max_cooldown),
+            absence_grace: env_secs("SOVEREIGN_RPC_WORKER_ABSENCE_GRACE_SECS", d.absence_grace),
         }
     }
 }
@@ -177,6 +258,12 @@ struct WorkerState {
     quarantine_count: u32,
     /// `Some(t)` while quarantined; excluded until `now >= t`.
     quarantined_until: Option<Instant>,
+    /// When the current UNCONFIRMED run began; `None` whenever we have a
+    /// definite statement. Bounds the hold — see `EligibilityConfig::absence_grace`.
+    unconfirmed_since: Option<Instant>,
+    /// When this peer last carried a successful multi-gigabyte model transfer.
+    /// Out-of-band liveness that is strictly stronger than an 800ms probe.
+    warm_alive_at: Option<Instant>,
 }
 
 impl WorkerState {
@@ -238,6 +325,57 @@ pub struct WorkerStatusView {
     pub status: WorkerStatus,
     pub flaps_in_window: u32,
     pub quarantine_remaining_secs: u64,
+    /// How long this worker's state has been held on NO EVIDENCE (0 when we
+    /// have a definite statement). Makes the withheld-judgement window visible
+    /// to an operator — "Eligible, unconfirmed for 45s" — instead of it being a
+    /// silent internal hold. `serde(default)` keeps older payloads readable.
+    #[serde(default)]
+    pub unconfirmed_for_secs: u64,
+}
+
+/// Classify what this tick says about one tracked worker.
+///
+/// Pure, and the hinge of the whole fix. Absence-from-the-slice degrades to a
+/// real [`Evidence::Absent`] only when we have positive grounds AND the benefit
+/// of the doubt has run out — a genuinely dead worker must still leave.
+fn evidence_for(
+    id: &NodeId,
+    st: &WorkerState,
+    present: &HashSet<NodeId>,
+    unconfirmed: &HashSet<NodeId>,
+    scanned: bool,
+    now: Instant,
+    cfg: &EligibilityConfig,
+) -> Evidence {
+    if present.contains(id) {
+        return Evidence::Present;
+    }
+    // Grace disabled — every non-present tick is absence, i.e. exactly the
+    // pre-2026-07-28 behaviour. Kept as a one-line escape for an operator who
+    // wants the old semantics back.
+    if cfg.absence_grace.is_zero() {
+        return Evidence::Absent;
+    }
+
+    // Do we have a REASON to withhold judgement this tick?
+    let no_statement = !scanned
+        || unconfirmed.contains(id)
+        || st
+            .warm_alive_at
+            .is_some_and(|t| now.duration_since(t) < cfg.absence_grace);
+    if !no_statement {
+        // Positive grounds: the scan ran, the peer was not merely unprobeable
+        // (gossip dropped it), and nothing vouches for it.
+        return Evidence::Absent;
+    }
+
+    // Withholding — but only for so long.
+    let held_for = st.unconfirmed_since.map(|s| now.duration_since(s));
+    if held_for.is_some_and(|d| d >= cfg.absence_grace) {
+        Evidence::Absent
+    } else {
+        Evidence::Unconfirmed
+    }
 }
 
 /// Tracks per-worker eligibility. Cheap to share (`Arc`) — the lock is internal.
@@ -261,71 +399,103 @@ impl WorkerEligibility {
         }
     }
 
-    /// Fold one discovery observation (`present` = workers advertised this tick)
-    /// into per-worker state, logging every status transition at INFO. Pure given
-    /// `(state, present, now)`.
+    /// Fold one FULL-EVIDENCE observation: every worker not in `present` is
+    /// treated as confirmed absent.
+    ///
+    /// Retained for callers that genuinely know the complete set (and for the
+    /// unit tests that predate [`DiscoveryOutcome`]). Production discovery uses
+    /// [`Self::observe_outcome`], because a probe that timed out is not the same
+    /// statement as a peer reporting no worker.
     pub fn observe(&self, present: &[DiscoveredWorker], now: Instant) {
-        let present_ids: HashSet<NodeId> = present.iter().map(|w| w.node_id).collect();
-        let addresses: HashMap<NodeId, &str> = present
+        self.observe_outcome(&DiscoveryOutcome::complete(present.to_vec()), now);
+    }
+
+    /// Fold one discovery outcome, honouring its unconfirmed set.
+    ///
+    /// Logs every status transition at INFO. Pure given `(state, outcome, now)`.
+    pub fn observe_outcome(&self, outcome: &DiscoveryOutcome, now: Instant) {
+        let present_ids: HashSet<NodeId> = outcome.workers.iter().map(|w| w.node_id).collect();
+        let unconfirmed_ids: HashSet<NodeId> = outcome.unconfirmed.iter().copied().collect();
+        let addresses: HashMap<NodeId, &str> = outcome
+            .workers
             .iter()
             .map(|w| (w.node_id, w.endpoint.as_str()))
             .collect();
         let mut map = self.workers.lock().unwrap_or_else(|e| e.into_inner());
 
         // Ensure every currently-present worker has an entry to update.
-        for w in present {
+        for w in &outcome.workers {
             map.entry(w.node_id).or_default();
         }
 
         for (id, st) in map.iter_mut() {
             let before = st.status(now, &self.config);
-            let now_present = present_ids.contains(id);
             let was_present = st.present;
+            let evidence = evidence_for(
+                id,
+                st,
+                &present_ids,
+                &unconfirmed_ids,
+                outcome.scanned,
+                now,
+                &self.config,
+            );
 
-            // An address change for a present node is NOT a flap — update the
-            // endpoint in place and leave presence/settle state untouched.
-            if now_present {
-                if let Some(ep) = addresses.get(id) {
-                    st.endpoint = (*ep).to_string();
+            match evidence {
+                // No statement. Freeze the whole state machine: no flap, no
+                // re-settle, endpoint untouched. Because `present` is left as it
+                // was, the disappear arm below fires EXACTLY ONCE when the grace
+                // finally expires — one flap, not one per tick.
+                Evidence::Unconfirmed => {
+                    st.unconfirmed_since.get_or_insert(now);
                 }
-            }
-
-            match (was_present, now_present) {
-                (false, true) => {
-                    // Appeared. If the quarantine has elapsed, (re)enter probation;
-                    // if still quarantined, stay quarantined (just mark present).
-                    if st.quarantined_until.is_none_or(|d| d <= now) {
-                        st.quarantined_until = None;
-                        st.present_since = Some(now);
+                Evidence::Present => {
+                    st.unconfirmed_since = None;
+                    // An address change for a present node is NOT a flap —
+                    // update the endpoint in place and leave presence/settle
+                    // state untouched.
+                    if let Some(ep) = addresses.get(id) {
+                        st.endpoint = (*ep).to_string();
+                    }
+                    if was_present {
+                        let not_quarantined = st.quarantined_until.is_none_or(|d| d <= now);
+                        // Start the settle clock if we don't have one yet and
+                        // we're not quarantined — e.g. the worker stayed present
+                        // THROUGH a quarantine that has now expired; it re-enters
+                        // probation from here and must settle afresh.
+                        if st.present_since.is_none() && not_quarantined {
+                            st.present_since = Some(now);
+                        }
+                        let settled = st
+                            .present_since
+                            .is_some_and(|s| now.duration_since(s) >= self.config.settle);
+                        if st.eligible_since.is_none() && settled && not_quarantined {
+                            st.eligible_since = Some(now);
+                        }
+                    } else {
+                        // Appeared. If the quarantine has elapsed, (re)enter
+                        // probation; if still quarantined, stay quarantined
+                        // (just mark present).
+                        if st.quarantined_until.is_none_or(|d| d <= now) {
+                            st.quarantined_until = None;
+                            st.present_since = Some(now);
+                            st.eligible_since = None;
+                        }
+                    }
+                    st.present = true;
+                }
+                Evidence::Absent => {
+                    st.unconfirmed_since = None;
+                    if was_present {
+                        // Disappeared — a flap. Reset the settle run; maybe
+                        // quarantine.
+                        st.present_since = None;
                         st.eligible_since = None;
+                        st.record_flap(now, &self.config);
                     }
+                    st.present = false;
                 }
-                (true, false) => {
-                    // Disappeared — a flap. Reset the settle run; maybe quarantine.
-                    st.present_since = None;
-                    st.eligible_since = None;
-                    st.record_flap(now, &self.config);
-                }
-                (true, true) => {
-                    let not_quarantined = st.quarantined_until.is_none_or(|d| d <= now);
-                    // Start the settle clock if we don't have one yet and we're not
-                    // quarantined — e.g. the worker stayed present THROUGH a
-                    // quarantine that has now expired; it re-enters probation from
-                    // here and must settle afresh before becoming eligible again.
-                    if st.present_since.is_none() && not_quarantined {
-                        st.present_since = Some(now);
-                    }
-                    // Promote to eligible once settled.
-                    let settled = st
-                        .present_since
-                        .is_some_and(|s| now.duration_since(s) >= self.config.settle);
-                    if st.eligible_since.is_none() && settled && not_quarantined {
-                        st.eligible_since = Some(now);
-                    }
-                }
-                (false, false) => {}
             }
-            st.present = now_present;
 
             let after = st.status(now, &self.config);
             if before != after {
@@ -334,6 +504,7 @@ impl WorkerEligibility {
                     endpoint = %st.endpoint,
                     from = ?before,
                     to = ?after,
+                    evidence = ?evidence,
                     flaps = st.flaps.len(),
                     quarantine_count = st.quarantine_count,
                     cooldown_secs = st.quarantine_remaining(now),
@@ -341,6 +512,52 @@ impl WorkerEligibility {
                 );
             }
         }
+    }
+
+    /// Positive out-of-band liveness: this peer just carried a successful
+    /// multi-gigabyte model transfer, which is far stronger evidence than any
+    /// 800 ms probe — and it arrives precisely when the probes are most likely
+    /// to be starved, because the transfer is what starves them.
+    ///
+    /// Deliberately narrow, so that a warm can never mask a genuinely flapping
+    /// worker:
+    /// - it NEVER creates an entry — a warm may vouch for a worker discovery
+    ///   already knows about, never invent one;
+    /// - it does not clear a quarantine, retract a flap, or shorten a settle;
+    /// - its only effect is to deny the NEXT tick the right to call a confirmed
+    ///   absence, and even that is bounded by the same `absence_grace` as every
+    ///   other hold. A peer that warms once and then goes quiet still degrades
+    ///   on schedule.
+    ///
+    /// Routing it through [`Evidence`] rather than mutating presence directly is
+    /// what makes that safe: a `note_alive` that set `present = true` would be
+    /// re-flapped by the very next `observe`, oscillating between the two
+    /// mutators.
+    pub fn note_alive(&self, node: NodeId, endpoint: &str, now: Instant) {
+        let mut map = self.workers.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(st) = map.get_mut(&node) else {
+            tracing::debug!(
+                worker = %node,
+                endpoint = %endpoint,
+                "worker-eligibility: warm success for a worker discovery has never seen — ignored"
+            );
+            return;
+        };
+        if st.endpoint != endpoint {
+            tracing::debug!(
+                worker = %node,
+                warm_endpoint = %endpoint,
+                known_endpoint = %st.endpoint,
+                "worker-eligibility: warm succeeded over a different address for a known worker"
+            );
+        }
+        st.warm_alive_at = Some(now);
+        tracing::info!(
+            worker = %node,
+            endpoint = %endpoint,
+            status = ?st.status(now, &self.config),
+            "worker-eligibility: warm transfer succeeded — treating this peer as alive"
+        );
     }
 
     /// The workers safe to distribute to right now — present, settled, not
@@ -368,6 +585,10 @@ impl WorkerEligibility {
                 status: st.status(now, &self.config),
                 flaps_in_window: st.flaps.len() as u32,
                 quarantine_remaining_secs: st.quarantine_remaining(now),
+                unconfirmed_for_secs: st
+                    .unconfirmed_since
+                    .map(|s| now.duration_since(s).as_secs())
+                    .unwrap_or(0),
             })
             .collect();
         out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
@@ -404,8 +625,31 @@ mod tests {
             flap_window: Duration::from_secs(600),
             initial_cooldown: Duration::from_secs(60),
             max_cooldown: Duration::from_secs(600),
+            // The pre-existing tests assert FULL-EVIDENCE semantics (every
+            // worker missing from a tick is gone), so they run with the hold
+            // disabled. The unconfirmed tests below build their own config.
+            absence_grace: Duration::ZERO,
         }
     }
+
+    /// As [`cfg`], but with the unconfirmed hold enabled.
+    fn cfg_with_grace(grace_secs: u64) -> EligibilityConfig {
+        EligibilityConfig {
+            absence_grace: Duration::from_secs(grace_secs),
+            ..cfg()
+        }
+    }
+
+    /// A tick that polled `ids` and could confirm none of them.
+    fn unconfirmed_tick(ids: &[u128]) -> DiscoveryOutcome {
+        DiscoveryOutcome {
+            workers: vec![],
+            unconfirmed: ids.iter().map(|n| NodeId::from_u128(*n)).collect(),
+            polled: ids.len(),
+            scanned: true,
+        }
+    }
+
     /// One discovered worker with a caller-chosen node identity + address.
     fn dw(node: u128, ep: &str) -> DiscoveredWorker {
         DiscoveredWorker {
@@ -542,6 +786,190 @@ mod tests {
         assert!(
             eligible_sets.iter().all(|s| s.is_empty()),
             "a flapping worker never enters the eligible set, so the loop never reloads"
+        );
+    }
+
+    // ── unconfirmed evidence (2026-07-28) ───────────────────────────────
+
+    /// Settle a worker to Eligible under a grace-enabled config.
+    fn settled(grace_secs: u64) -> (WorkerEligibility, Instant) {
+        let e = WorkerEligibility::new(cfg_with_grace(grace_secs));
+        let t0 = Instant::now();
+        e.observe(&w("a:1"), t0);
+        let t1 = t0 + Duration::from_secs(95);
+        e.observe(&w("a:1"), t1);
+        assert_eq!(e.eligible(t1), vec!["a:1".to_string()], "precondition");
+        (e, t1)
+    }
+
+    /// THE INCIDENT, at the eligibility layer. A peer busy serving our own 21GB
+    /// warm cannot answer an 800ms probe; that silence must not be read as
+    /// departure, because under the anchor profile one strike quarantines it and
+    /// forces a fresh 300s settle.
+    #[test]
+    fn an_unconfirmed_tick_does_not_flap_an_eligible_worker() {
+        let (e, mut t) = settled(120);
+        for _ in 0..3 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&unconfirmed_tick(&[1]), t);
+        }
+        assert_eq!(
+            e.eligible(t),
+            vec!["a:1".to_string()],
+            "a worker we merely failed to reach must stay eligible"
+        );
+        let view = &e.status_views(t)[0];
+        assert_eq!(view.flaps_in_window, 0, "no flap may be recorded");
+        assert!(
+            view.unconfirmed_for_secs > 0,
+            "the hold must be visible to an operator"
+        );
+    }
+
+    /// The benefit of the doubt is BOUNDED, and spends itself exactly once: a
+    /// worker held through the grace produces ONE flap at expiry, not one per
+    /// tick.
+    #[test]
+    fn unconfirmed_degrades_to_exactly_one_flap_after_the_grace() {
+        let (e, mut t) = settled(120);
+        for _ in 0..12 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&unconfirmed_tick(&[1]), t);
+        }
+        assert!(
+            e.eligible(t).is_empty(),
+            "a genuinely dead worker must still leave"
+        );
+        assert_eq!(
+            e.status_views(t)[0].flaps_in_window,
+            1,
+            "expiry is ONE transition, not one per tick"
+        );
+    }
+
+    /// Recovery inside the grace is free: the settle clock was never reset, so
+    /// the worker is still eligible the moment it answers again. This is what
+    /// turns the incident's 3 warm cycles into 1.
+    #[test]
+    fn a_recovery_inside_the_grace_does_not_re_settle() {
+        let (e, mut t) = settled(120);
+        for _ in 0..3 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&unconfirmed_tick(&[1]), t);
+        }
+        t += Duration::from_secs(15);
+        e.observe(&w("a:1"), t);
+        assert_eq!(
+            e.eligible(t),
+            vec!["a:1".to_string()],
+            "no 300s re-settle after a transient probe starvation"
+        );
+        assert_eq!(e.status_views(t)[0].unconfirmed_for_secs, 0);
+    }
+
+    #[test]
+    fn a_scan_that_did_not_run_is_not_evidence_of_absence() {
+        let (e, mut t) = settled(120);
+        t += Duration::from_secs(15);
+        // scanned = false: the daemon wasn't running, or the HTTP client failed
+        // to build. This says nothing about any worker.
+        e.observe_outcome(&DiscoveryOutcome::default(), t);
+        assert_eq!(e.eligible(t), vec!["a:1".to_string()]);
+    }
+
+    /// THE P0.4 REGRESSION GUARD. Gossip dropping a peer is POSITIVE evidence,
+    /// so `kill -9` of a worker daemon must still converge at today's speed —
+    /// the unconfirmed hold must not slow the acceptance path down.
+    #[test]
+    fn a_gossip_dropped_worker_is_confirmed_absent_immediately() {
+        let (e, mut t) = settled(120);
+        t += Duration::from_secs(15);
+        // Scanned, and the peer is in NEITHER set — it is gone, not silent.
+        e.observe_outcome(
+            &DiscoveryOutcome {
+                workers: vec![],
+                unconfirmed: vec![],
+                polled: 1,
+                scanned: true,
+            },
+            t,
+        );
+        assert!(
+            e.eligible(t).is_empty(),
+            "confirmed absence must take effect on the first tick"
+        );
+        assert_eq!(e.status_views(t)[0].flaps_in_window, 1);
+    }
+
+    #[test]
+    fn a_zero_grace_restores_the_pre_incident_behaviour() {
+        let (e, mut t) = settled(0);
+        t += Duration::from_secs(15);
+        e.observe_outcome(&unconfirmed_tick(&[1]), t);
+        assert!(
+            e.eligible(t).is_empty(),
+            "absence_grace = 0 must read every non-present tick as absence"
+        );
+    }
+
+    // ── note_alive (warm-success liveness) ──────────────────────────────
+
+    #[test]
+    fn note_alive_suppresses_a_confirmed_absence_then_stops() {
+        let (e, mut t) = settled(120);
+        e.note_alive(NodeId::from_u128(1), "a:1", t);
+
+        // Confirmed-absent ticks, but a multi-GB transfer just succeeded
+        // through this peer — that outranks a failed probe.
+        t += Duration::from_secs(15);
+        e.observe_outcome(&DiscoveryOutcome::complete(vec![]), t);
+        assert_eq!(
+            e.eligible(t),
+            vec!["a:1".to_string()],
+            "a peer that just carried gigabytes is not dead"
+        );
+
+        // ...but the vouching is bounded by the same grace as everything else.
+        for _ in 0..10 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&DiscoveryOutcome::complete(vec![]), t);
+        }
+        assert!(
+            e.eligible(t).is_empty(),
+            "one warm cannot vouch forever — the hold is bounded"
+        );
+    }
+
+    #[test]
+    fn note_alive_cannot_invent_a_worker() {
+        let e = WorkerEligibility::new(cfg_with_grace(120));
+        let t = Instant::now();
+        e.note_alive(NodeId::from_u128(99), "ghost:1", t);
+        assert!(
+            e.status_views(t).is_empty(),
+            "a warm may vouch for a known worker, never conjure one"
+        );
+    }
+
+    #[test]
+    fn note_alive_does_not_clear_a_quarantine() {
+        // Flap a worker into quarantine (threshold 3), then warm it.
+        let e = WorkerEligibility::new(cfg_with_grace(120));
+        let mut t = Instant::now();
+        for _ in 0..3 {
+            e.observe(&w("a:1"), t);
+            t += Duration::from_secs(5);
+            e.observe(&w(""), t);
+            t += Duration::from_secs(5);
+        }
+        assert_eq!(e.status_views(t)[0].status, WorkerStatus::Quarantined);
+
+        e.note_alive(NodeId::from_u128(1), "a:1", t);
+        assert_eq!(
+            e.status_views(t)[0].status,
+            WorkerStatus::Quarantined,
+            "a warm must not resurrect a flapping anchor — that is the gate that \
+             protects the host"
         );
     }
 
