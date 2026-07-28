@@ -902,6 +902,20 @@ impl ModelSlot {
                      (or pooled memory short) — not loading; retries as anchors join"
                 )));
             }
+            LoadPlacement::LocalUnfit { need_mb, usable_mb } => {
+                // Local-fit gate refusal: the fallback load would starve the
+                // host (2026-07-27: a 91 GB local fallback of the shared 122B
+                // killed the desktop session on unified memory). Same posture
+                // as InsufficientCluster — stay unavailable, retry on the
+                // next worker-set change.
+                return Err(Error::Inference(format!(
+                    "local-fit gate: {} needs ~{need_mb} MiB (weights + KV + scratch) but only \
+                     ~{usable_mb} MiB of system memory is usable after the host reserve — not \
+                     loading locally; retries as workers rejoin. \
+                     SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides.",
+                    model_path.display()
+                )));
+            }
         }
 
         let model =

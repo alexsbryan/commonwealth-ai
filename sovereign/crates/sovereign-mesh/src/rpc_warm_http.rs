@@ -139,6 +139,21 @@ fn error_chain(e: &dyn std::error::Error) -> String {
     out
 }
 
+/// Bound a worker's error body for a single log line. 500 bodies are
+/// `{"error": …}` one-liners; anything longer is truncated, not dropped —
+/// a truncated reason still beats `status=500` alone.
+fn truncate_for_log(s: &str) -> String {
+    const MAX: usize = 600;
+    if s.len() <= MAX {
+        return s.to_string();
+    }
+    let mut end = MAX;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}… [{} bytes total]", &s[..end], s.len())
+}
+
 /// The cache dir the in-process RPC worker actually reads — must mirror
 /// `model_slot::rpc_cache_dir` exactly, so the bytes we warm land where the
 /// worker's RPC server looks for `SET_TENSOR_HASH` hits. `Err` when caching is
@@ -885,7 +900,11 @@ async fn orchestrate_warm(
                         let status = r.status();
                         let detail = r.text().await.unwrap_or_default();
                         last_err = format!("{label} via {via}: warm returned {status}: {detail}");
-                        tracing::warn!(worker = %label, via = %via, status = %status, "rpc-warm: candidate answered with an error; trying next");
+                        // The worker's error body is the ONLY place the actual
+                        // failure reason surfaces (its own log may be unreachable
+                        // remotely) — losing it here cost a live 122B acceptance
+                        // run a blind retry loop (2026-07-27).
+                        tracing::warn!(worker = %label, via = %via, status = %status, detail = %truncate_for_log(&detail), "rpc-warm: candidate answered with an error; trying next");
                     }
                     Err(e) => {
                         last_err =
