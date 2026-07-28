@@ -18,6 +18,7 @@ mod turn_report;
 mod governance_commands;
 mod import_commands;
 mod insight_commands;
+mod invoke_coverage;
 mod local_corpus_commands;
 mod mesh_commands;
 mod meshapp;
@@ -501,7 +502,22 @@ fn main() -> ExitCode {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        // Wrapped, not bare, so a run can report WHICH commands it reached.
+        // This is the one chokepoint the frontend's `invoke()` and
+        // `command_bridge`'s `/invoke` both pass through, which is what makes
+        // the resulting number honest about UI-driven reach rather than just
+        // counting the handful of commands the specs name. Inert unless
+        // SOVEREIGN_INVOKE_COVERAGE is set — see `invoke_coverage`.
+        .invoke_handler({
+            // `generate_handler!` expands to an UNANNOTATED closure, and a
+            // closure's parameter types are inferred where it is written, not
+            // from a later call — so binding it to a `let` yields E0282. This
+            // identity function supplies the expected type at zero runtime
+            // cost (no boxing, no dynamic dispatch).
+            fn typed<F: Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool>(f: F) -> F {
+                f
+            }
+            let handler = typed(tauri::generate_handler![
             commands::send_message,
             commands::send_message_stream,
             commands::redirect_turn,
@@ -753,7 +769,20 @@ fn main() -> ExitCode {
             commands::mcp_test_connection,
             commands::mcp_set_token,
             commands::mcp_clear_token,
-        ])
+            ]);
+            // The runtime is spelled out because binding `generate_handler!`
+            // to a `let` loses the inference `invoke_handler` would otherwise
+            // supply; `Builder::default()` is `Builder<Wry>`.
+            //
+            // `ipc::Invoke` is documented upstream as "used internally by
+            // macros and explicitly NOT stable", so a Tauri upgrade may move
+            // it. That breaks the BUILD, loudly, which is the acceptable
+            // failure mode — it cannot silently stop recording.
+            move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
+                invoke_coverage::record(invoke.message.command());
+                handler(invoke)
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error building svrnmesh")
         .run(|_app_handle, event| {
