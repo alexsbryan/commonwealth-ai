@@ -29,6 +29,7 @@ use sovereign_inference::embedded::{EmbedOnlyProvider, EmbeddedLlamaCpp};
 use sovereign_inference::fast_exit_skip_destructors;
 use tracing::{error, info};
 
+use crate::distribution::DistributionHandoff;
 use crate::server::{router, ChildMeta};
 use crate::supervisor::HANDSHAKE_PREFIX;
 
@@ -63,6 +64,12 @@ struct ChildArgs {
     bind: String,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
+    /// Path to a [`DistributionHandoff`] written by the daemon. Present iff
+    /// this child hosts the mesh's DISTRIBUTED primary: it names the warmed
+    /// RPC workers and the shard plan they were warmed against. The path is
+    /// visible in `ps` and the file is plain JSON, so "what was this child
+    /// told to do" is answerable without reading the daemon's logs.
+    distribution: Option<PathBuf>,
 }
 
 fn take_value<'a>(
@@ -84,6 +91,7 @@ impl ChildArgs {
         let mut bind = "127.0.0.1:0".to_string();
         let mut mock_tokens: usize = 32;
         let mut mock_token_delay_ms: u64 = 0;
+        let mut distribution: Option<PathBuf> = None;
 
         let mut it = args.iter();
         while let Some(arg) = it.next() {
@@ -112,6 +120,9 @@ impl ChildArgs {
                     };
                 }
                 "--bind" => bind = take_value(&mut it, "--bind")?,
+                "--distribution" => {
+                    distribution = Some(PathBuf::from(take_value(&mut it, "--distribution")?))
+                }
                 "--mock-tokens" => {
                     mock_tokens = take_value(&mut it, "--mock-tokens")?
                         .parse()
@@ -135,6 +146,7 @@ impl ChildArgs {
             bind,
             mock_tokens,
             mock_token_delay_ms,
+            distribution,
         })
     }
 
@@ -249,9 +261,10 @@ async fn serve(cfg: ChildArgs) -> i32 {
         let gpu = cfg.gpu_layers;
         let mock_tokens = cfg.mock_tokens;
         let mock_delay = cfg.mock_token_delay_ms;
+        let distribution = cfg.distribution.clone();
         tokio::spawn(async move {
             let loaded = tokio::task::spawn_blocking(move || {
-                load_provider(role, model, ctx, gpu, mock_tokens, mock_delay)
+                load_provider(role, model, ctx, gpu, mock_tokens, mock_delay, distribution)
             })
             .await;
             match loaded {
@@ -314,6 +327,7 @@ async fn serve(cfg: ChildArgs) -> i32 {
 }
 
 /// Build the role's provider. Blocking (model load) — call on `spawn_blocking`.
+#[allow(clippy::too_many_arguments)]
 fn load_provider(
     role: Role,
     model: Option<PathBuf>,
@@ -321,14 +335,45 @@ fn load_provider(
     gpu_layers: Option<u32>,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
+    distribution: Option<PathBuf>,
 ) -> Result<Arc<dyn InferenceProvider>> {
     match role {
         Role::Generate => {
             let path = model
                 .ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
-            // Single model into the fast slot (no separate primary). Grammar/
-            // structured-output are honoured per-request by build_sampler.
-            let engine = EmbeddedLlamaCpp::load_dual(&path, None, ctx, gpu_layers)?;
+            let Some(handoff_path) = distribution else {
+                // Single model into the fast slot (no separate primary).
+                // Grammar/structured-output are honoured per-request by
+                // build_sampler.
+                let engine = EmbeddedLlamaCpp::load_dual(&path, None, ctx, gpu_layers)?;
+                return Ok(Arc::new(engine));
+            };
+
+            // Distributed primary. The daemon has already planned the shards
+            // and warmed every worker's cache; we load across them. Install the
+            // handoff FIRST — it is what makes `resolve_placement` see workers
+            // at all, and what pins the daemon's plan so our `-ot` overrides cut
+            // the blocks exactly where the warm caches expect.
+            let handoff = DistributionHandoff::read(&handoff_path).map_err(|e| {
+                Error::InvalidInput(format!(
+                    "--distribution {}: {e}",
+                    handoff_path.display()
+                ))
+            })?;
+            info!(
+                target: "compute_child",
+                workers = handoff.endpoints.len(),
+                endpoints = ?handoff.endpoints,
+                handoff = %handoff_path.display(),
+                "distributed primary: installing the daemon's worker set + shard plan"
+            );
+            handoff.install(&path);
+            let engine = EmbeddedLlamaCpp::load_single_distributed(
+                &path,
+                ctx,
+                gpu_layers,
+                ModelFamily::Unknown,
+            )?;
             Ok(Arc::new(engine))
         }
         Role::Embed => {

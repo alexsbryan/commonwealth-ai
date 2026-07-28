@@ -738,6 +738,75 @@ impl EmbeddedLlamaCpp {
         embed_family: ModelFamily,
         code_family: ModelFamily,
     ) -> Result<Self> {
+        Self::load_full_inner(
+            fast_model_path,
+            primary_model_path,
+            embed_model_path,
+            code_model_path,
+            context_size,
+            gpu_layers,
+            fast_family,
+            primary_family,
+            embed_family,
+            code_family,
+            /* only_slot_distributable */ false,
+        )
+    }
+
+    /// Load ONE model as this process's only slot, marked **distributable** —
+    /// the shape a `sovereign-compute` child takes when it hosts the mesh's
+    /// distributed primary.
+    ///
+    /// Two things make this different from [`load_dual`]:
+    ///
+    /// 1. **Distributable.** Every other slot is hardcoded non-distributable
+    ///    (only the daemon's primary distributes, which keeps fast/embed/code
+    ///    off the RPC path). A child that IS the primary needs its one slot to
+    ///    take the distributed placement path, or it would load ~91 GB locally.
+    /// 2. **No primary slot.** With `primary_path: None`, `Speed::Slow` routes
+    ///    to this slot too (`select_slot`), so the single distributed model
+    ///    answers every request — one weight copy, one KV cache.
+    ///
+    /// The load itself goes through the same `resolve_placement` the daemon
+    /// uses, so the local-fit gate, the quorum gate, and the `-ot` override path
+    /// all behave identically here. Pin the daemon's shard plan with
+    /// [`pin_shard_plan`](crate::embedded::pin_shard_plan) BEFORE calling this,
+    /// or the child will re-plan against post-warm VRAM and miss every cache.
+    pub fn load_single_distributed(
+        model_path: &Path,
+        context_size: u32,
+        gpu_layers: Option<u32>,
+        family: ModelFamily,
+    ) -> Result<Self> {
+        Self::load_full_inner(
+            model_path,
+            None,
+            None,
+            None,
+            context_size,
+            gpu_layers,
+            family,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+            ModelFamily::Unknown,
+            /* only_slot_distributable */ true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn load_full_inner(
+        fast_model_path: &Path,
+        primary_model_path: Option<&Path>,
+        embed_model_path: Option<&Path>,
+        code_model_path: Option<&Path>,
+        context_size: u32,
+        gpu_layers: Option<u32>,
+        fast_family: ModelFamily,
+        primary_family: ModelFamily,
+        embed_family: ModelFamily,
+        code_family: ModelFamily,
+        only_slot_distributable: bool,
+    ) -> Result<Self> {
         let hardware = HardwareProfile::detect();
         // GPU offload layer count. Precedence: explicit config > env override
         // > hardware default (999 when a GPU is detected, else 0).
@@ -830,7 +899,10 @@ impl EmbeddedLlamaCpp {
             fast_model_path,
             context_size,
             n_gpu_layers,
-            false, // fast slot stays local — never distributed across the mesh
+            // The fast slot stays local — never distributed across the mesh —
+            // EXCEPT in a compute child loaded via `load_single_distributed`,
+            // where this one slot IS the mesh's distributed primary.
+            only_slot_distributable,
         )?);
         tracing::info!(slot = "fast", family = ?fast_family, "slot loaded");
 

@@ -836,7 +836,17 @@ impl ModelSlot {
         // Total across ALL shards — not the first-shard file size — so a split
         // GGUF is classified by its real weight, not its ~10 MB header shard.
         let model_bytes = total_model_bytes(model_path);
-        let placement = resolve_placement(model_path, model_bytes, distributable);
+        // `cpu_only` reaches the local-fit gate: a CPU-only load mmaps the
+        // weights (reclaimable page cache — a box can legitimately run a
+        // model near or beyond RAM that way), while a GPU load pins them
+        // in GTT/unified memory, which is what starved the desktop in the
+        // 2026-07-27 incident. Only the pinned case is gated.
+        let placement = resolve_placement(
+            model_path,
+            model_bytes,
+            distributable,
+            effective_gpu_layers == 0,
+        );
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
         match &placement {

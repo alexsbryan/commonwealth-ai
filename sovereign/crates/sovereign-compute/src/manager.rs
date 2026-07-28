@@ -17,7 +17,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -34,6 +35,7 @@ use tracing::{info, warn};
 
 use crate::child::{ChildLifecycle, ChildProvider, ChildRuntimeState};
 use crate::client::ComputeChildClient;
+use crate::distribution::DistributionHandoff;
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
 /// Per-child supervision handles retained by the manager.
@@ -70,11 +72,37 @@ pub struct ChildStatusSnapshot {
     pub last_exit: Option<String>,
 }
 
+/// What the daemon must tell the manager to host a distributed primary in a
+/// child. Assembled from the daemon's models config — `[compute]` knows only
+/// that the mode is on, not which GGUF is the primary.
+#[derive(Debug, Clone)]
+pub struct DistributedPrimarySpec {
+    /// Addressable slot name (the shared-model id).
+    pub name: String,
+    /// The primary GGUF (first shard, for a split model).
+    pub model: PathBuf,
+    /// Context size for the child's slot; `None` = the child's default.
+    pub context_size: Option<u32>,
+    /// GPU layers for the child's slot; `None` = auto.
+    pub n_gpu_layers: Option<u32>,
+    /// Additional model ids that name this primary (e.g. the GGUF stem), so an
+    /// explicitly-addressed request still routes to the child.
+    pub model_ids: Vec<String>,
+    /// Where the daemon writes the [`DistributionHandoff`] the child reads.
+    /// A plain file on purpose: `cat` it and you know exactly which workers
+    /// the running child was told to load across, and with which shard cut.
+    pub handoff_path: PathBuf,
+}
+
 /// Owns the compute children + the model_id → child routes over them.
 pub struct ComputeChildManager {
     children: Vec<ManagedChild>,
     routes: HashMap<String, Arc<ChildProvider>>,
     embed_child: Option<Arc<ChildProvider>>,
+    /// The distributed-primary slot, when that mode is on. Created unspawned:
+    /// the daemon spawns it once it has warmed a worker set, and respawns it
+    /// whenever that set changes.
+    distributed: Option<(Arc<DynamicChildSlot>, DistributedPrimarySpec)>,
 }
 
 impl ComputeChildManager {
@@ -82,6 +110,16 @@ impl ComputeChildManager {
     /// `binary` is the executable to re-exec as `--compute-child`
     /// (`current_exe()` in production).
     pub fn start(section: &ComputeSection, binary: PathBuf, crash_log_dir: PathBuf) -> Arc<Self> {
+        Self::start_with_distributed(section, binary, crash_log_dir, None)
+    }
+
+    /// As [`Self::start`], plus (optionally) the distributed-primary slot.
+    pub fn start_with_distributed(
+        section: &ComputeSection,
+        binary: PathBuf,
+        crash_log_dir: PathBuf,
+        distributed_spec: Option<DistributedPrimarySpec>,
+    ) -> Arc<Self> {
         let mut children = Vec::new();
         let mut routes = HashMap::new();
         let mut embed_child = None;
@@ -91,7 +129,8 @@ impl ComputeChildManager {
                 continue;
             }
             let spec = ChildSpec::for_slot(slot_cfg);
-            let managed = spawn_managed(&spec, &binary, &crash_log_dir);
+            let (tx, _) = watch::channel(ChildRuntimeState::starting());
+            let managed = spawn_managed(&spec, &binary, &crash_log_dir, LifecycleSink::single(tx));
             let provider = Arc::new(ChildProvider::new(
                 spec.name.clone(),
                 managed.state_rx.clone(),
@@ -109,10 +148,24 @@ impl ComputeChildManager {
             children.push(managed);
         }
 
+        let distributed = distributed_spec.map(|spec| {
+            info!(
+                target: "compute_child",
+                slot = %spec.name,
+                model = %spec.model.display(),
+                "distributed-primary slot registered (unspawned — waits for a warmed worker set)"
+            );
+            (
+                DynamicChildSlot::new(spec.clone(), binary.clone(), crash_log_dir.clone()),
+                spec,
+            )
+        });
+
         Arc::new(Self {
             children,
             routes,
             embed_child,
+            distributed,
         })
     }
 
@@ -126,9 +179,35 @@ impl ComputeChildManager {
         self.embed_child.as_ref()
     }
 
-    /// A status snapshot for every managed child.
+    /// The distributed-primary slot, for the daemon's worker-set-change loop.
+    pub fn distributed_slot(&self) -> Option<Arc<DynamicChildSlot>> {
+        self.distributed.as_ref().map(|(slot, _)| Arc::clone(slot))
+    }
+
+    /// The distributed primary's spawn spec (model path, ctx, gpu layers).
+    pub fn distributed_spec(&self) -> Option<&DistributedPrimarySpec> {
+        self.distributed.as_ref().map(|(_, spec)| spec)
+    }
+
+    /// Routing entry for the distributed primary, consumed by the facade.
+    fn distributed_primary_route(&self) -> Option<DistributedPrimaryRoute> {
+        self.distributed.as_ref().map(|(slot, spec)| {
+            let mut model_ids = vec![spec.name.clone()];
+            model_ids.extend(spec.model_ids.iter().cloned());
+            model_ids.dedup();
+            DistributedPrimaryRoute {
+                slot: Arc::clone(slot),
+                provider: slot.provider(),
+                model_ids,
+            }
+        })
+    }
+
+    /// A status snapshot for every managed child, including the
+    /// distributed-primary slot when configured.
     pub fn statuses(&self) -> Vec<ChildStatusSnapshot> {
-        self.children
+        let mut out: Vec<ChildStatusSnapshot> = self
+            .children
             .iter()
             .map(|c| {
                 let st = c.state_rx.borrow();
@@ -144,7 +223,11 @@ impl ComputeChildManager {
                     last_exit: st.last_exit.clone(),
                 }
             })
-            .collect()
+            .collect();
+        if let Some((slot, _)) = &self.distributed {
+            out.push(slot.status());
+        }
+        out
     }
 
     /// Gracefully stop every child (SIGTERM → grace → SIGKILL).
@@ -152,6 +235,9 @@ impl ComputeChildManager {
         for c in &self.children {
             info!(target: "compute_child", child = %c.name, "terminating compute child");
             c.supervisor.terminate();
+        }
+        if let Some((slot, _)) = &self.distributed {
+            slot.shutdown();
         }
     }
 
@@ -168,7 +254,8 @@ impl ComputeChildManager {
         mock_token_delay_ms: u64,
     ) -> Arc<Self> {
         let spec = ChildSpec::mock_slot(name, mock_tokens, mock_token_delay_ms);
-        let managed = spawn_managed(&spec, &binary, &crash_log_dir);
+        let (tx, _) = watch::channel(ChildRuntimeState::starting());
+        let managed = spawn_managed(&spec, &binary, &crash_log_dir, LifecycleSink::single(tx));
         let provider = Arc::new(ChildProvider::new(
             spec.name.clone(),
             managed.state_rx.clone(),
@@ -179,9 +266,21 @@ impl ComputeChildManager {
             children: vec![managed],
             routes,
             embed_child: None,
+            distributed: None,
         })
     }
 }
+
+/// How long a child may take to bind, hand back its port, and load its model
+/// before the supervisor calls it stuck. Sized for a local GGUF load.
+const DEFAULT_LOAD_DEADLINE: Duration = Duration::from_secs(180);
+
+/// The same budget for a DISTRIBUTED primary. A ~90 GB model assembling across
+/// mesh workers is a different order of magnitude: the daemon's own warm of one
+/// worker took 3.5 minutes in the 2026-07-27 capture, and the child's `-ot` load
+/// walks every shard afterwards. Too tight a deadline here doesn't protect
+/// anything — it just restarts a child that was making progress.
+const DISTRIBUTED_LOAD_DEADLINE: Duration = Duration::from_secs(1800);
 
 /// The full spawn args for one child.
 struct ChildSpec {
@@ -189,6 +288,12 @@ struct ChildSpec {
     role: String,
     model_id: String,
     args: Vec<String>,
+    /// Extra environment for the child process (on top of the inherited
+    /// daemon environment). The distributed primary uses this to assert
+    /// `SOVEREIGN_RPC_ASSUME_WARMED`.
+    env: Vec<(String, String)>,
+    /// Handshake + model-load budget; see the two constants above.
+    load_deadline: Duration,
 }
 
 impl ChildSpec {
@@ -217,6 +322,56 @@ impl ChildSpec {
             role: slot.role.clone(),
             model_id: slot.name.clone(),
             args,
+            env: Vec::new(),
+            load_deadline: DEFAULT_LOAD_DEADLINE,
+        }
+    }
+
+    /// The child that hosts the mesh's DISTRIBUTED primary.
+    ///
+    /// Differs from a static slot in three ways, each load-bearing:
+    /// - `--distribution <handoff>` names the warmed worker set + the shard
+    ///   plan they were warmed against (see [`crate::distribution`]).
+    /// - `SOVEREIGN_RPC_ASSUME_WARMED=1` — no warm orchestrator exists inside a
+    ///   child (it needs the daemon's mesh directory), so without this
+    ///   assertion `classify_placement` refuses to distribute a large model and
+    ///   silently falls back to a local load.
+    /// - a much longer load deadline.
+    fn distributed_primary(
+        name: &str,
+        model: &Path,
+        context_size: Option<u32>,
+        n_gpu_layers: Option<u32>,
+        handoff_path: &Path,
+    ) -> Self {
+        let mut args = vec![
+            "--compute-child".to_string(),
+            "--role".to_string(),
+            "generate".to_string(),
+            "--name".to_string(),
+            name.to_string(),
+            "--bind".to_string(),
+            "127.0.0.1:0".to_string(),
+            "--model".to_string(),
+            model.display().to_string(),
+            "--distribution".to_string(),
+            handoff_path.display().to_string(),
+        ];
+        if let Some(ctx) = context_size {
+            args.push("--ctx".to_string());
+            args.push(ctx.to_string());
+        }
+        if let Some(gpu) = n_gpu_layers {
+            args.push("--gpu-layers".to_string());
+            args.push(gpu.to_string());
+        }
+        Self {
+            name: name.to_string(),
+            role: "generate".to_string(),
+            model_id: name.to_string(),
+            args,
+            env: vec![("SOVEREIGN_RPC_ASSUME_WARMED".to_string(), "1".to_string())],
+            load_deadline: DISTRIBUTED_LOAD_DEADLINE,
         }
     }
 
@@ -240,27 +395,75 @@ impl ChildSpec {
             role: "mock".to_string(),
             model_id: name.to_string(),
             args,
+            env: Vec::new(),
+            load_deadline: DEFAULT_LOAD_DEADLINE,
         }
+    }
+}
+
+/// Where one supervisor generation publishes its lifecycle transitions.
+///
+/// A statically-configured child has exactly one generation, so this is just a
+/// `watch::Sender`. A [`DynamicChildSlot`] respawns with new argv across the
+/// daemon's life and must keep the SAME channel (the routing facade holds a
+/// receiver), so the sender is shared and each generation carries an epoch: a
+/// superseded generation's late transition — an aborting ggml child can take
+/// seconds to die — must not clobber the live child's state.
+#[derive(Clone)]
+struct LifecycleSink {
+    tx: Arc<watch::Sender<ChildRuntimeState>>,
+    generation: u64,
+    live_generation: Arc<AtomicU64>,
+}
+
+impl LifecycleSink {
+    /// A sink for a child that is never respawned with different args.
+    fn single(tx: watch::Sender<ChildRuntimeState>) -> Self {
+        Self {
+            tx: Arc::new(tx),
+            generation: 0,
+            live_generation: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// `true` iff this generation is still the live one.
+    fn is_live(&self) -> bool {
+        self.live_generation.load(Ordering::SeqCst) == self.generation
+    }
+
+    /// Publish, unless this generation has been superseded or the channel is
+    /// closed. `false` means "stop collecting".
+    fn send(&self, state: ChildRuntimeState) -> bool {
+        self.is_live() && self.tx.send(state).is_ok()
+    }
+
+    fn current(&self) -> ChildRuntimeState {
+        self.tx.borrow().clone()
     }
 }
 
 /// Build the supervisor for one child, wire its lifecycle collector, and
 /// spawn both tasks.
-fn spawn_managed(spec: &ChildSpec, binary: &Path, crash_log_dir: &Path) -> ManagedChild {
+fn spawn_managed(
+    spec: &ChildSpec,
+    binary: &Path,
+    crash_log_dir: &Path,
+    sink: LifecycleSink,
+) -> ManagedChild {
     let config = SupervisorConfig {
         binary_path: binary.to_path_buf(),
         args: spec.args.clone(),
         working_dir: None,
-        env: vec![],
+        env: spec.env.clone(),
         health: HealthTarget::StdoutHandshake {
             health_path: crate::wire::ROUTE_HEALTH.to_string(),
-            handshake_deadline: Duration::from_secs(180),
+            handshake_deadline: spec.load_deadline,
         },
         crash_log_dir: crash_log_dir.to_path_buf(),
         heartbeat_interval: Duration::from_secs(2),
         heartbeat_timeout: Duration::from_secs(5),
         heartbeat_failure_threshold: 3,
-        ready_deadline: Duration::from_secs(180),
+        ready_deadline: spec.load_deadline,
         backoff_schedule: vec![
             Duration::from_secs(1),
             Duration::from_secs(2),
@@ -273,11 +476,11 @@ fn spawn_managed(spec: &ChildSpec, binary: &Path, crash_log_dir: &Path) -> Manag
     };
 
     let supervisor = Arc::new(Supervisor::new(config));
-    let (tx, rx) = watch::channel(ChildRuntimeState::starting());
+    let state_rx = sink.tx.subscribe();
     let collector = tokio::spawn(collect_lifecycle(
         spec.name.clone(),
         Arc::clone(&supervisor),
-        tx,
+        sink,
     ));
     let run = {
         let s = Arc::clone(&supervisor);
@@ -289,7 +492,7 @@ fn spawn_managed(spec: &ChildSpec, binary: &Path, crash_log_dir: &Path) -> Manag
         role: spec.role.clone(),
         model_id: spec.model_id.clone(),
         supervisor,
-        state_rx: rx,
+        state_rx,
         _run: run,
         _collector: collector,
     }
@@ -298,11 +501,7 @@ fn spawn_managed(spec: &ChildSpec, binary: &Path, crash_log_dir: &Path) -> Manag
 /// Translate a child's `SupervisorState` broadcast into the routable
 /// [`ChildRuntimeState`], rebuilding the client when it becomes serving and
 /// tracing every lifecycle transition (glassbox, target `compute_child`).
-async fn collect_lifecycle(
-    name: String,
-    supervisor: Arc<Supervisor>,
-    tx: watch::Sender<ChildRuntimeState>,
-) {
+async fn collect_lifecycle(name: String, supervisor: Arc<Supervisor>, sink: LifecycleSink) {
     let mut sub = supervisor.subscribe();
     let mut port: Option<u16> = None;
     let mut pid: Option<u32> = None;
@@ -377,7 +576,21 @@ async fn collect_lifecycle(
             None
         };
 
-        let prev = tx.borrow().lifecycle;
+        // A superseded generation stops here: after a respawn the old
+        // supervisor's SIGTERM/exit transitions are history, not the live
+        // slot's state, and publishing them would show the fresh child as
+        // dead.
+        if !sink.is_live() {
+            info!(
+                target: "compute_child",
+                child = %name,
+                generation = sink.generation,
+                "lifecycle collector retired (superseded by a respawn)"
+            );
+            break;
+        }
+
+        let prev = sink.current().lifecycle;
         if prev != lifecycle {
             info!(
                 target: "compute_child",
@@ -389,20 +602,246 @@ async fn collect_lifecycle(
             );
         }
 
-        if tx
-            .send(ChildRuntimeState {
-                lifecycle,
-                pid,
-                port,
-                client,
-                restarts,
-                last_transition_reason: reason,
-                last_exit: exit,
-            })
-            .is_err()
-        {
+        if !sink.send(ChildRuntimeState {
+            lifecycle,
+            pid,
+            port,
+            client,
+            restarts,
+            last_transition_reason: reason,
+            last_exit: exit,
+        }) {
             break;
         }
+    }
+}
+
+/// A compute child whose spawn arguments change over the daemon's life.
+///
+/// The distributed primary is the case this exists for: its worker set changes
+/// as mesh anchors join and leave, and the response to a change is **kill the
+/// child and spawn a fresh one against the new set** — never an in-place
+/// reload. That is not a stylistic choice. A graceful reload has to free the
+/// old sharded model's buffers on workers that may already be gone, and ggml's
+/// RPC client has no error path for a dead endpoint: it aborts the process. On
+/// 2026-07-27 that is exactly how the daemon died — the shrink-fast-prune
+/// reload, the very mechanism meant to protect the host from a departed worker,
+/// hit `ggml-rpc.cpp:386` and SIGABRT'd (note c4ef6fa0). Inside a child that
+/// abort is contained; respawning avoids it entirely.
+///
+/// The `Arc<ChildProvider>` handed to the routing facade is built once and
+/// survives every respawn — the watch channel is owned here, not by a
+/// generation. While a respawn is in flight the provider fail-fasts with
+/// `ComputeUnavailable`, which is the intended posture: callers cascade to a
+/// mesh peer or get a clean 503, never a daemon abort.
+pub struct DynamicChildSlot {
+    name: String,
+    role: String,
+    model_id: String,
+    /// Model, context size, GPU layers, handoff path — everything about this
+    /// slot that does NOT change over the daemon's life. Only the worker set
+    /// changes, which is why respawn takes just a handoff.
+    spec: DistributedPrimarySpec,
+    binary: PathBuf,
+    crash_log_dir: PathBuf,
+    /// Publish side, shared by every generation's collector.
+    tx: Arc<watch::Sender<ChildRuntimeState>>,
+    /// The generation whose transitions are authoritative. Bumped on every
+    /// respawn/retire so a dying generation can't clobber the live state.
+    live_generation: Arc<AtomicU64>,
+    provider: Arc<ChildProvider>,
+    /// The generation currently running; `None` once retired.
+    current: Mutex<Option<ManagedChild>>,
+}
+
+impl DynamicChildSlot {
+    /// Create the slot WITHOUT spawning anything. The provider is live
+    /// immediately and fail-fasts until the first [`Self::respawn_distributed`],
+    /// so the daemon can install routing before the cluster has formed.
+    pub fn new(spec: DistributedPrimarySpec, binary: PathBuf, crash_log_dir: PathBuf) -> Arc<Self> {
+        let (tx, rx) = watch::channel(ChildRuntimeState::starting());
+        let provider = Arc::new(ChildProvider::new(spec.name.clone(), rx));
+        Arc::new(Self {
+            name: spec.name.clone(),
+            role: "generate".to_string(),
+            model_id: spec.name.clone(),
+            spec,
+            binary,
+            crash_log_dir,
+            tx: Arc::new(tx),
+            live_generation: Arc::new(AtomicU64::new(0)),
+            provider,
+            current: Mutex::new(None),
+        })
+    }
+
+    /// The primary GGUF this slot's child loads — the daemon warms against
+    /// exactly this path.
+    pub fn model_path(&self) -> &Path {
+        &self.spec.model
+    }
+
+    /// The stable routing handle. Valid across respawns.
+    pub fn provider(&self) -> Arc<ChildProvider> {
+        Arc::clone(&self.provider)
+    }
+
+    /// The slot's addressable model id (== its name).
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    /// Replace the running child with one loaded across `handoff`'s worker set.
+    /// Terminates the previous generation first (SIGTERM → grace → SIGKILL,
+    /// which also covers a child stuck in ggml's abort handler — that handler
+    /// shells out to gdb and can take seconds to die).
+    ///
+    /// The handoff is written to disk before the spawn, so the child reads the
+    /// same bytes an operator can inspect.
+    ///
+    /// Must be called from within a Tokio runtime (it spawns the supervisor
+    /// tasks). Non-blocking: the new child loads asynchronously and the slot
+    /// reports `warming` until it serves.
+    pub fn respawn_distributed(
+        &self,
+        handoff: &DistributionHandoff,
+    ) -> std::result::Result<(), String> {
+        handoff.write(&self.spec.handoff_path).map_err(|e| {
+            format!(
+                "cannot write distribution handoff {}: {e}",
+                self.spec.handoff_path.display()
+            )
+        })?;
+        info!(
+            target: "compute_child",
+            child = %self.name,
+            model = %self.spec.model.display(),
+            workers = handoff.endpoints.len(),
+            endpoints = ?handoff.endpoints,
+            handoff = %self.spec.handoff_path.display(),
+            "distributed primary: respawning the child across the warmed worker set"
+        );
+        let spec = ChildSpec::distributed_primary(
+            &self.name,
+            &self.spec.model,
+            self.spec.context_size,
+            self.spec.n_gpu_layers,
+            &self.spec.handoff_path,
+        );
+        self.swap_generation(spec);
+        Ok(())
+    }
+
+    /// Terminate the running generation (if any) and start `spec` as the new
+    /// one, on the SAME watch channel.
+    ///
+    /// The generation counter is what makes this safe. A child being replaced
+    /// can take seconds to actually exit — a ggml abort handler shells out to
+    /// gdb before dying — and its final `Restarting`/`Failed` transitions would
+    /// otherwise land after the fresh child's and show a healthy slot as dead.
+    fn swap_generation(&self, spec: ChildSpec) {
+        let generation = self.live_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let sink = LifecycleSink {
+            tx: Arc::clone(&self.tx),
+            generation,
+            live_generation: Arc::clone(&self.live_generation),
+        };
+
+        let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(previous) = current.take() {
+            info!(
+                target: "compute_child",
+                child = %self.name,
+                generation,
+                "terminating the previous child before respawn"
+            );
+            previous.supervisor.terminate();
+        }
+        // The fresh generation starts from a clean state — otherwise the
+        // facade would keep routing to the terminated child's client until
+        // the new supervisor's first transition lands.
+        let _ = self.tx.send(ChildRuntimeState::starting());
+        *current = Some(spawn_managed(
+            &spec,
+            &self.binary,
+            &self.crash_log_dir,
+            sink,
+        ));
+    }
+
+    /// Respawn this slot with a model-free **mock** child.
+    ///
+    /// The respawn machinery is the risky new part of the distributed-primary
+    /// path — a superseded generation must not clobber the live one, and the
+    /// routing handle must survive the swap — and none of that needs a GGUF to
+    /// exercise. This is the seam the crash-isolation e2e drives, mirroring
+    /// [`ComputeChildManager::start_mock_slot`].
+    pub fn respawn_mock(&self, mock_tokens: usize, mock_token_delay_ms: u64) {
+        let spec = ChildSpec::mock_slot(&self.name, mock_tokens, mock_token_delay_ms);
+        self.swap_generation(spec);
+    }
+
+    /// Stop the child and park the slot in a terminal not-serving state.
+    ///
+    /// This is the "cluster can't hold the model" posture — quorum lost, no
+    /// eligible workers, warm failed. Mirrors `LoadPlacement::InsufficientCluster`:
+    /// stay unavailable and wait for the next worker-set change, rather than
+    /// fall back to a local load that would starve the host.
+    pub fn retire(&self, reason: &str) {
+        // Bump first: the terminated generation's exit transitions are now
+        // stale and must not overwrite the reason we publish below.
+        self.live_generation.fetch_add(1, Ordering::SeqCst);
+        let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(previous) = current.take() {
+            previous.supervisor.terminate();
+        }
+        info!(
+            target: "compute_child",
+            child = %self.name,
+            reason,
+            "distributed-primary child retired — slot stays unavailable until the cluster re-forms"
+        );
+        // Read the restart count BEFORE sending: holding a `borrow()` guard
+        // across `send()` would deadlock the watch channel's lock.
+        let restarts = self.tx.borrow().restarts;
+        let _ = self.tx.send(ChildRuntimeState {
+            lifecycle: ChildLifecycle::Failed,
+            pid: None,
+            port: None,
+            client: None,
+            restarts,
+            last_transition_reason: reason.to_string(),
+            last_exit: Some(reason.to_string()),
+        });
+    }
+
+    /// `true` iff a child is currently spawned (whatever its lifecycle).
+    pub fn is_spawned(&self) -> bool {
+        self.current
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
+    /// Status snapshot for `/status.inference.compute_children`.
+    pub fn status(&self) -> ChildStatusSnapshot {
+        let st = self.tx.borrow();
+        ChildStatusSnapshot {
+            name: self.name.clone(),
+            role: self.role.clone(),
+            model_id: self.model_id.clone(),
+            lifecycle: st.lifecycle,
+            pid: st.pid,
+            port: st.port,
+            restarts: st.restarts,
+            last_transition_reason: st.last_transition_reason.clone(),
+            last_exit: st.last_exit.clone(),
+        }
+    }
+
+    /// Terminate for good (daemon shutdown).
+    pub fn shutdown(&self) {
+        self.retire("daemon shutting down");
     }
 }
 
@@ -414,6 +853,36 @@ pub struct ComputeRoutedProvider {
     /// The manager backing these children (for `/status`). `None` in tests
     /// that construct routes directly without spawning processes.
     manager: Option<Arc<ComputeChildManager>>,
+    /// The child hosting the mesh's distributed primary, when that mode is on.
+    distributed_primary: Option<DistributedPrimaryRoute>,
+}
+
+/// Routing for the distributed primary: which requests belong to it, and the
+/// slot that owns the child serving them.
+struct DistributedPrimaryRoute {
+    slot: Arc<DynamicChildSlot>,
+    provider: Arc<ChildProvider>,
+    /// Model ids that name this primary explicitly (the slot name and the
+    /// GGUF's own id). A request naming one of these is primary traffic no
+    /// matter what speed it asked for.
+    model_ids: Vec<String>,
+}
+
+impl DistributedPrimaryRoute {
+    /// Is this request primary-class work?
+    ///
+    /// Two ways in, mirroring the engine's own `select_slot`: it names the
+    /// primary outright, or it names nothing and asks for a slow/medium
+    /// (i.e. substantive) answer. An unnamed `Speed::Fast` request is NOT
+    /// captured — the daemon still owns the fast, embed, and code slots
+    /// in-process, and sending a title-generation call across a mesh-sharded
+    /// 122B would be absurd.
+    fn claims(&self, request: &CompletionRequest) -> bool {
+        match request.model_id.as_deref() {
+            Some(id) => self.model_ids.iter().any(|m| m == id),
+            None => matches!(request.preferred_speed, Speed::Slow | Speed::Medium),
+        }
+    }
 }
 
 impl ComputeRoutedProvider {
@@ -422,6 +891,7 @@ impl ComputeRoutedProvider {
         Self {
             routes: manager.routes().clone(),
             embed_child: manager.embed_child().cloned(),
+            distributed_primary: manager.distributed_primary_route(),
             manager: Some(manager),
             inner,
         }
@@ -438,17 +908,40 @@ impl ComputeRoutedProvider {
             routes,
             embed_child,
             manager: None,
+            distributed_primary: None,
         }
     }
 
-    /// The child a request addresses by `model_id`, if any.
+    /// The child a request addresses, if any: an explicitly-named static slot
+    /// first, then the distributed primary's claim.
+    ///
+    /// A claimed request is NEVER handed back to `inner` when the child is
+    /// down. That is deliberate: `inner` would try to load the distributed
+    /// model in-process, which is both halves of the 2026-07-27 incident at
+    /// once — a host-starving local load, and ggml aborts inside the daemon.
+    /// The child's fail-fast `ComputeUnavailable` is the correct answer;
+    /// callers cascade to a mesh peer or get a clean 503.
     fn child_for(&self, request: &CompletionRequest) -> Option<&Arc<ChildProvider>> {
-        request.model_id.as_deref().and_then(|m| self.routes.get(m))
+        if let Some(child) = request.model_id.as_deref().and_then(|m| self.routes.get(m)) {
+            return Some(child);
+        }
+        self.distributed_primary
+            .as_ref()
+            .filter(|d| d.claims(request))
+            .map(|d| &d.provider)
     }
 
     /// The manager (for `/status`).
     pub fn manager(&self) -> Option<&Arc<ComputeChildManager>> {
         self.manager.as_ref()
+    }
+
+    /// The distributed-primary slot behind this facade, if the mode is on —
+    /// the handle the daemon's worker-discovery loop respawns and retires.
+    pub fn distributed_slot(&self) -> Option<Arc<DynamicChildSlot>> {
+        self.distributed_primary
+            .as_ref()
+            .map(|d| Arc::clone(&d.slot))
     }
 }
 
@@ -519,6 +1012,19 @@ impl InferenceProvider for ComputeRoutedProvider {
     }
 
     fn model_id_for(&self, speed: Speed) -> String {
+        // With the primary withheld from the in-process engine, `inner` would
+        // answer the Slow tier with the small FAST model — so this node would
+        // advertise a 0.8B as its heavyweight (`oicp_synthesis`) while a child
+        // serves the 122B. Answer with the child's id while it is serving; fall
+        // back to `inner` when it is not, so a request still lands somewhere
+        // that can answer.
+        if matches!(speed, Speed::Slow | Speed::Medium) {
+            if let Some(d) = &self.distributed_primary {
+                if d.provider.is_serving() {
+                    return d.slot.model_id().to_string();
+                }
+            }
+        }
         self.inner.model_id_for(speed)
     }
 
@@ -579,11 +1085,43 @@ impl InferenceProvider for ComputeRoutedProvider {
                 v.push((id.clone(), id.clone()));
             }
         }
+        // The distributed primary is advertised only while its child is
+        // actually serving. Unlike a static slot — a local GGUF that reloads in
+        // seconds — this one is unavailable whenever the cluster is re-forming,
+        // and advertising it then would pull peer traffic into a guaranteed 503.
+        if let Some(d) = &self.distributed_primary {
+            if d.provider.is_serving() {
+                for id in &d.model_ids {
+                    v.push((id.clone(), id.clone()));
+                }
+            }
+        }
         v
     }
 
     fn resident_slots(&self) -> Vec<ResidentSlot> {
-        self.inner.resident_slots()
+        let mut slots = self.inner.resident_slots();
+        // The primary is in another process, so `inner` cannot see it and
+        // `/status` would show a node with no primary at all. Say where it
+        // actually is — mode `child-distributed` — rather than leave the
+        // operator to infer it from the compute_children array.
+        if let Some(d) = &self.distributed_primary {
+            let serving = d.provider.is_serving();
+            slots.push(ResidentSlot {
+                role: "primary".to_string(),
+                model_id: d.slot.model_id().to_string(),
+                resident: serving,
+                size_bytes: None,
+                transitioning: !serving && d.slot.is_spawned(),
+                placement: Some(sovereign_core::traits::SlotPlacement {
+                    mode: "child-distributed".to_string(),
+                    total_blocks: 0,
+                    local_blocks: 0,
+                    workers: Vec::new(),
+                }),
+            });
+        }
+        slots
     }
 
     fn compute_children(&self) -> Vec<ComputeChildStatus> {
@@ -616,13 +1154,191 @@ pub fn build_compute_layer(
     binary: PathBuf,
     crash_log_dir: PathBuf,
 ) -> Option<(Arc<ComputeRoutedProvider>, Arc<ComputeChildManager>)> {
-    if !section.enabled || section.slot.is_empty() {
+    build_compute_layer_with_distributed(section, inner, binary, crash_log_dir, None)
+}
+
+/// As [`build_compute_layer`], plus the distributed-primary slot. The layer is
+/// built when EITHER static slots or a distributed primary is configured — the
+/// distributed mode needs no `[[compute.slot]]` entries of its own.
+pub fn build_compute_layer_with_distributed(
+    section: &ComputeSection,
+    inner: Arc<dyn InferenceProvider>,
+    binary: PathBuf,
+    crash_log_dir: PathBuf,
+    distributed_spec: Option<DistributedPrimarySpec>,
+) -> Option<(Arc<ComputeRoutedProvider>, Arc<ComputeChildManager>)> {
+    if !section.enabled || (section.slot.is_empty() && distributed_spec.is_none()) {
         return None;
     }
-    let manager = ComputeChildManager::start(section, binary, crash_log_dir);
-    if manager.routes().is_empty() {
+    let wants_distributed = distributed_spec.is_some();
+    let manager =
+        ComputeChildManager::start_with_distributed(section, binary, crash_log_dir, distributed_spec);
+    if manager.routes().is_empty() && !wants_distributed {
         return None;
     }
     let facade = Arc::new(ComputeRoutedProvider::new(inner, Arc::clone(&manager)));
     Some((facade, manager))
+}
+
+#[cfg(test)]
+mod distributed_slot_tests {
+    use super::*;
+    use sovereign_inference::embedded::NodeShard;
+
+    fn spec(dir: &Path) -> DistributedPrimarySpec {
+        DistributedPrimarySpec {
+            name: "shared-122b".to_string(),
+            model: dir.join("Qwen3.5-122B-00001-of-00003.gguf"),
+            context_size: Some(32768),
+            n_gpu_layers: None,
+            model_ids: vec!["Qwen3.5-122B-00001-of-00003".to_string()],
+            handoff_path: dir.join("distribution.json"),
+        }
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("dyn-slot-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    fn route(spec: &DistributedPrimarySpec, provider: Arc<ChildProvider>) -> DistributedPrimaryRoute {
+        let slot = DynamicChildSlot::new(spec.clone(), PathBuf::from("/nonexistent"), scratch("route"));
+        let mut model_ids = vec![spec.name.clone()];
+        model_ids.extend(spec.model_ids.iter().cloned());
+        DistributedPrimaryRoute {
+            slot,
+            provider,
+            model_ids,
+        }
+    }
+
+    fn request(model_id: Option<&str>, speed: Speed) -> CompletionRequest {
+        let mut r = CompletionRequest::default();
+        r.model_id = model_id.map(|s| s.to_string());
+        r.preferred_speed = speed;
+        r
+    }
+
+    /// The capture rule, stated as a test because getting it wrong is
+    /// expensive in both directions: too narrow and primary traffic loads the
+    /// model in the daemon (the abort we are containing); too wide and every
+    /// title-generation call goes to a mesh-sharded 122B.
+    #[test]
+    fn the_distributed_primary_claims_primary_traffic_only() {
+        let dir = scratch("claims");
+        let s = spec(&dir);
+        let (_tx, rx) = watch::channel(ChildRuntimeState::starting());
+        let r = route(&s, Arc::new(ChildProvider::new(s.name.clone(), rx)));
+
+        // Named outright — by slot name or by the GGUF's id — at any speed.
+        assert!(r.claims(&request(Some("shared-122b"), Speed::Fast)));
+        assert!(r.claims(&request(Some("Qwen3.5-122B-00001-of-00003"), Speed::Slow)));
+
+        // Unnamed substantive work is the primary's by default.
+        assert!(r.claims(&request(None, Speed::Slow)));
+        assert!(r.claims(&request(None, Speed::Medium)));
+
+        // Unnamed FAST work is not: the daemon still owns the fast slot
+        // in-process, and it must keep answering while the cluster re-forms.
+        assert!(!r.claims(&request(None, Speed::Fast)));
+
+        // Someone else's model id is not ours.
+        assert!(!r.claims(&request(Some("qwen3.5-0.8b"), Speed::Slow)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A superseded generation must not publish. Without this guard the
+    /// terminated child's `Failed` transition — which can arrive seconds later,
+    /// because ggml's abort handler shells out to gdb before dying — would
+    /// overwrite the fresh child's state and the facade would fail-fast against
+    /// a perfectly healthy process.
+    #[test]
+    fn a_superseded_generation_cannot_clobber_the_live_one() {
+        let (tx, rx) = watch::channel(ChildRuntimeState::starting());
+        let tx = Arc::new(tx);
+        let live = Arc::new(AtomicU64::new(1));
+
+        let old = LifecycleSink {
+            tx: Arc::clone(&tx),
+            generation: 0,
+            live_generation: Arc::clone(&live),
+        };
+        let new = LifecycleSink {
+            tx: Arc::clone(&tx),
+            generation: 1,
+            live_generation: Arc::clone(&live),
+        };
+
+        let mut state = ChildRuntimeState::starting();
+        state.lifecycle = ChildLifecycle::Serving;
+        state.last_transition_reason = "serving".to_string();
+        assert!(new.send(state));
+
+        let mut dying = ChildRuntimeState::starting();
+        dying.lifecycle = ChildLifecycle::Failed;
+        dying.last_transition_reason = "previous generation exited".to_string();
+        // Refused, and reported as "stop collecting".
+        assert!(!old.send(dying));
+        assert!(!old.is_live());
+
+        assert_eq!(rx.borrow().lifecycle, ChildLifecycle::Serving);
+    }
+
+    /// Retiring parks the slot unavailable — the "cluster can't hold it"
+    /// posture — without ever handing the request back to the in-process
+    /// engine. No child is spawned here, which is itself the point: the slot
+    /// is routable (and fail-fast) from the moment it exists.
+    #[test]
+    fn retire_parks_the_slot_unavailable_with_a_stated_reason() {
+        let dir = scratch("retire");
+        let slot = DynamicChildSlot::new(
+            spec(&dir),
+            PathBuf::from("/nonexistent-binary"),
+            dir.clone(),
+        );
+
+        assert!(!slot.is_spawned());
+        assert!(!slot.provider().is_serving());
+
+        slot.retire("no eligible RPC workers");
+
+        let status = slot.status();
+        assert_eq!(status.lifecycle, ChildLifecycle::Failed);
+        assert_eq!(status.last_transition_reason, "no eligible RPC workers");
+        assert_eq!(status.name, "shared-122b");
+        assert!(!slot.provider().is_serving());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The handoff must be on disk before the child is spawned — the child
+    /// reads it at startup, and an operator reads it to answer "which workers
+    /// is this child actually loaded across?".
+    #[tokio::test]
+    async fn respawn_writes_the_handoff_before_spawning() {
+        let dir = scratch("handoff");
+        let s = spec(&dir);
+        let slot = DynamicChildSlot::new(s.clone(), PathBuf::from("/nonexistent-binary"), dir.clone());
+
+        let handoff = DistributionHandoff {
+            endpoints: vec!["127.0.0.1:41001".to_string()],
+            plan: vec![NodeShard {
+                device_index: 0,
+                blocks: Some((0, 11)),
+                holds_output: false,
+                fraction: 0.25,
+            }],
+        };
+        slot.respawn_distributed(&handoff).expect("respawn");
+
+        let written = DistributionHandoff::read(&s.handoff_path).expect("handoff on disk");
+        assert_eq!(written, handoff);
+        assert!(slot.is_spawned());
+
+        // The binary does not exist, so the supervisor will never reach
+        // serving — the slot stays fail-fast rather than pretending.
+        assert!(!slot.provider().is_serving());
+        slot.retire("test over");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

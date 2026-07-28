@@ -6,12 +6,19 @@
 # read two architecture docs, inject one budgeted artifact at session start:
 #
 #   Tier 0 — brain health: is the daemon up, how many MCP tools are live.
-#   Tier 2 — the session-frame INDEX: one line per live frame, so a new window
-#            can see what work is in flight and dereference the frame it is
-#            actually continuing (`sovereign session frames <id>`). A resumed
-#            session gets its OWN frame injected whole instead — no selection
-#            is involved there, so none can be wrong.
-#            See docs/specs/SESSION_CONTINUITY.md and MEMORY_MODEL §5 E5.
+#   Tier 2 — the session HANDOFF, in three fallbacks, best first:
+#            (a) own frame, whole — a resume/compact of this same session_id.
+#            (b) PREDECESSOR frame, whole — the session that previously
+#                occupied this terminal, looked up by harness-process identity
+#                (`sovereign session lineage`). `/clear` mints a new session_id
+#                but does NOT restart the harness process, so this is a fact,
+#                not a guess, and it is the case that covers ~90% of boots on a
+#                working machine (20 of 22 recorded here were `source: clear`).
+#            (c) the INDEX — one line per live frame — when there is no
+#                lineage at all (a genuinely new terminal). Only here does
+#                anything have to be selected, and selection happens later, on
+#                the first prompt, where a prompt exists to select against.
+#            See docs/specs/SESSION_CONTINUITY.md §3b and MEMORY_MODEL §5 E5.
 #   Tier 1 — the working-set brief (`sovereign code brief`): recent activity,
 #            relevant notes, drift posture — token-budgeted.
 #
@@ -55,12 +62,40 @@ BASE = f"http://localhost:{PORT}"
 # across 80 transcripts). Stay well under it: the cost of being 2KB short is
 # one dereference; the cost of being 1 byte over is the whole payload turning
 # into a raw file read.
-TOTAL_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_BOOT_BUDGET_CHARS", "8000"))
-FRAME_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_BOOT_FRAME_CHARS", "4500"))
-BRIEF_MIN_CHARS = 800
+#
+# Budgets are counted in BYTES, because bytes are what the harness measures.
+# This payload is full of `·`, `—` and `✓` at 2-3 bytes each, so a char count
+# understates it by ~1.5% (measured: 5578 chars = 5666 bytes) — small now,
+# but it is the wrong unit and it always errs toward spilling.
+TOTAL_BUDGET_BYTES = int(os.environ.get("SOVEREIGN_BOOT_BUDGET_BYTES", "8000"))
+FRAME_BUDGET_BYTES = int(os.environ.get("SOVEREIGN_BOOT_FRAME_BYTES", "4500"))
+BRIEF_MIN_BYTES = 800
 FRAME_MAX_AGE_DAYS = 14
 
-SESSIONS_ROOT = os.path.expanduser("~/.sovereign/sessions")
+
+def nbytes(s):
+    return len(s.encode("utf-8"))
+
+
+def fit_bytes(text, budget, note):
+    """Trim `text` so that text+note fits `budget` BYTES. Returns
+    (text, truncated). Never silently drops: the caller emits `note`, which
+    always names how to fetch the rest."""
+    if nbytes(text) <= budget:
+        return text, False
+    room = max(0, budget - nbytes(note))
+    # Cut by characters (never mid-codepoint), then shrink until the encoded
+    # length fits. Converges in a couple of passes on real payloads.
+    cut = text[:room]
+    while cut and nbytes(cut) > room:
+        cut = cut[: int(len(cut) * 0.97) or 0]
+    return cut.rstrip() + note, True
+
+# Same override the CLI honours (SVRNMESH_/SOVEREIGN_SESSIONS_DIR), so the
+# hook and `sovereign session frames` can never read different stores.
+SESSIONS_ROOT = (os.environ.get("SVRNMESH_SESSIONS_DIR")
+                 or os.environ.get("SOVEREIGN_SESSIONS_DIR")
+                 or os.path.expanduser("~/.sovereign/sessions"))
 
 try:
     envelope = json.loads(os.environ.get("SOVEREIGN_HOOK_INPUT") or "{}")
@@ -77,23 +112,33 @@ prov = {
     # startup it cannot exist yet. `frame_is_own` disambiguates the two cases
     # so the mis-injection rate isn't polluted by legitimate self-resumes.
     "source": envelope.get("source") or "",
-    "budget_chars": TOTAL_BUDGET_CHARS,
+    "budget_bytes": TOTAL_BUDGET_BYTES,
     "frame_is_own": False,
     "frame_session": None,
     "frame_age_s": None,
     "frame_provenance": None,
-    "frame_chars_full": 0,
-    "frame_chars_injected": 0,
+    "frame_bytes_full": 0,
+    "frame_bytes_injected": 0,
     "frame_truncated": False,
     "frame_candidates": 0,
-    # index | own_full — which of the two Tier-2 shapes this boot injected.
-    # Phase 1 recorded "newest_mtime" here; that selector is gone.
+    # own_full | lineage | attached | index — which Tier-2 shape this boot
+    # injected. Phase 1 recorded "newest_mtime"; that selector is gone.
+    # `lineage`/`attached` are the deterministic paths (Phase 3): no candidate
+    # was ranked, so no ranking can have been wrong.
     "frame_selection": "none",
+    # Window lineage provenance — what the boot knew about its own terminal.
+    # Recorded even on the index path, because "no window" and "a window with
+    # no predecessor" are different failures with different repairs.
+    "window_key": None,
+    "window_pid": None,
+    "predecessor": None,
+    "predecessor_kind": None,
+    "predecessor_has_frame": None,
     "repo": "",
     "branch": "",
-    "brief_chars": 0,
+    "brief_bytes": 0,
     "brief_truncated": False,
-    "payload_chars": 0,
+    "payload_bytes": 0,
 }
 
 out = []
@@ -127,23 +172,30 @@ except Exception:
     emit(f"_brain: daemon not reachable on :{PORT} — code intel is dark; "
          f"start it: `sovereign daemon start`; `sovereign doctor` diagnoses_\n")
 
-# ── Tier 2: the frame INDEX (the handoff pointer) ───────────────────────
+# ── Tier 2: the session handoff ─────────────────────────────────────────
 #
-# WHAT CHANGED AND WHY (MEMORY_MODEL §5 E5 Phase 2). This tier used to inject
-# the frame with the newest mtime, whole. Under concurrent workstreams that is
-# the successor's frame only by luck, and a WRONG frame costs more than none:
-# session 40ab6490 was handed another thread's and burned 5,872 ramp tokens
-# hunting for the right one by hand.
+# PHASE 2 (2026-07-26) stopped injecting the newest frame here, because under
+# concurrent workstreams "newest" is the successor's frame only by luck, and a
+# wrong frame costs more than none (session 40ab6490 burned 5,872 ramp tokens
+# hunting for the right one). SessionStart has no prompt to select against, so
+# it stopped selecting and injected only the index; full-frame injection moved
+# to the first UserPromptSubmit.
 #
-# SessionStart has no prompt, which is *why* selection fell back to recency —
-# there is nothing here to select against. So it no longer tries. It injects
-# the index: one line per live frame (~200 tokens for the lot, against 1–2k
-# for one possibly-wrong frame), each dereferenceable with
-# `sovereign session frames <id>`. Full-frame injection moves to the first
-# UserPromptSubmit, where the prompt exists (inject-notes.sh).
+# PHASE 3 (2026-07-27) removes the guess for the common case instead of moving
+# it. `/clear` mints a new session_id, so the successor is never a "resume" and
+# the own-frame path never fires — 20 of the 22 boot records on this machine
+# are `source: clear`, every one `frame_is_own: false`. Each of those had to
+# pick its predecessor out of 25-42 candidates that all matched the branch, so
+# the decision fell to prompt-overlap noise ("everything", "continue") and
+# recency, and with two terminals open recency is a coin flip. Measured cost,
+# 4 minutes before this was written: session 963fc519 — the `/clear` successor
+# of a05e2bd1 in the same terminal — was handed the unrelated F9-scheduler
+# frame, noticed ("wrong arc"), and hand-fetched its real predecessor.
 #
-# The ONE case that still injects a frame whole is a resume/compact of a
-# session's OWN frame: no selection is involved, so no selection can be wrong.
+# But `/clear` does not restart the harness process, so the predecessor is a
+# LOOKUP: whoever last occupied this terminal. `frames --claim-window <id>`
+# performs that exchange — return the previous occupant, record us as the new
+# one — and only when it comes back empty do we fall through to the index.
 
 
 def git(*args):
@@ -169,15 +221,14 @@ if own and os.path.isfile(own):
         prov["frame_session"] = session_id
         prov["frame_is_own"] = True
         prov["frame_age_s"] = int(time.time() - os.path.getmtime(own))
-        prov["frame_chars_full"] = len(frame)
+        prov["frame_bytes_full"] = nbytes(frame)
         m = re.search(r"^provenance:\s*(\S+)", frame, re.M)
         prov["frame_provenance"] = m.group(1) if m else "unknown"
-        if len(frame) > FRAME_BUDGET_CHARS:
-            frame = (frame[:FRAME_BUDGET_CHARS].rstrip()
-                     + f"\n\n_[frame truncated at {FRAME_BUDGET_CHARS} chars — "
-                       f"read the rest on demand: `Read {own}`]_")
-            prov["frame_truncated"] = True
-        prov["frame_chars_injected"] = len(frame)
+        frame, prov["frame_truncated"] = fit_bytes(
+            frame, FRAME_BUDGET_BYTES,
+            f"\n\n_[frame truncated at {FRAME_BUDGET_BYTES}B — "
+            f"read the rest on demand: `Read {own}`]_")
+        prov["frame_bytes_injected"] = nbytes(frame)
         emit("### Your own session frame (resumed — this is the state you banked)\n")
         emit(frame)
         emit("")
@@ -186,16 +237,66 @@ if own and os.path.isfile(own):
 else:
     prov["frame_selection"] = "index"
     try:
-        p = subprocess.run(
-            ["sovereign", "session", "frames", "--json",
-             "--repo", repo, "--branch", branch,
-             "--limit", "8", "--max-age-days", str(FRAME_MAX_AGE_DAYS)],
-            capture_output=True, text=True, timeout=10,
-        )
+        # The exchange: hand back this terminal's previous occupant, then
+        # record us as the occupant so OUR successor is a lookup too. Claiming
+        # is safe on every path — a session that turns out to need no handoff
+        # still needs to be findable by the session that follows it.
+        argv = ["sovereign", "session", "frames", "--json",
+                "--repo", repo, "--branch", branch,
+                "--limit", "8", "--max-age-days", str(FRAME_MAX_AGE_DAYS)]
+        if session_id:
+            argv += ["--claim-window", session_id]
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=10)
         doc = json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip() else {}
         cands = doc.get("candidates") or []
         prov["frame_candidates"] = doc.get("count", len(cands))
-        if cands:
+        win = doc.get("window") or {}
+        prov["window_key"] = win.get("key")
+        prov["window_pid"] = win.get("pid")
+        pred = doc.get("predecessor") or {}
+        prov["predecessor"] = pred.get("session_id")
+        prov["predecessor_kind"] = pred.get("kind")
+        prov["predecessor_has_frame"] = pred.get("has_frame")
+
+        # (b) The deterministic handoff. Injected whole, exactly like a resume,
+        # because it is the same kind of answer: nothing was selected.
+        if pred.get("has_frame") and pred.get("path"):
+            frame = open(pred["path"]).read()
+            prov["frame_selection"] = (
+                "attached" if pred.get("kind") == "explicit" else "lineage"
+            )
+            prov["frame_session"] = pred.get("session_id")
+            prov["frame_age_s"] = pred.get("frame_age_s")
+            m = re.search(r"^provenance:\s*(\S+)", frame, re.M)
+            prov["frame_provenance"] = m.group(1) if m else "unknown"
+            prov["frame_bytes_full"] = nbytes(frame)
+            frame, prov["frame_truncated"] = fit_bytes(
+                frame, FRAME_BUDGET_BYTES,
+                f"\n\n_[frame truncated — full: `sovereign session frames "
+                f"{pred.get('short_id', '')}`]_")
+            prov["frame_bytes_injected"] = nbytes(frame)
+            how = ("you attached this window to it"
+                   if pred.get("kind") == "explicit"
+                   else "the session that was running in this terminal before "
+                        "the last /clear")
+            emit(f"### Session handoff — frame `{pred.get('short_id', '')}` "
+                 f"({how})\n")
+            emit(frame)
+            emit("\n_This is not a guess: it is the frame banked by this "
+                 "terminal's previous session. If it is the wrong workstream, "
+                 "`sovereign session frames` lists the others and "
+                 "`sovereign session attach <id>` re-points this window._\n")
+
+        # (b′) A predecessor with no frame is worth saying out loud — the
+        # successor should know its lineage resolved but the donor banked
+        # nothing, rather than silently reading it as "fresh start".
+        elif pred.get("session_id"):
+            emit(f"_This terminal's previous session "
+                 f"(`{pred.get('short_id', '')}`) banked no frame — nothing to "
+                 f"hand off. Index below._\n")
+
+        # (c) No lineage: fall back to the index, as before.
+        if prov["frame_selection"] == "index" and cands:
             # Rendered here rather than shelling a second time for the human
             # view; `sovereign session frames` is the authoritative renderer
             # and prints the same facts.
@@ -217,11 +318,16 @@ else:
                     f"- `{c.get('short_id', '')}` · {age_s}{mark} · "
                     f"{c.get('next_items', 0)} next — {c.get('goal', '')}"
                 )
-            lines.append("\n_None of these is injected: pick the one that "
-                         "describes work you are continuing. Your predecessor's "
-                         "frame is usually the top entry._\n")
+            why = ("this terminal has no recorded predecessor (first session "
+                   "in a new window)" if win else
+                   "no harness window could be resolved, so lineage is "
+                   "unavailable here")
+            lines.append(f"\n_No frame is injected: {why}. Pick the one that "
+                         "describes work you are continuing — and if you know "
+                         "which it is, `sovereign session attach <id>` makes "
+                         "the next /clear in this window deterministic._\n")
             block = "\n".join(lines)
-            prov["frame_chars_injected"] = len(block)
+            prov["frame_bytes_injected"] = nbytes(block)
             emit(block)
         # No fresh frame is normal (first boot, or >14d idle) — say nothing.
     except FileNotFoundError:
@@ -230,8 +336,8 @@ else:
         emit(f"_frame index unavailable ({type(e).__name__})_\n")
 
 # ── Tier 1: working-set brief ───────────────────────────────────────────
-spent = sum(len(p) + 1 for p in out)
-brief_budget = max(BRIEF_MIN_CHARS, TOTAL_BUDGET_CHARS - spent)
+spent = sum(nbytes(p) + 1 for p in out)
+brief_budget = max(BRIEF_MIN_BYTES, TOTAL_BUDGET_BYTES - spent)
 try:
     proc = subprocess.run(
         ["sovereign", "code", "brief", "--strategy", "recent", "--hours", "48",
@@ -239,13 +345,11 @@ try:
         capture_output=True, text=True, timeout=15,
     )
     if proc.returncode == 0 and proc.stdout.strip():
-        brief = proc.stdout.strip()
-        if len(brief) > brief_budget:
-            brief = (brief[:brief_budget].rstrip()
-                     + "\n\n_[brief truncated to stay under the hook payload "
-                       "budget — full: `sovereign code brief --hours 48`]_")
-            prov["brief_truncated"] = True
-        prov["brief_chars"] = len(brief)
+        brief, prov["brief_truncated"] = fit_bytes(
+            proc.stdout.strip(), brief_budget,
+            "\n\n_[brief truncated to stay under the hook payload budget — "
+            "full: `sovereign code brief --hours 48`]_")
+        prov["brief_bytes"] = nbytes(brief)
         emit(brief)
     else:
         err = (proc.stderr or proc.stdout).strip().splitlines()
@@ -258,7 +362,8 @@ except subprocess.TimeoutExpired:
     emit("_working-set brief unavailable (sovereign code brief timed out at 15s)_")
 
 payload = "\n".join(out)
-prov["payload_chars"] = len(payload)
+# Bytes — the unit the harness spill threshold is actually in.
+prov["payload_bytes"] = nbytes(payload)
 print(payload)
 
 # ── Provenance sidecar (fail-silent: never break the boot) ──────────────

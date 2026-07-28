@@ -199,7 +199,39 @@ earlier identical prune got lucky). Any in-flight request is lost. The defences:
 - **Stable shard plan.** The plan is cached per `(model, eligible worker set)`
   and VRAM is quantized to coarse buckets, so a reload across the same workers
   reuses the identical assignment — workers' warm caches stay valid (no re-warm
-  churn that the live-VRAM re-plan used to cause).
+  churn that the live-VRAM re-plan used to cause). The cache is process-local,
+  so when the load happens in a compute child (below) the daemon ships its plan
+  across and the child pins it — same invariant, one more boundary.
+- **Process containment (`[compute] distributed_primary`, default OFF).** The
+  only thing that actually stops an uncatchable abort from taking the control
+  plane with it: run the distributed primary in a supervised child. The daemon
+  plans + warms (it owns the mesh directory; a child cannot), writes a
+  `DistributionHandoff {endpoints, plan}` JSON, and spawns a child that loads
+  across exactly those workers with exactly that cut. A worker death then kills
+  the child — the daemon keeps gossip, `/status`, and the client API, sees the
+  exit as an event, and respawns against the survivors. Requests get a
+  fail-fast `ComputeUnavailable` (→ mesh cascade → clean 503), never a daemon
+  abort. `/status` reports the primary as `mode: "child-distributed"` and the
+  child's lifecycle under `compute_children`.
+- **Worker-set changes are kill + respawn, never an in-place reload.** Freeing a
+  sharded model's buffers on a worker that has already left aborts the process:
+  captured live 2026-07-27 23:13, where shrink-fast-prune's own
+  `reload_primary()` hit `ggml-rpc.cpp:386` and SIGABRT'd the daemon with no
+  inference in flight. In child mode the discovery loop respawns the child
+  instead of reloading, so that teardown never runs against a dead endpoint.
+- **Residual exposure, stated plainly.** Child mode moves the *decode* and
+  *teardown* aborts out of the daemon; it does not make the daemon
+  RPC-abort-proof. Planning still happens daemon-side (`register_rpc_workers` +
+  `plan_distribution` query each device's memory over RPC), so a worker that
+  dies inside that short window can still abort the daemon. The window is
+  bounded (it runs right after eligibility confirmed the worker, and only on a
+  worker-set change) and `REGISTERED_RPC` remains append-only. Moving planning
+  into the child would close it and is the natural follow-up. Second, smaller
+  gap: if the child dies because a worker vanished, the supervisor first
+  restarts it against the *same* handoff — up to a few fast failures over
+  ~10 s — until the next discovery tick supplies a new worker set. Both are
+  contained failures (the child dies, not the daemon), not aborts of the
+  control plane.
 
 ## Status
 

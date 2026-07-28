@@ -126,6 +126,19 @@ evaluated and rejected (all asserts in void paths). Requirements:
 - The abort window on worker disappearance (≤1 discovery tick) gets the
   **shrink-fast-prune** mitigation: prune-on-disappear skips the 20s STABLE debounce
   (grows keep it). Reduces, does not eliminate — supervision is the backstop.
+- **Shrink-fast-prune is ITSELF an abort face — captured live 2026-07-27 23:13
+  (note c4ef6fa0).** With the 122B sharded across BeefyMac, the worker went
+  `Eligible → Absent`; the prune fired as designed and called
+  `reload_primary()`; the reload's teardown had to free the old sharded model's
+  buffers *on the worker that had just left*; `ggml-rpc.cpp:386` →
+  `GGML_ABORT` → daemon exit 134. No inference was in flight. The mitigation
+  built to protect the host from a departed worker is a guaranteed abort when
+  the worker is already gone, because there is no error path in ggml's RPC
+  client for a dead endpoint. systemd restarted the daemon 45 s later, which is
+  exactly why supervision is the backstop and not the fix.
+  **Consequence:** under `[compute] distributed_primary` the response to a
+  worker-set change is kill + respawn of the child (`DynamicChildSlot`), never
+  an in-place reload — and the abort, if one still happens, lands in the child.
 - **Acceptance:** `kill -9` of the worker daemon mid-inference on the host = host
   serves again (local-only or re-distributed) within N minutes with no human action.
 
@@ -311,11 +324,48 @@ loop — faster for multi-input, semantically identical; `/status.inference` gai
 an (empty) `compute_children` array. Everything else — the facade, child spawning,
 pool routing — is inert unless a pool is configured.
 
-**Deferred:** routing the distributed 122B primary through a child (the seam is
-designed for it — a child with the RPC worker env distributes; placement change =
-child restart) — **this is the actual payoff and the real reason to keep the
-mechanism**; the desktop shared-model shell (P4); a `--threads`-per-child knob (the
-oversubscription cap, only relevant if replicas are used at all).
+**The distributed primary in a child — BUILT 2026-07-27, opt-in behind
+`[compute] distributed_primary`, default OFF.** This was the deferred payoff and
+the real reason to keep the mechanism. The earlier sketch here ("a child with
+the RPC worker env distributes; placement change = child restart") was wrong in
+three specific ways, each found by reading the code before writing any:
+
+1. **A child cannot warm.** `install_rpc_warm_orchestrator` captures
+   `Arc<EmbeddedDaemon>` — it needs the mesh member directory, the iroh
+   transport bases, and the daemon's resolved ports. So the daemon plans and
+   warms (`warm_distributed_primary`, the extracted shared tail of
+   `resolve_placement_inner` — one code path, no drift), then spawns the child
+   with `SOVEREIGN_RPC_ASSUME_WARMED=1`.
+2. **The plan must cross the process boundary, not just the worker list.** The
+   shard plan is cached per `(model, worker set)` *because* a worker's free VRAM
+   shifts by its own cached shard, so re-planning after a warm cuts the blocks
+   differently and invalidates every warm cache. That cache is process-local: a
+   child that re-planned would miss every `SET_TENSOR_HASH` and fall back to
+   bulk weight send — the send() deadlock the warm path exists to avoid. The
+   daemon writes a `DistributionHandoff {endpoints, plan}` JSON file, the child
+   pins it (`pin_shard_plan`) before loading. Plan agreement now holds across
+   processes, not just across reloads.
+3. **A child's model was structurally non-distributable.** `Role::Generate`
+   loaded via `load_dual(&path, None, …)` — the *fast* slot, hardcoded
+   `distributable=false`. New `EmbeddedLlamaCpp::load_single_distributed` loads
+   one slot marked distributable and with no primary configured, so
+   `select_slot` sends `Speed::Slow` to it as well: one weight copy, one KV.
+
+Also, `ComputeRoutedProvider` routed on exact `model_id` only, so `Speed::Slow`
+could never reach a child. It now additionally claims requests that name the
+primary or that name nothing and ask for slow/medium work — never an unnamed
+`Speed::Fast` call, which the daemon's in-process fast slot still owns. A
+claimed request is never handed back to `inner` when the child is down: the
+daemon **withholds the primary path entirely** in this mode (`primary_path:
+None`), so no in-process code path can pull the distributed model in behind our
+back, and the answer is a fail-fast `ComputeUnavailable` → mesh cascade → clean
+503.
+
+Worker-set changes are **kill + respawn** (`DynamicChildSlot`), never an
+in-place reload — see P0.4 below for the live capture that settles why.
+
+**Still deferred:** the desktop shared-model shell (P4); a `--threads`-per-child
+knob (the oversubscription cap, only relevant if replicas are used at all).
 
 **P2 — Worker-session liveness/identity authority.** One component owns "is peer X a
 usable worker, at what address + ABI," fusing signals by precedence: **connection-health

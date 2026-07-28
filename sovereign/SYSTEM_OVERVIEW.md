@@ -1118,6 +1118,34 @@ supervisor was extracted here from the desktop (shared, byte-identical).
 Crash-isolation acceptance is proven (`compute_child_e2e.rs`). See
 `docs/DISTRIBUTED_PILOT_READINESS.md` P1.
 
+**The distributed primary in a child (`[compute] distributed_primary`, default
+OFF).** The payoff the boundary was built for. Distributing a primary across
+mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker
+that dies mid-decode (`ggml-rpc.cpp:491`), or one already gone when the
+prune-reload frees its buffers (`:386` — this killed the daemon live on
+2026-07-27, from the shrink-fast-prune path meant to protect it), SIGABRTs the
+whole process. In this mode the daemon **withholds the primary entirely**
+(`primary_path: None`, so no in-process path can lazily load it) and a
+`DynamicChildSlot` owns it instead. The division of labour is forced by reach:
+only the daemon can warm (the orchestrator needs the mesh member directory + the
+iroh transport), only the child should load. So the daemon plans + warms via
+`warm_distributed_primary` — the extracted shared tail of
+`resolve_placement_inner`, one code path for both — writes a
+`DistributionHandoff {endpoints, plan}` JSON, and spawns a child with
+`SOVEREIGN_RPC_ASSUME_WARMED=1` that pins that plan (`pin_shard_plan`) before
+loading via `EmbeddedLlamaCpp::load_single_distributed`. Shipping the *plan*, not
+just the worker list, is what extends the plan-agreement invariant across the
+process boundary: the shard cache is process-local, and a child that re-planned
+against post-warm VRAM would cut the blocks differently, miss every warm cache,
+and fall back to bulk weight send. Worker-set changes are **kill + respawn**, not
+reload — the discovery loop respawns the child instead of calling
+`reload_primary()`. `ComputeRoutedProvider` claims primary-class traffic (named
+primary, or unnamed at `Speed::Slow`/`Medium`; never unnamed `Speed::Fast`, which
+the in-process fast slot still owns) and never falls back to `inner` for it —
+the answer while the cluster re-forms is a fail-fast `ComputeUnavailable` → mesh
+cascade → clean 503. `/status` shows the primary as `mode: "child-distributed"`.
+Respawn acceptance: `distributed_primary_respawn_e2e.rs`.
+
 **CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
 linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),
 Mamba/SSM, RWKV — drive an out-of-bounds write in ggml's recurrent

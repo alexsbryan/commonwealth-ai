@@ -523,6 +523,24 @@ pub struct ComputeSection {
     /// The compute slots to run — each is exactly one child process.
     #[serde(default)]
     pub slot: Vec<ComputeSlotConfig>,
+    /// Run the mesh's DISTRIBUTED primary in a compute child instead of
+    /// in-process. `false` (default) keeps the legacy in-daemon path exactly as
+    /// it was.
+    ///
+    /// This is the containment for ggml's uncatchable RPC aborts. Distributing
+    /// a primary across mesh workers puts ggml's RPC client in the daemon, and
+    /// that client has no error path: a worker that dies mid-decode
+    /// (`ggml-rpc.cpp:491`) — or one already gone when the prune reload frees
+    /// its buffers (`:386`, which killed the daemon live on 2026-07-27) —
+    /// SIGABRTs the whole process, taking gossip, `/status`, and the client API
+    /// with it. In a child, that abort kills the child; the daemon observes the
+    /// exit and respawns against the surviving workers.
+    ///
+    /// Requires `enabled = true`. Needs no `[[compute.slot]]` entries: the
+    /// primary's model comes from `[models]`, and its worker set from mesh
+    /// discovery at runtime.
+    #[serde(default)]
+    pub distributed_primary: bool,
 }
 
 /// One `[[compute.slot]]` — a single model in a single supervised child.
