@@ -89,6 +89,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 
 /// Margin gate. Twice the locator axis's 0.02 because these two
@@ -254,6 +255,36 @@ impl ConversationArchiveClassifier {
     /// this-thread questions and everything else; callers must treat
     /// `None` as "no signal", never as "this thread".
     pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<ArchiveVerdict> {
+        let score = self.score_from_embedding(q_normalized)?;
+        let gate = self.gate();
+        let fires = gate.admits(score);
+        tracing::info!(
+            target: "router.archive",
+            sim_archive = score.sim_positive,
+            sim_thread = score.sim_negative,
+            margin = score.margin(),
+            min_archive_sim = self.min_archive_sim,
+            min_margin = self.min_margin,
+            cushion = gate.cushion(score),
+            fires,
+            "archive classification"
+        );
+        fires.then_some(ArchiveVerdict {
+            sim_archive: score.sim_positive,
+            sim_thread: score.sim_negative,
+            margin: score.margin(),
+        })
+    }
+
+    /// Raw, UNGATED score: cosine to each class centroid.
+    ///
+    /// `None` only on a dimension mismatch. Split out from
+    /// [`Self::classify_from_embedding`] so [`crate::router_calibration`]
+    /// can evaluate any candidate gate from a single embedding pass.
+    /// This axis is the reason that matters: its floor moved 0.45 →
+    /// 0.50 because one real question was held out by 0.002 of margin,
+    /// and finding that by hand cost a bench run and a day.
+    pub fn score_from_embedding(&self, q_normalized: &[f32]) -> Option<AxisScore> {
         if q_normalized.len() != self.centroid_archive.len() {
             tracing::warn!(
                 target: "router.archive",
@@ -263,25 +294,15 @@ impl ConversationArchiveClassifier {
             );
             return None;
         }
-        let sim_archive = dot(q_normalized, &self.centroid_archive);
-        let sim_thread = dot(q_normalized, &self.centroid_thread);
-        let margin = sim_archive - sim_thread;
-        let fires = sim_archive >= self.min_archive_sim && margin >= self.min_margin;
-        tracing::info!(
-            target: "router.archive",
-            sim_archive,
-            sim_thread,
-            margin,
-            min_archive_sim = self.min_archive_sim,
-            min_margin = self.min_margin,
-            fires,
-            "archive classification"
-        );
-        fires.then_some(ArchiveVerdict {
-            sim_archive,
-            sim_thread,
-            margin,
-        })
+        Some(AxisScore::new(
+            dot(q_normalized, &self.centroid_archive),
+            dot(q_normalized, &self.centroid_thread),
+        ))
+    }
+
+    /// The gate currently applied to this axis.
+    pub fn gate(&self) -> AxisGate {
+        AxisGate::new(self.min_archive_sim, self.min_margin)
     }
 
     /// Convenience: embed `query` via `inference` and classify. Prefer
@@ -335,19 +356,6 @@ async fn compute_centroid(
         sum.ok_or_else(|| Error::InvalidInput("compute_centroid: empty example set".into()))?;
     normalize(&mut c);
     Ok(c)
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-fn normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
 }
 
 #[cfg(test)]

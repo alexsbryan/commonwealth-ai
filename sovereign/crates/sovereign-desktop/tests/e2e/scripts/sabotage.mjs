@@ -337,6 +337,21 @@ let exitCode = 0;
 /** Sentinel: a red baseline is a clean abort, not a crash. */
 class BaselineRed extends Error {}
 
+// The window this opens is real and it has already bitten once: on 2026-07-28 a
+// commit landed WHILE a run was mid-mutation and captured `ChatView.svelte`
+// with a deliberate bug in it (HEAD got the mutant; the tree got the correct
+// file back seconds later, so it showed up as a backwards-looking diff). The
+// lock above stops two sabotage runs from colliding; nothing here can stop
+// `git commit`. Say so where it cannot be missed.
+console.log(
+  `\n!! ${targets.length} TRACKED FILE(S) WILL BE REWRITTEN IN PLACE FOR THE ` +
+    `NEXT FEW MINUTES.\n` +
+    `!! Do not commit, stash, or switch branches until this finishes — a commit\n` +
+    `!! taken mid-run captures a deliberate bug. Files:\n` +
+    targets.map((t) => `!!   ${path.relative(CRATE_ROOT, t)}`).join("\n") +
+    "\n",
+);
+
 try {
   await startSharedServer();
 
@@ -402,7 +417,7 @@ try {
     const wanted = m.expectVerdict ?? "CAUGHT";
     const ok = verdict === wanted;
 
-    if (m.expectVerdict === "SURVIVED") {
+    if (m.selfControl) {
       // The runner's own negative control. See the bank entry.
       console.log(`  ${ok ? "CONTROL✓" : "CONTROL✗"} ${m.id}`);
       if (!ok) {
@@ -412,6 +427,24 @@ try {
             `than the mutation. EVERY OTHER VERDICT IN THIS RUN IS UNTRUSTWORTHY.`,
         );
         exitCode = 1;
+      }
+    } else if (m.knownHole) {
+      // A gap we have measured and not yet closed. Tracked rather than
+      // blocking: failing CI on a hole we already knew about on the day we
+      // found it just teaches people to delete the entry. What this DOES buy
+      // is the other direction — when someone finally covers the behaviour,
+      // the entry flips and says so, instead of sitting here claiming a gap
+      // that closed months ago.
+      if (ok) {
+        console.log(`  HOLE     ${m.id}`);
+        console.log(`           still uncovered: ${m.userImpact}`);
+      } else {
+        console.log(`  HOLE FIXED  ${m.id}`);
+        console.log(
+          `           Something now catches this. Promote it: drop knownHole + ` +
+            `expectVerdict and set mustFail to the spec that caught it, so it ` +
+            `becomes a real regression gate instead of a stale complaint.`,
+        );
       }
     } else if (verdict === "CAUGHT") {
       // A mutation that fails EVERY test in the spec is usually a crash, not a
@@ -482,14 +515,17 @@ try {
 // ── report ──
 if (exitCode === 2) process.exit(2); // baseline red: nothing below is meaningful
 
-// The runner's self-control is not a mutant of the product — score it apart, or
-// a passing control would pad the ratio it exists to validate.
-const controls = results.filter((r) => r.expected === "SURVIVED");
-const mutants = results.filter((r) => r.expected !== "SURVIVED");
+// Three populations, scored apart. Folding them together would let a passing
+// self-control pad the ratio it exists to validate, and let known holes drag
+// down a number that is supposed to describe the regression gate.
+const controls = results.filter((r) => r.selfControl);
+const holes = results.filter((r) => r.knownHole);
+const mutants = results.filter((r) => !r.selfControl && !r.knownHole);
 const caught = mutants.filter((r) => r.verdict === "CAUGHT").length;
 const survived = mutants.filter((r) => r.verdict === "SURVIVED");
 const stale = results.filter((r) => r.verdict === "STALE");
 const brokenControls = controls.filter((r) => r.verdict !== "SURVIVED");
+const closedHoles = holes.filter((r) => r.verdict === "CAUGHT");
 
 console.log(`\n${"─".repeat(64)}`);
 if (brokenControls.length > 0) {
@@ -505,6 +541,15 @@ if (controls.length > 0) {
     `          ${controls.length - brokenControls.length}/${controls.length} self-control(s) held ` +
       `(the runner can still report SURVIVED)`,
   );
+}
+if (holes.length > 0) {
+  console.log(
+    `          ${holes.length - closedHoles.length} known hole(s) still open` +
+      (closedHoles.length ? `, ${closedHoles.length} newly closed — promote them` : ""),
+  );
+  for (const h of holes) {
+    console.log(`            ${h.verdict === "CAUGHT" ? "closed" : "open"}  ${h.id}`);
+  }
 }
 if (survived.length) {
   console.log(`\n${survived.length} SURVIVED — the suite does not defend these:`);

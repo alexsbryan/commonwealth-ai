@@ -271,9 +271,80 @@ export const BANK = [
   // is SURVIVED. If this ever reports CAUGHT, the instrument is broken and
   // every other verdict in the run is worthless — which is what the script
   // says, loudly, rather than quietly scoring 17/17.
+  // ── Known holes: measured, not yet closed ──
+  //
+  // Found 2026-07-28 by a SOURCE-FIRST probe. The layer-2 mutants above were
+  // picked spec-first (read the spec, find the source it asserts on), which can
+  // only ever produce mutations inside covered code — 16/16 CAUGHT was close to
+  // tautological. Re-run with six mutants chosen by reading only `src/`, biased
+  // toward defensive and incidental code, and scored against the WHOLE suite,
+  // four survived; one of those (a fabricated install ETA) turned out to be
+  // caught by `corpusProgress.test.ts` at the vitest layer, leaving these three.
+  //
+  // Each was verified to survive the ENTIRE desktop gate: svelte-check 0 errors,
+  // vitest 370 passed, Playwright 267 passed. They ship today.
+  //
+  // They are TRACKED, not blocking. Failing CI on a gap the same day we found it
+  // just teaches people to delete the entry. What this buys is the other
+  // direction: when someone covers the behaviour, the runner says HOLE FIXED and
+  // asks for the entry to be promoted into a real gate.
+  {
+    id: "hole-delete-confirm-inverted",
+    suite: "synthetic",
+    expectVerdict: "SURVIVED",
+    knownHole:
+      "no spec exercises the two-click arm/confirm on the conversation ✕. The " +
+      "covering test would hover a row, click ✕ once, assert the row still " +
+      "exists and reads 'Delete?', then click again and assert it is gone.",
+    target: "src/lib/components/ConversationList.svelte",
+    breaks: "the hover ✕ arms first and deletes only on a second, confirming click",
+    userImpact:
+      "one mis-click on a ✕ that appears on hover permanently deletes a " +
+      "conversation — no confirm, no undo, no toast",
+    find: "    if (pendingDeleteId === id) {",
+    replace: "    if (pendingDeleteId !== id) {",
+    mustFail: ["tests/e2e/specs"],
+  },
+  {
+    id: "hole-memory-budget-guard-band",
+    suite: "synthetic",
+    expectVerdict: "SURVIVED",
+    knownHole:
+      "memoryBudget.ts's band logic is unit-tested; the SettingsPanel WIRING of " +
+      "it to the save button is not. The covering test would drive Settings → " +
+      "Models to a >=95% combination and assert Save is blocked, and to an ~85% " +
+      "one and assert it is not.",
+    target: "src/lib/components/SettingsPanel.svelte",
+    breaks: "the save block fires at the critical band (>=95%), not the warn band",
+    userImpact:
+      "a genuinely over-budget model combination saves happily and the daemon " +
+      "OOMs on load, while a merely-warned 85% config cannot be saved at all",
+    find: '{@const blockSave = activeTab === "models" && budgetState === "crit"}',
+    replace: '{@const blockSave = activeTab === "models" && budgetState === "warn"}',
+    mustFail: ["tests/e2e/specs"],
+  },
+  {
+    id: "hole-inner-work-draft-persistence",
+    suite: "synthetic",
+    expectVerdict: "SURVIVED",
+    knownHole:
+      "nothing covers the debounced localStorage autosave. The covering test " +
+      "would type into Inner Work, wait past the debounce, assert the key is " +
+      "written, then reload and assert the draft comes back.",
+    target: "src/lib/stores/innerWorkSession.svelte.ts",
+    breaks: "a non-empty draft is written to localStorage rather than removed",
+    userImpact:
+      "everything typed in Inner Work is dropped when the window closes — the " +
+      "autosave silently deletes instead of saving, and you return to a blank page",
+    find: "    if (text.length === 0) {",
+    replace: "    if (text.length >= 0) {",
+    mustFail: ["tests/e2e/specs"],
+  },
+
   {
     id: "self-control-unrelated-mutation",
     suite: "synthetic",
+    selfControl: true,
     expectVerdict: "SURVIVED",
     target: "src/lib/components/library/LibraryView.svelte",
     breaks: "NOTHING the declared spec observes — this is the control, not a mutant",

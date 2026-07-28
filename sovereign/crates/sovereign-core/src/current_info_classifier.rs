@@ -54,6 +54,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 
 const DEFAULT_MIN_MARGIN: f32 = 0.04;
@@ -195,6 +196,33 @@ impl CurrentInfoClassifier {
     /// + margin at info on the opt-in `router.current_info` target for
     /// glassbox gate tuning.
     pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> bool {
+        let Some(score) = self.score_from_embedding(q_normalized) else {
+            // Dimension mismatch already warned in `score_from_embedding`.
+            // Absence of signal means evergreen — the conservative default.
+            return false;
+        };
+        let gate = self.gate();
+        let fires = gate.admits(score);
+        tracing::info!(
+            target: "router.current_info",
+            sim_current = score.sim_positive,
+            sim_evergreen = score.sim_negative,
+            margin = score.margin(),
+            min_current_sim = self.min_current_sim,
+            min_margin = self.min_margin,
+            cushion = gate.cushion(score),
+            fires,
+            "current-info classification"
+        );
+        fires
+    }
+
+    /// Raw, UNGATED score: cosine to each class centroid.
+    ///
+    /// `None` only on a dimension mismatch. Split out from
+    /// [`Self::classify_from_embedding`] so [`crate::router_calibration`]
+    /// can evaluate any candidate gate from a single embedding pass.
+    pub fn score_from_embedding(&self, q_normalized: &[f32]) -> Option<AxisScore> {
         if q_normalized.len() != self.centroid_current.len() {
             tracing::warn!(
                 target: "router.current_info",
@@ -202,23 +230,17 @@ impl CurrentInfoClassifier {
                 centroid_dim = self.centroid_current.len(),
                 "current-info: dimension mismatch — treating as evergreen"
             );
-            return false;
+            return None;
         }
-        let sim_c = dot(q_normalized, &self.centroid_current);
-        let sim_e = dot(q_normalized, &self.centroid_evergreen);
-        let margin = sim_c - sim_e;
-        let fires = sim_c >= self.min_current_sim && margin >= self.min_margin;
-        tracing::info!(
-            target: "router.current_info",
-            sim_current = sim_c,
-            sim_evergreen = sim_e,
-            margin,
-            min_current_sim = self.min_current_sim,
-            min_margin = self.min_margin,
-            fires,
-            "current-info classification"
-        );
-        fires
+        Some(AxisScore::new(
+            dot(q_normalized, &self.centroid_current),
+            dot(q_normalized, &self.centroid_evergreen),
+        ))
+    }
+
+    /// The gate currently applied to this axis.
+    pub fn gate(&self) -> AxisGate {
+        AxisGate::new(self.min_current_sim, self.min_margin)
     }
 
     /// Convenience: embed `query` via `inference` and classify. Prefer
@@ -263,19 +285,6 @@ async fn compute_centroid(
         sum.ok_or_else(|| Error::InvalidInput("compute_centroid: empty example set".into()))?;
     normalize(&mut c);
     Ok(c)
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-fn normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
 }
 
 #[cfg(test)]

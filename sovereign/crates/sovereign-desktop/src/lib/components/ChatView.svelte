@@ -1128,7 +1128,7 @@
     // the row (real backend, post-completion) so we never double it.
     if (hydratedMessages.some((m) => m.id === turn.messageId)) return;
     const content =
-      turn.status === "done"
+      turn.status === "error"
         ? `${turn.text}${turn.text ? "\n\n" : ""}Error: ${
             turn.error ?? "unknown error"
           }`

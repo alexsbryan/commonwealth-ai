@@ -271,6 +271,15 @@ pub struct RoutingRun {
     pub bank_name: String,
     pub started_at_unix: i64,
     pub results: Vec<RoutingResult>,
+    /// Derived view of `results` — layer attribution, per-intent
+    /// precision/recall, confusions. Persisted into the baseline JSON
+    /// so a later run can diff coverage, not just the correct count.
+    ///
+    /// `#[serde(default)]` so baselines written before this field
+    /// existed still deserialize; they simply carry an empty metrics
+    /// block until the next run rewrites them.
+    #[serde(default)]
+    pub metrics: crate::eval_cmd::routing_metrics::RoutingMetrics,
 }
 
 /// Drive every question through the router classifier ONLY — no
@@ -296,10 +305,12 @@ pub async fn run_bank_routing(
         results.push(result);
     }
 
+    let metrics = crate::eval_cmd::routing_metrics::RoutingMetrics::from_results(&results);
     Ok(RoutingRun {
         bank_name: bank.bank.name.clone(),
         started_at_unix,
         results,
+        metrics,
     })
 }
 

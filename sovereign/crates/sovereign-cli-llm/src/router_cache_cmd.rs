@@ -61,7 +61,7 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 /// Walk up from CWD to the repo root (the dir holding `sovereign/models.toml`).
-fn repo_root() -> Option<PathBuf> {
+pub(crate) fn repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
         if dir.join(MODELS_REL).is_file() {
@@ -74,7 +74,7 @@ fn repo_root() -> Option<PathBuf> {
 }
 
 /// Load the five exemplar TOMLs + models.toml + the committed cache from disk.
-fn read_tree(root: &Path) -> std::io::Result<TreeFiles> {
+pub(crate) fn read_tree(root: &Path) -> std::io::Result<TreeFiles> {
     let rd = |rel: &str| std::fs::read_to_string(root.join(rel));
     Ok(TreeFiles {
         cache_json: rd(CACHE_REL)?,
@@ -87,14 +87,14 @@ fn read_tree(root: &Path) -> std::io::Result<TreeFiles> {
     })
 }
 
-struct TreeFiles {
-    cache_json: String,
-    router: String,
-    scope: String,
-    effort: String,
-    current_info: String,
-    archive: String,
-    models: String,
+pub(crate) struct TreeFiles {
+    pub(crate) cache_json: String,
+    pub(crate) router: String,
+    pub(crate) scope: String,
+    pub(crate) effort: String,
+    pub(crate) current_info: String,
+    pub(crate) archive: String,
+    pub(crate) models: String,
 }
 
 /// Resolve `(specs, fingerprint)` from the working tree — shared by check + the

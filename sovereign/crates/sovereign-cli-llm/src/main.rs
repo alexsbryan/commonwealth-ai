@@ -44,6 +44,7 @@ mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod router_cache_cmd;
+mod router_fit_cmd;
 mod search_gym_cmd;
 mod solve_cmd;
 mod voice_eval;
@@ -141,6 +142,7 @@ async fn async_main() {
         "recipe-agent" => recipe_agent_cmd::run_recipe_agent(rest).await,
         "maintainer" => recipe_agent_cmd::run_maintainer(rest).await,
         "router-cache" => router_cache_cmd::run(rest).await,
+        "router" => router_fit_cmd::run(rest).await,
         "pipeline" => pipeline_cmd::run_pipeline(rest).await,
         "workflow" => workflow_cmd::run_workflow(rest).await,
         "mcp" => mcp_cmd::run_mcp(rest).await,

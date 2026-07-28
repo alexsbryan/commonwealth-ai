@@ -32,6 +32,7 @@ pub mod atlas_ann;
 pub mod attribution;
 pub mod bank;
 pub mod report;
+pub mod routing_metrics;
 pub mod runner;
 pub mod runner_threads;
 pub mod score;

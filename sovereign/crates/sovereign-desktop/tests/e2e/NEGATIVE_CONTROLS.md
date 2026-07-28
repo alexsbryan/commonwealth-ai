@@ -127,8 +127,60 @@ warns, so the claim cannot rot into a rubber stamp.
 ## Reading a SURVIVED verdict
 
 It is not a flake and not a test to be adjusted. It says: *this regression
-reaches a user with every gate green.* The fix is to strengthen the named spec.
-Deleting or weakening the mutant converts a known hole into an unknown one.
+reaches a user with the named specs green.* The fix is to strengthen the named
+spec. Deleting or weakening the mutant converts a known hole into an unknown
+one.
+
+**Confirm against the other layers before calling it a hole.** The runner drives
+Playwright only, but the desktop gate is `npm run check` + `npm run test`
+(vitest) + Playwright. A mutation that no spec catches may still be caught by a
+unit test, and the runner cannot see that. This bit during the very first
+source-first probe: a mutation to `etaSecondsFor` that removed the "we cannot
+honestly estimate" guard survived all 267 Playwright tests and looked like a
+clean hole — `corpusProgress.test.ts` had it covered the whole time. Four
+apparent holes were three.
+
+So: apply the mutation, run `npm run check` and `npm run test` as well, and only
+then write it down.
+
+## Known holes
+
+Entries carrying `knownHole` are gaps that have been measured and not yet
+closed. They declare `expectVerdict: "SURVIVED"`, so they report `HOLE` and do
+**not** fail the build — failing CI on a gap the day it is discovered mostly
+teaches people to delete the entry.
+
+What they buy is the other direction. When someone finally covers the behaviour,
+the entry flips to `HOLE FIXED` and asks to be promoted into a real gate. That
+turns a finding into a ratchet instead of a comment that quietly goes stale.
+
+The three currently open were found by the source-first probe described below,
+and each was verified to survive the **entire** desktop gate — svelte-check 0
+errors, vitest 370 passed, Playwright 267 passed:
+
+| Hole | What ships broken |
+|---|---|
+| `hole-delete-confirm-inverted` | one mis-click on the hover ✕ permanently deletes a conversation — no confirm, no undo |
+| `hole-memory-budget-guard-band` | an over-budget model set saves and OOMs the daemon; a merely-warned one cannot be saved at all |
+| `hole-inner-work-draft-persistence` | Inner Work drafts are dropped on close — the autosave deletes instead of saving |
+
+## How the bank is selected — and why that decides what it can find
+
+The layer-2 mutants were chosen **spec-first**: read a spec, see what it
+asserts, find the source producing that DOM. That method can only generate
+mutations inside covered code, so its 16/16 is close to tautological. It
+demonstrates the machinery; it says little about coverage.
+
+Finding holes needs the opposite order — **source-first**: read only `src/`,
+pick behaviours by what would harm a user, bias deliberately toward defensive
+and incidental code (error branches, guards, fallbacks, formatting edge cases),
+and score against the *whole* suite rather than a named spec. Run that way, six
+mutants produced four survivors and three confirmed holes.
+
+The two methods answer different questions and the bank needs both. Spec-first
+keeps existing coverage honest; source-first is the only one that finds what is
+missing. When adding to the bank, say which method produced the entry — a bank
+grown only spec-first will trend toward 100% while covering less and less.
 
 ## Adding a mutant
 
@@ -169,6 +221,36 @@ Two rules that are easy to get wrong:
 Verification is against the captured bytes, not `git diff` — that would call a
 legitimately-dirty target unrestored, and a restored one clean only by luck. On
 any mismatch it exits 2. It never exits 0 with the tree modified.
+
+### Do not commit while it runs
+
+**The one hazard none of the above covers.** The lock stops two sabotage runs
+from colliding. Nothing can stop a `git commit` — by you, by a teammate, or by
+an agent on the mesh — from capturing the tree mid-mutation.
+
+This is not hypothetical. On 2026-07-28 a commit landed during a run and took
+`ChatView.svelte` with `turn.status === "error"` flipped to `"done"` — a real
+bug, in `main`, from a tool whose entire job is to *not* leave bugs behind. The
+tree was restored correctly seconds later, so the damage presented as a
+confusing backwards diff (HEAD wrong, working tree right) rather than anything
+that looked like an incident.
+
+The run now prints the list of files it is about to rewrite, with a warning, so
+the window is at least visible. If you suspect a commit landed mid-run, this
+finds it — for each bank entry, HEAD should contain the `find` string, never the
+`replace`:
+
+```bash
+node -e 'import("./tests/e2e/sabotage-bank.mjs").then(({BANK})=>console.log(
+  JSON.stringify(BANK.map(m=>({target:m.target,find:m.find,replace:m.replace})))))' \
+  > /tmp/bank.json
+# then check each target's HEAD blob for `replace` present && `find` absent
+```
+
+A repo-level `pre-commit` hook that refuses while `test-artifacts/.sabotage/lock`
+exists would close this properly. This repo installs no hooks today
+(`core.hooksPath` is unset), so that is a deliberate open item rather than an
+oversight.
 
 ## The tripwire
 

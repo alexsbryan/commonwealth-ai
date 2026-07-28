@@ -56,6 +56,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 
 const DEFAULT_MIN_MARGIN: f32 = 0.02;
@@ -187,11 +188,14 @@ impl PersonalScopeClassifier {
         self.n_external
     }
 
-    /// Classify against a pre-computed, L2-normalised query embedding.
-    /// Returns `Some("personal")` only when both absolute and margin
-    /// gates pass. Logs both similarities + margin at debug for
-    /// glassbox tuning of the gates (ARCH §0.1).
-    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<String> {
+    /// Raw, UNGATED score: cosine to each class centroid.
+    ///
+    /// `None` only on a dimension mismatch (a query embedded with a
+    /// different model). Split out from [`Self::classify_from_embedding`]
+    /// so [`crate::router_calibration`] can evaluate any candidate gate
+    /// from a single embedding pass — the score does not depend on the
+    /// thresholds, only the decision does.
+    pub fn score_from_embedding(&self, q_normalized: &[f32]) -> Option<AxisScore> {
         if q_normalized.len() != self.centroid_personal.len() {
             tracing::warn!(
                 target: "router.scope",
@@ -201,25 +205,37 @@ impl PersonalScopeClassifier {
             );
             return None;
         }
-        let sim_p = dot(q_normalized, &self.centroid_personal);
-        let sim_e = dot(q_normalized, &self.centroid_external);
-        let margin = sim_p - sim_e;
-        let fires = sim_p >= self.min_personal_sim && margin >= self.min_margin;
+        Some(AxisScore::new(
+            dot(q_normalized, &self.centroid_personal),
+            dot(q_normalized, &self.centroid_external),
+        ))
+    }
+
+    /// The gate currently applied to this axis.
+    pub fn gate(&self) -> AxisGate {
+        AxisGate::new(self.min_personal_sim, self.min_margin)
+    }
+
+    /// Classify against a pre-computed, L2-normalised query embedding.
+    /// Returns `Some("personal")` only when both absolute and margin
+    /// gates pass. Logs both similarities + margin + the signed
+    /// distance to the boundary for glassbox tuning (ARCH §0.1).
+    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<String> {
+        let score = self.score_from_embedding(q_normalized)?;
+        let gate = self.gate();
+        let fires = gate.admits(score);
         tracing::info!(
             target: "router.scope",
-            sim_personal = sim_p,
-            sim_external = sim_e,
-            margin,
+            sim_personal = score.sim_positive,
+            sim_external = score.sim_negative,
+            margin = score.margin(),
             min_personal_sim = self.min_personal_sim,
             min_margin = self.min_margin,
+            cushion = gate.cushion(score),
             fires,
             "scope classification"
         );
-        if fires {
-            Some("personal".to_string())
-        } else {
-            None
-        }
+        fires.then(|| "personal".to_string())
     }
 
     /// Convenience: embed `query` via `inference` and classify.
@@ -268,19 +284,6 @@ async fn compute_centroid(
         sum.ok_or_else(|| Error::InvalidInput("compute_centroid: empty example set".into()))?;
     normalize(&mut c);
     Ok(c)
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-fn normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
 }
 
 #[cfg(test)]

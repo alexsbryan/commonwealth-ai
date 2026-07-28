@@ -521,13 +521,39 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         Some(prev) if correct > prev => BenchStatus::Improved,
         Some(_) => BenchStatus::Green,
     };
+    // Layer attribution — the part accuracy cannot show. A run that
+    // holds 27/27 while the embed layer's share falls from 11 to 5 has
+    // silently become ~2x slower per question, and the correct-count
+    // comparison above scores it Green. Surface the delta in the note
+    // rather than in `status`, which other gates key off.
+    let metrics: Option<crate::eval_cmd::routing_metrics::RoutingMetrics> = parsed
+        .get("metrics")
+        .and_then(|m| serde_json::from_value(m.clone()).ok());
+    let prior_metrics: Option<crate::eval_cmd::routing_metrics::RoutingMetrics> = prior
+        .as_ref()
+        .and_then(|p| p.get("metrics"))
+        .and_then(|m| serde_json::from_value(m.clone()).ok());
+    let coverage_note = match (&metrics, &prior_metrics) {
+        (Some(now), Some(before)) if before.total > 0 => {
+            let delta = (now.embed_coverage() - before.embed_coverage()) * 100.0;
+            if delta.abs() >= 1.0 {
+                format!(" · embed-layer {delta:+.0}pt vs baseline")
+            } else {
+                String::new()
+            }
+        }
+        _ => String::new(),
+    };
+    let headline = metrics
+        .as_ref()
+        .map(|m| m.headline())
+        .unwrap_or_else(|| format!("routing {correct}/{total}"));
+
     let note = if misroutes.is_empty() {
-        Some(format!("routing accuracy {}/{} ✓", correct, total))
+        Some(format!("{headline}{coverage_note} ✓"))
     } else {
         Some(format!(
-            "routing {}/{} correct · {} misroute(s):\n     {}",
-            correct,
-            total,
+            "{headline}{coverage_note} · {} misroute(s):\n     {}",
             misroutes.len(),
             misroutes.join("\n     ")
         ))

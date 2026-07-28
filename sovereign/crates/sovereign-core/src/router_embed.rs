@@ -61,6 +61,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 use crate::types::Intent;
 
@@ -178,6 +179,39 @@ pub struct LocatorVerdict {
     /// Nearest tagged exemplar, truncated — the "why did this fire?"
     /// surface.
     pub nearest_exemplar: String,
+}
+
+/// Raw, UNGATED locator score — what [`LocatorVerdict`] is built from
+/// once a gate admits it.
+///
+/// `score.sim_positive` is the best similarity to any exemplar
+/// carrying the tag; `score.sim_negative` is the best similarity to
+/// any exemplar NOT carrying it, so `score.margin()` is the
+/// one-vs-rest separation the gate turns on.
+#[derive(Debug, Clone)]
+pub struct LocatorScore {
+    pub locator: String,
+    pub score: AxisScore,
+    /// Untruncated — the caller truncates for display.
+    pub nearest_exemplar: String,
+}
+
+/// Raw, UNGATED intent score.
+///
+/// The intent axis is multi-class (k=1 nearest-neighbour per intent)
+/// but its GATE is the same two-threshold rule every binary axis uses:
+/// `sim_positive` is the winning intent's max cosine and
+/// `sim_negative` is the runner-up intent's, so `margin()` is the
+/// separation between the top two intents.
+#[derive(Debug, Clone)]
+pub struct IntentScore {
+    pub top_intent: Intent,
+    pub second_intent: Option<Intent>,
+    pub score: AxisScore,
+    /// Untruncated nearest exemplar text for the winning intent.
+    pub nearest_exemplar: String,
+    /// Scope tag carried by that nearest exemplar, if any.
+    pub scope: Option<String>,
 }
 
 /// Hand-authored intent classifier. Pre-embeds every exemplar at
@@ -369,6 +403,55 @@ impl EmbedRouter {
     /// isn't met, or when the margin is too thin — in every case the
     /// caller simply continues down its normal cascade.
     pub fn locator_from_embedding(&self, q_normalized: &[f32]) -> Option<LocatorVerdict> {
+        let scored = self.score_locator_from_embedding(q_normalized)?;
+        let gate = self.locator_gate();
+        let decided = gate.admits(scored.score);
+
+        // Glassbox on its own target so "why did/didn't the locator
+        // fire?" is answerable from logs without enabling the whole
+        // router.embed stream. Emitted for every evaluation, including
+        // abstentions — the near-misses are the tuning signal, and
+        // `cushion` is how far this one sat from flipping.
+        tracing::info!(
+            target: "router.locator",
+            event = "classify",
+            locator = %scored.locator,
+            top_sim = scored.score.sim_positive,
+            rest_best = scored.score.sim_negative,
+            margin = scored.score.margin(),
+            min_sim = gate.min_sim,
+            min_margin = gate.min_margin,
+            cushion = gate.cushion(scored.score),
+            decided,
+            nearest = %truncate(&scored.nearest_exemplar, 60),
+            "router.locator: one-vs-rest decision"
+        );
+
+        decided.then(|| LocatorVerdict {
+            locator: scored.locator,
+            top_sim: scored.score.sim_positive,
+            margin: scored.score.margin(),
+            nearest_exemplar: truncate(&scored.nearest_exemplar, 80),
+        })
+    }
+
+    /// The gate currently applied to the locator axis.
+    pub fn locator_gate(&self) -> AxisGate {
+        AxisGate::new(self.locator_min_sim, self.locator_min_margin)
+    }
+
+    /// The gate currently applied to the intent axis.
+    pub fn intent_gate(&self) -> AxisGate {
+        AxisGate::new(self.min_top_sim, self.min_margin)
+    }
+
+    /// Raw, UNGATED locator score. `None` when no exemplar carries a
+    /// locator tag (the axis is inert) or the query embedding is empty.
+    ///
+    /// Split out from [`Self::locator_from_embedding`] so
+    /// [`crate::router_calibration`] can evaluate any candidate gate
+    /// from a single embedding pass.
+    pub fn score_locator_from_embedding(&self, q_normalized: &[f32]) -> Option<LocatorScore> {
         if q_normalized.is_empty() {
             return None;
         }
@@ -407,32 +490,10 @@ impl EmbedRouter {
         } else {
             untagged_best
         };
-        let margin = top_sim - rest_best;
-        let decided = top_sim >= self.locator_min_sim && margin >= self.locator_min_margin;
-
-        // Glassbox on its own target so "why did/didn't the locator
-        // fire?" is answerable from logs without enabling the whole
-        // router.embed stream. Emitted for every evaluation, including
-        // abstentions — the near-misses are the tuning signal.
-        tracing::info!(
-            target: "router.locator",
-            event = "classify",
-            locator = %tag,
-            top_sim,
-            rest_best,
-            margin,
-            min_sim = self.locator_min_sim,
-            min_margin = self.locator_min_margin,
-            decided,
-            nearest = %truncate(nearest, 60),
-            "router.locator: one-vs-rest decision"
-        );
-
-        decided.then(|| LocatorVerdict {
+        Some(LocatorScore {
             locator: tag.to_string(),
-            top_sim,
-            margin,
-            nearest_exemplar: truncate(nearest, 80),
+            score: AxisScore::new(top_sim, rest_best),
+            nearest_exemplar: nearest.to_string(),
         })
     }
 
@@ -441,6 +502,60 @@ impl EmbedRouter {
     /// into the existing search-embedding pipeline to skip a second
     /// embed call).
     pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<EmbedClassification> {
+        let scored = self.score_intent_from_embedding(q_normalized)?;
+        let gate = self.intent_gate();
+        let decided = gate.admits(scored.score);
+
+        // Glassbox: the routing decision is the *first level* of the
+        // whole stack — if intent classification is wrong, every
+        // downstream choice (retrieval, expansion, synthesis) is built
+        // on sand. Emit per-query whether the embed router was confident
+        // enough to OWN this route (`decided=true`, short-circuiting the
+        // heuristic + LLM cascade) or fell through (`decided=false`), with
+        // the similarity/margin vs thresholds that drove it. On the
+        // `router.embed` target, which the default daemon/eval filter
+        // does NOT enable — so this is opt-in (`router.embed=info`) and
+        // free in normal operation. Pairs with the second-best intent so
+        // near-miss misroutes (the margin-just-cleared case) are visible,
+        // and with `cushion` — the signed distance to the boundary, which
+        // is what a score-distribution drift report aggregates.
+        tracing::info!(
+            target: "router.embed",
+            event = "classify",
+            top_intent = ?scored.top_intent,
+            top_sim = scored.score.sim_positive,
+            second_intent = ?scored.second_intent.as_ref().map(|i| format!("{i:?}")),
+            second_sim = scored.score.sim_negative,
+            margin = scored.score.margin(),
+            min_top_sim = gate.min_sim,
+            min_margin = gate.min_margin,
+            cushion = gate.cushion(scored.score),
+            decided,
+            "router.embed: classify decision"
+        );
+
+        if !decided {
+            return None;
+        }
+        Some(EmbedClassification {
+            intent: scored.top_intent,
+            top_sim: scored.score.sim_positive,
+            margin: scored.score.margin(),
+            nearest_exemplar: truncate(&scored.nearest_exemplar, 80),
+            scope: scored.scope,
+        })
+    }
+
+    /// Raw, UNGATED intent score: the winning intent, the runner-up,
+    /// and their similarities.
+    ///
+    /// Split out from [`Self::classify_from_embedding`] so
+    /// [`crate::router_calibration`] can evaluate any candidate gate
+    /// from a single embedding pass. On this axis the sweep answers the
+    /// question accuracy cannot: how much of the bank could the embed
+    /// router OWN — displacing a ~1.2s LLM classifier call — before its
+    /// precision slips.
+    pub fn score_intent_from_embedding(&self, q_normalized: &[f32]) -> Option<IntentScore> {
         if self.exemplars.is_empty() || q_normalized.is_empty() {
             return None;
         }
@@ -481,43 +596,13 @@ impl EmbedRouter {
         let (top_intent, top_sim, nearest, top_scope) =
             (ranked[0].0.clone(), ranked[0].1, ranked[0].2, ranked[0].3);
         let second_sim = ranked.get(1).map(|(_, s, _, _)| *s).unwrap_or(0.0);
-        let margin = top_sim - second_sim;
+        let second_intent = ranked.get(1).map(|(i, _, _, _)| i.clone());
 
-        // Glassbox: the routing decision is the *first level* of the
-        // whole stack — if intent classification is wrong, every
-        // downstream choice (retrieval, expansion, synthesis) is built
-        // on sand. Emit per-query whether the embed router was confident
-        // enough to OWN this route (`decided=true`, short-circuiting the
-        // heuristic + LLM cascade) or fell through (`decided=false`), with
-        // the similarity/margin vs thresholds that drove it. On the
-        // `router.embed` target, which the default daemon/eval filter
-        // does NOT enable — so this is opt-in (`router.embed=info`) and
-        // free in normal operation. Pairs with the second-best intent so
-        // near-miss misroutes (the margin-just-cleared case) are visible.
-        let second_intent = ranked.get(1).map(|(i, _, _, _)| format!("{i:?}"));
-        let decided = top_sim >= self.min_top_sim && margin >= self.min_margin;
-        tracing::info!(
-            target: "router.embed",
-            event = "classify",
-            top_intent = ?top_intent,
-            top_sim,
-            second_intent = ?second_intent,
-            second_sim,
-            margin,
-            min_top_sim = self.min_top_sim,
-            min_margin = self.min_margin,
-            decided,
-            "router.embed: classify decision"
-        );
-
-        if !decided {
-            return None;
-        }
-        Some(EmbedClassification {
-            intent: top_intent,
-            top_sim,
-            margin,
-            nearest_exemplar: truncate(nearest, 80),
+        Some(IntentScore {
+            top_intent,
+            second_intent,
+            score: AxisScore::new(top_sim, second_sim),
+            nearest_exemplar: nearest.to_string(),
             scope: top_scope.map(String::from),
         })
     }
@@ -525,24 +610,42 @@ impl EmbedRouter {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-fn normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
-}
-
 fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
     } else {
         s.chars().take(n).collect::<String>() + "…"
+    }
+}
+
+/// The wire label for an `Intent` — the inverse of [`parse_intent`]
+/// over the labels an exemplar TOML can name.
+///
+/// Exists so calibration banks and routing reports can name intents in
+/// the same snake_case vocabulary the exemplar TOML uses, without every
+/// caller re-deriving it from `{:?}`. `intent_label_round_trips` keeps
+/// the two in sync.
+///
+/// `SimpleAction` and `Continuation` are router-internal — they are
+/// produced downstream (a web-search action, a thread continuation)
+/// and no exemplar can be tagged with them, so `parse_intent` REJECTS
+/// their labels. The mapping is deliberately one-way for those two:
+/// a report still needs to name them.
+pub fn intent_label(intent: &Intent) -> &'static str {
+    match intent {
+        Intent::SimpleQuery => "simple_query",
+        Intent::KnowledgeQuery => "knowledge_query",
+        Intent::DeepQuery => "deep_query",
+        Intent::ComparisonQuery => "comparison_query",
+        Intent::CodeQuery => "code_query",
+        Intent::ComplexTask => "complex_task",
+        Intent::MetalingualQuery => "metalingual_query",
+        Intent::ConationQuery => "conation_query",
+        Intent::CommissiveQuery => "commissive_query",
+        Intent::ExpressiveQuery => "expressive_query",
+        Intent::GenerativeQuery => "generative_query",
+        Intent::SimpleAction { .. } => "simple_action",
+        Intent::Continuation { .. } => "continuation",
     }
 }
 
@@ -583,6 +686,43 @@ mod tests {
         let a = vec![0.6, 0.8];
         let b = vec![0.6, 0.8];
         assert!((dot(&a, &b) - 1.0).abs() < 1e-6);
+    }
+
+    /// `intent_label` and `parse_intent` must stay inverse over every
+    /// label an exemplar TOML can carry — otherwise a calibration bank
+    /// could name an intent the router can never produce, and the
+    /// mismatch would read as a routing failure rather than a typo.
+    #[test]
+    fn intent_label_round_trips() {
+        let parseable = [
+            Intent::SimpleQuery,
+            Intent::KnowledgeQuery,
+            Intent::DeepQuery,
+            Intent::ComparisonQuery,
+            Intent::CodeQuery,
+            Intent::ComplexTask,
+            Intent::MetalingualQuery,
+            Intent::ConationQuery,
+            Intent::CommissiveQuery,
+            Intent::ExpressiveQuery,
+            Intent::GenerativeQuery,
+        ];
+        for i in parseable {
+            let label = intent_label(&i);
+            assert_eq!(
+                parse_intent(label).expect("label must parse back"),
+                i,
+                "round-trip failed for {label}"
+            );
+        }
+    }
+
+    /// The two router-internal variants are namable but NOT parseable —
+    /// an exemplar tagged with them would be a bank authoring error.
+    #[test]
+    fn router_internal_intents_are_one_way() {
+        assert!(parse_intent("simple_action").is_err());
+        assert!(parse_intent("continuation").is_err());
     }
 
     #[test]

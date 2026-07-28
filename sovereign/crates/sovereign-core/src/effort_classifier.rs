@@ -29,6 +29,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 use crate::types::Effort;
 
@@ -170,6 +171,33 @@ impl EffortClassifier {
     /// Low — the conservative, fast-slot default). Logs both similarities +
     /// margin at info for glassbox gate-tuning (ARCH §0.1 / §9).
     pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<Effort> {
+        let score = self.score_from_embedding(q_normalized)?;
+        let gate = self.gate();
+        let fires = gate.admits(score);
+        tracing::info!(
+            target: "router.effort",
+            sim_high = score.sim_positive,
+            sim_low = score.sim_negative,
+            margin = score.margin(),
+            min_high_sim = self.min_high_sim,
+            min_margin = self.min_margin,
+            cushion = gate.cushion(score),
+            fires,
+            "effort classification"
+        );
+        fires.then_some(Effort::High)
+    }
+
+    /// Raw, UNGATED score: cosine to each class centroid.
+    ///
+    /// `None` only on a dimension mismatch. Split out from
+    /// [`Self::classify_from_embedding`] so [`crate::router_calibration`]
+    /// can evaluate any candidate gate from a single embedding pass.
+    ///
+    /// NOTE: this axis is scored in the UNPREFIXED (`d:`) embedding
+    /// space — see `compute_centroid`. A calibration run must embed its
+    /// cases the same way or the numbers are meaningless.
+    pub fn score_from_embedding(&self, q_normalized: &[f32]) -> Option<AxisScore> {
         if q_normalized.len() != self.centroid_high.len() {
             tracing::warn!(
                 target: "router.effort",
@@ -179,21 +207,15 @@ impl EffortClassifier {
             );
             return None;
         }
-        let sim_high = dot(q_normalized, &self.centroid_high);
-        let sim_low = dot(q_normalized, &self.centroid_low);
-        let margin = sim_high - sim_low;
-        let fires = sim_high >= self.min_high_sim && margin >= self.min_margin;
-        tracing::info!(
-            target: "router.effort",
-            sim_high,
-            sim_low,
-            margin,
-            min_high_sim = self.min_high_sim,
-            min_margin = self.min_margin,
-            fires,
-            "effort classification"
-        );
-        fires.then_some(Effort::High)
+        Some(AxisScore::new(
+            dot(q_normalized, &self.centroid_high),
+            dot(q_normalized, &self.centroid_low),
+        ))
+    }
+
+    /// The gate currently applied to this axis.
+    pub fn gate(&self) -> AxisGate {
+        AxisGate::new(self.min_high_sim, self.min_margin)
     }
 
     /// Embed `query` (UNPREFIXED — see `compute_centroid`) and classify.
@@ -251,19 +273,6 @@ async fn compute_centroid(
         sum.ok_or_else(|| Error::InvalidInput("compute_centroid: empty example set".into()))?;
     normalize(&mut c);
     Ok(c)
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-fn normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
 }
 
 #[cfg(test)]
