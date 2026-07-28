@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Baseline storage convention for `svrn bench all`.
+//! Baseline storage convention for `svrn bench all` — and, since
+//! 2026-07-28, for `svrn router fit --save-baseline`, which stores a
+//! `FitSnapshot` under `routing/baselines/<bank>-fit/` through the
+//! same two functions.
 //!
 //! ```text
 //! sovereign/bench/<group>/

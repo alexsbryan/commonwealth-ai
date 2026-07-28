@@ -99,8 +99,8 @@ Exit is non-zero on any `SURVIVED` or `STALE`, so it gates in CI.
 
 A perfect score is the least falsifiable result there is. A bug that made the
 runner read every run as failing — a bad exit-code read, a spec path matching
-nothing, a stray non-zero from `npx` — would print `17/17` forever, and nobody
-questions `17/17`.
+nothing, a stray non-zero from `npx` — would print `19/19` forever, and nobody
+questions `19/19`.
 
 So the bank carries one entry, `self-control-unrelated-mutation`, whose declared
 verdict is `SURVIVED`: it mutates the Library empty state and runs the chat
@@ -154,15 +154,39 @@ What they buy is the other direction. When someone finally covers the behaviour,
 the entry flips to `HOLE FIXED` and asks to be promoted into a real gate. That
 turns a finding into a ratchet instead of a comment that quietly goes stale.
 
-The three currently open were found by the source-first probe described below,
-and each was verified to survive the **entire** desktop gate — svelte-check 0
-errors, vitest 370 passed, Playwright 267 passed:
+**There are none open right now.** The mechanism has run its full cycle once, on
+the three the source-first probe found — described below, each verified on
+2026-07-28 to survive the *entire* desktop gate (svelte-check 0 errors, vitest
+370 passed, Playwright 267 passed), and each closed the same day by a spec
+written to the `knownHole` description:
 
-| Hole | What ships broken |
-|---|---|
-| `hole-delete-confirm-inverted` | one mis-click on the hover ✕ permanently deletes a conversation — no confirm, no undo |
-| `hole-memory-budget-guard-band` | an over-budget model set saves and OOMs the daemon; a merely-warned one cannot be saved at all |
-| `hole-inner-work-draft-persistence` | Inner Work drafts are dropped on close — the autosave deletes instead of saving |
+| Was | Now gated by | What had shipped broken |
+|---|---|---|
+| `hole-delete-confirm-inverted` | `specs/conversation-delete-confirm.spec.ts` | one mis-click on the hover ✕ permanently deletes a conversation — no confirm, no undo |
+| `hole-memory-budget-guard-band` | `specs/settings-memory-budget.spec.ts` | an over-budget model set saves and OOMs the daemon; a merely-warned one cannot be saved at all |
+| `hole-inner-work-draft-persistence` | `specs/inner-work-draft-persistence.spec.ts` | Inner Work drafts are dropped on close — the autosave deletes instead of saving |
+
+The entries kept their `breaks` / `userImpact` wording and dropped the `hole-`
+prefix; they are ordinary blocking mutants now.
+
+Two things that closure surfaced, both worth knowing before writing the next
+covering spec:
+
+- **A stub with the wrong shape makes a surface untestable without failing
+  anything.** The shim's `detect_hardware` returned `{ram_gb, cpu_cores, gpu}`
+  against a `HardwareInfo` of `{system_ram_gb, gpu_available, gpu_name,
+  gpu_memory_gb, is_unified_memory}`. Every field read came back `undefined`, so
+  `effectiveMemoryBytes` returned `NaN`, the budget meter was pinned to the `ok`
+  band in every synthetic run regardless of model selection, and `ModelSelector`
+  threw on `system_ram_gb.toFixed(0)` the moment a slot was expanded. No spec
+  could have caught that mutant while the stub was wrong, and nothing anywhere
+  reported a problem. Fixed in `fixtures/tauri-shim.js`; this is the same class
+  of failure the fixture-liveness gate exists for, one layer down.
+- **"Navigate away and back" is not a persistence test.** `inner-work-page.spec.ts`
+  already did exactly that and passed under the mutation: `App.svelte` keeps the
+  Inner Work surface mounted and hides it with `display: none`, so the draft
+  came back from component memory having never been written. Persistence needs a
+  real reload, or a direct assertion on the storage key. Both are in the new spec.
 
 ## How the bank is selected — and why that decides what it can find
 
@@ -181,6 +205,15 @@ The two methods answer different questions and the bank needs both. Spec-first
 keeps existing coverage honest; source-first is the only one that finds what is
 missing. When adding to the bank, say which method produced the entry — a bank
 grown only spec-first will trend toward 100% while covering less and less.
+
+Note what the score did when those three closed: it went from 16/16 to 19/19.
+Both numbers are 100%, and the second one means considerably more — which is the
+argument for running a source-first probe periodically rather than treating a
+full score as the finish line. The next one should start where this one didn't
+reach: `mustFail: ["tests/e2e/specs"]` scores against the synthetic suite only,
+so a behaviour whose only coverage is vitest or real-mode still reads as a hole
+(the `etaSecondsFor` false positive), and nothing here has yet probed the
+real-backend layer at all.
 
 ## Adding a mutant
 

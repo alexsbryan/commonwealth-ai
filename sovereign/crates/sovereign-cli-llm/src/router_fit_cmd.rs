@@ -46,6 +46,9 @@ use sovereign_core::router_axis::{normalize, AxisGate};
 use sovereign_core::router_calibration::{
     fit, parse_bank, CalibrationCase, FitReport, GateOutcome, Objective, ScoredCase,
 };
+use sovereign_core::router_drift::{
+    bank_digest, compare, AxisChange, AxisDelta, DriftReport, FitSnapshot,
+};
 use sovereign_core::router_embed::{intent_label, EmbedRouter};
 use sovereign_core::router_embed_cache::BootEmbedCache;
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
@@ -70,13 +73,28 @@ OPTIONS:
   --min-precision <f>        Floor for max-coverage. Default 1.0.
   --embed-model <path>       Override the prescribed embed GGUF.
   --format <fmt>             human (default) | json
+  --save-baseline            Record THIS run under
+                             sovereign/bench/routing/baselines/<bank>-fit/
+                             so a later run can be diffed against it.
+  --baseline-dir <path>      Override that directory.
+  --no-drift                 Skip the comparison against the baseline.
 
 The default objective encodes the asymmetry every axis documents: a false
 positive hard-commits a turn down a narrowed path, a false negative merely
 falls through to the cascade. `--objective accuracy` scores the way the
 prior art does (both errors weighted equally) for comparison.
 
-Nothing is written. The report names the constant and the file to edit.";
+DRIFT. When a baseline exists, every run diffs the shipped gate's headroom
+against it — the check that catches an encoder or exemplar change closing in
+on a threshold BEFORE any bench regression shows it. Deltas are only called a
+regression when the encoder AND the bank are unchanged; otherwise they are
+printed as evidence and left to you.
+
+EXIT: 0 clean · 2 usage · 3 a gate is movable · 4 drift regression.
+
+No constant is ever written. Only the measurement is, and only on
+--save-baseline: a calibrator that edits what it measures is the opaque loop
+this replaces.";
 
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
@@ -99,6 +117,9 @@ struct Opts {
     objective: Objective,
     embed_model: Option<PathBuf>,
     json: bool,
+    save_baseline: bool,
+    baseline_dir: Option<PathBuf>,
+    no_drift: bool,
 }
 
 fn parse_opts(args: &[String]) -> Result<Opts, String> {
@@ -109,12 +130,20 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
     let mut objective_name = "safe-recall".to_string();
     let mut max_fp: usize = 0;
     let mut min_precision: f64 = 1.0;
+    let mut save_baseline = false;
+    let mut baseline_dir = None;
+    let mut no_drift = false;
 
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--bank" => bank = Some(PathBuf::from(next(&mut it, "--bank")?)),
             "--axis" => axes.push(next(&mut it, "--axis")?),
+            "--save-baseline" => save_baseline = true,
+            "--no-drift" => no_drift = true,
+            "--baseline-dir" => {
+                baseline_dir = Some(PathBuf::from(next(&mut it, "--baseline-dir")?))
+            }
             "--objective" => objective_name = next(&mut it, "--objective")?,
             "--max-false-positives" => {
                 max_fp = next(&mut it, "--max-false-positives")?
@@ -145,12 +174,27 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         }
     };
 
+    // A run restricted to one axis measures one axis. Saving it as
+    // THE baseline would silently retire the other five — the next
+    // full run would then report them as newly appeared and have
+    // nothing to diff them against.
+    if save_baseline && !axes.is_empty() {
+        return Err(
+            "--save-baseline needs a full run; drop --axis (a partial baseline \
+             would retire the axes it omits)"
+                .into(),
+        );
+    }
+
     Ok(Opts {
         bank,
         axes,
         objective,
         embed_model,
         json,
+        save_baseline,
+        baseline_dir,
+        no_drift,
     })
 }
 
@@ -212,6 +256,9 @@ async fn cmd_fit(args: &[String]) -> i32 {
         }
     };
     let mut cases: Vec<CalibrationCase> = Vec::new();
+    // Kept verbatim for the drift digest: it is the BANK CONTENT that
+    // decides whether two runs measured the same thing, not the paths.
+    let mut raw_banks: Vec<String> = Vec::new();
     for f in &files {
         let raw = match std::fs::read_to_string(f) {
             Ok(r) => r,
@@ -227,6 +274,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
                 return 2;
             }
         }
+        raw_banks.push(raw);
     }
     if !opts.axes.is_empty() {
         cases.retain(|c| opts.axes.contains(&c.axis));
@@ -451,26 +499,115 @@ async fn cmd_fit(args: &[String]) -> i32 {
         }
     }
 
+    // ── Drift against the last recorded run ──────────────────────
+    let snapshot = FitSnapshot {
+        embed_model: slot.file.clone(),
+        banks: files.iter().map(|f| f.display().to_string()).collect(),
+        bank_digest: bank_digest(&raw_banks),
+        axes: reports.clone(),
+    };
+    let dir = opts
+        .baseline_dir
+        .clone()
+        .unwrap_or_else(|| baseline_dir_for_bank(&root, &bank_path));
+
+    let drift = if opts.no_drift {
+        None
+    } else {
+        match crate::bench_cmd::baselines::read_latest_at::<FitSnapshot>(&dir) {
+            Ok(Some(mut base)) => {
+                // An `--axis` run measured a subset. Diffing it whole
+                // would report every axis it did not ask for as
+                // vanished, which is a fact about the flag, not the
+                // router.
+                if !opts.axes.is_empty() {
+                    base.axes.retain(|k, _| opts.axes.contains(k));
+                }
+                Some(compare(&base, &snapshot))
+            }
+            Ok(None) => None,
+            Err(e) => {
+                eprintln!("router fit: baseline unreadable, skipping drift ({e})");
+                None
+            }
+        }
+    };
+
+    // Written AFTER the comparison, so `--save-baseline` on a drifting
+    // run still shows you the drift it is about to overwrite.
+    let saved = if opts.save_baseline {
+        match crate::bench_cmd::baselines::write_dated_and_update_latest_at(&dir, &snapshot) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("router fit: write baseline into {}: {e}", dir.display());
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
     if opts.json {
         let payload = serde_json::json!({
             "embed_model": slot.file,
             "banks": files.iter().map(|f| f.display().to_string()).collect::<Vec<_>>(),
+            "bank_digest": snapshot.bank_digest,
             "cases_total": cases.len(),
             "skipped": skipped.iter().map(|(id, ax)| serde_json::json!({"id": id, "axis": ax})).collect::<Vec<_>>(),
             "axes": &reports,
+            "drift": drift.as_ref().map(drift_json),
+            "baseline_written": saved.as_ref().map(|p| p.display().to_string()),
         });
         println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
     } else {
         print_human(&reports, &shipped, &skipped, &slot.file);
+        match &drift {
+            Some(d) => print_drift(d, &dir),
+            None if !opts.no_drift => println!(
+                "No baseline under {} — nothing to diff against yet.\n\
+                 `--save-baseline` records this run as the first one.\n",
+                dir.display()
+            ),
+            None => {}
+        }
+        if let Some(p) = &saved {
+            println!("baseline written: {}", p.display());
+        }
     }
 
-    // Exit 3 when any axis could be improved — a CI-friendly signal,
-    // matching `router-cache check`'s "stale" convention.
-    if reports.values().any(|r| r.would_change()) {
+    // 4 beats 3: "the ground moved under a constant you did not touch"
+    // is a different, more urgent fact than "this constant could be
+    // tuned", and CI should be able to fail on one without the other.
+    if drift.as_ref().is_some_and(DriftReport::is_regression) {
+        4
+    } else if reports.values().any(|r| r.would_change()) {
+        // Exit 3 when any axis could be improved — a CI-friendly
+        // signal, matching `router-cache check`'s "stale" convention.
         3
     } else {
         0
     }
+}
+
+/// `sovereign/bench/routing/baselines/<bank>-fit/`.
+///
+/// `<bank>` is the bank file's stem, or the directory's name when the
+/// whole calibration directory was swept — so a default run lands in
+/// `calibration-fit/`, alongside the `<bench>-routing` / `<bench>-synth`
+/// directories the same tree already uses.
+fn baseline_dir_for_bank(root: &Path, bank_path: &Path) -> PathBuf {
+    let stem = if bank_path.is_file() {
+        bank_path.file_stem()
+    } else {
+        bank_path.file_name()
+    }
+    .and_then(|s| s.to_str())
+    .unwrap_or("calibration");
+    crate::bench_cmd::baselines::baseline_dir(
+        &root.join("sovereign").join("bench"),
+        "routing",
+        &format!("{stem}-fit"),
+    )
 }
 
 type Built = (
@@ -571,9 +708,17 @@ fn print_human(
     for (axis, r) in reports {
         println!("── {axis} ──────────────────────────────────────────");
         println!(
-            "  {} cases · {} gates evaluated",
-            r.cases_scored, r.gates_evaluated
+            "  {} cases ({} must fire · {} must abstain) · {} gates evaluated",
+            r.cases_scored, r.positives, r.negatives, r.gates_evaluated
         );
+        if r.underpowered() {
+            println!(
+                "  ! UNDERPOWERED — fewer than {} cases in one class. Read the\n    \
+                 shipped numbers, not the fitted gate: an optimum found on this\n    \
+                 few cases describes the sample, not the axis. Add cases first.",
+                sovereign_core::router_calibration::MIN_CASES_PER_CLASS
+            );
+        }
         print_outcome("shipped", &r.current);
         match &r.best {
             Some(b) => {
@@ -609,7 +754,176 @@ fn print_human(
         println!();
     }
     println!(
-        "Nothing was written. A calibration that edits the constants it \n\
+        "No constant was written. A calibration that edits the constants it \n\
          measures is the opaque loop this replaces."
     );
+    println!();
+}
+
+/// The before/after block.
+///
+/// Deltas print whether or not the run is attributable — they are the
+/// operator's evidence and withholding them would be the opposite of
+/// the point — but the header says plainly which of the two this is,
+/// and only an attributable run is allowed to say "REGRESSED".
+fn print_drift(d: &DriftReport, dir: &Path) {
+    let when = match crate::bench_cmd::baselines::baseline_age(dir) {
+        Some((date, days)) => format!("{date} ({days}d ago)"),
+        None => "an undated baseline".to_string(),
+    };
+    println!("── drift vs {when} ──────────────────────");
+    println!("  baseline  {}", dir.display());
+    if d.same_model() {
+        println!("  encoder   {} (unchanged)", d.current_model);
+    } else {
+        println!(
+            "  encoder   {} → {}   CHANGED",
+            d.baseline_model, d.current_model
+        );
+    }
+    if d.same_bank() {
+        println!("  bank      {} (unchanged)", d.current_digest);
+    } else {
+        println!(
+            "  bank      {} → {}   CHANGED",
+            d.baseline_digest, d.current_digest
+        );
+    }
+
+    if !d.attributable() {
+        println!(
+            "\n  ! NOT ATTRIBUTABLE. What follows are real differences between two\n  \
+               runs, but not between two measurements of the same thing: cosines\n  \
+               from another encoder live in another space, and another bank asks\n  \
+               other questions. Nothing below is called a regression. Once the\n  \
+               change is deliberate, re-record with --save-baseline."
+        );
+    }
+    println!();
+
+    for a in &d.axes {
+        match &a.change {
+            AxisChange::Appeared => {
+                println!("  {:<13} not in the baseline — nothing to diff", a.axis)
+            }
+            AxisChange::Vanished => println!(
+                "  {:<13} SCORED IN THE BASELINE, ABSENT NOW — a classifier failed\n\
+                 {:<15} to build or a bank section was removed",
+                a.axis, ""
+            ),
+            AxisChange::Compared(x) => print_axis_delta(&a.axis, x, d.attributable()),
+        }
+    }
+
+    println!();
+    let regressions = d.regressions();
+    if regressions.is_empty() {
+        if d.attributable() {
+            println!(
+                "No axis lost headroom. Encoder, bank and all twelve constants still\n\
+                 agree with the last recorded run.\n"
+            );
+        }
+    } else {
+        let names: Vec<&str> = regressions.iter().map(|a| a.axis.as_str()).collect();
+        println!(
+            "→ REGRESSED on {}: {}.\n  \
+               Same encoder, same bank — so what moved is the score distribution,\n  \
+               not the question. Read the cushions above before touching a constant:\n  \
+               the fix for a closing cushion is usually an exemplar, not a threshold.\n",
+            if names.len() == 1 { "1 axis" } else { "several axes" },
+            names.join(", ")
+        );
+    }
+}
+
+fn print_axis_delta(axis: &str, x: &AxisDelta, attributable: bool) {
+    let flag = if attributable && x.regressed() {
+        "   REGRESSED"
+    } else {
+        ""
+    };
+    println!(
+        "  {axis:<13} separation {:.3} → {:.3} ({:+.3}) · errors {} → {} · coverage {:.0}% → {:.0}%{flag}",
+        x.separation_before,
+        x.separation_after,
+        x.d_separation(),
+        x.errors_before,
+        x.errors_after,
+        x.coverage_before * 100.0,
+        x.coverage_after * 100.0,
+    );
+    // The cushion pair IS the early warning — separation is their
+    // difference, and a shrinking one can come from either end.
+    println!(
+        "                weakest-accept {} → {} · nearest-miss {} → {}",
+        fmt_cushion(x.weakest_accept_before),
+        fmt_cushion(x.weakest_accept_after),
+        fmt_cushion(x.nearest_miss_before),
+        fmt_cushion(x.nearest_miss_after),
+    );
+    if x.gate_moved() {
+        println!(
+            "                GATE MOVED sim {:.3}→{:.3} margin {:.3}→{:.3} — a human\n\
+             \x20               edited this, so the separation change follows from it",
+            x.gate_before.min_sim,
+            x.gate_after.min_sim,
+            x.gate_before.min_margin,
+            x.gate_after.min_margin,
+        );
+    }
+    if x.cases_changed() {
+        println!(
+            "                bank cases {} → {} — the axis is being asked a\n\
+             \x20               different question than it was",
+            x.cases_before, x.cases_after
+        );
+    }
+}
+
+fn drift_json(d: &DriftReport) -> serde_json::Value {
+    let axes: Vec<serde_json::Value> = d
+        .axes
+        .iter()
+        .map(|a| match &a.change {
+            AxisChange::Appeared => serde_json::json!({"axis": a.axis, "status": "appeared"}),
+            AxisChange::Vanished => serde_json::json!({"axis": a.axis, "status": "vanished"}),
+            AxisChange::Compared(x) => serde_json::json!({
+                "axis": a.axis,
+                "status": "compared",
+                "separation_before": x.separation_before,
+                "separation_after": x.separation_after,
+                "d_separation": x.d_separation(),
+                "errors_before": x.errors_before,
+                "errors_after": x.errors_after,
+                "d_coverage": x.d_coverage(),
+                "cases_before": x.cases_before,
+                "cases_after": x.cases_after,
+                "gate_moved": x.gate_moved(),
+                "regressed": attributable_regression(x, d.attributable()),
+            }),
+        })
+        .collect();
+    serde_json::json!({
+        "attributable": d.attributable(),
+        "same_model": d.same_model(),
+        "same_bank": d.same_bank(),
+        "baseline_model": d.baseline_model,
+        "current_model": d.current_model,
+        "baseline_digest": d.baseline_digest,
+        "current_digest": d.current_digest,
+        "regressed": d.is_regression(),
+        "axes": axes,
+    })
+}
+
+/// A per-axis regression flag that agrees with the report-level one.
+///
+/// `AxisDelta::regressed` answers "did this axis get worse", which is
+/// only a claim about the router when the run is attributable. Emitting
+/// the raw per-axis value next to `"regressed": false` at the top would
+/// let a JSON consumer read a regression the tool explicitly refused to
+/// assert.
+fn attributable_regression(x: &AxisDelta, attributable: bool) -> bool {
+    attributable && x.regressed()
 }

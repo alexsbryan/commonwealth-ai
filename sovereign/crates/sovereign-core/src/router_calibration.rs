@@ -329,7 +329,22 @@ pub fn fit(
     let sims: Vec<f32> = cases.iter().map(|c| c.score.sim_positive).collect();
     let margins: Vec<f32> = cases.iter().map(|c| c.score.margin()).collect();
     let sim_cands = candidates(&sims);
-    let margin_cands = candidates(&margins);
+
+    // A NEGATIVE margin threshold would admit scores where the
+    // negative class beat the positive one — "fire even though the
+    // evidence points the other way". That is not a gate, it is the
+    // absence of one, and an unconstrained sweep over a small bank
+    // will happily propose it (observed 2026-07-28: the archive and
+    // scope axes both fitted to margin <= -0.10 on 3-4 cases, which
+    // scored perfectly and meant nothing). The margin floor is a
+    // semantic constraint on the axis, not a hyperparameter.
+    let mut margin_cands: Vec<f32> = candidates(&margins)
+        .into_iter()
+        .filter(|m| *m >= 0.0)
+        .collect();
+    if margin_cands.is_empty() {
+        margin_cands.push(0.0);
+    }
 
     let mut best: Option<GateOutcome> = None;
     let mut evaluated = 0usize;
@@ -355,13 +370,25 @@ pub fn fit(
         }
     }
 
+    let positives = cases.iter().filter(|c| c.expect.is_some()).count();
     Some(FitReport {
         current: evaluate(cases, current),
         best,
         cases_scored: cases.len(),
         gates_evaluated: evaluated,
+        positives,
+        negatives: cases.len() - positives,
     })
 }
+
+/// Below this many cases in EITHER class, a fitted optimum is an
+/// artefact of the sample rather than a property of the axis.
+///
+/// Not a statistical result — a floor chosen so the report cannot
+/// present a 3-case fit with the same confidence as a 30-case one.
+/// This is the guard the prior art lacks: semantic-router's headline
+/// 34.85% -> 90.91% is fitted and reported on the SAME 66 rows.
+pub const MIN_CASES_PER_CLASS: usize = 5;
 
 /// The side-by-side a human needs to decide whether to move a
 /// constant.
@@ -375,9 +402,21 @@ pub struct FitReport {
     pub best: Option<GateOutcome>,
     pub cases_scored: usize,
     pub gates_evaluated: usize,
+    /// Cases that must fire.
+    pub positives: usize,
+    /// Cases that must abstain.
+    pub negatives: usize,
 }
 
 impl FitReport {
+    /// Too few cases in one class for the fitted gate to mean
+    /// anything. A report that is `underpowered` should be read as
+    /// "this axis needs more calibration cases", never as "move the
+    /// constant".
+    pub fn underpowered(&self) -> bool {
+        self.positives < MIN_CASES_PER_CLASS || self.negatives < MIN_CASES_PER_CLASS
+    }
+
     /// Would moving to `best` change any decision on this bank?
     ///
     /// A `false` here is the healthy steady state: the shipped gate is
@@ -755,6 +794,63 @@ mod tests {
             !r.would_change(),
             "an already-optimal gate must not be reported as movable"
         );
+    }
+
+    /// A gate with a negative margin floor fires when the NEGATIVE
+    /// class scored higher. Observed for real on 2026-07-28: the
+    /// archive and scope axes both fitted to margin <= -0.10 on 3-4
+    /// cases, scoring perfectly and meaning nothing.
+    #[test]
+    fn fit_never_proposes_a_negative_margin_gate() {
+        let bank = vec![
+            // A "positive" whose negative class actually won.
+            ScoredCase {
+                id: "inverted".into(),
+                score: AxisScore::new(0.60, 0.70),
+                expect: Some("a".into()),
+                predicted: Some("a".into()),
+            },
+            case("n", 0.20, 0.10, None, "a"),
+        ];
+        let best = fit(&bank, AxisGate::new(0.5, 0.04), Objective::Accuracy)
+            .unwrap()
+            .best
+            .unwrap();
+        assert!(
+            best.min_margin >= 0.0,
+            "fitted a negative margin floor: {}",
+            best.min_margin
+        );
+        assert_eq!(
+            best.fired_correct, 0,
+            "the inverted case must not be admitted by any legal gate"
+        );
+    }
+
+    #[test]
+    fn underpowered_flags_a_bank_too_small_to_trust() {
+        // 3 positives / 2 negatives — the shape that produced the
+        // meaningless fits above.
+        let small = vec![
+            case("p1", 0.70, 0.50, Some("a"), "a"),
+            case("p2", 0.68, 0.50, Some("a"), "a"),
+            case("p3", 0.66, 0.50, Some("a"), "a"),
+            case("n1", 0.20, 0.40, None, "a"),
+            case("n2", 0.22, 0.40, None, "a"),
+        ];
+        let r = fit(&small, AxisGate::new(0.5, 0.04), Objective::Accuracy).unwrap();
+        assert_eq!(r.positives, 3);
+        assert_eq!(r.negatives, 2);
+        assert!(r.underpowered(), "3/2 must be flagged");
+
+        // Ten of each clears the floor.
+        let mut big = small.clone();
+        for i in 0..7 {
+            big.push(case(&format!("px{i}"), 0.70, 0.50, Some("a"), "a"));
+            big.push(case(&format!("nx{i}"), 0.20, 0.40, None, "a"));
+        }
+        let r2 = fit(&big, AxisGate::new(0.5, 0.04), Objective::Accuracy).unwrap();
+        assert!(!r2.underpowered());
     }
 
     #[test]

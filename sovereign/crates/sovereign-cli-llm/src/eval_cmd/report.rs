@@ -14,6 +14,7 @@
 use std::collections::BTreeMap;
 
 use crate::eval_cmd::bank::{EvalBank, LatencyBudget};
+use crate::eval_cmd::routing_metrics::RoutingMetrics;
 use crate::eval_cmd::runner::{EvalResult, EvalRun};
 
 pub fn print_text(run: &EvalRun, inspect: bool, bank: Option<&EvalBank>) {
@@ -521,19 +522,15 @@ pub fn print_routing(run: &crate::eval_cmd::runner::RoutingRun) {
         );
     }
 
-    // Per-category rollup.
+    // Per-category rollup. Category is the bank's own axis and has no
+    // equivalent in `RoutingMetrics`, which is keyed by layer and by
+    // intent — so this stays hand-rolled.
     let mut by_cat: BTreeMap<String, (usize, usize, u64)> = BTreeMap::new();
-    let mut total_correct = 0usize;
-    let mut total_latency: u64 = 0;
     for r in &run.results {
         let entry = by_cat.entry(r.category.clone()).or_default();
         entry.0 += if r.correct { 1 } else { 0 };
         entry.1 += 1;
         entry.2 += r.latency_ms;
-        if r.correct {
-            total_correct += 1;
-        }
-        total_latency += r.latency_ms;
     }
     println!("\n─── per category ───");
     for (cat, (correct, total, lat_sum)) in &by_cat {
@@ -544,16 +541,15 @@ pub fn print_routing(run: &crate::eval_cmd::runner::RoutingRun) {
         };
         println!("  {cat:<26} {correct}/{total} correct  avg {avg_ms}ms");
     }
-    let n = run.results.len();
-    let avg_total = if n > 0 { total_latency / n as u64 } else { 0 };
-    let pct = if n > 0 {
-        100.0 * total_correct as f32 / n as f32
-    } else {
-        0.0
-    };
-    println!(
-        "\n─── overall ───\n  {total_correct}/{n} correct ({pct:.0}%)  avg {avg_total}ms per classify"
-    );
+
+    // Derived here from `results` rather than read off `run.metrics`.
+    // That field is `#[serde(default)]`, so a run deserialized from a
+    // baseline written before it existed carries an EMPTY block, and
+    // printing it would silently report 0/0 on a run that scored fine.
+    // `results` is the authoritative source and cannot be stale; the
+    // recomputation is one pass over a few dozen rows.
+    println!("\n─── overall ───");
+    print!("{}", RoutingMetrics::from_results(&run.results).render());
 }
 
 pub fn write_routing_json_file(

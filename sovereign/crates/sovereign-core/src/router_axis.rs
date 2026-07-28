@@ -166,12 +166,41 @@ mod tests {
         assert!(!GATE.admits(AxisScore::new(0.20, 0.19)));
     }
 
+    /// The gates are `>=`, not `>` — but only for values the binary
+    /// representation can hit exactly.
+    ///
+    /// This test originally asserted `AxisScore::new(0.50, 0.46)`
+    /// clears a `min_margin` of 0.04 and FAILED: as f32,
+    /// `0.50 - 0.46 = 0.03999999165534973`, which is below 0.04. The
+    /// subtraction, not the comparison, is where the boundary moves.
+    ///
+    /// That is the reason [`crate::router_calibration::candidates`]
+    /// proposes MIDPOINTS between observed scores rather than the
+    /// observed values themselves. A threshold placed exactly on an
+    /// observation is a coin flip at the ULP level; one placed halfway
+    /// between two observations cannot be. The inclusive comparison is
+    /// real, but nothing in production is allowed to depend on it.
     #[test]
-    fn gates_are_inclusive_at_the_boundary() {
-        // Exactly on both thresholds fires — `>=`, not `>`. The
-        // calibration sweep derives candidate thresholds from observed
-        // scores and relies on this.
-        assert!(GATE.admits(AxisScore::new(0.50, 0.46)));
+    fn gates_are_inclusive_at_exactly_representable_boundaries() {
+        // 0.5 and 0.25 are exact in binary; their difference is too.
+        let gate = AxisGate::new(0.5, 0.25);
+        let exactly_on_both = AxisScore::new(0.5, 0.25);
+        assert_eq!(exactly_on_both.margin(), 0.25);
+        assert!(gate.admits(exactly_on_both), "`>=` must include equality");
+        assert_eq!(gate.cushion(exactly_on_both), 0.0, "zero headroom");
+    }
+
+    /// The companion warning, pinned so nobody "fixes" the midpoint
+    /// logic back to observed values.
+    #[test]
+    fn a_boundary_built_from_inexact_decimals_can_fall_the_wrong_way() {
+        let gate = AxisGate::new(0.50, 0.04);
+        let nominally_on_the_boundary = AxisScore::new(0.50, 0.46);
+        assert!(
+            !gate.admits(nominally_on_the_boundary),
+            "0.50-0.46 is 0.0399999… in f32, so this does NOT clear 0.04 — \
+             thresholds must never be placed on an observed value"
+        );
     }
 
     /// The real regression this abstraction was extracted to make

@@ -26,7 +26,10 @@
 
 mod all;
 mod atlas;
-mod baselines;
+// Crate-visible: `router fit` records its calibration snapshots under
+// the same dated-JSON + `latest.json` convention rather than inventing
+// a second on-disk layout for the same job.
+pub(crate) mod baselines;
 mod book_report;
 mod chaos_monkey;
 mod desktop_bridge;

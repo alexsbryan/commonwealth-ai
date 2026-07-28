@@ -5,6 +5,11 @@ Conventions enforced for the Svelte 5 + Tauri 2 desktop frontend at
 [`../../ARCH_PRINCIPLES.md`](../../ARCH_PRINCIPLES.md) — these are
 the frontend-specific addenda.
 
+**Verifying your change:** this file says which tool to test a given
+kind of code with. [`QUALITY_SURFACE.md`](./QUALITY_SURFACE.md) says
+what every gate is, how to run it, which flags are load-bearing, and
+what CI does not run. Read that before assembling commands by hand.
+
 ---
 
 ## State management — three tiers, smallest fit wins

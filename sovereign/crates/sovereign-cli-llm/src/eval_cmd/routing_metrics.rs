@@ -236,6 +236,11 @@ impl RoutingMetrics {
     }
 
     /// Multi-line glassbox block for `--human` output.
+    ///
+    /// Printed by `report::print_routing` under `─── overall ───`. It
+    /// is the whole point of this module reaching the operator: the
+    /// accuracy line alone is what the router already reported, and
+    /// the four blocks under it are what accuracy could not say.
     pub fn render(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
@@ -243,6 +248,10 @@ impl RoutingMetrics {
             self.correct,
             self.total,
             self.accuracy() * 100.0
+        ));
+        out.push_str(&format!(
+            "  mean latency   {}ms per classify\n",
+            self.mean_latency_ms()
         ));
         out.push_str("  layer attribution (who decided, and how fast)\n");
         for (layer, s) in &self.layers {
@@ -428,5 +437,45 @@ mod tests {
         assert!(h.contains("5/5"), "got: {h}");
         assert!(h.contains("embed-layer 40%"), "got: {h}");
         assert!(h.contains("1122ms"), "got: {h}");
+    }
+
+    /// The block `report::print_routing` prints must actually carry
+    /// the four things the module docs say accuracy cannot say —
+    /// otherwise the printer is showing the operator a number they
+    /// already had.
+    ///
+    /// Asserted by content, not by golden string: the layout is
+    /// allowed to change, the disclosures are not.
+    #[test]
+    fn render_discloses_what_accuracy_alone_cannot() {
+        let mut rows = mixed_bank();
+        // One misroute, so per-intent and confusions are non-empty.
+        rows.push(row("f", "code_query", "knowledge_query", None, 40));
+        let r = RoutingMetrics::from_results(&rows).render();
+
+        // 1. the accuracy it already had, and how long it cost.
+        assert!(r.contains("5/6"), "accuracy line missing\n{r}");
+        assert!(r.contains("mean latency"), "latency line missing\n{r}");
+        // 2. which layer decided, and the coverage that a fit can move.
+        assert!(r.contains(EMBED_LAYER), "layer attribution missing\n{r}");
+        assert!(r.contains("embed-layer coverage"), "coverage missing\n{r}");
+        // 3. which class carries the errors.
+        assert!(r.contains("per-intent"), "per-intent block missing\n{r}");
+        assert!(r.contains("code_query"), "the weak intent is unnamed\n{r}");
+        // 4. what it confused with what.
+        assert!(r.contains("confusions"), "confusion block missing\n{r}");
+        assert!(
+            r.contains("code_query") && r.contains("knowledge_query"),
+            "the confusion pair is unnamed\n{r}"
+        );
+    }
+
+    /// A run with nothing in it renders a block, not a panic and not
+    /// an empty string — the printer calls this unconditionally.
+    #[test]
+    fn render_survives_an_empty_run() {
+        let r = RoutingMetrics::from_results(&[]).render();
+        assert!(r.contains("0/0"), "got: {r}");
+        assert!(!r.is_empty());
     }
 }

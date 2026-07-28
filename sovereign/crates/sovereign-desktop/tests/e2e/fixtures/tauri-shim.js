@@ -153,10 +153,21 @@
       client_port: 9741,
       has_config_toml: true,
     }),
+    // MUST match the `HardwareInfo` interface in src/lib/types.ts. The
+    // previous default ({ ram_gb, cpu_cores, gpu }) was a shape that no
+    // consumer reads, and the cost was invisible: `effectiveMemoryBytes`
+    // returned `undefined * GIB` = NaN, so the Settings budget meter was
+    // pinned to the "ok" band in every synthetic run no matter what
+    // models were selected — the guard it exists to enforce could not
+    // fire, and `ModelSelector`'s header threw on `system_ram_gb
+    // .toFixed(0)` the moment a slot was expanded. A stub with the wrong
+    // shape does not fail; it silently makes the surface untestable.
     detect_hardware: () => ({
-      ram_gb: 32,
-      cpu_cores: 8,
-      gpu: null,
+      system_ram_gb: 32,
+      gpu_available: false,
+      gpu_name: null,
+      gpu_memory_gb: null,
+      is_unified_memory: false,
     }),
     list_conversations: () => [],
     // A notebook's Ask-tab history. Default empty; specs that exercise
