@@ -44,51 +44,21 @@ sshd on port 2222** via a LaunchAgent: no sudo, runs as `alexsbryan`, accepts
 exactly one key, forced-command only, and system Remote Login stays OFF.
 (Smaller surface than Remote Login, not a workaround.)
 
-Run as `alexsbryan` on BeefyMac:
+One command, run as the login user on the Mac (repo pulled first):
 
 ```bash
-# 1. Wrapper must exist + be executable (git pull once ops-channel.sh is committed)
-chmod +x ~/dev/commonwealth-ai/scripts/ops-channel.sh
-
-# 2. Private sshd instance dir: host key, config, restricted authorized_keys
-mkdir -p ~/.svrn-ops && chmod 700 ~/.svrn-ops && cd ~/.svrn-ops
-ssh-keygen -q -t ed25519 -N '' -f host_key
-cat > sshd_config <<EOF
-Port 2222
-HostKey $HOME/.svrn-ops/host_key
-PidFile $HOME/.svrn-ops/sshd.pid
-AuthorizedKeysFile $HOME/.svrn-ops/authorized_keys
-PubkeyAuthentication yes
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-UsePAM no
-StrictModes no
-LogLevel VERBOSE
-EOF
-cat > authorized_keys <<'EOF'
-restrict,command="/Users/alexsbryan/dev/commonwealth-ai/scripts/ops-channel.sh" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII54RkuTeAumX6oc+gFevl6opDD9vrDdzyNMmEMD/+Sz svrn-ops
-EOF
-chmod 600 authorized_keys host_key
-
-# 3. LaunchAgent so it survives reboots (runs whenever alexsbryan is logged in)
-cat > ~/Library/LaunchAgents/com.svrn.ops-sshd.plist <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.svrn.ops-sshd</string>
-  <key>ProgramArguments</key><array>
-    <string>/usr/sbin/sshd</string>
-    <string>-D</string>
-    <string>-f</string><string>$HOME/.svrn-ops/sshd_config</string>
-    <string>-E</string><string>$HOME/.svrn-ops/sshd.log</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-</dict></plist>
-EOF
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.svrn.ops-sshd.plist
-launchctl print gui/$(id -u)/com.svrn.ops-sshd | head -5   # state should be 'running'
+bash ~/dev/commonwealth-ai/scripts/ops-channel-setup-macos.sh
 ```
+
+The script is idempotent (safe to re-run; re-bootstraps the LaunchAgent) and
+prints `OK: ops-channel sshd listening on :2222` on success. It authorizes the
+default svrn-ops client key (RuggedFox); pass a different pubkey as `$1` to
+authorize another client. It derives the forced-command path from its own repo
+location — no hardcoded home directory.
+
+What it sets up: `~/.svrn-ops/` (host key, sshd_config, single-key
+`authorized_keys`) + `~/Library/LaunchAgents/com.svrn.ops-sshd.plist` running
+`/usr/sbin/sshd -D` on port 2222 as the login user.
 
 If the macOS application firewall is on, the first incoming connection pops an
 "Allow sshd?" dialog — click Allow (no admin credentials needed).
