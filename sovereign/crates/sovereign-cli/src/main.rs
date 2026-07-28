@@ -52,6 +52,7 @@ mod refresh_cmd;
 mod rough_edges_cmd;
 mod serve_cmd;
 mod session_cmd;
+mod session_lineage;
 mod sibling;
 mod status_cmd;
 mod stop_cmd;

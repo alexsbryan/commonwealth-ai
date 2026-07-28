@@ -394,6 +394,7 @@ fn worker_allowlist() -> Option<Vec<String>> {
 pub(super) fn spawn_rpc_worker_discovery(
     daemon: Arc<EmbeddedDaemon>,
     engine_handle: Option<Arc<EmbeddedLlamaCpp>>,
+    distributed_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
 ) {
     // Mesh RPC-worker auto-discovery. With `SOVEREIGN_RPC_DISCOVER` set, this
     // host periodically scans peers' `/status` for advertised RPC workers and
@@ -415,6 +416,13 @@ pub(super) fn spawn_rpc_worker_discovery(
         sovereign_mesh::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));
         let daemon_for_disco = Arc::clone(&daemon);
         let engine_for_reload = engine_handle.clone();
+        let distributed_slot = distributed_slot.clone();
+        // Distributed-primary child state, shared with the warm task because a
+        // warm can take minutes of GGUF transfer and must never block the 15s
+        // discovery tick.
+        let child_state: Arc<std::sync::Mutex<ChildDistributionState>> =
+            Arc::new(std::sync::Mutex::new(ChildDistributionState::default()));
+        let child_busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
         // Supervised: a panic here used to silently freeze worker
         // discovery + shared-model host failover for the rest of the
         // process's life (DAEMON_RESILIENCE.md P0.4). Loop state
@@ -425,6 +433,9 @@ pub(super) fn spawn_rpc_worker_discovery(
             let engine_for_reload = engine_for_reload.clone();
             let snapshot = Arc::clone(&snapshot);
             let eligibility = std::sync::Arc::clone(&eligibility);
+            let distributed_slot = distributed_slot.clone();
+            let child_state = Arc::clone(&child_state);
+            let child_busy = Arc::clone(&child_busy);
             async move {
                 // `last_loaded` = worker set the resident primary was loaded across;
                 // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
@@ -509,10 +520,30 @@ pub(super) fn spawn_rpc_worker_discovery(
                         was_host = am_host;
                     }
 
+                    // In child mode the loop can't track "what is loaded"
+                    // locally — the warm completes asynchronously — so it reads
+                    // the shared cell the warm task writes. The comparison is
+                    // against the worker set we last ACTED ON, not the set that
+                    // ended up warm: a warm can legitimately place on a subset
+                    // (a worker that went ineligible between discovery and
+                    // planning), and comparing against the subset would make
+                    // `changed` true forever and respawn the child every tick.
+                    let mut retry_due = false;
+                    if distributed_slot.is_some() {
+                        let st = child_state
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        last_loaded = st.attempted.clone();
+                        retry_due = st
+                            .retry_at
+                            .map(|t| std::time::Instant::now() >= t)
+                            .unwrap_or(false);
+                    }
+
                     // Reload when the worker set CHANGES (grow or shrink) vs what's
                     // loaded, once it's been stable briefly. A shrink prunes the dead
                     // worker's device on reload (live_device_list_if_pruning_needed).
-                    let changed = current != last_loaded;
+                    let changed = current != last_loaded || retry_due;
                     // Shrink-fast-prune: if a worker the resident primary is loaded
                     // ACROSS dropped out of the eligible set, reload IMMEDIATELY — the
                     // dead worker must be pruned (live_device_list_if_pruning_needed)
@@ -535,8 +566,60 @@ pub(super) fn spawn_rpc_worker_discovery(
                             "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
                         );
                         }
-                        match &engine_for_reload {
-                            Some(engine) => {
+                        match (&distributed_slot, &engine_for_reload) {
+                            // ── Child mode: the primary lives in a supervised
+                            // child, so a worker-set change is a KILL + RESPAWN,
+                            // never an in-place reload. An in-place reload has to
+                            // free the old sharded model's buffers on workers that
+                            // may already be gone, and ggml's RPC client aborts the
+                            // process on a dead endpoint — that is exactly how the
+                            // daemon died on 2026-07-27 (note c4ef6fa0), from this
+                            // very code path.
+                            (Some(slot), _) => {
+                                if child_busy.load(std::sync::atomic::Ordering::SeqCst) {
+                                    tracing::debug!(
+                                        "distributed primary: warm/respawn already in flight — skipping this tick"
+                                    );
+                                } else if current.is_empty() {
+                                    // No eligible workers: stay unavailable
+                                    // rather than fall back to a local load that
+                                    // would starve the host.
+                                    slot.retire("no eligible RPC workers");
+                                    if let Ok(mut st) = child_state.lock() {
+                                        st.attempted.clear();
+                                        st.retry_at = None;
+                                    }
+                                } else {
+                                    child_busy
+                                        .store(true, std::sync::atomic::Ordering::SeqCst);
+                                    // Record the attempt BEFORE it runs, so the
+                                    // next tick compares against it and does not
+                                    // queue a second warm behind this one.
+                                    if let Ok(mut st) = child_state.lock() {
+                                        st.attempted = current.clone();
+                                        st.retry_at = None;
+                                    }
+                                    let slot = Arc::clone(slot);
+                                    let child_state = Arc::clone(&child_state);
+                                    let child_busy = Arc::clone(&child_busy);
+                                    let workers = current.clone();
+                                    // Detached: warming seeds every worker's
+                                    // shard and can take minutes of GGUF
+                                    // transfer. The 15s tick must keep running
+                                    // (host election, eligibility) throughout.
+                                    tokio::spawn(async move {
+                                        respawn_distributed_primary(
+                                            slot,
+                                            workers,
+                                            child_state,
+                                        )
+                                        .await;
+                                        child_busy
+                                            .store(false, std::sync::atomic::Ordering::SeqCst);
+                                    });
+                                }
+                            }
+                            (None, Some(engine)) => {
                                 tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
                                 match engine.reload_primary().await {
                                     Ok(()) => last_loaded = current.clone(),
@@ -547,13 +630,145 @@ pub(super) fn spawn_rpc_worker_discovery(
                             }
                             // No primary handle (provider build failed) — keep the
                             // snapshot fresh so a later manual load still picks workers up.
-                            None => last_loaded = current.clone(),
+                            (None, None) => last_loaded = current.clone(),
                         }
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 }
             }
         });
+    }
+}
+
+/// Distributed-primary child state shared between the discovery loop and the
+/// detached warm task.
+#[derive(Default)]
+struct ChildDistributionState {
+    /// The eligible worker set the last warm+respawn ACTED ON — not the set
+    /// that ended up warm. Comparing against the attempt is what keeps a
+    /// partial placement (a worker that went ineligible between discovery and
+    /// planning) from looking like a permanent "changed" and respawning the
+    /// child on every tick.
+    attempted: Vec<String>,
+    /// When to try again after a refusal, even though nothing changed. Without
+    /// it, one transient warm failure against an otherwise stable worker set
+    /// would leave the primary down until a worker happened to join or leave.
+    retry_at: Option<std::time::Instant>,
+}
+
+/// How long to wait before re-attempting a refused warm against an unchanged
+/// worker set. Long enough that a genuinely-forming cluster isn't hammered,
+/// short enough that a transient failure isn't a permanent outage.
+const CHILD_WARM_RETRY: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Warm the mesh workers for the distributed primary, then respawn the compute
+/// child across exactly the set that warmed.
+///
+/// The split of labour is forced by what each process can reach: only the
+/// daemon can warm (the orchestrator needs the mesh member directory, the iroh
+/// transport bases, and the daemon's own ports), and only the child should
+/// load (ggml's RPC client aborts the process it runs in when a worker dies).
+/// So the daemon plans + warms, writes what it decided into a handoff file, and
+/// the child loads against it.
+///
+/// The plan crosses with the worker list on purpose. The shard plan is cached
+/// per `(model, worker set)` precisely because a worker's free VRAM shifts by
+/// its own cached shard, so re-planning after a warm cuts the blocks
+/// differently — and that cache is process-local. A child that re-planned would
+/// miss every warm cache and fall back to bulk weight send (the send()
+/// deadlock). Pinning the daemon's plan in the child keeps warm-time and
+/// load-time placement identical across the process boundary.
+async fn respawn_distributed_primary(
+    slot: Arc<sovereign_compute::manager::DynamicChildSlot>,
+    workers: Vec<String>,
+    child_state: Arc<std::sync::Mutex<ChildDistributionState>>,
+) {
+    use sovereign_inference::embedded::DistributedWarmOutcome;
+
+    /// Park the slot unavailable and schedule one retry, so a refusal against
+    /// an unchanged worker set is a delay, not a permanent outage.
+    fn refuse(
+        slot: &sovereign_compute::manager::DynamicChildSlot,
+        state: &std::sync::Mutex<ChildDistributionState>,
+        reason: &str,
+    ) {
+        slot.retire(reason);
+        if let Ok(mut st) = state.lock() {
+            st.retry_at = Some(std::time::Instant::now() + CHILD_WARM_RETRY);
+        }
+    }
+
+    tracing::info!(
+        target: "compute_child",
+        workers = ?workers,
+        model = %slot.model_path().display(),
+        "distributed primary: warming worker shards before respawning the child"
+    );
+
+    let model_path = slot.model_path().to_path_buf();
+    // Blocking: the warm orchestrator bridges to async with `block_on` and can
+    // run for minutes. It must not run on a runtime worker thread.
+    let outcome = match tokio::task::spawn_blocking(move || {
+        sovereign_inference::embedded::warm_distributed_primary(&model_path)
+    })
+    .await
+    {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!(error = %e, "distributed primary: warm task panicked");
+            refuse(&slot, &child_state, "warm task panicked");
+            return;
+        }
+    };
+
+    match outcome {
+        DistributedWarmOutcome::Warm { endpoints, plan } => {
+            let handoff = sovereign_compute::distribution::DistributionHandoff {
+                endpoints: endpoints.clone(),
+                plan,
+            };
+            match slot.respawn_distributed(&handoff) {
+                Ok(()) => {
+                    tracing::info!(
+                        target: "compute_child",
+                        attempted = ?workers,
+                        warmed = ?endpoints,
+                        "distributed primary: child respawned across the warmed worker set"
+                    );
+                    // The attempt already recorded `workers`; clear the retry
+                    // timer. Placing on a SUBSET of the eligible set is a
+                    // normal outcome (a worker can go ineligible between
+                    // discovery and planning) and must not read as "changed".
+                    if let Ok(mut st) = child_state.lock() {
+                        st.retry_at = None;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "distributed primary: respawn failed");
+                    refuse(&slot, &child_state, "child respawn failed");
+                }
+            }
+        }
+        // Every refusal below is "stay unavailable" — the same posture the
+        // in-process path takes with InsufficientCluster/LocalUnfit. Falling
+        // back to a local load of a model this size is what collapsed the
+        // desktop session on 2026-07-27.
+        DistributedWarmOutcome::InsufficientCluster { eligible, quorum } => {
+            let reason = format!("cluster forming — {eligible} eligible anchor(s), quorum {quorum}");
+            tracing::info!(target: "compute_child", eligible, quorum, "distributed primary: {reason}");
+            refuse(&slot, &child_state, &reason);
+        }
+        DistributedWarmOutcome::Unplannable => {
+            refuse(
+                &slot,
+                &child_state,
+                "could not plan the shards (no RPC device, unreadable GGUF, or unmappable worker)",
+            );
+        }
+        DistributedWarmOutcome::WarmFailed { error } => {
+            tracing::warn!(target: "compute_child", %error, "distributed primary: warm failed");
+            refuse(&slot, &child_state, &format!("worker warm failed: {error}"));
+        }
     }
 }
 

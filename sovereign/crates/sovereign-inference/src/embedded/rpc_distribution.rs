@@ -930,8 +930,20 @@ pub(crate) fn local_fit_verdict(
 /// model that doesn't fit resolves to `LocalUnfit` — same no-load,
 /// stay-unavailable, retry-on-worker-change behaviour as
 /// `InsufficientCluster`. Glassbox: every refusal logs the numbers.
-fn gate_local(model_bytes: u64) -> LoadPlacement {
+fn gate_local(model_bytes: u64, cpu_only: bool) -> LoadPlacement {
     if model_bytes < local_fit_min_bytes() || local_fit_skip() {
+        return LoadPlacement::LocalOnly;
+    }
+    // CPU-only loads mmap the weights: file-backed, reclaimable page
+    // cache the kernel can evict under pressure. A headless box
+    // deliberately running a big model on CPU is a legitimate config
+    // and must not be refused. The incident class is GPU loads, where
+    // weights are PINNED in GTT/unified memory and the desktop starves.
+    if cpu_only {
+        tracing::info!(
+            model_mb = model_bytes / (1024 * 1024),
+            "local-fit gate: CPU-only load (mmap, reclaimable) — not gated"
+        );
         return LoadPlacement::LocalOnly;
     }
     let mut sys = sysinfo::System::new();
@@ -1076,8 +1088,9 @@ pub(crate) fn resolve_placement(
     model_path: &Path,
     model_bytes: u64,
     distributable: bool,
+    cpu_only: bool,
 ) -> LoadPlacement {
-    let placement = resolve_placement_inner(model_path, model_bytes, distributable);
+    let placement = resolve_placement_inner(model_path, model_bytes, distributable, cpu_only);
     if distributable {
         let summary = summarize_placement(&placement);
         tracing::info!(
@@ -1104,6 +1117,7 @@ fn resolve_placement_inner(
     model_path: &Path,
     model_bytes: u64,
     distributable: bool,
+    cpu_only: bool,
 ) -> LoadPlacement {
     let decision = classify_placement(
         distributable,
@@ -1115,7 +1129,7 @@ fn resolve_placement_inner(
     );
 
     let auto_warm = match decision {
-        PlacementDecision::LocalOnly => return gate_local(model_bytes),
+        PlacementDecision::LocalOnly => return gate_local(model_bytes, cpu_only),
         PlacementDecision::StreamSplit => {
             // Publish the workers so the stream path can enumerate + split them.
             register_rpc_workers();
@@ -1124,8 +1138,46 @@ fn resolve_placement_inner(
         PlacementDecision::OwnedOverrides { auto_warm } => auto_warm,
     };
 
-    // Owned-override path. Publish the workers, then plan the shards ONCE (shared
-    // by warm + load, so they can't diverge — the plan-agreement invariant).
+    match plan_and_warm(model_path, model_bytes, auto_warm) {
+        PlannedDistribution::Ready(dist) => LoadPlacement::OwnedOverrides(dist),
+        PlannedDistribution::Insufficient { eligible, quorum } => {
+            LoadPlacement::InsufficientCluster { eligible, quorum }
+        }
+        // Unplannable and warm-failure are both "never wedge" — load local,
+        // fit-gated. A later reload retries once the workers are reachable.
+        PlannedDistribution::Unplannable | PlannedDistribution::WarmFailed(_) => {
+            gate_local(model_bytes, cpu_only)
+        }
+    }
+}
+
+/// The result of planning (and optionally warming) a distributed placement —
+/// the shared tail of both the in-process load path ([`resolve_placement_inner`])
+/// and the out-of-process one ([`warm_distributed_primary`], which warms on
+/// behalf of a compute child). ONE code path, so the two cannot drift.
+enum PlannedDistribution {
+    /// Planned, quorum-approved, and (when asked) warm. Ready to load with `-ot`.
+    Ready(DistributionPlan),
+    /// Quorum or pooled memory unmet — the cluster is still forming.
+    Insufficient { eligible: usize, quorum: u32 },
+    /// No plan: no RPC device, unreadable block count, or an unmappable worker.
+    Unplannable,
+    /// The orchestrator ran and gave up.
+    WarmFailed(String),
+}
+
+/// Publish the workers, plan the shards ONCE, gate on quorum + pooled memory,
+/// and — when `auto_warm` — drive the injected orchestrator until every worker
+/// holds its shard.
+///
+/// The plan is computed once and consumed for BOTH warming and loading, so the
+/// two cannot disagree — the plan-agreement invariant that keeps every
+/// distributed weight a `SET_TENSOR_HASH` cache hit (no bulk send, no deadlock).
+///
+/// Blocking: the orchestrator bridges to async internally. Call it from a
+/// blocking context (a load thread or `spawn_blocking`), never from a runtime
+/// worker.
+fn plan_and_warm(model_path: &Path, model_bytes: u64, auto_warm: bool) -> PlannedDistribution {
     register_rpc_workers();
     let Some(dist) = plan_distribution(model_path) else {
         tracing::warn!(
@@ -1133,7 +1185,7 @@ fn resolve_placement_inner(
             "wanted to distribute a large primary but couldn't plan the shards (no RPC \
              device, GGUF block count unreadable, or unmappable worker) — loading local-only"
         );
-        return gate_local(model_bytes);
+        return PlannedDistribution::Unplannable;
     };
 
     // Quorum + pooled-memory gate (shared-model host): never attempt a load the
@@ -1150,7 +1202,7 @@ fn resolve_placement_inner(
             "shared-model cluster forming — quorum or pooled memory not met; not loading \
              (retries on the next worker-set change)"
         );
-        return LoadPlacement::InsufficientCluster {
+        return PlannedDistribution::Insufficient {
             eligible: dist.eligible_workers,
             quorum,
         };
@@ -1161,16 +1213,16 @@ fn resolve_placement_inner(
             workers = dist.assignments.len(),
             "SOVEREIGN_RPC_ASSUME_WARMED set — trusting worker shards are warm (skipping auto-warm)"
         );
-        return LoadPlacement::OwnedOverrides(dist);
+        return PlannedDistribution::Ready(dist);
     }
 
     // Auto-warm: ask the injected orchestrator to seed every worker's shard. It
-    // blocks until they're warm (or gives up). Any failure → local-only (never
-    // wedge); a later reload retries once the worker(s) are reachable.
+    // blocks until they're warm (or gives up). Any failure → the caller falls
+    // back (never wedge); a later reload retries once the workers are reachable.
     let Some(orchestrator) = RPC_WARM_ORCHESTRATOR.get() else {
         // classify_placement only returns auto_warm when an orchestrator is
-        // present, so this is unreachable in practice — but never wedge.
-        return gate_local(model_bytes);
+        // present, so this is unreachable from the load path — but never wedge.
+        return PlannedDistribution::WarmFailed("no warm orchestrator installed".to_string());
     };
     let req = RpcWarmPlan {
         model_path: model_path.to_path_buf(),
@@ -1187,7 +1239,7 @@ fn resolve_placement_inner(
             tracing::info!(
                 "auto-warm complete — all worker shards seeded; loading with -ot overrides"
             );
-            LoadPlacement::OwnedOverrides(dist)
+            PlannedDistribution::Ready(dist)
         }
         Err(e) => {
             tracing::warn!(
@@ -1195,9 +1247,106 @@ fn resolve_placement_inner(
                 "auto-warm failed — falling back to local (never wedge, fit-gated); a \
                  later reload will retry once the worker(s) are reachable"
             );
-            gate_local(model_bytes)
+            PlannedDistribution::WarmFailed(e)
         }
     }
+}
+
+// ─── Warming on behalf of a SEPARATE loader process (the compute child) ──────
+
+/// What the host learned when it warmed a distributed primary's worker shards
+/// on behalf of a **different process** — the `sovereign-compute` child that
+/// will hold the model and absorb ggml's uncatchable RPC abort.
+///
+/// Warming cannot move into the child: the orchestrator needs the mesh member
+/// directory, the iroh transport bases, and the daemon's resolved ports. So the
+/// daemon warms and hands the child the RESULT.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DistributedWarmOutcome {
+    /// Every worker holds its shard. `endpoints` is the worker set the child
+    /// loads across; `plan` is the shard plan they were warmed AGAINST and must
+    /// be pinned in the child via [`pin_shard_plan`] — see that function for why
+    /// re-planning in the child would silently invalidate every warm cache.
+    Warm {
+        endpoints: Vec<String>,
+        plan: Vec<NodeShard>,
+    },
+    /// Quorum or pooled memory unmet — the cluster is still forming. Stay
+    /// unavailable and retry on the next worker-set change.
+    InsufficientCluster { eligible: usize, quorum: u32 },
+    /// No plan could be computed: no RPC device, unreadable GGUF block count,
+    /// or an RPC device that maps to no endpoint.
+    Unplannable,
+    /// The orchestrator ran and gave up (worker unreachable, fetch failed, …).
+    WarmFailed { error: String },
+}
+
+/// Plan + warm `model_path`'s shards across the eligible mesh workers so a
+/// SEPARATE process can load it distributed. The daemon calls this before
+/// spawning (or respawning) the compute child that owns the distributed primary.
+///
+/// Blocking — the injected orchestrator bridges to async with `block_on` and a
+/// full warm can take minutes of GGUF transfer. Call from `spawn_blocking`,
+/// never from a runtime worker thread.
+pub fn warm_distributed_primary(model_path: &Path) -> DistributedWarmOutcome {
+    let model_bytes = super::model_slot::total_model_bytes(model_path);
+    match plan_and_warm(model_path, model_bytes, /* auto_warm */ true) {
+        PlannedDistribution::Ready(dist) => DistributedWarmOutcome::Warm {
+            endpoints: dist
+                .assignments
+                .iter()
+                .map(|a| a.endpoint.clone())
+                .collect(),
+            plan: dist.plan.clone(),
+        },
+        PlannedDistribution::Insufficient { eligible, quorum } => {
+            DistributedWarmOutcome::InsufficientCluster { eligible, quorum }
+        }
+        PlannedDistribution::Unplannable => DistributedWarmOutcome::Unplannable,
+        PlannedDistribution::WarmFailed(error) => DistributedWarmOutcome::WarmFailed { error },
+    }
+}
+
+/// The plan-cache key: the model's file name plus its worker set, sorted. Shared
+/// by [`plan_distribution`] and [`pin_shard_plan`] so a pinned plan and a
+/// computed one land on the same entry.
+fn plan_cache_key(model_path: &Path, endpoints: &[String]) -> (String, Vec<String>) {
+    let model_id = model_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let mut eps = endpoints.to_vec();
+    eps.sort();
+    (model_id, eps)
+}
+
+/// Seed this process's plan cache with a shard plan computed ELSEWHERE — the
+/// cross-process half of the plan-agreement invariant.
+///
+/// The in-process cache already keeps warm-time and load-time placement
+/// identical across reloads, because a worker's free VRAM swings by its own
+/// cached shard between reloads and a re-plan would drift the split (the
+/// `already=20` vs `36` cache invalidation). That cache is process-local, so a
+/// compute child loading a primary the DAEMON warmed would re-plan against
+/// post-warm VRAM, cut the blocks differently, miss every cache, and fall back
+/// to bulk weight send — the send() deadlock the warm path exists to avoid.
+///
+/// Pinning the daemon's plan closes that hole: the child's `plan_distribution`
+/// takes the cache hit and derives its `-ot` overrides and `tensor_split` from
+/// the identical shards the workers were warmed against.
+pub fn pin_shard_plan(model_path: &Path, endpoints: &[String], plan: Vec<NodeShard>) {
+    let key = plan_cache_key(model_path, endpoints);
+    tracing::info!(
+        model = %key.0,
+        workers = key.1.len(),
+        blocks = ?plan.iter().map(|s| s.blocks).collect::<Vec<_>>(),
+        "pinned an externally-computed shard plan (plan-agreement across the process boundary)"
+    );
+    plan_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, plan);
 }
 
 /// One-shot guard so the in-process RPC worker starts at most once.
@@ -1406,6 +1555,75 @@ fn rpc_cache_dir() -> Option<std::path::PathBuf> {
         return None;
     }
     Some(dir)
+}
+
+#[cfg(test)]
+mod distributed_handoff_tests {
+    use super::*;
+
+    fn shard(device_index: usize, first: u32, last: u32) -> NodeShard {
+        NodeShard {
+            device_index,
+            blocks: Some((first, last)),
+            holds_output: false,
+            fraction: 0.5,
+        }
+    }
+
+    /// A plan pinned from ANOTHER process must land on the same cache entry
+    /// `plan_distribution` looks up — that is the whole mechanism keeping a
+    /// compute child's `-ot` cut identical to the one the daemon warmed the
+    /// workers against. Endpoint ORDER must not matter: discovery hands the
+    /// worker set back in whatever order peers answered.
+    #[test]
+    fn pinned_plan_is_keyed_the_way_plan_distribution_looks_it_up() {
+        let model = Path::new("/models/Qwen3.5-122B-A10B-00001-of-00003.gguf");
+        let plan = vec![shard(0, 0, 11), shard(1, 12, 47)];
+        let pinned_order = vec!["10.0.0.9:50052".to_string(), "10.0.0.2:50052".to_string()];
+
+        pin_shard_plan(model, &pinned_order, plan.clone());
+
+        // Same worker set, opposite order → same key, so the child takes the
+        // cache hit instead of re-planning against post-warm VRAM.
+        let lookup_order = vec!["10.0.0.2:50052".to_string(), "10.0.0.9:50052".to_string()];
+        let key = plan_cache_key(model, &lookup_order);
+        let cached = plan_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&key)
+            .cloned();
+        assert_eq!(cached, Some(plan));
+
+        // A DIFFERENT worker set is a different key — a real topology change
+        // must re-plan rather than reuse a cut that no longer fits.
+        let other = plan_cache_key(model, &["10.0.0.2:50052".to_string()]);
+        assert!(plan_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&other)
+            .is_none());
+    }
+
+    /// The child's environment — workers present, warm asserted, NO
+    /// orchestrator (one can't exist in a child; it needs the daemon's mesh
+    /// directory) — must reach the override path WITHOUT trying to warm.
+    /// If this ever regressed to `LocalOnly`, a child would quietly load a
+    /// 90 GB model on one box: the 2026-07-27 host-starvation incident.
+    #[test]
+    fn a_compute_childs_environment_reaches_owned_overrides_without_warming() {
+        let mb = 1024 * 1024;
+        assert_eq!(
+            classify_placement(
+                /* distributable */ true,
+                /* has_workers */ true,
+                /* model_bytes */ 87_000 * mb,
+                /* safe_bytes */ 512 * mb,
+                /* assume_warmed */ true,
+                /* has_orchestrator */ false,
+            ),
+            PlacementDecision::OwnedOverrides { auto_warm: false }
+        );
+    }
 }
 
 #[cfg(test)]

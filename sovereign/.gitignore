@@ -3,7 +3,11 @@
 /data
 *.gguf
 *node_modules
-dist*
+# `dist/` (trailing slash) — the frontend build output, DIRECTORIES ONLY.
+# This was `dist*`, which silently swallowed any source file whose name
+# started with "dist": `distribution.rs`, `distributed_*_e2e.rs` were both
+# invisible to `git status` and would never have been committed.
+dist/
 
 # Desktop OCR binaries — populated by scripts/fetch-desktop-binaries.sh.
 # Large blobs, per-target, not source. README at the path explains how

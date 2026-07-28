@@ -35,6 +35,10 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 ///   the primary when the worker set grows).
 /// - `embed_family` — the manifest-resolved embed slot family; drives
 ///   app-side pooling + the mesh advertisement's embed-model info.
+/// - `distributed_primary` — `Some` only under `[compute] distributed_primary`:
+///   the slot whose child owns the mesh-distributed primary. The worker-
+///   discovery loop respawns it on every worker-set change instead of calling
+///   `engine.reload_primary()`.
 pub(crate) fn load_provider(
     config: &SetupConfig,
 ) -> Result<
@@ -42,6 +46,7 @@ pub(crate) fn load_provider(
         Arc<dyn InferenceProvider>,
         Arc<EmbeddedLlamaCpp>,
         ModelFamily,
+        Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
     ),
     (),
 > {
@@ -55,9 +60,40 @@ pub(crate) fn load_provider(
         })
         .unwrap_or(ModelFamily::Unknown);
 
+    // `[compute] distributed_primary` — the primary lives in a supervised
+    // child, so the daemon must NOT also hold it. Withholding the path is what
+    // makes that true: every lazy in-process primary load reads
+    // `primary_path`, so `None` means no code path in this process can pull the
+    // distributed model in behind our back (which would double the footprint
+    // AND put ggml's abort-happy RPC client back in the control plane).
+    let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
+    if child_owns_primary && config.models.fast_path() == config.models.primary.as_path() {
+        eprintln!(
+            "error: [compute] distributed_primary = true requires a DISTINCT small `fast` model."
+        );
+        eprintln!(
+            "hint: with no `[models].fast`, fast_path() falls back to the primary GGUF ({}), so \
+             the daemon would load the distributed model locally as its fast slot — the exact \
+             host-starving load this mode exists to prevent. Set `[models].fast` to a small GGUF.",
+            config.models.primary.display()
+        );
+        return Err(());
+    }
+    if child_owns_primary {
+        tracing::info!(
+            target: "compute_child",
+            primary = %config.models.primary.display(),
+            "[compute] distributed_primary — the daemon withholds the primary; a compute child owns it"
+        );
+    }
+
     let arc = match EmbeddedLlamaCpp::load_full_with_families(
         config.models.fast_path(),
-        Some(&config.models.primary),
+        if child_owns_primary {
+            None
+        } else {
+            Some(&config.models.primary)
+        },
         Some(&config.models.embed),
         // PR-E2: optional Code specialist. When set, `code`-hinted
         // requests hot-swap into the lazy slot (shared with primary).
@@ -171,21 +207,53 @@ pub(crate) fn load_provider(
     // processes; everything else falls through to `inner`. The concrete
     // `arc` engine is still returned for the RPC-worker reload path. Default
     // OFF → `inner` is installed unchanged.
+    let mut distributed_primary: Option<Arc<sovereign_compute::manager::DynamicChildSlot>> = None;
     let provider: Arc<dyn InferenceProvider> =
-        if config.compute.enabled && !config.compute.slot.is_empty() {
+        if config.compute.enabled && (!config.compute.slot.is_empty() || child_owns_primary) {
             let binary =
                 std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-cli-daemon"));
             let crash_dir = config.data.dir.join("compute-crash-logs");
-            match sovereign_compute::manager::build_compute_layer(
+            // The distributed primary's identity: the shared-model id when the
+            // node declares one (that is what peers address it by), else the
+            // GGUF's own stem. Both are accepted as `model_id` on the way in.
+            let distributed_spec = child_owns_primary.then(|| {
+                let stem = config
+                    .models
+                    .primary
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "primary".to_string());
+                let name = config
+                    .shared_model
+                    .model_id
+                    .clone()
+                    .unwrap_or_else(|| stem.clone());
+                sovereign_compute::manager::DistributedPrimarySpec {
+                    handoff_path: config
+                        .data
+                        .dir
+                        .join("compute-distribution")
+                        .join(format!("{name}.json")),
+                    name,
+                    model: config.models.primary.clone(),
+                    context_size: Some(config.models.effective_context_size()),
+                    n_gpu_layers: None,
+                    model_ids: vec![stem],
+                }
+            });
+            match sovereign_compute::manager::build_compute_layer_with_distributed(
                 &config.compute,
                 Arc::clone(&inner),
                 binary,
                 crash_dir,
+                distributed_spec,
             ) {
                 Some((facade, _manager)) => {
+                    distributed_primary = facade.distributed_slot();
                     tracing::info!(
                         target: "compute_child",
                         slots = config.compute.slot.len(),
+                        distributed_primary = distributed_primary.is_some(),
                         "compute-child routing facade installed"
                     );
                     // The facade holds the manager alive; children are
@@ -198,5 +266,5 @@ pub(crate) fn load_provider(
             inner
         };
 
-    Ok((provider, arc, resolved_embed_family))
+    Ok((provider, arc, resolved_embed_family, distributed_primary))
 }

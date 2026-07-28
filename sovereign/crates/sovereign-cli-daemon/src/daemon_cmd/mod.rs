@@ -397,7 +397,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // `build::inference::load_provider`. `engine_handle` (concrete) feeds
     // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
     // mesh embed-model advertisement.
-    let (provider, raw_engine, resolved_embed_family) =
+    let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
         match build::inference::load_provider(&config) {
             Ok(t) => t,
             Err(()) => return 1,
@@ -672,7 +672,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
     sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
 
-    bootstrap::spawn_rpc_worker_discovery(Arc::clone(&daemon), engine_handle);
+    bootstrap::spawn_rpc_worker_discovery(
+        Arc::clone(&daemon),
+        engine_handle,
+        distributed_primary_slot,
+    );
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
 

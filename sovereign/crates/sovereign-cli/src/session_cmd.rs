@@ -28,6 +28,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::cache_audit_cmd::{resolve_transcript_dir, short_session_id};
+use crate::session_lineage;
 use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
 /// The eight body sections of a session-frame/v1, in contract order
@@ -1034,6 +1035,12 @@ pub(crate) struct FrameEntry {
     pub(crate) next_items: usize,
     pub(crate) chars: usize,
     /// Ranking signals.
+    ///
+    /// `same_window` is the only one that is a FACT rather than a heuristic:
+    /// this frame was banked by the session that previously occupied this
+    /// terminal (see `session_lineage`). It outranks everything below it
+    /// because the others are evidence and it is an observation.
+    pub(crate) same_window: bool,
     pub(crate) branch_match: bool,
     pub(crate) in_flight: bool,
     pub(crate) prompt_overlap: usize,
@@ -1127,12 +1134,44 @@ pub(crate) fn distinctive_terms(text: &str, cap: usize) -> Vec<String> {
     out
 }
 
+/// Ordinary English that `distinctive_terms` lets through on the length rule
+/// alone (>= 8 chars, no code shape) and that therefore matched EVERY frame.
+///
+/// Measured, not guessed: across 22 recorded selections the deciding overlap
+/// terms included `everything`, `continue`, `something`, `tolerance`,
+/// `solution`, `containing`, `production` — words that carry no information
+/// about which workstream a prompt is about, but which broke recency ties and
+/// so effectively chose the frame at random. A term must earn its vote.
+const GENERIC_TERMS: &[&str] = &[
+    "everything", "something", "anything", "continue", "continues", "continuing", "solution",
+    "solutions", "containing", "contains", "consider", "different", "important", "probably",
+    "actually", "possible", "question", "questions", "understand", "following", "remaining",
+    "complete", "completed", "problem", "problems", "approach", "instead", "already", "another",
+    "because", "between", "through", "without", "against", "further", "however", "changes",
+    "working", "session", "sessions",
+];
+
+/// Is this term too common to be evidence? Anything with a code/path shape is
+/// kept regardless of length — `session_cmd` and `frame.md` are exactly the
+/// tokens this signal exists to catch.
+fn is_generic_term(t: &str) -> bool {
+    if t.contains('_') || t.contains('.') || t.contains('/') || t.contains('-') {
+        return false;
+    }
+    if t.chars().skip(1).any(|c| c.is_ascii_uppercase()) {
+        return false;
+    }
+    let tl = t.to_lowercase();
+    GENERIC_TERMS.contains(&tl.as_str())
+}
+
 /// How many of the prompt's distinctive terms appear anywhere in the frame.
 /// Case-insensitive substring, because a prompt says `session_cmd` where the
 /// frame says `session_cmd.rs`.
 fn overlap_with(frame_lower: &str, terms: &[String]) -> Vec<String> {
     terms
         .iter()
+        .filter(|t| !is_generic_term(t))
         .filter(|t| frame_lower.contains(&t.to_lowercase()))
         .cloned()
         .collect()
@@ -1146,6 +1185,7 @@ pub(crate) fn load_frames(
     repo: Option<&str>,
     branch: Option<&str>,
     prompt: Option<&str>,
+    predecessor: Option<&str>,
 ) -> Vec<FrameEntry> {
     let terms = prompt.map(|p| distinctive_terms(p, 20)).unwrap_or_default();
     let now = std::time::SystemTime::now();
@@ -1190,8 +1230,9 @@ pub(crate) fn load_frames(
         } else {
             overlap_with(&text.to_lowercase(), &terms)
         };
+        let session_id = entry.file_name().to_string_lossy().to_string();
         out.push(FrameEntry {
-            session_id: entry.file_name().to_string_lossy().to_string(),
+            same_window: predecessor.is_some_and(|p| p == session_id),
             branch_match: branch.is_some_and(|b| b == frame_branch),
             // `status` is free text written by whoever banked the frame — the
             // live store carries `in-flight`, `completed`, and
@@ -1215,19 +1256,28 @@ pub(crate) fn load_frames(
                 .unwrap_or(0),
             chars: text.len(),
             path,
+            session_id,
         });
     }
     rank_frames(&mut out);
     out
 }
 
-/// Lexicographic order: branch match, then prompt overlap, then recency.
-/// See the module note above for why there are no weights, and why
-/// `in_flight` is carried on every entry but deliberately not sorted on.
+/// Lexicographic order: **same window**, then branch match, then prompt
+/// overlap, then recency. See the module note above for why there are no
+/// weights, and why `in_flight` is carried on every entry but deliberately not
+/// sorted on.
+///
+/// `same_window` leads because it is the one key that is observed rather than
+/// inferred — the frame banked by the previous occupant of this terminal. On a
+/// single-branch repo `branch_match` is constant across every candidate and
+/// therefore decides nothing, which is how 25–42 frames ended up being
+/// separated by whether the prompt happened to contain the word "continue".
 pub(crate) fn rank_frames(frames: &mut [FrameEntry]) {
     frames.sort_by(|a, b| {
-        b.branch_match
-            .cmp(&a.branch_match)
+        b.same_window
+            .cmp(&a.same_window)
+            .then(b.branch_match.cmp(&a.branch_match))
             .then(b.prompt_overlap.cmp(&a.prompt_overlap))
             .then(a.age_s.cmp(&b.age_s))
     });
@@ -1268,7 +1318,8 @@ pub(crate) fn render_index(frames: &[FrameEntry], limit: usize) -> String {
             &f.goal
         };
         s.push_str(&format!(
-            "- `{id}` · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
+            "- `{id}`{win} · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
+            win = if f.same_window { " ← THIS WINDOW" } else { "" },
             age = human_age(f.age_s),
             branch = if f.branch.is_empty() { "?" } else { &f.branch },
             status = if f.status.is_empty() { "?" } else { &f.status },
@@ -1297,6 +1348,7 @@ fn frame_json(f: &FrameEntry) -> serde_json::Value {
         "next_items": f.next_items,
         "chars": f.chars,
         "signals": {
+            "same_window": f.same_window,
             "branch_match": f.branch_match,
             "in_flight": f.in_flight,
             "prompt_overlap": f.prompt_overlap,
@@ -1340,6 +1392,77 @@ pub(crate) fn resolve_frame_path(id_or_path: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// The frame the window lineage points at, resolved to a real file.
+///
+/// Separated from the ranked candidates on purpose: a predecessor is not a
+/// better guess, it is a different KIND of answer. Callers that have one
+/// should stop ranking; callers that do not should say so rather than quietly
+/// presenting rank #1 as if it were a handoff.
+struct Predecessor {
+    pointer: session_lineage::Pointer,
+    path: Option<PathBuf>,
+    frame_age_s: Option<u64>,
+}
+
+fn resolve_predecessor(
+    win: Option<&session_lineage::WindowKey>,
+    self_session: Option<&str>,
+) -> Option<Predecessor> {
+    let win = win?;
+    let pointer = session_lineage::read_pointer(win)?;
+    // A boot that re-reads its own binding is not a handoff. This happens on a
+    // second SessionStart for the same session (resume), where the `own_full`
+    // path is the correct one anyway.
+    if self_session.is_some_and(|s| s == pointer.session_id) {
+        return None;
+    }
+    let path = sessions_root()
+        .map(|r| r.join(&pointer.session_id).join("frame.md"))
+        .filter(|p| p.is_file());
+    let frame_age_s = path.as_ref().and_then(|p| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|m| std::time::SystemTime::now().duration_since(m).ok())
+            .map(|d| d.as_secs())
+    });
+    Some(Predecessor {
+        pointer,
+        path,
+        frame_age_s,
+    })
+}
+
+fn predecessor_json(p: &Predecessor) -> serde_json::Value {
+    serde_json::json!({
+        "session_id": p.pointer.session_id,
+        "short_id": short_session_id(&p.pointer.session_id),
+        "path": p.path.as_ref().map(|x| x.display().to_string()),
+        // `process` — the previous occupant of this terminal, bound
+        // automatically. `explicit` — a human ran `session attach`.
+        "kind": p.pointer.kind,
+        "bound_age_s": p.pointer.age_s(),
+        "frame_age_s": p.frame_age_s,
+        // False when the predecessor existed but never banked a frame (too
+        // short to distill, or the distill is still running). The caller must
+        // fall back to the index — and must not claim a handoff it did not get.
+        "has_frame": p.path.is_some(),
+        "repo": p.pointer.repo,
+        "branch": p.pointer.branch,
+    })
+}
+
+fn window_json(win: Option<&session_lineage::WindowKey>) -> serde_json::Value {
+    match win {
+        Some(w) => serde_json::json!({
+            "key": w.key, "pid": w.pid, "tty": w.tty, "started": w.started,
+        }),
+        // Not an error: no harness ancestor means no window (plain shell, CI,
+        // `claude -p`). Ranking proceeds without the lineage signal.
+        None => serde_json::Value::Null,
+    }
+}
+
 fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
     // Dereference: print one frame whole.
     if let Some(id) = id {
@@ -1370,28 +1493,94 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
         .and_then(|v| v.parse().ok())
         .unwrap_or(14);
     let limit: usize = flags.get("limit").and_then(|v| v.parse().ok()).unwrap_or(8);
+
+    // ── Window lineage ──────────────────────────────────────────────────
+    // `--claim-window <session_id>` is an EXCHANGE, and the side effect is in
+    // the flag name on purpose: read whoever last occupied this terminal (your
+    // predecessor), then record yourself as the occupant so your own successor
+    // can find you. The boot hook is the only caller that claims; every other
+    // reader gets the pointer without disturbing it.
+    let win = if flags.contains_key("no-lineage") {
+        None
+    } else {
+        session_lineage::resolve_window()
+    };
+    let claiming = flags.get("claim-window").filter(|s| !s.is_empty());
+    // Who is asking. A caller that is already the recorded occupant is not its
+    // own predecessor — without this, the second hook of the same session
+    // would be handed back the binding the first one just wrote.
+    let me = claiming
+        .or_else(|| flags.get("self").filter(|s| !s.is_empty()))
+        .map(String::as_str);
+    let predecessor = resolve_predecessor(win.as_ref(), me);
+    let mut bind_error: Option<String> = None;
+    if let (Some(sid), Some(w)) = (claiming, win.as_ref()) {
+        if let Err(e) = session_lineage::write_pointer(
+            w,
+            sid,
+            "process",
+            flags.get("repo").map(String::as_str).unwrap_or_default(),
+            flags.get("branch").map(String::as_str).unwrap_or_default(),
+        ) {
+            // Never fatal — a window that cannot be bound simply falls back to
+            // ranking next time, which is the pre-lineage behaviour.
+            bind_error = Some(e);
+        }
+    }
+
     let frames = load_frames(
         &root,
         max_age_days,
         flags.get("repo").map(String::as_str),
         flags.get("branch").map(String::as_str),
         flags.get("for-prompt").map(String::as_str),
+        predecessor.as_ref().map(|p| p.pointer.session_id.as_str()),
     );
 
     if flags.contains_key("json") {
         let doc = serde_json::json!({
-            "schema": "frame-index/v1",
+            "schema": "frame-index/v2",
             "root": root.display().to_string(),
             "repo": flags.get("repo").cloned().unwrap_or_default(),
             "branch": flags.get("branch").cloned().unwrap_or_default(),
             "max_age_days": max_age_days,
             "count": frames.len(),
+            "window": window_json(win.as_ref()),
+            // The deterministic answer when there is one. A caller with a
+            // predecessor should inject it and skip selection entirely.
+            "predecessor": predecessor.as_ref().map(predecessor_json),
+            "bind_error": bind_error,
             // Rank order. The head is the selection; the rest is the evidence
             // for why, so a caller can disagree with it.
             "candidates": frames.iter().take(limit).map(frame_json).collect::<Vec<_>>(),
         });
         println!("{}", serde_json::to_string(&doc).unwrap_or_default());
         return 0;
+    }
+
+    if let Some(p) = &predecessor {
+        let how = if p.pointer.kind == "explicit" {
+            "attached explicitly"
+        } else {
+            "previous occupant of this terminal"
+        };
+        match &p.path {
+            Some(path) => println!(
+                "Predecessor in this window: `{}` ({how}, bound {} ago, frame {} old)\n  {}\n",
+                short_session_id(&p.pointer.session_id),
+                human_age(p.pointer.age_s()),
+                p.frame_age_s.map(human_age).unwrap_or_else(|| "?".into()),
+                path.display(),
+            ),
+            None => println!(
+                "Predecessor in this window: `{}` ({how}) — but it banked NO frame; \
+                 falling back to the index.\n",
+                short_session_id(&p.pointer.session_id),
+            ),
+        }
+    }
+    if let Some(e) = &bind_error {
+        eprintln!("frames: could not bind this window ({e}) — lineage will not carry forward");
     }
 
     if frames.is_empty() {
@@ -1402,9 +1591,147 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
     0
 }
 
+/// `session lineage` — what this terminal is attached to, and how it knows.
+/// Pure glassbox: the boot hook's decision is a lookup a human can reproduce.
+fn run_lineage(flags: &BTreeMap<String, String>) -> i32 {
+    let win = session_lineage::resolve_window();
+    let predecessor = resolve_predecessor(win.as_ref(), None);
+    if flags.contains_key("json") {
+        let doc = serde_json::json!({
+            "schema": "window-lineage-view/v1",
+            "window": window_json(win.as_ref()),
+            "attached": predecessor.as_ref().map(predecessor_json),
+        });
+        println!("{}", serde_json::to_string(&doc).unwrap_or_default());
+        return 0;
+    }
+    match &win {
+        Some(w) => println!(
+            "window   {} · harness pid {} · started {} · key {}",
+            w.tty, w.pid, w.started, w.key
+        ),
+        None => {
+            println!(
+                "window   none — no harness process above this one (plain shell, CI, or \
+                 headless run).\n         Frame selection falls back to the ranked index."
+            );
+            return 0;
+        }
+    }
+    match &predecessor {
+        Some(p) => {
+            println!(
+                "attached {} ({}, bound {} ago)",
+                short_session_id(&p.pointer.session_id),
+                p.pointer.kind,
+                human_age(p.pointer.age_s())
+            );
+            match &p.path {
+                Some(path) => println!(
+                    "frame    {} ({} old)",
+                    path.display(),
+                    p.frame_age_s.map(human_age).unwrap_or_else(|| "?".into())
+                ),
+                None => println!("frame    none banked yet by that session"),
+            }
+        }
+        None => println!(
+            "attached nothing yet — the next `/clear` in this window has no predecessor.\n\
+             Bind one with `svrn session attach <id>` (see `svrn session frames`)."
+        ),
+    }
+    0
+}
+
+/// `session attach <id>` — point this window at a workstream by hand.
+///
+/// The automatic binding only covers "continue what this terminal was just
+/// doing". The other real case is "open a fresh terminal to pick up work that
+/// ran somewhere else" — no process lineage exists for that, so a human says
+/// it once and the next boot in this window honours it.
+fn run_attach(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
+    let Some(win) = session_lineage::resolve_window() else {
+        eprintln!(
+            "attach: no harness window above this process — nothing to attach to.\n\
+             (Run this from inside the session you want to bind.)"
+        );
+        return 2;
+    };
+    if flags.contains_key("clear") {
+        return match session_lineage::clear_pointer(&win) {
+            Ok(true) => {
+                println!("Detached window {} — the next session here starts cold.", win.key);
+                0
+            }
+            Ok(false) => {
+                println!("Window {} was not attached to anything.", win.key);
+                0
+            }
+            Err(e) => {
+                eprintln!("attach: {e}");
+                2
+            }
+        };
+    }
+    let Some(id) = id else {
+        eprintln!("attach: needs a session id (see `svrn session frames`), or --clear");
+        return 2;
+    };
+    // Resolve through the same path `frames <id>` uses, so an id that attaches
+    // is always an id that dereferences.
+    let path = match resolve_frame_path(id) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("attach: {e}");
+            return 2;
+        }
+    };
+    let session_id = path
+        .parent()
+        .and_then(|d| d.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| id.to_string());
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let repo = frontmatter_field(&text, "repo").unwrap_or_default();
+    let branch = frontmatter_field(&text, "branch").unwrap_or_default();
+
+    if let Some(prev) = session_lineage::read_pointer(&win) {
+        if prev.session_id != session_id {
+            println!(
+                "Replacing this window's attachment: {} → {}",
+                short_session_id(&prev.session_id),
+                short_session_id(&session_id)
+            );
+        }
+    }
+    match session_lineage::write_pointer(&win, &session_id, "explicit", &repo, &branch) {
+        Ok(()) => {
+            println!(
+                "Attached window {} (pid {}) to `{}`.\n\
+                 The next session started here — including after `/clear` — is handed that \
+                 frame whole, with no guessing.",
+                win.key,
+                win.pid,
+                short_session_id(&session_id)
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("attach: {e}");
+            2
+        }
+    }
+}
+
 // ── CLI plumbing ─────────────────────────────────────────────────────────
 
 fn sessions_root() -> Option<PathBuf> {
+    // Overridable for the same reason as SOVEREIGN_LINEAGE_DIR: the handoff
+    // path has to be exercisable end-to-end without writing into the live
+    // store the machine is actually using.
+    if let Some(d) = session_lineage::env_either("SESSIONS_DIR") {
+        return Some(PathBuf::from(d));
+    }
     dirs::home_dir().map(|h| h.join(".sovereign").join("sessions"))
 }
 
@@ -1416,10 +1743,16 @@ fn print_help() {
          Subcommands:\n\
          \x20 list               Recent transcripts for this project (newest first).\n\
          \x20 frames             Index of live session frames, one line each, in\n\
-         \x20                    selection order (branch match, in-flight, prompt\n\
+         \x20                    selection order (same window, branch match, prompt\n\
          \x20                    overlap, recency). This is what the boot hook\n\
-         \x20                    injects — a pointer per frame, not a frame.\n\
+         \x20                    injects when there is no predecessor — a pointer\n\
+         \x20                    per frame, not a frame.\n\
          \x20 frames <id>        Dereference: print that frame whole.\n\
+         \x20 lineage            What this terminal is attached to and how it knows:\n\
+         \x20                    harness pid, window key, bound session, its frame.\n\
+         \x20 attach <id>        Bind this terminal to a workstream by hand. The next\n\
+         \x20                    session started here — including after /clear — is\n\
+         \x20                    handed that frame whole, no guessing. --clear detaches.\n\
          \x20 distill <id>       Extract the spine and synthesize a frame; <id> is a\n\
          \x20                    session-id prefix from `list`.\n\
          \x20 grade <id|path>    Grade a frame against the golden (spec §5): per-section\n\
@@ -1436,7 +1769,15 @@ fn print_help() {
          \x20 --stdout           Print the frame instead of only writing it.\n\
          \x20 --force            Overwrite even a self-reported frame (default: a frame\n\
          \x20                    banked via session_state is never clobbered by distill).\n\n\
-         Output: ~/.sovereign/sessions/<session_id>/{{frame.md,spine.txt}}\n"
+         Options (frames):\n\
+         \x20 --repo/--branch    Scope the index.\n\
+         \x20 --for-prompt <s>   Rank by overlap with this prompt.\n\
+         \x20 --claim-window <s> Boot-hook exchange: return whoever last occupied this\n\
+         \x20                    terminal, then record <s> as the occupant.\n\
+         \x20 --no-lineage       Ignore window lineage; rank as if there were no\n\
+         \x20                    predecessor (use to audit the ranker).\n\n\
+         Output: ~/.sovereign/sessions/<session_id>/{{frame.md,spine.txt}}\n\
+         \x20       ~/.sovereign/lineage/<pid>-<hash>.json  (window → session pointer)\n"
     );
 }
 
@@ -1865,8 +2206,13 @@ pub async fn run(args: &[String]) -> i32 {
             }
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
-            "--no-llm" | "--stdout" | "--force" | "--json" => {
+            "--no-llm" | "--stdout" | "--force" | "--json" | "--clear" | "--no-lineage" => {
                 flags.insert(arg.trim_start_matches('-').to_string(), String::new());
+            }
+            "--claim-window" | "--self" => {
+                if let Some(v) = it.next() {
+                    flags.insert(arg.trim_start_matches("--").to_string(), v.clone());
+                }
             }
             "--repo" | "--branch" | "--for-prompt" | "--limit" | "--max-age-days" => {
                 if let Some(v) = it.next() {
@@ -1891,8 +2237,11 @@ pub async fn run(args: &[String]) -> i32 {
     // transcripts present at all (a fresh machine, or a hook running outside
     // a project), so it dispatches BEFORE the transcript-dir resolution that
     // the transcript-reading subcommands need.
-    if sub.as_deref() == Some("frames") {
-        return run_frames(id.as_deref(), &flags);
+    match sub.as_deref() {
+        Some("frames") => return run_frames(id.as_deref(), &flags),
+        Some("lineage") => return run_lineage(&flags),
+        Some("attach") => return run_attach(id.as_deref(), &flags),
+        _ => {}
     }
 
     let target_dir = match resolve_transcript_dir(project.as_deref(), dir.as_deref()) {
@@ -2261,6 +2610,7 @@ mod tests {
             goal: "g".into(),
             next_items: 1,
             chars: 100,
+            same_window: false,
             branch_match,
             in_flight,
             prompt_overlap: overlap,
@@ -2306,6 +2656,74 @@ mod tests {
     }
 
     #[test]
+    fn same_window_outranks_every_heuristic() {
+        // THE MEASURED FAILURE, as a test (2026-07-27). Session 963fc519 was
+        // the `/clear` successor of a05e2bd1 in the same terminal, and was
+        // handed an unrelated frame that won on prompt overlap + recency. The
+        // predecessor must win even when it loses every other signal: wrong
+        // branch, zero overlap, and much older.
+        let mut predecessor = entry("a05e2bd1", false, true, 0, 90_000);
+        predecessor.same_window = true;
+        let mut v = vec![entry("ad5fee8c", true, true, 9, 60), predecessor];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "a05e2bd1");
+
+        // And it is a tiebreak, not a bulldozer: with no window signal the
+        // established order is untouched.
+        let mut v = vec![entry("older", true, true, 0, 90_000), entry("newer", true, true, 0, 60)];
+        rank_frames(&mut v);
+        assert_eq!(v[0].session_id, "newer");
+    }
+
+    #[test]
+    fn generic_prose_terms_cast_no_vote() {
+        // Every one of these decided a real selection on this machine, purely
+        // by being >= 8 chars with no code shape. A frame containing the word
+        // "everything" is not evidence of anything.
+        for t in ["everything", "continue", "solution", "containing", "production", "session"] {
+            assert!(is_generic_term(t), "{t} should not vote");
+        }
+        // Code shapes survive at any length — this signal exists for them.
+        for t in ["session_cmd", "frame.md", "sovereign/docs", "SplitInferenceProvider", "rpc-warm"] {
+            assert!(!is_generic_term(t), "{t} must keep voting");
+        }
+        let terms: Vec<String> = ["everything", "session_cmd"].iter().map(|s| s.to_string()).collect();
+        let hits = overlap_with("we changed everything in session_cmd today", &terms);
+        assert_eq!(hits, vec!["session_cmd".to_string()]);
+    }
+
+    #[test]
+    fn render_index_marks_the_frame_from_this_window() {
+        let mut v = vec![entry("aaaaaaaa-1111", true, true, 0, 120)];
+        v[0].same_window = true;
+        let out = render_index(&v, 8);
+        assert!(out.contains("THIS WINDOW"), "{out}");
+        // And says nothing when there is no lineage to report.
+        let plain = render_index(&[entry("bbbbbbbb-2222", true, true, 0, 120)], 8);
+        assert!(!plain.contains("THIS WINDOW"), "{plain}");
+    }
+
+    #[test]
+    fn load_frames_flags_the_predecessor_and_nothing_else() {
+        let tmp = std::env::temp_dir().join(format!("svrn-pred-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        for id in ["pred", "other"] {
+            let d = tmp.join(id);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(
+                d.join("frame.md"),
+                "---\nrepo: r\nbranch: main\nstatus: active\n---\n\n## Goal\n\ng\n",
+            )
+            .unwrap();
+        }
+        let frames = load_frames(&tmp, 14, Some("r"), Some("main"), None, Some("pred"));
+        assert_eq!(frames[0].session_id, "pred");
+        assert!(frames[0].same_window);
+        assert!(frames.iter().filter(|f| f.same_window).count() == 1);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn in_flight_reads_the_status_stem_not_an_exact_string() {
         let tmp = std::env::temp_dir().join(format!("svrn-status-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -2324,7 +2742,7 @@ mod tests {
             )
             .unwrap();
         }
-        let frames = load_frames(&tmp, 14, Some("r"), Some("main"), None);
+        let frames = load_frames(&tmp, 14, Some("r"), Some("main"), None, None);
         let by = |id: &str| frames.iter().find(|f| f.session_id == id).unwrap().in_flight;
         assert!(by("a"));
         assert!(!by("b"));
@@ -2373,7 +2791,7 @@ mod tests {
             "Side branch work on session_cmd.rs",
         );
 
-        let frames = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None);
+        let frames = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None, None);
         // The other repo is filtered out entirely, not merely down-ranked.
         assert_eq!(frames.len(), 2);
         assert!(frames.iter().all(|f| f.repo == "commonwealth-ai"));
@@ -2393,6 +2811,7 @@ mod tests {
             Some("commonwealth-ai"),
             Some("side-branch"),
             Some("continue the session_cmd.rs work"),
+            None,
         );
         assert_eq!(frames[0].session_id, "ccc");
         assert!(frames[0].prompt_overlap > 0);
@@ -2402,6 +2821,7 @@ mod tests {
             Some("commonwealth-ai"),
             Some("side-branch"),
             Some("continue the work please"),
+            None,
         );
         assert_eq!(prose_only[0].prompt_overlap, 0);
 
@@ -2416,7 +2836,7 @@ mod tests {
                 std::time::SystemTime::now() - std::time::Duration::from_secs(20 * 86_400),
             )
             .unwrap();
-        let recent = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None);
+        let recent = load_frames(&tmp, 14, Some("commonwealth-ai"), Some("main"), None, None);
         assert!(recent.iter().all(|f| f.session_id != "aaa"), "{recent:?}");
         let _ = std::fs::remove_dir_all(&tmp);
     }

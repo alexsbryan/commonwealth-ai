@@ -72,7 +72,11 @@ NOTE_MAX_CHARS = int(os.environ.get("SOVEREIGN_NOTE_MAX_CHARS", "2000"))
 # The two budgets are shared, not stacked. A frame plus a full notes payload
 # would land around 10.5KB and spill to a file — re-creating on turn one the
 # exact leak Phase 1 closed. On the frame-bearing turn, notes yield.
-SESSIONS_ROOT = pathlib.Path.home() / ".sovereign" / "sessions"
+SESSIONS_ROOT = pathlib.Path(
+    os.environ.get("SVRNMESH_SESSIONS_DIR")
+    or os.environ.get("SOVEREIGN_SESSIONS_DIR")
+    or (pathlib.Path.home() / ".sovereign" / "sessions")
+)
 FRAME_BUDGET_CHARS = int(os.environ.get("SOVEREIGN_PROMPT_FRAME_CHARS", "4500"))
 NOTES_BUDGET_WITH_FRAME = int(os.environ.get("SOVEREIGN_NOTES_BUDGET_WITH_FRAME", "3200"))
 
@@ -219,22 +223,31 @@ def inject_frame_once(session_id, query):
            "chosen": None, "candidates": 0, "chars": 0, "signals": {}}
     printed = 0
     try:
-        # Boot already injected this session's own frame (resume/compact) —
-        # nothing to add, and re-injecting would duplicate 1-2k tokens.
+        # Boot already injected a frame whole — nothing to add, and
+        # re-injecting would duplicate 1-2k tokens. Three shapes qualify, all
+        # of them deterministic: `own_full` (resume/compact of this session),
+        # `lineage` (this terminal's previous occupant), `attached` (a human
+        # pointed this window at a workstream). Only `index` leaves selection
+        # to be done here, where a prompt exists to select against.
         boot = SESSIONS_ROOT / session_id / "boot.json"
         if boot.exists():
             try:
-                if json.loads(boot.read_text()).get("frame_selection") == "own_full":
-                    rec["outcome"] = "already_injected_at_boot"
+                sel = json.loads(boot.read_text()).get("frame_selection")
+                if sel in ("own_full", "lineage", "attached"):
+                    rec["outcome"] = f"already_injected_at_boot_{sel}"
                     return 0
             except (OSError, ValueError):
                 pass
 
         repo = os.path.basename(git("rev-parse", "--show-toplevel"))
         branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        # `--self` so the window pointer boot just wrote (pointing at US) is
+        # not mistaken for a predecessor. This path only runs when boot found
+        # no lineage, so there is genuinely a selection to make here.
         p = subprocess.run(
             ["sovereign", "session", "frames", "--json", "--repo", repo,
-             "--branch", branch, "--for-prompt", (query or "")[:400], "--limit", "3"],
+             "--branch", branch, "--for-prompt", (query or "")[:400], "--limit", "3",
+             "--self", session_id],
             capture_output=True, text=True, timeout=10,
         )
         if p.returncode != 0 or not p.stdout.strip():

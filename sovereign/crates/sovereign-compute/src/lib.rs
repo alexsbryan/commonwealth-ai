@@ -29,6 +29,7 @@
 pub mod child;
 pub mod child_main;
 pub mod client;
+pub mod distribution;
 pub mod manager;
 pub mod server;
 pub mod supervisor;
