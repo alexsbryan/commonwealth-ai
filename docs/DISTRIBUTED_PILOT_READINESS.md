@@ -33,15 +33,29 @@ auto-warm → plan-agreement placement → never-wedge fallback) is validated; t
 > MeshDiagnosticsPanel; svelte-check clean).
 
 > **Open acceptances as of 2026-07-27 — the builds are done; these RUNS are not:**
-> 1. **P0.1 — split-path distributed DECODE still unmeasured.** The 2026-07-19
->    correction stands: acceptance3 never generated a token, and every live run
->    since (GDN A/B, cloud tensor peer) was 4B or merged-file. Re-run the 3-file
->    split 122B e2e on the current binary (now carrying the flap + retarget
->    fixes) and capture decode + confirm the distribution HOLDS.
-> 2. **P0.4 — post-abort recovery timing never run live.** `kill -9` the worker
->    daemon mid-inference at 122B scale → host serves again within N minutes,
->    no human action. (The compute-child crash-isolation e2e passed, but that is
->    the opt-in `[compute]` boundary, not the deployed in-process shape.)
+> 1. **P0.1 — split-path distributed DECODE: first real tokens measured
+>    2026-07-28, but NOT yet a steady-state number.** The 2026-07-19 correction
+>    stands for that run. On 2026-07-28 the 3-file split 122B did generate under
+>    a verified distribution (child-owned RPC socket, placement 12/36): **163
+>    content frames in 17.7s = 9.15 tok/s**, and the distribution HELD for the
+>    whole window. Treat that as a FLOOR, not a comparison to the 17.3 tok/s of
+>    2026-07-19: no priming call preceded it (prior runs logged ~56s of page-in
+>    for the ~66GB local share) and the window was 18s, so it is a cold number
+>    that also carries the child's HTTP hop. **Still owed:** a primed,
+>    steady-state split-path decode measurement, in-process and in-child, so the
+>    boundary's actual throughput tax is known rather than guessed.
+> 2. **P0.4 — RUN LIVE 2026-07-28 under `[compute] distributed_primary`, PASSED
+>    (see the validation-log entry).** `kill -9` of the worker daemon mid-decode
+>    at split-122B scale: the host daemon SURVIVED (`NRestarts=0`, no
+>    `GGML_ABORT`), the stream ended with a terminal error frame, the slot
+>    retired rather than local-loading, and the host re-formed the cluster and
+>    served again **without human action** once the worker was back — 12m46s
+>    worker-restart → serving, of which ~4.5 min was one wasted warm cycle (open
+>    item 2 in that entry). **Still not run for the deployed IN-PROCESS shape**,
+>    where the same kill is expected to remain fatal (that is the abort this
+>    boundary exists to contain); the in-process path's contract is still host
+>    supervision + `Restart=on-failure`. Worker restart itself was manual —
+>    BeefyMac's daemon has no `KeepAlive`.
 > 3. **P0.5 — dual-restart heal acceptance not yet run** (both machines, mDNS
 >    blocked, restart in any order → mesh re-forms within one anti-entropy
 >    period). Run it on the retarget code path, which replaced the rebuild heal.
@@ -654,3 +668,66 @@ via load-balance skew on the next big-model validation).
     stdin) — bogus 0-frame INVALIDs until materialized as a file.
   - Teardown: instance destroyed after ~40 min (≈$0.04 total), join key rotated
     live via the daemon endpoint, host daemon restored to normal posture.
+- **2026-07-28 — INCIDENT REPLAY 67afadf3 (ggml-abort containment): PASSED.**
+  The acceptance for routing the distributed primary through a `sovereign-compute`
+  child (`[compute] distributed_primary = true`, commit `ffb60b0f`). RuggedFox
+  host + BeefyMac worker, split 122B, `SOVEREIGN_RPC_BLOCK_SPLIT=12,36`.
+  Warm `written=0 already=69` in 3m40s (`via=iroh:127.0.0.1:37337→86627fd5` — the
+  iroh bridge carries the warm plane fine), child serving 2m35s later, placement
+  worker blocks 0–11 (20.9 GB) / local 12–47 (63.9 GB, output head home).
+  **Distribution proven before the kill, not assumed:** `ss -tnp` showed the
+  ESTABLISHED `192.168.1.13:53156 → 192.168.1.2:50052` owned by the CHILD (pid
+  413830, fd 24) — the daemon held no RPC socket at all, which is the whole point.
+  Decode over the child, split path: **163 content frames in 17.7s = 9.15 tok/s**
+  — a FLOOR, not a steady-state figure (no priming call; prior runs logged ~56s
+  of page-in for the local share, and this window was 18s), so it is not
+  comparable to 2026-07-19's primed 17.3 tok/s. The boundary's real throughput
+  tax remains unmeasured.
+  `kill -9` of the worker daemon over the ops channel at 15:36:09.3Z, mid-stream
+  (144 frames already delivered). Result: **daemon pid 408424 survived,
+  `NRestarts=0`, zero `GGML_ABORT`/`SIGABRT` in its unit** — where the identical
+  chain on 2026-07-27 gave exit 134/SIGABRT. The child died instead; the client
+  got a terminal `data: {"error":{"message":"compute child stream transport
+  error…"}}` then `[DONE]` at 15:36:17.4Z (the 8s gap is ggml's abort handler
+  shelling out to gdb before the child dies). At 15:36:57 the slot retired
+  "no eligible RPC workers" — **no local-load fallback**, so the fit gate's half
+  never had to fire. Recovery: worker restarted 15:37:18 → cluster re-formed →
+  child serving again 15:50:04 → a real request answered from the distributed
+  122B at 15:50:28.
+  - **Three rough edges found (notes `491c1e51`, `c5678d34`); 1 and 2 block an
+    unattended pilot.**
+    1. **Named-model routing 503s for the distributed primary.** `model:
+       "Qwen3.5-122B-…-00001-of-00003"` → 503 *"no node in this mesh advertises
+       model X"*, while `/v1/models` lists that exact id and the UNNAMED request
+       (→ `Speed::Slow` → the facade) reaches the child and answers. Cause:
+       `build_self_manifest` runs once at boot (08:20:56) — before the child
+       exists (spawned 08:25:52, serving 08:28:27) — and nothing refreshes the
+       advertisement when the slot starts serving. The boot log shows the symptom
+       plainly: `advertised primary alias … target=Qwen3.5-0.8B-UD-Q6_K_XL`,
+       because the daemon withheld the primary. A peer addressing the shared model
+       by name gets a 503 from a healthy cluster.
+    2. **A busy worker looks dead to discovery, and that verdict tears down the
+       warm's own result.** On the recovery half, discovery logged
+       `eligible=0 discovered=0` at 15:42:29 while BeefyMac was demonstrably alive
+       (RPC server still accepting; `/status` answered 3/3 instantly once idle) —
+       the Mac is least responsive precisely while serving a 21 GB warm, and a
+       timed-out `/status` poll is indistinguishable from "no worker". The warm
+       still completed and respawned the child at 15:43:06; the next 15s tick took
+       the `current.is_empty()` branch and retired that child 8 seconds later.
+       Cost one wasted warm cycle (~4.5 min); **converged on the third cycle**, so
+       a wobble, not a livelock. Fixes to weigh: distinguish "peer answered: no
+       worker" from "peer did not answer"; a grace on the shrink-to-empty retire,
+       symmetric with the 20s grow debounce; or feed "warm just succeeded against
+       W" back into eligibility as liveness evidence.
+    3. **Three crash-loop respawns between kill and retire** (pids 421574/422017/
+       422106), each aborting on connect into the dead worker — the supervisor's
+       backoff and the 15s discovery tick are independent clocks, so ~48s of the
+       5-in-600s budget went to respawns that could not succeed.
+  - **Ops:** driven solo from RuggedFox over the ops channel (`docs/OPS_CHANNEL.md`)
+    — no agent or human on the Mac. The verb set covered every step
+    (`exe-info`/`logs`/`cache-size`/`daemon-kill9`/`daemon-start`); the only
+    worker-side signal it cannot supply is process RSS during load, which is
+    confirmatory, not an acceptance criterion. `kill -9` does not remove the
+    worker's log file, so a post-mortem `logs N` suffices — no live tail needed.
+    BeefyMac did not auto-restart (no `KeepAlive`), which the channel established
+    empirically rather than by asking.
