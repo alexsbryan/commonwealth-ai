@@ -170,7 +170,7 @@ jobs:
   # catalog is a runtime public/ asset fetched at load time, not a build-time
   # import, so neither check nor test needs the predev hook.
   desktop:
-    name: Desktop frontend (svelte-check + vitest)
+    name: Desktop frontend (svelte-check + vitest + e2e)
     needs: changes
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
@@ -187,6 +187,31 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run test
+      # The synthetic Playwright suite (tests/e2e/specs, 40 files). Cheap
+      # enough to sit in the per-PR job: it mocks the Tauri bridge at the
+      # WebView layer, so it needs Vite and nothing else — no daemon, no
+      # GGUFs, no display. `playwright.config.ts` is already CI-aware
+      # (forbidOnly, workers: 2, no dev-server reuse).
+      #
+      # Added 2026-07-27 because this layer was running NOWHERE in CI, and
+      # several UI regressions were shipping with their only regression
+      # test sitting in a suite nothing executed automatically.
+      #
+      # NOT the real-mode suite (playwright.real.config.ts): that one boots
+      # a fixture daemon and a real desktop process in Attach mode — the
+      # configuration shipped users actually run — but it needs multi-GB
+      # GGUFs that are not in the repo (`git ls-files sovereign/models` is
+      # empty) plus xvfb. That belongs in a nightly, not here.
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            sovereign/crates/sovereign-desktop/playwright-report/
+            sovereign/crates/sovereign-desktop/test-results/
+          retention-days: 7
 
   # ---------------------------------------------------------------
   # Tier 1 — the workspace compile. This job IS the CI budget; every
