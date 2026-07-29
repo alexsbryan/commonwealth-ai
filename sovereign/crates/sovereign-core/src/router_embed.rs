@@ -89,6 +89,43 @@ const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.50;
 /// nothing they had before.
 const DEFAULT_LOCATOR_MIN_MARGIN: f32 = 0.02;
 
+// THIS FLOOR IS PROBABLY TOO HIGH, BUT DO NOT TAKE THE VALUE `fit` OFFERS.
+// Two separate claims, measured 2026-07-29 — read both before touching it.
+//
+// 1. DO NOT take the fitted gate. `fit` has reported (0.356, 0.123) as "best"
+//    since the code_query re-filing — +1 fire, -2 errors, precision 100%. It
+//    is the wrong trade anyway: separation COLLAPSES 0.018 → 0.007 (the number
+//    the drift baseline exists to watch — a gate that thin flips on any
+//    encoder re-quantisation), 0.356 sits at the noise floor
+//    (`int_cmp_hawk_dove` scores 0.357 with margin 0.000, a coin flip, held
+//    out by the margin term alone), and it is demonstrably overfit: the fitted
+//    floor slid 0.363 → 0.356 when the bank grew by just three cases while
+//    this constant needed no move at all.
+//
+// 2. THE FLOOR STILL LOOKS ~0.10 TOO HIGH, and `fit` structurally cannot say
+//    so. On the same bank, (0.45, 0.100) — floor down, margin UNCHANGED —
+//    measures 7 correct fires against the SAME two errors this gate already
+//    ships (the `int_abstain_is_that_right` FP and the `int_cmp_rawls_nozick`
+//    mislabel). That is +4 correct fires for no new error. The floor is nearly
+//    INERT across 0.39–0.478: with the margin at 0.100 every semantic error in
+//    range is excluded by margin, not by floor, so the margin term is doing all
+//    the discriminating work and 0.55 is only suppressing true positives
+//    (`int_meta_word_meaning` 0.512, `int_code_retry_owner` 0.488,
+//    `int_conation_halve` 0.479, `int_code_tokenizer_handoff` 0.478 — all with
+//    margins ≥ 0.106).
+//
+//    WHY `fit` NEVER PROPOSES IT: safe-recall refuses ANY mislabel, and every
+//    7-fire gate carries the Rawls mislabel — which this gate ALREADY SHIPS.
+//    So the fitter judges candidates against a stricter standard than the
+//    status quo and cannot surface a gate that merely ties the shipped error
+//    count while quadrupling coverage. `--max-false-positives 1` does not
+//    relax it; that ceiling governs abstain-fires only.
+//
+//    IT IS NOT TAKEN YET because the bank cannot carry it: `MIN_CASES_PER_CLASS`
+//    is 5 and intent has 20 firing cases over 11 classes, ~1.8 each. Precedent
+//    cf63b468 — a gate that looked strictly dominant on ten effort cases was a
+//    REGRESSION once the bank grew to eighteen. GROW THE INTENT BANK FIRST,
+//    with cases chosen to break the floor drop, then re-measure.
 const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
 // Raised from 0.04 → 0.10 after code_query/generative_query densified
 // the intent space (see module doc "Confidence + margin gate").

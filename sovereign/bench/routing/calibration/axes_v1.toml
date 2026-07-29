@@ -130,6 +130,29 @@ expect = "comparison_query"
 note = "Two named schools, one explicit axis of difference. 'Where do' is the exact string that once matched DEFINITIONAL_VERBS and misrouted a factual lookup to metalingual — the pre-2026-05-15 failure the embed router replaced."
 
 [[case]]
+id = "int_cmp_hawk_dove"
+axis = "intent"
+query = "what separates a Fed hawk from a dove, really?"
+expect = "comparison_query"
+note = """
+Two-entity contrast whose entities are ROLES, not named thinkers — every
+comparison_query exemplar names people or named doctrines — and whose
+surface ("what separates X from Y") shares no lexical frame with the
+compare/contrast/differ vocabulary they all open with.
+
+This case exists as the control that refuted a proposed fix, and it is
+retained to keep that refutation measurable. On 2026-07-29 the hypothesis
+was that comparison_query had learned the marker VERB rather than its
+stated SHAPE, so marker-free exemplars would recover int_cmp_rawls_nozick.
+Three were added and the cache rebuilt; every case came back byte-identical
+and this control stayed at sim 0.357 with comparison_query not even the
+runner-up (it loses to a deep_query about an NFL salary cap). The exemplars
+were reverted. The axis is k=1 and TOPIC dominates surface: the only
+exemplar that could win the Rawls case is one about Rawls. Fixing this
+needs a per-class or topic-normalised score, not more exemplars.
+"""
+
+[[case]]
 id = "int_code_retry_owner"
 axis = "intent"
 query = "which module owns the retry logic on the ingest path?"
@@ -142,6 +165,37 @@ axis = "intent"
 query = "what does the chunker hand back to the indexer?"
 expect = "code_query"
 note = "Domain nouns only; no 'code', 'function', or 'type' marker. Tests code_query recall on natural phrasing."
+
+[[case]]
+id = "int_code_tokenizer_handoff"
+axis = "intent"
+query = "what does the tokenizer pass along to the embedder?"
+expect = "code_query"
+note = """
+The control for int_code_chunker_type. That case was mislabelled to
+metalingual until 2026-07-29, when the exemplar that beat it — "Where is
+the chunking strategy defined here?" — was re-filed to code_query for
+violating the stated WHERE-it-lives rule. But "chunker" and "chunking"
+share a stem, so the repair could have been pure TOPIC proximity rather
+than a repaired claim about SHAPE. This case is the same
+component-A-hands-what-to-component-B shape on a topic no code_query
+exemplar mentions. If it fires, the shape generalises; if it misses, the
+chunker result was topic luck and must be reported as such.
+"""
+
+[[case]]
+id = "int_meta_attributable_term"
+axis = "intent"
+query = "what do people here actually mean when they say a run is 'attributable'?"
+expect = "metalingual_query"
+note = """
+The reverse guard on that same re-filing. Moving two \"where does it live /
+how is it implemented\" exemplars out of metalingual must not drag the
+what-a-term-MEANS neighbourhood with them — that half of the boundary is
+the half metalingual keeps. In-system locator (\"here\"), no doc or spec
+mention to make it easy, and a term ('attributable') that appears in no
+exemplar.
+"""
 
 [[case]]
 id = "int_meta_word_meaning"

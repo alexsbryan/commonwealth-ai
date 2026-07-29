@@ -241,6 +241,26 @@ intent = "deep_query"
 query = "What's the strongest internalist response to externalism about justification?"
 
 # ── comparison_query — bounded two-entity contrast ──
+#
+# EVERY exemplar here opens with an explicit marker verb (compare / contrast /
+# differ / difference), so the class cannot distinguish having learned the
+# stated SHAPE from having learned the vocabulary. That confound is real and
+# still open — but DO NOT try to close it by adding marker-free exemplars.
+# That was tried on 2026-07-29 and refuted: three were added (imperative
+# "Set Darwin against Lamarck…", confusion-framing "I keep mixing up Freud and
+# Jung…", and "Where does Hobbes leave off and Rousseau begin…"), the cache was
+# rebuilt, and every single calibration case came back BYTE-IDENTICAL —
+# `int_cmp_rawls_nozick` still at sim 0.577 / margin +0.120, still beaten by
+# the same deep_query exemplar, with comparison's best still the pre-existing
+# "Compare the act and rule formulations of utilitarianism." at 0.457.
+#
+# The reason is that this axis is k=1 nearest-neighbour and TOPIC dominates
+# surface: `int_cmp_rawls_nozick` loses to a deep_query exemplar about RAWLS,
+# and no exemplar about Darwin, Freud or Hobbes can reach it however well it
+# matches the shape. The control case `int_cmp_hawk_dove` lands at 0.357 with
+# comparison_query not even the runner-up. The only exemplar that could win
+# the Rawls case is one about Rawls — which is coaching to the bank, not a fix.
+# See `int_cmp_hawk_dove` in the calibration bank for the full record.
 
 [[example]]
 intent = "comparison_query"
@@ -494,17 +514,14 @@ query = "What's the difference between Plan and Task in our codebase?"
 intent = "metalingual_query"
 query = "What does the spec mean by 'frontdoor'?"
 
-[[example]]
-intent = "metalingual_query"
-query = "Where is the chunking strategy defined here?"
-
+# Stays metalingual: a question about our PRACTICE, answered from prose
+# and notes. The call graph can show where errors are constructed; it
+# cannot say what the project's policy for handling them is. Contrast the
+# two "where does it live / how is it implemented" shapes that used to sit
+# here and now live in the codebase-navigator block below.
 [[example]]
 intent = "metalingual_query"
 query = "How do we handle errors in this project?"
-
-[[example]]
-intent = "metalingual_query"
-query = "How is rerank implemented here?"
 
 [[example]]
 intent = "metalingual_query"
@@ -1027,6 +1044,23 @@ query = "Find the implementation of the URL-allowlist constraint."
 [[example]]
 intent = "code_query"
 query = "What's the call chain from handle_message_stream to the inference provider?"
+
+# Re-filed from metalingual_query, 2026-07-29. Both predate the rule stated
+# above and violate it outright: each asks WHERE something lives / HOW it is
+# implemented, which is the call-graph side of the boundary. The 2026-07-25
+# migration wrote the rule and added the four exemplars above it, but never
+# swept the pre-existing metalingual block for shapes the new rule reclassified
+# — so `metalingual_query` kept two of the strongest "where does it live"
+# magnets in the bank. Measured cost before this move: they were the winning
+# rival on `int_code_chunker_type` (mislabelled code_query -> metalingual at
+# sim 0.623) and the runner-up suppressing the margin on `int_code_retry_owner`.
+[[example]]
+intent = "code_query"
+query = "Where is the chunking strategy defined here?"
+
+[[example]]
+intent = "code_query"
+query = "How is rerank implemented here?"
 
 # Stays metalingual: asks what a term MEANS here, not where it lives.
 [[example]]

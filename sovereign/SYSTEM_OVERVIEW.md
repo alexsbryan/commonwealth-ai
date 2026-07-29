@@ -1085,31 +1085,84 @@ false positives, so they are an exemplar-coverage gap — neither is an
 expository essay — not a threshold one.
 
 **Intent axis — the coverage ceiling is the geometry, not the objective.** A
-prior reading held that the axis's 21% coverage came from
+prior reading held that the axis's coverage came from
 `MaxCoverage{min_precision: 1.0}` refusing any mislabel trade, and that
-relaxing the floor would buy coverage cheaply; 7 of its 13 misses do already
-predict the **correct** label. That is refuted. Sweeping every gate
-exhaustively (thresholds at each observed score and each score plus epsilon,
-so gates that *exclude* a given case are reachable), the Pareto frontier is:
+relaxing the floor would buy coverage cheaply. That is refuted, and remains
+so: every precision floor from 1.0 down to **0.7** returns the same gate.
+Sweeping every gate exhaustively (thresholds at each observed score and each
+score plus epsilon, so gates that *exclude* a given case are reachable) is
+what settles it, and the sweep is replicable from `--format json` — the
+per-case `attribution` block carries `sim_positive` and `margin` for every
+case, which is all a re-derivation needs.
+
+Rival attribution then surfaced two *exemplar-level* defects. **One was real
+and is fixed; the other is not exemplar-fixable at all.** Both results are
+worth more than the coverage number they moved.
+
+*Fixed — a taxonomy rule the file stated and its own exemplars violated.*
+`int_code_chunker_type` (want `code_query`) was losing to
+`"Where is the chunking strategy defined here?"`, tagged `metalingual_query`.
+That is not an open taxonomy question: `exemplars.toml` **states** the
+discriminator — `code_query` is WHERE it lives · WHAT CALLS it · HOW it runs
+(answered from the SCIP call graph), `metalingual_query` is what a term MEANS
+· what CHANGED (answered from prose). The 2026-07-25 migration wrote that rule
+and added exemplars under it but never swept the pre-existing metalingual
+block, leaving two "where does it live / how is it implemented" magnets on the
+wrong side. Re-filing exactly those two (2026-07-29) moved the whole Pareto
+frontier, on the *identical* 24 cases:
 
 | correct fires | 2 | 3 | 4 | 5 | 6 | 7 | 9 |
 |---|---|---|---|---|---|---|---|
-| min errors | **0** | 2 | 2 | 4 | 4 | 7 | 13 |
+| min hard errors, before | **0** | 2 | 2 | 4 | 4 | 7 | 13 |
+| min hard errors, after | **0** | **0** | **0** | **0** | **1** | **3** | **8** |
 
-Every precision floor from 1.0 down to **0.7** returns the same gate and the
-same 2 correct fires. The third fire costs 2 errors, and they are *mislabels*
-— hard commits to the wrong intent. Nor were those 7 misses "held out by the
-floor alone": only 2 are (`int_meta_word_meaning`, `int_conation_halve`), 1 by
-the margin alone (`int_expressive_slog`), and 4 by both.
+Free correct fires went 2 → 4 (both endpoints confirmed by the fitter's own
+safe-recall objective, not only by the replication). Errors 16 → 15, mislabels
+2 → 1, precision 40% → 60%. `int_code_retry_owner`'s margin more than doubled,
+0.058 → 0.127. No constant moved, and the other five axes came back at
+**+0.000** separation — the edit is confined to the axis it was aimed at.
 
-What rival attribution does surface is two *exemplar-level* defects of the
-kind that fixed the locator. `int_cmp_rawls_nozick` (want `comparison_query`)
-loses to a `deep_query` exemplar about **Rawls** — topic dominance again. And
-`int_code_chunker_type` (want `code_query`) loses to
-`"Where is the chunking strategy defined here?"`, which is tagged
-`metalingual_query` — a real taxonomy boundary (a question *about our system*
-versus one *answered by reading code*) that the bank asserts one side of
-without pinning, exactly as the locator bank did before the split.
+*Not fixable by exemplars — topic dominates shape.* `int_cmp_rawls_nozick`
+(want `comparison_query`) loses to a `deep_query` exemplar about **Rawls**.
+The tempting reading is that `comparison_query` learned its marker verb rather
+than its stated shape — all fifteen exemplars open with
+compare/contrast/differ/difference, so nothing separates the two hypotheses.
+It was tested: three marker-free two-entity exemplars were added, the cache
+rebuilt, and **every case came back byte-identical**. The control case
+`int_cmp_hawk_dove` sits at sim 0.357 with `comparison_query` not even the
+runner-up. The exemplars were reverted; the control case is kept so the
+refutation stays measurable. The axis is k=1 over 11 topically-overlapping
+classes, so the only exemplar that can win the Rawls case is one *about
+Rawls* — which is coaching to the bank. Moving this ceiling needs per-class
+thresholds or a topic-normalised score, not more exemplars.
+
+*The fitted gate is declined — but the floor is a live lead, and `fit` cannot
+say so.* The fitter reports (0.356, 0.123) as "best" since the re-filing;
+`router_embed.rs` carries the reasons not to take it (separation collapses
+0.018 → 0.007, the fitted floor slid 0.363 → 0.356 when the bank grew by three
+cases while the shipped gate needed none, and 0.356 sits at the encoder's noise
+floor). That decline is not, however, a verdict that the floor is right.
+
+On the same bank, **(0.45, 0.100) — floor down, margin unchanged — measures 7
+correct fires against the *same two* errors the shipped gate already carries.**
++4 correct fires, no new error. The floor is nearly inert across 0.39–0.478:
+with the margin at 0.100 every semantic error in that range is excluded by
+*margin*, so the margin term does the discriminating work and 0.55 only
+suppresses true positives — four of them, all with margins ≥ 0.106.
+
+`fit` cannot surface this by construction: **safe-recall refuses any mislabel,
+and every 7-fire gate carries the Rawls mislabel that the shipped gate already
+ships.** The fitter therefore judges candidates against a stricter standard
+than the status quo, and cannot propose a gate that ties the shipped error
+count while quadrupling coverage. `--max-false-positives` does not relax this —
+that ceiling governs abstain-fires only. This is a defect in the objective, not
+in the axis, and it is the most useful thing this round of calibration found.
+
+The floor move is **not taken yet** because the bank cannot carry it: 20 firing
+cases over 11 classes is ~1.8 each against a `MIN_CASES_PER_CLASS` of 5, and
+the precedent (cf63b468) is a gate that looked strictly dominant on ten effort
+cases and was a regression once the bank grew to eighteen. Grow the intent bank
+first, with cases chosen to break the floor drop. `fit` still exits **3** here.
 
 **Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
 the failure this system actually has is that the ground moves while the
