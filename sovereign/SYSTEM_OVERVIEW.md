@@ -1122,6 +1122,20 @@ safe-recall objective, not only by the replication). Errors 16 → 15, mislabels
 0.058 → 0.127. No constant moved, and the other five axes came back at
 **+0.000** separation — the edit is confined to the axis it was aimed at.
 
+*And it carries a side effect worth generalising.* A/B'd by flipping the two
+tags back, rebuilding the cache and re-fitting: **consolidating two classes
+that shared a neighbourhood inflates the margin for everything in it.** Margin
+is a *relative* measure, and the absorbed class was the runner-up holding it
+down. No similarity changed — only which class claimed the win — yet
+`int_abstain_chunker_overlap_hunch`, a query that should abstain, went from
+margin +0.043 to +0.128. At the 0.100 margin shipped at the time, the re-filing
+*created* that false positive rather than relabelling a pre-existing one, which
+is what the plausible argument from "the same exemplar wins either way"
+predicted. It is harmless at the 0.206 margin shipped now, and the move is a
+clear net win there (2 correct/1 mislabel → 3 correct/0 mislabel). **The rule:
+after re-filing exemplars between classes, re-check the abstain cases, not just
+the positives.**
+
 *Not fixable by exemplars — topic dominates shape.* `int_cmp_rawls_nozick`
 (want `comparison_query`) loses to a `deep_query` exemplar about **Rawls**.
 The tempting reading is that `comparison_query` learned its marker verb rather
@@ -1136,33 +1150,49 @@ classes, so the only exemplar that can win the Rawls case is one *about
 Rawls* — which is coaching to the bank. Moving this ceiling needs per-class
 thresholds or a topic-normalised score, not more exemplars.
 
-*The fitted gate is declined — but the floor is a live lead, and `fit` cannot
-say so.* The fitter reports (0.356, 0.123) as "best" since the re-filing;
-`router_embed.rs` carries the reasons not to take it (separation collapses
-0.018 → 0.007, the fitted floor slid 0.363 → 0.356 when the bank grew by three
-cases while the shipped gate needed none, and 0.356 sits at the encoder's noise
-floor). That decline is not, however, a verdict that the floor is right.
+*The bank grew to adjudicate a floor move, and reported something worse.* The
+floor looked like a live lead: (0.45, 0.100) measured +4 correct fires for no
+new error, and `fit` could not surface it because safe-recall refuses any
+mislabel while the shipped gate already carried one — so the fitter judges
+candidates against a stricter standard than the status quo and cannot propose a
+gate that ties shipped errors while raising coverage. (`--max-false-positives`
+does not relax this; it governs abstain-fires only. That objective defect is
+real and still worth fixing.)
 
-On the same bank, **(0.45, 0.100) — floor down, margin unchanged — measures 7
-correct fires against the *same two* errors the shipped gate already carries.**
-+4 correct fires, no new error. The floor is nearly inert across 0.39–0.478:
-with the margin at 0.100 every semantic error in that range is excluded by
-*margin*, so the margin term does the discriminating work and 0.55 only
-suppresses true positives — four of them, all with margins ≥ 0.106.
+Growing the bank 27 → 40 to test that move found the **coverage bias that had
+been hiding the axis's actual precision**: all seven original abstain cases
+were 2-6 word ellipticals ("go on", "tell me more"). A floor drop admits the
+sim band 0.45–0.55, and only *content-rich* queries score there — so the bank
+was proving the floor safe using exactly the cases a floor cannot endanger.
+Four long, confident-sounding, genuinely under-determined abstain cases were
+added. Two of them fire, **at the shipped gate, not the proposed one.**
 
-`fit` cannot surface this by construction: **safe-recall refuses any mislabel,
-and every 7-fire gate carries the Rawls mislabel that the shipped gate already
-ships.** The fitter therefore judges candidates against a stricter standard
-than the status quo, and cannot propose a gate that ties the shipped error
-count while quadrupling coverage. `--max-false-positives` does not relax this —
-that ceiling governs abstain-fires only. This is a defect in the objective, not
-in the axis, and it is the most useful thing this round of calibration found.
+The shipped gate's real score on adequate evidence was **5 correct fires
+against 5 hard errors — 50% precision.** The axis was committing wrong about as
+often as it committed right, against its own documented asymmetry (a false
+positive hard-commits the turn; a false negative merely falls through to the
+cascade ~1.2s slower).
 
-The floor move is **not taken yet** because the bank cannot carry it: 20 firing
-cases over 11 classes is ~1.8 each against a `MIN_CASES_PER_CLASS` of 5, and
-the precedent (cf63b468) is a gate that looked strictly dominant on ten effort
-cases and was a regression once the bank grew to eighteen. Grow the intent bank
-first, with cases chosen to break the floor drop. `fit` still exits **3** here.
+So the repair is the **margin**, not the floor: `DEFAULT_MIN_MARGIN` 0.10 →
+0.206, floor untouched. **3 fires, 0 mislabels, 0 false positives — 100%
+precision**, separation 0.018 → 0.033, and `fit` now reports the axis
+**optimal** rather than movable. The margins sort with a clean gap exactly
+there: every hard error at ≤ 0.190, every surviving correct fire at ≥ 0.223.
+Five hard commits removed for two extra cascade calls. The floor is left at
+0.55 having been shown *inert* — every point on the frontier is reachable at a
+floor of 0.000 — because moving a constant that screens nothing is pure risk.
+
+*Why coverage cannot be recovered by tuning.* Below 0.206 good and bad
+interleave with no separating value: the two worst false positives fire at
+margins of 0.171 and 0.190, **higher than most correct fires**. On this axis
+margin measures confidence, not correctness. The purpose-built pair proves
+why — `int_know_losalamos_arrival` (a bare date lookup) and
+`int_deep_losalamos_disillusion` (a causal question) resolve to the *same*
+nearest exemplar, and the wrong one wins with the bigger margin. That is the
+same topic-dominance that refuted the `comparison_query` fix, now demonstrated
+under control rather than inferred. Recovering coverage needs per-class
+thresholds or a topic-normalised score — not a threshold move and not more
+exemplars.
 
 **Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
 the failure this system actually has is that the ground moves while the

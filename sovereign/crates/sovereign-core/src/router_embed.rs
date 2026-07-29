@@ -89,47 +89,64 @@ const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.50;
 /// nothing they had before.
 const DEFAULT_LOCATOR_MIN_MARGIN: f32 = 0.02;
 
-// THIS FLOOR IS PROBABLY TOO HIGH, BUT DO NOT TAKE THE VALUE `fit` OFFERS.
-// Two separate claims, measured 2026-07-29 — read both before touching it.
+// THIS FLOOR IS INERT. DO NOT TUNE IT — the margin below is the live term.
 //
-// 1. DO NOT take the fitted gate. `fit` has reported (0.356, 0.123) as "best"
-//    since the code_query re-filing — +1 fire, -2 errors, precision 100%. It
-//    is the wrong trade anyway: separation COLLAPSES 0.018 → 0.007 (the number
-//    the drift baseline exists to watch — a gate that thin flips on any
-//    encoder re-quantisation), 0.356 sits at the noise floor
-//    (`int_cmp_hawk_dove` scores 0.357 with margin 0.000, a coin flip, held
-//    out by the margin term alone), and it is demonstrably overfit: the fitted
-//    floor slid 0.363 → 0.356 when the bank grew by just three cases while
-//    this constant needed no move at all.
+// Measured 2026-07-29 on the 40-case calibration bank: EVERY point on the
+// axis's Pareto frontier is achieved at a floor of 0.000. The floor screens
+// nothing the margin does not already screen, at any operating point. Two
+// consequences, both counter-intuitive enough to be worth stating:
 //
-// 2. THE FLOOR STILL LOOKS ~0.10 TOO HIGH, and `fit` structurally cannot say
-//    so. On the same bank, (0.45, 0.100) — floor down, margin UNCHANGED —
-//    measures 7 correct fires against the SAME two errors this gate already
-//    ships (the `int_abstain_is_that_right` FP and the `int_cmp_rawls_nozick`
-//    mislabel). That is +4 correct fires for no new error. The floor is nearly
-//    INERT across 0.39–0.478: with the margin at 0.100 every semantic error in
-//    range is excluded by margin, not by floor, so the margin term is doing all
-//    the discriminating work and 0.55 is only suppressing true positives
-//    (`int_meta_word_meaning` 0.512, `int_code_retry_owner` 0.488,
-//    `int_conation_halve` 0.479, `int_code_tokenizer_handoff` 0.478 — all with
-//    margins ≥ 0.106).
+//   * Lowering it buys real coverage and costs nothing — (0.45, 0.100) scores
+//     9 correct fires against the SAME hard-error count as (0.55, 0.100)'s 5.
+//   * Raising the margin makes that moot: at the value shipped below, all
+//     three firing cases sit at sim ≥ 0.571, so this floor excludes nothing.
+//     It is left at 0.55 because moving an inert constant is pure risk.
 //
-//    WHY `fit` NEVER PROPOSES IT: safe-recall refuses ANY mislabel, and every
-//    7-fire gate carries the Rawls mislabel — which this gate ALREADY SHIPS.
-//    So the fitter judges candidates against a stricter standard than the
-//    status quo and cannot surface a gate that merely ties the shipped error
-//    count while quadrupling coverage. `--max-false-positives 1` does not
-//    relax it; that ceiling governs abstain-fires only.
-//
-//    IT IS NOT TAKEN YET because the bank cannot carry it: `MIN_CASES_PER_CLASS`
-//    is 5 and intent has 20 firing cases over 11 classes, ~1.8 each. Precedent
-//    cf63b468 — a gate that looked strictly dominant on ten effort cases was a
-//    REGRESSION once the bank grew to eighteen. GROW THE INTENT BANK FIRST,
-//    with cases chosen to break the floor drop, then re-measure.
+// DO NOT take the gate `fit` reports as "best" (it has offered (0.356, 0.123)
+// since the code_query re-filing). Separation collapses 0.018 → 0.007, 0.356
+// sits at the encoder noise floor, and it is demonstrably overfit — the fitted
+// floor slid 0.363 → 0.356 when the bank grew by three cases. More
+// fundamentally, `fit`'s safe-recall objective refuses ANY mislabel while the
+// shipped gate already carries one, so it judges candidates against a stricter
+// standard than the status quo and cannot surface a gate that ties shipped
+// errors while raising coverage. `--max-false-positives` does not relax that;
+// it governs abstain-fires only.
 const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
-// Raised from 0.04 → 0.10 after code_query/generative_query densified
-// the intent space (see module doc "Confidence + margin gate").
-const DEFAULT_MIN_MARGIN: f32 = 0.10;
+
+// Raised 0.10 → 0.206 on 2026-07-29. This is a PRECISION repair, and it costs
+// coverage on purpose.
+//
+// WHY. Growing the bank 27 → 40 revealed the shipped gate was committing wrong
+// about as often as it committed right: 5 correct fires against 5 hard errors,
+// **50% precision**. The old bank could not see this because ALL SEVEN of its
+// abstain cases were 2-6 word ellipticals ("go on", "tell me more") — too
+// short to reach the sim band where hard commits happen. Adding four
+// content-rich but genuinely under-determined abstain cases turned up two
+// false positives that the shipped gate had been making all along.
+//
+// This axis documents its own asymmetry: a false positive HARD-COMMITS the
+// turn down a narrowed path, while a false negative merely falls through to
+// the LLM cascade ~1.2s slower. At 50% precision that asymmetry was being paid
+// in the expensive direction. 0.206 buys 100% precision (3 fires, 0 hard
+// errors) for two correct fires — five hard commits removed at the cost of two
+// extra cascade calls.
+//
+// WHY 0.206 SPECIFICALLY. The margins sort with a clean gap exactly here:
+// every hard error is at ≤ 0.190, every remaining correct fire at ≥ 0.223.
+// 0.206 is the midpoint, 0.016 clear on each side — comparable to the effort
+// axis's 0.021. It is not set by any single case: dropping the most
+// influential new one (`int_know_losalamos_arrival`, 0.190) moves the midpoint
+// only to ~0.197.
+//
+// DO NOT try to recover the lost coverage by lowering the margin. Below 0.206
+// good and bad interleave with no separating value — the two worst false
+// positives fire at margins of 0.171 and 0.190, HIGHER than most correct
+// fires. On this axis margin measures confidence, not correctness, because
+// k=1 means TOPIC dominates ASK: `int_know_losalamos_arrival` (a bare date
+// lookup) and `int_deep_losalamos_disillusion` (a causal question) resolve to
+// the SAME nearest exemplar, and the wrong one wins with the bigger margin.
+// Recovering coverage needs per-class thresholds or a topic-normalised score.
+const DEFAULT_MIN_MARGIN: f32 = 0.206;
 
 /// On-disk exemplar list. Each `[[example]]` row carries an intent
 /// name (matches `Intent` debug-format, lowercased + snake_case) and

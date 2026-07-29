@@ -1054,6 +1054,30 @@ query = "What's the call chain from handle_message_stream to the inference provi
 # magnets in the bank. Measured cost before this move: they were the winning
 # rival on `int_code_chunker_type` (mislabelled code_query -> metalingual at
 # sim 0.623) and the runner-up suppressing the margin on `int_code_retry_owner`.
+#
+# SIDE EFFECT — MEASURED, NOT REASONED. A/B'd on 2026-07-29 by flipping these
+# two tags back, rebuilding the cache, and re-fitting: consolidating two classes
+# that shared a neighbourhood INFLATES THE MARGIN for everything in it, because
+# margin is a RELATIVE measure and the absorbed class was the runner-up
+# suppressing it. Nothing about the queries or their embeddings changed — only
+# which class claimed the win:
+#
+#   int_abstain_chunker_overlap_hunch   +0.043 -> +0.128   (should ABSTAIN)
+#   int_code_retry_owner                +0.058 -> +0.127
+#   int_code_chunker_type               +0.214 -> +0.223
+#   int_code_tokenizer_handoff          +0.110 -> +0.116
+#
+# The first line is the warning: an under-determined query got 3x more
+# confident without becoming any more correct. At the margin of 0.100 that
+# shipped at the time, this move CREATED that false positive — it did not
+# merely relabel a pre-existing one, which is what a plausible-sounding
+# argument from "the same exemplar wins either way" predicted. It is harmless
+# at the 0.206 margin shipped now (0.128 is well below the gate) and the move
+# is a clear net win there: 2 correct/1 mislabel -> 3 correct/0 mislabel.
+#
+# GENERAL RULE: after re-filing exemplars BETWEEN classes, re-check the ABSTAIN
+# cases, not just the positives. Merging classes cannot change any similarity,
+# but it can and does raise confidence across the whole shared region.
 [[example]]
 intent = "code_query"
 query = "Where is the chunking strategy defined here?"

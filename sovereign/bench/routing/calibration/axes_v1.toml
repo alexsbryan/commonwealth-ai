@@ -319,6 +319,125 @@ expect = "abstain"
 note = "Two words, no content. Included as the degenerate lower bound: a gate admitting this admits anything."
 
 # ══════════════════════════════════════════════════════════════════
+# INTENT AXIS — growth batch, 2026-07-29, to adjudicate a floor move
+#
+# `fit` measures (0.45, 0.100) as +4 correct fires for zero new errors
+# against the shipped (0.55, 0.100). The 27-case bank could not justify
+# taking it, and the reason is a COVERAGE BIAS, not the sample size:
+#
+#   ALL SEVEN original abstain cases are 2-6 words — "go on",
+#   "tell me more", "is that right?". Every one is an ultra-short
+#   elliptical.
+#
+# That is the wrong evidence for this decision. Lowering the floor admits
+# the sim band 0.45-0.55, and it is CONTENT-RICH queries that score there;
+# a bare elliptical cannot reach it. So the bank was proving the floor drop
+# safe using exactly the cases a floor drop cannot endanger, and had no way
+# to observe the failure it would actually cause. This is the same
+# one-directional hole `eff_short_but_hard` closed on the effort axis, where
+# the 10-case bank endorsed a gate that was a regression at 18 (cf63b468).
+#
+# The four abstain cases below are therefore LONG and confident-sounding but
+# genuinely under-determined — the intent turns on what the previous turn
+# was, which this axis cannot see. They are written to BREAK the floor move.
+# The nine firing cases probe classes the bank under-serves: commissive_query
+# had EIGHT exemplars and ZERO cases despite being the class that wrongly
+# wins two existing errors, and complex_task/simple_query/generative_query
+# are the sparsest.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_abstain_veil_didnt_land"
+axis = "intent"
+query = "the part about the veil of ignorance didn't quite land for me, the rest was fine"
+expect = "abstain"
+note = "Content-rich and confident, and still a coin flip: conation (redo that part), expressive (mild dissatisfaction, no action wanted), or metalingual (a remark about the text you produced). Which one depends entirely on whether the user wants it done again — not observable here. The first abstain case in this bank long enough to reach the sim band a lower floor would admit."
+
+[[case]]
+id = "int_abstain_chunker_overlap_hunch"
+axis = "intent"
+query = "is the chunker's overlap setting why retrieval feels off, or am I imagining it?"
+expect = "abstain"
+note = "code_query (go read the code and check) or expressive (floating a hunch, wants a conversation)? The trailing self-doubt is what makes it genuinely ambiguous. Doubles as a guard on the 2026-07-29 code_query re-filing: those exemplars made this neighbourhood more attractive to code_query, and this case must NOT be captured by it."
+
+[[case]]
+id = "int_abstain_third_option_first"
+axis = "intent"
+query = "you gave me three options earlier — I think the second is what I want, but say more about the third first"
+expect = "abstain"
+note = "Two moves in one sentence: metalingual recall of a prior enumeration AND a conation to elaborate. Neither dominates. Long, specific, and high-content, so it should land well inside the band a lower floor opens — which is the point."
+
+[[case]]
+id = "int_abstain_explain_or_just_tell"
+axis = "intent"
+query = "I'm honestly not sure whether I want the whole story of how Bretton Woods unravelled or just the year it ended"
+expect = "abstain"
+note = "The user states their own indeterminacy between deep_query and knowledge_query. If ANY gate commits this one it is committing a question whose asker has explicitly said they have not decided. Shares a topic with int_know_bretton_year and int_deep_bretton_timing, so it also probes whether topic proximity can drag an abstain into a fire."
+
+[[case]]
+id = "int_conation_three_sentences"
+axis = "intent"
+query = "do that again but keep it to three sentences and skip the caveats"
+expect = "conation_query"
+note = "Redo-with-constraints, and unlike int_conation_halve it carries real content. Tests that conation survives at length rather than being a short-imperative centroid."
+
+[[case]]
+id = "int_commissive_draft_tuesday"
+axis = "intent"
+query = "you can expect the draft from me by Tuesday"
+expect = "commissive_query"
+note = "commissive_query has 8 exemplars and had ZERO cases in this bank, yet it is the class that wrongly wins int_task_commitments AND int_gen_voice_pastiche. Without a positive case there is no way to tell over-firing from a healthy class. Speaker-commits-to-future-action, phrased away from the 'I'm going to X' frame the exemplars use."
+
+[[case]]
+id = "int_commissive_lint_before_push"
+axis = "intent"
+query = "from now on I'll run the lint script before I push"
+expect = "commissive_query"
+note = "Second commissive positive, durative rather than one-shot. Adjacent to conation in surface (it describes an action) but the actor is the SPEAKER, not the assistant — that is the whole boundary, and nothing in this bank pinned it before."
+
+[[case]]
+id = "int_simple_cups_ounces"
+axis = "intent"
+query = "how many ounces in three cups?"
+expect = "simple_query"
+note = "Closed-form unit conversion, no retrieval. simple_query has 6 exemplars, and int_simple_percentage is currently its only case — one probe cannot distinguish a healthy sparse class from a lucky one."
+
+[[case]]
+id = "int_complex_reading_triage"
+axis = "intent"
+query = "take my reading list, drop anything I've already finished, and group what's left by how long it'll take"
+expect = "complex_task"
+note = "Three chained operations over one source. complex_task has 4 exemplars — the sparsest class in the bank — and int_task_commitments, its only other case, currently misroutes to commissive_query. A second probe says whether that is the case or the class."
+
+[[case]]
+id = "int_gen_memorial"
+axis = "intent"
+query = "write me something short I could read out at my grandfather's memorial"
+expect = "generative_query"
+note = "Creative production carrying genuine affect. Both existing generative cases miss, one of them to knowledge_query; this one leans emotional, so if generative_query is really behaving like an expressive centroid at the margins this case will show it."
+
+[[case]]
+id = "int_know_losalamos_arrival"
+axis = "intent"
+query = "when did the European physicists actually get to Los Alamos?"
+expect = "knowledge_query"
+note = "Half of a topic-dominance pair, deliberately built on the topic of the deep_query exemplar 'How did Manhattan Project physicists' European exile shape the project's outcome?' — the exemplar that currently beats int_know_cable_funding. A bare date lookup that must NOT be pulled into deep_query by shared topic."
+
+[[case]]
+id = "int_deep_losalamos_disillusion"
+axis = "intent"
+query = "why did so many of the Los Alamos physicists turn against the bomb afterwards?"
+expect = "deep_query"
+note = "The other half. Same topic and nearly the same vocabulary as int_know_losalamos_arrival, opposite correct intent. If both resolve correctly the axis is reading the ASK; if they collapse together it is reading the TOPIC — which is the diagnosis that killed the comparison_query fix, restated as a measurable pair."
+
+[[case]]
+id = "int_meta_corpus_or_inferred"
+axis = "intent"
+query = "which parts of that came from my corpus and which did you work out yourself?"
+expect = "metalingual_query"
+note = "Provenance of the assistant's own answer — metalingual in the strictest sense. Probes the sub-shape found unreachable on 2026-07-29: both existing metalingual cases win via CONVERSATION-RECALL exemplars rather than any about-our-system exemplar. Content-rich, so it lands in the band a floor drop opens."
+
+# ══════════════════════════════════════════════════════════════════
 # LOCATOR AXIS — this thread vs everything else (one-vs-rest)
 # ══════════════════════════════════════════════════════════════════
 

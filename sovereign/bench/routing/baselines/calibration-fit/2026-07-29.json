@@ -3,7 +3,7 @@
   "banks": [
     "sovereign/bench/routing/calibration/axes_v1.toml"
   ],
-  "bank_digest": "3909d402b7a7124e",
+  "bank_digest": "f6d6b3c97160ec64",
   "axes": {
     "archive": {
       "current": {
@@ -92,30 +92,30 @@
     "intent": {
       "current": {
         "min_sim": 0.55,
-        "min_margin": 0.1,
+        "min_margin": 0.206,
         "fired_correct": 3,
-        "false_positive": 1,
-        "mislabelled": 1,
-        "abstained_correct": 6,
-        "missed": 16,
-        "weakest_accept": 0.003943704,
-        "nearest_miss": -0.014265545
-      },
-      "best": {
-        "min_sim": 0.35563958,
-        "min_margin": 0.12332739,
-        "fired_correct": 4,
         "false_positive": 0,
         "mislabelled": 0,
-        "abstained_correct": 7,
-        "missed": 16,
-        "weakest_accept": 0.0032906383,
-        "nearest_miss": -0.0032906383
+        "abstained_correct": 11,
+        "missed": 26,
+        "weakest_accept": 0.016714811,
+        "nearest_miss": -0.016430885
       },
-      "cases_scored": 27,
-      "gates_evaluated": 756,
-      "positives": 20,
-      "negatives": 7
+      "best": {
+        "min_sim": 0.3554867,
+        "min_margin": 0.20614196,
+        "fired_correct": 3,
+        "false_positive": 0,
+        "mislabelled": 0,
+        "abstained_correct": 11,
+        "missed": 26,
+        "weakest_accept": 0.016572848,
+        "nearest_miss": -0.016572848
+      },
+      "cases_scored": 40,
+      "gates_evaluated": 1640,
+      "positives": 29,
+      "negatives": 11
     },
     "locator": {
       "current": {
