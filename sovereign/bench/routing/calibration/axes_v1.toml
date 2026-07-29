@@ -645,3 +645,74 @@ axis = "effort"
 query = "can you put that last bit in a table?"
 expect = "abstain"
 note = "A formatting request: imperative, references prior content, requires no new reasoning. Sits near the locator axis's positives and must fire on neither."
+
+# Grown 2026-07-29 from 10 to 18 cases. The fitted gate was strictly
+# dominant over the shipped one on the original 10 (5/5 fires kept, the
+# single FP cleared), but a constant that ships to every user should not
+# move on ten cases — and eight of those ten shared a shape with the
+# exemplar bank. These eight are chosen to be the cases most likely to
+# BREAK the dominant gate, not to confirm it.
+#
+# The load-bearing addition is the missing half of the axis's own
+# thesis. `eff_abstain_exhaustive_but_shallow` tests "long answer, low
+# effort"; nothing tested "short answer, high effort". Every shipped
+# HIGH exemplar is an exhaustive expository essay, so an axis keyed on
+# length rather than reasoning depth would score perfectly on the old
+# bank. eff_short_but_hard and eff_abstain_thorough_but_trivial are the
+# two cases that can tell those apart.
+
+[[case]]
+id = "eff_short_but_hard"
+axis = "effort"
+query = "think this through carefully, then give me your answer in one paragraph"
+expect = "high"
+note = "Effort WITHOUT length — the inverse of eff_abstain_exhaustive_but_shallow and the case the original bank had no way to fail. Explicitly caps the output while asking for extended reasoning. Every HIGH exemplar in effort_examples.toml asks for a long answer; if the centroid has learned length rather than depth, this is where it shows."
+
+[[case]]
+id = "eff_abstain_thorough_but_trivial"
+axis = "effort"
+query = "explain thoroughly what HTTP stands for"
+expect = "abstain"
+note = "Carries the positive class's lexical marker (\"thoroughly\") on a one-line answer. Paired trap to eff_abstain_exhaustive_but_shallow, which uses \"every\" — a bank that only traps one depth-marker word measures one word. Escalating here loads the deep slot to expand an acronym."
+
+[[case]]
+id = "eff_diagnose_latency"
+axis = "effort"
+query = "our p90 latency doubled after the last deploy and I can't see why — reason it out"
+expect = "high"
+note = "Diagnostic reasoning. High effort with no exhaustiveness marker and no expository shape at all: the ask is to FORM a hypothesis, not to lay out a known subject. Every shipped HIGH exemplar is a survey of established material, so this tests whether the axis reads reasoning demand or essay register."
+
+[[case]]
+id = "eff_counterfactual_architecture"
+axis = "effort"
+query = "if we had gone with the other architecture two years ago, where would we be now?"
+expect = "high"
+note = "Counterfactual synthesis — genuinely expensive, and phrased as a short conversational question. Shares surface form with cheap speculation, which is the trap: the cost is in the reasoning, not the wording."
+
+[[case]]
+id = "eff_tradeoff_pick_one"
+axis = "effort"
+query = "weigh these three options against each other and tell me which one you'd actually pick"
+expect = "high"
+note = "Comparative synthesis terminating in a single choice. Demands the full comparison internally while asking for a short verdict — a second, differently-phrased probe of the depth-vs-length split, so eff_short_but_hard is not carrying that claim alone."
+
+[[case]]
+id = "eff_abstain_convert_units"
+axis = "effort"
+query = "convert 30 celsius to fahrenheit for me"
+expect = "abstain"
+note = "Mechanical computation. Distinct from the existing lookup abstains (capital of Peru) because it is a transformation rather than a recall — the low side of the axis should not be all trivia questions."
+
+[[case]]
+id = "eff_abstain_yes_no_fact"
+axis = "effort"
+query = "is the Danube longer than the Rhine?"
+expect = "abstain"
+note = "A COMPARISON that is nonetheless a single lookup. Comparative framing is a weak signal for effort — eff_tradeoff_pick_one is also comparative and must fire — so this is the negative that stops the axis from keying on \"compare\"."
+
+[[case]]
+id = "eff_abstain_list_codes"
+axis = "effort"
+query = "give me the ISO country codes for the Nordic countries"
+expect = "abstain"
+note = "Long mechanical output in a technical register, where eff_abstain_exhaustive_but_shallow is long mechanical output in a general one. The register is the variable: an axis that escalates on technical vocabulary rather than reasoning demand fails here and passes there."

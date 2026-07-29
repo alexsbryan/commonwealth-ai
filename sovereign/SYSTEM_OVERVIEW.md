@@ -1055,6 +1055,62 @@ other, and both lose to "Elaborate on the second point." Recall-vs-resume on
 an ordinal reference is below this encoder's resolution; the axis abstains on
 both, which is the safe direction.
 
+**Effort axis — why "grow the bank before moving the constant" is a rule
+(2026-07-29).** A fit against the original 10 effort cases proposed
+`(0.300, 0.040) → (0.482, 0.025)` and it looked *strictly dominant*: same 5/5
+correct fires, the single false positive cleared. Moving the constant on that
+evidence would have been wrong in both directions at once. The bank was grown
+to 18 with cases chosen to **break** that gate rather than confirm it, and on
+the larger bank `(0.482, 0.025)` scores **6 correct fires and 1 false
+positive** — it rejects `eff_diagnose_latency` (sim 0.418, a true HIGH) on the
+raised floor while `eff_abstain_thorough_but_trivial` (sim 0.556) sails
+through it anyway.
+
+The real separation was never in the floor. Sorted by margin, seven genuine
+HIGH cases sit at +0.099 and above, both false positives at +0.057, so
+`DEFAULT_MIN_MARGIN` moved 0.040 → **0.078** — the midpoint of that gap,
+0.021 clear on each side — and `DEFAULT_MIN_HIGH_SIM` stayed at 0.30. On the
+18-case bank that is errors 4 → 2, false positives 2 → 0, correct fires
+unchanged at 7/9, and the shipped gate is now optimal.
+
+The load-bearing new case is `eff_short_but_hard` ("think this through
+carefully, then give me your answer in one paragraph"). The old bank tested
+*long answer, low effort* (`eff_abstain_exhaustive_but_shallow`) but never the
+inverse, and every shipped HIGH exemplar is an exhaustive expository essay —
+so an axis that had learned **length** rather than reasoning depth would have
+scored perfectly. It fires correctly, which is the first actual evidence for
+the axis's own stated claim. The two remaining misses
+(`eff_counterfactual_architecture`, `eff_tradeoff_pick_one`) rank *below* both
+false positives, so they are an exemplar-coverage gap — neither is an
+expository essay — not a threshold one.
+
+**Intent axis — the coverage ceiling is the geometry, not the objective.** A
+prior reading held that the axis's 21% coverage came from
+`MaxCoverage{min_precision: 1.0}` refusing any mislabel trade, and that
+relaxing the floor would buy coverage cheaply; 7 of its 13 misses do already
+predict the **correct** label. That is refuted. Sweeping every gate
+exhaustively (thresholds at each observed score and each score plus epsilon,
+so gates that *exclude* a given case are reachable), the Pareto frontier is:
+
+| correct fires | 2 | 3 | 4 | 5 | 6 | 7 | 9 |
+|---|---|---|---|---|---|---|---|
+| min errors | **0** | 2 | 2 | 4 | 4 | 7 | 13 |
+
+Every precision floor from 1.0 down to **0.7** returns the same gate and the
+same 2 correct fires. The third fire costs 2 errors, and they are *mislabels*
+— hard commits to the wrong intent. Nor were those 7 misses "held out by the
+floor alone": only 2 are (`int_meta_word_meaning`, `int_conation_halve`), 1 by
+the margin alone (`int_expressive_slog`), and 4 by both.
+
+What rival attribution does surface is two *exemplar-level* defects of the
+kind that fixed the locator. `int_cmp_rawls_nozick` (want `comparison_query`)
+loses to a `deep_query` exemplar about **Rawls** — topic dominance again. And
+`int_code_chunker_type` (want `code_query`) loses to
+`"Where is the chunking strategy defined here?"`, which is tagged
+`metalingual_query` — a real taxonomy boundary (a question *about our system*
+versus one *answered by reading code*) that the bank asserts one side of
+without pinning, exactly as the locator bank did before the split.
+
 **Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
 the failure this system actually has is that the ground moves while the
 constants stay still — a new encoder, a re-quantised one, an edited exemplar

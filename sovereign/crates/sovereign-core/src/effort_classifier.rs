@@ -33,13 +33,36 @@ use crate::router_axis::{dot, normalize, AxisGate, AxisScore};
 use crate::traits::InferenceProvider;
 use crate::types::Effort;
 
-/// High must beat Low by at least this cosine margin. The probe separated all
-/// held-out cases with |margin| ≥ 0.079 (high: +0.11/+0.16), so 0.04 clears the
-/// low cases while leaving headroom; matches the embed-router's margin default.
-const DEFAULT_MIN_MARGIN: f32 = 0.04;
+/// High must beat Low by at least this cosine margin.
+///
+/// Was 0.04, inherited from the embed-router's default and justified by a
+/// probe whose held-out cases all separated by |margin| ≥ 0.079. Raised to
+/// 0.078 on 2026-07-29 against the 18 effort cases in
+/// `bench/routing/calibration/axes_v1.toml`: at 0.04 the axis fired on two
+/// queries that must abstain — "can you put that last bit in a table?" and
+/// "explain thoroughly what HTTP stands for" — both landing at margin
+/// +0.057, while the weakest genuine HIGH sits at +0.099. 0.078 is the
+/// midpoint of that gap, 0.021 clear on each side, and it costs nothing:
+/// correct fires stay at 7/9, false positives go 2 → 0.
+///
+/// The two HIGH cases it still misses (`eff_counterfactual_architecture`
+/// +0.020, `eff_tradeoff_pick_one` -0.040) rank BELOW both of those
+/// negatives, so no margin reaches them without taking the false positives
+/// first. That is an exemplar-coverage gap — every shipped HIGH exemplar is
+/// an exhaustive expository essay, and neither of those is — not a threshold
+/// one. Missing them is safe: the turn falls through to the fast slot.
+const DEFAULT_MIN_MARGIN: f32 = 0.078;
 /// High also needs this absolute similarity to the high centroid, so an
 /// off-distribution query near neither centroid abstains (→ Low) rather than
 /// escalating on a razor-thin margin. The probe's high cases sat at ~0.39.
+///
+/// DELIBERATELY UNCHANGED at 0.30. A fit against an earlier 10-case bank
+/// proposed raising this to 0.482 and it looked strictly dominant; the grown
+/// bank showed it was not. `eff_abstain_thorough_but_trivial` scores 0.556
+/// and would still have fired, while `eff_diagnose_latency` (0.418, a true
+/// HIGH) would have been rejected — one correct fire lost and the false
+/// positive kept. Separation on this axis lives in the margin, not the
+/// floor; the floor's job is only to reject queries near neither centroid.
 const DEFAULT_MIN_HIGH_SIM: f32 = 0.30;
 
 #[derive(Debug, Clone, Deserialize)]
