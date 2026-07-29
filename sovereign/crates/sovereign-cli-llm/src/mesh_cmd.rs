@@ -446,6 +446,14 @@ pub(crate) struct MeshDevice {
     pub(crate) vram_gb: f64,
     pub(crate) hw_fingerprint: Option<u64>,
     pub(crate) backend: Option<String>,
+    /// How this machine's rpc-server would be reached, when discovery has
+    /// found one for it.
+    ///
+    /// `None` means no worker is currently discovered for this peer — the plan
+    /// then cannot say how the tensor stream would travel, which is a reason to
+    /// report "not measured" rather than to assume the good case. See
+    /// [`sovereign_core::mesh_measurements::LinkClass`].
+    pub(crate) link: Option<sovereign_core::mesh_measurements::LinkClass>,
 }
 
 /// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
@@ -478,6 +486,30 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
         .cloned()
         .unwrap_or_default();
 
+    // node_id → the endpoint ggml would dial for that peer's rpc-server.
+    //
+    // This is the consumer half of the link agreement: `mesh bench` classifies
+    // the endpoints in the daemon's live *placement*, and this side classifies
+    // the endpoints in the daemon's live *discovery*. They are the same strings
+    // from the same daemon, run through the same `link_class_of_endpoint`, so
+    // the plan asks about the link the bench would measure. A peer absent from
+    // this list has no discovered worker; it stays `None` and the plan reports
+    // "not measured" rather than assuming a direct link it has not seen.
+    let worker_endpoints: std::collections::HashMap<String, String> = body
+        .get("rpc_workers")
+        .and_then(|w| w.as_array())
+        .map(|ws| {
+            ws.iter()
+                .filter_map(|w| {
+                    let id = w.get("node_id")?.as_str()?;
+                    let ep = w.get("endpoint")?.as_str()?;
+                    (!id.is_empty() && !ep.is_empty())
+                        .then(|| (id.to_string(), ep.to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     let mut workers: Vec<MeshDevice> = Vec::new();
     let mut host: Option<MeshDevice> = None;
     for m in &members {
@@ -493,6 +525,11 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
                 .get("backend")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
+            link: m
+                .get("node_id")
+                .and_then(|v| v.as_str())
+                .and_then(|id| worker_endpoints.get(id))
+                .map(|ep| sovereign_core::mesh_measurements::link_class_of_endpoint(ep)),
         };
         let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
@@ -793,13 +830,24 @@ pub(crate) enum SpeedSection {
 }
 
 /// Why a configuration can carry no measurement at all.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) enum NotMeasurable {
     /// `--devices` describes hardware that is not present.
     HypotheticalDevices,
     /// The host advertises no hardware fingerprint (an older daemon), so there
     /// is no key under which a measurement could have been filed.
     HostUnidentified,
+    /// A *peer* carrying part of the model advertises no hardware fingerprint,
+    /// so the placement cannot say which silicon held that share.
+    ///
+    /// Distinct from [`HostUnidentified`](NotMeasurable::HostUnidentified)
+    /// because the repair is on a different machine, and the operator needs to
+    /// be told which one. Falling back to a name-only key instead would let a
+    /// peer swap its GPU and keep answering with the old number.
+    PeerUnidentified {
+        /// The mesh member to go upgrade.
+        name: String,
+    },
 }
 
 /// One device's row in the plan.
@@ -1139,29 +1187,59 @@ fn resolve_speed(
     // side permanently out of step with `mesh bench`, which builds its shards
     // from what the daemon reports is loaded and has no idle device to report.
     // A key the producer can never reproduce is a key that never matches.
-    let shards: Vec<mm::PlacementShard> = rows
-        .iter()
-        .filter(|r| r.blocks.is_some() || r.holds_output)
-        .map(|r| mm::PlacementShard {
-            node_key: mesh
-                .get(r.dev)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| format!("dev{}", r.dev)),
+    //
+    // Each shard is keyed on the machine's hardware as well as its name — a
+    // peer that swaps a GPU must not keep answering with the number the old one
+    // produced. A peer too old to advertise a fingerprint is reported rather
+    // than keyed on its name alone, which mirrors `mesh bench`'s refusal to
+    // file such a run: neither side invents an identity the other cannot check.
+    let mut shards: Vec<mm::PlacementShard> = Vec::new();
+    for r in rows.iter().filter(|r| r.blocks.is_some() || r.holds_output) {
+        let dev = mesh.get(r.dev);
+        let name = dev
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| format!("dev{}", r.dev));
+        let Some(hw) = dev.and_then(|d| d.hw_fingerprint) else {
+            return (
+                SpeedSection::NotMeasurable(NotMeasurable::PeerUnidentified { name }),
+                None,
+            );
+        };
+        shards.push(mm::PlacementShard {
+            node_key: name,
+            hw: Some(hw),
             blocks: r.blocks,
             holds_output: r.holds_output,
-        })
-        .collect();
+        });
+    }
     let mode = if active_nodes <= 1 {
         "local"
     } else {
         "distributed"
     };
 
+    // The link, over the same devices the digest describes and excluding the
+    // host (which has no link to itself). A peer carrying weight but with no
+    // discovered worker classifies `Unknown`, which `lookup` refuses — the plan
+    // then says "not measured" instead of quoting a number taken over a link it
+    // cannot confirm this placement would use.
+    let worker_links: Vec<mm::LinkClass> = rows
+        .iter()
+        .filter(|r| !r.is_host && (r.blocks.is_some() || r.holds_output))
+        .map(|r| {
+            mesh.get(r.dev)
+                .and_then(|d| d.link)
+                .unwrap_or(mm::LinkClass::Unknown)
+        })
+        .collect();
+    let link = mm::LinkClass::summarize(&worker_links);
+
     let key = mm::MeasurementKey::for_plan(
         host,
         mm::model_fingerprint(sizes, n_layer),
         mm::placement_digest(mode, n_layer, &shards),
         n_ctx,
+        link,
     );
 
     let section = match mm::lookup(measurements, &key, current_build) {
@@ -1244,6 +1322,7 @@ fn render_speed_json(r: &PlanReport) -> serde_json::Value {
             "placement_digest": k.placement_digest,
             "host_hw_fingerprint": k.host_hw_fingerprint,
             "n_ctx": k.n_ctx,
+            "link": k.link.as_str(),
         }),
         None => serde_json::Value::Null,
     };
@@ -1261,6 +1340,8 @@ fn render_speed_json(r: &PlanReport) -> serde_json::Value {
                 serde_json::Value::from("hypothetical-devices"),
             SpeedSection::NotMeasurable(NotMeasurable::HostUnidentified) =>
                 serde_json::Value::from("host-unidentified"),
+            SpeedSection::NotMeasurable(NotMeasurable::PeerUnidentified { name }) =>
+                serde_json::Value::from(format!("peer-unidentified:{name}")),
         },
         "decode_tok_s": serde_json::Value::Null,
         "decode_tok_s_min": serde_json::Value::Null,
@@ -1517,7 +1598,31 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
             }
         }
         SpeedSection::NotMeasured { near } => {
-            let _ = writeln!(o, "Speed:          not measured for this split.");
+            // Not "for this split" — the split may well be measured and the
+            // link be what differs. Saying "split" there sent a reader looking
+            // for a difference in the block apportionment that isn't present.
+            let _ = writeln!(o, "Speed:          not measured for this configuration.");
+            // An unclassifiable link is the one reason a reader cannot work out
+            // for themselves from the rest of the output, so it is named.
+            if r.speed_key
+                .as_ref()
+                .is_some_and(|k| {
+                    k.link == sovereign_core::mesh_measurements::LinkClass::Unknown
+                })
+            {
+                let _ = writeln!(
+                    o,
+                    "                No rpc-server is discovered for every machine in this plan,"
+                );
+                let _ = writeln!(
+                    o,
+                    "                so how the tensor stream would travel is unknown — and that"
+                );
+                let _ = writeln!(
+                    o,
+                    "                choice alone has moved decode by ~2.3x on this fleet."
+                );
+            }
             for n in near.iter().take(2) {
                 let _ = writeln!(
                     o,
@@ -1558,6 +1663,21 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
                 "                so there is no key a measurement could be filed under. Upgrading"
             );
             let _ = writeln!(o, "                the daemon on this node fixes it.");
+        }
+        SpeedSection::NotMeasurable(NotMeasurable::PeerUnidentified { name }) => {
+            let _ = writeln!(
+                o,
+                "Speed:          not measurable — {name} is holding part of this model but"
+            );
+            let _ = writeln!(
+                o,
+                "                advertises no hardware fingerprint, so a number measured on"
+            );
+            let _ = writeln!(
+                o,
+                "                this split could not say which machine produced it. Upgrading"
+            );
+            let _ = writeln!(o, "                the daemon on {name} fixes it.");
         }
     }
 }
@@ -2826,6 +2946,15 @@ mod plan_tests {
     use sovereign_core::mesh_measurements as mm;
 
     fn mesh_devs(names: &[&str], fp: Option<u64>) -> Vec<MeshDevice> {
+        mesh_devs_linked(names, fp, Some(mm::LinkClass::Direct))
+    }
+
+    /// `mesh_devs` with the link spelled out, for the tests that turn on it.
+    fn mesh_devs_linked(
+        names: &[&str],
+        fp: Option<u64>,
+        link: Option<mm::LinkClass>,
+    ) -> Vec<MeshDevice> {
         names
             .iter()
             .map(|n| MeshDevice {
@@ -2833,6 +2962,7 @@ mod plan_tests {
                 vram_gb: 64.0,
                 hw_fingerprint: fp,
                 backend: Some("vulkan".into()),
+                link,
             })
             .collect()
     }
@@ -2842,6 +2972,63 @@ mod plan_tests {
         let mut i = input(model(48, 1, 2, 0), 48, devices_gb);
         i.mesh = Some(mesh);
         i
+    }
+
+    /// A single-node plan has no link, and must key as `Local` rather than
+    /// inheriting whatever the host's own row happens to say.
+    #[test]
+    fn a_single_node_plan_keys_as_local() {
+        let mesh = mesh_devs(&["ruggedfox"], Some(7));
+        let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+        i.host = 0;
+        i.mesh = Some(mesh);
+        let r = report(i);
+        assert_eq!(
+            r.speed_key.expect("live mesh key").link,
+            mm::LinkClass::Local,
+            "no workers means no link to classify"
+        );
+    }
+
+    /// A peer carrying blocks that discovery has NOT found a worker for cannot
+    /// be attributed. The plan must not assume the good case: `Unknown` keys
+    /// never match, so the reader is told "not measured" instead of being shown
+    /// a direct-link number for a placement that might tunnel.
+    #[test]
+    fn a_peer_with_no_discovered_worker_makes_the_link_unknown() {
+        let mesh = mesh_devs_linked(&["beefymac", "ruggedfox"], Some(7), None);
+        let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+        i.host = 1;
+        i.mesh = Some(mesh);
+        let r = report(i);
+        let key = r.speed_key.expect("live mesh key");
+        assert_eq!(key.link, mm::LinkClass::Unknown);
+        // `lookup` refuses an Unknown link outright — proven against a stored
+        // record in `mesh_measurements::an_unknown_link_never_matches_even_another_unknown`.
+        assert!(mm::lookup(&mm::MeasurementFile::new(), &key, "0.0.0").is_none());
+    }
+
+    /// The same plan over a tunnel and over a direct link are different
+    /// questions, and must not share an answer.
+    #[test]
+    fn the_link_is_the_only_difference_and_it_still_changes_the_key() {
+        let plan_over = |link: mm::LinkClass| {
+            let mesh = mesh_devs_linked(&["beefymac", "ruggedfox"], Some(7), Some(link));
+            let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+            i.host = 1;
+            i.mesh = Some(mesh);
+            report(i).speed_key.expect("live mesh key")
+        };
+        let direct = plan_over(mm::LinkClass::Direct);
+        let tunnel = plan_over(mm::LinkClass::Tunnel);
+
+        assert_eq!(
+            direct.placement_digest, tunnel.placement_digest,
+            "same machines, same split — the digest cannot tell these apart"
+        );
+        assert_eq!(direct.host_hw_fingerprint, tunnel.host_hw_fingerprint);
+        assert_eq!(direct.n_ctx, tunnel.n_ctx);
+        assert_ne!(direct, tunnel, "…but the key must, via the link");
     }
 
     /// An idle peer must not change the key.
@@ -2902,11 +3089,13 @@ mod plan_tests {
     fn an_idle_shard_would_change_the_digest_if_it_reached_it() {
         let held = mm::PlacementShard {
             node_key: "beefymac".into(),
+            hw: Some(0xF0F),
             blocks: Some((0, 47)),
             holds_output: true,
         };
         let idle = mm::PlacementShard {
             node_key: "idlepeer".into(),
+            hw: Some(0xF0F),
             blocks: None,
             holds_output: false,
         };
@@ -2958,6 +3147,87 @@ mod plan_tests {
         assert_eq!(render_json(&r)["speed"]["reason"], "host-unidentified");
     }
 
+    /// The host knows what it is; the peer holding half the model does not.
+    ///
+    /// Keying on the peer's *name* alone would be the blind spot this field
+    /// closed: swap that machine's GPU, keep its name, and every number it ever
+    /// filed keeps answering. The refusal names the machine to go upgrade,
+    /// because the repair is on a different box than the one being asked.
+    #[test]
+    fn a_peer_without_a_fingerprint_is_not_measurable_and_is_named() {
+        let mut devs = mesh_devs(&["beefymac", "ruggedfox"], Some(7));
+        devs[0].hw_fingerprint = None;
+        let r = report(live(devs));
+        assert!(
+            matches!(
+                &r.speed,
+                SpeedSection::NotMeasurable(NotMeasurable::PeerUnidentified { name })
+                    if name == "beefymac"
+            ),
+            "an unidentifiable peer must not be keyed on its name alone"
+        );
+        assert_eq!(
+            render_json(&r)["speed"]["reason"],
+            "peer-unidentified:beefymac"
+        );
+        let human = render_human(&r);
+        assert!(human.contains("beefymac"), "name the machine: {human}");
+        assert!(
+            !quotes_a_rate(&human),
+            "nothing may quote a rate for a placement it cannot attribute: {human}"
+        );
+    }
+
+    /// The consumer half of the agreement, with a peer's hardware in play:
+    /// `mesh plan` must build the digest `mesh bench` files under, or every
+    /// record is written to a key nothing ever looks up.
+    ///
+    /// This is the distributed counterpart to
+    /// `a_solo_bench_and_a_solo_plan_agree_on_the_digest` in `mesh_bench`.
+    #[test]
+    fn a_peers_hardware_reaches_the_digest_the_bench_would_file_under() {
+        let with_beefy = mm::placement_digest(
+            "distributed",
+            48,
+            &[
+                mm::PlacementShard {
+                    node_key: "beefymac".into(),
+                    hw: Some(7),
+                    blocks: Some((0, 11)),
+                    holds_output: false,
+                },
+                mm::PlacementShard {
+                    node_key: "ruggedfox".into(),
+                    hw: Some(7),
+                    blocks: Some((12, 47)),
+                    holds_output: true,
+                },
+            ],
+        );
+        let after_gpu_swap = mm::placement_digest(
+            "distributed",
+            48,
+            &[
+                mm::PlacementShard {
+                    node_key: "beefymac".into(),
+                    hw: Some(8),
+                    blocks: Some((0, 11)),
+                    holds_output: false,
+                },
+                mm::PlacementShard {
+                    node_key: "ruggedfox".into(),
+                    hw: Some(7),
+                    blocks: Some((12, 47)),
+                    holds_output: true,
+                },
+            ],
+        );
+        assert_ne!(
+            with_beefy, after_gpu_swap,
+            "same name, same split, different silicon — a different measurement"
+        );
+    }
+
     /// An identified mesh with nothing recorded says so, and offers the command.
     #[test]
     fn an_identified_mesh_with_no_record_says_not_measured() {
@@ -2971,10 +3241,13 @@ mod plan_tests {
         assert_eq!(k.n_ctx, 32_768);
         assert_eq!(k.host_hw_fingerprint, 7);
         assert!(k.model_fingerprint.starts_with("mf1:"));
-        assert!(k.placement_digest.starts_with("pd1:"));
+        // pd2 since 2026-07-29: the shard hashes each machine's hardware, not
+        // just its name. This assertion is why the label and the construction
+        // cannot drift apart unnoticed — it caught exactly that during the bump.
+        assert!(k.placement_digest.starts_with("pd2:"));
 
         let out = render_human(&r);
-        assert!(out.contains("not measured for this split"));
+        assert!(out.contains("not measured for this configuration"));
         assert!(out.contains("svrn mesh bench"));
         assert_eq!(render_json(&r)["speed"]["status"], "not_measured");
     }
@@ -3116,7 +3389,7 @@ mod plan_tests {
         assert_eq!(near[0].differs_by, vec!["split"]);
 
         let out = render_human(&r);
-        assert!(out.contains("not measured for this split"));
+        assert!(out.contains("not measured for this configuration"));
         assert!(out.contains("48 local (solo)"));
         assert!(
             out.contains("does not apply here"),

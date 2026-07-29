@@ -94,10 +94,21 @@ pub(crate) fn classify_containment(
     }
 
     let declared_host = matches!(role, SharedModelRole::Host) || pinned_host_is_self;
-    // A hand-set SOVEREIGN_RPC_DISCOVER turns any node into one that discovers
-    // workers and can win the host election — the CLI power-user path into the
-    // same hazard.
-    if declared_host || discover_forced_by_env {
+    // A hand-set SOVEREIGN_RPC_DISCOVER turns a node that would NOT otherwise
+    // discover into one that does, and can win the host election — the CLI
+    // power-user path into the same hazard.
+    //
+    // It is only *new information* when the role does not already imply
+    // discovery. A serving role sets this very variable itself
+    // (`apply_shared_model_role_to_env`, which runs earlier in boot), so
+    // reading it unqualified means reading back something the daemon wrote
+    // sixty lines ago — which made the `Anchor` arm below unreachable and
+    // refused every anchor on the normal path, citing "declared host" at a node
+    // that had declared nothing of the sort. Observed on BeefyMac 2026-07-29
+    // with a verbatim `role = "anchor"` config.
+    let role_implies_discovery = matches!(role, SharedModelRole::Host | SharedModelRole::Anchor);
+    let operator_forced_discovery = discover_forced_by_env && !role_implies_discovery;
+    if declared_host || operator_forced_discovery {
         return if override_set {
             ContainmentVerdict::RefuseOverridden
         } else {
@@ -300,5 +311,42 @@ mod tests {
             classify_containment(false, SharedModelRole::Consumer, false, true, false),
             ContainmentVerdict::Refuse
         );
+    }
+
+    /// The production call, which the anchor test above could not reach.
+    ///
+    /// `an_anchor_warns_but_boots` passes `discover_forced_by_env = false` — a
+    /// value the real boot never produces. `apply_shared_model_role_to_env`
+    /// (mod.rs:336) sets `SOVEREIGN_RPC_DISCOVER=1` for any serving role, and
+    /// `check_containment` (inference.rs:76) reads it afterwards, so an anchor
+    /// always arrives here with the flag ON. Before 2026-07-29 that reached the
+    /// `declared_host || …` arm and refused the boot outright, telling the
+    /// operator their anchor was "a shared-model HOST". BeefyMac hit exactly
+    /// this with a config whose only shared-model line was `role = "anchor"`.
+    ///
+    /// The flag is the daemon's own output on this path, so it carries no
+    /// information about operator intent and must not decide anything.
+    #[test]
+    fn an_anchor_still_boots_when_its_own_role_set_the_discover_flag() {
+        let v = classify_containment(false, SharedModelRole::Anchor, false, true, false);
+        assert_eq!(
+            v,
+            ContainmentVerdict::Warn,
+            "the role set that flag; reading it back must not turn an anchor into a host"
+        );
+        assert!(v.proceeds());
+    }
+
+    /// …and the same self-set flag must not silently promote a HOST out of
+    /// refusal either. Host refuses on the role term alone, flag or no flag.
+    #[test]
+    fn a_host_is_refused_whether_or_not_the_discover_flag_is_set() {
+        for flag in [false, true] {
+            assert_eq!(
+                classify_containment(false, SharedModelRole::Host, false, flag, false),
+                ContainmentVerdict::Refuse,
+                "host refuses on its role, independent of the discover flag"
+            );
+        }
     }
 }

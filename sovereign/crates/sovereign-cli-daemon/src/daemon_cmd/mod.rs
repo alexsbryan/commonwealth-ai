@@ -81,9 +81,9 @@ pub async fn run(args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(&args[1..]).await,
-        Some("start") => start_daemon().await,
+        Some("start") => start_daemon(&args[1..]).await,
         Some("stop") => stop_daemon().await,
-        Some("restart") => restart_daemon().await,
+        Some("restart") => restart_daemon(&args[1..]).await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
         Some(flag) if flag.starts_with("--") => {
@@ -124,10 +124,11 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn daemon [--setup-only] | svrn daemon <subcommand>",
+            "svrn daemon [--setup-only] [--rpc-worker[=<bind>]] | svrn daemon <subcommand>",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
+            ("--rpc-worker[=<bind>]", "Lend this node's GPU to the mesh: serve an llama.cpp RPC worker so peers can place layers here. Default bind 0.0.0.0:50052. Works on `run`, `start` and `restart`. This only OFFERS the GPU — unlike `[shared_model] role = \"anchor\"`, it does not also turn on peer discovery or enter the host election."),
         ]),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),
@@ -333,6 +334,9 @@ async fn run_daemon(args: &[String]) -> i32 {
     // translate it here, once, before any RPC consumer reads the env
     // (the inference serve call_once, the discovery loop below, and
     // commonwealth-api's /status advertise). An explicit env var wins.
+    // `--rpc-worker` first: it is the operator saying it out loud on this
+    // invocation, and the role translation below only fills in what is unset.
+    bootstrap::apply_rpc_worker_flag(args);
     bootstrap::apply_shared_model_role_to_env(&config.shared_model);
 
     // Route llama.cpp's internal log into our tracing layer. Without

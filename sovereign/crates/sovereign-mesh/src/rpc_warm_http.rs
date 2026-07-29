@@ -879,7 +879,16 @@ async fn orchestrate_warm(
             // Try candidates in order; first success wins. Glassbox: every
             // attempt logs WHICH path (`via`) carried or failed it, so "which
             // transport actually warmed this worker?" is answerable from logs.
-            let mut last_err = format!("{label}: no warm-POST candidate");
+            //
+            // EVERY attempt is kept, not just the last. Keeping only the last
+            // one made the reported cause always the FINAL candidate — the
+            // raw-IP fallback, whose `Connection refused` is expected and
+            // uninteresting on an iroh-routed mesh. That buried the real
+            // failure (the iroh candidate timing out) under a message that
+            // reads like "the peer needs to expose port 9742", and cost a
+            // session chasing port exposure while the iroh path was in fact
+            // the working one (2026-07-29).
+            let mut attempts: Vec<String> = Vec::new();
             for (url, via, ep) in &candidates {
                 match http.post(url).json(&body).send().await {
                     Ok(r) if r.status().is_success() => {
@@ -916,7 +925,7 @@ async fn orchestrate_warm(
                     Ok(r) => {
                         let status = r.status();
                         let detail = r.text().await.unwrap_or_default();
-                        last_err = format!("{label} via {via}: warm returned {status}: {detail}");
+                        attempts.push(format!("via {via}: returned {status}: {detail}"));
                         // The worker's error body is the ONLY place the actual
                         // failure reason surfaces (its own log may be unreachable
                         // remotely) — losing it here cost a live 122B acceptance
@@ -924,13 +933,22 @@ async fn orchestrate_warm(
                         tracing::warn!(worker = %label, via = %via, status = %status, detail = %truncate_for_log(&detail), "rpc-warm: candidate answered with an error; trying next");
                     }
                     Err(e) => {
-                        last_err =
-                            format!("{label} via {via}: warm request failed: {}", error_chain(&e));
-                        tracing::warn!(worker = %label, via = %via, "rpc-warm: candidate unreachable; trying next");
+                        let chain = error_chain(&e);
+                        attempts.push(format!("via {via}: {chain}"));
+                        // The error itself, not just the fact of one: a bare
+                        // "candidate unreachable" left the iroh candidate's
+                        // actual failure (a 30s dial timeout) invisible in the
+                        // logs, so the only visible cause was the raw
+                        // fallback's refusal.
+                        tracing::warn!(worker = %label, via = %via, error = %chain, "rpc-warm: candidate unreachable; trying next");
                     }
                 }
             }
-            Err(last_err)
+            Err(if attempts.is_empty() {
+                format!("{label}: no warm-POST candidate")
+            } else {
+                format!("{label}: all {} candidate(s) failed: {}", attempts.len(), attempts.join("; "))
+            })
         });
     }
 

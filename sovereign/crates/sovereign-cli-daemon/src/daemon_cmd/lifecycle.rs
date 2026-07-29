@@ -38,6 +38,28 @@ fn daemon_base_url() -> String {
 pub(super) async fn stop_daemon() -> i32 {
     eprintln!("stopping the daemon …");
 
+    // OWNERSHIP FIRST. If a service manager is running the daemon, it
+    // must do the stopping — otherwise we SIGTERM its child out from
+    // under it and the manager's restart policy races whatever starts
+    // next. The service-manager leg further down is a FALLBACK for a
+    // missing pidfile; it fires too late to prevent that.
+    if let Some(svc) = crate::service_install::managing_service() {
+        eprintln!(
+            "  {} is registered — stopping via the service manager",
+            svc.name
+        );
+        return match svc.stop() {
+            Ok(()) => {
+                eprintln!("✓ daemon stopped");
+                0
+            }
+            Err(e) => {
+                eprintln!("✗ {e}");
+                1
+            }
+        };
+    }
+
     // Prefer the PID file written by `daemon start` — that's the only
     // way we can reliably stop a daemon that wasn't launched via a
     // service manager. Fall back to launchctl / systemctl when the
@@ -344,13 +366,33 @@ mod stop_daemon_tests {
 /// This is the dev-workflow counterpart to `svrn setup`'s
 /// launchd/systemd registration — when you don't want a service
 /// manager owning lifecycle, `start` gives you a one-liner.
-pub(crate) async fn start_daemon() -> i32 {
+pub(crate) async fn start_daemon(args: &[String]) -> i32 {
     if wait_for_ready(std::time::Duration::from_millis(200)).await {
         let pid_hint = read_daemon_pid()
             .map(|p| format!(" (pid {p})"))
             .unwrap_or_default();
         eprintln!("✓ daemon already running on :{}{pid_hint}", client_port());
         return 0;
+    }
+
+    // A detached child does NOT inherit the unit's `Environment=` or
+    // its `ExecStart` wrapper (on this host, a `toolbox run` into the
+    // container the daemon must live in, plus five SOVEREIGN_RPC_* /
+    // ubatch vars that exist nowhere else). Starting one alongside a
+    // registered service silently produces a differently-configured
+    // daemon. Defer.
+    if let Some(svc) = crate::service_install::managing_service() {
+        eprintln!(
+            "  {} is registered — starting via the service manager",
+            svc.name
+        );
+        return match svc.start() {
+            Ok(()) => finish_service_start(&svc.name).await,
+            Err(e) => {
+                eprintln!("✗ {e}");
+                1
+            }
+        };
     }
 
     // Bind-collision detector (added 2026-05-20).
@@ -457,9 +499,17 @@ pub(crate) async fn start_daemon() -> i32 {
     eprintln!("starting the daemon (logs: {})…", log_dir.display());
 
     let mut cmd = std::process::Command::new(&exe);
-    cmd.arg("daemon")
-        .arg("run")
-        .stdin(std::process::Stdio::null())
+    cmd.arg("daemon").arg("run");
+    // The detached child is the process that actually serves, so flags that
+    // configure serving have to travel to it. `start` returns as soon as the
+    // child is ready; anything applied only in this process is discarded with
+    // it — which would make `daemon start --rpc-worker` silently start a
+    // daemon that lends nothing.
+    if let Some(bind) = super::bootstrap::rpc_worker_flag(args) {
+        cmd.arg(format!("--rpc-worker={bind}"));
+        eprintln!("  lending this node's GPU to the mesh on {bind}");
+    }
+    cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::from(out_file))
         .stderr(std::process::Stdio::from(err_file));
 
@@ -548,6 +598,30 @@ pub(crate) async fn start_daemon() -> i32 {
         client_port(),
         timeout.as_secs(),
         err_path.display()
+    );
+    1
+}
+
+/// Wait for a service-manager-started daemon to answer, and report.
+///
+/// Deliberately does NOT read the pidfile for the "ready" line: under
+/// a service manager the pid belongs to the manager's child (and on
+/// this host to a `toolbox run` wrapper's grandchild), so any pid we
+/// printed would be the wrong one. The unit name is the honest handle.
+async fn finish_service_start(unit: &str) -> i32 {
+    let timeout = ready_timeout();
+    if wait_for_ready(timeout).await {
+        eprintln!(
+            "✓ daemon ready at http://127.0.0.1:{} (managed by {unit})",
+            client_port()
+        );
+        return 0;
+    }
+    eprintln!(
+        "⚠ {unit} accepted the command but :{} didn't respond within {}s\n\
+         the daemon may still be loading models — re-check with `svrn daemon status`",
+        client_port(),
+        timeout.as_secs()
     );
     1
 }
@@ -691,8 +765,29 @@ extern "C" {
 /// who actually wants strict launchd accounting can run via
 /// `launchctl kickstart -k gui/$(id -u)/com.svrnmesh.daemon`
 /// directly.
-pub(crate) async fn restart_daemon() -> i32 {
+pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
     eprintln!("restarting the daemon …");
+
+    // One atomic `restart` beats stop-then-start when a manager owns
+    // the daemon: it never leaves a window in which the manager's
+    // restart policy and our own start race for :9741. That race is
+    // how a host ends up with two daemons, one of which loses the bind
+    // and runs on with no listener (observed here 2026-07-29: a
+    // 17-hour orphan serving nothing).
+    if let Some(svc) = crate::service_install::managing_service() {
+        eprintln!(
+            "  {} is registered — restarting via the service manager",
+            svc.name
+        );
+        return match svc.restart() {
+            Ok(()) => finish_service_start(&svc.name).await,
+            Err(e) => {
+                eprintln!("✗ {e}");
+                1
+            }
+        };
+    }
+
     let stop_rc = stop_daemon().await;
     if stop_rc != 0 {
         // stop_daemon already printed the failure reason. Don't try
@@ -700,7 +795,7 @@ pub(crate) async fn restart_daemon() -> i32 {
         // we'd just race the old one for :9741.
         return stop_rc;
     }
-    start_daemon().await
+    start_daemon(args).await
 }
 
 /// `svrn daemon reload` — POST /v1/admin/reload. Hot-reloads

@@ -267,6 +267,62 @@ pub(super) fn build_folder_tiered_deps(
 /// role asks to serve but no explicit `SOVEREIGN_RPC_SERVE` is set.
 const DEFAULT_RPC_BIND: &str = "0.0.0.0:50052";
 
+/// `--rpc-worker[=<bind>]` → the address this node should serve its GPU on.
+///
+/// Lending a GPU to the mesh was previously reachable only by editing
+/// `[shared_model] role` in a TOML file or by knowing the name of an
+/// undocumented environment variable. Both work; neither is something an
+/// operator can discover from `--help`, and "turn this box into a worker" is a
+/// one-line intention that deserves a one-line spelling.
+///
+/// Accepts `--rpc-worker`, `--rpc-worker=<bind>` and `--rpc-worker <bind>`. A
+/// following token is taken as the bind only when it is not itself a flag, so
+/// `--rpc-worker --setup-only` means the default bind, not a bind of
+/// `--setup-only`.
+///
+/// This is deliberately NOT the same lever as `role = "anchor"`. The role also
+/// turns on peer *discovery* (`SOVEREIGN_RPC_DISCOVER`) and enters this node in
+/// the host election; this flag only offers the GPU. On a node whose daemon
+/// predates the 2026-07-29 containment fix that distinction matters, because
+/// the discovery flag is what the boot gate reads back — see
+/// [`crate::daemon_cmd::build::containment`].
+pub(super) fn rpc_worker_flag(args: &[String]) -> Option<String> {
+    let mut it = args.iter().enumerate();
+    let (i, a) = it.find(|(_, a)| {
+        a.as_str() == "--rpc-worker" || a.starts_with("--rpc-worker=")
+    })?;
+    if let Some(bind) = a.strip_prefix("--rpc-worker=") {
+        let bind = bind.trim();
+        // `--rpc-worker=` with nothing after it is a typo, not a request to
+        // serve on the empty string (which `serve_rpc_worker_if_configured`
+        // would silently ignore, leaving the operator with no worker and no
+        // explanation).
+        return Some(if bind.is_empty() {
+            DEFAULT_RPC_BIND.to_string()
+        } else {
+            bind.to_string()
+        });
+    }
+    let next = args
+        .get(i + 1)
+        .map(String::as_str)
+        .filter(|n| !n.starts_with('-') && !n.is_empty());
+    Some(next.unwrap_or(DEFAULT_RPC_BIND).to_string())
+}
+
+/// Apply `--rpc-worker` to the env contract the RPC consumers read.
+///
+/// Runs BEFORE [`apply_shared_model_role_to_env`], which only fills
+/// `SOVEREIGN_RPC_SERVE` in when it is unset — so an explicit flag beats the
+/// configured role, matching how an explicit env var already beats both.
+pub(super) fn apply_rpc_worker_flag(args: &[String]) {
+    let Some(bind) = rpc_worker_flag(args) else {
+        return;
+    };
+    std::env::set_var("SOVEREIGN_RPC_SERVE", &bind);
+    tracing::info!(bind = %bind, "--rpc-worker → SOVEREIGN_RPC_SERVE");
+}
+
 /// Translate `[shared_model] role` into the RPC env contract that the
 /// three decoupled RPC consumers already read — the inference serve
 /// (`serve_rpc_worker_if_configured`), this module's discovery loop, and
@@ -2252,5 +2308,70 @@ pub(super) fn setup_watchers_and_work_atlas(
         work_atlas_repo_root,
         work_atlas_repo_id,
         work_atlas_branch,
+    }
+}
+
+#[cfg(test)]
+mod rpc_worker_flag_tests {
+    use super::{rpc_worker_flag, DEFAULT_RPC_BIND};
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn absent_means_this_node_lends_nothing() {
+        assert_eq!(rpc_worker_flag(&args(&["run"])), None);
+        assert_eq!(rpc_worker_flag(&args(&[])), None);
+    }
+
+    #[test]
+    fn bare_flag_takes_the_documented_default() {
+        assert_eq!(
+            rpc_worker_flag(&args(&["run", "--rpc-worker"])).as_deref(),
+            Some(DEFAULT_RPC_BIND)
+        );
+    }
+
+    #[test]
+    fn an_explicit_bind_is_honoured_in_both_spellings() {
+        for a in [
+            args(&["--rpc-worker=10.0.0.4:9999"]),
+            args(&["--rpc-worker", "10.0.0.4:9999"]),
+        ] {
+            assert_eq!(rpc_worker_flag(&a).as_deref(), Some("10.0.0.4:9999"));
+        }
+    }
+
+    /// The space form must not swallow the next flag as a bind address.
+    /// `serve_rpc_worker_if_configured` would then try to bind `--setup-only`,
+    /// fail, and leave the operator with a daemon that quietly lends nothing.
+    #[test]
+    fn a_following_flag_is_not_mistaken_for_a_bind() {
+        assert_eq!(
+            rpc_worker_flag(&args(&["--rpc-worker", "--setup-only"])).as_deref(),
+            Some(DEFAULT_RPC_BIND)
+        );
+    }
+
+    /// `--rpc-worker=` is a typo. Serving on the empty string is silently a
+    /// no-op inside ggml, so treat it as the default rather than as consent to
+    /// do nothing.
+    #[test]
+    fn an_empty_bind_falls_back_rather_than_serving_nothing() {
+        assert_eq!(
+            rpc_worker_flag(&args(&["--rpc-worker="])).as_deref(),
+            Some(DEFAULT_RPC_BIND)
+        );
+    }
+
+    /// The flag has to survive the trip to the detached child `daemon start`
+    /// spawns, which re-parses it from the `--rpc-worker=<bind>` form.
+    #[test]
+    fn the_forwarded_form_round_trips() {
+        let bind = rpc_worker_flag(&args(&["--rpc-worker", "192.168.1.2:50052"]))
+            .expect("parsed once");
+        let forwarded = args(&["run", &format!("--rpc-worker={bind}")]);
+        assert_eq!(rpc_worker_flag(&forwarded), Some(bind));
     }
 }

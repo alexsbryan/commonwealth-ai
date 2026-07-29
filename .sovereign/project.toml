@@ -4,7 +4,7 @@ schema_version = 2
 name = "commonwealth-ai"
 
 [observation]
-observed_at = 1785286838
+observed_at = 1785321616
 has_git = true
 embed_model_available = false
 

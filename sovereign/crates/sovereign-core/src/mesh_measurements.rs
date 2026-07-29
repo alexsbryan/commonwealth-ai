@@ -51,25 +51,43 @@
 //! | `host_hw_fingerprint` | one machine's number is shown on another's |
 //! | `n_ctx` | an 8k number is shown for a 128k plan (decode rate tracks KV size) |
 //! | `probe_version` | numbers taken by different methods are compared as equals |
+//! | `link` | a tunnelled number is shown for a direct-IP plan (a 2.3× error) |
 //!
 //! And what is deliberately *excluded*: RPC endpoint ports (DHCP churn would
 //! make every lookup a miss), and the probe's prompt text and token counts
 //! (they are protocol constants folded into `probe_version`, not key fields —
 //! keying on them would drive the hit rate to zero).
 //!
+//! `link` is the newest of the six and was added after the other five were
+//! already in service, so it is worth saying why it earns its place. It is the
+//! only key field that can change *without anything on either machine
+//! changing*: the same model, the same split, the same silicon, reached over a
+//! different path. Measured on this fleet, the same 4B distributed decode read
+//! 17.35 tok/s over a forced iroh tunnel and ~40 tok/s over direct IP — a 2.3×
+//! spread from link choice alone, larger than most of what the other five
+//! fields guard against. Before it existed those two runs shared a key and the
+//! later one silently answered for both. See [`LinkClass`].
+//!
 //! The GPU backend is folded *inside* `host_hw_fingerprint` rather than sitting
 //! beside it, because a ROCm↔Vulkan swap shifts throughput materially on
 //! identical silicon without changing the GPU's name — so it has to break the
 //! key, not merely annotate it.
 //!
-//! ## Known blind spot
+//! Peer hardware is covered the same way, one level down. `host_hw_fingerprint`
+//! pins only the machine that *ran* the probe; the machines that held the rest
+//! of the model are described by `placement_digest`, so each
+//! [`PlacementShard`] carries its own [`hw`](PlacementShard::hw) fingerprint
+//! and the digest changes when a peer's silicon does. Until 2026-07-29 a shard
+//! was identified by mesh *name* alone, so a peer that swapped a GPU for a
+//! different one of the same capacity — or merely flipped Vulkan↔ROCm — kept
+//! every key it had ever filed, and the old number answered for the new
+//! machine. A name is not hardware.
 //!
-//! Worker hardware is only as specific as the `node_key` each caller supplies.
-//! A worker that swaps a GPU for a different one of the same capacity, while
-//! keeping its name, produces a stale hit. The fix is to fold each worker's own
-//! hardware fingerprint into its `node_key`; the shape here supports that
-//! without a schema change, because `node_key` is an opaque caller-supplied
-//! string.
+//! Where a machine advertises no fingerprint (a peer on an older daemon), the
+//! callers do not fall back to a name-only key: `mesh plan` reports "not
+//! measured" and `mesh bench` refuses to file. An unattributable record is
+//! worse than a missing one, because only the missing one admits what it does
+//! not know.
 //!
 //! ## Storage
 //!
@@ -100,7 +118,14 @@ pub const PROBE_VERSION: u32 = 1;
 
 /// Bumped when the on-disk layout changes incompatibly. A file at a different
 /// version is discarded wholesale.
-const SCHEMA_VERSION: u32 = 1;
+///
+/// v2 (2026-07-29) added [`MeasurementKey::link`]. Discarding rather than
+/// migrating is the honest option: a v1 record does not say which link it was
+/// taken over, and there is no way to recover that after the fact. Defaulting
+/// them to any concrete [`LinkClass`] would assert something nobody measured,
+/// and defaulting them to `Unknown` would keep rows that can never match. They
+/// are dropped, and the operator re-measures.
+const SCHEMA_VERSION: u32 = 2;
 
 /// Per-key run cap. Keeps variance visible without unbounded growth.
 pub const MAX_RUNS_PER_KEY: usize = 8;
@@ -212,24 +237,47 @@ pub struct PlacementShard {
     /// must not appear: they churn across restarts and would make every lookup
     /// a miss.
     pub node_key: String,
+    /// The fingerprint of the silicon behind `node_key`.
+    ///
+    /// A name is not hardware. A peer that swaps a GPU for a different one of
+    /// the same capacity, or flips its backend between Vulkan and ROCm, keeps
+    /// its mesh name and every name-only key it ever filed — so the old number
+    /// answers for the new machine. This field is what makes the digest notice.
+    /// It is deliberately *beside* `node_key` rather than concatenated into it,
+    /// because `node_key` is also the mesh-member name used to look a peer up in
+    /// the live mesh and to label it in human output; hashing hardware into that
+    /// string would break both.
+    ///
+    /// `None` means the machine did not advertise one (a peer on an older
+    /// daemon). Both callers refuse to build a key in that case rather than
+    /// filing under a shard they cannot attribute — see
+    /// [`hardware_fingerprint`]. It is still encoded distinctly from any `Some`
+    /// so the two can never collide in the digest.
+    pub hw: Option<u64>,
     /// Inclusive block range this device holds, or `None` if it holds none.
     pub blocks: Option<(u32, u32)>,
     /// Whether this device carries the output head.
     pub holds_output: bool,
 }
 
-/// Fingerprint a placement — `"pd1:<16 hex>"`.
+/// Fingerprint a placement — `"pd2:<16 hex>"`.
 ///
 /// `mode` distinguishes a single-machine load from a split one, so the same
 /// model measured solo and measured distributed are never confused. Shards are
 /// sorted by `node_key`, making the digest independent of the order the mesh
 /// happened to enumerate its members.
+///
+/// The prefix is a *generation*, not decoration. `pd1` hashed a shard as
+/// name + blocks + output-head; `pd2` also hashes [`PlacementShard::hw`], so
+/// the same inputs produce a different digest under the two schemes. Bumping it
+/// means a stored `pd1:` digest is visibly from the older construction instead
+/// of being silently un-matchable bytes wearing the same label.
 pub fn placement_digest(mode: &str, total_blocks: u32, shards: &[PlacementShard]) -> String {
     let mut sorted: Vec<&PlacementShard> = shards.iter().collect();
     sorted.sort_unstable_by(|a, b| a.node_key.cmp(&b.node_key));
 
     let mut h = Sha256::new();
-    h.update(b"pd1");
+    h.update(b"pd2");
     h.update(mode.as_bytes());
     h.update([0u8]);
     h.update(total_blocks.to_le_bytes());
@@ -237,6 +285,14 @@ pub fn placement_digest(mode: &str, total_blocks: u32, shards: &[PlacementShard]
     for s in sorted {
         h.update(s.node_key.as_bytes());
         h.update([0u8]);
+        // Tagged, so "no fingerprint" cannot hash the same as any real one.
+        match s.hw {
+            Some(fp) => {
+                h.update([1u8]);
+                h.update(fp.to_le_bytes());
+            }
+            None => h.update([0u8]),
+        }
         match s.blocks {
             Some((lo, hi)) => {
                 h.update([1u8]);
@@ -247,11 +303,124 @@ pub fn placement_digest(mode: &str, total_blocks: u32, shards: &[PlacementShard]
         }
         h.update([u8::from(s.holds_output)]);
     }
-    format!("pd1:{}", hex16(&h.finalize()))
+    format!("pd2:{}", hex16(&h.finalize()))
 }
 
 fn hex16(digest: &[u8]) -> String {
     digest[..8].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Link
+// ---------------------------------------------------------------------------
+
+/// How the host reaches the machines holding the rest of the model.
+///
+/// The tensor stream is raw TCP to each worker's rpc-server, so this is a
+/// property of *the endpoint ggml dials*, not of the peer's identity. The same
+/// peer is [`Direct`](LinkClass::Direct) when discovery found a routable
+/// address for it and [`Tunnel`](LinkClass::Tunnel) when it fell back to a
+/// loopback proxy whose far end is an iroh tunnel. Which of those happens is
+/// decided by network conditions on the day, not by configuration — which is
+/// exactly why it has to be in the key rather than in a comment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkClass {
+    /// No network hop at all: the whole model is on the host.
+    Local,
+    /// Raw TCP to a routable address — a LAN, or a WireGuard-style overlay.
+    Direct,
+    /// Relayed or hole-punched through an iroh loopback proxy.
+    Tunnel,
+    /// The link could not be determined. Never matches a record: see [`lookup`].
+    Unknown,
+}
+
+impl LinkClass {
+    /// Stable identifier for JSON and human output.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LinkClass::Local => "local",
+            LinkClass::Direct => "direct",
+            LinkClass::Tunnel => "tunnel",
+            LinkClass::Unknown => "unknown",
+        }
+    }
+
+    /// The link class of a whole placement, from its workers' individual links.
+    ///
+    /// Three rules, each chosen for a reason:
+    ///
+    /// - **No workers ⇒ [`Local`](LinkClass::Local).** There is no link to
+    ///   classify, and a single-node run must not be keyed as though there
+    ///   were.
+    /// - **Any `Unknown` ⇒ `Unknown`.** One unclassifiable worker makes the
+    ///   whole placement unattributable. Guessing the rest would be answering a
+    ///   question we cannot see the answer to.
+    /// - **Any `Tunnel` ⇒ `Tunnel`,** rather than a majority or an average. A
+    ///   single-stream pipeline runs at the speed of its slowest hop, so one
+    ///   tunnelled worker characterises the whole run even when every other
+    ///   worker is direct.
+    pub fn summarize(workers: &[LinkClass]) -> LinkClass {
+        if workers.is_empty() {
+            return LinkClass::Local;
+        }
+        if workers.contains(&LinkClass::Unknown) {
+            return LinkClass::Unknown;
+        }
+        if workers.contains(&LinkClass::Tunnel) {
+            return LinkClass::Tunnel;
+        }
+        LinkClass::Direct
+    }
+}
+
+/// Classify the endpoint ggml dials for one worker.
+///
+/// A loopback authority is the tell. Worker discovery hands ggml either a
+/// routable `host:port` it probed successfully, or `127.0.0.1:<port>` — a local
+/// proxy socket whose far end is an iroh tunnel to the peer. Nothing else can
+/// legitimately present as loopback: a worker genuinely on this machine is not
+/// a worker, it is the host.
+///
+/// **This is the single decider, and it is shared deliberately.** `svrn mesh
+/// bench` calls it on the endpoints in the daemon's live placement; `svrn mesh
+/// plan` calls it on the endpoints in the mesh status' discovered-worker list.
+/// Two implementations that disagreed by one edge case would file every record
+/// under a key the reader can never reproduce — the store would grow forever
+/// while the plan reported "not measured" for the configuration it just
+/// measured. One function, two callers, is what makes that failure impossible
+/// rather than merely unlikely.
+pub fn link_class_of_endpoint(endpoint: &str) -> LinkClass {
+    let e = endpoint.trim();
+    // Only two forms carry a port unambiguously: `[<ipv6>]:port` and a single-
+    // colon `<host>:port`. A bare IPv6 literal has no port (that is what the
+    // brackets are for), so it is taken whole rather than truncated at its
+    // first colon — `::1` must not parse as an empty host.
+    let host = if let Some(rest) = e.strip_prefix('[') {
+        rest.split(']').next().unwrap_or(rest)
+    } else if e.matches(':').count() > 1 {
+        e
+    } else {
+        e.split(':').next().unwrap_or(e)
+    }
+    .trim();
+
+    if host.is_empty() {
+        return LinkClass::Unknown;
+    }
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host == "::1"
+        || host == "0:0:0:0:0:0:0:1"
+        // The whole 127.0.0.0/8 block, not just 127.0.0.1.
+        || host
+            .strip_prefix("127.")
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+    if loopback {
+        LinkClass::Tunnel
+    } else {
+        LinkClass::Direct
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +442,9 @@ pub struct MeasurementKey {
     /// Context length the measurement was taken at. Decode rate is a function
     /// of KV size, so 8k and 128k are not the same measurement.
     pub n_ctx: u32,
+    /// See [`LinkClass`]. The path the tensor stream took between the machines
+    /// in this placement.
+    pub link: LinkClass,
 }
 
 impl MeasurementKey {
@@ -287,6 +459,7 @@ impl MeasurementKey {
         model_fingerprint: String,
         placement_digest: String,
         n_ctx: u32,
+        link: LinkClass,
     ) -> Self {
         Self {
             probe_version: PROBE_VERSION,
@@ -294,6 +467,7 @@ impl MeasurementKey {
             placement_digest,
             host_hw_fingerprint: host.fingerprint(),
             n_ctx,
+            link,
         }
     }
 }
@@ -461,11 +635,22 @@ pub struct MeasurementSummary {
 /// `current_build` is passed in rather than read from the environment so this
 /// stays a pure function — the whole module is testable without a filesystem,
 /// a daemon, or a GPU.
+///
+/// A key whose [`link`](MeasurementKey::link) is [`LinkClass::Unknown`] never
+/// matches, *including against a stored `Unknown`*. Two runs we could not
+/// classify are not thereby the same run — that would be inferring an identity
+/// from a shared absence of evidence, which is precisely the fabrication this
+/// module exists to prevent. The caller reports "not measured" and
+/// [`near_misses`] still names what *was* measured, so the operator sees the
+/// number that exists and why it does not apply.
 pub fn lookup(
     file: &MeasurementFile,
     key: &MeasurementKey,
     current_build: &str,
 ) -> Option<MeasurementSummary> {
+    if key.link == LinkClass::Unknown {
+        return None;
+    }
     let valid: Vec<&MeasurementRecord> = file
         .records
         .iter()
@@ -519,7 +704,7 @@ pub struct NearMiss {
     pub measured_at: u64,
     /// Which parts of the key differ from the one asked about. Stable
     /// identifiers: `"split"`, `"host-hardware"`, `"context"`,
-    /// `"probe-version"`.
+    /// `"probe-version"`, `"link"`.
     pub differs_by: Vec<&'static str>,
 }
 
@@ -548,6 +733,9 @@ pub fn near_misses(file: &MeasurementFile, key: &MeasurementKey) -> Vec<NearMiss
             }
             if r.key.probe_version != key.probe_version {
                 differs_by.push("probe-version");
+            }
+            if r.key.link != key.link {
+                differs_by.push("link");
             }
             NearMiss {
                 placement_human: r.placement_human.clone(),
@@ -681,11 +869,13 @@ mod tests {
         vec![
             PlacementShard {
                 node_key: "beefymac".into(),
+                hw: Some(0xBEEF),
                 blocks: Some((0, 11)),
                 holds_output: false,
             },
             PlacementShard {
                 node_key: "ruggedfox".into(),
+                hw: Some(0xF0F),
                 blocks: Some((12, 47)),
                 holds_output: true,
             },
@@ -698,7 +888,137 @@ mod tests {
             model_fingerprint(&sizes(), 48),
             placement_digest("distributed", 48, &shards()),
             32_768,
+            LinkClass::Direct,
         )
+    }
+
+    /// [`key`] over a tunnel instead of a direct link. Everything else — model,
+    /// split, host, context — is byte-identical.
+    fn key_tunnelled() -> MeasurementKey {
+        MeasurementKey::for_plan(
+            HostIdentity::from_live_mesh(Some(42)).unwrap(),
+            model_fingerprint(&sizes(), 48),
+            placement_digest("distributed", 48, &shards()),
+            32_768,
+            LinkClass::Tunnel,
+        )
+    }
+
+    // --- link classification -------------------------------------------------
+
+    #[test]
+    fn loopback_endpoints_are_tunnels_and_routable_ones_are_direct() {
+        for ep in [
+            "127.0.0.1:50052",
+            "127.0.0.53:50052",
+            "localhost:50052",
+            "LOCALHOST:50052",
+            "[::1]:50052",
+        ] {
+            assert_eq!(
+                link_class_of_endpoint(ep),
+                LinkClass::Tunnel,
+                "{ep} is a loopback proxy — the far end is a tunnel"
+            );
+        }
+        for ep in [
+            "192.168.1.2:50052",
+            "100.104.36.28:50052",
+            "beefymac.local:50052",
+            "[fd7a:115c:a1e0::a3a:241c]:50052",
+        ] {
+            assert_eq!(
+                link_class_of_endpoint(ep),
+                LinkClass::Direct,
+                "{ep} is routable — ggml dials it directly"
+            );
+        }
+    }
+
+    /// A bare IPv6 literal has no port, so it must not be truncated at its
+    /// first colon. `::1` splitting to an empty host would classify the
+    /// loopback address as `Unknown` instead of `Tunnel`.
+    #[test]
+    fn bare_ipv6_is_not_truncated_at_its_first_colon() {
+        assert_eq!(link_class_of_endpoint("::1"), LinkClass::Tunnel);
+        assert_eq!(
+            link_class_of_endpoint("fd7a:115c:a1e0::a3a:241c"),
+            LinkClass::Direct
+        );
+        assert_eq!(link_class_of_endpoint(""), LinkClass::Unknown);
+        assert_eq!(link_class_of_endpoint(":50052"), LinkClass::Unknown);
+    }
+
+    #[test]
+    fn summarize_takes_the_worst_link_and_local_means_no_workers() {
+        use LinkClass::*;
+        assert_eq!(LinkClass::summarize(&[]), Local);
+        assert_eq!(LinkClass::summarize(&[Direct, Direct]), Direct);
+        // One tunnelled hop gates the whole pipeline.
+        assert_eq!(LinkClass::summarize(&[Direct, Tunnel]), Tunnel);
+        // Unknown dominates even a tunnel: we cannot attribute the run at all.
+        assert_eq!(LinkClass::summarize(&[Tunnel, Unknown]), Unknown);
+        assert_eq!(LinkClass::summarize(&[Direct, Unknown]), Unknown);
+    }
+
+    // --- the link is part of the identity ------------------------------------
+
+    /// The defect this field exists to prevent, stated as a test.
+    ///
+    /// Same model, same split, same host, same context — measured once over a
+    /// tunnel. Asking about the direct-link configuration must NOT return that
+    /// number. On this fleet the two differ by ~2.3×, so serving one for the
+    /// other is not a rounding error, it is a wrong answer delivered
+    /// confidently.
+    #[test]
+    fn a_tunnelled_measurement_is_never_served_for_a_direct_plan() {
+        let mut f = MeasurementFile::new();
+        record(&mut f, rec_at(key_tunnelled(), 100, 17.35, Verdict::Valid));
+
+        assert!(
+            lookup(&f, &key(), "0.10.0").is_none(),
+            "the direct-link plan must not be answered by a tunnelled run"
+        );
+        assert_eq!(
+            lookup(&f, &key_tunnelled(), "0.10.0")
+                .expect("the tunnelled configuration WAS measured")
+                .decode_tok_s,
+            17.35
+        );
+    }
+
+    /// …and the operator is told why, rather than just "no data".
+    #[test]
+    fn a_link_mismatch_surfaces_as_a_near_miss_naming_the_link() {
+        let mut f = MeasurementFile::new();
+        record(&mut f, rec_at(key_tunnelled(), 100, 17.35, Verdict::Valid));
+
+        let near = near_misses(&f, &key());
+        assert_eq!(near.len(), 1, "the tunnelled run is a near miss");
+        assert_eq!(near[0].differs_by, vec!["link"]);
+        assert_eq!(near[0].decode_tok_s, 17.35);
+    }
+
+    /// `Unknown` is an absence of evidence, not a value. Two runs nobody could
+    /// classify are not thereby the same run.
+    #[test]
+    fn an_unknown_link_never_matches_even_another_unknown() {
+        let unknown = MeasurementKey::for_plan(
+            HostIdentity::from_live_mesh(Some(42)).unwrap(),
+            model_fingerprint(&sizes(), 48),
+            placement_digest("distributed", 48, &shards()),
+            32_768,
+            LinkClass::Unknown,
+        );
+        let mut f = MeasurementFile::new();
+        record(&mut f, rec_at(unknown.clone(), 100, 14.1, Verdict::Valid));
+
+        assert!(
+            lookup(&f, &unknown, "0.10.0").is_none(),
+            "an unclassifiable link cannot be answered, even by another one"
+        );
+        // But the record is still visible as a near miss, so nothing is hidden.
+        assert!(!near_misses(&f, &key()).is_empty());
     }
 
     fn rec_at(k: MeasurementKey, at: u64, tok_s: f64, verdict: Verdict) -> MeasurementRecord {
@@ -750,6 +1070,62 @@ mod tests {
         );
     }
 
+    /// The digest must announce the generation it was actually built with.
+    ///
+    /// Written because the `pd1`→`pd2` bump half-landed: the hash input changed
+    /// and the printed label did not, so for one build every digest was new
+    /// bytes wearing the old name — the exact confusion the prefix exists to
+    /// prevent, and invisible to every other test here because they all compare
+    /// digests to each other rather than to a literal. When the construction
+    /// changes again, change this literal in the same commit.
+    #[test]
+    fn the_digest_label_matches_the_generation_that_produced_it() {
+        let d = placement_digest("distributed", 48, &shards());
+        assert!(
+            d.starts_with("pd2:"),
+            "hashing `hw` is the pd2 construction; a pd1 label on it would tell a \
+             reader these digests are comparable with older ones: {d}"
+        );
+    }
+
+    /// The blind spot this field exists to close.
+    ///
+    /// Same peer name, same split, same everything a `pd1` digest could see —
+    /// different silicon. Before `hw` was part of the shard these two hashed
+    /// identically, so the number measured on the old GPU answered for the new
+    /// one. A name is not hardware.
+    #[test]
+    fn key_changes_when_a_peer_swaps_hardware_but_keeps_its_name() {
+        let a = placement_digest("distributed", 48, &shards());
+        let mut regunned = shards();
+        regunned[0].hw = Some(0xDEAD);
+        let b = placement_digest("distributed", 48, &regunned);
+        assert_eq!(
+            regunned[0].node_key, shards()[0].node_key,
+            "precondition: the peer kept its name — only the silicon changed"
+        );
+        assert_ne!(
+            a, b,
+            "the same split on the same peer's NEW hardware is a different measurement"
+        );
+    }
+
+    /// A machine that never said what it is must not be confused with one that
+    /// did — in either direction. Both callers refuse to build a key from an
+    /// unfingerprinted shard, so this is the backstop for that promise rather
+    /// than a path production takes.
+    #[test]
+    fn an_unfingerprinted_shard_never_collides_with_a_fingerprinted_one() {
+        let known = placement_digest("distributed", 48, &shards());
+        let mut anonymous = shards();
+        anonymous[0].hw = None;
+        assert_ne!(
+            known,
+            placement_digest("distributed", 48, &anonymous),
+            "absence of a fingerprint must not hash like the presence of one"
+        );
+    }
+
     #[test]
     fn key_changes_between_solo_and_distributed() {
         let solo = placement_digest("local", 48, &shards());
@@ -782,6 +1158,7 @@ mod tests {
             model_fingerprint(&sizes(), 48),
             placement_digest("distributed", 48, &shards()),
             8_192,
+            LinkClass::Direct,
         );
         assert_ne!(small, key());
     }
@@ -937,6 +1314,7 @@ mod tests {
             model_fingerprint(&sizes(), 48),
             placement_digest("distributed", 48, &moved),
             32_768,
+            LinkClass::Direct,
         );
 
         assert!(
@@ -961,6 +1339,7 @@ mod tests {
             model_fingerprint(&other_model, 48),
             placement_digest("distributed", 48, &shards()),
             32_768,
+            LinkClass::Direct,
         );
         assert!(near_misses(&f, &asked).is_empty());
     }
@@ -993,6 +1372,7 @@ mod tests {
             model_fingerprint(&sizes(), 48),
             placement_digest("distributed", 48, &moved),
             32_768,
+            LinkClass::Direct,
         );
         assert!(near_misses(&f, &asked).is_empty());
     }
@@ -1018,6 +1398,7 @@ mod tests {
             model_fingerprint(&sizes(), 48),
             placement_digest("local", 48, &shards()),
             32_768,
+            LinkClass::Direct,
         );
         record(&mut f, rec_at(other.clone(), 1, 11.7, Verdict::Valid));
         for i in 0..(MAX_RUNS_PER_KEY as u64 + 3) {

@@ -310,25 +310,28 @@ pub(crate) struct WorkerSnapshot {
 /// local load, so the range comes from the GGUF's own layer count instead —
 /// which is what `mesh plan` hashes for the same configuration.
 ///
-/// `resolve` maps an RPC endpoint to a mesh member name. Where it returns
-/// `None` the endpoint's host (port dropped — ports churn across restarts and
-/// would make every lookup a miss) is used, matching
-/// [`mm::PlacementShard::node_key`]'s documented fallback.
+/// `resolve` maps an RPC endpoint to the mesh member behind it — name *and*
+/// hardware fingerprint, because a shard is identified by both.
+///
+/// **Every machine carrying weight must be identifiable, or nothing is filed.**
+/// A worker whose endpoint resolves to no mesh member, or to a member on a
+/// daemon too old to advertise a fingerprint, produces an `Err`. This replaced
+/// an endpoint-host fallback that looked forgiving and was not: `mesh plan`
+/// builds its shards by walking mesh *members*, so it can never reconstruct a
+/// key naming a non-member endpoint. Every record filed through that fallback
+/// was write-only — stored, counted, and impossible to look up. Refusing says
+/// so at the moment it happens instead.
 pub(crate) fn shards_from_placement(
     placement: &PlacementSnapshot,
-    host_name: &str,
+    host: &NodeIdentity,
     n_layer: u32,
-    resolve: &dyn Fn(&str) -> Option<String>,
+    resolve: &dyn Fn(&str) -> Option<NodeIdentity>,
 ) -> Result<Vec<mm::PlacementShard>, String> {
     if n_layer == 0 {
         return Err("the model reports zero transformer blocks".to_string());
     }
     if placement.workers.is_empty() {
-        return Ok(vec![mm::PlacementShard {
-            node_key: host_name.to_string(),
-            blocks: Some((0, n_layer - 1)),
-            holds_output: true,
-        }]);
+        return Ok(vec![host.shard(Some((0, n_layer - 1)), true)?]);
     }
 
     let worker_total: u32 = placement.workers.iter().map(|w| w.blocks).sum();
@@ -363,24 +366,96 @@ pub(crate) fn shards_from_placement(
         // A worker holding nothing is not part of the placement. Dropping it
         // keeps the digest describing the machines that carry the model, which
         // is what makes it stable across an idle peer joining or leaving.
-        if blocks.is_none() && !w.holds_output {
+        if !carries_weight(w) {
             continue;
         }
-        shards.push(mm::PlacementShard {
-            node_key: resolve(&w.endpoint).unwrap_or_else(|| endpoint_host(&w.endpoint)),
-            blocks,
-            holds_output: w.holds_output,
-        });
+        let peer = resolve(&w.endpoint).ok_or_else(|| {
+            format!(
+                "the worker at {} is carrying part of the model but is not a known mesh \
+                 member, so the machine cannot be named in the key",
+                endpoint_host(&w.endpoint)
+            )
+        })?;
+        shards.push(peer.shard(blocks, w.holds_output)?);
     }
     let host_holds_output = !placement.workers.iter().any(|w| w.holds_output);
     if placement.local_blocks > 0 || host_holds_output {
-        shards.push(mm::PlacementShard {
-            node_key: host_name.to_string(),
-            blocks: (placement.local_blocks > 0).then_some((next, total - 1)),
-            holds_output: host_holds_output,
-        });
+        shards.push(host.shard(
+            (placement.local_blocks > 0).then_some((next, total - 1)),
+            host_holds_output,
+        )?);
     }
     Ok(shards)
+}
+
+/// A machine that can appear in a placement: what it is called, and what it is.
+///
+/// Both halves are required to key a measurement. The name alone was the key
+/// until 2026-07-29, which meant a peer could replace its GPU and keep every
+/// number it had ever filed. See [`mm::PlacementShard::hw`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NodeIdentity {
+    pub(crate) name: String,
+    pub(crate) hw: Option<u64>,
+}
+
+impl NodeIdentity {
+    /// This machine's share of a placement, or an error naming it if it never
+    /// said what hardware it is.
+    ///
+    /// The refusal lives here, at the one place a shard is built, so the host
+    /// and every worker are held to the same standard by construction rather
+    /// than by two call sites remembering to agree.
+    fn shard(
+        &self,
+        blocks: Option<(u32, u32)>,
+        holds_output: bool,
+    ) -> Result<mm::PlacementShard, String> {
+        let hw = self.hw.ok_or_else(|| {
+            format!(
+                "{} is carrying part of the model but advertises no hardware fingerprint \
+                 (a daemon too old to report one), so a measurement filed against it could \
+                 not say which machine produced it",
+                self.name
+            )
+        })?;
+        Ok(mm::PlacementShard {
+            node_key: self.name.clone(),
+            hw: Some(hw),
+            blocks,
+            holds_output,
+        })
+    }
+}
+
+/// Whether a worker is actually part of the placement.
+///
+/// A worker apportioned no blocks and holding no output head carries none of
+/// the model: it changes nothing about how the model decodes, and including it
+/// would make the digest depend on which idle peers happened to be online.
+///
+/// Shared by [`shards_from_placement`] and [`placement_link`] so the digest and
+/// the link class always describe the *same set of machines*. Duplicating the
+/// rule would let an idle tunnelled peer classify a run as `Tunnel` while
+/// contributing nothing to the digest — a key that changes for a machine that
+/// is not carrying anything.
+fn carries_weight(w: &WorkerSnapshot) -> bool {
+    w.blocks > 0 || w.holds_output
+}
+
+/// The [`mm::LinkClass`] of a live placement, from the endpoints ggml dialled.
+///
+/// Reads the same `/status` placement the shards come from, so the link is the
+/// one this run actually used rather than the one discovery might pick next
+/// time. A local load (no workers carrying weight) is `Local`.
+pub(crate) fn placement_link(placement: &PlacementSnapshot) -> mm::LinkClass {
+    let links: Vec<mm::LinkClass> = placement
+        .workers
+        .iter()
+        .filter(|w| carries_weight(w))
+        .map(|w| mm::link_class_of_endpoint(&w.endpoint))
+        .collect();
+    mm::LinkClass::summarize(&links)
 }
 
 /// `host:port` → `host`. Ports churn across restarts; a digest that included
@@ -838,8 +913,12 @@ pub(crate) struct MeshView {
     pub(crate) self_hw_fingerprint: Option<u64>,
     /// This node's GPU backend, recorded for display.
     pub(crate) self_backend: Option<String>,
-    /// RPC endpoint → member name, via the `rpc_workers` node ids.
-    pub(crate) endpoint_names: HashMap<String, String>,
+    /// RPC endpoint → the member behind it, via the `rpc_workers` node ids.
+    ///
+    /// Carries the peer's hardware fingerprint as well as its name: a shard is
+    /// keyed on both, and this is the only place the bench learns a *peer's*
+    /// hardware (`self_hw_fingerprint` covers only this node).
+    pub(crate) endpoint_nodes: HashMap<String, NodeIdentity>,
     /// Member name → online.
     pub(crate) online: HashMap<String, bool>,
 }
@@ -856,15 +935,22 @@ impl MeshView {
             .get("members")
             .and_then(|m| m.as_array())
             .unwrap_or(&empty);
-        let mut names: HashMap<String, String> = HashMap::new();
+        let mut nodes: HashMap<String, NodeIdentity> = HashMap::new();
         for m in members {
             let name = m
                 .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("?")
                 .to_string();
+            let hw = m.get("hw_fingerprint").and_then(|v| v.as_u64());
             if let Some(id) = m.get("node_id").and_then(|n| n.as_str()) {
-                names.insert(id.to_string(), name.clone());
+                nodes.insert(
+                    id.to_string(),
+                    NodeIdentity {
+                        name: name.clone(),
+                        hw,
+                    },
+                );
             }
             view.online.insert(
                 name.clone(),
@@ -872,7 +958,7 @@ impl MeshView {
             );
             if m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false) {
                 view.self_name = name;
-                view.self_hw_fingerprint = m.get("hw_fingerprint").and_then(|v| v.as_u64());
+                view.self_hw_fingerprint = hw;
                 view.self_backend = m
                     .get("backend")
                     .and_then(|v| v.as_str())
@@ -890,8 +976,8 @@ impl MeshView {
             ) else {
                 continue;
             };
-            if let Some(name) = names.get(id) {
-                view.endpoint_names.insert(ep.to_string(), name.clone());
+            if let Some(node) = nodes.get(id) {
+                view.endpoint_nodes.insert(ep.to_string(), node.clone());
             }
         }
         view
@@ -995,6 +1081,61 @@ pub(crate) fn primary_is_serving(body: &serde_json::Value, primary_model_id: &st
                     && k.get("lifecycle").and_then(|l| l.as_str()) == Some("serving")
             })
         })
+}
+
+/// The reason the primary's compute children have all given up, if they have.
+///
+/// The canary waits out a cold load, which on a large model legitimately takes
+/// minutes. But "not serving yet" and "will never serve" look identical from
+/// the residency field alone, and the daemon already knows the difference: a
+/// child that has failed says so, with the reason it exited.
+///
+/// Without this the bench spends `CANARY_ATTEMPTS × CANARY_RETRY` — ten minutes
+/// — printing "This is the cold load, not a failure" at an operator whose
+/// `/status` has been saying `lifecycle: "failed", last_exit: "no eligible RPC
+/// workers"` the whole time. Observed on RuggedFox 2026-07-29. Telling someone
+/// to keep waiting for something that already failed is the opposite of what
+/// this command is for.
+///
+/// `None` — keep waiting — in every case that is not unambiguously terminal:
+///
+/// - **No children at all.** The primary is in-process; there is nothing here
+///   to have failed, and residency is the only signal.
+/// - **Any replica not `failed`.** `starting`, `warming` and `restarting` are
+///   the cold load itself; `serving` and `degraded` are answering. A pool with
+///   one dead replica and one live one is not a dead end.
+///
+/// Only when every replica backing this model has failed is the wait pointless.
+pub(crate) fn primary_children_failed(
+    body: &serde_json::Value,
+    primary_model_id: &str,
+) -> Option<String> {
+    let kids: Vec<&serde_json::Value> = body
+        .get("inference")?
+        .get("compute_children")?
+        .as_array()?
+        .iter()
+        .filter(|k| k.get("model_id").and_then(|m| m.as_str()) == Some(primary_model_id))
+        .collect();
+    if kids.is_empty() {
+        return None;
+    }
+    if !kids
+        .iter()
+        .all(|k| k.get("lifecycle").and_then(|l| l.as_str()) == Some("failed"))
+    {
+        return None;
+    }
+    // The child's own words. `last_exit` is why it died; `last_transition_reason`
+    // is why it moved — prefer the former and fall back, so the operator gets
+    // the daemon's account rather than this command's paraphrase of it.
+    let reason = kids.iter().find_map(|k| {
+        k.get("last_exit")
+            .and_then(|r| r.as_str())
+            .or_else(|| k.get("last_transition_reason").and_then(|r| r.as_str()))
+            .filter(|r| !r.is_empty())
+    });
+    Some(reason.unwrap_or("no reason reported").to_string())
 }
 
 /// Daemon uptime in seconds, for the liveness comparison.
@@ -1232,11 +1373,27 @@ async fn run_bench(args: BenchArgs) -> i32 {
         // so a canary that stopped at "I got tokens" would hand the timed
         // trials to the wrong slot and produce a run the guards then have to
         // throw away. Wait for the model we came to measure.
-        let serving = match get_json(&client, port, "/status").await {
-            Ok(b) => primary_is_serving(&b, &primary_model_id),
-            Err(_) => false,
-        };
+        let status = get_json(&client, port, "/status").await.ok();
+        let serving = status
+            .as_ref()
+            .is_some_and(|b| primary_is_serving(b, &primary_model_id));
         if serving && tokens > 0 {
+            break;
+        }
+        // The daemon already knows this will never come up. Waiting out the
+        // remaining attempts would spend ten minutes calling a failure a cold
+        // load; the guards downstream still record the run as invalid, they
+        // just get to do it now and with the child's own reason attached.
+        if let Some(reason) =
+            status.as_ref().and_then(|b| primary_children_failed(b, &primary_model_id))
+        {
+            eprintln!(
+                "      the primary's compute child has FAILED — not a cold load: {reason}\n      \
+                 Not waiting out the remaining {} attempt(s); nothing can serve this model \
+                 until that child starts.",
+                CANARY_ATTEMPTS - attempt
+            );
+            canary_err = Some(format!("primary compute child failed: {reason}"));
             break;
         }
         let coming_up = !serving || canary_err.as_deref().is_some_and(slot_still_starting);
@@ -1286,8 +1443,12 @@ async fn run_bench(args: BenchArgs) -> i32 {
         );
     }
 
-    let shards = match shards_from_placement(&placement_before, &mesh.self_name, n_layer, &|ep| {
-        mesh.endpoint_names.get(ep).cloned()
+    let host_identity = NodeIdentity {
+        name: mesh.self_name.clone(),
+        hw: mesh.self_hw_fingerprint,
+    };
+    let shards = match shards_from_placement(&placement_before, &host_identity, n_layer, &|ep| {
+        mesh.endpoint_nodes.get(ep).cloned()
     }) {
         Ok(s) => s,
         Err(e) => {
@@ -1382,11 +1543,15 @@ async fn run_bench(args: BenchArgs) -> i32 {
         trials: trials.len() as u32,
     });
     let nodes = shards.len() as u32;
+    // Classified from the placement this run measured, not from what discovery
+    // might choose next time — the number belongs to the link it was taken on.
+    let link = placement_link(&placement_before);
     let key = mm::MeasurementKey::for_plan(
         host,
         fingerprint,
         mm::placement_digest(digest_mode(&shards), n_layer, &shards),
         n_ctx,
+        link,
     );
     let record = mm::MeasurementRecord {
         key: key.clone(),
@@ -1672,6 +1837,7 @@ pub(crate) fn render_bench_json(r: &mm::MeasurementRecord, store_note: &str) -> 
             "placement_digest": r.key.placement_digest,
             "host_hw_fingerprint": r.key.host_hw_fingerprint,
             "n_ctx": r.key.n_ctx,
+            "link": r.key.link.as_str(),
         },
         "model": r.model_name,
         "placement": r.placement_human,
@@ -1708,6 +1874,22 @@ pub(crate) fn render_bench_human(r: &mm::MeasurementRecord, store_note: &str) ->
         r.placement_human, r.nodes, r.hops
     );
     let _ = writeln!(o, "Context:        {} tokens", r.key.n_ctx);
+    // Only when there is a hop to characterise. A single-node run has no link,
+    // and "Link: local" beside "Placement: 48 local" is noise. For anything
+    // distributed it is load-bearing: the same split over a tunnel rather than
+    // a direct address has read ~2.3x apart on this fleet, so a reader who
+    // cannot see which one produced this number cannot use it.
+    if r.nodes > 1 {
+        let _ = writeln!(
+            o,
+            "Link:           {}{}",
+            r.key.link.as_str(),
+            match r.link_rtt_ms {
+                Some(ms) => format!("   ({ms:.0} ms to the furthest worker)"),
+                None => String::new(),
+            }
+        );
+    }
     if let Some(b) = &r.backend {
         let _ = writeln!(o, "Backend:        {b}");
     }

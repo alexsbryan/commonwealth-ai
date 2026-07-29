@@ -24,7 +24,6 @@ use commonwealth_api::state::AppState;
 use commonwealth_core::ids::MeshId;
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
-use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -139,8 +138,86 @@ pub async fn initial_sync(
     }
 }
 
+/// Choose this round's gossip targets from `(peer, last_contact_unix)`
+/// pairs: online peers first, and **most-stale first within each group** —
+/// the peer closest to the offline threshold is the one a round can least
+/// afford to skip. Offline peers take whatever slots are left. Returned in
+/// dial order, so live peers are contacted before any unreachable member
+/// can burn `PEER_TIMEOUT`.
+///
+/// THE RULE THIS ENFORCES: *selection misses alone must never be able to
+/// carry a reachable peer past `offline_threshold`.* The previous selection
+/// shuffled ALL members together and truncated to `FANOUT`, making a live
+/// peer's per-round contact chance `FANOUT / members` — while
+/// `DEFAULT_OFFLINE_THRESHOLD` is sized at "roughly 6× the interval" on the
+/// unstated assumption that a round *contacts* the peer. Random sampling
+/// silently violated the assumption its own constant was chosen under.
+///
+/// Ordering by staleness converts that coin flip into a bound: with `n`
+/// online peers a peer waits at most `ceil(n / FANOUT)` rounds, because
+/// every round it goes unpicked it moves up the order. No RNG, no
+/// per-round state, and it degrades gracefully — the mesh only needs
+/// `ceil(n / FANOUT) * interval < offline_threshold`, which is a
+/// computable condition rather than a silent probability
+/// (`max_online_peers_before_false_offline`).
+///
+/// MEASURED, not theorised. Meshsonics 2026-07-29: 4 members, one live
+/// peer (BeefyMac) + two long-dead ones, `FANOUT = 2`. BeefyMac was picked
+/// ~2/3 of rounds while the dead peers each burned a ~3s iroh dial,
+/// stretching rounds 10s → ~16s, so four misses cleared 60s. It flapped
+/// Offline three times in fourteen minutes (staleness 68s / 63s / 62s)
+/// with gossip reach at 65–600ms on either side of every lapse. Because
+/// gossip-Online membership *is* the RPC-worker liveness signal, each flap
+/// emptied the eligible-worker set; the third retired a healthy
+/// distributed 122B eleven minutes into serving. Fourteen seconds after
+/// that child was SIGKILLed: `gossip: reach ok reach_ms=548`.
+///
+/// A member that cannot contribute to a given workload is NOT the thing
+/// being filtered here, and must never be: peers belong to a mesh for
+/// their own reasons, and a run drawing on a subset of them is the normal
+/// case, not a degraded one. The only axis this reads is reachability.
+///
+/// Resurrection is unaffected when the online set fills the fan-out: a
+/// returning peer runs this same loop and dials US, and the receive-side
+/// merge stamps `observe_peer_contact` — already the documented
+/// offline→online path, not a new assumption.
+fn select_round_peers<T>(
+    mut online: Vec<(T, u64)>,
+    mut offline: Vec<(T, u64)>,
+    fanout: usize,
+) -> Vec<T> {
+    // Ascending `last_contact` == longest-unseen first.
+    online.sort_by_key(|(_, last_contact)| *last_contact);
+    offline.sort_by_key(|(_, last_contact)| *last_contact);
+    let online_take = online.len().min(fanout);
+    let mut out: Vec<T> = online.drain(..online_take).map(|(c, _)| c).collect();
+    let offline_take = offline.len().min(fanout - out.len());
+    out.extend(offline.drain(..offline_take).map(|(c, _)| c));
+    out
+}
+
+/// How many online peers this mesh can hold before a reachable peer can be
+/// carried past `offline_threshold` by selection pressure alone. Above
+/// this, `FANOUT` (or the threshold, or the interval) has to grow — the
+/// point of stating it as a function is that the ceiling is checkable
+/// instead of being an emergent property of a shuffle.
+fn max_online_peers_before_false_offline(
+    fanout: usize,
+    interval: Duration,
+    offline_threshold: Duration,
+) -> usize {
+    if interval.is_zero() {
+        return usize::MAX;
+    }
+    // A peer must be reached within `rounds` rounds; staleness ordering
+    // reaches every online peer within ceil(n / fanout).
+    let rounds = (offline_threshold.as_secs() / interval.as_secs()) as usize;
+    fanout.saturating_mul(rounds)
+}
+
 /// One full gossip round. Touches own `last_seen`, decays stale
-/// peers, then pair-gossips with up to `FANOUT` random members.
+/// peers, then pair-gossips with up to `FANOUT` members — online ones
+/// first (`select_round_peers`).
 pub async fn run_one_round(
     app_state: &AppState,
     offline_threshold: Duration,
@@ -172,7 +249,7 @@ pub async fn run_one_round(
     // info only when the advertised set changed (new corpus
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
-    let candidates: Vec<PeerContact> = {
+    let candidates: Vec<(PeerContact, bool, u64)> = {
         let mut mesh = app_state.inner.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
             .members
@@ -294,7 +371,19 @@ pub async fn run_one_round(
             // The transport sorts candidates IPv4-first on
             // resolution and promotes the last-working address,
             // so the contact carries the raw gossiped list.
-            .map(peer_contact)
+            //
+            // Status AND local-contact staleness ride along, because the
+            // round's SELECTION depends on both — see `select_round_peers`.
+            // Read here, inside the same lock that just ran the offline-decay
+            // pass and via the same `peer_contact_or_init` it used, so the
+            // selection sees this round's numbers and not last round's.
+            .map(|m| {
+                (
+                    peer_contact(m),
+                    m.status != NodeStatus::Offline,
+                    app_state.peer_contact_or_init(m.node_id, now),
+                )
+            })
             .collect()
     };
 
@@ -305,15 +394,19 @@ pub async fn run_one_round(
         return Ok(());
     }
 
-    // Step 2: pick up to FANOUT peers at random. Scope the RNG so
-    // the non-Send `ThreadRng` doesn't cross an `.await` below —
-    // spawned futures must be `Send` and `rand::rng()` isn't.
+    // Step 2: pick up to FANOUT peers — online ones first, most-stale
+    // first within each group. Not a heuristic: see `select_round_peers`
+    // for why random sampling here is what decays healthy peers to
+    // Offline. No RNG is involved any more, which is also why nothing
+    // needs scoping around the `.await`s below.
     let selection = {
-        let mut rng = rand::rng();
-        let mut tmp = candidates;
-        tmp.shuffle(&mut rng);
-        tmp.truncate(FANOUT);
-        tmp
+        let (online, offline): (Vec<_>, Vec<_>) =
+            candidates.into_iter().partition(|(_, up, _)| *up);
+        select_round_peers(
+            online.into_iter().map(|(c, _, s)| (c, s)).collect(),
+            offline.into_iter().map(|(c, _, s)| (c, s)).collect(),
+            FANOUT,
+        )
     };
 
     // Step 3: snapshot our mesh once and POST it to each picked
@@ -797,5 +890,176 @@ impl MeshWire {
             members,
             peers: self.peers,
         }
+    }
+}
+
+#[cfg(test)]
+mod select_round_peers_tests {
+    use super::{
+        max_online_peers_before_false_offline, select_round_peers, DEFAULT_GOSSIP_INTERVAL,
+        DEFAULT_OFFLINE_THRESHOLD, FANOUT,
+    };
+
+    /// Simulate `rounds` gossip rounds over a fixed member set and return, for
+    /// each online peer, the WORST gap (in rounds) it ever went uncontacted.
+    /// A peer contacted every round has a gap of 1.
+    ///
+    /// This is the only honest way to test the property at issue: the bug was
+    /// never visible in a single round, only in a streak of them.
+    fn worst_contact_gap(online: usize, offline: usize, fanout: usize, rounds: usize) -> usize {
+        let mut last_contact: Vec<u64> = vec![0; online + offline];
+        let mut worst = vec![0usize; online];
+        for round in 1..=rounds {
+            let up: Vec<(usize, u64)> = (0..online).map(|i| (i, last_contact[i])).collect();
+            let down: Vec<(usize, u64)> = (online..online + offline)
+                .map(|i| (i, last_contact[i]))
+                .collect();
+            for id in select_round_peers(up, down, fanout) {
+                if id < online {
+                    worst[id] = worst[id].max(round - last_contact[id] as usize);
+                }
+                // Contact stamps the round number, exactly as
+                // `observe_peer_contact` stamps the clock in the real loop.
+                last_contact[id] = round as u64;
+            }
+        }
+        // Count the TRAILING gap too. Without this a peer that is never
+        // selected at all keeps a worst-gap of 0 and the assertion passes
+        // vacuously — the exact shape of the bug being tested for.
+        for (id, w) in worst.iter_mut().enumerate() {
+            *w = (*w).max(rounds - last_contact[id] as usize);
+        }
+        worst.into_iter().max().unwrap_or(0)
+    }
+
+    /// How many rounds fit inside the offline threshold — the budget a peer
+    /// has to be contacted within, and the number the threshold's own
+    /// "roughly 6× the interval" doc comment is reasoning about.
+    fn rounds_before_decay() -> usize {
+        (DEFAULT_OFFLINE_THRESHOLD.as_secs() / DEFAULT_GOSSIP_INTERVAL.as_secs()) as usize
+    }
+
+    /// The live Meshsonics shape that retired a healthy distributed 122B: one
+    /// online peer, two long-dead members, `FANOUT = 2`. The online peer must
+    /// be contacted EVERY round — the threshold is counted in rounds, and a
+    /// miss streak is what decayed it.
+    #[test]
+    fn the_only_online_peer_is_contacted_every_round_when_corpses_outnumber_it() {
+        assert_eq!(worst_contact_gap(1, 2, FANOUT, 200), 1);
+        let picked = select_round_peers(vec![("BeefyMac", 10)], vec![("LittleMac", 0)], FANOUT);
+        assert_eq!(
+            picked[0], "BeefyMac",
+            "the live peer must be dialed FIRST — before an unreachable member burns PEER_TIMEOUT — \
+             even though it is the FRESHER of the two"
+        );
+    }
+
+    /// The generalised rule, and the one a growing mesh actually needs: a
+    /// reachable peer must never be carried past the offline threshold by
+    /// selection pressure alone. Asserted across every mesh size the
+    /// configured fan-out is supposed to cover, with corpses mixed in.
+    ///
+    /// The old shuffle-and-truncate fails this at EVERY size, corpses or not
+    /// — simulated over 5000 rounds at `FANOUT = 2` against a 6-round budget,
+    /// worst gap in rounds: 1 online + 2 offline → 8; **3 online + 0 offline
+    /// → 12**; 6 online → 26; 6 online + 2 offline → 32; 12 online → 59. The
+    /// dead members on Meshsonics made it fire sooner, but three healthy
+    /// peers and no corpses at all is already past the threshold. Random
+    /// sampling was never sound here; the corpses only set the rate.
+    #[test]
+    fn no_reachable_peer_is_ever_carried_past_the_offline_threshold() {
+        let budget = rounds_before_decay();
+        let ceiling = max_online_peers_before_false_offline(
+            FANOUT,
+            DEFAULT_GOSSIP_INTERVAL,
+            DEFAULT_OFFLINE_THRESHOLD,
+        );
+        assert!(ceiling >= 2, "fan-out must cover at least a pair");
+        for online in 1..=ceiling {
+            for corpses in 0..4 {
+                let gap = worst_contact_gap(online, corpses, FANOUT, 300);
+                assert!(
+                    gap <= budget,
+                    "{online} online + {corpses} offline: a healthy peer went {gap} rounds \
+                     uncontacted, past the {budget}-round offline budget"
+                );
+            }
+        }
+    }
+
+    /// Staleness ordering is what produces that bound: the longest-unseen
+    /// peer goes first, so a peer that misses a round is promoted, not
+    /// re-entered into a fresh lottery.
+    #[test]
+    fn the_longest_unseen_peer_is_selected_first() {
+        let picked = select_round_peers(
+            vec![("fresh", 100), ("stalest", 5), ("middling", 50)],
+            Vec::new(),
+            2,
+        );
+        assert_eq!(picked, vec!["stalest", "middling"]);
+    }
+
+    /// Reachability is the ONLY axis. A peer that is online but useless for
+    /// the workload at hand is still gossiped with every round like any
+    /// other — members belong to a mesh for their own reasons, and a run
+    /// drawing on a subset of them is normal, not degraded.
+    #[test]
+    fn selection_reads_reachability_only_never_capability() {
+        // Same shape, twice: the function has no input by which "can this
+        // peer serve a 122B shard" could possibly influence the outcome.
+        let a = select_round_peers(vec![("tiny-laptop", 1), ("big-gpu-box", 2)], Vec::new(), 2);
+        assert_eq!(a, vec!["tiny-laptop", "big-gpu-box"]);
+    }
+
+    /// Every online peer we have room for is taken before any offline one.
+    #[test]
+    fn online_peers_fill_the_fanout_before_offline_peers_get_a_slot() {
+        let picked = select_round_peers(
+            vec![("a", 1), ("b", 2), ("c", 3)],
+            vec![("dead", 0)],
+            2,
+        );
+        assert_eq!(picked, vec!["a", "b"]);
+    }
+
+    /// A fully-partitioned node — nothing online — must still probe, or it
+    /// could never rejoin.
+    #[test]
+    fn a_node_with_no_online_peers_still_probes_the_offline_ones() {
+        let picked = select_round_peers(
+            Vec::<(&str, u64)>::new(),
+            vec![("dead-a", 1), ("dead-b", 2), ("dead-c", 3)],
+            2,
+        );
+        assert_eq!(picked, vec!["dead-a", "dead-b"]);
+    }
+
+    /// Fewer candidates than the fan-out is not an error, and a solo mesh
+    /// selects nothing rather than panicking on the `fanout - out.len()` math.
+    #[test]
+    fn short_candidate_lists_and_an_empty_mesh_are_handled() {
+        assert_eq!(
+            select_round_peers(vec![("a", 0)], Vec::new(), 2),
+            vec!["a"]
+        );
+        assert!(select_round_peers(Vec::<(&str, u64)>::new(), Vec::new(), 2).is_empty());
+        assert!(select_round_peers(vec![("a", 0)], vec![("b", 0)], 0).is_empty());
+    }
+
+    /// The ceiling is a real number the operator could act on, not a
+    /// formality: at the shipped constants it must cover a mesh comfortably
+    /// larger than the current one.
+    #[test]
+    fn the_documented_ceiling_matches_the_shipped_constants() {
+        assert_eq!(
+            max_online_peers_before_false_offline(
+                FANOUT,
+                DEFAULT_GOSSIP_INTERVAL,
+                DEFAULT_OFFLINE_THRESHOLD
+            ),
+            12,
+            "FANOUT=2 × (60s / 10s) = 12 online peers"
+        );
     }
 }

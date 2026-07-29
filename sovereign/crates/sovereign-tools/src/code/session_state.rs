@@ -159,6 +159,19 @@ pub fn upsert_frame(
             ));
         }
     }
+    // An upsert carrying no section body, no status and no note id still
+    // CREATED the file and reported `created: true` — a success-shaped
+    // response for a frame with eight empty sections, which then goes on
+    // to advertise nothing to the successor that boots from it. Three
+    // such frames were found banked on disk (2026-07-29), one of them
+    // live in the boot index. A write that writes nothing is an error.
+    if update.sections.is_empty() && update.status.is_none() && update.note_ids.is_empty() {
+        return Err(format!(
+            "session_state: nothing to write — supply at least one section body ({}), \
+             a status, or note_ids. Refusing to bank an empty frame.",
+            FRAME_SECTIONS.join(" | ")
+        ));
+    }
 
     let dir = sessions_root.join(session_id);
     let path = dir.join("frame.md");
@@ -290,6 +303,27 @@ const SECTION_PARAMS: [&str; 8] = [
     "verification",
 ];
 
+/// The non-section parameters. Kept beside [`SECTION_PARAMS`] so
+/// [`is_known_param`] cannot drift away from the descriptor.
+const META_PARAMS: [&str; 3] = ["session_id", "status", "note_ids"];
+
+fn is_known_param(key: &str) -> bool {
+    SECTION_PARAMS.contains(&key) || META_PARAMS.contains(&key)
+}
+
+/// The JSON type name, so a type-mismatch message can name what the
+/// caller actually sent rather than only what was expected.
+fn json_type(v: &serde_json::Value) -> &'static str {
+    match v {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
 #[async_trait]
 impl Tool for SessionStateTool {
     fn descriptor(&self) -> ToolDescriptor {
@@ -342,12 +376,19 @@ impl Tool for SessionStateTool {
                           are the strong continuity path (self-reported frames grade \
                           100% vs 17% for post-hoc distillation); a current frame is \
                           what lets a successor session resume your work without \
-                          re-reading the repo."
+                          re-reading the repo. Sections are FLAT string params — one \
+                          key per section (goal, state, next, decisions, invariants, \
+                          dead_ends, working_set, verification); there is no `sections` \
+                          array and no `section`/`content` pair."
                 .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": properties,
-                "required": ["session_id"]
+                "required": ["session_id"],
+                // The declarative twin of the unknown-key guard in
+                // `execute`: a validating client rejects the wrong shape
+                // before it costs a round trip.
+                "additionalProperties": false
             }),
             examples: vec![ToolExample {
                 situation: "A plan step just completed — bank the position before moving on."
@@ -380,6 +421,32 @@ impl Tool for SessionStateTool {
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let obj = params.as_object().ok_or_else(|| {
+            Error::InvalidInput("session_state: params must be a JSON object".into())
+        })?;
+
+        // An unrecognised key is a REJECTED call, never a dropped one.
+        // Two plausible-but-wrong shapes showed up in real transcripts
+        // (2026-07-29): `sections: [{name, content}]`, and a `section` +
+        // `content` pair. Both sailed through as `created: true,
+        // sections_updated: []` and overwrote the caller's frame with an
+        // empty one — the caller had no way to tell the write was lost.
+        let unknown: Vec<&str> = obj
+            .keys()
+            .map(String::as_str)
+            .filter(|k| !is_known_param(k))
+            .collect();
+        if !unknown.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "session_state: unknown parameter(s) `{}`. Sections are FLAT string params \
+                 — one key per section, e.g. `goal: \"- ship E4a\"`. There is no `sections` \
+                 array and no `section`/`content` pair. Accepted: {} | {}",
+                unknown.join("`, `"),
+                SECTION_PARAMS.join(" | "),
+                META_PARAMS.join(" | "),
+            )));
+        }
+
         let session_id = params
             .get("session_id")
             .and_then(|v| v.as_str())
@@ -387,24 +454,55 @@ impl Tool for SessionStateTool {
 
         let mut update = FrameUpdate::default();
         for p in SECTION_PARAMS {
-            if let Some(body) = params.get(p).and_then(|v| v.as_str()) {
-                update.sections.push((p.to_string(), body.to_string()));
+            match obj.get(p) {
+                None | Some(serde_json::Value::Null) => {}
+                Some(serde_json::Value::String(body)) => {
+                    update.sections.push((p.to_string(), body.clone()));
+                }
+                Some(other) => {
+                    return Err(Error::InvalidInput(format!(
+                        "session_state: `{p}` must be a markdown string, got {}. Join list \
+                         items into one string with newlines.",
+                        json_type(other)
+                    )));
+                }
             }
         }
-        update.status = params
-            .get("status")
-            .and_then(|v| v.as_str())
-            .map(str::to_string);
-        update.note_ids = params
-            .get("note_ids")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
+        update.status = match obj.get("status") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(s)) => Some(s.clone()),
+            Some(other) => {
+                return Err(Error::InvalidInput(format!(
+                    "session_state: `status` must be a string, got {}",
+                    json_type(other)
+                )));
+            }
+        };
+        update.note_ids = match obj.get("note_ids") {
+            None | Some(serde_json::Value::Null) => Vec::new(),
+            Some(serde_json::Value::Array(a)) => {
+                let mut ids = Vec::with_capacity(a.len());
+                for v in a {
+                    match v.as_str() {
+                        Some(s) => ids.push(s.to_string()),
+                        None => {
+                            return Err(Error::InvalidInput(format!(
+                                "session_state: `note_ids` must be an array of strings, got a \
+                                 {} element",
+                                json_type(v)
+                            )));
+                        }
+                    }
+                }
+                ids
+            }
+            Some(other) => {
+                return Err(Error::InvalidInput(format!(
+                    "session_state: `note_ids` must be an array of strings, got {}",
+                    json_type(other)
+                )));
+            }
+        };
 
         let outcome = upsert_frame(
             &self.sessions_root,
@@ -524,6 +622,120 @@ mod tests {
         update.status = Some("paused".into());
         let err = upsert_frame(&root, "s4", None, update).unwrap_err();
         assert!(err.contains("in-flight | completed | abandoned"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "session-state-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        }
+    }
+
+    /// A write that would write nothing is an error, and banks no file.
+    /// This is the guard that turns the silent failure loud even for a
+    /// caller that reaches the function directly.
+    #[test]
+    fn empty_update_is_rejected_and_banks_no_frame() {
+        let root = tmp_root("noop");
+        let err = upsert_frame(&root, "s6", None, update_with(&[])).unwrap_err();
+        assert!(err.contains("nothing to write"), "{err}");
+        assert!(
+            !root.join("s6").join("frame.md").exists(),
+            "a no-op upsert must not create an empty frame"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The `sections: [{name, content}]` shape observed in real
+    /// transcripts (2026-07-29). It used to return `created: true,
+    /// sections_updated: []` and overwrite the frame with an empty one.
+    #[tokio::test]
+    async fn sections_array_shape_is_rejected_not_silently_dropped() {
+        let root = tmp_root("shape_array");
+        let tool = SessionStateTool::new().with_sessions_root(root.clone());
+        let err = tool
+            .execute(
+                &json!({
+                    "session_id": "s7",
+                    "sections": [{"name": "Goal", "content": "ship the thing"}]
+                }),
+                &ctx(),
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown parameter"), "{err}");
+        assert!(err.contains("sections"), "names the offending key: {err}");
+        assert!(err.contains("goal"), "teaches the real shape: {err}");
+        assert!(!root.join("s7").join("frame.md").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The other wild shape: a singular `section` + `content` pair.
+    #[tokio::test]
+    async fn section_content_pair_shape_is_rejected() {
+        let root = tmp_root("shape_pair");
+        let tool = SessionStateTool::new().with_sessions_root(root.clone());
+        let err = tool
+            .execute(
+                &json!({"session_id": "s8", "section": "Goal", "content": "ship it"}),
+                &ctx(),
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown parameter"), "{err}");
+        assert!(err.contains("section"), "{err}");
+        assert!(err.contains("content"), "both keys named: {err}");
+        assert!(!root.join("s8").join("frame.md").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A known section param with a non-string value used to be dropped
+    /// by `as_str()`. Now it names the type it got.
+    #[tokio::test]
+    async fn non_string_section_body_is_rejected() {
+        let root = tmp_root("shape_type");
+        let tool = SessionStateTool::new().with_sessions_root(root.clone());
+        let err = tool
+            .execute(
+                &json!({"session_id": "s9", "next": ["a", "b"]}),
+                &ctx(),
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("`next` must be a markdown string"), "{err}");
+        assert!(err.contains("got array"), "names what it got: {err}");
+        assert!(!root.join("s9").join("frame.md").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The correct flat shape still works end-to-end through the MCP
+    /// path — the guards reject wrong shapes, not the real one.
+    #[tokio::test]
+    async fn flat_section_params_still_write_through_the_mcp_path() {
+        let root = tmp_root("shape_ok");
+        let tool = SessionStateTool::new().with_sessions_root(root.clone());
+        let out = tool
+            .execute(
+                &json!({"session_id": "s10", "goal": "- ship E4a", "next": "- register"}),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        let StepOutput::Json(v) = out else {
+            panic!("expected json output")
+        };
+        assert_eq!(v["created"], json!(true));
+        assert_eq!(v["sections_updated"], json!(["Goal", "Next"]));
+        let text = std::fs::read_to_string(root.join("s10").join("frame.md")).unwrap();
+        assert!(text.contains("- ship E4a"));
         std::fs::remove_dir_all(&root).ok();
     }
 

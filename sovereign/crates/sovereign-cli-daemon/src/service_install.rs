@@ -348,6 +348,209 @@ fn uninstall_systemd() -> Result<(), String> {
     Ok(())
 }
 
+/// Service names to probe, current name FIRST and the legacy name
+/// second.
+///
+/// Both platforms need the legacy entry for the same reason: the
+/// rebrand shipped `migrate_legacy_service`, but migration only runs
+/// on install, so hosts that never re-ran `svrn install-service` are
+/// still serving under the old name today. This host is one — it runs
+/// `sovereign.service` with four drop-ins. A probe that knows only the
+/// current name concludes "nothing owns the daemon" and hands
+/// lifecycle back to the detached-child path, which is precisely the
+/// bug this module is here to prevent.
+#[cfg(target_os = "linux")]
+pub(crate) const CANDIDATE_SERVICES: [&str; 2] = ["svrnmesh.service", "sovereign.service"];
+
+#[cfg(target_os = "macos")]
+pub(crate) const CANDIDATE_SERVICES: [&str; 2] = ["com.svrnmesh.daemon", "com.sovereign.daemon"];
+
+/// A service manager that is RUNNING the daemon right now.
+///
+/// Distinct from [`service_installed`], which probes `is-enabled` and
+/// answers "will a crash be auto-restarted?" — a question about boot.
+/// This probes `is-active` and answers "must lifecycle commands go
+/// through the service manager?", which is what `daemon
+/// start`/`stop`/`restart` need to know.
+///
+/// Why the distinction earns its keep: a service-managed daemon
+/// inherits `Environment=` and the unit's `ExecStart` wrapper, and on
+/// a real install that is where the operational configuration lives.
+/// On this host five vars (`SOVEREIGN_N_UBATCH`,
+/// `SOVEREIGN_RPC_WORKER_ALLOWLIST`, `_SETTLE_SECS`,
+/// `_FLAP_THRESHOLD`, `SOVEREIGN_RPC_BLOCK_SPLIT`) exist ONLY in the
+/// drop-ins — no config file, no shell rc. A `daemon restart` that
+/// SIGTERMs the unit's child and spawns its own detached replacement
+/// silently drops all five, changing the distributed-inference shard
+/// boundary and worker policy while reporting success. Delegating
+/// keeps them, because systemd re-applies the unit.
+pub struct ManagingService {
+    /// Unit or label name — printed so the operator can see which
+    /// manager the verb decided to defer to.
+    pub name: String,
+    pub(crate) mgr: Manager,
+}
+
+/// Which service manager a candidate name belongs to.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Manager {
+    Systemd,
+    Launchd,
+}
+
+impl Manager {
+    /// The binary that drives it.
+    pub(crate) fn program(self) -> &'static str {
+        match self {
+            Manager::Systemd => "systemctl",
+            Manager::Launchd => "launchctl",
+        }
+    }
+}
+
+/// The argv for one lifecycle verb — pure, and compiled on EVERY
+/// platform.
+///
+/// Deliberately not behind `#[cfg]`, so the launchd command lines are
+/// type-checked and unit-tested when building on Linux too. The
+/// interesting decisions live here — `kickstart -k` for restart but
+/// bare `kickstart` for start, and the `gui/<uid>/` domain target —
+/// and they are easy to get wrong. Only the `Command` invocation
+/// below is platform-dependent.
+pub(crate) fn lifecycle_argv(mgr: Manager, verb: &str, name: &str, uid: u32) -> Vec<String> {
+    match mgr {
+        Manager::Systemd => vec!["--user".into(), verb.into(), name.into()],
+        Manager::Launchd => {
+            // launchd has no `restart` verb; `kickstart -k` IS the
+            // documented equivalent — it kills a running job and
+            // starts it again, re-reading the plist so the job's
+            // EnvironmentVariables are re-applied, exactly as systemd
+            // re-applies a unit. That re-application is the entire
+            // reason to delegate rather than spawn our own child.
+            //
+            // kickstart REQUIRES the `gui/<uid>/` domain target; the
+            // bare-label form is legacy syntax and rejects `-k`.
+            let target = format!("gui/{uid}/{name}");
+            match verb {
+                "restart" => vec!["kickstart".into(), "-k".into(), target],
+                "stop" => vec!["kill".into(), "SIGTERM".into(), target],
+                _ => vec!["kickstart".into(), target],
+            }
+        }
+    }
+}
+
+/// Is this stderr the manager saying "it was already stopped"?
+/// Treated as success: that is the outcome the caller asked for.
+/// `stop_service` learned these shapes the hard way; the delegation
+/// path must not regress them.
+pub(crate) fn stop_stderr_means_already_stopped(stderr: &str) -> bool {
+    stderr.contains("No such process")
+        || stderr.contains("not running")
+        || stderr.contains("Could not find service")
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    // SAFETY: getuid(2) cannot fail and is thread-safe.
+    unsafe { libc::getuid() }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
+}
+
+impl ManagingService {
+    /// Restart in place, letting the manager re-apply the unit.
+    pub fn restart(&self) -> Result<(), String> {
+        self.act("restart")
+    }
+
+    /// Stop, so the manager does not immediately restart it.
+    pub fn stop(&self) -> Result<(), String> {
+        self.act("stop")
+    }
+
+    /// Start under the manager.
+    pub fn start(&self) -> Result<(), String> {
+        self.act("start")
+    }
+
+    /// Platform-independent by construction — see [`lifecycle_argv`].
+    fn act(&self, verb: &str) -> Result<(), String> {
+        let argv = lifecycle_argv(self.mgr, verb, &self.name, current_uid());
+        let label = format!("{} {}", self.mgr.program(), argv.join(" "));
+        let out = std::process::Command::new(self.mgr.program())
+            .args(&argv)
+            .output()
+            .map_err(|e| format!("{label}: {e}"))?;
+        if out.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if verb == "stop" && stop_stderr_means_already_stopped(&stderr) {
+            return Ok(());
+        }
+        Err(format!("{label} failed: {}", stderr.trim()))
+    }
+}
+
+/// Argv that asks the manager "do you know this service?".
+///
+/// REGISTRATION, not liveness — and that distinction is the whole
+/// point. An earlier cut of this probe asked systemd `is-active`,
+/// which is wrong for exactly the case that matters: a `daemon start`
+/// happens when the daemon is DOWN, so the unit is `inactive`, so the
+/// probe said "unmanaged" and the caller spawned its own detached
+/// child — losing every `Environment=` and the `ExecStart` wrapper.
+/// The verb that most needs to delegate was the one guaranteed not
+/// to. Verified the hard way on 2026-07-29: the restart stopped a
+/// `sovereign.service`-managed daemon and then could not start it
+/// back.
+///
+/// `systemctl --user cat` exits 0 for any unit systemd knows, active
+/// or not. `launchctl list` exits 0 for any loaded job, running or
+/// not — the same question in launchd's vocabulary.
+pub(crate) fn probe_argv(mgr: Manager, name: &str) -> Vec<String> {
+    match mgr {
+        Manager::Systemd => vec!["--user".into(), "cat".into(), name.into()],
+        Manager::Launchd => vec!["list".into(), name.into()],
+    }
+}
+
+/// The service manager currently running the daemon, if any.
+/// `None` means lifecycle is the caller's to own — the detached-child
+/// path in `daemon start` is correct.
+///
+/// Both platforms walk [`CANDIDATE_SERVICES`] in order, so a host
+/// still registered under the pre-rebrand name is recognised rather
+/// than silently treated as unmanaged.
+pub fn managing_service() -> Option<ManagingService> {
+    #[cfg(target_os = "macos")]
+    let mgr = Manager::Launchd;
+    #[cfg(target_os = "linux")]
+    let mgr = Manager::Systemd;
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        CANDIDATE_SERVICES.iter().find_map(|name| {
+            let out = std::process::Command::new(mgr.program())
+                .args(probe_argv(mgr, name))
+                .output()
+                .ok()?;
+            out.status.success().then(|| ManagingService {
+                name: (*name).to_string(),
+                mgr,
+            })
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        None
+    }
+}
+
 /// True when the daemon is registered with the user's service manager
 /// AND the registration is active — i.e. a crash WILL be auto-restarted.
 ///
@@ -358,6 +561,11 @@ fn uninstall_systemd() -> Result<(), String> {
 /// exits 0. Anything else (other platforms, probe failures) reports
 /// unsupervised, which is the safe direction for the doctor check and
 /// the `daemon start` advisory that consume this.
+///
+/// Asks a different question from [`managing_service`]: this one is
+/// about BOOT and crash-recovery, that one is about who must drive
+/// lifecycle right now. A host can be managed-but-not-enabled (this
+/// one is), so neither answer implies the other.
 pub fn service_installed() -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -384,5 +592,115 @@ pub fn service_installed() -> bool {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         false
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod service_ownership_tests {
+    use super::*;
+
+    /// The launchd command lines, asserted from whatever platform the
+    /// suite runs on. These are the lines a Mac user's `svrn daemon
+    /// restart` actually executes, and until this test existed nothing
+    /// checked them outside the release workflow.
+    #[test]
+    fn launchd_argv_uses_kickstart_dash_k_with_a_gui_domain_target() {
+        assert_eq!(
+            lifecycle_argv(Manager::Launchd, "restart", "com.svrnmesh.daemon", 501),
+            ["kickstart", "-k", "gui/501/com.svrnmesh.daemon"],
+            "restart must be kickstart -k: launchd has no restart verb, and -k is \
+             what re-reads the plist so EnvironmentVariables are re-applied"
+        );
+        assert_eq!(
+            lifecycle_argv(Manager::Launchd, "start", "com.svrnmesh.daemon", 501),
+            ["kickstart", "gui/501/com.svrnmesh.daemon"],
+            "start is kickstart WITHOUT -k — -k would kill a healthy daemon"
+        );
+        assert_eq!(
+            lifecycle_argv(Manager::Launchd, "stop", "com.svrnmesh.daemon", 501),
+            ["kill", "SIGTERM", "gui/501/com.svrnmesh.daemon"]
+        );
+        assert_eq!(Manager::Launchd.program(), "launchctl");
+    }
+
+    #[test]
+    fn systemd_argv_is_user_scoped() {
+        assert_eq!(
+            lifecycle_argv(Manager::Systemd, "restart", "svrnmesh.service", 501),
+            ["--user", "restart", "svrnmesh.service"],
+            "--user matters: the daemon is a user unit, and the system-scoped \
+             command would target a different (nonexistent) unit"
+        );
+        assert_eq!(Manager::Systemd.program(), "systemctl");
+    }
+
+    /// A stop that finds nothing to stop got what it asked for.
+    #[test]
+    fn already_stopped_stderr_is_success_on_both_managers() {
+        for s in [
+            "launchctl: No such process",
+            "Unit svrnmesh.service is not running",
+            "Could not find service \"com.svrnmesh.daemon\"",
+        ] {
+            assert!(stop_stderr_means_already_stopped(s), "{s:?}");
+        }
+        assert!(!stop_stderr_means_already_stopped("Permission denied"));
+    }
+
+    /// The regression that made service ownership invisible on a real
+    /// host: the probe knew only the CURRENT service name, so a daemon
+    /// still registered under the legacy name looked unmanaged and
+    /// every lifecycle verb fell through to the detached-child path.
+    /// Asserted on both platforms because both rebranded, and on both
+    /// `migrate_legacy_service` only runs at install time — so both
+    /// have hosts still serving under the old name.
+    #[test]
+    fn both_platforms_probe_current_name_first_then_legacy() {
+        assert_eq!(CANDIDATE_SERVICES.len(), 2, "current + legacy");
+        assert!(
+            !CANDIDATE_SERVICES[0].contains("sovereign"),
+            "current (rebranded) name is probed first: {CANDIDATE_SERVICES:?}"
+        );
+        assert!(
+            CANDIDATE_SERVICES[1].contains("sovereign"),
+            "legacy name must still be probed — real installs run under it: \
+             {CANDIDATE_SERVICES:?}"
+        );
+    }
+
+    /// The probe must ask about REGISTRATION, not liveness. Asking
+    /// systemd `is-active` broke `daemon start` specifically: start
+    /// runs when the daemon is down, so the unit reads `inactive`, so
+    /// the probe reported "unmanaged" and the caller spawned a
+    /// detached child with none of the unit's environment. Guard the
+    /// verb, not just the intent.
+    #[test]
+    fn the_probe_asks_about_registration_not_liveness() {
+        assert_eq!(
+            probe_argv(Manager::Systemd, "sovereign.service"),
+            ["--user", "cat", "sovereign.service"],
+            "`cat` exits 0 for a known-but-inactive unit; `is-active` does not, \
+             and a down daemon is exactly when `start` needs to delegate"
+        );
+        assert_eq!(
+            probe_argv(Manager::Launchd, "com.svrnmesh.daemon"),
+            ["list", "com.svrnmesh.daemon"],
+            "`launchctl list` exits 0 for a loaded job whether or not it is running"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_probes_systemd_unit_names() {
+        assert_eq!(CANDIDATE_SERVICES, ["svrnmesh.service", "sovereign.service"]);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_probes_launchd_labels() {
+        assert_eq!(
+            CANDIDATE_SERVICES,
+            ["com.svrnmesh.daemon", "com.sovereign.daemon"]
+        );
     }
 }

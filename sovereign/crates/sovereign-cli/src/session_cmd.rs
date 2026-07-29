@@ -1259,8 +1259,31 @@ pub(crate) fn load_frames(
             session_id,
         });
     }
+    retain_listable(&mut out);
     rank_frames(&mut out);
     out
+}
+
+/// Drop frames that are not handoff candidates before they reach the
+/// index.
+///
+/// `abandoned` is the ONE status that means "do not continue this" —
+/// the donor said so explicitly. `completed` deliberately stays: the
+/// module note above is emphatic that a completed frame is the NORMAL
+/// good handoff (completion means the donor got far enough to write
+/// down what is next), and filtering it was the E5 bug, not the fix.
+///
+/// The `same_window` exemption is load-bearing: the frame banked by
+/// the previous occupant of THIS terminal is observed, not inferred,
+/// and hiding it would leave the successor with a silent gap where its
+/// own predecessor should be. Better to show it and let the successor
+/// read `status: abandoned` for itself.
+///
+/// Retired frames stay on disk and stay readable by id via
+/// `sovereign session frames <id>` — this filters the index, not the
+/// store.
+pub(crate) fn retain_listable(frames: &mut Vec<FrameEntry>) {
+    frames.retain(|f| f.same_window || !f.status.to_lowercase().contains("abandon"));
 }
 
 /// Lexicographic order: **same window**, then branch match, then prompt
@@ -2616,6 +2639,38 @@ mod tests {
             prompt_overlap: overlap,
             overlap_terms: Vec::new(),
         }
+    }
+
+    /// An abandoned frame is not a handoff candidate and must not cost
+    /// every future successor a line of context to read and reject.
+    /// A completed one MUST survive — it is the normal good handoff.
+    #[test]
+    fn retain_listable_drops_abandoned_but_keeps_completed() {
+        let mut v = vec![
+            entry("done", true, false, 0, 60),
+            entry("live", true, true, 0, 60),
+            entry("gave-up", true, true, 0, 60),
+        ];
+        v[2].status = "abandoned".into();
+        retain_listable(&mut v);
+        let ids: Vec<&str> = v.iter().map(|f| f.session_id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["done", "live"],
+            "abandoned dropped, completed kept"
+        );
+    }
+
+    /// Never hide this terminal's own predecessor, whatever its status —
+    /// a silent gap where the successor's own lineage should be is worse
+    /// than one line saying the donor gave up.
+    #[test]
+    fn retain_listable_never_hides_the_same_window_predecessor() {
+        let mut v = vec![entry("mine", true, true, 0, 60)];
+        v[0].status = "abandoned".into();
+        v[0].same_window = true;
+        retain_listable(&mut v);
+        assert_eq!(v.len(), 1, "same-window frame survives even when abandoned");
     }
 
     #[test]
