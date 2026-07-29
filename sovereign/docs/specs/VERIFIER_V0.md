@@ -20,6 +20,54 @@ verification with a `violation_prob` that finally means something.
 
 ---
 
+## 0. Build vs. adopt — why train at all
+
+The adopt option is real and the spec takes it seriously. The candidates,
+as of 2026-07-28:
+
+| Off-the-shelf | Numbers | Why it can't simply be the answer |
+|---|---|---|
+| **HalluGuard-Qwen3-4B** (checkpoint + GGUF published on HF — this **supersedes** the design-study conclusion that no Qwen3-family verifier existed to adopt) | 84.0 RAGTruth / 75.7 avg | the strongest adopt candidate, and it enters M0 as a first-class baseline; license unverified (dataset is Apache 2.0; model card TBC at M0). Trained on FineWeb prose + their register, not our chunks/claims — the distribution gap is the open question our banks answer |
+| Bespoke-MiniCheck-7B | 77.4 avg (leaderboard top) | **CC-BY-NC-4.0** — commercial use requires a negotiated license. Baseline-only; never shippable |
+| Granite Guardian 3.3-8B | 82.2 RAGTruth | Apache 2.0, but 8B (≈2× the latency/residency budget of 4B) and a foreign tokenizer family in a fleet standardized on Qwen |
+| Lynx 8B/70B | strong HaluBench | Llama family + sizes wrong for the per-claim budget |
+
+Given that, four reasons to build, in order:
+
+1. **The flywheel is the point, not the checkpoint.** The parent doc's
+   architecture makes the verifier the one component that must keep
+   learning from the product's own evidence: D0 corrections → receipts →
+   training data → v1, v2, … A frozen third-party model cannot absorb any
+   of that, and `violation_prob` stays an artifact of someone else's
+   training run — post-hoc calibratable, never contractual. The training
+   pipeline is the asset; v0 is its first turn.
+2. **The deployment interface is the training distribution.** Our gate
+   feeds OCR-garbled chunks, cross-chunk evidence windows, and
+   `extract_claim_list` register. Every adopt candidate trained on prose.
+   The FaithBench lesson — small verifiers collapse off-distribution — is
+   exactly the risk, and Stream B (training on our interface) is the only
+   fix. Adoption cannot close that gap by definition.
+3. **The marginal cost of build over *responsible* adopt is small.**
+   Adopting safely requires the eval harness, contamination checks,
+   calibration on held-out receipts, quant checks, GGUF integration, and
+   the `rescore` A/B — everything in this spec except the training runs.
+   The runs themselves cost owned-hardware wall-clock, a free proven
+   dataset, and a published recipe at exactly our target size.
+4. **Sovereignty and monoculture.** The product's premise is that the
+   trust function runs locally and answerably; a strategic dependency on
+   third-party frozen weights for the *core* trust function is the
+   dependency the rest of the stack refuses everywhere else. And the
+   parent doc's monoculture counter requires the ability to mint diverse
+   verifier versions — an ability, not a download.
+
+**The discipline that keeps this honest:** adopt-vs-build is decided by
+the eval card, not by this section. M0 baselines the adopt candidates on
+*our* banks; if at any milestone an adoptable checkpoint beats our best
+model on the card (internal banks + external benchmarks + calibration +
+latency + license), it ships in the opt-in judge slot while training
+continues toward surpassing it. Build is the strategy; adopt is always
+the live fallback.
+
 ## 1. Success criteria
 
 Two red lines from the commons doc apply throughout: hallucination-catch
@@ -163,13 +211,24 @@ exists. v0's job is to be worth correcting.
 
 ## 4. Training on the Strix Halo node
 
-**Stack:** ROCm 7.x on gfx1151 + PyTorch 2.11 ROCm wheels (the official
-ROCm/PyTorch container is the known-good path; `TORCH_BLAS_PREFER_HIPBLASLT=1`),
-TRL `ORPOTrainer` + PEFT LoRA. ORPO is monolithic — no reference model in
-memory, unlike DPO — which is part of why the recipe suits this hardware.
-FlashAttention on gfx1151 is immature; plan on SDPA and treat any FA/aotriton
-win as a bonus. Community SFT/LoRA guides for this exact APU exist and are
-the M0 starting point rather than first-principles bring-up.
+**Stack: Unsloth-patched TRL `ORPOTrainer`, vanilla TRL as fallback.**
+Unsloth shipped official AMD support (~May 2026) and lists gfx1151 /
+Strix Halo as fully supported with hardware-specific kernel tuning; its
+Triton kernels claim ~2× step speed and large VRAM savings, and it
+patches TRL's ORPOTrainer directly, so the recipe code is the same either
+way. Install path per their docs: TheRock gfx1151 nightlies
+(`rocm.nightlies.amd.com/v2/gfx1151/`) for torch + `rocm[libraries,devel]`
+— pin exact versions in the run manifest, since consumer-AMD support is
+only months old. **M0 runs the 100-step probe both ways (Unsloth vs
+vanilla TRL) and the wall-clock table below assumes vanilla** — if
+Unsloth's speedup holds on this silicon, the table shrinks and that
+measurement is the evidence. Base environment either way: ROCm 7.x +
+PyTorch ROCm wheels, `TORCH_BLAS_PREFER_HIPBLASLT=1`, PEFT LoRA. ORPO is
+monolithic — no reference model in memory, unlike DPO — which is part of
+why the recipe suits this hardware. Without Unsloth, FlashAttention on
+gfx1151 is immature: plan on SDPA and treat any FA/aotriton win as a
+bonus. Community SFT/LoRA guides for this exact APU exist and are the M0
+starting point rather than first-principles bring-up.
 
 **Memory (128GB unified):** 4B bf16 weights ≈ 8GB. LoRA (r=32, α=64, all
 linear) leaves >100GB for activations — seq 4096 with real batch sizes
@@ -202,8 +261,12 @@ Where it wins is memory bandwidth (400 vs 256 GB/s → faster inference
 decode) and simply being a second machine. So it joins the plan as a
 **parallel lane**, not an alternative:
 
-- **Stack: `mlx-lm-lora`, not PyTorch MPS.** Native ORPO on Apple Silicon
-  (monolithic, LoRA/full-FT/QAT), mature and purpose-built. If PyTorch
+- **Stack: `mlx-lm-lora`, not PyTorch MPS.** Unsloth does not run on
+  Apple Silicon (Triton dependency; their Mac support is "in the works"),
+  so the MLX lane is the native path: `mlx-lm-lora` has ORPO on Apple
+  Silicon (monolithic, LoRA/full-FT/QAT), purpose-built; `mlx-tune`
+  (Unsloth-compatible API on MLX) is the alternative to evaluate at M0.
+  If PyTorch
   MPS is ever used on this box instead, the standing kernel-panic
   invariant applies in full (this exact machine was panicked by an
   unguarded long-context MPS loop on 2026-07-07): MPS watermark env vars,
@@ -274,7 +337,7 @@ parent doc). The card that gates shipping:
 
 | | Deliverable | Gate to pass |
 |---|---|---|
-| **M0** (~week 1) | Two-box bring-up: ROCm/PyTorch/TRL on the Strix Halo + `mlx-lm-lora` on the M2 Max, 100-step ORPO probes on 0.8B with measured tok/s on both; HalluGuard-76k downloaded + schema-validated; eval harness running LLM-AggreFact/RAGTruth/FaithBench against off-the-shelf MiniCheck + our banks; contamination pass | baseline table exists; wall-clock table re-derived from measured tok/s on both boxes and roles assigned; fine-tuned-checkpoint → GGUF conversion proven on the probe checkpoint |
+| **M0** (~week 1) | Two-box bring-up: ROCm/PyTorch on the Strix Halo with the probe run both Unsloth-patched and vanilla-TRL, + `mlx-lm-lora` on the M2 Max — 100-step ORPO probes on 0.8B with measured tok/s for all three; HalluGuard-76k downloaded + schema-validated; eval harness running LLM-AggreFact/RAGTruth/FaithBench against the §0 adopt candidates (HalluGuard-Qwen3-4B GGUF first, incl. license check; MiniCheck) + our banks; contamination pass | baseline table exists; wall-clock table re-derived from measured tok/s on both boxes and roles assigned; fine-tuned-checkpoint → GGUF conversion proven on the probe checkpoint |
 | **M1** | 0.8B trained on Stream A, full eval card produced (numbers will be sub-4B — that's fine) | pipeline end-to-end: train → eval → calibrate → GGUF → `rescore` A/B all work; card template exists |
 | **M2** | Stream B harness: corruption taxonomy implemented over Secret Agent/Saltgrass via `extract_claim_list`; 20–40k validated pairs; 0.8B mix study (A vs A+B) | every generated case passes the fairness contract; mix study shows B is non-harmful on external + helpful on internal banks |
 | **M3** | **The v0 run:** 4B LoRA on A+B; eval card | §1 targets: ≥75.7 avg / ≥84.0 RAGTruth; FaithBench reported; internal gates green |
@@ -288,9 +351,12 @@ pipeline, and a mix study — not hope.
 
 ## 8. Risks
 
-- **gfx1151 training maturity** — the top project risk. Mitigation: M0 is
-  a hard gate with measured throughput before anything is scheduled;
-  known-good ROCm containers; 0.8B absorbs all the debugging. Escape
+- **gfx1151 training maturity** — the top project risk. Unsloth's
+  official Strix Halo support (~May 2026) improves the odds but is itself
+  young (nightly-pinned torch; recent bug-fix PRs against this exact
+  target). Mitigation: M0 is a hard gate with measured throughput before
+  anything is scheduled; the Unsloth-vs-vanilla A/B keeps a fallback
+  stack proven at all times; 0.8B absorbs all the debugging. Escape
   hatch: a rented GPU for the single M3 run changes nothing else in the
   plan.
 - **FaithBench collapse** — small classifiers historically fall apart on
@@ -321,10 +387,12 @@ uses to certify — provenance enforces the split.
 
 - [HalluGuard-Preferences-76k (HF dataset)](https://huggingface.co/datasets/lrsbrgrn/HalluGuard-Preferences-76k) — 76,708 ORPO tuples, Apache 2.0, construction + filtering details
 - [HalluGuard paper note (arXiv 2510.22395)](https://github.com/AkihikoWatanabe/paper_notes/issues/3065) · [emergentmind topic page](https://www.emergentmind.com/topics/halluguard-framework) — 4B SRM, ORPO, 84.0 RAGTruth / 75.7 LLM-AggreFact
+- [lrsbrgrn on HF](https://huggingface.co/lrsbrgrn) — HalluGuard-Qwen3-4B checkpoint **and** GGUF are published (the §0 adopt candidate) · [Bespoke-MiniCheck-7B](https://huggingface.co/bespokelabs/Bespoke-MiniCheck-7B) — CC-BY-NC-4.0, baseline-only
 - [LLM-AggreFact leaderboard](https://llm-aggrefact.github.io/) · [MiniCheck (GitHub)](https://github.com/Liyan06/MiniCheck) · [Bespoke-MiniCheck-7B](https://docs.bespokelabs.ai/models/bespoke-minicheck) — the 77.4 BAcc bar
 - [Paladin-mini (arXiv 2506.20384)](https://arxiv.org/html/2506.20384v1) — grounding model emphasizing real-world/operating-point evaluation
 - [Qwen3.5 family overview](https://enclaveai.app/blog/2026/03/08/qwen-3-5-complete-model-family-local-ai/) · [Qwen/Qwen3.5-27B (HF)](https://huggingface.co/Qwen/Qwen3.5-27B) — dense 0.8B–27B lineup, March 2026
 - [Strix Halo LLM performance tracker](https://llm-tracker.info/AMD-Strix-Halo-(Ryzen-AI-Max+-395)-GPU-Performance) · [Strix Halo fine-tuning guide (SFT/LoRA)](https://www.promptinjection.net/p/how-to-fine-tune-llms-on-amd-strix-halo-ryzen-ai-max-395-sft-lora) · [Level1Techs benchmark thread](https://forum.level1techs.com/t/strix-halo-ryzen-ai-max-395-llm-benchmark-results/233796) — gfx1151 ROCm/PyTorch state, fine-tuning viability
-- [mlx-lm-lora (GitHub)](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora) · [PyPI](https://pypi.org/project/mlx-lm-lora/) — native ORPO/DPO/LoRA training on Apple Silicon (the M2 lane's stack)
+- [Unsloth: official AMD support](https://unsloth.ai/docs/blog/unleash-the-power-of-amd-official-support-for-unsloth-is-here) · [AMD technical article](https://www.amd.com/en/developer/resources/technical-articles/2026/train-and-run-models-on-amd-gpus-with-unsloth.html) · [Unsloth Studio on Strix Halo notes](https://github.com/t-sinclair2500/unsloth_studio_rocm_Halo_Strix) — gfx1151 fully supported, TheRock-nightly install path; no Apple Silicon support ([requirements](https://unsloth.ai/docs/get-started/fine-tuning-for-beginners/unsloth-requirements))
+- [mlx-lm-lora (GitHub)](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora) · [PyPI](https://pypi.org/project/mlx-lm-lora/) · [mlx-tune (Unsloth-compatible API on MLX)](https://github.com/ARahim3/mlx-tune) — native ORPO/DPO/LoRA training on Apple Silicon (the M2 lane's stack)
 - Internal: MPS long-context kernel-panic invariant `[env:macos-arm64]` (2026-07-07) — mandatory guards for any PyTorch/MPS run on the M2 box
 - Internal: `VERIFICATION_COMMONS.md` (parent design study); chaos-QA calibration arc; situated-harness study; spec-decode tokenizer invariant (Qwen3.5/3.6 vocab 248,320)
