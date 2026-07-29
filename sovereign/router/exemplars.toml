@@ -324,10 +324,40 @@ query = "What does ATOS stand for in our system?"
 # Calibration 2026-07-26 against Qwen3-Embedding-0.6B (query-instruction
 # prefix applied, exemplars.toml as the one-vs-rest negative set): 8
 # held-out positives / 14 held-out negatives, ZERO false positives at
-# every (min_sim, min_margin) swept. Positives that fire clear the gate
-# by a wide margin (target case "what was the first thing I asked?" —
-# L=0.791, margin +0.374); the ones that abstain lose to genuinely
-# adjacent shapes and fall through to the normal cascade.
+# every (min_sim, min_margin) swept.
+#
+# SUPERSEDED 2026-07-29 — that "zero false positives" claim did not
+# survive a bigger bank. On the 11 locator cases in
+# `bench/routing/calibration/axes_v1.toml`, the shipped gate
+# (0.500/0.020) fired on TWO archive-recall questions, and no
+# (min_sim, min_margin) pair existed that cleared them while keeping
+# the true positives. `router fit --axis locator --explain` attributed
+# both to one tagged row — the ordinal exemplar A, which then said
+# "What did I ask you at the very start of this chat?" — and all three
+# missed positives to specific UNTAGGED rows that outscored them.
+#
+# The repair was entirely on this file, no constant moved: reword A off
+# the archive-colliding surface, add A2 to keep the canonical positive,
+# add G/H/I for shapes no row covered, and add two archive-recall
+# negatives under scope = "personal" below. Result on the same bank:
+# errors 5 -> 1, false positives 2 -> 0, correct fires 2 -> 4.
+#
+# Cost, recorded because it is the number that will move next: headroom
+# fell with the error count. Separation 0.142 -> 0.066 and
+# weakest-accept +0.114 -> +0.038, because the axis now decides four
+# cases where it used to decide two. A future exemplar edit has ~0.038
+# of margin before the weakest correct fire drops out — re-run
+# `router fit --axis locator --explain` after touching any row here.
+#
+# The one remaining miss is a measured encoder limit, not a gap. The
+# ordinal RECALL probe ("what was the second option you listed?",
+# margin -0.028) and its RESUME twin ("go back to the second option you
+# listed", -0.010) are 0.018 apart with the negative RANKED HIGHER, so
+# no threshold fires one without the other, and both lose to the
+# conation row "Elaborate on the second point." Recall-vs-resume on an
+# ordinal reference is below this encoder's resolution. The axis
+# abstains on both, which is the safe direction — they fall through to
+# the cascade rather than hard-committing to MetalingualQuery.
 
 [[example]]
 intent = "metalingual_query"
@@ -348,10 +378,32 @@ query = "In this conversation, what corpus did we agree to enrich first?"
 # shape, phrased away from the probe set that calibrated the gate.
 
 # A. ordinal / positional reference to this thread
+#
+# Reworded 2026-07-29. It was "What did I ask you at the very start of
+# this chat?", and per-case attribution named it as the nearest tagged
+# row behind BOTH locator false positives — it is the strongest
+# attractor in the bank for archive-recall phrasings, because the
+# clause carrying its meaning ("at the very start of this chat") is
+# not the clause the encoder weights ("What did I ask you"), which
+# every archive question also says. The discriminating content of this
+# row has to BE the thread deixis, not sit next to it.
 [[example]]
 intent = "metalingual_query"
 locator = "conversation"
-query = "What did I ask you at the very start of this chat?"
+query = "Which question did I open this thread with?"
+
+# A2. the same ordinal shape carrying the "first thing" surface, which
+# A gave up when it was reworded off "What did I ask you".
+#
+# Two rows, not one, because the two jobs are in tension: A has to NOT
+# say "ask you about" (that is what pulled the archive queries in), and
+# something still has to cover the canonical positive, which does say
+# it. A2 reaches that surface through "brought up here" instead —
+# in-thread deixis with no archive-compatible time reference.
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "What was the first thing I brought up here?"
 
 # B. thread-so-far summary
 [[example]]
@@ -382,6 +434,57 @@ query = "Where did we leave off before I stepped away?"
 intent = "metalingual_query"
 locator = "conversation"
 query = "Read back what you told me a moment ago."
+
+# G-I added 2026-07-29 from per-case attribution (`router fit --axis
+# locator --explain`), which named the row each missed positive LOST to
+# rather than only that it lost. All three misses were beaten by
+# UNTAGGED rows in a way the counts alone could not distinguish from a
+# threshold problem:
+#
+#   loc_did_i_contradict     -0.018  lost to expressive "I'm not sure
+#                                    if I'm doing this right."
+#   loc_what_were_the_three  -0.090  lost to conation "Walk through
+#                                    what you just did, step by step."
+#   loc_replay_second_option -0.249  lost to conation "Elaborate on
+#                                    the second point."
+#
+# The last is the instructive one: the RECALL phrasing scored WORSE
+# than the resume phrasing it was split from, so the encoder is keyed
+# on the topic ("second point/option") and not on the speech act. No
+# threshold reaches these; only coverage does.
+#
+# Phrased deliberately far from the bench probes, per the authoring
+# rule archive_examples.toml states: coaching to the held-out set is
+# worse than missing. If the probes clear on these, the axis
+# generalised; if they only clear on near-paraphrases, that is the
+# finding and the axis cannot own the shape.
+
+# G. consistency check over the turns already in context.
+#
+# Phrased as a scan over the visible messages rather than as
+# self-appraisal: the probe this shape exists for
+# (loc_did_i_contradict) loses to the EXPRESSIVE row "I'm not sure if
+# I'm doing this right.", so self-evaluative phrasing pulls toward
+# expressive and away from the axis.
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Do any of my earlier messages here disagree with each other?"
+
+# H. recall of the assistant's prior enumeration, as a set
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Which options did you give me a minute ago?"
+
+# I. recall of ONE numbered member of that enumeration. The recall
+# side of the boundary `loc_abstain_resume_second` pins: "remind me
+# what X was" retrieves, "go back to X" re-opens and belongs to
+# conation.
+[[example]]
+intent = "metalingual_query"
+locator = "conversation"
+query = "Remind me what your third suggestion was."
 
 [[example]]
 intent = "metalingual_query"
@@ -851,6 +954,27 @@ query = "How has my thinking about commuting changed since I moved?"
 intent = "deep_query"
 scope = "personal"
 query = "What tensions keep showing up in how I describe my mornings?"
+
+# G. recall of MY OWN PAST QUESTIONS across the archive.
+#
+# A genuinely new shape for this set, not a paraphrase: A/B/C/D/E/F all
+# recall what the user SAID, MENTIONED, or THINKS. None covers what the
+# user ASKED. That gap is load-bearing, because the locator axis's
+# ordinal row ("What did I ask you at the very start of this chat?") is
+# the single strongest attractor in the whole bank for archive-recall
+# phrasings — it produced BOTH locator false positives
+# (loc_abstain_last_week 0.668, loc_abstain_across_all_chats 0.660),
+# and the locator hard-commits at Pre-check -2.5, ABOVE the archive
+# classifier at -2.4, so nothing downstream can undo it.
+#
+# Deliberately avoids "first"/"start"/"this chat": the negative has to
+# compete for the question-asking surface WITHOUT stealing
+# loc_first_thing_this_chat, which is a true positive sitting on the
+# same words.
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "What kinds of things was I asking you about last summer?"
 
 
 # ─────────────────────────────────────────────────────────────────

@@ -80,6 +80,20 @@ pub struct ScoredCase {
     pub expect: Option<String>,
     /// What the axis WOULD produce if the gate admits this score.
     pub predicted: Option<String>,
+    /// For the k=1 axes (`intent`, `locator`): the exemplar that set
+    /// `score.sim_positive`. `None` for the centroid axes, where the
+    /// positive class is a centroid and no single row is responsible.
+    pub nearest: Option<String>,
+    /// For the k=1 axes: the exemplar that set `score.sim_negative` —
+    /// the row that CAPPED the margin.
+    ///
+    /// This is the field that makes a negative margin actionable. A
+    /// missed positive with `margin < 0` was outscored by a specific
+    /// row; naming it distinguishes the two fixes that look identical
+    /// from the counts alone — "the tagged set lacks this shape"
+    /// (add exemplars) versus "an untagged row is stealing this
+    /// shape" (retag or reword that row).
+    pub rival: Option<String>,
 }
 
 impl ScoredCase {
@@ -180,6 +194,14 @@ pub struct CaseAttribution {
     pub expect: Option<String>,
     /// The label the axis would emit if admitted.
     pub predicted: Option<String>,
+    /// The exemplar behind `sim_positive` (k=1 axes only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nearest: Option<String>,
+    /// The exemplar behind `sim_negative` (k=1 axes only) — what the
+    /// case lost to. On a `Missed` with a negative margin this names
+    /// the row to change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rival: Option<String>,
 }
 
 /// Attribute every case to its bucket under `gate`.
@@ -198,6 +220,8 @@ pub fn attribute(cases: &[ScoredCase], gate: AxisGate) -> Vec<CaseAttribution> {
             cushion: gate.cushion(c.score),
             expect: c.expect.clone(),
             predicted: c.predicted.clone(),
+            nearest: c.nearest.clone(),
+            rival: c.rival.clone(),
         })
         .collect()
 }
@@ -681,6 +705,8 @@ mod tests {
             score: AxisScore::new(sim_p, sim_n),
             expect: expect.map(String::from),
             predicted: Some(pred.into()),
+            nearest: None,
+            rival: None,
         }
     }
 
@@ -794,6 +820,45 @@ mod tests {
             .map(|r| r.id)
             .collect();
         assert_eq!(leaked, vec!["neg_near".to_string()]);
+    }
+
+    /// Exemplar identity must survive the trip into the report, and
+    /// must stay absent for the centroid axes that genuinely have no
+    /// single responsible row — an empty string there would read as
+    /// "an exemplar named ''" rather than "not applicable".
+    #[test]
+    fn attribute_carries_exemplar_identity_for_the_k1_axes_only() {
+        let bank = vec![
+            ScoredCase {
+                id: "k1".into(),
+                score: AxisScore::new(0.40, 0.55),
+                expect: Some("conversation".into()),
+                predicted: Some("conversation".into()),
+                nearest: Some("Read back what you told me a moment ago.".into()),
+                rival: Some("Elaborate on the second point.".into()),
+            },
+            ScoredCase {
+                id: "centroid".into(),
+                score: AxisScore::new(0.70, 0.40),
+                expect: Some("personal".into()),
+                predicted: Some("personal".into()),
+                nearest: None,
+                rival: None,
+            },
+        ];
+        let rows = attribute(&bank, AxisGate::new(0.50, 0.02));
+        let by = |id: &str| rows.iter().find(|r| r.id == id).expect("case").clone();
+
+        // The k=1 case was outscored — the rival is the row to change.
+        let k1 = by("k1");
+        assert_eq!(k1.verdict, CaseVerdict::Missed);
+        assert!(k1.margin < 0.0, "margin was {}", k1.margin);
+        assert_eq!(k1.rival.as_deref(), Some("Elaborate on the second point."));
+        assert!(k1.nearest.as_deref().unwrap().starts_with("Read back"));
+
+        let centroid = by("centroid");
+        assert_eq!(centroid.nearest, None);
+        assert_eq!(centroid.rival, None);
     }
 
     /// A rejected case carries the distance it would have to travel —
@@ -961,12 +1026,16 @@ mod tests {
                 score: AxisScore::new(0.80, 0.60),
                 expect: Some("deep_query".into()),
                 predicted: Some("knowledge_query".into()),
+                nearest: None,
+                rival: None,
             },
             ScoredCase {
                 id: "should_abstain".into(),
                 score: AxisScore::new(0.80, 0.60),
                 expect: None,
                 predicted: Some("knowledge_query".into()),
+                nearest: None,
+                rival: None,
             },
         ];
         let o = evaluate(&bank, AxisGate::new(0.5, 0.0));
@@ -988,6 +1057,8 @@ mod tests {
                 score: AxisScore::new(0.60, 0.55),
                 expect: Some("deep_query".into()),
                 predicted: Some("k".into()),
+                nearest: None,
+                rival: None,
             },
         ];
         // Demanding perfection stops above the mislabelled case.
@@ -1047,6 +1118,8 @@ mod tests {
                 score: AxisScore::new(0.60, 0.70),
                 expect: Some("a".into()),
                 predicted: Some("a".into()),
+                nearest: None,
+                rival: None,
             },
             case("n", 0.20, 0.10, None, "a"),
         ];

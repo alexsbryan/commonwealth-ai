@@ -1005,6 +1005,56 @@ FPs by threading a 0.031 band above their margins — a fix tuned to two
 specific cases. The same view shows 7 of the intent axis's 13 misses already
 predict the **correct** label and are held out by the floor alone.
 
+**Rival attribution — naming what a case lost to (2026-07-29).** Knowing a
+case is an error is not knowing how to fix it. A missed positive at
+`margin -0.133` was beaten by *something*, but `score_locator_from_embedding`
+computed the negative side as a bare `f32::max` and threw the identity away,
+so the only available move was to guess more exemplars — the guess
+`archive_examples.toml` already records failing (similarity there is
+topic-dominated; "adding rows buys the topics you add, nothing else").
+`LocatorScore`/`IntentScore` now carry `rival_exemplar` — the untagged row
+that set `sim_negative`, or the runner-up intent's nearest — and it flows
+through `ScoredCase`/`CaseAttribution` into `--explain` and the JSON. The
+production glassbox log (`target: "router.locator"`) carries it too, so
+"why did the locator abstain?" is answerable from logs alone. The centroid
+axes (scope, archive, current_info, effort) leave it `None` honestly: their
+positive class is a mean over ~20 rows and no single row is responsible.
+
+It reclassified the finding a second time. The three misses lost to three
+*different* rows: two to `conation_query` exemplars ("Elaborate on the second
+point.", "Walk through what you just did, step by step.") and one to an
+`expressive_query` row ("I'm not sure if I'm doing this right."). Both false
+positives traced to a **single tagged row** — ordinal exemplar A, then
+phrased "What did I ask you at the very start of this chat?", whose meaning
+lives in a clause the encoder does not weight while the clause it does weight
+is one every archive question also says.
+
+That mattered because the locator **hard-commits**: Pre-check -2.5 returns
+`MetalingualQuery` with no classifier vote, and it sits *above* the
+conversation-archive axis at Pre-check -2.4. An archive question the locator
+claims can never reach the classifier built to catch it, so the locator has
+to reject archive shapes itself.
+
+The repair moved **no constant** — reword A off the shared surface, add A2 to
+keep the canonical positive it was carrying, add tagged rows for three
+uncovered shapes, add two archive-recall negatives under `scope = "personal"`.
+On the same bank: **errors 5 → 1, false positives 2 → 0, correct fires 2 → 4,
+accuracy 50% → 90.9%**, and the shipped `(0.500, 0.020)` gate is now optimal.
+The cost is headroom, recorded because it is what moves next: separation
+0.142 → 0.066, weakest-accept +0.114 → +0.038, since the axis now decides
+four cases where it decided two.
+
+The surviving miss is a **measured encoder limit**, not a gap. The bank was
+split to pin a boundary it had been asserting one side of: ordinal *recall*
+("what was the second option you listed?") versus ordinal *resume* ("go back
+to the second option you listed"), the latter an abstain under the same rule
+as `loc_abstain_summarize_pasted` — a transformation of in-context content,
+which a hard commit would answer with a recitation. They land 0.018 apart
+**with the negative ranked higher**, so no threshold fires one without the
+other, and both lose to "Elaborate on the second point." Recall-vs-resume on
+an ordinal reference is below this encoder's resolution; the axis abstains on
+both, which is the safe direction.
+
 **Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
 the failure this system actually has is that the ground moves while the
 constants stay still — a new encoder, a re-quantised one, an edited exemplar

@@ -194,6 +194,15 @@ pub struct LocatorScore {
     pub score: AxisScore,
     /// Untruncated — the caller truncates for display.
     pub nearest_exemplar: String,
+    /// The UNTAGGED exemplar that set `score.sim_negative` — i.e. the
+    /// row this query lost to when the margin came out negative.
+    ///
+    /// Without it a negative margin is an unattributable number: you
+    /// know the tagged set was beaten but not by what, so "add more
+    /// exemplars" is the only available move and it is a guess.
+    /// `archive_examples.toml` records that guess being made and
+    /// failing. `None` only when no untagged exemplar exists.
+    pub rival_exemplar: Option<String>,
 }
 
 /// Raw, UNGATED intent score.
@@ -212,6 +221,10 @@ pub struct IntentScore {
     pub nearest_exemplar: String,
     /// Scope tag carried by that nearest exemplar, if any.
     pub scope: Option<String>,
+    /// Nearest exemplar of the RUNNER-UP intent — the row that set
+    /// `score.sim_negative` and therefore capped the margin. `None`
+    /// when only one intent has exemplars.
+    pub rival_exemplar: Option<String>,
 }
 
 /// Hand-authored intent classifier. Pre-embeds every exemplar at
@@ -424,6 +437,11 @@ impl EmbedRouter {
             cushion = gate.cushion(scored.score),
             decided,
             nearest = %truncate(&scored.nearest_exemplar, 60),
+            rival = %scored
+                .rival_exemplar
+                .as_deref()
+                .map(|r| truncate(r, 60))
+                .unwrap_or_else(|| "<none>".to_string()),
             "router.locator: one-vs-rest decision"
         );
 
@@ -458,6 +476,7 @@ impl EmbedRouter {
         // Best similarity per tag, and the best over untagged rows.
         let mut per_tag: HashMap<&str, (f32, &str)> = HashMap::new();
         let mut untagged_best = f32::MIN;
+        let mut untagged_best_q: Option<&str> = None;
         for ex in &self.exemplars {
             if ex.embedding.len() != q_normalized.len() {
                 continue;
@@ -475,7 +494,12 @@ impl EmbedRouter {
                         })
                         .or_insert((sim, ex.query.as_str()));
                 }
-                None => untagged_best = untagged_best.max(sim),
+                None => {
+                    if sim > untagged_best {
+                        untagged_best = sim;
+                        untagged_best_q = Some(ex.query.as_str());
+                    }
+                }
             }
         }
         let (tag, (top_sim, nearest)) = per_tag
@@ -494,6 +518,7 @@ impl EmbedRouter {
             locator: tag.to_string(),
             score: AxisScore::new(top_sim, rest_best),
             nearest_exemplar: nearest.to_string(),
+            rival_exemplar: untagged_best_q.map(str::to_string),
         })
     }
 
@@ -604,6 +629,7 @@ impl EmbedRouter {
             score: AxisScore::new(top_sim, second_sim),
             nearest_exemplar: nearest.to_string(),
             scope: top_scope.map(String::from),
+            rival_exemplar: ranked.get(1).map(|(_, _, q, _)| q.to_string()),
         })
     }
 }
@@ -954,6 +980,77 @@ mod tests {
         );
         assert_eq!(r.locator_exemplar_count(), 0);
         assert!(r.locator_from_embedding(&unit(vec![1.0, 0.0, 0.0])).is_none());
+    }
+
+    /// A negative margin says the tagged set was beaten. Without the
+    /// rival's identity that is an unattributable number, and the only
+    /// available move is to guess more exemplars — the guess
+    /// `archive_examples.toml` records failing.
+    ///
+    /// The rival must track the ACTUAL argmax over untagged rows, not
+    /// merely the first one seen, so this leans the query at each
+    /// untagged exemplar in turn and demands the answer follow.
+    #[test]
+    fn locator_score_names_the_untagged_rival_that_capped_the_margin() {
+        let r = router_with(locator_bank(), 0.55, 0.10);
+
+        // Leaning x→y: the KnowledgeQuery row on y is the rival.
+        let s = r
+            .score_locator_from_embedding(&unit(vec![0.7, 0.6, 0.0]))
+            .expect("tagged row exists");
+        assert_eq!(s.rival_exemplar.as_deref(), Some("What is X?"));
+        assert!(s.nearest_exemplar.starts_with("What did I ask you"));
+
+        // Leaning x→z: the ConationQuery row on z takes over. Same
+        // tagged nearest, different rival — which is the whole point.
+        let s = r
+            .score_locator_from_embedding(&unit(vec![0.7, 0.0, 0.6]))
+            .expect("tagged row exists");
+        assert_eq!(s.rival_exemplar.as_deref(), Some("Stop."));
+        assert!(s.nearest_exemplar.starts_with("What did I ask you"));
+    }
+
+    /// `sim_negative` falls back to 0.0 when nothing is untagged. The
+    /// rival must then be `None` rather than a fabricated row.
+    #[test]
+    fn locator_rival_is_none_when_every_exemplar_is_tagged() {
+        let r = router_with(
+            vec![tagged_exemplar(
+                Intent::MetalingualQuery,
+                "What did we cover so far?",
+                vec![1.0, 0.0, 0.0],
+                Some("conversation"),
+            )],
+            0.55,
+            0.10,
+        );
+        let s = r
+            .score_locator_from_embedding(&unit(vec![1.0, 0.0, 0.0]))
+            .expect("tagged row exists");
+        assert_eq!(s.rival_exemplar, None);
+        assert_eq!(s.score.sim_negative, 0.0);
+    }
+
+    /// The intent axis is multi-class, so its `sim_negative` is the
+    /// RUNNER-UP intent's best row. Naming it answers "what did this
+    /// query nearly route to instead?".
+    #[test]
+    fn intent_score_names_the_runner_up_exemplar() {
+        let r = router_with(
+            vec![
+                make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![1.0, 0.0, 0.0]),
+                make_exemplar(Intent::DeepQuery, "Why did X happen?", vec![0.0, 1.0, 0.0]),
+                make_exemplar(Intent::ConationQuery, "Stop.", vec![0.0, 0.0, 1.0]),
+            ],
+            0.55,
+            0.10,
+        );
+        let s = r
+            .score_intent_from_embedding(&unit(vec![0.8, 0.55, 0.0]))
+            .expect("non-empty bank");
+        assert_eq!(s.top_intent, Intent::KnowledgeQuery);
+        assert_eq!(s.nearest_exemplar, "What is X?");
+        assert_eq!(s.rival_exemplar.as_deref(), Some("Why did X happen?"));
     }
 
     /// The shipped bank must actually carry the axis — a rename or a

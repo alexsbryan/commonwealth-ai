@@ -413,12 +413,16 @@ async fn cmd_fit(args: &[String]) -> i32 {
                 score: s.score,
                 expect: c.expected_label().map(String::from),
                 predicted: Some(intent_label(&s.top_intent).to_string()),
+                nearest: Some(s.nearest_exemplar),
+                rival: s.rival_exemplar,
             }),
             "locator" => router.score_locator_from_embedding(&v).map(|s| ScoredCase {
                 id: c.id.clone(),
                 score: s.score,
                 expect: c.expected_label().map(String::from),
                 predicted: Some(s.locator),
+                nearest: Some(s.nearest_exemplar),
+                rival: s.rival_exemplar,
             }),
             "scope" => scope.as_ref().and_then(|k| {
                 k.score_from_embedding(&v).map(|s| ScoredCase {
@@ -426,6 +430,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
                     score: s,
                     expect: c.expected_label().map(String::from),
                     predicted: Some("personal".to_string()),
+                    // Centroid axis: the positive class is a mean over
+                    // ~20 rows, so no single exemplar is responsible.
+                    nearest: None,
+                    rival: None,
                 })
             }),
             "archive" => archive.as_ref().and_then(|k| {
@@ -434,6 +442,8 @@ async fn cmd_fit(args: &[String]) -> i32 {
                     score: s,
                     expect: c.expected_label().map(String::from),
                     predicted: Some("archive".to_string()),
+                    nearest: None,
+                    rival: None,
                 })
             }),
             "current_info" => current_info.as_ref().and_then(|k| {
@@ -442,6 +452,8 @@ async fn cmd_fit(args: &[String]) -> i32 {
                     score: s,
                     expect: c.expected_label().map(String::from),
                     predicted: Some("current".to_string()),
+                    nearest: None,
+                    rival: None,
                 })
             }),
             "effort" => effort.as_ref().and_then(|k| {
@@ -450,6 +462,8 @@ async fn cmd_fit(args: &[String]) -> i32 {
                     score: s,
                     expect: c.expected_label().map(String::from),
                     predicted: Some("high".to_string()),
+                    nearest: None,
+                    rival: None,
                 })
             }),
             _ => None,
@@ -809,6 +823,39 @@ fn print_case_row(r: &CaseAttribution) {
         want,
         would,
     );
+    print_case_exemplars(r);
+}
+
+/// The k=1 axes can say WHICH exemplars produced the two similarities;
+/// the centroid axes cannot, and print nothing here.
+///
+/// This is the line that turns "margin -0.133" from a number into a
+/// fix. `won by` names the row that outscored the positive class — on
+/// a missed case with a negative margin, that row is the defect.
+fn print_case_exemplars(r: &CaseAttribution) {
+    let (nearest, rival) = (r.nearest.as_deref(), r.rival.as_deref());
+    if nearest.is_none() && rival.is_none() {
+        return;
+    }
+    // Which side actually won tells the reader which row to look at.
+    let verb = if r.margin < 0.0 { "LOST to" } else { "beat" };
+    println!(
+        "                    nearest \"{}\"",
+        clip(nearest.unwrap_or("<none>"), 62)
+    );
+    println!(
+        "                    {:<7} \"{}\"",
+        verb,
+        clip(rival.unwrap_or("<none>"), 62)
+    );
+}
+
+fn clip(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(n.saturating_sub(1)).collect();
+    format!("{head}…")
 }
 
 /// The per-case half of the report: which cases are behind the counts.

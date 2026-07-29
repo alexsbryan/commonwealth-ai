@@ -297,11 +297,18 @@ expect = "abstain"
 note = "Plain world question. Blocked by the absolute floor rather than the margin; a regression here means the prefixed embedding space shifted."
 
 [[case]]
-id = "loc_your_second_option"
+id = "loc_replay_second_option"
+axis = "locator"
+query = "what was the second option you listed?"
+expect = "conversation"
+note = "RECALL end of the recall-vs-resume boundary. Interrogative: it asks for the CONTENT of a prior assistant turn, which is answerable only from this thread. Paired with loc_abstain_resume_second, which is the same referent under an imperative. Split out 2026-07-29 after per-case attribution showed the old single case (`loc_your_second_option`, \"go back to the second option you listed\") losing by -0.133 to the conation exemplar \"Elaborate on the second point.\" — the bank was asserting one side of a boundary it should pin."
+
+[[case]]
+id = "loc_abstain_resume_second"
 axis = "locator"
 query = "go back to the second option you listed"
-expect = "conversation"
-note = "Replay of the assistant's own prior turn, phrased as an imperative. The imperative surface is the trap: `exemplars.toml` carries a conation row that steals exactly this shape, so this case sits on the axis's nearest documented confusion without echoing it."
+expect = "abstain"
+note = "RESUME end of the same boundary, and an abstain for the reason loc_abstain_summarize_pasted gives: the ask is a transformation of in-context content, not recall of it. \"Go back to\" asks the assistant to re-open option 2 and carry on, so a hard commit to MetalingualQuery at 0.95 would answer with a recitation and throw the elaboration away. `exemplars.toml` carries a conation row (\"Elaborate on the second point.\") that wins this query by -0.133 — measured, not assumed, and correctly so."
 
 [[case]]
 id = "loc_did_i_contradict"
