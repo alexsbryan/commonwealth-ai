@@ -483,10 +483,22 @@ use sovereign_core::time::unix_now as unix_now_secs;
 // for in-crate callers that reference `project_cmd::find_*`.
 pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
 
-/// Base URL the CLI uses to talk to the local daemon. Hardcoded to
-/// `127.0.0.1:9741` — the freshness HTTP surface is loopback-only
-/// by design, so we never talk to a remote host.
-const DAEMON_BASE: &str = "http://127.0.0.1:9741";
+/// Base URL the CLI uses to talk to the local daemon.
+///
+/// Loopback-only by design — the freshness HTTP surface never talks to a
+/// remote host — but the PORT comes from the operator's config. This was a
+/// `const` pinned to `:9741`, which meant every `project` subcommand
+/// (`list`, `register`, `refresh`, `status`) reported "daemon call failed"
+/// against a perfectly healthy daemon whenever `[daemon] client_port` was
+/// set to anything else. `code_map.rs` was already resolving the port this
+/// way; this side simply had not been updated. Found 2026-07-28 by the
+/// journey harness's sandbox, which runs its daemon on :19741.
+fn daemon_base() -> String {
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    format!("http://127.0.0.1:{port}")
+}
 
 // ─── Small helpers used by the new subcommands ───────────────
 
@@ -501,7 +513,7 @@ fn derive_corpus_id(root: &Path) -> String {
 }
 
 async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
-    let url = format!("{DAEMON_BASE}{path}");
+    let url = format!("{}{path}", daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

@@ -1,0 +1,40 @@
+[Unit]
+# @REPO_ROOT@ is substituted by scripts/install-journey-nightly.sh at install
+# time. Do not hardcode a path here: this repo is not checked out at the same
+# place on every machine in the fleet, and a unit that silently points at
+# somebody else's home directory fails in a way nobody reads.
+Description=Sovereign CLI journey harness — nightly live lane
+Documentation=file://@REPO_ROOT@/sovereign/docs/TESTING_SURFACE.md
+# No After=/Requires= on the daemon: the lane is safe whether or not the
+# operator's daemon is up, because it boots its OWN in a private netns on a
+# non-default port.
+
+[Service]
+Type=oneshot
+# The script re-execs itself into the dev toolbox when run outside one, so
+# this stays a plain invocation on the host.
+ExecStart=@REPO_ROOT@/sovereign/scripts/cli-journey-nightly.sh
+WorkingDirectory=@REPO_ROOT@
+
+# A journey lane is worth ~5 minutes; a hung daemon boot is not worth all
+# night. The script's own per-step timeouts sit well inside this.
+TimeoutStartSec=45min
+
+# Nightly work must never compete with the operator. This is a background
+# quality signal, not a deadline.
+Nice=10
+IOSchedulingClass=idle
+
+# The report is the product. Journal it too, so `journalctl --user -u
+# sovereign-journey-nightly` answers "what happened last night" without
+# anyone knowing where the report directory is.
+StandardOutput=journal
+StandardError=journal
+
+# Deliberately NOT hardened with ProtectHome/PrivateTmp: the lane needs $HOME
+# (models, ~/.sovereign, the report dir) and creates its own throwaway HOME
+# and network namespace internally, which is where the isolation actually
+# lives. See sovereign/scripts/cli-journey-sandbox.sh.
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,53 @@
+# Fixture recipe for the CLI journey harness. NOT a shipping corpus.
+#
+# `@FIXTURE_DIR@` is substituted with an absolute path by
+# sovereign/scripts/cli-journey-sandbox.sh, which writes the resolved copy into
+# its throwaway HOME and publishes it to that HOME's recipe registry. The
+# committed file keeps the placeholder on purpose: a recipe carrying an
+# absolute path from whichever machine last touched it is how
+# sovereign-recipes/arch-principles/recipe.toml ended up pointing at
+# /Users/user/… and working nowhere.
+#
+# WHY A RECIPE AND NOT `corpus ingest`. `corpus install` is the command the
+# `corpus-lifecycle` journey asserts, and it is a genuinely different path:
+# the daemon resolves a recipe, validates its parameters, then acquires,
+# extracts, chunks and indexes. `corpus ingest` would produce a comparable
+# index in one command and prove none of that. Only the bytes here are local;
+# the machinery under test is the real one.
+
+[corpus]
+id = "journey-fixture"
+name = "Journey harness fixture corpus"
+description = "Three small documents used by the CLI journey harness to exercise install → query → remove → prove-it-is-gone without a network download."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+[acquire]
+type = "local_file"
+path = "@FIXTURE_DIR@/docs.jsonl"
+
+# JSONL, not markdown, and the reason is worth recording: `local_file` happily
+# names a DIRECTORY, but only the jsonl extractor resolves one into a file
+# list. The markdown extractor calls read() on whatever path it is handed, so
+# a directory came back as `Is a directory (os error 21)` — surfaced as an
+# async ingest failure AFTER `corpus install` had already returned success.
+[extract]
+type = "jsonl"
+content_field = "content"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+
+[index]
+fts = true
+vector = true
+
+# Off deliberately. The atlas enrichment pipeline drives an LLM over every
+# document; on three fixture files that would dominate the lane's runtime and
+# would be testing the enrichment stack rather than the corpus lifecycle. The
+# `enrich-atlas` journey is the place that belongs.
+[enrichment]
+enabled = false

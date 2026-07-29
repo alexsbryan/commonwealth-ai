@@ -25,6 +25,7 @@
 //!
 //! It reads only local transcript files — no daemon, no network, no mutation.
 
+use sovereign_cli_shared::repo::find_repo_root_in;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -1410,7 +1411,27 @@ fn print_help() {
     );
 }
 
-/// Shared with `session_cmd` — both read the same transcript layout.
+/// Shared with `session_cmd` and `notes_retrieval_cmd` — all three read the
+/// same transcript layout.
+///
+/// Claude Code names a transcript directory after the cwd the session was
+/// STARTED in, which is almost always the repo root. Keying purely off the
+/// caller's cwd therefore broke every one of these commands when run from a
+/// subdirectory: in this repo, `svrn cache-audit` from `sovereign/` reported
+/// "no transcripts at …-commonwealth-ai-sovereign" and dead-ended, while the
+/// identical command one directory up worked. Since `sovereign/` is where
+/// nearly all the code lives, that was the common case failing, not the edge.
+/// (Found 2026-07-28 by the first live run of the journey harness.)
+///
+/// So the cwd is the START of a search, not the answer: walk up toward the
+/// git repo root and take the DEEPEST ancestor that actually holds
+/// transcripts. The walk is bounded by the repo root precisely so it cannot
+/// silently wander into a *different* project's transcripts, and the fallback
+/// when nothing matches is the unmodified cwd — which keeps the error message
+/// naming the directory the operator was actually in.
+///
+/// `--dir` is exact and never searched: the caller named a literal transcript
+/// directory.
 pub(crate) fn resolve_transcript_dir(
     project: Option<&str>,
     dir: Option<&str>,
@@ -1420,21 +1441,72 @@ pub(crate) fn resolve_transcript_dir(
     }
     // Canonicalize so `--project .` / relative paths encode the same dir name
     // Claude Code derives from the absolute cwd ("." used to encode as "-").
-    let cwd = project
-        .map(|p| {
-            std::fs::canonicalize(p)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| p.to_string())
-        })
-        .or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .map(|p| p.display().to_string())
-        })
+    let base = project
+        .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| PathBuf::from(p)))
+        .or_else(|| std::env::current_dir().ok())
         .ok_or_else(|| "could not determine the current working directory".to_string())?;
     let home = dirs::home_dir().ok_or_else(|| "could not locate the home directory".to_string())?;
-    let encoded = encode_project_path(&cwd);
-    Ok(home.join(".claude").join("projects").join(encoded))
+    let projects_root = home.join(".claude").join("projects");
+
+    let chain = ancestor_chain(&base, find_repo_root_in(&base).as_deref());
+    if let Some(found) = pick_transcript_dir(&projects_root, &chain) {
+        // Glassbox: silently reading a DIFFERENT directory's transcripts than
+        // the one you are standing in would make every downstream number a
+        // small mystery. Say which, and why, whenever it is not the cwd.
+        if found.0 != base {
+            eprintln!(
+                "svrn: no transcripts recorded for {} — using {} (nearest ancestor with transcripts)",
+                base.display(),
+                found.0.display()
+            );
+        }
+        return Ok(found.1);
+    }
+    Ok(projects_root.join(encode_project_path(&base.display().to_string())))
+}
+
+/// `base`, then each ancestor up to and including `repo_root`.
+///
+/// Just `[base]` when there is no repo root, or when `base` is not inside it
+/// (a canonicalization mismatch) — in both cases there is no principled stop
+/// point, and walking to `/` could reach an unrelated project.
+fn ancestor_chain(base: &Path, repo_root: Option<&Path>) -> Vec<PathBuf> {
+    let mut chain = vec![base.to_path_buf()];
+    let Some(root) = repo_root else {
+        return chain;
+    };
+    if !base.starts_with(root) {
+        return chain;
+    }
+    let mut cur = base.to_path_buf();
+    while cur != root {
+        let Some(parent) = cur.parent() else { break };
+        chain.push(parent.to_path_buf());
+        cur = parent.to_path_buf();
+    }
+    chain
+}
+
+/// First candidate in `chain` whose encoded directory actually holds
+/// transcripts. Returns `(source_dir, transcript_dir)` so the caller can tell
+/// the operator which working directory the transcripts belong to.
+///
+/// "Holds transcripts" means at least one `*.jsonl`, not merely exists: a
+/// leftover empty directory for the cwd would otherwise shadow a populated
+/// ancestor and reproduce the exact dead end this search removes.
+fn pick_transcript_dir(projects_root: &Path, chain: &[PathBuf]) -> Option<(PathBuf, PathBuf)> {
+    chain.iter().find_map(|cand| {
+        let encoded = projects_root.join(encode_project_path(&cand.display().to_string()));
+        has_transcripts(&encoded).then(|| (cand.clone(), encoded))
+    })
+}
+
+fn has_transcripts(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|mut entries| {
+        entries.any(|e| {
+            e.is_ok_and(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+        })
+    })
 }
 
 fn collect_reports(dir: &Path) -> Result<Vec<SessionReport>, String> {
@@ -2077,6 +2149,137 @@ mod tests {
             encode_project_path("/Users/alexsbryan/dev/commonwealth-ai"),
             "-Users-alexsbryan-dev-commonwealth-ai"
         );
+    }
+
+    // ── transcript-dir resolution ─────────────────────────────────
+    //
+    // The regression these pin: running from a SUBDIRECTORY of the repo
+    // reported "no transcripts" and dead-ended, because Claude Code names the
+    // transcript dir after the cwd the session started in (the repo root).
+    // `sovereign/` is where nearly all of this repo's code lives, so the
+    // failing case was the common one.
+
+    /// Create `<projects>/<encoded(work)>` holding `n` transcript files.
+    fn stage_transcripts(projects: &Path, work: &Path, n: usize) -> PathBuf {
+        let dir = projects.join(encode_project_path(&work.display().to_string()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..n {
+            std::fs::write(dir.join(format!("{i}.jsonl")), "{}\n").unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn ancestor_chain_walks_from_cwd_up_to_the_repo_root_inclusive() {
+        let root = PathBuf::from("/w/repo");
+        let deep = PathBuf::from("/w/repo/sovereign/crates/cli");
+        assert_eq!(
+            ancestor_chain(&deep, Some(&root)),
+            vec![
+                PathBuf::from("/w/repo/sovereign/crates/cli"),
+                PathBuf::from("/w/repo/sovereign/crates"),
+                PathBuf::from("/w/repo/sovereign"),
+                PathBuf::from("/w/repo"),
+            ]
+        );
+    }
+
+    #[test]
+    fn ancestor_chain_stops_at_the_repo_root_and_never_escapes_it() {
+        // The bound that keeps the search from wandering into a DIFFERENT
+        // project's transcripts: /w and / are never candidates.
+        let chain = ancestor_chain(
+            &PathBuf::from("/w/repo/sovereign"),
+            Some(Path::new("/w/repo")),
+        );
+        assert!(!chain.contains(&PathBuf::from("/w")));
+        assert!(!chain.contains(&PathBuf::from("/")));
+    }
+
+    #[test]
+    fn ancestor_chain_is_just_the_base_outside_a_repo() {
+        assert_eq!(
+            ancestor_chain(&PathBuf::from("/tmp/loose"), None),
+            vec![PathBuf::from("/tmp/loose")]
+        );
+    }
+
+    #[test]
+    fn ancestor_chain_is_just_the_base_when_root_is_not_an_ancestor() {
+        // Defensive: a canonicalization mismatch must not start an unbounded
+        // walk toward `/`.
+        assert_eq!(
+            ancestor_chain(&PathBuf::from("/a/b"), Some(Path::new("/x/y"))),
+            vec![PathBuf::from("/a/b")]
+        );
+    }
+
+    #[test]
+    fn resolution_prefers_the_cwds_own_transcripts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = tmp.path().join("projects");
+        let root = tmp.path().join("repo");
+        let sub = root.join("sovereign");
+        let want = stage_transcripts(&projects, &sub, 1);
+        stage_transcripts(&projects, &root, 1);
+
+        let chain = ancestor_chain(&sub, Some(&root));
+        let (src, dir) = pick_transcript_dir(&projects, &chain).unwrap();
+        assert_eq!(src, sub, "the deepest match wins");
+        assert_eq!(dir, want);
+    }
+
+    #[test]
+    fn resolution_falls_back_to_the_repo_root_from_a_subdirectory() {
+        // The exact reported failure: transcripts exist for the repo root
+        // only, and the operator is standing in `sovereign/`.
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = tmp.path().join("projects");
+        let root = tmp.path().join("repo");
+        let sub = root.join("sovereign");
+        let want = stage_transcripts(&projects, &root, 2);
+
+        let chain = ancestor_chain(&sub, Some(&root));
+        let (src, dir) = pick_transcript_dir(&projects, &chain).unwrap();
+        assert_eq!(src, root);
+        assert_eq!(dir, want);
+    }
+
+    #[test]
+    fn an_empty_transcript_dir_does_not_shadow_a_populated_ancestor() {
+        // `has_transcripts` requires an actual *.jsonl. A leftover empty dir
+        // for the cwd would otherwise reproduce the dead end being fixed.
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = tmp.path().join("projects");
+        let root = tmp.path().join("repo");
+        let sub = root.join("sovereign");
+        stage_transcripts(&projects, &sub, 0); // exists, but empty
+        let want = stage_transcripts(&projects, &root, 1);
+
+        let chain = ancestor_chain(&sub, Some(&root));
+        let (src, dir) = pick_transcript_dir(&projects, &chain).unwrap();
+        assert_eq!(src, root);
+        assert_eq!(dir, want);
+    }
+
+    #[test]
+    fn resolution_finds_nothing_when_no_ancestor_has_transcripts() {
+        // Must stay None so the caller falls back to the cwd and the error
+        // message names the directory the operator was actually in.
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        let root = tmp.path().join("repo");
+        let chain = ancestor_chain(&root.join("sovereign"), Some(&root));
+        assert!(pick_transcript_dir(&projects, &chain).is_none());
+    }
+
+    #[test]
+    fn explicit_dir_is_taken_verbatim_and_never_searched() {
+        // `--dir` names a literal transcript directory; searching from it
+        // would be wrong even when it does not exist.
+        let got = resolve_transcript_dir(None, Some("/nonexistent/literal")).unwrap();
+        assert_eq!(got, PathBuf::from("/nonexistent/literal"));
     }
 
     #[test]

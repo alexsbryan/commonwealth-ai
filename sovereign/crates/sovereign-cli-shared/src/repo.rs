@@ -28,13 +28,28 @@ pub fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
 /// `git rev-parse --show-toplevel` from the current working directory.
 /// `None` if not inside a git repo (or git is unavailable).
 pub fn find_repo_root() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    find_repo_root_in(&cwd)
+}
+
+/// `git rev-parse --show-toplevel` as evaluated *from `start`*, rather than
+/// from the process's own cwd.
+///
+/// Needed by any command that resolves a repo for a path the caller named
+/// (`--project <path>`) instead of the directory it happens to be sitting in.
+pub fn find_repo_root_in(start: &Path) -> Option<PathBuf> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
+        .current_dir(start)
         .output()
         .ok()?;
     if output.status.success() {
         let s = String::from_utf8_lossy(&output.stdout);
-        Some(PathBuf::from(s.trim()))
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        Some(PathBuf::from(trimmed))
     } else {
         None
     }

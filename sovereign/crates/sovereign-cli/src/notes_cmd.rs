@@ -33,21 +33,256 @@ pub async fn run(args: &[String]) -> i32 {
 
     match args.first().map(String::as_str) {
         Some("add") => cmd_add(&args[1..]).await,
+        Some("list") => cmd_list(&args[1..]).await,
         Some("retrieval-audit") => crate::notes_retrieval_cmd::run(&args[1..]).await,
         Some("promote") => crate::dev_bin::exec("atos-status-promote", &args[1..]),
         Some("migrate-from") => cmd_migrate_from(&args[1..]).await,
         Some("rationalize") => cmd_rationalize(&args[1..]).await,
         Some("gc") => cmd_gc(&args[1..]).await,
+        // A search/filter request is a request to SEE NOTES, so it routes to
+        // the list view rather than the reflection summary.
+        //
+        // Before this, `svrn notes` had no read-back for the notes
+        // `svrn notes add` writes: the default path forwarded everything to
+        // the 30-day reflection view, and `--query` was not a flag at all —
+        // it printed "Unknown flag: --query" and dumped `svrn reflect` help.
+        // `.claude/hooks/session-boot.sh` has been telling operators to run
+        // `sovereign notes --query "<id>"` to read a truncated note the whole
+        // time, so the repo shipped a hook teaching a flag the binary
+        // rejected, and the only working search surface was the MCP `notes`
+        // tool. Caught 2026-07-28 by the `agent-notes` journey, whose title
+        // is literally "Leave durable decisions and read them back".
+        _ if args.iter().any(|a| is_list_flag(a)) => cmd_list(args).await,
         _ => {
-            // Default + filter flags: forward to the canonical
-            // reflection view (without the deprecation banner —
-            // that only fires when the user types `sovereign
-            // reflect`). The `--kind` / `--source` filters
-            // described in the plan are implemented in Phase 7
-            // alongside the audit assembly rewrite.
+            // Bare `svrn notes` keeps forwarding to the canonical reflection
+            // view (without the deprecation banner — that only fires when the
+            // user types `sovereign reflect`). Engineers rely on that view;
+            // only an explicit filter switches to the list.
             crate::reflect_cmd::run_reflect_view(args).await
         }
     }
+}
+
+/// Flags that mean "show me matching notes" rather than "summarize my
+/// reflections". `--since` / `--tool` are deliberately NOT here: they are
+/// long-standing reflection-view filters and must keep that meaning.
+fn is_list_flag(arg: &str) -> bool {
+    let name = arg.split('=').next().unwrap_or(arg);
+    matches!(name, "--query" | "-q" | "--symbol" | "--file" | "--id")
+}
+
+/// A hex-ish fragment long enough to be a note id rather than a search term.
+///
+/// 8 is the short-id width printed by every surface in this stack; a UUID is
+/// 36 with dashes. Below 8 the risk of hijacking a legitimate search
+/// (`svrn notes --query cafe`) outweighs the convenience.
+fn looks_like_note_id(q: &str) -> bool {
+    let len = q.len();
+    (8..=36).contains(&len) && q.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// `svrn notes list` — the read-back surface for the notes this CLI writes.
+///
+/// Deliberately the same query path the MCP `notes` tool uses
+/// (`NoteStore::read_notes`: FTS over content, plus symbol / file / kind
+/// filters), so the CLI and the agent surface cannot drift into disagreeing
+/// about what is stored.
+///
+/// Flags:
+///   --query <s> / -q   Full-text search over note content.
+///   --id <id>          Exact id (prefix-matched, so an 8-char short id works).
+///   --kind <k>         Repeatable. decision | attempt | invariant | todo | …
+///   --symbol <s>       Repeatable. Notes tagged with this symbol.
+///   --file <p>         Repeatable. Notes tagged with this file path.
+///   --limit <n>        Default 20, capped at 100 by the store.
+///   --include-retired  Show retired notes too (default: hide).
+///   --full             Print whole bodies instead of the first 3 lines.
+///   --data-dir <p>     Override notes.db location.
+async fn cmd_list(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP_LIST);
+        return 0;
+    }
+
+    let mut query: Option<String> = None;
+    let mut id_prefix: Option<String> = None;
+    let mut kinds: Vec<String> = Vec::new();
+    let mut symbols: Vec<String> = Vec::new();
+    let mut files: Vec<String> = Vec::new();
+    let mut limit: usize = 20;
+    let mut include_retired = false;
+    let mut full = false;
+    let mut data_dir: Option<PathBuf> = None;
+
+    // Accept both `--flag value` and `--flag=value`; the hook and the docs
+    // use the first form, `cli-contract.toml` steps use the second.
+    let mut i = 0;
+    while i < args.len() {
+        let (name, inline) = match args[i].split_once('=') {
+            Some((n, v)) => (n.to_string(), Some(v.to_string())),
+            None => (args[i].clone(), None),
+        };
+        let mut take = |i: &mut usize| -> Option<String> {
+            if let Some(v) = inline.clone() {
+                return Some(v);
+            }
+            *i += 1;
+            args.get(*i).cloned()
+        };
+        match name.as_str() {
+            "--query" | "-q" => query = take(&mut i),
+            "--id" => id_prefix = take(&mut i),
+            "--kind" => {
+                if let Some(v) = take(&mut i) {
+                    kinds.push(v);
+                }
+            }
+            "--symbol" => {
+                if let Some(v) = take(&mut i) {
+                    symbols.push(v);
+                }
+            }
+            "--file" => {
+                if let Some(v) = take(&mut i) {
+                    files.push(v);
+                }
+            }
+            "--limit" => {
+                if let Some(v) = take(&mut i) {
+                    match v.parse::<usize>() {
+                        Ok(n) if n > 0 => limit = n,
+                        _ => {
+                            eprintln!("notes list: --limit must be a positive number, got {v:?}");
+                            return 2;
+                        }
+                    }
+                }
+            }
+            "--include-retired" => include_retired = true,
+            "--full" => full = true,
+            "--data-dir" => data_dir = take(&mut i).map(PathBuf::from),
+            other if other.starts_with('-') => {
+                eprintln!("notes list: unknown flag {other:?}");
+                crate::util::help::print(&HELP_LIST);
+                return 2;
+            }
+            // A bare word is the query: `svrn notes list embedrouter`.
+            other => query = Some(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
+        eprintln!(
+            "notes list: could not locate notes.db. Run `svrn init` in this \
+             repo (or pass --data-dir <path>)."
+        );
+        return 1;
+    };
+    let store = match NoteStore::open(&notes_db) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("notes list: open {}: {e}", notes_db.display());
+            return 1;
+        }
+    };
+
+    // `--id` is an exact lookup, not a search: FTS would tokenize a UUID and
+    // match nothing useful. Prefix so the 8-char short ids printed everywhere
+    // else in this stack resolve.
+    let rows = if let Some(prefix) = id_prefix.as_deref() {
+        match store.scan_all(true).await {
+            Ok(all) => all
+                .into_iter()
+                .filter(|r| r.id.starts_with(prefix))
+                .take(limit)
+                .collect::<Vec<_>>(),
+            Err(e) => {
+                eprintln!("notes list: {e}");
+                return 1;
+            }
+        }
+    } else {
+        match store
+            .read_notes(
+                query.as_deref(),
+                &symbols,
+                &files,
+                &kinds,
+                limit,
+                include_retired,
+            )
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("notes list: {e}");
+                return 1;
+            }
+        }
+    };
+
+    // An id pasted into --query finds nothing through FTS (the tokenizer has
+    // no useful term for a UUID fragment), and the note-injection hooks quote
+    // ids at exactly this call — "full note: `sovereign notes --query <id>`".
+    // Rather than hand back an empty result for advice the tooling itself
+    // gives, retry an id lookup when the query LOOKS like an id and the
+    // search came back empty.
+    let rows = if rows.is_empty() && id_prefix.is_none() {
+        match query.as_deref().filter(|q| looks_like_note_id(q)) {
+            Some(q) => match store.scan_all(true).await {
+                Ok(all) => all
+                    .into_iter()
+                    .filter(|r| r.id.starts_with(q))
+                    .take(limit)
+                    .collect::<Vec<_>>(),
+                Err(_) => rows,
+            },
+            None => rows,
+        }
+    } else {
+        rows
+    };
+
+    if rows.is_empty() {
+        // Exit 0: "no notes match" is an answer, not a failure. Say what was
+        // searched so an empty result is not mistaken for a broken lookup —
+        // that ambiguity is what made the missing surface hard to notice.
+        println!("no notes matched (db: {})", notes_db.display());
+        return 0;
+    }
+
+    for row in &rows {
+        let retired = if row.retired_at.is_some() {
+            "  [retired]"
+        } else {
+            ""
+        };
+        println!(
+            "── {}  [{}]  {}{}",
+            &row.id[..row.id.len().min(8)],
+            row.kind,
+            row.session_id,
+            retired
+        );
+        if full {
+            println!("{}", row.content);
+        } else {
+            for line in row.content.lines().take(3) {
+                println!("   {line}");
+            }
+            if row.content.lines().count() > 3 {
+                println!("   … (--full for the whole body)");
+            }
+        }
+        println!();
+    }
+    println!(
+        "{} note(s) from {}",
+        rows.len(),
+        notes_db.display()
+    );
+    0
 }
 
 /// `svrn notes add` — append a new note.
@@ -362,6 +597,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage(
             "svrn notes                           30-day reflection view (default)\n\
              svrn notes add --kind <k> -m \"...\"   Append a note\n\
+             svrn notes list [--query <s>]        List / search the notes themselves\n\
+             svrn notes --query <s>               Same as `list --query` (search implies the list view)\n\
+             svrn notes list --id <id>            Read one note by id (8-char short ids work)\n\
              svrn notes promote <id> --to <s>     Promote scope\n\
              svrn notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
              svrn notes rationalize               Candidate report: consolidate/supersede moves (no LLM, no writes)\n\
@@ -373,8 +611,44 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ),
         crate::util::help::HelpSection::Notes(
             "Replaces `svrn reflect` and `svrn atos promote`. Old names \
-             still work and forward here. The Phase 7 audit-hardening rewrite adds \
-             multi-source views (--kind, --source, --feature filters).",
+             still work and forward here. Bare `svrn notes` is the reflection \
+             SUMMARY; `svrn notes list` is the notes themselves — the same \
+             NoteStore::read_notes query the MCP `notes` tool uses, so the two \
+             surfaces cannot disagree about what is stored.",
+        ),
+    ],
+};
+
+const HELP_LIST: crate::util::help::Help = crate::util::help::Help {
+    command: "svrn notes list",
+    summary: "List and search durable notes — the read-back for `svrn notes add`.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "svrn notes list [--query <s>] [--kind <k>]... [--limit <n>]\n    \
+             [--symbol <s>]... [--file <p>]... [--id <id>]\n    \
+             [--include-retired] [--full] [--data-dir <p>]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            ("--query <s> / -q", "Full-text search over note content (a bare word works too)"),
+            ("--id <id>", "Exact id, prefix-matched so 8-char short ids resolve"),
+            ("--kind <k>", "Repeatable: decision | attempt | invariant | todo | reflection | …"),
+            ("--symbol <s>", "Repeatable: notes tagged with this symbol"),
+            ("--file <p>", "Repeatable: notes tagged with this file path"),
+            ("--limit <n>", "Max results (default 20; the store caps at 100)"),
+            ("--include-retired", "Include retired notes (default: hidden)"),
+            ("--full", "Print whole bodies instead of the first 3 lines"),
+            ("--data-dir <p>", "Override the notes.db location"),
+        ]),
+        crate::util::help::HelpSection::Examples(&[
+            ("svrn notes list --kind decision", "Every decision on record"),
+            ("svrn notes --query \"grounding gate\"", "Search; no `list` needed"),
+            ("svrn notes list --symbol EmbedRouter", "Notes tagged to a symbol"),
+            ("svrn notes list --id 625ca452 --full", "Read one note whole"),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Exits 0 with `no notes matched` when nothing hits — an empty \
+             result is an answer, not an error. The db actually searched is \
+             printed so an empty result is never confused with the wrong db.",
         ),
     ],
 };
@@ -1440,6 +1714,55 @@ fn first_line(s: &str) -> String {
         format!("{}…", line.chars().take(84).collect::<String>())
     } else {
         line.to_string()
+    }
+}
+
+#[cfg(test)]
+mod read_back_tests {
+    use super::*;
+
+    // The regression these pin: `svrn notes add` wrote notes the CLI then had
+    // no way to read back. Bare `notes` renders the reflection SUMMARY, and
+    // `--query` was not a flag at all — it printed "Unknown flag: --query"
+    // and fell back to `svrn reflect` help. Only the MCP `notes` tool could
+    // search. Caught 2026-07-28 by the `agent-notes` journey.
+
+    #[test]
+    fn a_search_flag_routes_to_the_list_view() {
+        for flag in ["--query", "-q", "--symbol", "--file", "--id"] {
+            assert!(is_list_flag(flag), "{flag} must reach the list view");
+        }
+        // `--flag=value` is the form cli-contract.toml steps use.
+        assert!(is_list_flag("--query=grounding"));
+    }
+
+    #[test]
+    fn reflection_filters_keep_meaning_the_reflection_view() {
+        // `--since` / `--tool` are long-standing reflection-view filters.
+        // Routing them to the list would silently change a view engineers
+        // rely on — a worse bug than the one being fixed.
+        for flag in ["--since", "--tool", "--source", "--feature"] {
+            assert!(!is_list_flag(flag), "{flag} must stay on the reflection view");
+        }
+    }
+
+    #[test]
+    fn an_id_shaped_query_is_recognised_as_an_id() {
+        // The note-injection hooks quote ids at exactly this call site
+        // ("full note: `sovereign notes --query <id>`"), and FTS has no
+        // useful term for a UUID fragment.
+        assert!(looks_like_note_id("625ca452"));
+        assert!(looks_like_note_id("f496d39e-20a6-422c-adbf-b3c40b5b14eb"));
+    }
+
+    #[test]
+    fn ordinary_searches_are_not_hijacked_as_ids() {
+        assert!(!looks_like_note_id("cafe"), "too short to risk it");
+        assert!(!looks_like_note_id("grounding gate"));
+        assert!(!looks_like_note_id("EmbedRouter"));
+        assert!(!looks_like_note_id(""));
+        // Hex-looking but past UUID length is prose, not an id.
+        assert!(!looks_like_note_id(&"a".repeat(40)));
     }
 }
 

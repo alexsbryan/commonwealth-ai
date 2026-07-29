@@ -123,8 +123,19 @@ match() { printf '%s\n' "$CHANGED" | grep -Eq "$1"; }
 
 RUST=0
 DESKTOP=0
-match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^vendor/|^scripts/sovereign-test\.sh$|^scripts/lib/)' && RUST=1
+JOURNEY=0
+# The non-.rs entries are TEST INPUTS. `sovereign/docs/cli-contract.toml` is
+# read by cli_contract_{code,docs,journeys} and cli_journey_dispatch, so
+# editing the manifest alone can turn the suite red without touching a line of
+# Rust — and this filter used to say otherwise, which meant a manifest-only
+# push sailed through the local gate and went red in CI. That is the precise
+# failure this hook exists to prevent, so the filters must stay in step.
+match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^vendor/|^scripts/sovereign-test\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/)' && RUST=1
 match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
+# The journey harness's own negative controls: the runner SCRIPT, which no
+# cargo test covers. Every path here is also a RUST path above, so the static
+# and offline tiers ride the workspace test run and are not re-run here.
+match '(^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/|^sovereign/crates/sovereign-cli/tests/cli_(contract|journey))' && JOURNEY=1
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn
@@ -263,7 +274,36 @@ else
     say "no Rust changes — skipping workspace tests"
 fi
 
-# ── Gate 4: the desktop webview surface, which cargo is blind to. ──────────
+# ── Gate 4: the journey harness's own negative controls. ───────────────────
+#
+# Tiers 1 and 2 of the journey harness are Rust tests and ride Gate 3. Tier 3
+# is a shell RUNNER, and no cargo test can reach it — so without this gate the
+# thing that decides whether every journey passed or failed is itself ungated.
+#
+# That is not hypothetical. The runner this replaced, cli-contract-live-verify.sh,
+# was written, documented as "safe to call unconditionally in CI", and then
+# never called once: SOVEREIGN_LIVE_CONTRACT appears nowhere in the repo except
+# inside the script that reads it. An opt-in guard decays into decoration, and
+# a harness nobody has seen FAIL is not evidence of anything.
+#
+# Cost is a few seconds: a stub binary and a loopback stub daemon, no models,
+# no real daemon, nothing written outside a mktemp dir (ARCH_PRINCIPLES §12.4).
+if (( JOURNEY )); then
+    if command -v python3 >/dev/null 2>&1; then
+        run_gate "CLI journey self-test (harness negative controls)" \
+            sovereign/scripts/tests/cli-journey-selftest.sh
+    else
+        # The stub daemon is a python3 one-liner. No python3 is a property of
+        # this shell, not of the push — same reasoning as the third-party build
+        # break above: block only on what an edit here could actually fix.
+        warn "python3 not found — cannot run the journey self-test (its stub daemon needs it)"
+        UNVERIFIED+=("CLI journey self-test")
+    fi
+else
+    say "no journey-harness changes — skipping journey self-test"
+fi
+
+# ── Gate 5: the desktop webview surface, which cargo is blind to. ──────────
 if (( DESKTOP )); then
     if [[ -n "$QUICK" ]]; then
         warn "SKIPPING desktop gates (SOVEREIGN_PREPUSH_QUICK set) — CI will run them"

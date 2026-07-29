@@ -5,6 +5,32 @@
 
 use super::home_dir_buf;
 
+/// The port this host's daemon is actually configured to serve on.
+///
+/// Every lifecycle verb in this file used to hardcode `9741`, so an operator
+/// who set `[daemon] client_port` in `~/.sovereign/config.toml` got a CLI
+/// that could not talk to their own daemon: `daemon status` reported
+/// "✗ not reachable on :9741" against a daemon running perfectly on the
+/// configured port, `daemon stop`'s port-lookup leg looked at the wrong
+/// listener, and `daemon reload` POSTed into the void. The default is
+/// unchanged, so nothing moves for the overwhelming majority who never set
+/// the key.
+///
+/// Found 2026-07-28: the CLI journey harness runs its sandbox daemon on
+/// :19741 precisely so it cannot touch the operator's real one, and three
+/// journeys failed on a daemon that was demonstrably up and answering.
+fn client_port() -> u16 {
+    use crate::setup_config::{DaemonSection, SetupConfig};
+    SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or_else(|_| DaemonSection::default().client_port)
+}
+
+/// `http://127.0.0.1:<configured port>` — base URL for local daemon calls.
+fn daemon_base_url() -> String {
+    format!("http://127.0.0.1:{}", client_port())
+}
+
 /// `svrn daemon restart` — hard-restart the registered service.
 /// Most users reach for this when the daemon feels stuck or after a
 /// change that isn't hot-reloadable (port, data_dir). For model-only
@@ -59,12 +85,12 @@ pub(super) async fn stop_daemon() -> i32 {
     // doesn't consult HOME at all. Operators should never set it.
     #[cfg(unix)]
     if !stop_sandboxed() {
-        if let Some(pid) = find_daemon_pid_by_port(9741) {
+        if let Some(pid) = find_daemon_pid_by_port(client_port()) {
             let rc = unsafe {
                 libc_kill(pid, 15 /* SIGTERM */)
             };
             if rc == 0 {
-                return await_exit_or_sigkill(pid, ", found by :9741 listener").await;
+                return await_exit_or_sigkill(pid, &format!(", found by :{} listener", client_port())).await;
             }
             // kill() failed (most likely EPERM on a daemon owned by another
             // user). Fall through to the service-manager path; it might be
@@ -323,7 +349,7 @@ pub(crate) async fn start_daemon() -> i32 {
         let pid_hint = read_daemon_pid()
             .map(|p| format!(" (pid {p})"))
             .unwrap_or_default();
-        eprintln!("✓ daemon already running on :9741{pid_hint}");
+        eprintln!("✓ daemon already running on :{}{pid_hint}", client_port());
         return 0;
     }
 
@@ -350,11 +376,12 @@ pub(crate) async fn start_daemon() -> i32 {
     // bind-collision failure mode it guards against is the Unix
     // loopback address-specific-listener routing quirk.
     #[cfg(unix)]
-    if let Some(holder_pid) = find_daemon_pid_by_port(9741) {
+    if let Some(holder_pid) = find_daemon_pid_by_port(client_port()) {
         let our_pid = read_daemon_pid();
         if our_pid != Some(holder_pid) {
+            let port = client_port();
             eprintln!(
-                "✗ :9741 is held by pid {holder_pid} but the readiness probe failed.\n  \
+                "✗ :{port} is held by pid {holder_pid} but the readiness probe failed.\n  \
                  something else owns the port (stale debug build, half-shut daemon, foreign process).\n  \
                  Stop it first: `kill {holder_pid}` (or `svrn daemon stop` if it's a managed sovereign),\n  \
                  then re-run `svrn daemon start`."
@@ -515,9 +542,10 @@ pub(crate) async fn start_daemon() -> i32 {
         return 0;
     }
     eprintln!(
-        "⚠ pid {pid} started but :9741 didn't respond within {}s\n\
+        "⚠ pid {pid} started but :{} didn't respond within {}s\n\
          the daemon may still be loading models — re-check with `svrn daemon status`\n\
          tail {} for details",
+        client_port(),
         timeout.as_secs(),
         err_path.display()
     );
@@ -691,7 +719,7 @@ pub(super) async fn reload_daemon() -> i32 {
         }
     };
     let resp = client
-        .post("http://127.0.0.1:9741/v1/admin/reload")
+        .post(format!("{}/v1/admin/reload", daemon_base_url()))
         .json(&serde_json::json!({}))
         .send()
         .await;
@@ -699,8 +727,9 @@ pub(super) async fn reload_daemon() -> i32 {
         Ok(r) => r,
         Err(e) => {
             eprintln!(
-                "error: could not reach daemon at :9741 ({e}).\n\
-                 hint: is it running? try `svrn daemon status`."
+                "error: could not reach daemon at :{} ({e}).\n\
+                 hint: is it running? try `svrn daemon status`.",
+                client_port()
             );
             return 1;
         }
@@ -754,6 +783,20 @@ pub(super) async fn reload_daemon() -> i32 {
 }
 
 /// `svrn daemon status` — is the daemon alive and answering?
+///
+/// The status LINE goes to stdout in every branch, because it is the answer
+/// to the question the operator asked — not a diagnostic about answering it.
+/// Health is carried by the exit code, which is what a script should gate on.
+/// This matches `systemctl status` / `docker ps`, which also print to stdout
+/// when reporting a stopped or unhealthy thing.
+///
+/// It used to `eprintln!` all three branches, which meant `svrn daemon status`
+/// could not be piped, redirected, or grepped: `svrn daemon status > out.txt`
+/// produced an EMPTY file on success. Caught 2026-07-28 by the first live run
+/// of the journey harness, once its assertions stopped folding stderr into
+/// stdout — three journey steps had been "passing" on a stderr banner alone.
+/// Only the client-construction failure below stays on stderr: that is an
+/// internal fault, not a report about the daemon.
 pub(super) async fn status_daemon() -> i32 {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
@@ -765,7 +808,8 @@ pub(super) async fn status_daemon() -> i32 {
             return 1;
         }
     };
-    match client.get("http://127.0.0.1:9741/v1/models").send().await {
+    let base = daemon_base_url();
+    match client.get(format!("{base}/v1/models")).send().await {
         Ok(r) if r.status().is_success() => {
             let body: serde_json::Value = r
                 .json()
@@ -776,20 +820,20 @@ pub(super) async fn status_daemon() -> i32 {
                 .and_then(|d| d.as_array())
                 .map(|a| a.len())
                 .unwrap_or(0);
-            eprintln!("✓ daemon running at http://localhost:9741 ({count} models registered)");
+            println!("✓ daemon running at {base} ({count} models registered)");
             0
         }
         Ok(r) => {
-            eprintln!(
-                "⚠ something is answering on :9741 but returned {}. \
+            println!(
+                "⚠ something is answering on {base} but returned {}. \
                  not a svrn daemon, or in a bad state.",
                 r.status()
             );
             1
         }
         Err(_) => {
-            eprintln!(
-                "✗ daemon not reachable on :9741.\n\
+            println!(
+                "✗ daemon not reachable on {base}.\n\
                  start it with `svrn daemon restart` (if installed)\n\
                  or run `svrn setup` (if not yet configured)."
             );
@@ -839,7 +883,7 @@ async fn wait_for_ready(timeout: std::time::Duration) -> bool {
     };
     let start = std::time::Instant::now();
     while start.elapsed() < timeout {
-        if let Ok(r) = client.get("http://127.0.0.1:9741/v1/models").send().await {
+        if let Ok(r) = client.get(format!("{}/v1/models", daemon_base_url())).send().await {
             if r.status().is_success() {
                 return true;
             }

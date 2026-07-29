@@ -5,6 +5,24 @@ MCP server: http://localhost:9741/mcp
 Corpus: commonwealth-ai
 Languages: rust
 
+## Two ways to reach the tools
+
+**MCP (preferred when the daemon is running).** Clients like Claude Code
+auto-discover the full tool set via `tools/list` against the server above.
+Structured, fast, native.
+
+**CLI fallback.** The same 24 tools are callable as shell commands:
+
+```
+sovereign tools list                           # manifest, grouped by Effect × Scope
+sovereign tools describe <id>                  # full descriptor + parameters + output keys + examples
+sovereign tools call <id> [--key=value ...]    # invoke, plain text or --format json output
+```
+
+`svrn tools call symbol_lookup --name=Foo` runs the same
+`Tool::execute()` as the MCP path — pick whichever is in front of you. Use
+the CLI when the daemon isn't up, when scripting, or to see `--help`.
+
 ## Tools
 
 | Tool | When to use | Notes |
@@ -19,7 +37,7 @@ Languages: rust
 | `write_note` | Record decisions, invariants, todos | Persists across sessions |
 | `read_notes` | Recall prior decisions | FTS or filter by symbol/file/kind |
 | `delete_note` | Remove stale notes | By ID |
-| `session_reflection` | End of significant task — record tool feedback | Feeds `sovereign reflect` |
+| `session_reflection` | End of significant task — record tool feedback | Feeds `svrn reflect` |
 | `test_status` | Last test run result | |
 | `run_tests` | Trigger a test run | |
 | `get_run_output` | Test run stdout/stderr | |
@@ -106,14 +124,14 @@ session_reflection(
 
 **Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
 `read_notes(kinds=["reflection"], query="<tool_name>")` — limitations disappear from results
-once the developer retires them via `sovereign reflect --retire`.
+once the developer retires them via `svrn reflect --retire`.
 
 When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
 appended to a tool response, it is a nudge — write one when the work feels significant.
 
 ## Developer: reviewing reflections
 
-`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+`svrn reflect` reads the accumulated backlog from any directory — it finds the active
 database automatically via `~/.sovereign/active_notes_db`.
 
 ```bash
@@ -168,17 +186,17 @@ Never poll in a tight loop — use a 15-30s gap between checks.
 
 ## Server lifecycle
 
-`sovereign project serve` hot-reloads SCIP every 30 seconds. Post-commit
+`svrn project serve` hot-reloads SCIP every 30 seconds. Post-commit
 hooks keep both the symbol index and call graph current automatically.
 If something seems stale, check `~/.sovereign/hooks.log` and run
-`sovereign project install-hooks` if the hook predates recent changes.
+`svrn project install-hooks` if the hook predates recent changes.
 
 ## Call graph
 
 `find_callers` and `find_callees` use the SCIP graph.
 New symbols have no graph entries until the next git commit
 (the post-commit hook keeps this current automatically).
-To refresh manually: `sovereign project refresh`
+To refresh manually: `svrn project refresh`
 
 ## Project-specific invariants
 

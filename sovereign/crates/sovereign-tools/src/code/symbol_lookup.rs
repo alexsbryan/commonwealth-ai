@@ -120,7 +120,11 @@ impl Tool for SymbolLookupTool {
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("symbol_lookup requires 'name'".to_string()))?;
+            // Name the tool as DECLARED (`id: "symbols"`, above), not by its
+            // pre-March-2026 alias. A user who typed the canonical name and
+            // was told "symbol_lookup requires 'name'" got pointed at an
+            // identifier they did not use and that the docs tell them not to.
+            .ok_or_else(|| Error::InvalidInput("symbols requires 'name'".to_string()))?;
         if !is_valid_symbol_name(name) {
             return Err(Error::InvalidInput(format!(
                 "invalid symbol name '{name}': must be alphanumeric plus _, ::, or $, and ≤256 chars"
@@ -209,9 +213,14 @@ async fn format_symbol_rows(rows: &[SymbolRow]) -> String {
         if i > 0 {
             out.push_str("\n\n");
         }
-        let content = read_symbol_body(&row.file_path, row.line_start, row.line_end)
-            .await
-            .unwrap_or_else(|e| format!("// (couldn't read source: {e})"));
+        let content = read_symbol_body(
+            &row.file_path,
+            &row.corpus_id,
+            row.line_start,
+            row.line_end,
+        )
+        .await
+        .unwrap_or_else(|e| format!("// (couldn't read source: {e})"));
         let lang = if row.language.is_empty() {
             ""
         } else {
@@ -233,7 +242,12 @@ async fn format_symbol_rows(rows: &[SymbolRow]) -> String {
 /// Read a 0-indexed inclusive `[start, end]` line range out of a
 /// source file. SCIP records paths workspace-relative; we resolve
 /// against the registered project roots if the path isn't absolute.
-async fn read_symbol_body(path: &str, line_start: i32, line_end: i32) -> std::io::Result<String> {
+async fn read_symbol_body(
+    path: &str,
+    corpus_id: &str,
+    line_start: i32,
+    line_end: i32,
+) -> std::io::Result<String> {
     use std::path::PathBuf;
 
     let candidate = PathBuf::from(path);
@@ -241,16 +255,21 @@ async fn read_symbol_body(path: &str, line_start: i32, line_end: i32) -> std::io
         candidate
     } else {
         // SCIP file_path values are recorded relative to the corpus
-        // root (e.g. `src/foo.rs`). Try every registered project root
-        // recorded by `sovereign project register` (~/.sovereign/projects/).
-        // First hit wins; if none match, fall through with the bare
-        // path so the error message includes what we looked for.
-        resolve_via_project_registry(&candidate)
+        // root (e.g. `src/foo.rs`). Resolve against the roots recorded by
+        // `sovereign project register` (~/.sovereign/projects.json), owning
+        // corpus first. If none match, fall through with the bare path so the
+        // error message includes what we looked for.
+        resolve_via_project_registry(&candidate, corpus_id)
             .await
             .unwrap_or(candidate)
     };
 
-    let content = tokio::fs::read_to_string(&resolved).await?;
+    // Name the path in the error. Bare io::Error renders as "No such file or
+    // directory (os error 2)", which tells a caller staring at a bodyless
+    // result nothing about WHICH file could not be found or where it looked.
+    let content = tokio::fs::read_to_string(&resolved)
+        .await
+        .map_err(|e| std::io::Error::new(e.kind(), format!("{}: {e}", resolved.display())))?;
     let start = line_start.max(0) as usize;
     let end = line_end.max(line_start) as usize;
     let slice: Vec<&str> = content
@@ -281,33 +300,142 @@ async fn read_symbol_body(path: &str, line_start: i32, line_end: i32) -> std::io
 /// error on the registry just returns `None` rather than propagating
 /// — symbol lookup should degrade gracefully when the registry isn't
 /// present (e.g. fresh install before any `sovereign project init`).
-async fn resolve_via_project_registry(rel: &std::path::Path) -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let projects_dir = std::path::PathBuf::from(home)
-        .join(".sovereign")
-        .join("projects");
-    let mut entries = tokio::fs::read_dir(&projects_dir).await.ok()?;
-    while let Some(entry) = entries.next_entry().await.ok().flatten() {
-        let toml = entry.path();
-        if toml.extension().and_then(|e| e.to_str()) != Some("toml") {
-            continue;
-        }
-        let body = tokio::fs::read_to_string(&toml).await.ok()?;
-        // Tiny key='value' parser — avoids a serde_toml dep here. The
-        // registry file format is one `root = "..."` line per project,
-        // written by `sovereign project register`. Anything fancier
-        // (interpolation, multi-line strings) isn't used here.
-        for line in body.lines() {
-            let trimmed = line.trim();
-            if let Some(rest) = trimmed.strip_prefix("root") {
-                let rest = rest.trim_start_matches(['=', ' ', '\t']);
-                let root = rest.trim_matches('"').trim_matches('\'');
-                let candidate = std::path::PathBuf::from(root).join(rel);
-                if candidate.exists() {
-                    return Some(candidate);
-                }
-            }
-        }
+async fn resolve_via_project_registry(
+    rel: &std::path::Path,
+    corpus_id: &str,
+) -> Option<std::path::PathBuf> {
+    let path = dirs::home_dir()?.join(".sovereign").join("projects.json");
+    let body = tokio::fs::read_to_string(&path).await.ok()?;
+    resolve_in_roots(rel, &registry_roots(&body, corpus_id))
+}
+
+/// Project roots from the registry body, the owning corpus first.
+///
+/// Reads `~/.sovereign/projects.json` — the canonical registry written by
+/// `sovereign project register` (`sovereign-mesh/src/projects.rs`): a JSON
+/// array of `{corpus_id, root, …}`.
+///
+/// This used to scan `~/.sovereign/projects/*.toml` for `root = "…"` lines —
+/// a directory and file format that NOTHING in the workspace has ever
+/// written. So registry resolution never once fired, and `read_symbol_body`
+/// always fell through to the bare corpus-relative path, which the OS then
+/// resolved against the process cwd. `symbols` therefore returned a real body
+/// only when invoked from the corpus root exactly, and a header with
+/// `// (couldn't read source: …)` from anywhere else — at exit 0, so nothing
+/// announced the degradation. Caught 2026-07-28 by the journey harness, whose
+/// runner happens to run from `sovereign/`.
+///
+/// Ordering matters: with several projects registered, a path like
+/// `src/main.rs` exists under more than one root, and the first *existing*
+/// hit would otherwise be arbitrary. The row's own corpus wins.
+fn registry_roots(body: &str, corpus_id: &str) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(body) else {
+        return Vec::new();
+    };
+    let root_of = |e: &serde_json::Value| {
+        e.get("root")
+            .and_then(|r| r.as_str())
+            .filter(|r| !r.is_empty())
+            .map(std::path::PathBuf::from)
+    };
+    let owns = |e: &serde_json::Value| {
+        e.get("corpus_id").and_then(|c| c.as_str()) == Some(corpus_id) && !corpus_id.is_empty()
+    };
+    let mut roots: Vec<std::path::PathBuf> = entries.iter().filter(|e| owns(e)).filter_map(root_of).collect();
+    roots.extend(entries.iter().filter(|e| !owns(e)).filter_map(root_of));
+    roots
+}
+
+/// First `root/rel` that exists on disk.
+fn resolve_in_roots(
+    rel: &std::path::Path,
+    roots: &[std::path::PathBuf],
+) -> Option<std::path::PathBuf> {
+    roots.iter().map(|r| r.join(rel)).find(|c| c.exists())
+}
+
+#[cfg(test)]
+mod source_resolution_tests {
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    /// Verbatim shape of `~/.sovereign/projects.json` as written by
+    /// `sovereign project register`. Pinning the real shape is the point:
+    /// the bug being fixed was a resolver reading a format nothing writes.
+    const REGISTRY: &str = r#"[
+      {"corpus_id":"other-project","root":"/w/other",
+       "registered_at":"2026-07-25T00:04:54Z","watchers":{"scip":false}},
+      {"corpus_id":"commonwealth-ai","root":"/w/commonwealth-ai",
+       "registered_at":"2026-07-25T00:04:54Z","watchers":{"scip":false}}
+    ]"#;
+
+    #[test]
+    fn reads_roots_from_the_canonical_registry_shape() {
+        let roots = registry_roots(REGISTRY, "commonwealth-ai");
+        assert_eq!(roots.len(), 2, "every registered root stays a candidate");
+        assert_eq!(
+            roots[0],
+            PathBuf::from("/w/commonwealth-ai"),
+            "the row's OWN corpus must be tried first — a relative path like \
+             src/main.rs exists under several roots, so ordering decides"
+        );
     }
-    None
+
+    #[test]
+    fn unknown_corpus_still_yields_every_root() {
+        // Degrades to "try them all" rather than resolving nothing.
+        let roots = registry_roots(REGISTRY, "not-registered");
+        assert_eq!(roots.len(), 2);
+    }
+
+    #[test]
+    fn empty_corpus_id_does_not_match_entries_lacking_one() {
+        let body = r#"[{"root":"/w/a"},{"corpus_id":"b","root":"/w/b"}]"#;
+        assert_eq!(registry_roots(body, "").len(), 2);
+    }
+
+    #[test]
+    fn malformed_or_empty_registry_yields_no_roots() {
+        // Must not panic and must not invent roots: callers fall back to the
+        // bare path, which keeps the old cwd-relative behaviour as a floor.
+        assert!(registry_roots("not json at all", "x").is_empty());
+        assert!(registry_roots("[]", "x").is_empty());
+        assert!(registry_roots(r#"[{"corpus_id":"x"}]"#, "x").is_empty());
+        assert!(registry_roots(r#"[{"root":"","corpus_id":"x"}]"#, "x").is_empty());
+    }
+
+    #[test]
+    fn resolves_a_corpus_relative_path_under_a_registered_root() {
+        // The end-to-end shape of the fix: a SCIP path recorded relative to
+        // the corpus root resolves no matter what the process cwd is.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("repo");
+        let file = root.join("sovereign/crates/x/src/lib.rs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "fn main() {}").unwrap();
+
+        let rel = Path::new("sovereign/crates/x/src/lib.rs");
+        assert_eq!(resolve_in_roots(rel, &[root.clone()]), Some(file));
+    }
+
+    #[test]
+    fn skips_roots_where_the_path_does_not_exist() {
+        let tmp = tempfile::tempdir().unwrap();
+        let real = tmp.path().join("real");
+        let file = real.join("src/lib.rs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let roots = vec![tmp.path().join("missing"), real];
+        assert_eq!(resolve_in_roots(Path::new("src/lib.rs"), &roots), Some(file));
+    }
+
+    #[test]
+    fn resolves_to_none_when_no_root_holds_the_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(
+            resolve_in_roots(Path::new("nope/gone.rs"), &[tmp.path().to_path_buf()]),
+            None
+        );
+    }
 }

@@ -134,6 +134,17 @@ jobs:
               - 'scripts/sovereign-test.sh'
               - 'scripts/lib/**'
               - 'sovereign/crates/sovereign-tools/src/code/test_adapters/**'
+              # The CLI contract + journey manifest IS the test input for
+              # cli_contract_{code,docs,journeys} and cli_journey_dispatch —
+              # editing it can turn the suite red without touching a .rs file.
+              - 'sovereign/docs/cli-contract.toml'
+              # The journey runner, its sandbox lane, its nightly wrapper, and
+              # its negative controls. A glob, not a list: this was three named
+              # files and the nightly lane added a fourth that silently matched
+              # nothing. Keep in step with the `rust` / `JOURNEY` filters in
+              # scripts/pre-push.sh.
+              - 'sovereign/scripts/cli-journey-*.sh'
+              - 'sovereign/scripts/tests/**'
               - '.github/workflows/ci.yml'
             desktop:
               - 'sovereign/crates/sovereign-desktop/**'
@@ -389,6 +400,25 @@ jobs:
       # but CI must — otherwise the first doctest anyone writes runs nowhere.
       - name: Test workspace (scripts/sovereign-test.sh)
         run: ./scripts/sovereign-test.sh --human --doctests
+      # The journey harness's own negative controls. The static and offline
+      # journey tiers ride the workspace test above (they are Rust tests, so
+      # they cost nothing extra once the compile is paid). This step covers
+      # the third tier — the live RUNNER — on a stub binary and a loopback
+      # stub daemon: no models, no real daemon (ARCH_PRINCIPLES §12.4), a
+      # few seconds.
+      #
+      # It exists because the previous live layer was never exercised at all:
+      # cli-contract-live-verify.sh gates on SOVEREIGN_LIVE_CONTRACT, which
+      # nothing in the repo has ever set. A harness nobody has seen fail is
+      # not evidence. These controls prove the runner rejects a wrong exit
+      # code, a missing substring, a mutation that did not reverse, and that
+      # it aborts a sequence rather than reporting consequential noise.
+      #
+      # The real-daemon run stays an OPERATOR gate, not a CI one, because it
+      # needs model weights this runner does not have:
+      #   SOVEREIGN_LIVE_JOURNEYS=1 sovereign/scripts/cli-journey-verify.sh --tier 2
+      - name: CLI journey harness self-test
+        run: sovereign/scripts/tests/cli-journey-selftest.sh
       # Benches are the only --all-targets class `cargo test` does not build,
       # and bench code rots silently. Incremental against the artifacts the
       # test build just produced, so this is seconds, not a second compile.

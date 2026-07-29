@@ -318,7 +318,12 @@ async fn cmd_call(args: &[String]) -> i32 {
     };
 
     if let Err(e) = tool.validate(&params_value) {
-        eprintln!("tools call: validation failed: {e}");
+        // Name the tool AS TYPED and point at the surface that lists its
+        // parameters. A bare "validation failed: …" leaves the caller to
+        // guess which tool complained (aliases mean the message may name a
+        // different id) and where the required arguments are documented.
+        eprintln!("tools call {id}: validation failed: {e}");
+        eprintln!("  Run `svrn tools describe {id}` for its parameter schema.");
         return 2;
     }
 

@@ -3,7 +3,7 @@
 //! daemon-facing project registry and watcher-control subcommands, plus
 //! their local helpers (`daemon_get`, `format_graph_age`,
 //! `print_simple_help`). The shared `daemon_post` / `derive_corpus_id` /
-//! `DAEMON_BASE` stay in `super` (they're also used by init/refresh) and
+//! `daemon_base()` stay in `super` (they're also used by init/refresh) and
 //! resolve through `use super::*`. Split out of `project_cmd` (2026-07-13);
 //! pure move.
 
@@ -315,7 +315,7 @@ fn format_graph_age(secs: u64) -> String {
 }
 
 async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
-    let url = format!("{DAEMON_BASE}{path}");
+    let url = format!("{}{path}", super::daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

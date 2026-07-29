@@ -727,6 +727,71 @@ async fn async_main() {
         }
     }
 
+    // Hidden introspection: `svrn __journey-plan` prints the manifest's
+    // JOURNEYS — the sequenced use cases — for the cli-journey-verify.sh
+    // harness. Two record kinds, tab-separated, journeys emitted hardest-
+    // hitting first (tier ascending) and each immediately followed by its
+    // steps in order:
+    //
+    //   J <id> <tier> <persona> <visibility> <live|skip:reason> <title>
+    //   S <id> <idx> <mut|ro> <exit|-> <contains|-> <absent|-> <1|0 non-empty>
+    //     <live|skip:reason> <run>
+    //
+    // `-` means "not asserted" so a bash `while IFS=$'\t' read` never sees a
+    // collapsed empty field. `run` is last because it is the only field that
+    // may contain spaces. Reads docs/cli-contract.toml (a dev checkout only);
+    // a no-op in the shipped binary, like __contract-smoke above.
+    if raw_args.first().map(String::as_str) == Some("__journey-plan") {
+        match sovereign_cli_shared::cli_contract::Contract::load_default() {
+            Ok(contract) => {
+                let mut journeys: Vec<_> = contract.journeys.iter().collect();
+                journeys.sort_by(|a, b| a.tier.cmp(&b.tier).then_with(|| a.id.cmp(&b.id)));
+                let dash = |o: &Option<String>| o.clone().unwrap_or_else(|| "-".into());
+                let live = |o: &Option<String>| {
+                    o.as_ref()
+                        .map(|r| format!("skip:{r}"))
+                        .unwrap_or_else(|| "live".into())
+                };
+                for j in journeys {
+                    println!(
+                        "J\t{}\t{}\t{:?}\t{:?}\t{}\t{}",
+                        j.id,
+                        j.tier,
+                        j.persona,
+                        j.visibility,
+                        live(&j.skip_live),
+                        j.title
+                    );
+                    for (i, s) in j.steps.iter().enumerate() {
+                        let e = s.expect.clone().unwrap_or_default();
+                        // `run` stays LAST: it is the only field that may
+                        // contain whitespace, and the shell runner reads it as
+                        // the remainder of the line. A new column goes before
+                        // it, never after.
+                        println!(
+                            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            j.id,
+                            i,
+                            if s.mutates { "mut" } else { "ro" },
+                            e.exit.map(|c| c.to_string()).unwrap_or_else(|| "-".into()),
+                            dash(&e.stdout_contains),
+                            dash(&e.stdout_absent),
+                            u8::from(e.stdout_non_empty),
+                            live(&s.skip_live),
+                            s.settle_secs.unwrap_or(0),
+                            s.run
+                        );
+                    }
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("__journey-plan: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // A dev checkout running a dispatcher built without `--features
     // dev-tools` has silently lost the developer verbs. Warn on EVERY verb,
     // not only the gated ones: the whole failure mode is that the loss

@@ -1148,7 +1148,7 @@ const GENERIC_TERMS: &[&str] = &[
     "actually", "possible", "question", "questions", "understand", "following", "remaining",
     "complete", "completed", "problem", "problems", "approach", "instead", "already", "another",
     "because", "between", "through", "without", "against", "further", "however", "changes",
-    "working", "session", "sessions",
+    "working", "session", "sessions", "production", "tolerance",
 ];
 
 /// Is this term too common to be evidence? Anything with a code/path shape is

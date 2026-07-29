@@ -247,6 +247,7 @@ visibility = "public"
 classification = "daemon"
 [[command]]
 path = "corpus status"
+probe = "no-args"  # `--help` is not honoured — the command RUNS (prints the real status table and hits the daemon). Verified 2026-07-28.
 binary = "llm"
 visibility = "public"
 classification = "daemon"
@@ -383,10 +384,12 @@ binary = "dev"
 feature = "dev-tools"
 [[command]]
 path = "tools describe"
+probe = "no-args"  # treats `--help` as the missing <tool-id> positional (exit 2). Verified 2026-07-28.
 binary = "dev"
 feature = "dev-tools"
 [[command]]
 path = "tools call"
+probe = "no-args"  # treats `--help` as the missing <tool-id> positional (exit 2). Verified 2026-07-28.
 binary = "dev"
 feature = "dev-tools"
 flags = [{ name = "--format", takes_value = true }]
@@ -566,6 +569,7 @@ classification = "daemon"
 flags = [{ name = "--dry-run" }]
 [[command]]
 path = "alignment status"
+probe = "no-args"  # `--help` is not honoured — the command RUNS (prints `Alignment dry-run`). Verified 2026-07-28.
 binary = "llm"
 classification = "daemon"
 
@@ -590,14 +594,17 @@ classification = "daemon"
 # Correctness gyms — internal, mock-replay (need the daemon for inference).
 [[command]]
 path = "search-gym run"
+probe = "no-args"  # rejects `--help` as an unknown flag (exit 2). Verified 2026-07-28.
 binary = "llm"
 classification = "daemon"
 [[command]]
 path = "search-gym calibrate-judge"
+probe = "no-args"  # rejects `--help` as an unknown flag (exit 2). Verified 2026-07-28.
 binary = "llm"
 classification = "daemon"
 [[command]]
 path = "knowledge-gym run"
+probe = "no-args"  # rejects `--help` as an unknown flag (exit 2). Verified 2026-07-28.
 binary = "llm"
 classification = "daemon"
 
@@ -608,6 +615,7 @@ binary = "llm"
 flags = [{ name = "--offline" }]
 [[command]]
 path = "recipe test"
+probe = "no-args"  # `--help` is warned about and IGNORED, then the command runs and exits 1. Verified 2026-07-28.
 binary = "llm"
 classification = "daemon"
 flags = [
@@ -620,6 +628,7 @@ flags = [
 ]
 [[command]]
 path = "recipe validate"
+probe = "no-args"  # `--help` is warned about and IGNORED, then the command runs and exits 1. Verified 2026-07-28.
 binary = "llm"
 flags = [{ name = "--offline" }]
 [[command]]
@@ -907,6 +916,7 @@ hidden = true
 flags = [{ name = "--check" }]
 [[command]]
 path = "meshapp"
+probe = "no-args"  # rejects `--help` (exit 2, prints its own usage). Verified 2026-07-28.
 binary = "llm"
 hidden = true
 [[command]]
@@ -952,3 +962,854 @@ hidden = true
 path = "portfolio"
 binary = "llm"
 hidden = true
+
+# ═════════════════════════════════════════════════════════════════════════
+# JOURNEYS — the sequenced use cases the CLI promises.
+#
+# The [[command]] rows above prove each verb EXISTS. They cannot prove that
+# any ordered sequence of them WORKS: before this section, install→query→
+# remove was unverified anywhere in the repo, and the only behavioural probes
+# were four read-only commands asserting `exit == 0` (and never executed,
+# because nothing set SOVEREIGN_LIVE_CONTRACT).
+#
+# Every journey below is DERIVED from a sequence the docs already teach —
+# `doc` cites where, and cli_contract_journeys checks the citation resolves.
+# Journeys were not invented for the harness.
+#
+# Fields:
+#   id          REQUIRED. stable kebab-case key.
+#   title       REQUIRED. what the person is trying to accomplish.
+#   persona     REQUIRED. end-user | operator | developer | author | agent.
+#   tier        REQUIRED. 1 (product is broken without it) .. 5 (specialist).
+#               Drives live-run ordering and triage severity.
+#   visibility  (internal) public journeys may not contain dev-tools steps.
+#   doc         repo-relative path (optionally #anchor) that teaches it.
+#   skip_live   set = statically checked + dispatch-replayed, but not run
+#               live (needs a second machine, paid infra, or is destructive).
+#   [[journey.step]] run / command / mutates / expect / skip_live / note
+#
+# A step's `run` binds to a [[command]] by longest prefix, stopping at the
+# first `-flag` or `{placeholder}`. Three outcomes (StepBinding):
+#   Exact      — a declared path matched.
+#   VerbOnly   — the verb is tracked but this subcommand has no row yet.
+#                ALLOWED, but the step must carry a `note` saying so. Grep
+#                `note =` here for the list of subcommands still to declare.
+#   Unresolved — neither path nor verb exists. Always a hard failure. This
+#                is the check that catches a doc teaching a dead command.
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Arc A — get it running ───────────────────────────────────────────────
+
+[[journey]]
+id = "first-run"
+title = "Install, set up, and get a grounded answer"
+persona = "end-user"
+tier = 1
+visibility = "public"
+doc = "README.md"
+[[journey.step]]
+run = "setup --yes"
+mutates = true
+note = "writes config + downloads models into the hermetic HOME"
+[[journey.step]]
+run = "daemon start"
+mutates = true
+[[journey.step]]
+run = "daemon status"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "model list"
+note = "`model` is declared subcommand-shaped; `model list` has no row of its own"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "chat ask {question}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "install-service"
+mutates = true
+skip_live = "registers a real launchd/systemd unit on the host"
+note = "README.md:14-24 teaches setup → install-service; this is the only PUBLIC verb that appears in no `--help` text"
+[[journey.step]]
+run = "daemon stop"
+mutates = true
+
+[[journey]]
+id = "watcher-repair"
+title = "Repair a project whose index is healthy but unwatched"
+persona = "developer"
+tier = 3
+doc = ".claude/CLAUDE.md"
+[[journey.step]]
+run = "status"
+note = "the flat alias of `project status`; the `Watched` line is what distinguishes this failure from a healthy index"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "doctor"
+note = "watcher_freshness = Failed means the registry is empty and nothing is watching anything"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "project register --corpus-id {corpus}"
+mutates = true
+note = "one per orphan; doctor prints the exact commands"
+[[journey.step]]
+run = "project list"
+[journey.step.expect]
+exit = 0
+stdout_contains = "{corpus}"
+
+[[journey]]
+id = "daemon-triage"
+title = "Diagnose and recover a sick daemon"
+persona = "operator"
+tier = 1
+visibility = "public"
+doc = "sovereign/docs/RUNBOOK.md"
+[[journey.step]]
+run = "daemon status"
+[[journey.step]]
+run = "doctor"
+note = "exit code reflects system health, not conformance — assert output only"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "daemon restart"
+mutates = true
+[[journey.step]]
+run = "daemon status"
+[journey.step.expect]
+exit = 0
+
+[[journey]]
+id = "stay-current"
+title = "Check for and install a newer CLI"
+persona = "end-user"
+tier = 3
+visibility = "public"
+doc = "sovereign/docs/CLI_REFERENCE.md"
+skip_live = "the install half rewrites the binary under test"
+[[journey.step]]
+run = "update --check"
+[journey.step.expect]
+exit = 0
+
+# ── Arc B — knowledge ────────────────────────────────────────────────────
+
+[[journey]]
+id = "corpus-lifecycle"
+title = "Install a knowledge corpus, query it, remove it, prove it is gone"
+persona = "end-user"
+tier = 1
+visibility = "public"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+[[journey.step]]
+run = "corpus list"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "corpus install {corpus}"
+mutates = true
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "corpus status"
+note = "the assertion the four legacy smoke probes lacked: prove the install LANDED"
+# `corpus install` POSTs to the daemon and returns immediately; the ingest runs
+# in a spawned task. Asserting instantly here asserted something install never
+# promised — the fixture corpus indexes in under a second, but not before the
+# next process has started. The assertion is unchanged; it is allowed the
+# system's own latency, and the runner prints how long it actually waited.
+settle_secs = 120
+[journey.step.expect]
+exit = 0
+stdout_contains = "{corpus}"
+[[journey.step]]
+run = "chat inspect --corpus {corpus} {question}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "corpus remove {corpus}"
+mutates = true
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "corpus status"
+note = """prove the mutation REVERSED — an exit-code-only gate cannot see this. \
+Asserted against `corpus status`, NOT `corpus list`: list prints the static \
+built-in CATALOG (the six installable ids), so `stdout_absent` against it was \
+a false proof — it held whether or not the removal did anything. status is \
+the installed-set surface, and is what step 2 uses to prove the install \
+landed, so the pair is now symmetric."""
+[journey.step.expect]
+exit = 0
+stdout_absent = "{corpus}"
+
+[[journey]]
+id = "folder-to-corpus"
+title = "Turn a folder of documents into a queryable corpus with a workflow"
+persona = "end-user"
+tier = 2
+visibility = "public"
+doc = "docs/WRITE_A_WORKFLOW.md"
+[[journey.step]]
+run = "workflow list"
+note = "`workflow` is declared bare; its list/run/copy/new subcommands have no rows yet"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "workflow copy notebook {workflow}"
+mutates = true
+note = "same: `workflow copy` has no row of its own"
+[[journey.step]]
+run = "workflow run {workflow} --folder {folder} --corpus {corpus}"
+mutates = true
+note = "same: `workflow run` has no row of its own"
+[[journey.step]]
+run = "chat inspect --corpus {corpus} {question}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+[[journey]]
+id = "enrich-atlas"
+title = "Enrich an installed corpus into an atlas and query it"
+persona = "author"
+tier = 3
+doc = "sovereign/docs/CLI_REFERENCE.md"
+[[journey.step]]
+run = "enrich init {corpus} --from-corpus {corpus}"
+mutates = true
+[[journey.step]]
+run = "enrich build {corpus} --full"
+mutates = true
+[[journey.step]]
+run = "enrich status {corpus}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "enrich query {corpus} {question}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "atlas status {corpus}"
+note = "the structural view of what enrich built — atlas and enrich write the same corpus"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+# ── Arc C — mesh ─────────────────────────────────────────────────────────
+
+[[journey]]
+id = "mesh-federate"
+title = "Federate two nodes and reach a peer's corpus"
+persona = "operator"
+tier = 2
+visibility = "public"
+doc = "docs/TWO_NODE_QUICKSTART.md"
+skip_live = "needs a second machine; scripts/mesh-soak.sh covers the multi-node half"
+[[journey.step]]
+run = "mesh create {mesh_name}"
+mutates = true
+[[journey.step]]
+run = "mesh status"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "mesh join {join_key}"
+mutates = true
+skip_live = "runs on the peer node"
+[[journey.step]]
+run = "mesh status"
+[journey.step.expect]
+stdout_contains = "2"
+[[journey.step]]
+run = "mesh balance"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "mesh leave"
+mutates = true
+note = "prove the mutation reverses: the node re-solos"
+
+[[journey]]
+id = "mesh-bigger-model"
+title = "Run a model larger than one machine across the mesh"
+persona = "operator"
+tier = 2
+visibility = "public"
+doc = "docs/RUN_A_BIGGER_MODEL.md"
+skip_live = "needs a second machine plus a multi-GB GGUF"
+[[journey.step]]
+run = "mesh create {mesh_name}"
+mutates = true
+[[journey.step]]
+run = "mesh join {join_key}"
+mutates = true
+skip_live = "runs on the lending machine"
+[[journey.step]]
+run = "mesh plan {gguf} --from-mesh"
+note = "REAL but UNDECLARED: `mesh plan` dispatches and is taught in RUN_A_BIGGER_MODEL.md, but no [[command]] row declares it"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "mesh status"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+[[journey]]
+id = "mcp-interop"
+title = "Wire an external MCP server in and confirm its tools are reachable"
+persona = "developer"
+tier = 2
+doc = "docs/INTEROP.md"
+[[journey.step]]
+run = "mcp add {mcp_name} --url {url}"
+mutates = true
+note = "REAL but UNDECLARED: `mcp add` dispatches (mcp_cmd.rs) but has no [[command]] row"
+[[journey.step]]
+run = "mcp list"
+[journey.step.expect]
+exit = 0
+stdout_contains = "{mcp_name}"
+[[journey.step]]
+run = "mcp test {mcp_name}"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "mcp tools {mcp_name}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+# ── Arc D — authoring ────────────────────────────────────────────────────
+
+[[journey]]
+id = "recipe-author"
+title = "Author a recipe, test it, install it as a corpus, publish it"
+persona = "author"
+tier = 3
+doc = "sovereign-recipes/GETTING_STARTED.md"
+[[journey.step]]
+run = "recipe validate {recipe}"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "recipe test {recipe} --sample-size 50"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "corpus install {corpus}"
+mutates = true
+[[journey.step]]
+run = "corpus status"
+[journey.step.expect]
+stdout_contains = "{corpus}"
+[[journey.step]]
+run = "recipe publish {recipe}"
+mutates = true
+skip_live = "publishes to the shared catalog"
+
+[[journey]]
+id = "meshapp-author"
+title = "Ship a mesh app: recipe to corpus to explorer to registry"
+persona = "author"
+tier = 4
+doc = "sovereign/docs/MESHAPP_AUTHORING.md"
+skip_live = "publishes to the shared catalog and serves a dev HTTP surface"
+[[journey.step]]
+run = "recipe validate {recipe}"
+[[journey.step]]
+run = "corpus install {corpus}"
+mutates = true
+[[journey.step]]
+run = "corpus snapshot publish {corpus}"
+mutates = true
+note = "REAL but UNDECLARED: `corpus snapshot` has no [[command]] row"
+[[journey.step]]
+run = "meshapp new {app} --corpus {corpus}"
+mutates = true
+note = "`meshapp` is declared bare; new/dev/publish/install/list have no rows"
+[[journey.step]]
+run = "meshapp publish {app}"
+mutates = true
+[[journey.step]]
+run = "meshapp list"
+[journey.step.expect]
+stdout_contains = "{app}"
+
+# ── Arc E — developer / code intelligence ────────────────────────────────
+
+[[journey]]
+id = "code-intel-lifecycle"
+title = "Index a repo, serve it, keep it fresh, stop it"
+persona = "developer"
+tier = 3
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+[[journey.step]]
+run = "project init"
+mutates = true
+[[journey.step]]
+run = "project list"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "project status"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "project refresh"
+mutates = true
+[[journey.step]]
+run = "serve --background"
+mutates = true
+note = "SOVEREIGN_STOP_SANDBOXED=1 is load-bearing here — see phase3_serve_lifecycle.rs:127"
+[[journey.step]]
+run = "stop"
+mutates = true
+note = "prove the mutation reverses: pidfile removed, port refuses"
+
+[[journey]]
+id = "tool-primitives"
+title = "Discover a code-intelligence tool and call it"
+persona = "agent"
+tier = 3
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+[[journey.step]]
+run = "tools list"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "tools describe {tool}"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "tools call {tool} --name={symbol} --format json"
+note = """the {tool}/{symbol} fixtures move together — the default pair is \
+`symbols` + a symbol that exists in this repo. Bare `tools call symbols` \
+exits 2 ("requires 'name'"), so the argument is what makes this a real call \
+rather than an argument-validation test."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{symbol}"
+
+[[journey]]
+id = "spec-check"
+title = "Check code against the spec it claims to implement"
+persona = "developer"
+tier = 4
+doc = "docs/CHECK_CODE_AGAINST_SPEC.md"
+[[journey.step]]
+run = "code facts {repo} --corpus-id {corpus}"
+mutates = true
+note = "REAL but UNDECLARED: `code facts` has no [[command]] row (CLI_REFERENCE omits it)"
+[[journey.step]]
+run = "enrich spec-intel {spec} --corpus {corpus}"
+mutates = true
+note = "REAL but UNDECLARED: `enrich spec-intel` has no [[command]] row"
+[[journey.step]]
+run = "code check-spec --corpus {corpus} --claims {claims}"
+note = "REAL but UNDECLARED: `code check-spec` has no [[command]] row"
+[journey.step.expect]
+stdout_non_empty = true
+
+[[journey]]
+id = "drift-cadence"
+title = "Detect narrative-vs-code drift and check the posture is fresh"
+persona = "developer"
+tier = 4
+doc = "sovereign/docs/DRIFT_DETECTION.md"
+skip_live = "a full drift run indexes a repo and drives an LLM for tens of minutes"
+[[journey.step]]
+run = "drift detect --code {repo} --narrative {doc} --output {out}"
+mutates = true
+[[journey.step]]
+run = "tools call drift_posture"
+[journey.step.expect]
+stdout_non_empty = true
+
+[[journey]]
+id = "solve-goal"
+title = "Give the daemon a coding goal and review the diff"
+persona = "developer"
+tier = 3
+visibility = "public"
+doc = "sovereign/docs/SOLVER_FOR_PI_USERS.md"
+skip_live = "writes code into a working tree and drives long inference"
+[[journey.step]]
+run = "solve {repo} {goal} --watch"
+mutates = true
+[[journey.step]]
+run = "solve --status {job_id}"
+note = "the round/verdict line is the only evidence the solver is progressing rather than stuck"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "solve --cancel {job_id}"
+mutates = true
+
+[[journey]]
+id = "atos-project"
+title = "Take a greenfield repo from charter to a passed phase"
+persona = "developer"
+tier = 4
+doc = "sovereign/docs/ATOS.md"
+skip_live = "agent-collaborative; each step drives a long orchestrated session"
+[[journey.step]]
+run = "project init"
+mutates = true
+[[journey.step]]
+run = "project design"
+mutates = true
+[[journey.step]]
+run = "project plan"
+mutates = true
+[[journey.step]]
+run = "project charter"
+mutates = true
+[[journey.step]]
+run = "project found --orchestrate"
+mutates = true
+[[journey.step]]
+run = "project phase"
+mutates = true
+[[journey.step]]
+run = "project audit"
+[journey.step.expect]
+stdout_non_empty = true
+
+[[journey]]
+id = "atos-feature"
+title = "Drive one feature through provision, milestones, and teardown"
+persona = "developer"
+tier = 5
+doc = "sovereign/docs/ATOS.md"
+skip_live = "long orchestrated sessions; teardown reads stdin"
+[[journey.step]]
+run = "atos provision {feature_id} --charter {charter}"
+mutates = true
+[[journey.step]]
+run = "atos start-milestone {feature_id} --brief {brief}"
+mutates = true
+[[journey.step]]
+run = "atos end-milestone {feature_id}"
+mutates = true
+[[journey.step]]
+run = "atos spec {feature_id}"
+[[journey.step]]
+run = "atos status {feature_id}"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "atos teardown {feature_id}"
+mutates = true
+
+# ── Arc F — agent hygiene ────────────────────────────────────────────────
+
+[[journey]]
+id = "session-continuity"
+title = "Hand a session's state to its successor"
+persona = "agent"
+tier = 4
+doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
+[[journey.step]]
+run = "session list"
+note = "`session` is declared bare; list/frames/distill/grade have no rows"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "session distill {session_id}"
+mutates = true
+[[journey.step]]
+run = "session frames"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+[[journey]]
+id = "agent-notes"
+title = "Leave durable decisions and read them back"
+persona = "agent"
+tier = 4
+doc = "sovereign/docs/CLI_REFERENCE.md"
+[[journey.step]]
+run = "notes add --kind decision -m {content}"
+mutates = true
+note = """`notes` is declared bare; add/promote/gc have no rows. The shape is \
+`add --kind <k> -m <body>` per `svrn notes --help`; this row previously read \
+`notes add {content} --kind decision`, which exits 2 (`unknown flag`)."""
+[[journey.step]]
+run = "notes --query {content}"
+note = """the actual read-back — the journey's whole title. This step was RED \
+when first run for real (2026-07-28) and the fix was to the PRODUCT, not the \
+assertion: `notes add` committed the row but the CLI had no way to see it \
+back. Bare `svrn notes` renders only the 30-day reflection SUMMARY, and \
+`--query` was not a flag — it printed "Unknown flag: --query" and dumped \
+`svrn reflect` help, while the only working search lived on the MCP `notes` \
+tool. `svrn notes list` now exposes NoteStore::read_notes (the same query the \
+MCP tool uses) and a filter flag routes there. Assert on `{content}`, never \
+`stdout_non_empty` — the reflection banner satisfies non-empty on its own, \
+which is exactly why the gap went unseen."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{content}"
+[[journey.step]]
+run = "reflect"
+[journey.step.expect]
+exit = 0
+
+[[journey]]
+id = "work-coordination"
+title = "Claim a scope so peer agents do not collide, then release it"
+persona = "agent"
+tier = 4
+doc = "sovereign/docs/WORK_ATLAS.md"
+[[journey.step]]
+run = "claim {scope} --intent {intent}"
+mutates = true
+[[journey.step]]
+run = "claim list"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "claim release {claim_id}"
+mutates = true
+note = "prove the mutation reverses: the claim is gone, not archived (WORK_ATLAS spec §3)"
+
+[[journey]]
+id = "context-spend-audit"
+title = "Find where a session's context budget went"
+persona = "agent"
+tier = 5
+doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
+[[journey.step]]
+run = "cache-audit --sort ratio"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+# ── Arc G — specialist loops ─────────────────────────────────────────────
+
+[[journey]]
+id = "correctness-gates"
+title = "Run the ordered correctness gates before claiming a win"
+persona = "developer"
+tier = 5
+doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
+skip_live = "each gate is a multi-minute benchmark against real models"
+[[journey.step]]
+run = "corpus diag {corpus}"
+note = "REAL but UNDECLARED: `corpus diag` has no [[command]] row; CORRECTNESS_TOOLING says run it FIRST"
+[[journey.step]]
+run = "doctor"
+[[journey.step]]
+run = "bench atlas"
+[[journey.step]]
+run = "eval run --bank {bank} --synth"
+[[journey.step]]
+run = "voice --all"
+note = "`voice` is declared bare; its only action is `eval`"
+
+[[journey]]
+id = "gym-fixture-loop"
+title = "Add a failing gym fixture, fix it, prove no regressions"
+persona = "developer"
+tier = 5
+doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
+skip_live = "mock-replay gyms need their fixture banks and a judge model"
+[[journey.step]]
+run = "knowledge-gym run --fixture {fixture}"
+note = "step 1 must FAIL before the fix — polarity is the point of the loop"
+[[journey.step]]
+run = "knowledge-gym run --replays 3"
+[[journey.step]]
+run = "search-gym calibrate-judge"
+note = "CLI_REFERENCE is explicit that calibration precedes the run"
+[[journey.step]]
+run = "search-gym run --replays 5"
+
+[[journey]]
+id = "alignment-migrate"
+title = "Migrate the alignment workspace onto the mesh"
+persona = "operator"
+tier = 5
+doc = "sovereign/docs/PLAN_ALIGNMENT.md"
+skip_live = "ingests the operator's real ~/.claude and notes.db"
+[[journey.step]]
+run = "alignment migrate --dry-run"
+note = "preview before the mutating form — the doc leads with it"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "alignment migrate"
+mutates = true
+[[journey.step]]
+run = "alignment status"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+
+[[journey]]
+id = "git-archaeology"
+title = "Mine commit history for atom provenance and evaluate it"
+persona = "developer"
+tier = 5
+doc = "sovereign/docs/GIT_ARCHAEOLOGY.md"
+skip_live = "walks the full git history of a real code corpus"
+[[journey.step]]
+run = "enrich ingest {atlas} --source-corpus {corpus}"
+mutates = true
+note = "REAL but UNDECLARED: `enrich ingest` has no [[command]] row"
+[[journey.step]]
+run = "git-archaeology {atlas}"
+mutates = true
+[[journey.step]]
+run = "archaeology-eval {atlas} --inquiry {inquiry}"
+[journey.step.expect]
+stdout_non_empty = true
+
+[[journey]]
+id = "governance"
+title = "Surface tensions in a corpus and resolve them into common law"
+persona = "developer"
+tier = 5
+doc = "sovereign/docs/CLI_REFERENCE.md"
+skip_live = "event-sourced resolution drives long inference over a corpus"
+[[journey.step]]
+run = "govern seed {corpus}"
+mutates = true
+[[journey.step]]
+run = "govern tensions {corpus}"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "govern resolve {corpus}"
+mutates = true
+[[journey.step]]
+run = "govern accept {corpus}"
+mutates = true
+[[journey.step]]
+run = "govern ask {question}"
+[journey.step.expect]
+stdout_non_empty = true
+
+[[journey]]
+id = "pipeline-pods"
+title = "Drive a durable ingestion pipeline across ephemeral pods"
+persona = "operator"
+tier = 5
+doc = "sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md"
+skip_live = "provisions paid cloud GPU pods"
+[[journey.step]]
+run = "pipeline pod up"
+mutates = true
+[[journey.step]]
+run = "pipeline pod list"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "pipeline run {recipe}"
+mutates = true
+[[journey.step]]
+run = "pipeline status {recipe}"
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "pipeline pod down {pod_id}"
+mutates = true
+note = "prove the mutation reverses — an orphaned pod bills until it is torn down"
+
+# ═════════════════════════════════════════════════════════════════════════
+# STRANDED — verbs that belong to no journey.
+#
+# This ledger exists so "stranded" is a TRACKED, SHRINKING quantity. The
+# ratchet in cli_contract_journeys forbids it growing: a new verb must
+# either join a journey or be added here on purpose, with a reason.
+#
+# disposition: promote (a real journey nobody wrote down)
+#              fold    (belongs under an existing verb — see fold_into)
+#              demote  (internal tooling; should be hidden + out of --help)
+#              park    (an experiment behind a build gate)
+# ═════════════════════════════════════════════════════════════════════════
+
+[[stranded]]
+verb = "mobile"
+reason = "serve/status/pair is a real product surface (the phone-facing API) with no documented sequence anywhere — CLI_REFERENCE has only a subcommand table"
+disposition = "promote"
+
+[[stranded]]
+verb = "portfolio"
+reason = "FR-11 gossip-excluded local corpus sets — a real privacy feature whose only mention in the repo is a stale audit finding calling it unreachable (it is reachable; main.rs:934-936)"
+disposition = "promote"
+
+[[stranded]]
+verb = "proxy"
+reason = "cite-or-abstain QA over a filing; reachable, but `proxy --help` exits 2 because proxy_cmd/mod.rs:29 matches --help as a subcommand name"
+disposition = "promote"
+
+[[stranded]]
+verb = "reading-diag"
+reason = "validates the desktop reading chain without the UI — a correctness gate, not a standalone verb"
+disposition = "fold"
+fold_into = "correctness-gates"
+
+[[stranded]]
+verb = "rough-edges"
+reason = "FIXME/TODO/HACK scanner over a code corpus; belongs with the other code-intelligence surfaces"
+disposition = "fold"
+fold_into = "code"
+
+[[stranded]]
+verb = "nudge"
+reason = "one subcommand (`dismiss`) whose only purpose is suppressing ATOS audit nudges"
+disposition = "fold"
+fold_into = "atos"
+
+[[stranded]]
+verb = "recipe-agent"
+reason = "agent-driven recipe authoring; overlaps the recipe-author journey end to end"
+disposition = "fold"
+fold_into = "recipe"
+
+[[stranded]]
+verb = "maintainer"
+reason = "single `inbox` subcommand for recipe maintainers; no doc, not in --help"
+disposition = "demote"
+
+[[stranded]]
+verb = "newsworthy"
+reason = "tracked-set lifecycle summary over MeshStore; one passing mention, no documented sequence"
+disposition = "demote"
+
+[[stranded]]
+verb = "router-cache"
+reason = "check/rebuild of the router exemplar embedding cache — maintenance, arguably belongs behind `doctor --fix`"
+disposition = "demote"
+
+[[stranded]]
+verb = "meta-atlas"
+reason = "cross-corpus canonical atoms; documented only in a bench README, no user-facing sequence"
+disposition = "demote"
+
+[[stranded]]
+verb = "awareness"
+reason = "12 subcommands behind a cargo feature that is not built by default; an experiment, not a promise"
+disposition = "park"

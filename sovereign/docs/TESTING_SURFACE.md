@@ -32,6 +32,166 @@ The four layers we use:
 | **L2** Subsystem integration | Real HTTP/SQL/MeshStore on ephemeral port, mocked inference + corpus | `tests/*.rs` | Wiring bugs, route bugs, persistence-on-mutation bugs, OICP decisions |
 | **L3** Multi-daemon E2E | Two+ `EmbeddedDaemon` instances on distinct ports, gossip + handshake over real HTTP | `tests/*.rs` (unblocked by the port-config landing) | Cross-mesh convergence, distributed state, peer-routing decisions |
 | **L4** Real-binary smoke | `cargo run --bin sovereign daemon run` against a curated fixture | manual playbook or `--ignored` tests | mDNS, launchd/systemd, real GPU inference, real Tailscale topology |
+| **L4j** CLI journeys | The ordered command sequences a person actually types, declared as `[[journey]]` in `docs/cli-contract.toml` | `tests/cli_contract_journeys.rs` (static) + `tests/cli_journey_dispatch.rs` (offline) + `scripts/cli-journey-verify.sh` (live, via `cli-journey-sandbox.sh`; nightly timer + pre-push gate 4) | A use case breaking even though every verb still exists — a renamed step, a mutation that stops reversing, a command that exits 0 while doing nothing. Also *absence* of coverage: a journey that executes no steps reports `∅`, never `✓` |
+
+**On L4j.** The `[[command]]` rows in the contract prove each verb *exists*;
+they cannot prove a *sequence* works. Until 2026-07-28 nothing did:
+`corpus install` → query → `corpus remove` was unverified anywhere, and the
+only behavioural probes were four read-only commands asserting `exit == 0`
+that nothing ever ran (`SOVEREIGN_LIVE_CONTRACT` appears nowhere but inside
+the script that reads it). The static and offline tiers ride the normal
+workspace test run at no extra cost; the live tier needs models and is an
+operator gate, but its *runner* is covered in CI by
+`scripts/tests/cli-journey-selftest.sh`, which proves on staged input that it
+rejects a wrong exit code, a missing substring, and a mutation that did not
+reverse. A harness nobody has seen fail is not evidence.
+
+**Running the live tier.** Two lanes, both operator gates:
+
+```bash
+# read-only, against whatever daemon you already have. Safe anywhere.
+SOVEREIGN_LIVE_JOURNEYS=1 sovereign/scripts/cli-journey-verify.sh --tier 2
+
+# mutating, against a daemon this script boots and owns.
+sovereign/scripts/cli-journey-sandbox.sh
+```
+
+The read-only lane can only verify a journey's read-only *prefix* — on its
+first run 13 of 15 runnable journeys reported `partial`, because the steps
+that carry the meaning (`corpus remove` and the "prove it is gone" assertion
+after it, `daemon stop`, `notes add` then read it back) are exactly the ones
+too destructive to run against a real `~/.sovereign`. `cli-journey-sandbox.sh`
+supplies what the runner deliberately refuses to invent for itself: a private
+netns, a throwaway `HOME`, mDNS off, iroh kill-switched, port 19741, and the
+small soak models — the isolation pattern `scripts/daemon-soak.sh` has run
+since 2026-07-18. It drives **one journey per runner invocation** and revives
+the daemon between them, because `first-run` legitimately ends in
+`daemon stop` and every journey ordered after it was otherwise failing for a
+reason that had nothing to do with what it tested.
+
+Fixtures that would cost a large download stay UNSET, so their steps report
+`skip … no fixture` in the step log rather than passing silently. Opt in per
+run: `JOURNEY_CORPUS=sep sovereign/scripts/cli-journey-sandbox.sh`.
+
+**Verdicts, and why a journey count is not coverage.** Both lanes report one
+of four verdicts per journey, each carrying `ran/declared steps`:
+
+| | meaning |
+|---|---|
+| `✓` passed | every declared step ran, bar manifest-declared `skip_live` |
+| `~` partial | ran, but a precondition was skipped — the sequence is not proven |
+| `∅` vacuous | **nothing ran.** This journey is evidence of nothing |
+| `✗` failed | a step asserted something untrue |
+
+`∅` exists because the first full sandbox run reported `29 ok, 0 failed` while
+four journeys had executed *zero* steps and only 28 of 57 declared steps had
+run at all. Every skip was legitimate and every skip was logged — but nothing
+aggregated them, so a manifest of unexecuted assertions read as coverage. That
+is the same vacuous-green class this layer already catches twice elsewhere (a
+folded `2>&1` stream letting stderr satisfy `stdout_contains`; a typo'd
+`--journey` reporting `0 ok, 0 failed`), and it had reached the summary line of
+the tool that catches it. The precedent for the fix is `sovereign-test.sh`
+exiting 4 on a zero-test run: **a zero-step journey is never green.**
+
+So both lanes now print **two** coverage lines, and the gap between them is
+the point:
+
+```
+coverage 42/57 steps in journeys this lane ENTERED (73%)
+manifest 42/121 steps in the WHOLE manifest (34%)
+```
+
+The first number is a percentage of what the lane was *willing to attempt*.
+Journeys dropped whole by `skip_live` — 14 of 29, 60 steps, everything that
+needs a second machine, paid GPU pods, or tens of minutes of inference — used
+to leave *both* sides of that ratio, so they cost nothing and the number read
+almost twice as good as the truth. Quoting the attempted ratio alone is the
+same move as a ✓ on a journey that executed nothing, one level up. **The
+manifest ratio is the real behavioural coverage of the CLI.**
+
+**Built-in fixtures.** Both numbers moved (23% → 34% manifest, 49% → 73%
+lane) when `{corpus}` and the MCP server stopped being unset:
+
+- `sovereign/tests/fixtures/journey-corpus/` + `journey-corpus.recipe.toml` —
+  three small documents installed through a **real recipe**
+  (`acquire.type = "local_file"`), so `corpus install` runs its genuine
+  daemon-side path with no network. `{corpus}` was the most demanded token in
+  the manifest by a factor of four; unset, it alone left four journeys
+  executing nothing.
+- The MCP fixture is the product's own `svrn mcp demo-server`, booted by the
+  sandbox — a real reference server rather than a second protocol
+  implementation to keep in step.
+
+Point `JOURNEY_CORPUS` at a catalog id (`sep`) to prove the download path too;
+that skips fixture seeding entirely.
+
+**`settle_secs`.** `corpus install` POSTs to the daemon and returns before the
+ingest lands, so the next step asserted instantly and failed for a reason that
+had nothing to do with correctness. A step may now declare `settle_secs = N`:
+the assertion is unchanged and must still hold, but the step is re-run for up
+to N seconds and the runner prints how long it actually waited
+(`✓ [2] corpus status (settled after 1s)`). It is not a flake allowance —
+steps without it are checked exactly once, and the selftest pins both
+directions.
+
+What the other 77% is *not* is unverified. Every step in every journey,
+including the `skip_live` ones, is proven by the static and offline tiers to
+name a command that exists, is documented, and dispatches. The gap is
+specifically behavioural: nobody asserts what those sequences *do*.
+
+Both lanes exit **4** when a journey executed nothing. Exit 4 is deliberately distinct from 1: nothing is
+broken, but nothing was tested either, and the fix is a fixture rather than a
+bug. The read-only lane prints `∅` but does *not* exit 4, because a journey of
+nothing-but-mutating steps runs nothing there by construction; making that
+permanently red would be a different way of not being read.
+
+A missing fixture now demotes a journey to `~ partial` rather than leaving it
+`✓`, on the same reasoning that already applied to a skipped mutation: the
+step's precondition never happened, so nothing downstream of it is proven. A
+manifest-declared `skip_live` does *not* demote — that is the author's stated
+scope, not this lane failing to supply something — but it is counted and named
+on the verdict line, because a silent 6/7 is how coverage quietly leaks away.
+
+**Running it without remembering.** An opt-in guard decays into decoration:
+the predecessor harness was never run once, because running it required
+setting `SOVEREIGN_LIVE_CONTRACT` and nothing ever did. Two mechanisms remove
+the memory requirement:
+
+- **Pre-push** (`scripts/pre-push.sh`, gate 4) runs the runner's negative
+  controls on every push that touches the harness or the manifest — seconds,
+  a stub binary and a loopback stub daemon, no models. The static and offline
+  tiers ride the workspace test run in the same hook; `cli-contract.toml` and
+  the journey scripts are part of that hook's `rust` filter precisely because
+  editing the manifest alone can turn the suite red without touching a `.rs`.
+- **Nightly** (`sovereign/scripts/cli-journey-nightly.sh`, installed by
+  `scripts/install-journey-nightly.sh`) runs the full mutating lane on a
+  systemd user timer, on the machine where the models and toolbox already
+  live. It re-execs into the dev toolbox, rebuilds the binaries so a green
+  run is about *today's* code, gates on the harness's own controls before
+  trusting the lane's result, and writes a dated report plus
+  `~/.sovereign/journey-nightly/latest.json`.
+
+```bash
+scripts/install-journey-nightly.sh            # install + enable the timer
+scripts/install-journey-nightly.sh --status   # armed? when next? last verdict?
+systemctl --user start sovereign-journey-nightly.service   # fire it now
+```
+
+**A red lane is not automatically a broken lane.** The worked example is
+`agent-notes`, which was red for a day on purpose. `svrn notes add` committed
+a note the CLI then offered no way to read back — `svrn notes --query` was not
+a flag, only the MCP `notes` tool could search them, and
+`.claude/hooks/session-boot.sh` had been printing that non-existent flag as
+advice all along. The assertion stated the intent; the defect was in the
+product. It went green when `svrn notes list` was added on top of
+`NoteStore::read_notes` — the same query the MCP tool uses, so the two
+surfaces cannot drift into disagreeing about what is stored.
+
+Weakening an assertion to make a lane green is the one change to never make
+here. The whole reason this layer exists is that its predecessor asserted
+`exit == 0` and therefore could not see anything; a manifest that reports what
+the product *does* rather than what it *should* do is that harness again with
+extra steps. The same rule is what makes `∅` a verdict rather than a pass.
 
 Most production bugs in a daemon like this live at **L2 × hard
 failure or restart recovery**. That's where the highest-leverage

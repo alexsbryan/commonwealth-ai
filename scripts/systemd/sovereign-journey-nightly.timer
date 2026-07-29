@@ -1,0 +1,20 @@
+[Unit]
+Description=Nightly Sovereign CLI journey harness lane
+Documentation=file:///home/alexbryan/dev/commonwealth-ai/sovereign/docs/TESTING_SURFACE.md
+
+[Timer]
+# 03:30 local. Late enough that an evening's work is committed, early enough
+# that the report is waiting at the start of the next day.
+OnCalendar=*-*-* 03:30:00
+
+# The laptop is not on at 03:30 every night. Without this the lane silently
+# never runs on a machine that sleeps — which is the same "guard that decays
+# into decoration" failure the whole harness exists to avoid, just wearing a
+# systemd hat. Persistent=true fires the missed run once the machine is back.
+Persistent=true
+
+# Do not stampede the moment the machine wakes; let the desktop settle.
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

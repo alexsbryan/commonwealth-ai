@@ -119,6 +119,30 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
     submit_install_request(id, params).await
 }
 
+/// Base URL of the daemon's INTERNAL listener, honouring
+/// `[daemon] internal_port` in `~/.sovereign/config.toml`.
+///
+/// This was hardcoded to `http://127.0.0.1:9742`, which meant `corpus install`
+/// could only ever talk to a daemon on the default port — any operator who
+/// moved `internal_port`, and every sandboxed or side-by-side daemon, got
+/// "Is `svrn daemon` running?" from a daemon that was running perfectly well.
+/// The CLI journey harness found it the first time a fixture corpus made the
+/// install step actually execute.
+///
+/// The desktop already resolves the port this way
+/// (`sovereign-desktop/src-tauri/src/bootstrap.rs`); the CLI simply never did.
+///
+/// NOTE: the same literal is still hardcoded in `alignment_cmd.rs` (progress)
+/// and `pipeline_cmd.rs` (pause) — they have the identical bug and want this
+/// helper, but they are not on the path this change is verifying, so they are
+/// left for a focused sweep rather than fixed blind.
+fn internal_daemon_base() -> String {
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.daemon.internal_port)
+        .unwrap_or(9742);
+    format!("http://127.0.0.1:{port}")
+}
+
 /// POST an install request to the running daemon's `/internal/corpus/install`
 /// endpoint and report the outcome. The daemon owns the actual ingest task; this
 /// is the thin, fire-and-forget client. Shared by `corpus install` and a
@@ -128,7 +152,7 @@ pub(crate) async fn submit_install_request(
     id: &str,
     params: std::collections::BTreeMap<String, serde_json::Value>,
 ) -> i32 {
-    let url = "http://127.0.0.1:9742/internal/corpus/install";
+    let url = format!("{}/internal/corpus/install", internal_daemon_base());
     let body = serde_json::json!({
         "corpus_id": id,
         "parameters": params,
@@ -143,7 +167,7 @@ pub(crate) async fn submit_install_request(
             return 1;
         }
     };
-    match client.post(url).json(&body).send().await {
+    match client.post(&url).json(&body).send().await {
         Ok(resp) if resp.status().is_success() => {
             // The endpoint is fire-and-forget, but its 200 body carries a
             // `spawned` flag: true = a new ingest task started, false = an
