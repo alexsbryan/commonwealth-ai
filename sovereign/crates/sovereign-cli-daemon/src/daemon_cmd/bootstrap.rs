@@ -804,6 +804,29 @@ async fn respawn_distributed_primary(
         }
     }
 
+    /// Park the slot unavailable with **no retry timer**, for a refusal that
+    /// waiting cannot fix.
+    ///
+    /// A cluster that is still forming resolves itself as anchors join, so
+    /// [`refuse`] retries. A device whose assigned share exceeds its memory
+    /// does not: re-planning the same model across the same devices produces
+    /// the same overflow, and a timer just repeats the refusal on a schedule.
+    ///
+    /// This costs no new state and no new timer. The discovery loop already
+    /// re-plans for free when the worker set changes (`changed = current !=
+    /// last_loaded`), which is exactly — and only — when the answer could
+    /// differ.
+    fn park(
+        slot: &sovereign_compute::manager::DynamicChildSlot,
+        state: &std::sync::Mutex<ChildDistributionState>,
+        reason: &str,
+    ) {
+        slot.retire(reason);
+        if let Ok(mut st) = state.lock() {
+            st.retry_at = None;
+        }
+    }
+
     tracing::info!(
         target: "compute_child",
         workers = ?workers,
@@ -863,6 +886,22 @@ async fn respawn_distributed_primary(
             let reason = format!("cluster forming — {eligible} eligible anchor(s), quorum {quorum}");
             tracing::info!(target: "compute_child", eligible, quorum, "distributed primary: {reason}");
             refuse(&slot, &child_state, &reason);
+        }
+        DistributedWarmOutcome::WorkerUnfit(overflow) => {
+            // Parked, not retried: the cluster is fully formed and has the
+            // memory in aggregate — one device just cannot hold what it was
+            // assigned. Waiting changes nothing; a worker-set change re-plans
+            // for free.
+            tracing::warn!(
+                target: "compute_child",
+                device = overflow.device_index,
+                endpoint = ?overflow.endpoint,
+                held_mb = overflow.held_mb,
+                need_mb = overflow.need_mb,
+                capacity_mb = overflow.capacity_mb,
+                "distributed primary: per-device fit refusal — parking (not retrying)"
+            );
+            park(&slot, &child_state, &overflow.refusal());
         }
         DistributedWarmOutcome::Unplannable => {
             refuse(

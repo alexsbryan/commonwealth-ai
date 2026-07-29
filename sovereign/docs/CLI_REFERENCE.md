@@ -82,6 +82,7 @@ Manage the local Commonwealth mesh.
 | `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
 | `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
 | `plan <gguf>` | Work out whether a model fits, and which machine holds what — before you commit |
+| `bench` | Measure how fast the model you are running actually decodes, and record it |
 
 `svrn mesh plan` answers the question you have before you download 80 GB: will this
 run on the machines I have? It reads only the GGUF's header table, so it needs no
@@ -105,6 +106,46 @@ measurement exists for that exact model on that exact split; otherwise it says "
 measured" and names the command that would measure it, rather than offering an
 estimate. A `--devices` plan describes hardware that isn't present, so it is never
 eligible for a measurement at all.
+
+`svrn mesh bench` is the command that produces those measurements, and it is the
+counterpart to `plan` in one specific way: **it measures the configuration you are
+running, and never loads the one it wants to measure.** There is no slot to select,
+so there is no slot to get wrong — which matters because this daemon keeps a small
+always-hot model beside the big one, and a request that lands on the small one comes
+back fast, successful, and meaningless.
+
+```sh
+svrn mesh bench                       # measure whatever is loaded right now
+svrn mesh bench the-big-one.gguf      # the same, but fail if that isn't what's loaded
+svrn mesh bench --history             # what has this machine already measured?
+```
+
+Passing a GGUF is an *assertion*, not a selection: it is fingerprinted from its header
+and compared against the resident model, and a mismatch exits `3` naming the config
+line to change. The measurement itself fires real streaming completions at the real
+HTTP surface and times the frames as they arrive, so the number includes the actual
+split and the actual network path. Decode rate is steady state; time to first token is
+reported beside it rather than smeared into it.
+
+Nine validity guards run on every measurement — which slot served it, per-frame
+timing, placement unchanged across the run, peer liveness before *and* after, a canary
+first, host survival, a floor on frame count, inter-trial spread, and a complete finish
+reason. Each one exists because it caught a real false result. A run that trips any of
+them is still written down, so the failure can be inspected, but it is never served
+back to `plan`: keeping failures is what stops the tool becoming retry-until-lucky.
+
+The first of those deserves a note, because the obvious version of it does nothing.
+The `model` field on a streaming response is an echo of what the client asked for, so
+checking it proves only that the request was addressed correctly — a reply from a
+different model carries the right name. What the guard actually checks is whether the
+daemon reports the primary as *serving*, before and after the timed run. On the first
+live run this caught exactly what it was written for: with the big model's process
+still starting, requests to it came back at a rate that model cannot reach, correctly
+labelled and entirely meaningless.
+
+It is not instant. A cold load of a large model can take minutes before the first
+trial starts. Exit `0` valid · `1` a guard tripped · `2` bad arguments · `3` assertion
+failed · `4` nothing measurable · `5` no daemon.
 
 ### `svrn corpus`
 

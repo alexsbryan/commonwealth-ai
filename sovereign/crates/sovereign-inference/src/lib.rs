@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod benchmark;
 pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;

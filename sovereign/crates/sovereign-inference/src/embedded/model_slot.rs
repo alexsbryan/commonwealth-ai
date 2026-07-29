@@ -926,6 +926,19 @@ impl ModelSlot {
                     model_path.display()
                 )));
             }
+            LoadPlacement::WorkerUnfit(overflow) => {
+                // The cluster has the memory; one device does not have its
+                // share. Do NOT load — neither distributed (the shard would
+                // fail on that device) nor locally (a model this size on the
+                // host is the 2026-07-27 session-kill). The message carries the
+                // numbers and both real fixes; see `WorkerOverflow::refusal`
+                // for why it says LOWER the headroom.
+                return Err(Error::Inference(format!(
+                    "{} — {}",
+                    model_path.display(),
+                    overflow.refusal()
+                )));
+            }
         }
 
         let model =

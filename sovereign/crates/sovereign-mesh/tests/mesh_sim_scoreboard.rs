@@ -2524,7 +2524,8 @@ fn what_the_scorer_loses_by_never_measuring_anyone() {
     // the extrapolation never runs.
     //
     // Production would not have that property. `run_baseline_benchmark`
-    // probes the **`Speed::Fast` slot** — a ~4B model — while the
+    // (deleted 2026-07-28 — see below) probed the **`Speed::Fast`
+    // slot** — a ~4B model — while the
     // candidate being scored is whatever the peer advertises, often a
     // 35B. The ratio would be ~0.1 and the estimate an order of
     // magnitude below the measured rate. So a shipped probe activates a
@@ -2667,10 +2668,14 @@ fn what_the_scorer_loses_by_never_measuring_anyone() {
 
     // ---- and the mechanism production would actually ship ----
     // Everything above prices a rate card measured on the model each
-    // node serves. `run_baseline_benchmark` measures the `Speed::Fast`
-    // slot instead, so a shipped card describes a ~2.5 GB model and
-    // `throughput_factor` extrapolates from it to whatever is being
-    // scored, assuming rate scales as 1/size.
+    // node serves. `run_baseline_benchmark` measured the `Speed::Fast`
+    // slot instead, so a shipped card would describe a ~2.5 GB model
+    // and `throughput_factor` would extrapolate from it to whatever is
+    // being scored, assuming rate scales as 1/size. This arm is why
+    // that probe was deleted on 2026-07-28 rather than wired up: the
+    // number it produced was aimed at a consumer that would misuse it.
+    // `svrn mesh bench` measures the model actually being served and
+    // reports to a human, not to this scorer.
     //
     // β = 1.0 is that assumption, and it must reproduce the rows above
     // exactly — asserted below rather than eyeballed, because the whole

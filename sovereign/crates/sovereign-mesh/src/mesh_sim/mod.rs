@@ -125,9 +125,10 @@ pub struct SimConfig {
     /// **This knob exists because production could not have that rate
     /// card, and the difference is a mechanism rather than a
     /// perturbation.** `run_baseline_benchmark`
-    /// (`sovereign-inference/src/benchmark.rs:59`) probes the
-    /// `Speed::Fast` slot — a ~4B model — and stamps that model's size
-    /// into `baseline_size_gb`. `throughput_factor` then extrapolates
+    /// (`sovereign-inference/src/benchmark.rs`, deleted 2026-07-28)
+    /// probed the `Speed::Fast` slot — a ~4B model — and stamped that
+    /// model's size into `baseline_size_gb`. `throughput_factor` then
+    /// extrapolates
     /// to whatever the peer is being scored for by scaling linearly on
     /// the size ratio (`scoring.rs:384`). When the two models are the
     /// same, as they are in this sim, the ratio is 1.0 and the
@@ -367,16 +368,16 @@ pub enum Arm {
     /// Arm 0 with every candidate's advertised `BenchmarkResult`
     /// removed — F10's second half, in isolation.
     ///
-    /// **This is not a hypothetical.** No node on this mesh has ever
-    /// advertised a rate card. `run_baseline_benchmark`
-    /// (`sovereign-inference/src/benchmark.rs:59`) has zero callers;
-    /// `MeshInferenceProvider::set_local_benchmark`
-    /// (`peer_inference.rs:808`) has zero callers, so `local_benchmark`
-    /// is `None` for the life of the process; and the gossip builder
-    /// hardcodes `benchmark: None` (`capabilities.rs:194`) under a
-    /// comment promising a `with_benchmark` setter that was never
-    /// written. Both ends of the wire are blind, and two doc comments
-    /// describe the mechanism as if it runs.
+    /// **This is not a hypothetical, and as of 2026-07-28 it is no
+    /// longer even an accident.** No node on this mesh has ever
+    /// advertised a rate card. Both producers — `run_baseline_benchmark`
+    /// and `MeshInferenceProvider::set_local_benchmark`, each with zero
+    /// callers — were deleted rather than left as an invitation to wire
+    /// them up, and the local `benchmark` field went with them. The
+    /// gossip builder likewise hardcodes `benchmark: None`
+    /// (`capabilities.rs`). Both ends of the wire are now blind by
+    /// construction, so this arm measures the shipped system rather
+    /// than a state it merely happens to be in.
     ///
     /// The consequence composes with F9's peer half and that is the
     /// point of the arm. `throughput_factor` (`scoring.rs:362`) has
@@ -795,9 +796,10 @@ impl Arm {
     ///
     /// Applied at both injection sites rather than at the node, because
     /// the blindness is not a property of the advertiser: the local
-    /// side is missing for a different reason (`set_local_benchmark`
-    /// uncalled) than the peer side (`capabilities.rs` hardcodes
-    /// `None`), and a fix could plausibly land one without the other.
+    /// side is missing for a different reason (no producer — the
+    /// setter and the field were deleted) than the peer side
+    /// (`capabilities.rs` hardcodes `None`), and a change could
+    /// plausibly land one without the other.
     fn blind_rate_card(&self) -> bool {
         matches!(self, Arm::BlindRateCard | Arm::BlindShipped)
     }
@@ -1604,10 +1606,10 @@ impl Sim {
                         manifest: &node.manifest,
                         observations: &local_obs,
                         // F10: `None` on the blind arms, and `None` in
-                        // production unconditionally — `local_benchmark`
-                        // is initialised to `None` at
-                        // `peer_inference.rs:573` and its only writer
-                        // has no callers.
+                        // production unconditionally — the local
+                        // benchmark field and its setter were deleted
+                        // on 2026-07-28, so production passes a literal
+                        // `None` here with no state behind it.
                         benchmark: if self.arm.blind_rate_card() {
                             None
                         } else {

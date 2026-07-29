@@ -755,6 +755,191 @@ pub fn plan_shards_explicit(
     Some(build_shards_from_counts(counts, &w))
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Does the plan actually FIT? — the shared decider
+//
+// `plan_shards_weighted` decides where each block GOES. Nothing above decides
+// whether the device it goes to can HOLD it, and until 2026-07-28 nothing did:
+// the live load gated only on POOLED memory, so a plan whose aggregate fit
+// comfortably could still hand one worker more than it had. `mesh plan` grew
+// the per-device check first, in its own private fold, which meant the preview
+// and the load could disagree — the exact drift the preview exists to close.
+//
+// So the check lives here, beside the planner, and both callers use it.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// A model's resident byte mass, decomposed the way a placement decision needs
+/// it.
+///
+/// Read from the GGUF's tensor table — a header parse, no weight load — so this
+/// is cheap enough to compute on every plan. The decomposition matters because
+/// the pieces land in different places: block mass follows the shard split, the
+/// output head rides with the last block-holder, and `token_embd` stays in host
+/// RAM rather than on any device.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ModelMass {
+    /// Per-block resident bytes, indexed by block number. Empty when the tensor
+    /// table could not be read — see [`ModelMass::is_known`].
+    pub block_bytes: Vec<u64>,
+    /// Output head (`output.weight`) bytes. Rides with the last block-holder.
+    pub head_bytes: u64,
+    /// Input embedding (`token_embd`) bytes. Stays in host system RAM and is
+    /// therefore NOT charged to any device's share.
+    pub embd_bytes: u64,
+    /// Global tensors that are neither head nor embedding, plus any tensor
+    /// tagged with an out-of-range layer. Host overhead.
+    pub other_global_bytes: u64,
+    /// Routed-expert (`_exps`) mass — the COLD part of a mixture-of-experts
+    /// model. Resident, so it counts against fit; only the router's top-k are
+    /// read per token, so it is a small fraction of the per-token work.
+    pub routed_expert_bytes: u64,
+    /// The model carries `ssm_*` weights — a hybrid (Gated DeltaNet) stack.
+    pub recurrent: bool,
+}
+
+impl ModelMass {
+    /// Every resident byte, including the pieces that live in host RAM.
+    pub fn total_bytes(&self) -> u64 {
+        self.block_bytes.iter().sum::<u64>()
+            + self.head_bytes
+            + self.embd_bytes
+            + self.other_global_bytes
+    }
+
+    /// Whether this mass can support a fit judgment.
+    ///
+    /// An all-zero block table means the tensor table was unreadable. The
+    /// distinction is load-bearing: a fit check run against zeros would pass
+    /// every device trivially, turning a failed header read into a clean bill
+    /// of health.
+    pub fn is_known(&self) -> bool {
+        self.block_bytes.iter().any(|&b| b > 0)
+    }
+}
+
+/// Decompose a GGUF tensor table into a [`ModelMass`].
+///
+/// `sizes` is the `(tensor_name, layer, nbytes)` table `tensor_sizes` returns.
+/// `n_layer` is the header's block count; a tensor tagged with a layer outside
+/// `0..n_layer` is counted as a global rather than silently dropped, because a
+/// dropped byte is a byte the fit check will not charge anyone for. Pure.
+pub fn model_mass_from_sizes(sizes: &[(String, Option<u32>, u64)], n_layer: u32) -> ModelMass {
+    let mut m = ModelMass {
+        block_bytes: vec![0u64; n_layer as usize],
+        ..Default::default()
+    };
+    for (name, layer, nbytes) in sizes {
+        if name.contains(".ssm_") {
+            m.recurrent = true;
+        }
+        if is_routed_expert_tensor(name) {
+            m.routed_expert_bytes += *nbytes;
+        }
+        match layer {
+            Some(l) if (*l as usize) < m.block_bytes.len() => m.block_bytes[*l as usize] += *nbytes,
+            Some(_) => m.other_global_bytes += *nbytes,
+            None if is_output_tensor(name) => m.head_bytes += *nbytes,
+            None if name.contains("token_embd") => m.embd_bytes += *nbytes,
+            None => m.other_global_bytes += *nbytes,
+        }
+    }
+    m
+}
+
+/// One device's share of a plan, weighed against what that device has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShardFit {
+    /// Index into the plan's device order (RPC workers first, host last) — the
+    /// same index [`NodeShard::device_index`] carries. A caller displaying this
+    /// against its own device numbering must map back through the order it
+    /// passed in; the two spaces are easy to confuse and nothing here can catch
+    /// it for you.
+    pub device_index: usize,
+    /// Resident bytes this device would hold: its block range plus the output
+    /// head if it carries it.
+    pub held_bytes: u64,
+    /// `held_bytes × headroom` — what must actually fit.
+    pub need_bytes: u64,
+    /// What this device has.
+    pub capacity_bytes: u64,
+}
+
+impl ShardFit {
+    /// Whether this device can hold its share with headroom.
+    pub fn fits(&self) -> bool {
+        self.need_bytes <= self.capacity_bytes
+    }
+
+    /// Spare room in bytes; negative when this device overflows.
+    pub fn slack_bytes(&self) -> i128 {
+        self.capacity_bytes as i128 - self.need_bytes as i128
+    }
+}
+
+/// Judge a shard plan device by device.
+///
+/// Returns **one row per shard**, in plan order, fitting and overflowing alike —
+/// not a pass/fail. A `Result<(), Overflow>` shape would force every caller that
+/// wants to *show* the fit (which `mesh plan` does, `ok +12.4 GB` per row) to
+/// keep its own traversal, and a second traversal is exactly the drift this
+/// function exists to remove.
+///
+/// `capacities` is in **plan order** — the same order `plan_shards_weighted`'s
+/// `weights` were in, RPC workers first and the host last. Passing it in the
+/// caller's own device numbering silently mis-attributes every row.
+///
+/// `None` means **"cannot judge"**, and it is not a pass. It is returned when
+/// the inputs do not describe each other — a capacity list of the wrong length,
+/// an empty plan, a nonsensical headroom — or when [`ModelMass::is_known`] is
+/// false, because judging against an unread tensor table would clear every
+/// device on the strength of zeros. A caller that gets `None` must say so; it
+/// must not report a fit.
+pub fn shard_fits(
+    plan: &[NodeShard],
+    capacities: &[u64],
+    mass: &ModelMass,
+    headroom: f64,
+) -> Option<Vec<ShardFit>> {
+    if plan.is_empty() || capacities.len() != plan.len() {
+        return None;
+    }
+    if !headroom.is_finite() || headroom < 1.0 {
+        return None;
+    }
+    if !mass.is_known() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(plan.len());
+    for (pos, shard) in plan.iter().enumerate() {
+        // The plan's own `device_index` is the authority on which capacity a
+        // shard is judged against; position is only a fallback for a
+        // hand-built plan that did not set it.
+        let idx = if shard.device_index < capacities.len() {
+            shard.device_index
+        } else {
+            pos
+        };
+        let mut held = 0u64;
+        if let Some((a, b)) = shard.blocks {
+            for blk in a..=b {
+                // A range past the end of the table means the plan and the mass
+                // describe different models. Refuse rather than under-charge.
+                held = held.checked_add(*mass.block_bytes.get(blk as usize)?)?;
+            }
+        }
+        if shard.holds_output {
+            held += mass.head_bytes;
+        }
+        out.push(ShardFit {
+            device_index: idx,
+            held_bytes: held,
+            need_bytes: (held as f64 * headroom) as u64,
+            capacity_bytes: capacities[idx],
+        });
+    }
+    Some(out)
+}
+
 /// The cacheable output head (LM projection) — placed with the last block-holding
 /// device, distinct from `token_embd` (input) which stays on the host CPU.
 pub fn is_output_tensor(name: &str) -> bool {
@@ -1235,5 +1420,187 @@ mod tests {
         assert!(!is_routed_expert_tensor("blk.3.ffn_gate_inp.weight")); // router = hot
         assert!(!is_routed_expert_tensor("blk.3.attn_q.weight"));
         assert!(!is_routed_expert_tensor("output.weight"));
+    }
+
+    // ── the shared fit decider ──────────────────────────────────────────────
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// A 4-block model: 1 GiB per block, a 1 GiB head, 2 GiB of embeddings.
+    fn simple_sizes() -> Vec<(String, Option<u32>, u64)> {
+        let mut v: Vec<(String, Option<u32>, u64)> = (0..4)
+            .map(|i| (format!("blk.{i}.attn_q.weight"), Some(i), GIB))
+            .collect();
+        v.push(("output.weight".into(), None, GIB));
+        v.push(("token_embd.weight".into(), None, 2 * GIB));
+        v
+    }
+
+    #[test]
+    fn model_mass_separates_what_lands_in_different_places() {
+        let m = model_mass_from_sizes(&simple_sizes(), 4);
+        assert_eq!(m.block_bytes, vec![GIB; 4]);
+        assert_eq!(m.head_bytes, GIB, "the head rides with the last block-holder");
+        assert_eq!(
+            m.embd_bytes,
+            2 * GIB,
+            "token_embd stays in host RAM and must not be charged to a device"
+        );
+        assert_eq!(m.other_global_bytes, 0);
+        assert_eq!(m.total_bytes(), 7 * GIB);
+        assert!(m.is_known());
+        assert!(!m.recurrent);
+    }
+
+    #[test]
+    fn model_mass_counts_an_out_of_range_layer_rather_than_dropping_it() {
+        // A dropped byte is a byte the fit check will not charge anyone for.
+        let sizes = vec![
+            ("blk.0.attn_q.weight".into(), Some(0), GIB),
+            ("blk.99.attn_q.weight".into(), Some(99), 5 * GIB),
+        ];
+        let m = model_mass_from_sizes(&sizes, 1);
+        assert_eq!(m.block_bytes, vec![GIB]);
+        assert_eq!(m.other_global_bytes, 5 * GIB);
+        assert_eq!(m.total_bytes(), 6 * GIB);
+    }
+
+    #[test]
+    fn model_mass_notices_moe_and_recurrent_stacks() {
+        let sizes = vec![
+            ("blk.0.ffn_gate_exps.weight".into(), Some(0), 8 * GIB),
+            ("blk.0.ssm_a".into(), Some(0), GIB),
+        ];
+        let m = model_mass_from_sizes(&sizes, 1);
+        assert_eq!(m.routed_expert_bytes, 8 * GIB);
+        assert!(m.recurrent);
+        assert_eq!(
+            m.block_bytes[0],
+            9 * GIB,
+            "routed-expert mass is resident and still counts against fit"
+        );
+    }
+
+    #[test]
+    fn an_unread_tensor_table_is_never_a_pass() {
+        // This is the whole reason `shard_fits` returns Option. Judging against
+        // an empty mass would clear every device on the strength of zeros —
+        // turning a failed header parse into a clean bill of health.
+        let mass = ModelMass::default();
+        assert!(!mass.is_known());
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2), None);
+    }
+
+    #[test]
+    fn shard_fits_reports_every_device_not_just_the_failures() {
+        // A Result-shaped decider would force `mesh plan` to keep its own
+        // traversal to print the fitting rows — and a second traversal is the
+        // drift this function exists to remove.
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        assert_eq!(fits.len(), 2, "one row per shard, fitting rows included");
+        assert!(fits.iter().all(|f| f.fits()));
+        // Device 1 holds blocks 2-3 plus the head: 3 GiB, needing 3.6 with headroom.
+        assert_eq!(fits[1].held_bytes, 3 * GIB);
+        assert_eq!(fits[1].need_bytes, (3.0 * GIB as f64 * 1.2) as u64);
+        assert!(fits[1].slack_bytes() > 0);
+    }
+
+    #[test]
+    fn a_device_that_cannot_hold_its_share_overflows() {
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        // Device 0 holds blocks 0-1 = 2 GiB, needing 2.4 GiB; it has 2.
+        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        assert!(!fits[0].fits());
+        assert!(fits[0].slack_bytes() < 0);
+        assert!(fits[1].fits(), "one overflow must not condemn the others");
+    }
+
+    #[test]
+    fn pooled_memory_can_pass_where_a_device_fails() {
+        // The exact hole the per-device gate closes: 12 GiB pooled against a
+        // 7 GiB model is comfortable, and the split still overflows one device.
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        let capacities = [1 * GIB, 11 * GIB];
+        assert!(
+            capacities.iter().sum::<u64>() > (mass.total_bytes() as f64 * 1.2) as u64,
+            "the aggregate gate would wave this through"
+        );
+        let fits = shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable");
+        assert!(fits.iter().any(|f| !f.fits()));
+    }
+
+    #[test]
+    fn headroom_scales_the_requirement_so_lowering_it_helps() {
+        // `need = held × headroom`. The refusal message tells operators to
+        // LOWER the headroom; this is the arithmetic that makes that correct.
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        let capacities = [2 * GIB, 10 * GIB];
+        assert!(!shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable")[0].fits());
+        assert!(
+            shard_fits(&plan, &capacities, &mass, 1.0).expect("judgeable")[0].fits(),
+            "lowering the headroom must be able to rescue a marginal fit"
+        );
+    }
+
+    #[test]
+    fn inputs_that_do_not_describe_each_other_cannot_be_judged() {
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        assert_eq!(
+            shard_fits(&plan, &[GIB], &mass, 1.2),
+            None,
+            "one capacity for two devices is not a verdict"
+        );
+        assert_eq!(shard_fits(&[], &[], &mass, 1.2), None);
+        assert_eq!(
+            shard_fits(&plan, &[GIB, GIB], &mass, 0.5),
+            None,
+            "headroom below 1.0 would ask a device to hold less than it holds"
+        );
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, f64::NAN), None);
+    }
+
+    #[test]
+    fn a_plan_for_a_different_model_cannot_be_judged() {
+        // A block range past the end of the mass table means the two describe
+        // different models. Refusing beats silently under-charging the device.
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(8, &[1.0, 1.0]);
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2), None);
+    }
+
+    #[test]
+    fn a_device_holding_no_blocks_needs_nothing() {
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        // Four blocks across three devices weighted 10:1:0 — the last gets none.
+        let plan = plan_shards_weighted(4, &[10.0, 1.0, 0.0], &mass.block_bytes, mass.head_bytes);
+        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB, 0], &mass, 1.2).expect("judgeable");
+        let idle = fits.last().expect("three rows");
+        assert_eq!(idle.held_bytes, 0);
+        assert!(
+            idle.fits(),
+            "a device holding nothing must not be reported as overflowing"
+        );
+    }
+
+    #[test]
+    fn fit_rows_follow_the_plans_device_index_not_their_position() {
+        // The index-space trap: capacities arrive in PLAN order, and a caller
+        // that maps them through its own device numbering silently attributes
+        // every row to the wrong machine.
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        for (pos, f) in fits.iter().enumerate() {
+            assert_eq!(f.device_index, plan[pos].device_index);
+        }
+        assert_eq!(fits[0].capacity_bytes, 2 * GIB);
+        assert_eq!(fits[1].capacity_bytes, 10 * GIB);
     }
 }

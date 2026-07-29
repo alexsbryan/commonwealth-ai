@@ -34,6 +34,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "fetch-model" => cmd_fetch_model(&args[1..]).await,
         "warm-cache" => cmd_warm_cache(&args[1..]).await,
         "plan" => cmd_plan(&args[1..]).await,
+        "bench" => crate::mesh_bench::cmd_bench(&args[1..]).await,
         "check-invariants" => cmd_check_invariants(&args[1..]).await,
         "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {
@@ -413,6 +414,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             (
                 "plan <gguf> --devices <gb,..>",
                 "Dry-run the tensor split across a mesh — per-device fit + headroom, offline (no load)",
+            ),
+            (
+                "bench",
+                "Measure how fast the model you are running actually decodes, and record it for `plan`",
             ),
             (
                 "check-invariants --nodes <a,b,..>",
@@ -799,20 +804,40 @@ pub(crate) enum NotMeasurable {
 
 /// One device's row in the plan.
 pub(crate) struct DeviceRow {
+    /// Index into the caller's device list — the number the operator typed in
+    /// `--devices`, and the one displayed. **Not** the same as
+    /// `fit.device_index`, which is in plan order (workers first, host last).
+    /// Confusing the two silently attributes every row to the wrong machine,
+    /// and nothing downstream can catch it.
     pub(crate) dev: usize,
     pub(crate) is_host: bool,
-    pub(crate) vram: u64,
     pub(crate) blocks: Option<(u32, u32)>,
     pub(crate) holds_output: bool,
-    /// Bytes of weights this device holds.
-    pub(crate) weight: u64,
-    /// `weight × headroom` — what must fit.
-    pub(crate) need: u64,
+    /// This device's share weighed against its memory.
+    ///
+    /// Comes from `shard_fits` — the SAME decider the live load's per-device
+    /// gate runs. That is the whole point: this command exists to preview a
+    /// load, and a preview computing its own answer is a preview that can
+    /// disagree with the thing it previews. It did, until 2026-07-28.
+    pub(crate) fit: sovereign_inference::embedded::ShardFit,
 }
 
 impl DeviceRow {
+    /// What this device has.
+    pub(crate) fn vram(&self) -> u64 {
+        self.fit.capacity_bytes
+    }
+    /// Bytes of weights this device holds.
+    pub(crate) fn weight(&self) -> u64 {
+        self.fit.held_bytes
+    }
+    /// `weight × headroom` — what must fit.
+    pub(crate) fn need(&self) -> u64 {
+        self.fit.need_bytes
+    }
+    /// Whether this device can hold its share.
     pub(crate) fn fits(&self) -> bool {
-        self.need <= self.vram
+        self.fit.fits()
     }
 }
 
@@ -910,26 +935,12 @@ pub(crate) fn build_report(
 
     // Per-block byte mass + global tensors (output head → last block-holder;
     // token_embd → host system RAM; other globals lumped as host overhead).
-    let mut block_bytes = vec![0u64; n_layer as usize];
-    let (mut output_bytes, mut embd_bytes, mut other_global) = (0u64, 0u64, 0u64);
     // Routed-expert (`_exps`) mass is the COLD part of an MoE model — only the
     // router's top-k experts are read per token, so it can be ~90% of the bytes
-    // yet a small fraction of the per-token work. Tallied for the hot/cold report.
-    let mut routed_expert_bytes = 0u64;
-    for (name, layer, nbytes) in &sizes {
-        if inf::is_routed_expert_tensor(name) {
-            routed_expert_bytes += *nbytes;
-        }
-        match layer {
-            Some(l) if (*l as usize) < block_bytes.len() => block_bytes[*l as usize] += *nbytes,
-            Some(_) => other_global += *nbytes,
-            None if inf::is_output_tensor(name) => output_bytes += *nbytes,
-            None if name.contains("token_embd") => embd_bytes += *nbytes,
-            None => other_global += *nbytes,
-        }
-    }
-    let total_weight: u64 =
-        block_bytes.iter().sum::<u64>() + output_bytes + embd_bytes + other_global;
+    // yet a small fraction of the per-token work. `model_mass_from_sizes` is the
+    // same decomposition the live load's planner uses.
+    let mass = inf::model_mass_from_sizes(&sizes, n_layer);
+    let total_weight: u64 = mass.total_bytes();
 
     let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
 
@@ -945,28 +956,36 @@ pub(crate) fn build_report(
     // Byte-mass-aware split — apportion each device a contiguous block range whose
     // BYTES (not count) are proportional to its VRAM, folding the output head onto
     // the host. The IDENTICAL call the live load makes, so the preview matches it.
-    let plan = inf::plan_shards_weighted(n_layer, &weights, &block_bytes, output_bytes);
+    let plan = inf::plan_shards_weighted(n_layer, &weights, &mass.block_bytes, mass.head_bytes);
+
+    // The per-device verdict, from the decider the live gate runs. Capacities go
+    // in PLAN order (`order[pos]`), and the display maps back through `order`
+    // below — the two index spaces look interchangeable and are not.
+    let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
+    let fits = inf::shard_fits(&plan, &capacities, &mass, headroom);
 
     let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
     for (pos, &d) in order.iter().enumerate() {
         let shard = &plan[pos];
-        let mut w = 0u64;
-        if let Some((a, b)) = shard.blocks {
-            for blk in a..=b {
-                w += block_bytes[blk as usize];
-            }
-        }
-        if shard.holds_output {
-            w += output_bytes;
-        }
         rows.push(DeviceRow {
             dev: d,
             is_host: d == host,
-            vram: vram[d],
             blocks: shard.blocks,
             holds_output: shard.holds_output,
-            weight: w,
-            need: (w as f64 * headroom) as u64,
+            // `shard_fits` declines to judge when the inputs don't describe each
+            // other. Every such input is validated away before we get here
+            // except one: a GGUF whose tensor table carries no per-layer mass at
+            // all. For that model every device genuinely holds zero block bytes,
+            // so a zero row is the right answer rather than a papered-over gap.
+            fit: fits
+                .as_ref()
+                .and_then(|f| f.get(pos).copied())
+                .unwrap_or(inf::ShardFit {
+                    device_index: pos,
+                    held_bytes: 0,
+                    need_bytes: 0,
+                    capacity_bytes: capacities[pos],
+                }),
         });
     }
     rows.sort_by_key(|r| r.dev);
@@ -977,7 +996,7 @@ pub(crate) fn build_report(
     let gate_pass = pooled >= gate_need;
 
     // Block-mass uniformity → the "does heterogeneity stay safe" verdict.
-    let nz: Vec<u64> = block_bytes.iter().copied().filter(|&b| b > 0).collect();
+    let nz: Vec<u64> = mass.block_bytes.iter().copied().filter(|&b| b > 0).collect();
     let bmin = nz.iter().copied().min().unwrap_or(0);
     let bmax = nz.iter().copied().max().unwrap_or(0);
     let bmean = if nz.is_empty() {
@@ -1000,14 +1019,15 @@ pub(crate) fn build_report(
 
     // Hot = resident mass touched every token: all block bytes minus the cold
     // routed experts, plus the output head (token_embd lives in host RAM).
-    let moe = if routed_expert_bytes > 0 {
+    let moe = if mass.routed_expert_bytes > 0 {
         Some(MoeReport {
-            routed_expert_bytes,
-            hot_bytes: block_bytes
+            routed_expert_bytes: mass.routed_expert_bytes,
+            hot_bytes: mass
+                .block_bytes
                 .iter()
                 .sum::<u64>()
-                .saturating_sub(routed_expert_bytes)
-                + output_bytes,
+                .saturating_sub(mass.routed_expert_bytes)
+                + mass.head_bytes,
         })
     } else {
         None
@@ -1045,8 +1065,8 @@ pub(crate) fn build_report(
         model_name,
         n_layer,
         total_weight,
-        output_bytes,
-        embd_bytes,
+        output_bytes: mass.head_bytes,
+        embd_bytes: mass.embd_bytes,
         block_mass,
         moe,
         headroom,
@@ -1112,8 +1132,16 @@ fn resolve_speed(
         );
     };
 
+    // Only the devices that actually hold something. A machine that was
+    // apportioned no blocks is not part of the placement — it changes nothing
+    // about how the model decodes — and including it would make the digest
+    // depend on which idle peers happened to be online. It would also put this
+    // side permanently out of step with `mesh bench`, which builds its shards
+    // from what the daemon reports is loaded and has no idle device to report.
+    // A key the producer can never reproduce is a key that never matches.
     let shards: Vec<mm::PlacementShard> = rows
         .iter()
+        .filter(|r| r.blocks.is_some() || r.holds_output)
         .map(|r| mm::PlacementShard {
             node_key: mesh
                 .get(r.dev)
@@ -1156,12 +1184,12 @@ pub(crate) fn render_json(r: &PlanReport) -> serde_json::Value {
             serde_json::json!({
                 "device": d.dev,
                 "role": if d.is_host { "host" } else { "worker" },
-                "vram_gb": gb(d.vram),
+                "vram_gb": gb(d.vram()),
                 "blocks": d.blocks.map(|(a, b)| [a, b]),
                 "block_count": d.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
                 "holds_output": d.holds_output,
-                "weight_gb": gb(d.weight),
-                "need_gb": gb(d.need),
+                "weight_gb": gb(d.weight()),
+                "need_gb": gb(d.need()),
                 "fits": d.fits(),
             })
         })
@@ -1351,9 +1379,9 @@ pub(crate) fn render_human(r: &PlanReport) -> String {
             None => ("—".to_string(), "0".to_string()),
         };
         let fit = if d.fits() {
-            format!("ok  +{:.1} GB", gb(d.vram - d.need))
+            format!("ok  +{:.1} GB", gb(d.vram() - d.need()))
         } else {
-            format!("OVERFLOW -{:.1} GB", gb(d.need - d.vram))
+            format!("OVERFLOW -{:.1} GB", gb(d.need() - d.vram()))
         };
         let star = if d.is_host { "*" } else { " " };
         let role = if d.is_host { "host" } else { "worker" };
@@ -1362,11 +1390,11 @@ pub(crate) fn render_human(r: &PlanReport) -> String {
             "{star} {:>3}  {:<6} {:>6.1} GB  {:<8}  {:>2}  {:>6.1} GB  {:>6.1} GB  {fit}",
             d.dev,
             role,
-            gb(d.vram),
+            gb(d.vram()),
             blocks_s,
             n_s,
-            gb(d.weight),
-            gb(d.need)
+            gb(d.weight()),
+            gb(d.need())
         );
         if d.is_host && r.embd_bytes > 0 {
             let _ = writeln!(
@@ -2519,8 +2547,73 @@ mod plan_tests {
         )
     }
 
-    /// The defect the live load still has, visible in the preview: pooled memory
-    /// is ample, yet one device's own share does not fit it.
+    /// The index-space trap, pinned.
+    ///
+    /// `shard_fits` receives capacities in PLAN order — RPC workers first, host
+    /// last — while a row is displayed under the index the operator typed in
+    /// `--devices`. The two are different permutations whenever `--host` is not
+    /// the last device, and mixing them up attributes every row to the wrong
+    /// machine with no error and no visible symptom. This asserts the mapping
+    /// end to end: whatever the plan order, each row's capacity is the VRAM of
+    /// the device that row NAMES.
+    #[test]
+    fn each_rows_capacity_belongs_to_the_device_that_row_names() {
+        let devices = vec![64.0, 32.0, 16.0];
+        for host in 0..devices.len() {
+            let mut i = input(model(48, 1, 2, 3), 48, devices.clone());
+            i.host = host;
+            let r = report(i);
+            for row in &r.rows {
+                assert_eq!(
+                    row.vram(),
+                    (devices[row.dev] * GIB) as u64,
+                    "host={host}: row for device {} carries another device's capacity",
+                    row.dev
+                );
+            }
+            let head_holder = r.rows.iter().find(|d| d.holds_output).expect("a head");
+            assert_eq!(
+                head_holder.dev, host,
+                "host={host}: the output head must land on the host"
+            );
+        }
+    }
+
+    /// The preview's verdict IS the live gate's verdict — same function, same
+    /// numbers. Before 2026-07-28 this file had its own fold and its own
+    /// comparison, so the two could drift apart silently; a preview that
+    /// disagrees with the load it previews is worse than no preview.
+    #[test]
+    fn the_rows_come_from_the_shared_decider() {
+        use sovereign_inference::embedded as inf;
+        let sizes = model(48, 1, 2, 3);
+        let devices = vec![64.0, 32.0, 32.0];
+        let r = report(input(sizes.clone(), 48, devices.clone()));
+
+        // Rebuild the same inputs the live load would hand `shard_fits`.
+        let mass = inf::model_mass_from_sizes(&sizes, 48);
+        let vram: Vec<u64> = devices.iter().map(|&g| (g * GIB) as u64).collect();
+        let host = devices.len() - 1;
+        let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
+        order.push(host);
+        let weights: Vec<f32> = order
+            .iter()
+            .map(|&d| inf::quantize_vram(vram[d]) as f32)
+            .collect();
+        let plan = inf::plan_shards_weighted(48, &weights, &mass.block_bytes, mass.head_bytes);
+        let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
+        let fits = inf::shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable");
+
+        for (pos, &d) in order.iter().enumerate() {
+            let row = r.rows.iter().find(|x| x.dev == d).expect("a row per device");
+            assert_eq!(row.fit, fits[pos], "device {d} disagrees with shard_fits");
+        }
+    }
+
+    /// The defect the aggregate gate cannot see: pooled memory is ample, yet one
+    /// device's own share does not fit it. The preview surfaced this first; as
+    /// of 2026-07-28 the live load refuses on it too, through this same
+    /// `shard_fits` call.
     ///
     /// The mechanism is `quantize_vram`'s 4 GiB bucket floor — a 2 GB device is
     /// weighted as though it had 4 GiB, so the split hands it roughly twice the
@@ -2540,7 +2633,7 @@ mod plan_tests {
             "exactly the small device should overflow"
         );
         assert_eq!(overflows[0].dev, 0);
-        assert!(overflows[0].need > overflows[0].vram);
+        assert!(overflows[0].need() > overflows[0].vram());
         assert_eq!(
             r.exit_code(),
             1,
@@ -2553,7 +2646,7 @@ mod plan_tests {
     #[test]
     fn every_block_is_charged_exactly_once() {
         let r = report(input(model(48, 1, 2, 3), 48, vec![64.0, 32.0, 32.0]));
-        let charged: u64 = r.rows.iter().map(|d| d.weight).sum();
+        let charged: u64 = r.rows.iter().map(|d| d.weight()).sum();
         assert_eq!(
             charged,
             48 * GB + 2 * GB,
@@ -2578,7 +2671,7 @@ mod plan_tests {
             .blocks
             .map(|(a, b)| (a..=b).count() as u64 * GB)
             .unwrap_or(0);
-        assert_eq!(holder.weight, blocks_only + 8 * GB);
+        assert_eq!(holder.weight(), blocks_only + 8 * GB);
     }
 
     /// `--host` moves both the head and the star in the table.
@@ -2600,7 +2693,7 @@ mod plan_tests {
         i.headroom = 1.35;
         let r = report(i);
         let d = &r.rows[0];
-        assert_eq!(d.need, (d.weight as f64 * 1.35) as u64);
+        assert_eq!(d.need(), (d.weight() as f64 * 1.35) as u64);
     }
 
     #[test]
@@ -2723,7 +2816,7 @@ mod plan_tests {
     fn a_device_with_no_blocks_holds_nothing_and_fits() {
         let r = report(input(model(2, 1, 0, 0), 2, vec![64.0, 64.0, 64.0]));
         for d in r.rows.iter().filter(|d| d.blocks.is_none()) {
-            assert_eq!(d.weight, 0);
+            assert_eq!(d.weight(), 0);
             assert!(d.fits());
         }
     }
@@ -2749,6 +2842,78 @@ mod plan_tests {
         let mut i = input(model(48, 1, 2, 0), 48, devices_gb);
         i.mesh = Some(mesh);
         i
+    }
+
+    /// An idle peer must not change the key.
+    ///
+    /// A machine apportioned no blocks is not part of the placement — it changes
+    /// nothing about how the model decodes. If it entered the digest, a
+    /// measurement taken today would stop matching the moment an unrelated peer
+    /// came online, and `mesh bench` (which builds its shards from what the
+    /// daemon reports is *loaded*, and so has no idle device to report) could
+    /// never produce a key this side would look up.
+    #[test]
+    fn a_peer_holding_no_blocks_does_not_enter_the_digest() {
+        // One block cannot be spread, so every device past the block-holder is
+        // idle however much memory it advertises. (Shrinking a device does NOT
+        // idle it: `quantize_vram` floors at one 4 GiB bucket, so a nominally
+        // tiny peer still gets a share.)
+        //
+        // The device NAMES are ordered so that the same machine — beefymac —
+        // ends up holding the block in both plans. That is deliberate and it is
+        // the whole subtlety: adding a device changes the apportionment, so
+        // "the same plan plus an idle peer" is not something you get by
+        // appending a device. What is being asserted is narrower and true: two
+        // plans in which the same machine holds the same blocks digest the same,
+        // however many idle machines stand alongside.
+        let plan_with = |names: &[&str], host: usize| {
+            let mesh = mesh_devs(names, Some(7));
+            let mut i = input(model(1, 4, 2, 0), 1, mesh.iter().map(|d| d.vram_gb).collect());
+            i.host = host;
+            i.mesh = Some(mesh);
+            report(i)
+        };
+
+        let two = plan_with(&["beefymac", "ruggedfox"], 1);
+        let three = plan_with(&["idlepeer", "ruggedfox", "beefymac"], 1);
+
+        let holder = |r: &PlanReport| {
+            let row = r.rows.iter().find(|d| d.blocks.is_some()).expect("a holder");
+            (row.dev, row.blocks, row.holds_output)
+        };
+        assert_eq!(holder(&two).1, holder(&three).1, "same blocks…");
+        assert_eq!(
+            three.rows.iter().filter(|r| r.blocks.is_none()).count(),
+            2,
+            "…and the three-device plan must really have two idle devices, or \
+             this proves nothing"
+        );
+        assert_eq!(
+            two.speed_key.expect("two-device key").placement_digest,
+            three.speed_key.expect("three-device key").placement_digest,
+        );
+    }
+
+    /// Why the filter above is needed at all: an idle shard, if it reached the
+    /// digest, would change it — and `mesh bench` builds its shards from what
+    /// the daemon reports is LOADED, so it has no idle device to contribute and
+    /// could never reproduce such a key.
+    #[test]
+    fn an_idle_shard_would_change_the_digest_if_it_reached_it() {
+        let held = mm::PlacementShard {
+            node_key: "beefymac".into(),
+            blocks: Some((0, 47)),
+            holds_output: true,
+        };
+        let idle = mm::PlacementShard {
+            node_key: "idlepeer".into(),
+            blocks: None,
+            holds_output: false,
+        };
+        assert_ne!(
+            mm::placement_digest("local", 48, &[held.clone()]),
+            mm::placement_digest("local", 48, &[held, idle]),
+        );
     }
 
     /// Any tokens-per-second figure carrying an actual number.

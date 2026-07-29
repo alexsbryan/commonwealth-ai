@@ -203,13 +203,23 @@ pub async fn build_local_capabilities(
         // simulated fleet containing a node slower than the 20 tok/s
         // reference, and 0% on five others.
         //
-        // Before wiring this: read §4.5's verdict. The dead
-        // `run_baseline_benchmark` probes the `Speed::Fast` slot, so
-        // filling this field from it would advertise a ~2.5 GB model's
-        // rate and leave `throughput_factor` extrapolating up to a
-        // 21 GB one on a linear size law that is false — measured as a
-        // quality regression wearing a large latency win. The card has
-        // to describe the model being scored.
+        // Before wiring this: read §4.5's verdict. The probe that used
+        // to be the obvious source, `run_baseline_benchmark`, measured
+        // the `Speed::Fast` slot, so filling this field from it would
+        // advertise a ~2.5 GB model's rate and leave
+        // `throughput_factor` extrapolating up to a 21 GB one on a
+        // linear size law that is false — measured as a quality
+        // regression wearing a large latency win. It was deleted on
+        // 2026-07-28 rather than left as an invitation.
+        //
+        // `svrn mesh bench` is the honest producer, and it deliberately
+        // does not write here. Its number describes the model actually
+        // being served, and its consumer is a human deciding whether to
+        // add a machine — not the ranked dispatch, whose
+        // `throughput_factor` would immediately extrapolate away from
+        // it through a ≤20 tok/s clamp. Aiming a real measurement at
+        // the wrong consumer ships §4.5's regression with no other code
+        // change.
         benchmark: None,
         // Current local in-flight count for load-aware scheduling.
         // Read directly from the MIP-shared atomic via AppState:

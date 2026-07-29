@@ -218,6 +218,24 @@ classification = "offline"
 args = ["mesh", "plan", "--help"]
 expect_exit = 0
 [[command]]
+# The counterpart to `mesh plan`: where plan says what WOULD fit, bench measures
+# what the running configuration actually does. Classified `daemon` because it
+# has to talk to one — it measures the model that is loaded and never loads one
+# itself. Only `--help` is smoked; a real run fires completions at a resident
+# model and can take tens of minutes.
+path = "mesh bench"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--trials", takes_value = true },
+  { name = "--json" },
+  { name = "--history" },
+]
+[command.smoke]
+args = ["mesh", "bench", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh leave"
 binary = "llm"
 visibility = "public"

@@ -1966,12 +1966,21 @@ how every paragraph above should be read (2026-07-27 — full result in
 `SCHEDULER_QUALITY.md` §4.5).** Everything above is Tier-1: measured on
 a simulator where each node advertises a `BenchmarkResult`. **No node on
 this mesh ever has.** `run_baseline_benchmark`
-(`sovereign-inference/src/benchmark.rs`) has zero callers,
-`set_local_benchmark` (`peer_inference.rs`) has zero callers, and
+(`sovereign-inference/src/benchmark.rs`) had zero callers,
+`set_local_benchmark` (`peer_inference.rs`) had zero callers, and
 `build_local_capabilities` hardcodes `benchmark: None` into every gossip
 tick — under comments that used to describe the startup probe and a
-`with_benchmark` setter as though both existed. Neither does; both
+`with_benchmark` setter as though both existed. Neither did; both
 comments are now corrected in place.
+
+**As of 2026-07-28 both dead producers are deleted**, along with
+`MeshInferenceProvider`'s `local_benchmark` field, so the local
+`LocalCandidateView.benchmark` is now a literal `None` with no state
+behind it. Production is blind by *construction* rather than by
+accident, which is what makes the `blind-shipped` arm a measurement of
+the shipped system rather than of a state it merely happens to be in.
+Leaving the probe in place was the standing invitation the paragraph
+below argues against.
 
 So `throughput_factor` has two sources and production supplies neither
 (the observed decode EWMA is gated behind a `samples >= 5` the ranked
@@ -1991,7 +2000,7 @@ card only carries information about a node *slower* than reference, and
 `mixed-hubs` is the suite's only fleet containing one.
 
 **The obvious repair is a measured regression, so it is filed
-DO-NOT-BUILD.** Adding a call site to the dead probe wires the
+DO-NOT-BUILD.** Adding a call site to the (now deleted) probe wires the
 `Speed::Fast` slot: a ~2.5 GB model's rate stamped in as the baseline,
 which `throughput_factor` then extrapolates up to a 21 GB candidate on a
 *linear* size law. Decode is bandwidth-bound and the law is false, and
@@ -2001,8 +2010,17 @@ down. New knobs `SimConfig::probe_baseline_size_gb` /
 own assumption and reproduces the un-probed rows exactly): at β=0.7 the
 "win" grows to −56% while declined capability upgrades double 31→67, and
 at β=0.5 real downgrades appear. An honest card costs no quality — but
-only if it describes the model being *scored*. Benchmark per-model, or
-leave the probe dead.
+only if it describes the model being *scored*.
+
+`svrn mesh bench` (below) is the per-model measurement that condition
+asks for, and it **deliberately does not write here.** Its number is
+aimed at a human deciding whether to add a machine, not at the ranked
+dispatch — and `throughput_factor` would extrapolate away from it
+through the same one-sided clamp the moment it arrived. Same number,
+different consumer. Pointing it at `NodeCapabilities.benchmark` ships
+this section's regression with no other code change; a future reader who
+"completes the wiring" while citing §4.5 correctly will have aimed it at
+the wrong target.
 
 This also settles why §4.1 cannot ship: `PredictInputs::from_candidate`
 reads the advertised benchmark and nothing else, so unhardcoding
@@ -2071,9 +2089,7 @@ unified-memory APUs). See [[project_moe_byte_aware_split]].
 An offline dry-run of that split — a GGUF header-table parse, no model load and no GPU,
 instant even on a 400 GB split — so you can see whether a model fits a mesh *before*
 loading it. It shows the *bytes* each device holds and whether each one *individually*
-fits: the gap it closes is that the live host gates only on aggregate pooled memory
-(`resolve_placement_inner`: `pooled >= model_bytes × headroom`), so a cluster that
-clears the aggregate gate can still OOM a small node. It also reports the MoE hot/cold
+fits. It also reports the MoE hot/cold
 mass breakdown, whether per-block mass is uniform or skewed, and a **node/hop advisor**
 — the minimum nodes that hold the model (fewest of the largest devices whose pooled
 VRAM covers `model × headroom`) and the resulting hops, flagging when the mesh is spread
@@ -2093,6 +2109,107 @@ replacing the hardcoded ×1.2 — and `mesh plan` defaults its `--headroom` to t
 resolution order, so the preview's headroom is the one the load executes with. Exit
 codes: `0` fits, `1` won't fit, `2` bad args.
 See [`docs/RUN_A_BIGGER_MODEL.md`](./docs/RUN_A_BIGGER_MODEL.md).
+
+**Per-device fit — one decider, both sides (2026-07-28).** Until this date the
+live host gated only on *aggregate* pooled memory (`pooled >= model_bytes ×
+headroom`), so a cluster that cleared the aggregate gate could still hand one
+worker more than it had; `mesh plan` caught that in its own private fold, which
+meant the preview and the load could disagree about the thing the preview exists
+to predict. Both now call **`rpc_warm_cache::shard_fits(plan, capacities, mass,
+headroom) -> Option<Vec<ShardFit>>`**, beside the planner that produced the
+split, over a `ModelMass` from `model_mass_from_sizes` (the same GGUF
+header-table decomposition, replacing two divergent folds).
+
+Three shapes are load-bearing. It returns **one row per shard, fitting rows
+included** — a `Result<(), Overflow>` would force `mesh plan` to keep its own
+traversal to print `ok +12.4 GB`, and a second traversal is the drift being
+removed. `None` means **"cannot judge"** and is *not* a pass: an unread tensor
+table would otherwise clear every device on the strength of zeros. And
+capacities arrive in **plan order** (workers first, host last) while rows display
+in the operator's `--devices` order — two permutations that look
+interchangeable, pinned by a test.
+
+`DistributionPlan` accordingly carries `device_vram_bytes: Vec<u64>` in place of
+the summed `pooled_vram_bytes` (the sum is still what the quorum gate checks),
+plus a `mass` computed **before** the plan-cache branch so a cached plan is
+judged against the same numbers a fresh one is. A refusal is
+`LoadPlacement::WorkerUnfit` / `PlannedDistribution::WorkerOverflow` /
+`DistributedWarmOutcome::WorkerUnfit` — a **new** variant rather than a reuse of
+`InsufficientCluster`, because pooling more memory does not fix an overflow and
+saying "the cluster is forming" sends the operator looking for a peer that is
+already there. `resolve_placement_inner` must **not** route it to `gate_local`:
+falling back to a local load of an 80–90 GB model by a path that looks like
+resilience is the 2026-07-27 session-kill. The compute-child path **parks**
+(`bootstrap::park`, `retry_at = None`) rather than retrying, because an overflow
+is not time-fixable — the existing worker-set-change re-plan is free and is the
+only event that could change the answer. The refusal says **lower** the
+headroom, not raise it (`need = held × headroom`), and names
+`SOVEREIGN_SKIP_PER_DEVICE_FIT=1` for the one real false-positive: on a reload a
+worker still holding its previous shard under-reports free memory.
+
+**Measuring what you are running — `svrn mesh bench`**
+(`sovereign-cli-llm::mesh_bench`). The producer for the `speed` block `mesh plan`
+reports. **It measures the configuration that is loaded and never loads the one
+it wants to measure** — there is no slot argument, so there is no slot to get
+wrong, which is the mechanism satisfying `SCHEDULER_QUALITY.md` §4.5's "probe the
+model being scored". An optional `<model.gguf>` is an *assertion*: fingerprinted
+header-only against the resident primary, mismatch → exit 3 naming the config
+line.
+
+It fires real streaming completions at `POST /v1/chat/completions` and timestamps
+SSE frames as they arrive, so the number includes the actual RPC split and iroh
+path; `decode_tok_s = (content_frames − 1) / (t_last − t_first)`, steady state,
+TTFT reported separately rather than smeared in. `prefill_tok_s` comes only from
+the server's `usage.prompt_tokens` and renders `n/a` otherwise — never
+`len()/4`. The probe (prompt, token budget, timing formula, guard set) is fixed
+by `mesh_measurements::PROBE_VERSION`; there is deliberately no `--max-tokens`,
+because a knob whose adjustment invalidates comparison against every prior record
+while looking like harmless tuning is a trap.
+
+**Nine validity guards**, six ported from
+`scripts/measure-distributed-decode.sh` (each earned by an observed false result)
+plus three new. Ported: which slot served it (below); per-frame timing; placement
+re-read after the run; peer liveness before **and** after; a canary first; host
+survival (from `/status` uptime going backwards, which unlike `pgrep` cannot
+match a wrapper script or a deleted inode). New: `content_frames >= 32`,
+inter-trial spread ≤25%, `finish_reason ∈ {length, stop}`.
+
+**The served-slot guard, and why the obvious version of it does nothing.** The
+shell script asserted that the SSE `model` field names the primary. On this
+server that field is a **verbatim echo of the string the client requested** —
+every frame says `commonwealth/primary` because that is what was asked for,
+whatever actually answered. Measured 2026-07-28 on the first live run: with the
+122B's compute child in `lifecycle: starting`, requests to `commonwealth/primary`
+returned ~100 tok/s (impossible for that model, which does ~14.8 local) and the
+frame-name check passed cleanly. The script has the same hole and never caught it
+because it only ever ran when the primary was up.
+
+`mesh_bench::primary_is_serving` is the check that attributes, run before **and**
+after the trials, and it has to understand two hosting modes.
+`ComputeRoutedProvider::resident_slots()` forwards the *in-process* engine's
+view, and the in-process engine never loaded a child-hosted model — so
+`resident` is `false` **forever** for a perfectly healthy child-hosted primary. A
+guard reading only that field would refuse every honest run on this
+configuration, which is a worse failure than the vacuous check it replaces. So
+the predicate is "in-process `resident: true` **or** a `compute_children` entry
+with a matching `model_id` and `lifecycle == "serving"`"; `starting` and
+`warming` deliberately do not count, because those are precisely the states in
+which something else answers. The canary waits on this same predicate rather than
+on "I got tokens", since stopping at the first answer hands the timed trials to
+whichever slot is currently covering. A run tripping any guard is still **written** — a discarded
+failure teaches nobody anything, and dropping it silently makes the tool
+retry-until-lucky — but `lookup` never returns it. Exit `0` valid · `1` guard
+tripped · `2` bad args · `3` assertion failed · `4` nothing measurable · `5` no
+daemon.
+
+The key it files under must be the key `mesh plan` constructs, or every record is
+unfindable. Both build `PlacementShard`s over **only the devices that hold
+blocks** — an idle peer changes nothing about how the model decodes, and bench
+has no idle device to report — and both derive the digest's `mode` from shard
+topology rather than from the daemon's mode string (which has five values:
+`local`, `distributed`, `child-distributed`, `stream-split`, `forming`) so the
+two vocabularies cannot drift. The daemon's own word is preserved verbatim in the
+record's `placement_human`.
 
 The strong-peer-topology roadmap (latency-class hierarchy: cascade
 routing, draft-on-spoke/verify-on-hub speculation, hub queue

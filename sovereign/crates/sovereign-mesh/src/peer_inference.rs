@@ -411,14 +411,6 @@ pub struct MeshInferenceProvider {
     /// separate promotion process that decides which extensions
     /// merit standardization.
     extension_registry: Arc<RwLock<ExtensionRegistry>>,
-    /// Local-side throughput benchmark. Set by the daemon's startup
-    /// probe via [`MeshInferenceProvider::set_local_benchmark`] once
-    /// the bundled model has been measured; read on every scoring
-    /// pass to feed the local candidate's throughput factor. `None`
-    /// before the probe completes — the scheduler then falls back to
-    /// observation-only scoring, which is safe because local
-    /// observations accumulate fast.
-    local_benchmark: Arc<RwLock<Option<sovereign_core::oicp::BenchmarkResult>>>,
     /// Per-peer consecutive-failure tracker. Peers that fail
     /// `FAILURE_THRESHOLD` requests in a row are quarantined for a
     /// linearly-backed-off cooldown. Filtered out of routing
@@ -619,7 +611,6 @@ impl MeshInferenceProvider {
             peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
-            local_benchmark: Arc::new(RwLock::new(None)),
             peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
@@ -836,7 +827,9 @@ impl MeshInferenceProvider {
             captured_at_unix: now,
             local: LocalObservationRecord {
                 observations: self.local_observations.read().await.clone(),
-                benchmark: self.local_benchmark.read().await.clone(),
+                // Structurally `None`: no producer exists, by decision.
+                // See the note on `LocalCandidateView.benchmark` below.
+                benchmark: None,
                 advertised_models: self
                     .self_manifest
                     .load()
@@ -848,27 +841,6 @@ impl MeshInferenceProvider {
             },
             peers,
         }
-    }
-
-    /// Replace the local-side benchmark result. Called once by the
-    /// daemon's startup probe after the bundled model has been
-    /// measured. Idempotent — calling twice with the same result is
-    /// a no-op for downstream scoring.
-    pub async fn set_local_benchmark(&self, bench: sovereign_core::oicp::BenchmarkResult) {
-        tracing::info!(
-            model = %bench.baseline_model_id,
-            pp_tok_s = bench.pp_tok_s,
-            tg_tok_s = bench.tg_tok_s,
-            size_gb = bench.baseline_size_gb,
-            "bench: completed"
-        );
-        *self.local_benchmark.write().await = Some(bench);
-    }
-
-    /// Read-only access to the local benchmark for components that
-    /// need to advertise it (manifest construction, gossip).
-    pub async fn local_benchmark(&self) -> Option<sovereign_core::oicp::BenchmarkResult> {
-        self.local_benchmark.read().await.clone()
     }
 
     /// Snapshot the current extension-hint usage for governance
@@ -1297,7 +1269,6 @@ impl MeshInferenceProvider {
             obs.in_flight = self.in_flight_publisher.load(Ordering::Relaxed);
             obs
         };
-        let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
         let now_unix = Self::now_unix_secs();
 
@@ -1379,7 +1350,28 @@ impl MeshInferenceProvider {
                 local: LocalCandidateView {
                     manifest: &self_manifest,
                     observations: &local_obs,
-                    benchmark: local_bench.as_ref(),
+                    // Always `None`, and that is a decision rather than
+                    // an omission. The scorer still accepts a benchmark
+                    // — `scheduler_core`'s tests exercise both arms —
+                    // but nothing on this node produces one, because
+                    // the probe that used to (`run_baseline_benchmark`,
+                    // deleted 2026-07-28) measured the small always-hot
+                    // slot and `throughput_factor` then extrapolated
+                    // linearly on the size ratio to whatever model was
+                    // being scored. That law is false; decode is
+                    // bandwidth-bound and scales sub-linearly.
+                    // `SCHEDULER_QUALITY.md` §4.5 prices the error at
+                    // −56% mean latency on large models.
+                    //
+                    // The honest producer is `svrn mesh bench`, which
+                    // measures the model actually being served. It
+                    // deliberately does NOT write here: its consumer is
+                    // a human deciding whether to add a machine, not
+                    // the ranked dispatch, and pointing it at this
+                    // field would ship §4.5's regression with no other
+                    // code change. Wiring it up is a regression, not a
+                    // fix — measure it as a Tier-1 arm first.
+                    benchmark: None,
                 },
                 peers: &views,
             },

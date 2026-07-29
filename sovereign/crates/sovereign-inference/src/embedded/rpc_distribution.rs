@@ -470,10 +470,25 @@ pub(crate) struct DistributionPlan {
     /// Eligible RPC worker peers (anchors lending memory) this plan
     /// distributes onto — the quorum-count input for the shared-model gate.
     pub(crate) eligible_workers: usize,
-    /// Total pooled device memory (bytes) across every device this plan places
-    /// weights on (RPC workers + local GPU) — the memory the model must fit
-    /// into. The gate checks this against `model_size × 1.2`.
-    pub(crate) pooled_vram_bytes: u64,
+    /// Per-device memory (bytes), in **plan order** — RPC workers first, the
+    /// local GPU last, the same order `plan` indexes.
+    ///
+    /// Kept per-device rather than pre-summed because the sum answers the wrong
+    /// question. Pooled memory says the cluster could hold the model *somewhere*;
+    /// it says nothing about whether the device each block was actually assigned
+    /// to can hold its share. A plan can pass the pooled gate comfortably and
+    /// still hand one worker more than it has — which is what
+    /// [`shard_fits`] now catches. The sum is still available (`.iter().sum()`)
+    /// and is still what the quorum gate checks.
+    pub(crate) device_vram_bytes: Vec<u64>,
+    /// The model's byte mass, when the tensor table could be read.
+    ///
+    /// Computed unconditionally, **before** the plan-cache branch, so a cached
+    /// plan is judged against the same mass a freshly-computed one is. `None`
+    /// when the header parse failed — the apportionment then falls back to a
+    /// count split and the per-device fit check honestly reports that it cannot
+    /// judge, rather than clearing every device against zeros.
+    pub(crate) mass: Option<ModelMass>,
 }
 
 /// Process-wide cache of the shard plan, keyed by `(model_id, sorted RPC
@@ -584,18 +599,37 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         eligible_rpc.into_iter().map(|(d, _)| d).collect();
     devs.extend(local);
 
-    // Pooled device memory across every placed device (workers + local) — the
-    // memory the model must fit into. Summed unconditionally (cheap FFI) so it is
-    // available regardless of the plan-cache hit/miss below.
-    let pooled_vram_bytes: u64 = devs
+    // Per-device memory across every placed device (workers + local), in plan
+    // order. Read unconditionally (cheap FFI) so it is available regardless of
+    // the plan-cache hit/miss below. Kept per-device: the sum answers "could the
+    // cluster hold this at all", which is not the same question as "can the
+    // device this block landed on hold it".
+    let device_vram_bytes: Vec<u64> = devs
         .iter()
         .map(|&d| {
             let (mut free, mut total): (usize, usize) = (0, 0);
             unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
             (if free > 0 { free } else { total }) as u64
         })
-        .sum();
+        .collect();
     let eligible_workers = assignments.len();
+
+    // The model's byte mass — a GGUF header-table parse, no weight load. Read
+    // BEFORE the plan-cache branch so a cache hit and a cache miss are judged
+    // against the same numbers; a mass that only existed on the miss path would
+    // mean the fit gate silently stopped running after the first load.
+    let mass: Option<ModelMass> = match tensor_sizes(model_path) {
+        Ok(sizes) => Some(model_mass_from_sizes(&sizes, n_layer)),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                model = %model_path.display(),
+                "plan_distribution: tensor_sizes failed — falling back to the count-based \
+                 split, and the per-device fit check will report that it cannot judge"
+            );
+            None
+        }
+    };
 
     // ONE stable shard plan per (model, worker set). Reuse the cached plan across
     // reloads with the same workers so each worker's warm cache stays valid; only
@@ -629,50 +663,27 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
             // Byte-mass-aware split: overlay the model's REAL per-block byte mass
             // so a non-uniform (MoE / hybrid) model apportions by BYTES, not block
             // count — a count split can hand a small node a heavy contiguous run
-            // and OOM it. This is a GGUF header-table parse only (no weight load);
-            // on any read failure we fall back to the count split (empty
-            // block_bytes) rather than wedge the load.
-            let (block_bytes, head_bytes) = match tensor_sizes(model_path) {
-                Ok(sizes) => {
-                    let mut bb = vec![0u64; n_layer as usize];
-                    let mut head = 0u64;
-                    // A hybrid (recurrent) model carries `ssm_*` weights in its
-                    // Gated DeltaNet blocks alongside plain attention blocks.
-                    let mut recurrent = false;
-                    for (name, layer, nbytes) in &sizes {
-                        if name.contains(".ssm_") {
-                            recurrent = true;
-                        }
-                        match layer {
-                            Some(l) if (*l as usize) < bb.len() => bb[*l as usize] += *nbytes,
-                            None if is_output_tensor(name) => head += *nbytes,
-                            _ => {}
-                        }
-                    }
-                    // Byte-mass apportionment is safe on hybrid (recurrent)
-                    // models too, PROVIDED the load also pins `tensor_split` to
-                    // the plan (see `DistributionPlan::tensor_split`). An
-                    // earlier hybrid→count-based forcing here was H3 of the
-                    // 2026-07-27 crash hunt and was FALSIFIED: count-based
-                    // produced the identical 8/24 cut and the identical abort,
-                    // because llama.cpp's per-layer device map follows
-                    // tensor_split (default: advertised free VRAM over
-                    // n_layer+1 units), not our overrides — WHICH apportionment
-                    // rule we use never decided anything.
-                    if recurrent {
-                        tracing::debug!(
-                            model = %key.0,
-                            "plan_distribution: hybrid/recurrent model (ssm_* blocks) — \
-                             byte-mass split, dev_layer pinned via tensor_split"
-                        );
-                    }
-                    (bb, head)
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, model = %key.0, "plan_distribution: tensor_sizes failed — falling back to count-based split");
-                    (Vec::new(), 0)
-                }
-            };
+            // and OOM it. `mass` was read above; on a header-read failure it is
+            // `None` and we fall back to the count split rather than wedge.
+            //
+            // Byte-mass apportionment is safe on hybrid (recurrent) models too,
+            // PROVIDED the load also pins `tensor_split` to the plan (see
+            // `DistributionPlan::tensor_split`). An earlier hybrid→count-based
+            // forcing here was H3 of the 2026-07-27 crash hunt and was
+            // FALSIFIED: count-based produced the identical 8/24 cut and the
+            // identical abort, because llama.cpp's per-layer device map follows
+            // tensor_split (default: advertised free VRAM over n_layer+1 units),
+            // not our overrides — WHICH apportionment rule we use never decided
+            // anything.
+            let block_bytes: &[u64] = mass.as_ref().map_or(&[], |m| m.block_bytes.as_slice());
+            let head_bytes = mass.as_ref().map_or(0, |m| m.head_bytes);
+            if mass.as_ref().is_some_and(|m| m.recurrent) {
+                tracing::debug!(
+                    model = %key.0,
+                    "plan_distribution: hybrid/recurrent model (ssm_* blocks) — \
+                     byte-mass split, dev_layer pinned via tensor_split"
+                );
+            }
             let byte_aware = !block_bytes.is_empty();
             // Diagnostic override: `SOVEREIGN_RPC_BLOCK_SPLIT=11,21` pins the
             // per-device block counts (device order: RPC workers first, then
@@ -709,28 +720,28 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
                     );
                     plan
                 }
-                None => plan_shards_weighted(n_layer, &weights, &block_bytes, head_bytes),
+                None => plan_shards_weighted(n_layer, &weights, block_bytes, head_bytes),
             };
 
             // Glassbox: log the resulting per-device byte balance so an operator
             // can see WHY each node got its range — and spot a residual overflow a
-            // contiguous split can't avoid on a very skewed model.
-            if byte_aware {
-                let total_mass = block_bytes.iter().sum::<u64>() + head_bytes;
-                for s in &computed {
-                    let held = s
-                        .blocks
-                        .map(|(a, b)| (a..=b).map(|i| block_bytes[i as usize]).sum::<u64>())
-                        .unwrap_or(0)
-                        + if s.holds_output { head_bytes } else { 0 };
-                    tracing::info!(
-                        device = s.device_index,
-                        blocks = ?s.blocks,
-                        held_gb = held as f64 / 1.073_741_824e9,
-                        share_pct = if total_mass > 0 { 100.0 * held as f64 / total_mass as f64 } else { 0.0 },
-                        vram_weight = weights[s.device_index],
-                        "plan_distribution: byte-mass shard"
-                    );
+            // contiguous split can't avoid on a very skewed model. Same
+            // `shard_fits` the gate below judges on, at headroom 1.0, so the log
+            // and the refusal can never describe different numbers.
+            if let Some(m) = mass.as_ref() {
+                let total_mass = m.block_bytes.iter().sum::<u64>() + m.head_bytes;
+                if let Some(fits) = shard_fits(&computed, &device_vram_bytes, m, 1.0) {
+                    for f in &fits {
+                        tracing::info!(
+                            device = f.device_index,
+                            blocks = ?computed.get(f.device_index).and_then(|s| s.blocks),
+                            held_gb = f.held_bytes as f64 / 1.073_741_824e9,
+                            capacity_gb = f.capacity_bytes as f64 / 1.073_741_824e9,
+                            share_pct = if total_mass > 0 { 100.0 * f.held_bytes as f64 / total_mass as f64 } else { 0.0 },
+                            vram_weight = weights[f.device_index],
+                            "plan_distribution: byte-mass shard"
+                        );
+                    }
                 }
             }
             tracing::info!(model = %key.0, devices = devs.len(), byte_aware, "plan_distribution: computed new shard plan");
@@ -770,8 +781,138 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         tensor_split,
         assignments,
         eligible_workers,
-        pooled_vram_bytes,
+        device_vram_bytes,
+        mass,
     })
+}
+
+/// Operator escape hatch for the per-device fit gate:
+/// `SOVEREIGN_SKIP_PER_DEVICE_FIT=1`. Mirrors `SOVEREIGN_SKIP_LOCAL_FIT_CHECK`.
+///
+/// It exists for one specific hazard. On a **reload**, a worker may still be
+/// holding its previous shard when the host re-plans, so `free` under-reports
+/// and the gate can manufacture an overflow that never happens — holding the
+/// model unavailable over a measurement artifact. The three mitigations are this
+/// flag (named in the refusal itself), logging both raw numbers and the capacity
+/// source on every refusal, and parking rather than retrying (an overflow is not
+/// time-fixable, so hammering it changes nothing).
+fn per_device_fit_skip() -> bool {
+    std::env::var("SOVEREIGN_SKIP_PER_DEVICE_FIT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// The worker whose share does not fit, if any — the per-device half of the
+/// shared-model gate.
+///
+/// Returns the FIRST overflowing device in plan order. One is enough to refuse,
+/// and naming one device an operator can act on beats a list they have to read.
+/// `None` means either every device fits or the fit could not be judged; the
+/// caller proceeds in both cases, because refusing a load on the strength of an
+/// unread tensor table would brick loading on a header-parse bug.
+fn first_worker_overflow(dist: &DistributionPlan) -> Option<WorkerOverflow> {
+    const MIB: u64 = 1024 * 1024;
+    if per_device_fit_skip() {
+        tracing::warn!(
+            "SOVEREIGN_SKIP_PER_DEVICE_FIT=1 — per-device fit gate disabled; a worker \
+             whose share exceeds its memory will fail at load instead"
+        );
+        return None;
+    }
+    let mass = dist.mass.as_ref()?;
+    let headroom = rpc_headroom_factor();
+    let Some(fits) = shard_fits(&dist.plan, &dist.device_vram_bytes, mass, headroom) else {
+        // Explicitly NOT a pass — say so rather than let silence read as one.
+        tracing::warn!(
+            devices = dist.device_vram_bytes.len(),
+            shards = dist.plan.len(),
+            mass_known = mass.is_known(),
+            "per-device fit gate: cannot judge (the plan and the model's byte mass do not \
+             describe each other) — proceeding without the per-device check"
+        );
+        return None;
+    };
+    let endpoint_of: HashMap<usize, String> = dist
+        .assignments
+        .iter()
+        .map(|a| (a.device_index, a.endpoint.clone()))
+        .collect();
+    let bad = fits.iter().find(|f| !f.fits())?;
+    Some(WorkerOverflow {
+        // `None` is this node's own GPU. A distributed plan can overflow the
+        // host's share just as easily as a worker's, and refusing only for
+        // remote devices would leave the same failure unguarded at home.
+        endpoint: endpoint_of.get(&bad.device_index).cloned(),
+        device_index: bad.device_index,
+        blocks: dist
+            .plan
+            .iter()
+            .find(|s| s.device_index == bad.device_index)
+            .and_then(|s| s.blocks)
+            .map(|(a, b)| b - a + 1)
+            .unwrap_or(0),
+        held_mb: bad.held_bytes / MIB,
+        need_mb: bad.need_bytes / MIB,
+        capacity_mb: bad.capacity_bytes / MIB,
+    })
+}
+
+/// One device's share exceeding its memory — the payload shared by the three
+/// mirrored refusal enums, so the numbers reaching an operator are identical
+/// whichever path refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerOverflow {
+    /// RPC endpoint of the worker, or `None` for this node's own GPU.
+    pub endpoint: Option<String>,
+    /// Index in the plan's device order (RPC workers first, host last).
+    pub device_index: usize,
+    /// Transformer blocks this device was assigned.
+    pub blocks: u32,
+    /// Resident weight bytes it would hold, in MiB.
+    pub held_mb: u64,
+    /// `held × headroom` — what must fit, in MiB.
+    pub need_mb: u64,
+    /// What it has, in MiB.
+    pub capacity_mb: u64,
+}
+
+impl WorkerOverflow {
+    /// How this device is named to an operator.
+    pub fn device_label(&self) -> String {
+        match &self.endpoint {
+            Some(ep) => format!("worker {ep}"),
+            None => "this node's local GPU".to_string(),
+        }
+    }
+
+    /// The refusal, in full, with the two things an operator can actually do
+    /// about it.
+    ///
+    /// It says **lower** the headroom, not raise it. `need = held × headroom`,
+    /// so raising the factor makes the refusal worse — advice that reads as
+    /// helpful and moves the operator further from a working load. `mesh plan`
+    /// already says lower; this message existing and saying the opposite would
+    /// reintroduce, in a new place, exactly the preview↔load drift the shared
+    /// decider was built to close.
+    pub fn refusal(&self) -> String {
+        format!(
+            "per-device fit gate: {} was assigned {} block(s) — {} MiB of weights, \
+             {} MiB with headroom — but advertises only {} MiB. Not loading; a shard \
+             that does not fit fails at load, and a local fallback of a model this \
+             size is the 2026-07-27 session-kill. \
+             Fixes: give that device more memory, LOWER `[shared_model] headroom` \
+             (need = held × headroom, so raising it makes this worse), or add a \
+             worker so the split gets finer. SOVEREIGN_SKIP_PER_DEVICE_FIT=1 \
+             overrides. Capacity is the device's advertised free memory, falling \
+             back to its total; on a reload a worker still holding its previous \
+             shard under-reports free memory, which the override exists for.",
+            self.device_label(),
+            self.blocks,
+            self.held_mb,
+            self.need_mb,
+            self.capacity_mb,
+        )
+    }
 }
 
 /// The device strategy for one model load — resolved up front, then applied.
@@ -800,6 +941,17 @@ pub(crate) enum LoadPlacement {
     /// unified memory. Same recovery as `InsufficientCluster`: stay
     /// unavailable; a later reload (next worker-set change) retries.
     LocalUnfit { need_mb: u64, usable_mb: u64 },
+    /// The cluster has enough memory in aggregate, but one device's assigned
+    /// share exceeds what that device has. Distinct from `InsufficientCluster`
+    /// on purpose: pooling more memory does not fix this, and telling an
+    /// operator "the cluster is forming" when the cluster is fully formed sends
+    /// them looking for a peer that is already there.
+    ///
+    /// Recovery differs too. `InsufficientCluster` resolves itself as anchors
+    /// join, so it retries. An overflow is not time-fixable — the same plan
+    /// against the same devices overflows again — so the slot is **parked**
+    /// until the worker set actually changes.
+    WorkerUnfit(WorkerOverflow),
 }
 
 /// The placement decision as a PURE function of its inputs — split out so the
@@ -1047,6 +1199,7 @@ fn summarize_placement(placement: &LoadPlacement) -> sovereign_core::traits::Slo
         LoadPlacement::StreamSplit => bare("stream-split"),
         LoadPlacement::InsufficientCluster { .. } => bare("forming"),
         LoadPlacement::LocalUnfit { .. } => bare("unfit-local"),
+        LoadPlacement::WorkerUnfit(_) => bare("unfit-worker"),
         LoadPlacement::OwnedOverrides(dist) => {
             let ep: std::collections::HashMap<usize, String> = dist
                 .assignments
@@ -1143,6 +1296,11 @@ fn resolve_placement_inner(
         PlannedDistribution::Insufficient { eligible, quorum } => {
             LoadPlacement::InsufficientCluster { eligible, quorum }
         }
+        // NOT routed to `gate_local`. This is the load-bearing arm: the cluster
+        // has the memory, so a fallback here would load an 80–90 GB model onto
+        // the host — the 2026-07-27 session-kill, arrived at by a path that
+        // looks like resilience. Stay unavailable instead.
+        PlannedDistribution::WorkerOverflow(o) => LoadPlacement::WorkerUnfit(o),
         // Unplannable and warm-failure are both "never wedge" — load local,
         // fit-gated. A later reload retries once the workers are reachable.
         PlannedDistribution::Unplannable | PlannedDistribution::WarmFailed(_) => {
@@ -1160,6 +1318,9 @@ enum PlannedDistribution {
     Ready(DistributionPlan),
     /// Quorum or pooled memory unmet — the cluster is still forming.
     Insufficient { eligible: usize, quorum: u32 },
+    /// Pooled memory is sufficient but one device's share is not. See
+    /// [`LoadPlacement::WorkerUnfit`].
+    WorkerOverflow(WorkerOverflow),
     /// No plan: no RPC device, unreadable block count, or an unmappable worker.
     Unplannable,
     /// The orchestrator ran and gave up.
@@ -1193,11 +1354,12 @@ fn plan_and_warm(model_path: &Path, model_bytes: u64, auto_warm: bool) -> Planne
     // unavailable and let the next worker-set-change reload retry as anchors join.
     let quorum = rpc_quorum_anchors();
     let needed = ((model_bytes as f64 * rpc_headroom_factor()) as u64).max(rpc_min_pooled_bytes());
-    if (dist.eligible_workers as u32) < quorum || dist.pooled_vram_bytes < needed {
+    let pooled_vram_bytes: u64 = dist.device_vram_bytes.iter().sum();
+    if (dist.eligible_workers as u32) < quorum || pooled_vram_bytes < needed {
         tracing::warn!(
             eligible_anchors = dist.eligible_workers,
             quorum,
-            pooled_gb = dist.pooled_vram_bytes / (1024 * 1024 * 1024),
+            pooled_gb = pooled_vram_bytes / (1024 * 1024 * 1024),
             need_gb = needed / (1024 * 1024 * 1024),
             "shared-model cluster forming — quorum or pooled memory not met; not loading \
              (retries on the next worker-set change)"
@@ -1206,6 +1368,30 @@ fn plan_and_warm(model_path: &Path, model_bytes: u64, auto_warm: bool) -> Planne
             eligible: dist.eligible_workers,
             quorum,
         };
+    }
+
+    // Per-device fit. The gate above asked whether the cluster could hold the
+    // model *somewhere*; this asks whether the device each block was actually
+    // assigned to can hold its share. A plan can pass the first and fail the
+    // second — pooled memory is a sum, and a sum cannot see a skew.
+    //
+    // Refused BEFORE warming: warming a shard onto a worker that cannot hold it
+    // spends minutes of GGUF transfer to arrive at the same refusal.
+    if let Some(overflow) = first_worker_overflow(&dist) {
+        tracing::warn!(
+            target: "placement",
+            device = overflow.device_index,
+            endpoint = ?overflow.endpoint,
+            blocks = overflow.blocks,
+            held_mb = overflow.held_mb,
+            need_mb = overflow.need_mb,
+            capacity_mb = overflow.capacity_mb,
+            headroom = rpc_headroom_factor(),
+            capacity_source = "ggml_backend_dev_memory (free, else total)",
+            "{}",
+            overflow.refusal()
+        );
+        return PlannedDistribution::WorkerOverflow(overflow);
     }
 
     if !auto_warm {
@@ -1274,6 +1460,10 @@ pub enum DistributedWarmOutcome {
     /// Quorum or pooled memory unmet — the cluster is still forming. Stay
     /// unavailable and retry on the next worker-set change.
     InsufficientCluster { eligible: usize, quorum: u32 },
+    /// Pooled memory is sufficient but one device's assigned share exceeds what
+    /// that device has. Park the slot rather than retry — see
+    /// [`LoadPlacement::WorkerUnfit`].
+    WorkerUnfit(WorkerOverflow),
     /// No plan could be computed: no RPC device, unreadable GGUF block count,
     /// or an RPC device that maps to no endpoint.
     Unplannable,
@@ -1302,6 +1492,7 @@ pub fn warm_distributed_primary(model_path: &Path) -> DistributedWarmOutcome {
         PlannedDistribution::Insufficient { eligible, quorum } => {
             DistributedWarmOutcome::InsufficientCluster { eligible, quorum }
         }
+        PlannedDistribution::WorkerOverflow(o) => DistributedWarmOutcome::WorkerUnfit(o),
         PlannedDistribution::Unplannable => DistributedWarmOutcome::Unplannable,
         PlannedDistribution::WarmFailed(error) => DistributedWarmOutcome::WarmFailed { error },
     }
