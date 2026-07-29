@@ -219,7 +219,8 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
         if pass {
             bucket.0 += 1;
         }
-        eprintln!(
+        // One row per replayed question — the body of the report.
+        println!(
             "  [{:>2}/{}] {:<28} {:<14} → {:<16} {}",
             qi + 1,
             take,
@@ -244,11 +245,11 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
 
     let total = rows.len();
     let passed = rows.iter().filter(|r| r["pass"] == true).count();
-    eprintln!("\n── routing-replay (desktop transport) ──");
+    println!("\n── routing-replay (desktop transport) ──");
     for (cat, (p, t)) in &per_category {
-        eprintln!("  {:<26} {:>2}/{:<2}", cat, p, t);
+        println!("  {:<26} {:>2}/{:<2}", cat, p, t);
     }
-    eprintln!(
+    println!(
         "  overall: {passed}/{total} ({:.0}%)",
         if total == 0 {
             0.0

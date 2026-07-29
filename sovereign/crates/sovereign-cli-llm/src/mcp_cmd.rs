@@ -81,7 +81,10 @@ async fn cmd_list() -> i32 {
             }
         };
         let desc = config.description.as_deref().unwrap_or("");
-        eprintln!("  {:<16} {status}  {desc}", config.name);
+        // The listing IS the payload: `svrn mcp list > servers.txt` must not
+        // produce an empty file. cli-contract.toml asserts stdout_contains here.
+        // The empty-state guidance above stays on stderr, matching `chat list`.
+        println!("  {:<16} {status}  {desc}", config.name);
     }
     0
 }
@@ -104,9 +107,12 @@ async fn cmd_test(args: &[String]) -> i32 {
     eprint!("Connecting to {name}... ");
     match test_connection_verbose(config).await {
         Ok(tools) => {
-            eprintln!("connected! {} tools available:", tools.len());
+            // "connected!" completes the progress line on stderr; the inventory
+            // it introduces is the payload and belongs on stdout.
+            eprintln!("connected!");
+            println!("{} tools available:", tools.len());
             for tool in &tools {
-                eprintln!("  - mcp_{}_{}", name, tool);
+                println!("  - mcp_{}_{}", name, tool);
             }
             0
         }
@@ -134,9 +140,9 @@ async fn cmd_tools(args: &[String]) -> i32 {
         match test_connection_verbose(config).await {
             Ok(tools) => {
                 found_any = true;
-                eprintln!("[{}] {} tools:", config.name, tools.len());
+                println!("[{}] {} tools:", config.name, tools.len());
                 for tool in &tools {
-                    eprintln!("  mcp_{}_{tool}", config.name);
+                    println!("  mcp_{}_{tool}", config.name);
                 }
             }
             Err(e) => {
@@ -294,9 +300,20 @@ fn load_mcp_configs() -> Vec<McpServerConfig> {
     // migration, and this is the *same* typed list the chat surfaces load via
     // `sovereign_tools::mcp::load_from_setup_config` — no second parser to
     // drift out of sync.
-    SetupConfig::load()
-        .map(|c| c.mcp_servers)
-        .unwrap_or_default()
+    match SetupConfig::load() {
+        Ok(c) => c.mcp_servers,
+        Err(e) => {
+            // `unwrap_or_default()` used to swallow this, so a config that
+            // failed to PARSE was reported by every caller as "No MCP servers
+            // configured" — the operator is then told to add the servers that
+            // are already sitting in the file. Distinguish "none configured"
+            // from "could not read what you configured"; the callers keep
+            // their own empty-list guidance for the genuinely-empty case.
+            eprintln!("warning: could not read ~/.sovereign/config.toml: {e}");
+            eprintln!("hint: MCP servers cannot be listed until the config parses. Check it with `svrn doctor`.");
+            Vec::new()
+        }
+    }
 }
 
 async fn test_connection(config: &McpServerConfig) -> std::result::Result<usize, String> {

@@ -289,6 +289,125 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
 }
 
 #[tokio::test]
+async fn answering_peer_whose_record_is_frozen_must_not_decay() {
+    // REGRESSION (2026-07-29, observed live). A peer that ANSWERS every
+    // gossip round must never decay Offline, even when its own record
+    // stops advancing.
+    //
+    // The bug: liveness was stamped only from `MergeReport.observed`,
+    // which by contract holds the peers whose record ADVANCED in the
+    // merge. A peer answering us every round with an unchanged record
+    // was therefore never stamped, and decayed on schedule while
+    // `gossip: reach ok` kept logging success.
+    //
+    // Production shape this reproduces: BeefyMac replied to four
+    // consecutive rounds at 46/55/63/69 ms, its self `last_seen` frozen
+    // (its own outbound loop was wedged, its inbound handler was fine),
+    // and we marked it Offline at staleness_secs=67 — emptying the
+    // eligible-worker set and costing the distributed 122B its shard.
+    //
+    // Modelled here by freezing B's clock while A's advances: B keeps
+    // serving, but every reply carries the same `last_seen`, so nothing
+    // ever lands in `observed`.
+    let mesh_id = MeshId::from_u128(77);
+    let hash = [5u8; 32];
+    let a_id = NodeId::from_u128(1);
+    let b_id = NodeId::from_u128(2);
+
+    // B: a healthy peer with a REAL router, on a clock that never moves.
+    let mesh_b = Mesh {
+        id: mesh_id,
+        name: "Test".into(),
+        join_key_hash: hash,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(
+                b_id,
+                member_at(b_id, "B", 1_000, "127.0.0.1:2222".parse().unwrap()),
+            );
+            m
+        },
+        peers: vec![],
+    };
+    let state_b = Arc::new(AppState::new(b_id, mesh_b));
+    state_b.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+    let addr_b = spawn_internal_router((*state_b).clone()).await;
+
+    let mesh_a = Mesh {
+        id: mesh_id,
+        name: "Test".into(),
+        join_key_hash: hash,
+        require_encryption: false,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(
+                a_id,
+                member_at(a_id, "A", 1_000, "127.0.0.1:1111".parse().unwrap()),
+            );
+            m.insert(b_id, member_at(b_id, "B", 1_000, addr_b));
+            m
+        },
+        peers: vec![],
+    };
+    let state_a = Arc::new(AppState::new(a_id, mesh_a));
+    let clock_a = commonwealth_core::TestClock::new(1_000);
+    state_a.install_clock(Arc::new(clock_a.clone()));
+
+    // Round 1 at t=1000: A reaches B and converges.
+    gossip::run_one_round(&state_a, Duration::from_secs(60))
+        .await
+        .expect("round 1 should succeed");
+    assert_eq!(
+        state_a.peer_contact_or_init(b_id, 0),
+        1_000,
+        "round 1 must stamp local contact at t=1000"
+    );
+    assert_eq!(
+        state_a.inner.mesh.read().await.members.get(&b_id).unwrap().status,
+        NodeStatus::Online,
+        "B must be Online after a successful round"
+    );
+
+    // Advance ONLY A's clock well past the 60s threshold. B still
+    // serves, but its frozen clock means its record never advances,
+    // so B cannot appear in `observed` on any later merge.
+    clock_a.advance(120);
+
+    // Round 2 at t=1120: A reaches B successfully again. THE ROUND-TRIP
+    // ITSELF is the liveness evidence — it must stamp B.
+    gossip::run_one_round(&state_a, Duration::from_secs(60))
+        .await
+        .expect("round 2 should succeed");
+    // THE ASSERTION WITH TEETH. Status alone is NOT it: on a successful
+    // reach the round unconditionally forces `status = Online` (see the
+    // `peer back Online` fix-up in run_one_round), which masks the defect
+    // for any peer selected that round. The damage is done through
+    // `last_contact`, which that fix-up does NOT touch — it ages forever
+    // while we keep reaching the peer, so the decay pass at the TOP of
+    // every subsequent round re-marks the peer Offline, and it only gets
+    // flipped back if the FANOUT=2 selection happens to include it. That
+    // Offline window is what empties the eligible-worker set.
+    //
+    // So assert the quantity decay actually reads.
+    assert_eq!(
+        state_a.peer_contact_or_init(b_id, 0),
+        1_120,
+        "a completed round-trip MUST stamp local contact — otherwise \
+         last_contact ages while the peer answers every round, and the \
+         decay pass flaps it Offline on schedule (observed live 2026-07-29: \
+         reach ok at 46/55/63/69 ms in the four rounds before \
+         `peer marked Offline … staleness_secs=67`)"
+    );
+    // And with contact fresh, decay must not fire at all.
+    assert_eq!(
+        state_a.inner.mesh.read().await.members.get(&b_id).unwrap().status,
+        NodeStatus::Online,
+        "a peer that answered this very round must be Online"
+    );
+}
+
+#[tokio::test]
 async fn departure_tombstones_self_on_peers() {
     // B calls announce_departure → it pushes its own tombstoned record to A's
     // /internal/gossip → A removes B mesh-wide (event-time LWW), instead of

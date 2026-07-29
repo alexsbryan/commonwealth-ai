@@ -1988,11 +1988,14 @@ async fn list_assets(store: &dyn StateStore) -> Result<(), String> {
         eprintln!("(no document assets in the daemon's store)");
         return Ok(());
     }
-    eprintln!("{:<38}  {:<24}  state", "asset_id", "title");
-    eprintln!("{}", "─".repeat(80));
+    // The listing IS what `--list-assets` was asked for, so it goes to
+    // stdout and stays greppable/redirectable; only the follow-up hint
+    // below is narration.
+    println!("{:<38}  {:<24}  state", "asset_id", "title");
+    println!("{}", "─".repeat(80));
     for a in &assets {
         let title = truncate(&a.title, 22);
-        eprintln!("{:<38}  {:<24}  {:?}", a.id, title, a.state);
+        println!("{:<38}  {:<24}  {:?}", a.id, title, a.state);
     }
     eprintln!();
     eprintln!("Reuse one with:  svrn bench book-report --reuse-asset <asset_id>");

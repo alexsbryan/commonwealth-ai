@@ -122,26 +122,12 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
 /// Base URL of the daemon's INTERNAL listener, honouring
 /// `[daemon] internal_port` in `~/.sovereign/config.toml`.
 ///
-/// This was hardcoded to `http://127.0.0.1:9742`, which meant `corpus install`
-/// could only ever talk to a daemon on the default port — any operator who
-/// moved `internal_port`, and every sandboxed or side-by-side daemon, got
-/// "Is `svrn daemon` running?" from a daemon that was running perfectly well.
-/// The CLI journey harness found it the first time a fixture corpus made the
-/// install step actually execute.
-///
-/// The desktop already resolves the port this way
-/// (`sovereign-desktop/src-tauri/src/bootstrap.rs`); the CLI simply never did.
-///
-/// NOTE: the same literal is still hardcoded in `alignment_cmd.rs` (progress)
-/// and `pipeline_cmd.rs` (pause) — they have the identical bug and want this
-/// helper, but they are not on the path this change is verifying, so they are
-/// left for a focused sweep rather than fixed blind.
-fn internal_daemon_base() -> String {
-    let port = sovereign_core::setup_config::SetupConfig::load()
-        .map(|cfg| cfg.daemon.internal_port)
-        .unwrap_or(9742);
-    format!("http://127.0.0.1:{port}")
-}
+/// The resolution now lives in `sovereign_contracts::setup_config`, next to the
+/// field it reads, because this same literal had been hardcoded at FOUR sites
+/// (here, `alignment_cmd.rs` progress, `pipeline_cmd.rs` pause, and a `doctor`
+/// probe). The focused sweep this note used to defer is done; all four call the
+/// shared helper. Kept as a thin alias so the call sites below read locally.
+use sovereign_contracts::setup_config::internal_daemon_base;
 
 /// POST an install request to the running daemon's `/internal/corpus/install`
 /// endpoint and report the outcome. The daemon owns the actual ingest task; this

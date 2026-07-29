@@ -347,7 +347,10 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
             deficient_questions += 1;
         }
 
-        // Glassbox per-question line.
+        // Glassbox per-question line. This block is the comparison report
+        // itself — including the ERRORED line, which is a recorded per-probe
+        // outcome (it counts toward `bridge_errors` and lands in the JSON
+        // rows), not a program error — so the whole block goes to stdout.
         let fmt_set = |s: &BTreeSet<String>| -> String {
             if s.is_empty() {
                 "{}".to_string()
@@ -355,24 +358,24 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
                 format!("{{{}}}", s.iter().cloned().collect::<Vec<_>>().join(", "))
             }
         };
-        eprintln!("  [{:>2}/{}] {} ({})", qi + 1, take, q.id, q.qtype.label());
+        println!("  [{:>2}/{}] {} ({})", qi + 1, take, q.id, q.qtype.label());
         if let Some(err) = &bridge_error {
-            eprintln!("         desktop turn ERRORED: {err}");
+            println!("         desktop turn ERRORED: {err}");
         }
-        eprintln!("         bench   signals: {}", fmt_set(&bench_sig));
-        eprintln!("         desktop signals: {}", fmt_set(&desk_sig));
+        println!("         bench   signals: {}", fmt_set(&bench_sig));
+        println!("         desktop signals: {}", fmt_set(&desk_sig));
         if is_deficient {
-            eprintln!(
+            println!(
                 "         -> DESKTOP DEFICIENT: missing {{{}}}  [FAIL]",
                 deficient.join(", ")
             );
         } else if !surplus.is_empty() {
-            eprintln!(
+            println!(
                 "         -> PARITY OK (desktop surplus {{{}}})",
                 surplus.join(", ")
             );
         } else {
-            eprintln!("         -> PARITY OK");
+            println!("         -> PARITY OK");
         }
 
         rows.push(serde_json::json!({
@@ -396,11 +399,12 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     } else {
         "fail"
     };
-    eprintln!(
+    // Rollup — the headline the operator ran the command for.
+    println!(
         "[parity] SUMMARY: {} questions, {deficient_questions} desktop-deficient, {bridge_errors} bridge-error",
         rows.len(),
     );
-    eprintln!(
+    println!(
         "[parity] RESULT: {} ({} questions where desktop surfaced fewer enrichment legs than the bench)",
         result.to_uppercase(),
         deficient_questions,

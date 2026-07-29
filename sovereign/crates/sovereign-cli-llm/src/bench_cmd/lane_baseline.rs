@@ -300,14 +300,20 @@ fn dir_glyph(d: Direction) -> &'static str {
 ///
 /// Always prints an `N regressed` line so the CI runner's existing scoreboard
 /// parser (shared with `bench all`) sees a consistent vocabulary.
+///
+/// The table is the payload and goes to **stdout**, so `bench gate > report.txt`
+/// captures the verdict. This is safe for the CI scoreboard parser, which folds
+/// both streams (`2>&1 | tee "$out"`, scripts/sovereign-ci-bench.sh:231) before
+/// grepping for `N regressed`; the block moves as a unit, so its internal order
+/// is unchanged.
 pub fn render_and_exit_code(diff: &LaneDiff, lane: &str) -> i32 {
-    eprintln!("\n── lane gate: {lane} (baseline-relative) ──");
+    println!("\n── lane gate: {lane} (baseline-relative) ──");
     if diff.first_run {
-        eprintln!("  no baseline yet — first-run. Capture one with --update-baseline.");
-        eprintln!("  0 regressed (first-run)");
+        println!("  no baseline yet — first-run. Capture one with --update-baseline.");
+        println!("  0 regressed (first-run)");
         return 0;
     }
-    eprintln!(
+    println!(
         "  {:<28} {:>10} {:>10} {:>9} {:>8}  dir  status",
         "metric", "baseline", "current", "Δ", "tol"
     );
@@ -317,7 +323,7 @@ pub fn render_and_exit_code(diff: &LaneDiff, lane: &str) -> i32 {
             Movement::Improved => "improved",
             Movement::Unchanged => "ok",
         };
-        eprintln!(
+        println!(
             "  {:<28} {:>10.4} {:>10.4} {:>+9.4} {:>8.4}  {:<3}  {}",
             d.name,
             d.baseline,
@@ -329,24 +335,24 @@ pub fn render_and_exit_code(diff: &LaneDiff, lane: &str) -> i32 {
         );
     }
     for m in &diff.missing {
-        eprintln!(
+        println!(
             "  {m:<28} {:>10} (in baseline, absent now — schema drift?)",
             "—"
         );
     }
     let n_reg = diff.n_regressed();
     let n_imp = diff.improvements().count();
-    eprintln!(
+    println!(
         "  ── {} regressed · {} improved · {} ok ──",
         n_reg,
         n_imp,
         diff.deltas.len().saturating_sub(n_reg + n_imp),
     );
     if n_reg == 0 {
-        eprintln!("  VERDICT: PASS ✓  — no metric regressed past tolerance vs baseline.");
+        println!("  VERDICT: PASS ✓  — no metric regressed past tolerance vs baseline.");
         0
     } else {
-        eprintln!("  VERDICT: FAIL ✗  — {n_reg} metric(s) regressed vs baseline.");
+        println!("  VERDICT: FAIL ✗  — {n_reg} metric(s) regressed vs baseline.");
         1
     }
 }

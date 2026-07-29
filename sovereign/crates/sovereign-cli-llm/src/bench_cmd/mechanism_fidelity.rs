@@ -1085,11 +1085,13 @@ fn write_jsonl(path: &Path, rows: &[ResultRow]) -> std::io::Result<()> {
     Ok(())
 }
 
-/// A compact, glass-box read of the run printed to stderr — per model, the
-/// mean full-render P1 collapse and the control's P1 movement (so a leak
-/// is visible at a glance), plus the early-stopping outcome.
+/// A compact, glass-box read of the run — per model, the mean full-render
+/// P1 collapse and the control's P1 movement (so a leak is visible at a
+/// glance), plus the early-stopping outcome. This table is the run's
+/// result, so it goes to stdout; only the pointer at the tail (what to run
+/// next) stays on stderr.
 fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
-    eprintln!(
+    println!(
         "\n── reasoning-fidelity summary (class={}, pool={}) ──",
         args.class,
         args.pool.as_str()
@@ -1119,7 +1121,7 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
             .map(|r| r.d_agent.abs())
             .filter(|d| d.is_finite())
             .collect();
-        eprintln!(
+        println!(
             "  {m}: P1 collapse Δ̄={:+.3} (n={})  |  control P1 Δ̄={:+.3} (n={})  |  P2 |Δ̄|={:.3}  |  INV |Δ̄|={:.3}",
             mean(&p1_full),
             p1_full.len(),
@@ -1134,7 +1136,7 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
                 (Some(lo), Some(hi)) => format!("  mag CS=[{lo:.2},{hi:.2}]"),
                 _ => String::new(),
             };
-            eprintln!(
+            println!(
                 "      cases drawn: {}{}{}",
                 r.n_drawn,
                 if r.stopped_early {
@@ -1146,8 +1148,13 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
             );
         }
     }
+    // The legend is how you read the table above, so it ships with it;
+    // the "run this next" pointer is guidance and stays on stderr.
+    println!(
+        "  (faithful: P1 Δ̄ strongly negative, control P1 Δ̄≈0, P2/INV |Δ̄| small.)"
+    );
     eprintln!(
-        "  (faithful: P1 Δ̄ strongly negative, control P1 Δ̄≈0, P2/INV |Δ̄| small. Read the\n   power-annotated verdict with sovereign/bench/mechanism_fidelity/verdict.py.)"
+        "  Read the power-annotated verdict with sovereign/bench/mechanism_fidelity/verdict.py."
     );
 }
 

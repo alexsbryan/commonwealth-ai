@@ -376,14 +376,16 @@ fn write_jsonl(path: &std::path::Path, verdicts: &[Verdict]) -> std::io::Result<
     Ok(())
 }
 
+/// The calibration report itself — the numbers the run exists to produce,
+/// so every line here is stdout payload.
 fn print_summary(report: &CalibrationReport, verdicts: &[Verdict]) {
     let c = &report.counts;
-    eprintln!("\n── fidelity flywheel: grounded calibration (I1) ──");
-    eprintln!(
+    println!("\n── fidelity flywheel: grounded calibration (I1) ──");
+    println!(
         "  competence-when-present : {:.2}   [correct {}/{}, timid {}]",
         report.competence, c.answerable_correct, c.answerable, c.answerable_abstained,
     );
-    eprintln!(
+    println!(
         "  honesty-when-absent     : {:.2}   [honest {}/{}, HALLUCINATED {}]",
         report.honesty, c.absent_honest, c.absent, c.absent_hallucinated,
     );
@@ -395,9 +397,9 @@ fn print_summary(report: &CalibrationReport, verdicts: &[Verdict]) {
         }
     }
     if tally.is_empty() {
-        eprintln!("  failures: none");
+        println!("  failures: none");
     } else {
         let parts: Vec<String> = tally.iter().map(|(k, n)| format!("{k}={n}")).collect();
-        eprintln!("  failures by class: {}", parts.join(" "));
+        println!("  failures by class: {}", parts.join(" "));
     }
 }

@@ -45,6 +45,50 @@ const FANOUT: usize = 2;
 /// slow/unreachable peers don't drag out a gossip round.
 const PEER_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// The gossip HTTP client — built ONCE per process, shared by every
+/// round and every peer.
+///
+/// WHY THIS IS NOT BUILT PER ROUND (fixed 2026-07-29). A
+/// `reqwest::Client` owns its connection pool; a client built inside a
+/// round is dropped with the round, taking the pool with it. Every
+/// round therefore opened a *new* TCP connection to the peer's local
+/// iroh bridge — and `HttpBridge::spawn` dials a **fresh QUIC
+/// connection per accepted TCP connection**. So gossip paid a full
+/// QUIC handshake to every peer on every round, forever, and never
+/// benefited from an established path. The handshake is also the thing
+/// that times out: a `dial failed … error=timed out` warning is one
+/// round's handshake giving up, which is how selection-independent
+/// staleness crept back in even after `select_round_peers` was made
+/// deterministic.
+///
+/// Measured live, RuggedFox → BeefyMac over iroh on a healthy idle LAN
+/// (raw TCP RTT to the same host: p50 6.9 ms), concurrent A/B across
+/// one identical 3-minute window:
+///
+/// | | p50 | p90 | max | dial timeouts |
+/// |---|---|---|---|---|
+/// | fresh client per round | 189 ms | 1327 ms | 2273 ms | 2 |
+/// | reused connection | 38.8 ms | 391 ms | 1227 ms | 0 |
+///
+/// A warm round reaches 6.4 ms — the raw LAN RTT — because it does no
+/// handshake at all.
+///
+/// The build is fallible (TLS backend init), and deterministically so:
+/// caching the failure is correct, not a lost retry.
+fn gossip_client() -> Result<&'static reqwest::Client, &'static str> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
+        std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(PEER_TIMEOUT)
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .as_ref()
+        .map_err(String::as_str)
+}
+
 /// After this long without a successful gossip contact, a peer is
 /// marked Offline. Needs to be >> `interval` so a single missed
 /// round doesn't flap peers offline — roughly 6× the interval is
@@ -413,10 +457,7 @@ pub async fn run_one_round(
     // peer. Using the same snapshot across the fan-out keeps rounds
     // cheap and means every peer sees the same view of us.
     let my_snapshot = { app_state.inner.mesh.read().await.clone() };
-    let http = reqwest::Client::builder()
-        .timeout(PEER_TIMEOUT)
-        .build()
-        .map_err(|e| GossipError::ClientBuild(e.to_string()))?;
+    let http = gossip_client().map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
     let transport = app_state.peer_transport();
     for contact in selection {
@@ -441,7 +482,7 @@ pub async fn run_one_round(
             // be correlated with a run of failed reaches on a specific
             // address family (LAN vs Tailscale).
             let attempt_start = Instant::now();
-            match gossip_with_peer(&http, &ep.base_url, &my_snapshot).await {
+            match gossip_with_peer(http, &ep.base_url, &my_snapshot).await {
                 Ok(their_view) => {
                     let reach_ms = attempt_start.elapsed().as_millis() as u64;
                     info!(
@@ -453,6 +494,30 @@ pub async fn run_one_round(
                     // Pin this endpoint as the preferred starting
                     // point for the next round's resolution.
                     transport.note_success(peer_id, TrafficClass::Gossip, ep);
+                    // A COMPLETED ROUND-TRIP IS THE STRONGEST LIVENESS
+                    // EVIDENCE THERE IS — stamp it UNCONDITIONALLY, and
+                    // before the merge (fixed 2026-07-29).
+                    //
+                    // The stamping below is driven by `report.observed`,
+                    // which by contract holds only the peers whose RECORD
+                    // ADVANCED in this merge. That is the right rule for
+                    // peers we learned about transitively, and the wrong
+                    // rule for the peer we just spoke to: in steady state
+                    // its record does not advance, so a peer answering us
+                    // every round was never stamped at all and decayed to
+                    // Offline on schedule while `gossip: reach ok` kept
+                    // logging success.
+                    //
+                    // Observed live 2026-07-29 — reach ok at 46/55/63/69 ms
+                    // in the four rounds immediately preceding
+                    // `peer marked Offline … staleness_secs=67`, on a peer
+                    // that was answering TCP in 3-9 ms at the time. That
+                    // false Offline emptied the eligible-worker set and
+                    // cost the distributed 122B its remote shard.
+                    //
+                    // Liveness must never be a side effect of payload
+                    // change. Talking to someone IS the evidence.
+                    app_state.observe_peer_contact(peer_id, now);
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
                     // Stamp local-observation time for every peer whose record
@@ -646,16 +711,15 @@ pub async fn announce_departure(app_state: &AppState) {
             .collect();
         (mesh.clone(), targets)
     };
-    let http = match reqwest::Client::builder().timeout(PEER_TIMEOUT).build() {
-        Ok(c) => c,
-        Err(_) => return,
+    let Ok(http) = gossip_client() else {
+        return;
     };
     let transport = app_state.peer_transport();
     let mut announced = 0usize;
     for contact in &targets {
         let eps = transport.endpoints(contact, TrafficClass::Gossip).await;
         for ep in &eps {
-            if gossip_with_peer(&http, &ep.base_url, &snapshot)
+            if gossip_with_peer(http, &ep.base_url, &snapshot)
                 .await
                 .is_ok()
             {
@@ -736,7 +800,7 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
         return;
     }
 
-    let http = match reqwest::Client::builder().timeout(PEER_TIMEOUT).build() {
+    let http = match gossip_client() {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(error = %e, "broadcast_now: client build failed");
@@ -890,6 +954,33 @@ impl MeshWire {
             members,
             peers: self.peers,
         }
+    }
+}
+
+#[cfg(test)]
+mod gossip_client_tests {
+    use super::gossip_client;
+
+    /// The gossip HTTP client must be ONE process-wide instance, because a
+    /// `reqwest::Client` owns its connection pool: a fresh client per round
+    /// drops the pool, and the peer's iroh `HttpBridge` then dials a fresh
+    /// QUIC connection for the new TCP connection. Measured cost of getting
+    /// this wrong (RuggedFox → BeefyMac, concurrent A/B, one 3-min window):
+    /// p50 189 ms and 2 dial timeouts, versus p50 38.8 ms and 0 when the
+    /// connection is reused.
+    ///
+    /// Pointer identity is the honest assertion here — two `Client` values
+    /// that merely compare equal would still be two pools.
+    #[test]
+    fn gossip_client_is_one_shared_pool_per_process() {
+        let a = gossip_client().expect("gossip client builds");
+        let b = gossip_client().expect("gossip client builds");
+        assert!(
+            std::ptr::eq(a, b),
+            "gossip must reuse ONE reqwest::Client — a per-round client throws \
+             away the connection pool and forces a fresh QUIC handshake to every \
+             peer on every round"
+        );
     }
 }
 

@@ -2208,7 +2208,9 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // with standalone Commonwealth deployments.
     let client_url = detect_commonwealth_url(sovereign_dir)
         .unwrap_or_else(|| "http://127.0.0.1:9741".to_string());
-    let internal_url = "http://127.0.0.1:9742".to_string();
+    // Resolved from `[daemon] internal_port`, not hardcoded: doctor probing the
+    // default port while the daemon listens elsewhere reports a false "down".
+    let internal_url = sovereign_core::setup_config::internal_daemon_base();
     // Supervision check runs UNCONDITIONALLY — outside the :9741
     // reachability gate below — because it matters most precisely
     // when the daemon is down: an unsupervised daemon that crashed is

@@ -124,12 +124,24 @@ async fn run_cmd(args: &[String]) -> i32 {
         .expect("build http client");
     let cfg = runner::RunnerCfg { base_url, replays };
 
+    // The human report is the primary payload and belongs on stdout so
+    // `svrn ... > gym.txt` captures it. Under `--json` stdout is already
+    // owned by the machine-readable document, so the same lines fall back
+    // to stderr rather than corrupting it.
+    let emit = |line: &str| {
+        if json_out {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    };
+
     let mut all_runs: Vec<runner::FixtureReport> = Vec::new();
     for fx in &fixtures {
-        eprintln!("\n=== fixture: {} ===", fx.slug);
+        emit(&format!("\n=== fixture: {} ===", fx.slug));
         let report = runner::run_fixture_replays(&client, &cfg, fx).await;
         for line in report.human_lines() {
-            eprintln!("  {line}");
+            emit(&format!("  {line}"));
         }
         all_runs.push(report);
     }
@@ -141,9 +153,9 @@ async fn run_cmd(args: &[String]) -> i32 {
             Err(e) => eprintln!("knowledge-gym: cannot serialise summary: {e}"),
         }
     } else {
-        eprintln!("\n=== summary ===");
+        println!("\n=== summary ===");
         for line in agg.human_lines() {
-            eprintln!("  {line}");
+            println!("  {line}");
         }
     }
 

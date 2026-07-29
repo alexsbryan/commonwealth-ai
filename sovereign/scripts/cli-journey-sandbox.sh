@@ -320,6 +320,47 @@ if [ -z "${SOVEREIGN_JOURNEY_MCP_URL:-}" ]; then
   echo
 fi
 
+# ── a throwaway repo for the watcher-repair journey ──────────────────────
+# `watcher-repair` registers an orphaned repo with the daemon's freshness
+# pipeline and proves it shows up in `project list`. It used to reuse
+# `{corpus}` — the KNOWLEDGE-corpus token — as a project id. Two distinct
+# namespaces sharing one token, and the step silently registered the derived
+# id instead, so step [3] asserted an id nothing had created.
+#
+# A distinct id alone does NOT fix it. `ProjectRegistry::nested_conflict`
+# (sovereign-mesh/src/projects.rs:386) treats an identical root under a
+# different name as a collision, so registering a second id against THIS repo
+# would be refused as soon as any earlier journey — `code-intel-lifecycle`
+# step [0] — had registered it. The journey therefore needs its own ROOT, not
+# just its own name, which also makes it independent of manifest order.
+#
+# A git repo, because the registry's freshness pipeline polls git HEAD; a
+# rootless directory would register but never be a realistic orphan.
+PROJECT_ID="${SOVEREIGN_JOURNEY_PROJECT:-journey-project}"
+PROJECT_ROOT="${SOVEREIGN_JOURNEY_PROJECT_ROOT:-$SANDBOX_HOME/journey-project}"
+if [ -z "${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}" ]; then
+  mkdir -p "$PROJECT_ROOT/src"
+  cat >"$PROJECT_ROOT/src/lib.rs" <<'RS'
+// Minimal source so the project has something a code index could walk.
+pub fn journey_fixture_marker() -> &'static str {
+    "journey-project"
+}
+RS
+  if git -C "$PROJECT_ROOT" init -q 2>/dev/null \
+     && git -C "$PROJECT_ROOT" add -A 2>/dev/null \
+     && git -C "$PROJECT_ROOT" -c user.email=journey@localhost \
+            -c user.name=journey commit -qm "journey fixture" 2>/dev/null; then
+    echo "sandbox: throwaway project repo seeded ($PROJECT_ID → $PROJECT_ROOT)"
+  else
+    # Non-fatal, same posture as the MCP fixture: watcher-repair reverts to
+    # reporting a skip, which is the honest outcome, and the rest of the lane
+    # is unaffected.
+    echo "sandbox: could NOT seed the project repo — watcher-repair will skip" >&2
+    PROJECT_ROOT=""
+  fi
+  echo
+fi
+
 # Hand off. SOVEREIGN_JOURNEY_ISOLATED=1 is this script asserting what it has
 # actually provided — a throwaway HOME on a non-default port in a private
 # netns. It is the runner's safety interlock, and the only place in the repo
@@ -356,6 +397,8 @@ run_one() { # $1 = journey id; remaining = passthrough flags
       ${JOURNEY_CORPUS:+SOVEREIGN_JOURNEY_CORPUS="$JOURNEY_CORPUS"} \
       ${MCP_URL:+SOVEREIGN_JOURNEY_MCP_NAME="$MCP_NAME"} \
       ${MCP_URL:+SOVEREIGN_JOURNEY_MCP_URL="$MCP_URL"} \
+      ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT="$PROJECT_ID"} \
+      ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT_ROOT="$PROJECT_ROOT"} \
     "$RUNNER" --mutating "${SANDBOX_EXCLUDES[@]}" --journey "$jid" "$@" \
     2>&1 | grep -vE '^cli-journey: |^ +steps +[0-9]|^ +coverage |^ +manifest |^$'
   return "${PIPESTATUS[0]}"

@@ -259,13 +259,23 @@ struct CorpusHits {
     chunks: Vec<ScoredChunk>,
 }
 
+/// The retrieval hits — the payload, and therefore stdout.
+///
+/// Everything `run_inspect` prints ABOVE this (the query banner, embedding
+/// dims, per-corpus eligibility, hit counts, open/search failures) is glassbox
+/// narration of HOW the search ran and stays on stderr. That split is the same
+/// one `chat ask` makes deliberately: the answer streams to stdout, the
+/// provenance chrome to stderr. Before this, the text path wrote everything to
+/// stderr and stdout was 0 bytes, so `chat inspect | grep` found nothing and
+/// `> file` produced an empty file — while cli-contract.toml has asserted
+/// `stdout_non_empty` on this step all along.
 fn print_text(per_corpus: &[CorpusHits], snippet_len: usize) {
     for bucket in per_corpus {
         if bucket.chunks.is_empty() {
             continue;
         }
-        eprintln!();
-        eprintln!("═══ {} ═══", bucket.corpus_id);
+        println!();
+        println!("═══ {} ═══", bucket.corpus_id);
         for (i, c) in bucket.chunks.iter().enumerate() {
             let title = c
                 .title
@@ -273,14 +283,14 @@ fn print_text(per_corpus: &[CorpusHits], snippet_len: usize) {
                 .filter(|s| !s.is_empty())
                 .unwrap_or("<untitled>");
             let snippet = truncate(&c.content.replace('\n', " "), snippet_len);
-            eprintln!(
+            println!(
                 "  [{rank:>2}] score={score:.3}  {title}",
                 rank = i + 1,
                 score = c.score,
                 title = title,
             );
             if let Some(url) = c.url.as_deref() {
-                eprintln!("       {url}");
+                println!("       {url}");
             }
             if !c.metadata.is_empty() {
                 let mut kvs: Vec<_> = c.metadata.iter().collect();
@@ -292,10 +302,10 @@ fn print_text(per_corpus: &[CorpusHits], snippet_len: usize) {
                     .collect::<Vec<_>>()
                     .join(" ");
                 if !joined.is_empty() {
-                    eprintln!("       {joined}");
+                    println!("       {joined}");
                 }
             }
-            eprintln!("       {snippet}");
+            println!("       {snippet}");
         }
     }
 }

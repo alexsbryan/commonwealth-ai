@@ -1085,14 +1085,24 @@ note = "watcher_freshness = Failed means the registry is empty and nothing is wa
 [journey.step.expect]
 stdout_non_empty = true
 [[journey.step]]
-run = "project register --corpus-id {corpus}"
+run = "project register --root {project_root} --corpus-id {project}"
 mutates = true
-note = "one per orphan; doctor prints the exact commands"
-[[journey.step]]
-run = "project list"
+note = """one per orphan; doctor prints the exact commands. {project} is NOT \
+{corpus}: a knowledge-corpus id and a project id are different namespaces, and \
+sharing one token made this step register the DERIVED id while step [3] \
+asserted an id nothing had created. `--root` is explicit because the registry \
+refuses a second name against an already-registered root \
+(ProjectRegistry::nested_conflict), so reusing this repo would make the \
+journey depend on whether code-intel-lifecycle ran first. Until 2026-07-29 \
+`--corpus-id` was not parsed at all and the catch-all arm swallowed it."""
 [journey.step.expect]
 exit = 0
-stdout_contains = "{corpus}"
+[[journey.step]]
+run = "project list"
+note = "prove the registration LANDED under the id asked for, not a derived one"
+[journey.step.expect]
+exit = 0
+stdout_contains = "{project}"
 
 [[journey]]
 id = "daemon-triage"
@@ -1165,8 +1175,15 @@ run = "chat inspect --corpus {corpus} {question}"
 exit = 0
 stdout_non_empty = true
 [[journey.step]]
-run = "corpus remove {corpus}"
+run = "corpus remove {corpus} --yes"
 mutates = true
+note = """`--yes` is REQUIRED, not tidiness. `corpus remove` prompts, and on EOF \
+`read_line` returns Ok(0) rather than an error — so the answer parses as empty, \
+the removal ABORTS, and it still exits 0. Without `--yes` this step passed \
+while removing nothing, and step [5] then correctly reported the corpus still \
+present. Before the runner closed stdin (2026-07-29) the prompt was instead \
+being answered by the PLAN ROWS on the loop's stdin, which is what made the \
+whole thing invisible."""
 [journey.step.expect]
 exit = 0
 [[journey.step]]

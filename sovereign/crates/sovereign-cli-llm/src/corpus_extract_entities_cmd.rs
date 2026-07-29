@@ -103,7 +103,10 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
             return 1;
         }
     };
-    eprintln!("Database: {}", db_path.display());
+    // Database / Index / Scope are the inventory: under `--dry-run` they
+    // are the whole answer, and on a real run they are the provenance
+    // header for the summary at the end. Payload either way -> stdout.
+    println!("Database: {}", db_path.display());
     let index = match CorpusIndex::open(&corpus_index_path).await {
         Ok(i) => i,
         Err(e) => {
@@ -114,7 +117,7 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
             return 1;
         }
     };
-    eprintln!("Index:    {}", corpus_index_path.display());
+    println!("Index:    {}", corpus_index_path.display());
 
     // Group chunks by source_doc_id.
     let groups = match index.group_chunks_by_source_doc().await {
@@ -126,7 +129,7 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
     };
     let total_convs = groups.len();
     let total_chunks: usize = groups.values().map(|v| v.len()).sum();
-    eprintln!(
+    println!(
         "Scope:    {} conversation{} / {} chunks",
         total_convs,
         if total_convs == 1 { "" } else { "s" },
@@ -260,12 +263,14 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
     let _ = store.upsert_chunk_entity_progress(&progress).await;
 
     let elapsed = overall_start.elapsed();
+    // The blank stays on stderr: it terminates the in-place progress row,
+    // which is a stderr concern. The tally below is the run's result.
     eprintln!();
-    eprintln!("✓ extraction complete");
-    eprintln!("  conversations:   {convs_done}");
-    eprintln!("  chunks:          {}", progress.chunks_processed);
-    eprintln!("  mentions:        {total_mentions}");
-    eprintln!(
+    println!("✓ extraction complete");
+    println!("  conversations:   {convs_done}");
+    println!("  chunks:          {}", progress.chunks_processed);
+    println!("  mentions:        {total_mentions}");
+    println!(
         "  wall-clock:      {:.1}s  ({:.0}ms / chunk)",
         elapsed.as_secs_f64(),
         elapsed.as_secs_f64() * 1000.0 / progress.chunks_processed.max(1) as f64

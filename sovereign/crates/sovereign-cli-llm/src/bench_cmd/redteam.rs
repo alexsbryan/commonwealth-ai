@@ -294,7 +294,9 @@ async fn run(args_in: &[String]) -> i32 {
     ];
 
     // MAIN
-    eprintln!("\n══════════ MAIN pool ══════════");
+    // Pool banners introduce the arm tables printed by `print_arm`, so they
+    // travel with them on stdout.
+    println!("\n══════════ MAIN pool ══════════");
     let base_main = score_arm(&Identity, &captured, &ctx, &mut memo).await;
     print_arm("baseline (identity)", &base_main, None);
     glassbox_baseline(&base_main);
@@ -311,7 +313,7 @@ async fn run(args_in: &[String]) -> i32 {
     let has_fresh = !captured_fresh.is_empty();
     let mut fresh_arms: Vec<(&str, Arm)> = Vec::new();
     let base_fresh = if has_fresh {
-        eprintln!("\n══════════ FRESH pool (sealed generalization set) ══════════");
+        println!("\n══════════ FRESH pool (sealed generalization set) ══════════");
         let bf = score_arm(&Identity, &captured_fresh, &ctx, &mut memo).await;
         print_arm("baseline (identity)", &bf, None);
         for (label, t) in &candidates {
@@ -331,14 +333,14 @@ async fn run(args_in: &[String]) -> i32 {
     // tolerance. (D1) any per-probe regression rejects; (D2) a main-pool win must
     // also hold on the sealed fresh pool. The aggregate `decide()` column above is
     // shown only to contrast the OLD gate (which the cheats fooled).
-    eprintln!("\n══════════ gate-trust read (per-probe paired verdict) ══════════");
+    println!("\n══════════ gate-trust read (per-probe paired verdict) ══════════");
     for (label, main_arm) in &main_arms {
         let (reg_m, imp_m) = paired_diff(&base_main, main_arm);
         let (reg_f, imp_f) = match (&base_fresh, fresh_arms.iter().find(|(l, _)| l == label)) {
             (Some(bf), Some((_, fa))) => paired_diff(bf, fa),
             _ => (0, 0),
         };
-        eprintln!(
+        println!(
             "  {label:32} main(reg={reg_m} fix={imp_m}) fresh(reg={reg_f} fix={imp_f})  {}",
             redteam_verdict(reg_m, imp_m, reg_f, imp_f, has_fresh)
         );
@@ -478,15 +480,17 @@ async fn action_for(
 
 // ─────────────────────────────── glassbox ───────────────────────────────────
 
+/// Per-probe baseline table. This is evidence the operator reads and
+/// greps, not run narration, so it goes to stdout with the arm tables.
 fn glassbox_baseline(arm: &Arm) {
-    eprintln!("  ── baseline per-probe (what the model actually said) ──");
+    println!("  ── baseline per-probe (what the model actually said) ──");
     for o in &arm.outcomes {
         let tag = if o.qtype.is_absent() {
             "ABSENT "
         } else {
             "present"
         };
-        eprintln!(
+        println!(
             "    [{tag}] {:<34} {:<9} {}",
             o.id,
             format!("{:?}", o.action),
@@ -497,7 +501,7 @@ fn glassbox_baseline(arm: &Arm) {
 
 /// H1's full decision trace per probe — the diagnosis for a NoChange result.
 fn glassbox_h1(captured: &[Capture], atlas: &dyn AtlasLookup) {
-    eprintln!("  ── H1 decision trace per probe ──");
+    println!("  ── H1 decision trace per probe ──");
     let h1 = AttributeOmissionDetector;
     for cap in captured {
         let t = h1.explain(&cap.probe, &cap.visible, &cap.chunks, atlas);
@@ -528,7 +532,7 @@ fn glassbox_h1(captured: &[Capture], atlas: &dyn AtlasLookup) {
                 t.value_tokens, t.entity_atom_count
             )
         };
-        eprintln!("    [{tag}] {:<34} {decision:<10} {why}", cap.probe.id);
+        println!("    [{tag}] {:<34} {decision:<10} {why}", cap.probe.id);
     }
 }
 
@@ -544,7 +548,7 @@ fn excerpt(s: &str) -> String {
 fn print_arm(label: &str, arm: &Arm, verdict: Option<PromoteDecision>) {
     let r = &arm.report;
     let v = verdict.map(|d| format!("  →  {d:?}")).unwrap_or_default();
-    eprintln!(
+    println!(
         "  {label:32} competence={:.2}  honesty={:.2}  hallucination={:.2}{v}",
         r.competence, r.honesty, r.hallucination_rate
     );

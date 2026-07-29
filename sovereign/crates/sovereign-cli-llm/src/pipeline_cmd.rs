@@ -604,8 +604,11 @@ async fn mesh_pause_via_daemon(
         "fanout": true,
     });
 
-    let url = "http://127.0.0.1:9742/internal/pipeline/pause";
-    let resp = match client.post(url).json(&body).send().await {
+    let url = format!(
+        "{}/internal/pipeline/pause",
+        sovereign_contracts::setup_config::internal_daemon_base()
+    );
+    let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) if e.is_connect() || e.is_timeout() => {
             return Err(MeshPauseError::DaemonDown);

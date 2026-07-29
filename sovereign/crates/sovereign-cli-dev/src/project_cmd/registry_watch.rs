@@ -18,6 +18,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
                 "svrn project register",
                 "svrn project register --root /path/to/repo",
                 "svrn project register --name my-monorepo",
+                "svrn project register --corpus-id my-monorepo   # alias of --name",
                 "svrn project register --force   # override the nested-root guard",
             ],
         );
@@ -34,11 +35,31 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
                 i += 1;
                 root = args.get(i).map(PathBuf::from);
             }
-            "--name" => {
+            // `--corpus-id` is the name the registry itself uses (`project
+            // list` prints `corpus_id`, `project unregister` takes one) and is
+            // what .claude/CLAUDE.md documents as the watcher-registry repair.
+            // It was never parsed, and the catch-all below swallowed it, so
+            // `project register --corpus-id foo` registered the DERIVED id and
+            // printed "✓ Registered project "<derived>"" — a success message
+            // for a registration the operator did not ask for. Accepted as an
+            // alias rather than renamed, because `--name` is what `doctor`
+            // prints today (doctor_cmd.rs:1723) and operators have it in
+            // muscle memory and scripts.
+            "--name" | "--corpus-id" => {
                 i += 1;
                 name = args.get(i).cloned();
             }
             "--force" => force = true,
+            // An unrecognised flag is an ERROR, not a no-op. The catch-all that
+            // used to live here is how the above went unnoticed: a typo'd or
+            // renamed flag silently changed WHICH project got registered while
+            // still exiting 0. Positionals stay tolerated — only `-`-prefixed
+            // tokens are rejected, so this cannot break an unquoted path.
+            other if other.starts_with('-') => {
+                eprintln!("error: unknown flag `{other}` for `svrn project register`.");
+                eprintln!("hint: valid flags are --root <path>, --name|--corpus-id <id>, --force.");
+                return 2;
+            }
             _ => {}
         }
         i += 1;

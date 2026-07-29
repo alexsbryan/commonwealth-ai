@@ -967,6 +967,38 @@ fn default_client_bind() -> String {
 fn default_internal_port() -> u16 {
     9742
 }
+
+/// Base URL of the daemon's INTERNAL listener (`http://127.0.0.1:<internal_port>`),
+/// honouring `[daemon] internal_port` in `~/.sovereign/config.toml`.
+///
+/// WHY THIS EXISTS IN THE CONTRACTS CRATE. Four CLI call sites independently
+/// hardcoded `http://127.0.0.1:9742`, so `corpus install`, `alignment` progress,
+/// `pipeline pause` and one `doctor` probe could only ever reach a daemon on the
+/// default port. Any operator who moved `internal_port` — and every sandboxed or
+/// side-by-side daemon — got "Is `svrn daemon` running?" from a daemon running
+/// perfectly well. The CLI journey harness surfaced the first of the four in
+/// 2026-07-28 when a fixture corpus made the install step actually execute.
+///
+/// The desktop always resolved this properly
+/// (`sovereign-desktop/src-tauri/src/bootstrap.rs`); the CLI never did. It lives
+/// HERE rather than in `sovereign-cli-shared` because the resolution needs
+/// [`SetupConfig`], and that crate deliberately carries no heavy dependencies.
+///
+/// Falls back to the compiled default when the config is absent or unreadable,
+/// which is the same posture the `#[serde(default)]` on the field itself takes:
+/// a missing config means defaults, not an error.
+pub fn internal_daemon_base() -> String {
+    let port = SetupConfig::load()
+        .map(|cfg| cfg.daemon.internal_port)
+        .unwrap_or_else(|_| default_internal_port());
+    internal_daemon_base_for(port)
+}
+
+/// Pure builder behind [`internal_daemon_base`], for callers that already hold a
+/// resolved port (tests, and the daemon itself, which knows what it bound).
+pub fn internal_daemon_base_for(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
 fn default_internal_bind() -> String {
     // Historical behaviour: the internal mesh API binds every interface.
     // Operators on multi-homed hosts can pin it to a private NIC.
@@ -1171,6 +1203,27 @@ fn expand_home(p: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The whole point of the helper is that it does NOT bake in 9742. A
+    /// regression here restores the four-way-duplicated bug it replaced:
+    /// every internal-API caller silently pinned to the default port.
+    #[test]
+    fn internal_base_url_honours_a_moved_port() {
+        assert_eq!(internal_daemon_base_for(9742), "http://127.0.0.1:9742");
+        assert_eq!(internal_daemon_base_for(19742), "http://127.0.0.1:19742");
+    }
+
+    /// The loading path falls back to the compiled default rather than
+    /// erroring, matching the `#[serde(default)]` posture on the field: a
+    /// missing config means defaults. Asserted against the constant so moving
+    /// `default_internal_port` cannot leave the fallback behind.
+    #[test]
+    fn internal_base_url_falls_back_to_the_declared_default() {
+        assert_eq!(
+            internal_daemon_base_for(default_internal_port()),
+            "http://127.0.0.1:9742"
+        );
+    }
 
     /// `ComputeSection`'s fields carry `#[serde(default)]` with no
     /// `skip_serializing_if`, so `save_to` materializes `distributed_primary =

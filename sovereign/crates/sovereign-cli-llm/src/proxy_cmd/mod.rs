@@ -20,6 +20,16 @@ subcommands:
                                 cite-or-abstain over the filing's verbatim text.";
 
 pub async fn run_proxy(args: &[String]) -> i32 {
+    // `--help` was matched as a SUBCOMMAND NAME and fell to the unknown arm,
+    // so `svrn proxy --help` printed "unknown `proxy` subcommand `--help`" and
+    // exited 2 — the verb was reachable but undiscoverable, which is how it
+    // ended up stranded in the CLI manifest. Explicit help is what the user
+    // asked for, so it is payload: stdout, exit 0. The no-args and
+    // unknown-subcommand arms below are usage-ON-ERROR and stay on stderr.
+    if sovereign_cli_shared::help::wants_help(args) {
+        println!("{USAGE}");
+        return 0;
+    }
     let mut it = args.iter();
     let Some(sub) = it.next() else {
         eprintln!("{USAGE}");

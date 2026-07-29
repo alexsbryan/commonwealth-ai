@@ -395,9 +395,13 @@ async fn fetch_alignment_progress() -> Result<Option<IngestProgress>, String> {
     struct ProgressSnapshot {
         progress: HashMap<String, IngestProgress>,
     }
-    // Same internal port the install path posts to (config.node.internal_port,
-    // default 9742). Keep the two in lockstep — they talk to the same daemon.
-    let url = "http://127.0.0.1:9742/internal/corpus/progress";
+    // Same internal listener the install path posts to. Resolved through the
+    // shared helper rather than a literal, so a moved `[daemon] internal_port`
+    // reaches this path too — they talk to the same daemon.
+    let url = format!(
+        "{}/internal/corpus/progress",
+        sovereign_contracts::setup_config::internal_daemon_base()
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()

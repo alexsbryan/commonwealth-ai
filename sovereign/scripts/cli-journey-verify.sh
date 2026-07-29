@@ -163,6 +163,14 @@ declare -A FIX=(
   [folder]="${SOVEREIGN_JOURNEY_FOLDER:-}"
   [recipe]="${SOVEREIGN_JOURNEY_RECIPE:-}"
   [repo]="${SOVEREIGN_JOURNEY_REPO:-}"
+  # DISTINCT from {corpus}. A knowledge-corpus id and a project/code-corpus id
+  # are different namespaces that happen to both be called "corpus id"; sharing
+  # one token made `watcher-repair` register the derived id and then assert an
+  # id nothing had created. {project_root} is separate because the registry
+  # refuses a second name against an already-registered root
+  # (ProjectRegistry::nested_conflict), so the journey needs its own repo.
+  [project]="${SOVEREIGN_JOURNEY_PROJECT:-}"
+  [project_root]="${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}"
   [session_id]="${SOVEREIGN_JOURNEY_SESSION:-}"
   [scope]="${SOVEREIGN_JOURNEY_SCOPE:-ToolRegistry}"
   # Distinctive and single-token so the read-back assertion survives any
@@ -452,7 +460,23 @@ while IFS=$'\t' read -r kind f2 f3 f4 f5 f6 f7 f8 f9 f10 f11; do
     # stale capture: the point of settling is that the system's state is still
     # changing, and `corpus status` has to be asked again to see it.
     attempt_step() {
-      out="$(timeout "$STEP_TIMEOUT" "$BIN" "${ARGV[@]}" 2>"$ERR_FILE")"; code=$?
+      # `</dev/null` IS LOAD-BEARING, not hygiene. The plan is piped into this
+      # runner's read loop (`done < <(plan_source)` at the bottom), so a step
+      # command that reads stdin consumes PLAN ROWS — the loop then resumes
+      # mid-manifest with `cur_id` still set to the current journey, and binds
+      # a LATER journey's step to it.
+      #
+      # Observed 2026-07-29, and it had been invisible: `corpus remove` prompts
+      # for confirmation, ate the rows after corpus-lifecycle[4], and step [5]
+      # was recorded as `atos teardown {feature_id}` — atos-feature's step 5.
+      # The journey still reported a plausible `partial 5/6`, so the effect was
+      # a MISSING ASSERTION (corpus-lifecycle's proof that the removal actually
+      # reversed never ran) dressed as an ordinary missing fixture. It could
+      # only surface once step [4] started passing.
+      #
+      # A journey step must never be able to consume the manifest that drives
+      # it. Any command needing input has to declare it, not inherit it.
+      out="$(timeout "$STEP_TIMEOUT" "$BIN" "${ARGV[@]}" 2>"$ERR_FILE" </dev/null)"; code=$?
       err="$(cat "$ERR_FILE")"
       why=""
       [ "$want_exit" != "-" ] && [ "$code" != "$want_exit" ] && why="exit $code, want $want_exit"
