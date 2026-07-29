@@ -402,4 +402,50 @@ mod tests {
         let avail = live_available_resources(&hw, Some(u64::MAX / 2));
         assert!(avail.free_storage_gb > 0.0);
     }
+
+    /// Gossip must never advertise a `BenchmarkResult`. This is a
+    /// behavioural guard, not a style preference, and it is cheap
+    /// insurance against a very expensive mistake.
+    ///
+    /// `throughput_factor` (`oicp-types/src/scoring.rs:362`) takes the
+    /// advertised benchmark and, absent enough observed samples,
+    /// extrapolates it onto whatever candidate is being scored by a
+    /// linear size ratio (`scoring.rs:384`):
+    ///
+    /// ```text
+    /// bench.tg_tok_s * (bench.baseline_size_gb / candidate_size_gb)
+    /// ```
+    ///
+    /// Its own comment concedes real scaling is sub-linear because
+    /// memory bandwidth dominates. `SCHEDULER_QUALITY.md` §4.5 priced
+    /// that extrapolation against the simulator and filed it
+    /// **DO-NOT-BUILD**: reading −56%, with declined upgrades doubling
+    /// and downgrades appearing.
+    ///
+    /// The trap is that arming it takes no new code. The consumer is
+    /// already wired end to end; the only thing holding it back is that
+    /// this builder leaves the field `None`. Set it here — from any
+    /// probe, however well intentioned — and the regression ships on
+    /// the next gossip tick with nothing else changed and no review
+    /// step that would obviously catch it.
+    ///
+    /// A measured throughput number is a legitimate goal, and the
+    /// capability-oracle work exists to produce one. It carries its own
+    /// type in `sovereign-core::mesh_measurements`, keyed to the exact
+    /// model and split it was measured on, and it reaches a human
+    /// reading `svrn mesh plan` — not the scheduler's ranked dispatch,
+    /// which is the consumer §4.5 measured. Route it through here and
+    /// you have silently converted a measurement into an extrapolation.
+    #[tokio::test]
+    async fn gossip_never_advertises_a_benchmark() {
+        let caps = build_local_capabilities(None, 0, 1.0, None, None).await;
+        assert!(
+            caps.benchmark.is_none(),
+            "build_local_capabilities set NodeCapabilities.benchmark. That arms the \
+             size-ratio extrapolation at oicp-types/src/scoring.rs:384, which \
+             SCHEDULER_QUALITY.md §4.5 measured at −56% and filed DO-NOT-BUILD. If you \
+             have a real measurement, it belongs in sovereign-core::mesh_measurements \
+             keyed to the model and split it was taken on — not on the gossip path."
+        );
+    }
 }

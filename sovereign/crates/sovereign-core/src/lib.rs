@@ -11,6 +11,7 @@ pub mod health_monitor;
 pub mod insight;
 pub mod memory;
 pub mod memory_compaction;
+pub mod mesh_measurements;
 pub mod mobile_host;
 pub mod model_family;
 pub mod models_manifest;

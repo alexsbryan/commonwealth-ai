@@ -81,6 +81,30 @@ Manage the local Commonwealth mesh.
 | `logs` | Show mesh daemon logs |
 | `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
 | `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
+| `plan <gguf>` | Work out whether a model fits, and which machine holds what — before you commit |
+
+`svrn mesh plan` answers the question you have before you download 80 GB: will this
+run on the machines I have? It reads only the GGUF's header table, so it needs no
+daemon, no GPU, and no model load, and it answers instantly even for a split
+measured in hundreds of gigabytes.
+
+```sh
+svrn mesh plan the-big-one.gguf --devices 64,32,32   # a mesh you're considering
+svrn mesh plan the-big-one.gguf --from-mesh          # the mesh you actually have
+```
+
+It lays the model's blocks across the machines by byte mass — not block count, which
+matters on a mixture-of-experts model where one block can outweigh another many times
+over — and reports what each machine would hold against what it has. `--host <idx>`
+moves the output head; `--headroom <f>` explores a tighter or safer pack than the one
+the load is configured for; `--json` emits the whole plan for scripting. Exit `0` if
+it fits, `1` if it doesn't, `2` on bad arguments.
+
+The report also says what it *cannot* tell you. Speed is reported only where a real
+measurement exists for that exact model on that exact split; otherwise it says "not
+measured" and names the command that would measure it, rather than offering an
+estimate. A `--devices` plan describes hardware that isn't present, so it is never
+eligible for a measurement at all.
 
 ### `svrn corpus`
 

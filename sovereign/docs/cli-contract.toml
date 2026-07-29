@@ -207,6 +207,17 @@ binary = "llm"
 visibility = "public"
 classification = "daemon"
 [[command]]
+# Offline by classification, and that is the point: `--devices` reads only the
+# GGUF header table, so it answers "will this fit" with no daemon, no GPU and no
+# model load. Only `--from-mesh` touches the daemon.
+path = "mesh plan"
+binary = "llm"
+visibility = "public"
+classification = "offline"
+[command.smoke]
+args = ["mesh", "plan", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh leave"
 binary = "llm"
 visibility = "public"
@@ -1260,7 +1271,7 @@ mutates = true
 skip_live = "runs on the lending machine"
 [[journey.step]]
 run = "mesh plan {gguf} --from-mesh"
-note = "REAL but UNDECLARED: `mesh plan` dispatches and is taught in RUN_A_BIGGER_MODEL.md, but no [[command]] row declares it"
+note = "the fit preview: per-device bytes and whether each machine's own share lands, from the GGUF header alone"
 [journey.step.expect]
 stdout_non_empty = true
 [[journey.step]]

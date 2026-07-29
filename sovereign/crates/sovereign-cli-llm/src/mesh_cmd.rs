@@ -429,12 +429,26 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
     ],
 };
 
+/// One machine on the live mesh, as `mesh plan --from-mesh` sees it.
+///
+/// Carries identity alongside capacity because a measured throughput number is
+/// only meaningful for the machines it was measured on: `name` distinguishes
+/// one peer's share from another's in the placement digest, and
+/// `hw_fingerprint` pins the hardware. Both are absent for a peer on an older
+/// daemon, which `mesh plan` reports as "not measured" rather than guessing.
+pub(crate) struct MeshDevice {
+    pub(crate) name: String,
+    pub(crate) vram_gb: f64,
+    pub(crate) hw_fingerprint: Option<u64>,
+    pub(crate) backend: Option<String>,
+}
+
 /// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
-/// per-device VRAM vector for `mesh plan --from-mesh`: online anchor workers first,
+/// per-device vector for `mesh plan --from-mesh`: online anchor workers first,
 /// this host (`is_self`) last so the output head lands on it. Returns
-/// `(vram_gb per device, host index)`. Prints the resolved mesh to stderr (so
-/// `--json` stays clean on stdout).
-async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
+/// `(devices, host index)`. Prints the resolved mesh to stderr (so `--json`
+/// stays clean on stdout).
+async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
     let port = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
@@ -459,38 +473,48 @@ async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
         .cloned()
         .unwrap_or_default();
 
-    let mut workers: Vec<(String, f64)> = Vec::new();
-    let mut host: Option<(String, f64)> = None;
+    let mut workers: Vec<MeshDevice> = Vec::new();
+    let mut host: Option<MeshDevice> = None;
     for m in &members {
-        let name = m
-            .get("name")
-            .and_then(|n| n.as_str())
-            .unwrap_or("?")
-            .to_string();
+        let dev = MeshDevice {
+            name: m
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("?")
+                .to_string(),
+            vram_gb: m.get("vram_gb").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            hw_fingerprint: m.get("hw_fingerprint").and_then(|v| v.as_u64()),
+            backend: m
+                .get("backend")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+        };
         let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
         let can_anchor = m
             .get("can_anchor")
             .and_then(|b| b.as_bool())
             .unwrap_or(false);
-        let vram = m.get("vram_gb").and_then(|v| v.as_f64()).unwrap_or(0.0);
         if is_self {
-            host = Some((name, vram));
+            host = Some(dev);
         } else if online && can_anchor {
-            workers.push((name, vram));
+            workers.push(dev);
         }
     }
-    let (host_name, host_vram) =
+    let host =
         host.ok_or_else(|| "could not find this node (is_self) in the mesh status".to_string())?;
 
     eprintln!(
         "Resolved live mesh: {} online anchor worker(s) + this host",
         workers.len()
     );
-    for (n, v) in &workers {
-        eprintln!("  worker  {n}: {v:.0} GB VRAM");
+    for w in &workers {
+        eprintln!("  worker  {}: {:.0} GB VRAM", w.name, w.vram_gb);
     }
-    eprintln!("  host    {host_name}: {host_vram:.0} GB VRAM  (holds the output head)");
+    eprintln!(
+        "  host    {}: {:.0} GB VRAM  (holds the output head)",
+        host.name, host.vram_gb
+    );
     if workers.is_empty() {
         eprintln!(
             "  note: no online anchor workers — the plan will show a single-node (local) load."
@@ -498,8 +522,8 @@ async fn devices_from_live_mesh() -> Result<(Vec<f64>, usize), String> {
     }
     eprintln!();
 
-    let mut devices: Vec<f64> = workers.iter().map(|(_, v)| *v).collect();
-    devices.push(host_vram);
+    let mut devices = workers;
+    devices.push(host);
     let host_idx = devices.len() - 1;
     Ok((devices, host_idx))
 }
@@ -533,6 +557,10 @@ async fn cmd_plan(args: &[String]) -> i32 {
     let mut headroom_from_flag = false;
     let mut json = false;
     let mut from_mesh = false;
+    // `Some` only under `--from-mesh`. A `--devices` plan describes hardware
+    // that is not here, so it has no identity and can never match a
+    // measurement — see `SpeedSection::NotMeasurable`.
+    let mut mesh_devices: Option<Vec<MeshDevice>> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -603,9 +631,12 @@ async fn cmd_plan(args: &[String]) -> i32 {
             return 2;
         }
         match devices_from_live_mesh().await {
-            Ok((gb, h)) => {
-                devices_gb = gb;
+            Ok((devs, h)) => {
+                devices_gb = devs.iter().map(|d| d.vram_gb).collect();
                 host_idx = Some(h);
+                // Retained for the speed lookup: only a real, present mesh can
+                // identify the machines a measurement would belong to.
+                mesh_devices = Some(devs);
             }
             Err(e) => {
                 eprintln!("--from-mesh: {e}");
@@ -646,6 +677,237 @@ async fn cmd_plan(args: &[String]) -> i32 {
         }
     };
 
+    let host = host_idx.unwrap_or(devices_gb.len() - 1);
+    if host >= devices_gb.len() {
+        eprintln!(
+            "--host {host} out of range (valid 0..{})",
+            devices_gb.len() - 1
+        );
+        return 2;
+    }
+
+    // The context length the plan assumes. Same accessor the cold-start and
+    // reload paths use, so a plan and the load it previews cannot disagree
+    // about KV size — which is part of the measurement key.
+    let n_ctx = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.models.effective_context_size())
+        .unwrap_or(16384);
+
+    let report = build_report(
+        PlanInput {
+            model_name: model
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?")
+                .to_string(),
+            n_layer,
+            sizes,
+            devices_gb,
+            host,
+            headroom,
+            headroom_from_flag,
+            mesh: mesh_devices,
+            n_ctx,
+        },
+        &sovereign_core::mesh_measurements::load(),
+        env!("CARGO_PKG_VERSION"),
+    );
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&render_json(&report)).unwrap_or_default()
+        );
+    } else {
+        print!("{}", render_human(&report));
+    }
+    report.exit_code()
+}
+
+// ---------------------------------------------------------------------------
+// `mesh plan`, as a pure function of its inputs
+//
+// Everything below is deliberately free of I/O, so the report can be built and
+// rendered in a test without a GGUF on disk, a daemon, or a GPU. `cmd_plan`
+// above is the shell: it parses args, reads the header table, talks to the
+// mesh, and hands the result here.
+//
+// The split exists because this command shipped for months with no tests at
+// all — there was no seam to test at. Keep the seam: computation belongs in
+// `build_report`, wording belongs in the renderers, and neither should acquire
+// a file read or a network call.
+// ---------------------------------------------------------------------------
+
+const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+
+fn gb(bytes: u64) -> f64 {
+    bytes as f64 / GIB
+}
+
+/// Everything `build_report` needs, already read from disk and validated.
+pub(crate) struct PlanInput {
+    /// Display name of the model file.
+    pub(crate) model_name: String,
+    /// Transformer block count from the GGUF header.
+    pub(crate) n_layer: u32,
+    /// `(tensor_name, layer, nbytes)` from the GGUF tensor table.
+    pub(crate) sizes: Vec<(String, Option<u32>, u64)>,
+    /// Per-device usable VRAM in GB, in caller order.
+    pub(crate) devices_gb: Vec<f64>,
+    /// Index into `devices_gb` of the host — the node that holds the output
+    /// head. Validated in range by the caller.
+    pub(crate) host: usize,
+    /// Headroom multiplier applied to each device's share.
+    pub(crate) headroom: f64,
+    /// Whether `headroom` came from `--headroom` (a what-if) rather than the
+    /// configuration the live load will actually use.
+    pub(crate) headroom_from_flag: bool,
+    /// Live mesh identities, in the same order as `devices_gb`. `Some` only
+    /// under `--from-mesh`; a `--devices` plan describes hardware that is not
+    /// here and therefore has no measurement to find.
+    pub(crate) mesh: Option<Vec<MeshDevice>>,
+    /// Context length the plan assumes. Part of the measurement key, because
+    /// decode rate is a function of KV size.
+    pub(crate) n_ctx: u32,
+}
+
+/// What `mesh plan` can honestly say about speed.
+pub(crate) enum SpeedSection {
+    /// A real run against exactly this configuration.
+    Measured {
+        summary: Box<sovereign_core::mesh_measurements::MeasurementSummary>,
+    },
+    /// This configuration could be measured; nobody has. `near` names
+    /// measurements of the same model in *other* configurations — as context
+    /// for the operator, never as a number for this one.
+    NotMeasured {
+        near: Vec<sovereign_core::mesh_measurements::NearMiss>,
+    },
+    /// There is nothing here to have measured.
+    NotMeasurable(NotMeasurable),
+}
+
+/// Why a configuration can carry no measurement at all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NotMeasurable {
+    /// `--devices` describes hardware that is not present.
+    HypotheticalDevices,
+    /// The host advertises no hardware fingerprint (an older daemon), so there
+    /// is no key under which a measurement could have been filed.
+    HostUnidentified,
+}
+
+/// One device's row in the plan.
+pub(crate) struct DeviceRow {
+    pub(crate) dev: usize,
+    pub(crate) is_host: bool,
+    pub(crate) vram: u64,
+    pub(crate) blocks: Option<(u32, u32)>,
+    pub(crate) holds_output: bool,
+    /// Bytes of weights this device holds.
+    pub(crate) weight: u64,
+    /// `weight × headroom` — what must fit.
+    pub(crate) need: u64,
+}
+
+impl DeviceRow {
+    pub(crate) fn fits(&self) -> bool {
+        self.need <= self.vram
+    }
+}
+
+/// Spread of per-block byte mass — the "is heterogeneous VRAM safe here" signal.
+pub(crate) struct BlockMass {
+    pub(crate) min: u64,
+    pub(crate) max: u64,
+    pub(crate) mean: u64,
+    pub(crate) spread: f64,
+    pub(crate) uniform: bool,
+}
+
+/// Hot/cold split for a mixture-of-experts model.
+pub(crate) struct MoeReport {
+    /// Routed-expert bytes — cold, only the router's top-k are read per token.
+    pub(crate) routed_expert_bytes: u64,
+    /// Resident mass touched on every token.
+    pub(crate) hot_bytes: u64,
+}
+
+/// Node count and the per-token hop cost that follows from it.
+pub(crate) struct NodesReport {
+    pub(crate) active_nodes: usize,
+    pub(crate) hops_now: usize,
+    pub(crate) min_nodes: usize,
+    pub(crate) hops_min: usize,
+}
+
+/// The finished plan, ready to render.
+pub(crate) struct PlanReport {
+    pub(crate) model_name: String,
+    pub(crate) n_layer: u32,
+    pub(crate) total_weight: u64,
+    pub(crate) output_bytes: u64,
+    pub(crate) embd_bytes: u64,
+    pub(crate) block_mass: BlockMass,
+    pub(crate) moe: Option<MoeReport>,
+    pub(crate) headroom: f64,
+    pub(crate) headroom_from_flag: bool,
+    pub(crate) pooled: u64,
+    pub(crate) gate_need: u64,
+    pub(crate) gate_pass: bool,
+    pub(crate) rows: Vec<DeviceRow>,
+    pub(crate) nodes: NodesReport,
+    /// What we can honestly say about how fast this configuration runs.
+    pub(crate) speed: SpeedSection,
+    /// The measurement key this plan looked up, when it had one. Emitted in
+    /// `--json` so a script can correlate a plan with a `mesh bench` record.
+    pub(crate) speed_key: Option<sovereign_core::mesh_measurements::MeasurementKey>,
+}
+
+impl PlanReport {
+    /// Devices whose share does not fit their own memory.
+    pub(crate) fn overflows(&self) -> Vec<&DeviceRow> {
+        self.rows.iter().filter(|r| !r.fits()).collect()
+    }
+
+    /// `0` when the model fits both gates, `1` when it does not.
+    ///
+    /// Speed never participates: a plan that fits but would run slowly is still
+    /// a plan that fits, and picking a tokens-per-second threshold on someone
+    /// else's behalf is not this command's job.
+    pub(crate) fn exit_code(&self) -> i32 {
+        if self.gate_pass && self.overflows().is_empty() {
+            0
+        } else {
+            1
+        }
+    }
+}
+
+/// Lay a model's blocks across a set of devices and judge the fit.
+///
+/// Pure. Uses the same `plan_shards_weighted` the live load uses, over the same
+/// device order (workers first, host last), so the preview and the load cannot
+/// disagree about where a block lands.
+pub(crate) fn build_report(
+    input: PlanInput,
+    measurements: &sovereign_core::mesh_measurements::MeasurementFile,
+    current_build: &str,
+) -> PlanReport {
+    use sovereign_inference::embedded as inf;
+
+    let PlanInput {
+        model_name,
+        n_layer,
+        sizes,
+        devices_gb,
+        host,
+        headroom,
+        headroom_from_flag,
+        mesh,
+        n_ctx,
+    } = input;
+
     // Per-block byte mass + global tensors (output head → last block-holder;
     // token_embd → host system RAM; other globals lumped as host overhead).
     let mut block_bytes = vec![0u64; n_layer as usize];
@@ -669,13 +931,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     let total_weight: u64 =
         block_bytes.iter().sum::<u64>() + output_bytes + embd_bytes + other_global;
 
-    let gib = 1024.0_f64 * 1024.0 * 1024.0;
-    let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * gib) as u64).collect();
-    let host = host_idx.unwrap_or(vram.len() - 1);
-    if host >= vram.len() {
-        eprintln!("--host {host} out of range (valid 0..{})", vram.len() - 1);
-        return 2;
-    }
+    let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
 
     // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
     // plan_shards places the output head on the host — the SAME functions the live
@@ -691,16 +947,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // the host. The IDENTICAL call the live load makes, so the preview matches it.
     let plan = inf::plan_shards_weighted(n_layer, &weights, &block_bytes, output_bytes);
 
-    let gb = |b: u64| b as f64 / gib;
-    struct Row {
-        dev: usize,
-        is_host: bool,
-        vram: u64,
-        blocks: Option<(u32, u32)>,
-        holds_output: bool,
-        weight: u64,
-    }
-    let mut rows: Vec<Row> = Vec::with_capacity(vram.len());
+    let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
     for (pos, &d) in order.iter().enumerate() {
         let shard = &plan[pos];
         let mut w = 0u64;
@@ -712,25 +959,22 @@ async fn cmd_plan(args: &[String]) -> i32 {
         if shard.holds_output {
             w += output_bytes;
         }
-        rows.push(Row {
+        rows.push(DeviceRow {
             dev: d,
             is_host: d == host,
             vram: vram[d],
             blocks: shard.blocks,
             holds_output: shard.holds_output,
             weight: w,
+            need: (w as f64 * headroom) as u64,
         });
     }
     rows.sort_by_key(|r| r.dev);
 
-    // Aggregate gate (the live daemon's model×1.2, with YOUR headroom) + per-device fit.
+    // Aggregate gate (the live daemon's model×1.2, with YOUR headroom).
     let pooled: u64 = vram.iter().sum();
     let gate_need = (total_weight as f64 * headroom) as u64;
     let gate_pass = pooled >= gate_need;
-    let overflows: Vec<&Row> = rows
-        .iter()
-        .filter(|r| (r.weight as f64 * headroom) as u64 > r.vram)
-        .collect();
 
     // Block-mass uniformity → the "does heterogeneity stay safe" verdict.
     let nz: Vec<u64> = block_bytes.iter().copied().filter(|&b| b > 0).collect();
@@ -746,17 +990,29 @@ async fn cmd_plan(args: &[String]) -> i32 {
     } else {
         1.0
     };
-    let uniform = spread <= 1.15;
+    let block_mass = BlockMass {
+        min: bmin,
+        max: bmax,
+        mean: bmean,
+        spread,
+        uniform: spread <= 1.15,
+    };
 
-    // MoE hot/cold split + node-count/hop advisor.
-    let is_moe = routed_expert_bytes > 0;
     // Hot = resident mass touched every token: all block bytes minus the cold
     // routed experts, plus the output head (token_embd lives in host RAM).
-    let hot_bytes = block_bytes
-        .iter()
-        .sum::<u64>()
-        .saturating_sub(routed_expert_bytes)
-        + output_bytes;
+    let moe = if routed_expert_bytes > 0 {
+        Some(MoeReport {
+            routed_expert_bytes,
+            hot_bytes: block_bytes
+                .iter()
+                .sum::<u64>()
+                .saturating_sub(routed_expert_bytes)
+                + output_bytes,
+        })
+    } else {
+        None
+    };
+
     // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
     // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
     // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
@@ -773,168 +1029,384 @@ async fn cmd_plan(args: &[String]) -> i32 {
     }
     min_nodes = min_nodes.max(1);
     let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
-    let hops_now = active_nodes - 1;
-    let hops_min = min_nodes.saturating_sub(1);
 
-    if json {
-        let devices_json: Vec<serde_json::Value> = rows
-            .iter()
-            .map(|r| {
-                serde_json::json!({
-                    "device": r.dev,
-                    "role": if r.is_host { "host" } else { "worker" },
-                    "vram_gb": gb(r.vram),
-                    "blocks": r.blocks.map(|(a, b)| [a, b]),
-                    "block_count": r.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
-                    "holds_output": r.holds_output,
-                    "weight_gb": gb(r.weight),
-                    "need_gb": gb((r.weight as f64 * headroom) as u64),
-                    "fits": (r.weight as f64 * headroom) as u64 <= r.vram,
-                })
-            })
-            .collect();
-        let out = serde_json::json!({
-            "model": model.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
-            "blocks": n_layer,
-            "weights_gb": gb(total_weight),
-            "output_head_gb": gb(output_bytes),
-            "token_embd_host_ram_gb": gb(embd_bytes),
-            "block_mass_gb": {
-                "min": gb(bmin), "max": gb(bmax), "mean": gb(bmean),
-                "spread": spread, "uniform": uniform
-            },
-            "headroom": headroom,
-            "headroom_source": if headroom_from_flag { "flag" } else { "config" },
-            "pooled_gb": gb(pooled),
-            "aggregate_gate_need_gb": gb(gate_need),
-            "aggregate_gate_pass": gate_pass,
-            "per_device_overflow_devices": overflows.iter().map(|r| r.dev).collect::<Vec<_>>(),
-            "moe": if is_moe {
-                serde_json::json!({
-                    "routed_expert_gb": gb(routed_expert_bytes),
-                    "routed_expert_pct": 100.0 * routed_expert_bytes as f64 / total_weight as f64,
-                    "hot_gb": gb(hot_bytes),
-                    "hot_pct": 100.0 * hot_bytes as f64 / total_weight as f64,
-                })
-            } else {
-                serde_json::Value::Null
-            },
-            "nodes_used": active_nodes,
-            "hops": hops_now,
-            "min_nodes": min_nodes,
-            "min_hops": hops_min,
-            "devices": devices_json,
-        });
-        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
-        return if gate_pass && overflows.is_empty() {
-            0
-        } else {
-            1
-        };
-    }
-
-    // Human report.
-    let name = model.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-    println!("svrn mesh plan — dry run (no load, no GPU)\n");
-    println!("Model:  {name}");
-    println!(
-        "        {n_layer} blocks · {:.1} GB weights  (output head {:.1} GB · token_embd {:.1} GB on host RAM)",
-        gb(total_weight),
-        gb(output_bytes),
-        gb(embd_bytes)
+    let (speed, speed_key) = resolve_speed(
+        &rows,
+        mesh.as_deref(),
+        &sizes,
+        n_layer,
+        active_nodes,
+        n_ctx,
+        measurements,
+        current_build,
     );
-    if uniform {
-        println!(
-            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {spread:.2}× spread → UNIFORM mass",
-            gb(bmin),
-            gb(bmax),
-            gb(bmean)
+
+    PlanReport {
+        model_name,
+        n_layer,
+        total_weight,
+        output_bytes,
+        embd_bytes,
+        block_mass,
+        moe,
+        headroom,
+        headroom_from_flag,
+        pooled,
+        gate_need,
+        gate_pass,
+        rows,
+        nodes: NodesReport {
+            active_nodes,
+            hops_now: active_nodes - 1,
+            min_nodes,
+            hops_min: min_nodes.saturating_sub(1),
+        },
+        speed,
+        speed_key,
+    }
+}
+
+/// Decide what this plan may say about speed.
+///
+/// Pure, and deliberately conservative at every branch. The three outcomes are
+/// distinct on purpose: "measured" is a fact, "not measured" is an invitation,
+/// and "not measurable" means the question does not apply to what was asked.
+/// Collapsing the last two would tell a `--devices` user to run a benchmark
+/// that could not produce a record matching their query.
+#[allow(clippy::too_many_arguments)]
+fn resolve_speed(
+    rows: &[DeviceRow],
+    mesh: Option<&[MeshDevice]>,
+    sizes: &[(String, Option<u32>, u64)],
+    n_layer: u32,
+    active_nodes: usize,
+    n_ctx: u32,
+    measurements: &sovereign_core::mesh_measurements::MeasurementFile,
+    current_build: &str,
+) -> (
+    SpeedSection,
+    Option<sovereign_core::mesh_measurements::MeasurementKey>,
+) {
+    use sovereign_core::mesh_measurements as mm;
+
+    // A hypothetical mesh has no machines to have measured.
+    let Some(mesh) = mesh else {
+        return (
+            SpeedSection::NotMeasurable(NotMeasurable::HypotheticalDevices),
+            None,
         );
-        println!("        VRAM-proportional block count ≈ byte-proportional, so heterogeneous VRAM is safe.");
+    };
+
+    // The host must be identifiable, or there is no key. Substituting a
+    // placeholder would collide every unidentified host into one bucket and
+    // serve one machine's number on another.
+    let host_fp = rows
+        .iter()
+        .find(|r| r.is_host)
+        .and_then(|r| mesh.get(r.dev))
+        .and_then(|d| d.hw_fingerprint);
+    let Some(host) = mm::HostIdentity::from_live_mesh(host_fp) else {
+        return (
+            SpeedSection::NotMeasurable(NotMeasurable::HostUnidentified),
+            None,
+        );
+    };
+
+    let shards: Vec<mm::PlacementShard> = rows
+        .iter()
+        .map(|r| mm::PlacementShard {
+            node_key: mesh
+                .get(r.dev)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| format!("dev{}", r.dev)),
+            blocks: r.blocks,
+            holds_output: r.holds_output,
+        })
+        .collect();
+    let mode = if active_nodes <= 1 {
+        "local"
     } else {
-        println!(
-            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {spread:.2}× spread → NON-UNIFORM mass  (!)",
-            gb(bmin),
-            gb(bmax),
-            gb(bmean)
-        );
-        println!("        Split apportions by byte MASS (not count), so heterogeneous VRAM stays balanced — but a single block heavier than a small node's whole share still can't be split contiguously. Watch per-device fit.");
+        "distributed"
+    };
+
+    let key = mm::MeasurementKey::for_plan(
+        host,
+        mm::model_fingerprint(sizes, n_layer),
+        mm::placement_digest(mode, n_layer, &shards),
+        n_ctx,
+    );
+
+    let section = match mm::lookup(measurements, &key, current_build) {
+        Some(summary) => SpeedSection::Measured {
+            summary: Box::new(summary),
+        },
+        None => SpeedSection::NotMeasured {
+            near: mm::near_misses(measurements, &key),
+        },
+    };
+    (section, Some(key))
+}
+
+/// The machine-readable plan.
+pub(crate) fn render_json(r: &PlanReport) -> serde_json::Value {
+    let devices_json: Vec<serde_json::Value> = r
+        .rows
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "device": d.dev,
+                "role": if d.is_host { "host" } else { "worker" },
+                "vram_gb": gb(d.vram),
+                "blocks": d.blocks.map(|(a, b)| [a, b]),
+                "block_count": d.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
+                "holds_output": d.holds_output,
+                "weight_gb": gb(d.weight),
+                "need_gb": gb(d.need),
+                "fits": d.fits(),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "model": r.model_name,
+        "blocks": r.n_layer,
+        "weights_gb": gb(r.total_weight),
+        "output_head_gb": gb(r.output_bytes),
+        "token_embd_host_ram_gb": gb(r.embd_bytes),
+        "block_mass_gb": {
+            "min": gb(r.block_mass.min),
+            "max": gb(r.block_mass.max),
+            "mean": gb(r.block_mass.mean),
+            "spread": r.block_mass.spread,
+            "uniform": r.block_mass.uniform
+        },
+        "headroom": r.headroom,
+        "headroom_source": if r.headroom_from_flag { "flag" } else { "config" },
+        "pooled_gb": gb(r.pooled),
+        "aggregate_gate_need_gb": gb(r.gate_need),
+        "aggregate_gate_pass": r.gate_pass,
+        "per_device_overflow_devices": r.overflows().iter().map(|d| d.dev).collect::<Vec<_>>(),
+        "moe": match &r.moe {
+            Some(m) => serde_json::json!({
+                "routed_expert_gb": gb(m.routed_expert_bytes),
+                "routed_expert_pct": 100.0 * m.routed_expert_bytes as f64 / r.total_weight as f64,
+                "hot_gb": gb(m.hot_bytes),
+                "hot_pct": 100.0 * m.hot_bytes as f64 / r.total_weight as f64,
+            }),
+            None => serde_json::Value::Null,
+        },
+        "nodes_used": r.nodes.active_nodes,
+        "hops": r.nodes.hops_now,
+        "min_nodes": r.nodes.min_nodes,
+        "min_hops": r.nodes.hops_min,
+        "devices": devices_json,
+        "speed": render_speed_json(r),
+    })
+}
+
+/// The `speed` object, always present.
+///
+/// Every numeric field is `null` when there is no measurement — never `0.0`.
+/// A consumer will divide by a number; `null` is an absence it has to handle,
+/// while zero is a lie it will happily propagate.
+fn render_speed_json(r: &PlanReport) -> serde_json::Value {
+    let key = match &r.speed_key {
+        Some(k) => serde_json::json!({
+            "probe_version": k.probe_version,
+            "model_fingerprint": k.model_fingerprint,
+            "placement_digest": k.placement_digest,
+            "host_hw_fingerprint": k.host_hw_fingerprint,
+            "n_ctx": k.n_ctx,
+        }),
+        None => serde_json::Value::Null,
+    };
+
+    let mut o = serde_json::json!({
+        "status": match &r.speed {
+            SpeedSection::Measured { .. } => "measured",
+            SpeedSection::NotMeasured { .. } => "not_measured",
+            SpeedSection::NotMeasurable(_) => "not_measurable",
+        },
+        "reason": match &r.speed {
+            SpeedSection::Measured { .. } => serde_json::Value::Null,
+            SpeedSection::NotMeasured { .. } => "no-record".into(),
+            SpeedSection::NotMeasurable(NotMeasurable::HypotheticalDevices) =>
+                serde_json::Value::from("hypothetical-devices"),
+            SpeedSection::NotMeasurable(NotMeasurable::HostUnidentified) =>
+                serde_json::Value::from("host-unidentified"),
+        },
+        "decode_tok_s": serde_json::Value::Null,
+        "decode_tok_s_min": serde_json::Value::Null,
+        "decode_tok_s_max": serde_json::Value::Null,
+        "ttft_ms": serde_json::Value::Null,
+        "itl_p50_ms": serde_json::Value::Null,
+        "itl_p95_ms": serde_json::Value::Null,
+        "prefill_tok_s": serde_json::Value::Null,
+        "n_ctx": r.speed_key.as_ref().map(|k| k.n_ctx),
+        "backend": serde_json::Value::Null,
+        "runs": serde_json::Value::Null,
+        "measured_at": serde_json::Value::Null,
+        "measured_build": serde_json::Value::Null,
+        "stale": serde_json::Value::Null,
+        "near_misses": match &r.speed {
+            SpeedSection::NotMeasured { near } => near
+                .iter()
+                .map(|n| serde_json::json!({
+                    "placement_human": n.placement_human,
+                    "decode_tok_s": n.decode_tok_s,
+                    "measured_at": n.measured_at,
+                    "differs_by": n.differs_by,
+                }))
+                .collect::<Vec<_>>()
+                .into(),
+            _ => serde_json::Value::Array(Vec::new()),
+        },
+        "measure_command": "svrn mesh bench",
+        "key": key,
+    });
+
+    if let SpeedSection::Measured { summary: s } = &r.speed {
+        let m = o.as_object_mut().expect("json! built an object");
+        m.insert("decode_tok_s".into(), s.decode_tok_s.into());
+        m.insert("decode_tok_s_min".into(), s.decode_tok_s_min.into());
+        m.insert("decode_tok_s_max".into(), s.decode_tok_s_max.into());
+        m.insert("ttft_ms".into(), s.ttft_ms.into());
+        m.insert("itl_p50_ms".into(), s.itl_p50_ms.into());
+        m.insert("itl_p95_ms".into(), s.itl_p95_ms.into());
+        m.insert("prefill_tok_s".into(), s.prefill_tok_s.into());
+        m.insert("backend".into(), s.backend.clone().into());
+        m.insert("runs".into(), s.runs.into());
+        m.insert("measured_at".into(), s.measured_at.into());
+        m.insert("measured_build".into(), s.measured_build.clone().into());
+        m.insert("stale".into(), s.stale.into());
     }
-    if is_moe {
-        println!(
+    o
+}
+
+/// The operator-facing plan.
+pub(crate) fn render_human(r: &PlanReport) -> String {
+    use std::fmt::Write as _;
+    let mut o = String::new();
+    let headroom = r.headroom;
+
+    let _ = writeln!(o, "svrn mesh plan — dry run (no load, no GPU)\n");
+    let _ = writeln!(o, "Model:  {}", r.model_name);
+    let _ = writeln!(
+        o,
+        "        {} blocks · {:.1} GB weights  (output head {:.1} GB · token_embd {:.1} GB on host RAM)",
+        r.n_layer,
+        gb(r.total_weight),
+        gb(r.output_bytes),
+        gb(r.embd_bytes)
+    );
+
+    let m = &r.block_mass;
+    if m.uniform {
+        let _ = writeln!(
+            o,
+            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {:.2}× spread → UNIFORM mass",
+            gb(m.min),
+            gb(m.max),
+            gb(m.mean),
+            m.spread
+        );
+        let _ = writeln!(o, "        VRAM-proportional block count ≈ byte-proportional, so heterogeneous VRAM is safe.");
+    } else {
+        let _ = writeln!(
+            o,
+            "Blocks: {:.2}–{:.2} GB (mean {:.2}) · {:.2}× spread → NON-UNIFORM mass  (!)",
+            gb(m.min),
+            gb(m.max),
+            gb(m.mean),
+            m.spread
+        );
+        let _ = writeln!(o, "        Split apportions by byte MASS (not count), so heterogeneous VRAM stays balanced — but a single block heavier than a small node's whole share still can't be split contiguously. Watch per-device fit.");
+    }
+
+    if let Some(moe) = &r.moe {
+        let _ = writeln!(
+            o,
             "MoE:    {:.1} GB routed experts ({:.0}% — COLD, only top-k read per token) · {:.1} GB hot skeleton ({:.0}% — every token)",
-            gb(routed_expert_bytes),
-            100.0 * routed_expert_bytes as f64 / total_weight as f64,
-            gb(hot_bytes),
-            100.0 * hot_bytes as f64 / total_weight as f64,
+            gb(moe.routed_expert_bytes),
+            100.0 * moe.routed_expert_bytes as f64 / r.total_weight as f64,
+            gb(moe.hot_bytes),
+            100.0 * moe.hot_bytes as f64 / r.total_weight as f64,
         );
-        println!("        Whole blocks (experts included) stay on one node, so decode keeps its {hops_now}-hop path — a layer's experts are never scattered across nodes.");
+        let _ = writeln!(o, "        Whole blocks (experts included) stay on one node, so decode keeps its {}-hop path — a layer's experts are never scattered across nodes.", r.nodes.hops_now);
     }
-    let hr_note = if headroom_from_flag {
+
+    let hr_note = if r.headroom_from_flag {
         "--headroom override — WHAT-IF; the load executes with the [shared_model] headroom"
     } else {
         "matches the load's configured headroom"
     };
-    println!("Headroom: {headroom:.2}× ({hr_note}) — weight × {headroom:.2} must fit each device (covers KV + buffers)\n");
+    let _ = writeln!(o, "Headroom: {headroom:.2}× ({hr_note}) — weight × {headroom:.2} must fit each device (covers KV + buffers)\n");
 
-    println!("  dev  role    VRAM       blocks     n   weight     need       fit");
-    for r in &rows {
-        let (blocks_s, n_s) = match r.blocks {
+    let _ = writeln!(
+        o,
+        "  dev  role    VRAM       blocks     n   weight     need       fit"
+    );
+    for d in &r.rows {
+        let (blocks_s, n_s) = match d.blocks {
             Some((a, b)) => (format!("{a}-{b}"), format!("{}", b - a + 1)),
             None => ("—".to_string(), "0".to_string()),
         };
-        let need = (r.weight as f64 * headroom) as u64;
-        let fit = if need <= r.vram {
-            format!("ok  +{:.1} GB", gb(r.vram - need))
+        let fit = if d.fits() {
+            format!("ok  +{:.1} GB", gb(d.vram - d.need))
         } else {
-            format!("OVERFLOW -{:.1} GB", gb(need - r.vram))
+            format!("OVERFLOW -{:.1} GB", gb(d.need - d.vram))
         };
-        let star = if r.is_host { "*" } else { " " };
-        let role = if r.is_host { "host" } else { "worker" };
-        println!(
+        let star = if d.is_host { "*" } else { " " };
+        let role = if d.is_host { "host" } else { "worker" };
+        let _ = writeln!(
+            o,
             "{star} {:>3}  {:<6} {:>6.1} GB  {:<8}  {:>2}  {:>6.1} GB  {:>6.1} GB  {fit}",
-            r.dev,
+            d.dev,
             role,
-            gb(r.vram),
+            gb(d.vram),
             blocks_s,
             n_s,
-            gb(r.weight),
-            gb(need)
+            gb(d.weight),
+            gb(d.need)
         );
-        if r.is_host && embd_bytes > 0 {
-            println!(
+        if d.is_host && r.embd_bytes > 0 {
+            let _ = writeln!(
+                o,
                 "       (+ token_embd {:.1} GB in host system RAM, not VRAM)",
-                gb(embd_bytes)
+                gb(r.embd_bytes)
             );
         }
     }
 
-    println!();
-    println!(
+    let _ = writeln!(o);
+    let _ = writeln!(
+        o,
         "Aggregate gate: pooled {:.1} GB {} model×{headroom:.2} ({:.1} GB) → {}",
-        gb(pooled),
-        if gate_pass { ">=" } else { "<" },
-        gb(gate_need),
-        if gate_pass {
+        gb(r.pooled),
+        if r.gate_pass { ">=" } else { "<" },
+        gb(r.gate_need),
+        if r.gate_pass {
             "PASS".to_string()
         } else {
             "FAIL — cluster too small; the host reports \"forming\" and does not load".to_string()
         }
     );
+
+    let overflows = r.overflows();
     if overflows.is_empty() {
-        println!("Per-device:     all devices fit ok");
+        let _ = writeln!(o, "Per-device:     all devices fit ok");
     } else {
-        let ids: Vec<String> = overflows.iter().map(|r| r.dev.to_string()).collect();
-        println!(
+        let ids: Vec<String> = overflows.iter().map(|d| d.dev.to_string()).collect();
+        let _ = writeln!(
+            o,
             "Per-device:     {} device(s) OVERFLOW [{}] -> the LIVE load would OOM here (it gates only on the aggregate, not per-device).",
             overflows.len(),
             ids.join(", ")
         );
-        println!("\nOptions:");
-        println!("   • move the host role to your largest node (--host <idx>) — the host also holds the output head");
-        println!("   • lower --headroom for a tighter pack (less KV room), or give the overflowing node more free VRAM");
-        if !uniform {
-            println!("   • this model is skewed enough that one block's mass exceeds a small node's share — the split is already mass-aware, so the fix is more VRAM on that node or a different --host, not a smarter split");
+        let _ = writeln!(o, "\nOptions:");
+        let _ = writeln!(o, "   • move the host role to your largest node (--host <idx>) — the host also holds the output head");
+        let _ = writeln!(o, "   • lower --headroom for a tighter pack (less KV room), or give the overflowing node more free VRAM");
+        if !r.block_mass.uniform {
+            let _ = writeln!(o, "   • this model is skewed enough that one block's mass exceeds a small node's share — the split is already mass-aware, so the fix is more VRAM on that node or a different --host, not a smarter split");
         }
     }
 
@@ -945,24 +1417,120 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // can raise THROUGHPUT despite the extra hop — the measured 122B ran ~20%
     // faster distributed (36/12) than solo. So report the hop cost; don't claim
     // fewer nodes is always faster.
-    println!(
-        "Nodes:          {active_nodes} holding blocks → {hops_now} network hop{} per token",
-        if hops_now == 1 { "" } else { "s" }
+    let n = &r.nodes;
+    let _ = writeln!(
+        o,
+        "Nodes:          {} holding blocks → {} network hop{} per token",
+        n.active_nodes,
+        n.hops_now,
+        if n.hops_now == 1 { "" } else { "s" }
     );
-    if min_nodes < active_nodes {
-        println!(
-            "                mass alone fits {min_nodes} node{} ({hops_min} hop{}) — {} fewer node(s) would cut {} per-token hop(s) of latency. Net tok/s depends on the host: if it's memory-bandwidth-bound, keeping layers offloaded can still win. Measure both.",
-            if min_nodes == 1 { "" } else { "s" },
-            if hops_min == 1 { "" } else { "s" },
-            active_nodes - min_nodes,
-            hops_now - hops_min,
+    if n.min_nodes < n.active_nodes {
+        let _ = writeln!(
+            o,
+            "                mass alone fits {} node{} ({} hop{}) — {} fewer node(s) would cut {} per-token hop(s) of latency. Net tok/s depends on the host: if it's memory-bandwidth-bound, keeping layers offloaded can still win. Measure both.",
+            n.min_nodes,
+            if n.min_nodes == 1 { "" } else { "s" },
+            n.hops_min,
+            if n.hops_min == 1 { "" } else { "s" },
+            n.active_nodes - n.min_nodes,
+            n.hops_now - n.hops_min,
         );
     }
 
-    if gate_pass && overflows.is_empty() {
-        0
-    } else {
-        1
+    render_speed_human(&mut o, r);
+    o
+}
+
+/// The `Speed:` block.
+///
+/// The whole point of this section is that it is allowed to say nothing. A
+/// number appears here only when a run produced it for this exact
+/// configuration; otherwise the block names the command that would produce
+/// one. It carries no estimate, no interpolation from a neighbouring split,
+/// and — deliberately — no guess at how long measuring would take, since that
+/// would itself be a fabricated number about a model we have never loaded.
+fn render_speed_human(o: &mut String, r: &PlanReport) {
+    use std::fmt::Write as _;
+
+    match &r.speed {
+        SpeedSection::Measured { summary: s } => {
+            let _ = writeln!(
+                o,
+                "Speed:          {:.1} tok/s decode · TTFT {:.2} s — MEASURED on this exact split",
+                s.decode_tok_s,
+                s.ttft_ms / 1000.0
+            );
+            let _ = writeln!(
+                o,
+                "                {} · ctx {}{}",
+                s.placement_human,
+                s.n_ctx,
+                match &s.backend {
+                    Some(b) => format!(" · {b}"),
+                    None => String::new(),
+                }
+            );
+            let _ = writeln!(
+                o,
+                "                {} run{}, {:.1}–{:.1} tok/s · build {}",
+                s.runs,
+                if s.runs == 1 { "" } else { "s" },
+                s.decode_tok_s_min,
+                s.decode_tok_s_max,
+                s.measured_build
+            );
+            if s.stale {
+                let _ = writeln!(
+                    o,
+                    "                (!) recorded on a different build than this binary. Re-run `svrn mesh bench`"
+                );
+                let _ = writeln!(o, "                    if the inference engine changed.");
+            }
+        }
+        SpeedSection::NotMeasured { near } => {
+            let _ = writeln!(o, "Speed:          not measured for this split.");
+            for n in near.iter().take(2) {
+                let _ = writeln!(
+                    o,
+                    "                Measured on this mesh: {} → {:.1} tok/s.",
+                    n.placement_human, n.decode_tok_s
+                );
+                let _ = writeln!(
+                    o,
+                    "                That is a different configuration ({}), so its number does not apply here.",
+                    n.differs_by.join(", ")
+                );
+            }
+            if near.is_empty() {
+                let _ = writeln!(
+                    o,
+                    "                Sovereign does not quote throughput it has not measured."
+                );
+            }
+            let _ = writeln!(o, "                Measure it:  svrn mesh bench");
+        }
+        SpeedSection::NotMeasurable(NotMeasurable::HypotheticalDevices) => {
+            let _ = writeln!(
+                o,
+                "Speed:          not measurable — --devices describes hardware that isn't here."
+            );
+            let _ = writeln!(
+                o,
+                "                Run this with --from-mesh on the mesh itself, then `svrn mesh bench`."
+            );
+        }
+        SpeedSection::NotMeasurable(NotMeasurable::HostUnidentified) => {
+            let _ = writeln!(
+                o,
+                "Speed:          not measurable — this host advertises no hardware fingerprint,"
+            );
+            let _ = writeln!(
+                o,
+                "                so there is no key a measurement could be filed under. Upgrading"
+            );
+            let _ = writeln!(o, "                the daemon on this node fixes it.");
+        }
     }
 }
 
@@ -1905,4 +2473,534 @@ fn hostname() -> Option<String> {
         .ok()
         .and_then(|h| h.into_string().ok())
         .map(|s| s.strip_suffix(".local").map(|t| t.to_string()).unwrap_or(s))
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    /// A model with `n` uniform blocks, an output head, and a token embedding.
+    fn model(n: u32, block_gb: u64, head_gb: u64, embd_gb: u64) -> Vec<(String, Option<u32>, u64)> {
+        let mut v: Vec<(String, Option<u32>, u64)> = (0..n)
+            .map(|i| (format!("blk.{i}.attn_q.weight"), Some(i), block_gb * GB))
+            .collect();
+        v.push(("output.weight".into(), None, head_gb * GB));
+        v.push(("token_embd.weight".into(), None, embd_gb * GB));
+        v
+    }
+
+    fn input(sizes: Vec<(String, Option<u32>, u64)>, n: u32, devices_gb: Vec<f64>) -> PlanInput {
+        let host = devices_gb.len() - 1;
+        PlanInput {
+            model_name: "test.gguf".into(),
+            n_layer: n,
+            sizes,
+            devices_gb,
+            host,
+            headroom: 1.2,
+            headroom_from_flag: false,
+            // These tests exercise the fit computation, not the speed lookup;
+            // `mesh: None` is the `--devices` shape, which is barred from
+            // matching a measurement by construction.
+            mesh: None,
+            n_ctx: 32_768,
+        }
+    }
+
+    /// `build_report` against an empty measurement store — the week-1 state, and
+    /// the state every fit assertion below cares about.
+    fn report(i: PlanInput) -> PlanReport {
+        build_report(
+            i,
+            &sovereign_core::mesh_measurements::MeasurementFile::new(),
+            "test-build",
+        )
+    }
+
+    /// The defect the live load still has, visible in the preview: pooled memory
+    /// is ample, yet one device's own share does not fit it.
+    ///
+    /// The mechanism is `quantize_vram`'s 4 GiB bucket floor — a 2 GB device is
+    /// weighted as though it had 4 GiB, so the split hands it roughly twice the
+    /// mass it can hold. Aggregate arithmetic cannot see this, which is exactly
+    /// why the per-device pass exists.
+    #[test]
+    fn a_small_device_overflows_while_the_pooled_gate_passes() {
+        let r = report(input(model(300, 2, 0, 0), 300, vec![2.0, 1000.0]));
+        assert!(
+            r.gate_pass,
+            "1002 GB pooled against a 600 GB model must clear the aggregate gate"
+        );
+        let overflows = r.overflows();
+        assert_eq!(
+            overflows.len(),
+            1,
+            "exactly the small device should overflow"
+        );
+        assert_eq!(overflows[0].dev, 0);
+        assert!(overflows[0].need > overflows[0].vram);
+        assert_eq!(
+            r.exit_code(),
+            1,
+            "a per-device overflow is not a passing plan"
+        );
+    }
+
+    /// Every byte of the model is charged to exactly one device. If this drifts,
+    /// the fit verdict is meaningless in a way no other assertion would catch.
+    #[test]
+    fn every_block_is_charged_exactly_once() {
+        let r = report(input(model(48, 1, 2, 3), 48, vec![64.0, 32.0, 32.0]));
+        let charged: u64 = r.rows.iter().map(|d| d.weight).sum();
+        assert_eq!(
+            charged,
+            48 * GB + 2 * GB,
+            "block mass plus the output head, and nothing else"
+        );
+        // token_embd is host system RAM, never a device's share.
+        assert_eq!(r.embd_bytes, 3 * GB);
+        assert_eq!(r.total_weight, 48 * GB + 2 * GB + 3 * GB);
+    }
+
+    /// The output head rides the host, and the host is charged for it.
+    #[test]
+    fn the_host_is_charged_for_the_output_head() {
+        let r = report(input(model(48, 1, 8, 0), 48, vec![64.0, 64.0]));
+        let holder = r
+            .rows
+            .iter()
+            .find(|d| d.holds_output)
+            .expect("someone holds the head");
+        assert!(holder.is_host, "the head belongs to the host");
+        let blocks_only: u64 = holder
+            .blocks
+            .map(|(a, b)| (a..=b).count() as u64 * GB)
+            .unwrap_or(0);
+        assert_eq!(holder.weight, blocks_only + 8 * GB);
+    }
+
+    /// `--host` moves both the head and the star in the table.
+    #[test]
+    fn the_host_index_selects_which_device_holds_the_head() {
+        let mut i = input(model(48, 1, 4, 0), 48, vec![64.0, 64.0, 64.0]);
+        i.host = 0;
+        let r = report(i);
+        assert!(r.rows[0].is_host && r.rows[0].holds_output);
+        assert!(!r.rows[1].holds_output && !r.rows[2].holds_output);
+        assert!(render_human(&r).contains("*   0  host"));
+    }
+
+    /// Need is `weight × headroom`, using the same truncating cast the table
+    /// prints — so the gate and the displayed number agree at the boundary.
+    #[test]
+    fn need_is_weight_times_headroom_exactly() {
+        let mut i = input(model(48, 1, 0, 0), 48, vec![512.0]);
+        i.headroom = 1.35;
+        let r = report(i);
+        let d = &r.rows[0];
+        assert_eq!(d.need, (d.weight as f64 * 1.35) as u64);
+    }
+
+    #[test]
+    fn a_cluster_too_small_fails_the_aggregate_gate() {
+        let r = report(input(model(48, 1, 0, 0), 48, vec![2.0, 2.0]));
+        assert!(!r.gate_pass);
+        assert_eq!(r.exit_code(), 1);
+        assert!(render_human(&r).contains("FAIL — cluster too small"));
+    }
+
+    #[test]
+    fn a_comfortable_fit_passes_both_gates() {
+        let r = report(input(model(48, 1, 2, 1), 48, vec![256.0, 256.0]));
+        assert!(r.gate_pass);
+        assert!(r.overflows().is_empty());
+        assert_eq!(r.exit_code(), 0);
+        assert!(render_human(&r).contains("Per-device:     all devices fit ok"));
+    }
+
+    /// A dense model reports no MoE section; a routed-expert model does, and the
+    /// expert mass is counted as cold rather than as per-token work.
+    #[test]
+    fn moe_is_reported_only_when_routed_experts_exist() {
+        let dense = report(input(model(48, 1, 0, 0), 48, vec![256.0]));
+        assert!(dense.moe.is_none());
+        assert!(!render_human(&dense).contains("MoE:"));
+
+        let mut sizes = model(48, 1, 0, 0);
+        sizes.push(("blk.0.ffn_gate_exps.weight".into(), Some(0), 90 * GB));
+        let moe = report(input(sizes, 48, vec![512.0]));
+        let m = moe.moe.as_ref().expect("routed experts make this an MoE");
+        assert_eq!(m.routed_expert_bytes, 90 * GB);
+        assert_eq!(
+            m.hot_bytes,
+            (48 + 90) * GB - 90 * GB,
+            "hot mass excludes the cold experts"
+        );
+        assert!(render_human(&moe).contains("MoE:"));
+    }
+
+    /// Uniform mass says heterogeneous VRAM is safe; skewed mass warns instead.
+    #[test]
+    fn block_mass_spread_drives_the_uniformity_verdict() {
+        let uniform = report(input(model(48, 1, 0, 0), 48, vec![256.0]));
+        assert!(uniform.block_mass.uniform);
+        assert!(render_human(&uniform).contains("UNIFORM mass"));
+
+        let mut skewed = model(48, 1, 0, 0);
+        skewed[0].2 = 40 * GB;
+        let r = report(input(skewed, 48, vec![256.0]));
+        assert!(!r.block_mass.uniform);
+        assert!(r.block_mass.spread > 1.15);
+        assert!(render_human(&r).contains("NON-UNIFORM mass"));
+    }
+
+    /// Fewer nodes means fewer per-token hops — reported as a cost, never as a
+    /// recommendation, because on a bandwidth-bound host offloading can still win.
+    #[test]
+    fn the_hop_count_follows_the_node_count_without_claiming_a_winner() {
+        let r = report(input(model(48, 1, 0, 0), 48, vec![256.0, 256.0, 256.0]));
+        assert_eq!(r.nodes.active_nodes, 3);
+        assert_eq!(r.nodes.hops_now, 2);
+        assert_eq!(r.nodes.min_nodes, 1, "one 256 GB node holds a 48 GB model");
+        let out = render_human(&r);
+        assert!(out.contains("3 holding blocks → 2 network hops per token"));
+        assert!(
+            out.contains("Measure both."),
+            "the advisor must not claim fewer nodes is always faster"
+        );
+    }
+
+    /// The headroom line distinguishes a what-if from the value the load will use.
+    #[test]
+    fn headroom_source_is_reported_honestly() {
+        let mut i = input(model(48, 1, 0, 0), 48, vec![256.0]);
+        i.headroom_from_flag = true;
+        let flagged = report(i);
+        assert!(render_human(&flagged).contains("WHAT-IF"));
+        assert_eq!(render_json(&flagged)["headroom_source"], "flag");
+
+        let configured = report(input(model(48, 1, 0, 0), 48, vec![256.0]));
+        assert!(render_human(&configured).contains("matches the load's configured headroom"));
+        assert_eq!(render_json(&configured)["headroom_source"], "config");
+    }
+
+    /// The JSON contract every scripted consumer reads.
+    #[test]
+    fn render_json_carries_the_whole_device_table() {
+        let r = report(input(model(48, 1, 2, 1), 48, vec![64.0, 32.0, 32.0]));
+        let j = render_json(&r);
+        assert_eq!(j["blocks"], 48);
+        assert!(j["aggregate_gate_pass"].as_bool().unwrap());
+        assert_eq!(j["moe"], serde_json::Value::Null);
+        let devices = j["devices"].as_array().expect("a row per device");
+        assert_eq!(devices.len(), 3);
+        for d in devices {
+            for k in [
+                "device",
+                "role",
+                "vram_gb",
+                "blocks",
+                "block_count",
+                "holds_output",
+                "weight_gb",
+                "need_gb",
+                "fits",
+            ] {
+                assert!(
+                    !d[k].is_null() || k == "blocks",
+                    "device row is missing {k}"
+                );
+            }
+        }
+        assert_eq!(j["devices"][2]["role"], "host");
+    }
+
+    /// A device that gets no blocks holds nothing and cannot manufacture a
+    /// refusal.
+    #[test]
+    fn a_device_with_no_blocks_holds_nothing_and_fits() {
+        let r = report(input(model(2, 1, 0, 0), 2, vec![64.0, 64.0, 64.0]));
+        for d in r.rows.iter().filter(|d| d.blocks.is_none()) {
+            assert_eq!(d.weight, 0);
+            assert!(d.fits());
+        }
+    }
+
+    // --- the speed section ------------------------------------------------
+
+    use sovereign_core::mesh_measurements as mm;
+
+    fn mesh_devs(names: &[&str], fp: Option<u64>) -> Vec<MeshDevice> {
+        names
+            .iter()
+            .map(|n| MeshDevice {
+                name: (*n).into(),
+                vram_gb: 64.0,
+                hw_fingerprint: fp,
+                backend: Some("vulkan".into()),
+            })
+            .collect()
+    }
+
+    fn live(mesh: Vec<MeshDevice>) -> PlanInput {
+        let devices_gb = mesh.iter().map(|d| d.vram_gb).collect::<Vec<_>>();
+        let mut i = input(model(48, 1, 2, 0), 48, devices_gb);
+        i.mesh = Some(mesh);
+        i
+    }
+
+    /// Any tokens-per-second figure carrying an actual number.
+    ///
+    /// Deliberately not a bare `contains("tok/s")`: the hops advisor legitimately
+    /// says "Net tok/s depends on the host", which is prose about a tradeoff, not
+    /// a claim about this mesh. What must never appear unmeasured is a *number*.
+    fn quotes_a_rate(s: &str) -> bool {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|w| w[1].starts_with("tok/s") && w[0].chars().any(|c| c.is_ascii_digit()))
+    }
+
+    /// `--devices` describes hardware that is not here, so no measurement can
+    /// apply to it. Barred by construction, not by a runtime check.
+    #[test]
+    fn a_hypothetical_mesh_is_not_measurable() {
+        let r = report(input(model(48, 1, 2, 0), 48, vec![64.0, 64.0]));
+        assert!(matches!(
+            r.speed,
+            SpeedSection::NotMeasurable(NotMeasurable::HypotheticalDevices)
+        ));
+        assert!(r.speed_key.is_none(), "no key exists for absent hardware");
+
+        let j = render_json(&r);
+        assert_eq!(j["speed"]["status"], "not_measurable");
+        assert_eq!(j["speed"]["reason"], "hypothetical-devices");
+        assert!(j["speed"]["key"].is_null());
+        assert!(render_human(&r).contains("not measurable"));
+    }
+
+    /// A host that advertises no fingerprint gets an honest refusal rather than
+    /// a placeholder key that would collide every unidentified machine.
+    #[test]
+    fn an_unidentified_host_is_not_measurable() {
+        let r = report(live(mesh_devs(&["beefymac", "ruggedfox"], None)));
+        assert!(matches!(
+            r.speed,
+            SpeedSection::NotMeasurable(NotMeasurable::HostUnidentified)
+        ));
+        assert_eq!(render_json(&r)["speed"]["reason"], "host-unidentified");
+    }
+
+    /// An identified mesh with nothing recorded says so, and offers the command.
+    #[test]
+    fn an_identified_mesh_with_no_record_says_not_measured() {
+        let r = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let SpeedSection::NotMeasured { near } = &r.speed else {
+            panic!("expected NotMeasured");
+        };
+        assert!(near.is_empty(), "an empty store has no near misses");
+
+        let k = r.speed_key.as_ref().expect("an identified mesh has a key");
+        assert_eq!(k.n_ctx, 32_768);
+        assert_eq!(k.host_hw_fingerprint, 7);
+        assert!(k.model_fingerprint.starts_with("mf1:"));
+        assert!(k.placement_digest.starts_with("pd1:"));
+
+        let out = render_human(&r);
+        assert!(out.contains("not measured for this split"));
+        assert!(out.contains("svrn mesh bench"));
+        assert_eq!(render_json(&r)["speed"]["status"], "not_measured");
+    }
+
+    /// THE guard for week 1: with no measurement, no rate is quoted anywhere,
+    /// and every numeric field is null rather than zero. Zero is a number a
+    /// consumer will divide by; null is an absence it has to handle.
+    #[test]
+    fn no_rate_is_quoted_and_no_numeric_is_zero_when_unmeasured() {
+        for r in [
+            report(input(model(48, 1, 2, 0), 48, vec![64.0, 64.0])),
+            report(live(mesh_devs(&["a", "b"], Some(7)))),
+            report(live(mesh_devs(&["a", "b"], None))),
+        ] {
+            let out = render_human(&r);
+            assert!(
+                !quotes_a_rate(&out),
+                "an unmeasured plan quoted a rate:\n{out}"
+            );
+            let s = &render_json(&r)["speed"];
+            for k in [
+                "decode_tok_s",
+                "decode_tok_s_min",
+                "decode_tok_s_max",
+                "ttft_ms",
+                "itl_p50_ms",
+                "itl_p95_ms",
+                "prefill_tok_s",
+                "runs",
+                "measured_at",
+                "measured_build",
+                "stale",
+            ] {
+                assert!(s[k].is_null(), "speed.{k} must be null, not a value");
+            }
+        }
+    }
+
+    /// A record filed under this exact configuration is served, and the whole
+    /// block is populated.
+    #[test]
+    fn a_matching_record_is_served_back() {
+        let probe = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let key = probe.speed_key.clone().expect("key");
+
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                key,
+                decode_tok_s: 14.1,
+                decode_tok_s_min: 13.9,
+                decode_tok_s_max: 14.2,
+                ttft_ms: 910.0,
+                itl_p50_ms: 71.0,
+                itl_p95_ms: 79.0,
+                prefill_tok_s: None,
+                cold_load_s: Some(112.3),
+                trials: 3,
+                content_frames: 256,
+                model_name: "test.gguf".into(),
+                placement_human: "36 local + 12 @beefymac".into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_753_500_000,
+                build: "test-build".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: Some(0.4),
+                verdict: mm::Verdict::Valid,
+            },
+        );
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            "test-build",
+        );
+        assert!(matches!(r.speed, SpeedSection::Measured { .. }));
+        let out = render_human(&r);
+        assert!(out.contains("14.1 tok/s decode"));
+        assert!(out.contains("MEASURED on this exact split"));
+        assert!(quotes_a_rate(&out), "a measured plan SHOULD quote a rate");
+
+        let s = &render_json(&r)["speed"];
+        assert_eq!(s["status"], "measured");
+        assert_eq!(s["decode_tok_s"], 14.1);
+        assert_eq!(s["runs"], 1);
+        assert_eq!(s["stale"], false);
+        assert!(
+            s["prefill_tok_s"].is_null(),
+            "unmeasured prefill stays null"
+        );
+    }
+
+    /// A record taken on a different split is named as context but never
+    /// becomes this plan's number.
+    #[test]
+    fn a_record_for_another_split_is_a_near_miss_not_an_answer() {
+        let other = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let mut key = other.speed_key.clone().expect("key");
+        key.placement_digest = "pd1:0000000000000000".into();
+
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                key,
+                decode_tok_s: 11.7,
+                decode_tok_s_min: 11.7,
+                decode_tok_s_max: 11.7,
+                ttft_ms: 800.0,
+                itl_p50_ms: 80.0,
+                itl_p95_ms: 90.0,
+                prefill_tok_s: None,
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 128,
+                model_name: "test.gguf".into(),
+                placement_human: "48 local (solo)".into(),
+                nodes: 1,
+                hops: 0,
+                measured_at: 1_753_400_000,
+                build: "test-build".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: None,
+                verdict: mm::Verdict::Valid,
+            },
+        );
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            "test-build",
+        );
+        let SpeedSection::NotMeasured { near } = &r.speed else {
+            panic!("a different split is not a hit");
+        };
+        assert_eq!(near.len(), 1);
+        assert_eq!(near[0].differs_by, vec!["split"]);
+
+        let out = render_human(&r);
+        assert!(out.contains("not measured for this split"));
+        assert!(out.contains("48 local (solo)"));
+        assert!(
+            out.contains("does not apply here"),
+            "the other number must be explicitly disclaimed"
+        );
+
+        let s = &render_json(&r)["speed"];
+        assert_eq!(s["status"], "not_measured");
+        assert!(
+            s["decode_tok_s"].is_null(),
+            "a near miss must NEVER populate this plan's rate"
+        );
+        assert_eq!(s["near_misses"][0]["decode_tok_s"], 11.7);
+    }
+
+    /// A record from a different build is still shown — with a warning. Hiding
+    /// it would cost a re-measurement for nothing.
+    #[test]
+    fn a_record_from_another_build_is_shown_and_flagged() {
+        let probe = report(live(mesh_devs(&["a", "b"], Some(7))));
+        let key = probe.speed_key.clone().expect("key");
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                key,
+                decode_tok_s: 14.1,
+                decode_tok_s_min: 14.0,
+                decode_tok_s_max: 14.2,
+                ttft_ms: 900.0,
+                itl_p50_ms: 70.0,
+                itl_p95_ms: 78.0,
+                prefill_tok_s: None,
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 256,
+                model_name: "test.gguf".into(),
+                placement_human: "36/12".into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_753_000_000,
+                build: "0.9.1".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: None,
+                verdict: mm::Verdict::Valid,
+            },
+        );
+        let r = build_report(live(mesh_devs(&["a", "b"], Some(7))), &file, "0.10.0");
+        assert!(render_human(&r).contains("(!) recorded on a different build"));
+        assert_eq!(render_json(&r)["speed"]["stale"], true);
+    }
 }

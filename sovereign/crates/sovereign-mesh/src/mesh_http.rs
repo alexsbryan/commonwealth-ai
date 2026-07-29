@@ -256,6 +256,17 @@ pub struct MemberDto {
     /// pod-deployment workflows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// Stable hash of this member's advertised hardware. Part of the
+    /// measurement cache key `svrn mesh plan` builds — a throughput number is
+    /// only valid on the hardware it was measured on. `None` for peers on a
+    /// daemon that predates the field; `mesh plan` then reports "not measured"
+    /// rather than guessing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hw_fingerprint: Option<u64>,
+    /// GPU compute backend as advertised (`cuda` | `rocm` | `metal` | `vulkan`),
+    /// shown beside a measurement so the reader knows which stack produced it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 }
 
 fn default_node_name(override_name: Option<String>) -> String {
@@ -350,6 +361,8 @@ async fn mesh_status(
             vram_gb: m.vram_gb,
             can_anchor: m.can_anchor,
             addresses: m.addresses.clone(),
+            hw_fingerprint: m.hw_fingerprint,
+            backend: m.backend.clone(),
         })
         .collect();
 

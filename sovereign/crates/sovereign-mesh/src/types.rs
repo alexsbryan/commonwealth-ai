@@ -57,6 +57,25 @@ pub struct MeshMember {
     /// round, or when the member crashed without graceful shutdown).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// Stable hash of this member's advertised hardware
+    /// (`sovereign_core::mesh_measurements::hardware_fingerprint`).
+    ///
+    /// Part of the measurement cache key: a measured throughput number is only
+    /// valid on the hardware it was measured on, so a machine change has to
+    /// break the key rather than quietly serve the old number. `None` for a
+    /// peer running a daemon that predates this field, which `mesh plan` treats
+    /// as "not measured" rather than substituting a placeholder — one shared
+    /// default would collide every unidentified host into a single key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hw_fingerprint: Option<u64>,
+    /// GPU compute backend as advertised (`cuda` | `rocm` | `metal` | `vulkan`).
+    ///
+    /// Displayed beside a measurement so the reader knows which stack produced
+    /// it. The same silicon driven through a different backend runs at a
+    /// materially different rate, so this is also folded into
+    /// [`MeshMember::hw_fingerprint`] — it annotates *and* discriminates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

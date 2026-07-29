@@ -53,6 +53,38 @@ impl MeshState {
                     // workflow (operators need self.address as the
                     // founder addr; member addresses for debugging).
                     addresses: m.addresses.iter().map(|a| a.to_string()).collect(),
+                    // Derived from the hardware this member ALREADY gossips —
+                    // no new gossip field, no schema change, no extra round.
+                    // A member advertising no GPU gets `None` rather than a
+                    // fingerprint of an empty set, so "we don't know this
+                    // machine" stays distinguishable from "we know it has
+                    // nothing".
+                    hw_fingerprint: if m.capabilities.hardware.gpus.is_empty() {
+                        None
+                    } else {
+                        Some(sovereign_core::mesh_measurements::hardware_fingerprint(
+                            m.capabilities.hardware.cpu_cores,
+                            m.capabilities.hardware.system_ram_gb,
+                            &m.capabilities
+                                .hardware
+                                .gpus
+                                .iter()
+                                .map(|g| {
+                                    (
+                                        g.name.clone(),
+                                        g.vram_gb,
+                                        compute_type_label(g.compute_type).to_string(),
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        ))
+                    },
+                    backend: m
+                        .capabilities
+                        .hardware
+                        .gpus
+                        .first()
+                        .map(|g| compute_type_label(g.compute_type).to_string()),
                 }
             })
             .collect();
@@ -122,6 +154,21 @@ impl MeshState {
 /// panels even when the data was present. Pinned by `node_id_key_is_full_hex`.
 fn member_node_id_key(id: &commonwealth_core::ids::NodeId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Wire label for a GPU's compute backend.
+///
+/// Spelled out here rather than derived from `Debug` because it is part of a
+/// measurement cache key: a `Debug` rename would silently invalidate every
+/// recorded throughput number on every machine. These strings are a contract.
+fn compute_type_label(ct: commonwealth_core::capabilities::ComputeType) -> &'static str {
+    use commonwealth_core::capabilities::ComputeType as C;
+    match ct {
+        C::Cuda => "cuda",
+        C::Rocm => "rocm",
+        C::Metal => "metal",
+        C::Vulkan => "vulkan",
+    }
 }
 
 fn humanize_corpus_id(id: &str) -> String {

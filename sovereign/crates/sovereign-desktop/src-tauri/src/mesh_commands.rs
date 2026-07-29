@@ -588,6 +588,8 @@ impl MeshStateResponse {
                 contribution_level: 0,
                 contribution_label: String::new(),
                 addresses: m.addresses,
+                hw_fingerprint: m.hw_fingerprint,
+                backend: m.backend,
             })
             .collect();
         Self {
