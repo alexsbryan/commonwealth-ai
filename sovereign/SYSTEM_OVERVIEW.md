@@ -979,6 +979,32 @@ gate" — the fit-on-your-own-test-set failure the prior art commits by
 reporting its headline on the same 66 rows it tuned on. **The command
 writes no constant**; it names the constant and the file and stops.
 
+**Per-case attribution (`--explain`).** A confusion matrix says *two false
+positives*; the next question is always **which two**, and until 2026-07-29
+nothing could answer it — `evaluate()` incremented counters and dropped the
+case id, so the operator's only recourse was to re-derive the buckets by
+hand. `ScoredCase::verdict()` is now the single bucketing rule, and both
+`evaluate()` (which counts verdicts) and `attribute()` (which names them)
+route through it — so the per-case listing can never contradict the totals
+printed above it, and a test sweeps every reachable gate on a bank asserting
+the two views agree. `verdict_changes()` adds the other half: `would_change()`
+says *that* moving a constant changes something, this says *what*, per case.
+`--explain` prints the errors behind each axis (expensive first, closest to
+the boundary first) plus the flips a move would cause; `--format json`
+always carries every case for both gates.
+
+The first run paid for itself. The locator axis's 2 false positives are
+`loc_abstain_last_week` and `loc_abstain_across_all_chats` — both
+**archive-recall** questions, and both scoring *higher* on the conversation
+locator (sim 0.668 / 0.660) than any of the three true positives the gate
+misses (0.420–0.448, at **negative** margins). No threshold reaches those
+three: the geometry ranks archive questions as more "about this conversation"
+than genuine in-thread ones. That is an **exemplar-coverage** defect, not a
+threshold defect, and the fitted `(0.314, 0.178)` gate only clears the two
+FPs by threading a 0.031 band above their margins — a fix tuned to two
+specific cases. The same view shows 7 of the intent axis's 13 misses already
+predict the **correct** label and are held out by the floor alone.
+
 **Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
 the failure this system actually has is that the ground moves while the
 constants stay still — a new encoder, a re-quantised one, an edited exemplar

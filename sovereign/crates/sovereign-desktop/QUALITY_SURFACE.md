@@ -40,7 +40,7 @@ run](#what-ci-does-not-run), which is the most important section here.
 | Demo reel | `npm run demo` | 9 product beats; a failed beat exports no clip | no |
 | a11y | `npm run a11y` | Accessibility report | no |
 | Soak / chaos / personas | `npm run soak` · `chaos` · `personas.mjs` | Long-run stability and answer quality | no |
-| **Production boot chain** | `scripts/wizard-verify.sh` | The path a **shipped install** actually takes: fresh wizard → `complete_setup` → supervised relaunch → `current_exe() --daemon-child` → Attach. Linux-only (`unshare`). | no |
+| **Production boot chain** | `scripts/wizard-verify.sh` | The path a **shipped install** actually takes: fresh wizard → `complete_setup` → supervised relaunch → `current_exe() --daemon-child` → Attach. Linux + macOS. | no |
 | Whole-stack smoke | `scripts/desktop-smoke.sh` | All of the above, budgeted, in one run | no |
 
 ### What the three Playwright configs are for
@@ -90,7 +90,10 @@ Two consequences worth stating plainly:
   `SOVEREIGN_CLI_PATH` when set. Every supervised lane in the repo sets it
   (`faults/spawn.ts:151`, `tests/e2e/scripts/lib/harness.mjs:257`) except
   `wizard-verify.sh`, which unsets it. So F5 is the *only* coverage of the
-  branch a packaged install takes, and it is Linux-only.
+  branch a packaged install takes. It isolates via a private netns on Linux
+  and via checked-free ports on macOS (there is no netns equivalent — it
+  refuses to start unless `:9741`/`:9745` are free, which `desktop-smoke.sh`
+  Phase 6 arranges for you). Verified 12/12 on Darwin, 2026-07-28.
 
 ---
 
@@ -270,6 +273,14 @@ Stated plainly, because the gap is the thing most likely to bite you:
 
 If you are about to cut a release, `scripts/desktop-smoke.sh` is the closest
 thing to a complete answer, and it is not cheap. Budget for it — and read its
-scoreboard for `SKIP` rows, not just the final verdict. On macOS and Windows,
-Phase 6 always skips, which means the boot chain those users run is verified on
-no machine you own.
+scoreboard for `SKIP` rows, not just the final verdict: a lane that could not
+get its preconditions verified nothing, and only the `SKIP` detail says so.
+
+**`desktop-smoke.sh` did not run on macOS at all until 2026-07-28.** `run_capped`
+shelled out to GNU `timeout`, which darwin does not ship, so every phase exited
+127 — including `stop_resident_daemon`'s own capped `sovereign daemon stop`,
+whose `|| true` swallowed it, so the daemon was never asked to stop and the
+port poll then blamed the daemon. One missing binary, two misleading symptoms,
+and a whole-stack gate that was structurally incapable of passing on half the
+platforms it ships to. It now resolves `timeout`/`gtimeout`/a bash fallback and
+prints which one it is using in the start banner. Windows remains uncovered.

@@ -44,7 +44,8 @@ use sovereign_core::effort_classifier::EffortClassifier;
 use sovereign_core::models_manifest::ModelsManifest;
 use sovereign_core::router_axis::{normalize, AxisGate};
 use sovereign_core::router_calibration::{
-    fit, parse_bank, CalibrationCase, FitReport, GateOutcome, Objective, ScoredCase,
+    attribute, fit, parse_bank, verdict_changes, CalibrationCase, CaseAttribution, CaseVerdict,
+    FitReport, GateOutcome, Objective, ScoredCase,
 };
 use sovereign_core::router_drift::{
     bank_digest, compare, AxisChange, AxisDelta, DriftReport, FitSnapshot,
@@ -78,6 +79,9 @@ OPTIONS:
                              so a later run can be diffed against it.
   --baseline-dir <path>      Override that directory.
   --no-drift                 Skip the comparison against the baseline.
+  --explain                  Name the cases behind the counts: every error
+                             under the shipped gate, and every case whose
+                             verdict the best gate would flip.
 
 The default objective encodes the asymmetry every axis documents: a false
 positive hard-commits a turn down a narrowed path, a false negative merely
@@ -89,6 +93,11 @@ against it — the check that catches an encoder or exemplar change closing in
 on a threshold BEFORE any bench regression shows it. Deltas are only called a
 regression when the encoder AND the bank are unchanged; otherwise they are
 printed as evidence and left to you.
+
+EXPLAIN. `--explain` answers the question the counts cannot: the report says
+two false positives — WHICH two? It lists them by case id with the scores and
+the per-case cushion, plus what moving to the fitted gate would actually flip.
+`--format json` always carries the full per-case attribution for both gates.
 
 EXIT: 0 clean · 2 usage · 3 a gate is movable · 4 drift regression.
 
@@ -120,6 +129,7 @@ struct Opts {
     save_baseline: bool,
     baseline_dir: Option<PathBuf>,
     no_drift: bool,
+    explain: bool,
 }
 
 fn parse_opts(args: &[String]) -> Result<Opts, String> {
@@ -133,6 +143,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
     let mut save_baseline = false;
     let mut baseline_dir = None;
     let mut no_drift = false;
+    let mut explain = false;
 
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -141,6 +152,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--axis" => axes.push(next(&mut it, "--axis")?),
             "--save-baseline" => save_baseline = true,
             "--no-drift" => no_drift = true,
+            "--explain" => explain = true,
             "--baseline-dir" => {
                 baseline_dir = Some(PathBuf::from(next(&mut it, "--baseline-dir")?))
             }
@@ -195,6 +207,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         save_baseline,
         baseline_dir,
         no_drift,
+        explain,
     })
 }
 
@@ -589,12 +602,20 @@ async fn cmd_fit(args: &[String]) -> i32 {
             "cases_total": cases.len(),
             "skipped": skipped.iter().map(|(id, ax)| serde_json::json!({"id": id, "axis": ax})).collect::<Vec<_>>(),
             "axes": &reports,
+            "attribution": attribution_json(&reports, &by_axis),
             "drift": drift.as_ref().map(drift_json),
             "baseline_written": saved.as_ref().map(|p| p.display().to_string()),
         });
         println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
     } else {
-        print_human(&reports, &shipped, &skipped, &measured_model);
+        print_human(
+            &reports,
+            &shipped,
+            &skipped,
+            &measured_model,
+            &by_axis,
+            opts.explain,
+        );
         match &drift {
             Some(d) => print_drift(d, &dir),
             None if !opts.no_drift => println!(
@@ -732,11 +753,118 @@ fn print_outcome(label: &str, o: &GateOutcome) {
     );
 }
 
+/// Full per-case attribution for both gates, per axis.
+///
+/// Unconditional in JSON — unlike the human report, which filters to
+/// errors to stay readable. A machine consumer wants every row, and
+/// this is the surface a future regression check would key on ("the FP
+/// set changed", not just "the FP count changed").
+fn attribution_json(
+    reports: &BTreeMap<String, FitReport>,
+    by_axis: &BTreeMap<String, Vec<ScoredCase>>,
+) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for (axis, r) in reports {
+        let Some(cases) = by_axis.get(axis) else {
+            continue;
+        };
+        let shipped_rows = attribute(cases, r.current.gate());
+        let best_rows = r.best.as_ref().map(|b| attribute(cases, b.gate()));
+        let flips = r.best.as_ref().map(|b| {
+            verdict_changes(cases, r.current.gate(), b.gate())
+                .into_iter()
+                .map(|(id, before, after)| {
+                    serde_json::json!({"id": id, "before": before, "after": after})
+                })
+                .collect::<Vec<_>>()
+        });
+        out.insert(
+            axis.clone(),
+            serde_json::json!({
+                "shipped": shipped_rows,
+                "best": best_rows,
+                "flips": flips,
+            }),
+        );
+    }
+    serde_json::Value::Object(out)
+}
+
+/// One attribution row, aligned so a column of them reads as a table.
+///
+/// `expect`/`predicted` are spelled out rather than abbreviated: on the
+/// multi-class intent axis "fired the wrong label" and "fired when it
+/// should have abstained" are different bugs, and the row has to say
+/// which without the reader consulting the bank.
+fn print_case_row(r: &CaseAttribution) {
+    let want = r.expect.as_deref().unwrap_or("abstain");
+    let would = r.predicted.as_deref().unwrap_or("-");
+    println!(
+        "    {:<15} {:<34} sim {:.3}  margin {:+.3}  cushion {:+.3}   want {} · would fire {}",
+        r.verdict.label(),
+        r.id,
+        r.sim_positive,
+        r.margin,
+        r.cushion,
+        want,
+        would,
+    );
+}
+
+/// The per-case half of the report: which cases are behind the counts.
+///
+/// Prints ERRORS only, expensive first (false positive → mislabelled →
+/// missed), then what moving to the fitted gate would flip. Correct
+/// cases are omitted deliberately — `weakest_accept` already summarises
+/// how close the healthy ones sit to the boundary, and a 74-row dump
+/// buries the two rows a human is looking for. `--format json` carries
+/// every case for both gates.
+fn print_attribution(r: &FitReport, cases: &[ScoredCase]) {
+    let rows = attribute(cases, r.current.gate());
+    let mut errors: Vec<&CaseAttribution> = rows.iter().filter(|x| x.verdict.is_error()).collect();
+    // Expensive errors first; within a bucket, closest to the boundary
+    // first — that is the one a threshold move would reach soonest.
+    errors.sort_by(|a, b| {
+        let rank = |v: CaseVerdict| match v {
+            CaseVerdict::FalsePositive => 0,
+            CaseVerdict::Mislabelled => 1,
+            _ => 2,
+        };
+        rank(a.verdict)
+            .cmp(&rank(b.verdict))
+            .then(b.cushion.partial_cmp(&a.cushion).unwrap_or(std::cmp::Ordering::Equal))
+    });
+
+    if errors.is_empty() {
+        println!("  every case decided correctly under the shipped gate.");
+    } else {
+        println!("  the {} error(s) behind those counts:", errors.len());
+        for e in errors {
+            print_case_row(e);
+        }
+    }
+
+    if let Some(b) = &r.best {
+        let flips = verdict_changes(cases, r.current.gate(), b.gate());
+        if !flips.is_empty() {
+            println!(
+                "  moving to the fitted gate would flip {} case(s):",
+                flips.len()
+            );
+            for (id, before, after) in flips {
+                println!("    {:<34} {} → {}", id, before.label(), after.label());
+            }
+        }
+    }
+}
+
 fn print_human(
     reports: &BTreeMap<String, FitReport>,
     shipped: &BTreeMap<&str, (AxisGate, &str, &str)>,
     skipped: &[(String, String)],
     model_file: &str,
+    by_axis: &BTreeMap<String, Vec<ScoredCase>>,
+    explain: bool,
 ) {
     println!("\nrouter fit — thresholds measured against {model_file}\n");
     for (axis, r) in reports {
@@ -774,6 +902,15 @@ fn print_human(
                 }
             }
             None => println!("  best           <no gate satisfies the objective on this bank>"),
+        }
+        if explain {
+            match by_axis.get(axis) {
+                Some(cases) => print_attribution(r, cases),
+                // Unreachable in practice — a report only exists for an
+                // axis that scored cases — but silence here would read
+                // as "no errors", which is the one thing it must not say.
+                None => println!("  (no scored cases retained for this axis — cannot attribute)"),
+            }
         }
         println!();
     }

@@ -197,8 +197,12 @@ stop_resident_daemon() {
     curl -s --max-time 2 "$DAEMON_URL/v1/models" >/dev/null 2>&1 || { log "  :9741 free"; return 0; }
     sleep 2; i=$((i+2))
   done
-  warn "  :9741 still answering after 60s — managed real-mode will likely trip its port guard"
-  return 0
+  # Return FAILURE. This used to `return 0`, so callers proceeded into a
+  # run whose port guard was guaranteed to trip and reported it as a
+  # product FAIL instead of an environment SKIP. A lane that could not get
+  # its preconditions did not verify anything — say so.
+  warn "  :9741 still answering after 60s — cannot free the port"
+  return 1
 }
 
 # Restore the resident daemon after managed real-mode. `sovereign daemon start`
@@ -219,8 +223,22 @@ restore_resident_daemon() {
 }
 
 # Rewrite config.toml's primary= line to $1 (idempotent; backs up once).
+#
+# REFUSES a path that does not exist. This writes the OPERATOR'S live
+# ~/.svrnmesh/config.toml, and a primary that isn't on disk is not a
+# degraded run — the daemon will not start at all: the VRAM preflight
+# stats the file, the error underflows the size to ~i64::MAX MiB, and the
+# gate rejects the whole config. The smoke then reports "resident daemon
+# didn't return" and leaves the box without a daemon. Observed 2026-07-28
+# on darwin, where SHIPPED_PRIMARY names a GGUF that is not present.
+# Leaving the existing primary alone is always the safer failure.
 ensure_config_primary() {
   local model="$1"
+  if [ ! -e "$model" ]; then
+    warn "  refusing to repoint primary at a missing file: $model"
+    warn "  leaving the existing primary in place (config not touched)"
+    return 1
+  fi
   grep -q "^primary = \"$model\"" "$SVR/config.toml" 2>/dev/null && return 0
   cp "$SVR/config.toml" "$SVR/config.toml.bak-smoke-$STAMP" 2>/dev/null || true
   python3 - "$SVR/config.toml" "$model" <<'PY'
@@ -238,7 +256,38 @@ cleanup() {
 trap cleanup EXIT
 
 # run_capped <secs> <cmd...> ; returns cmd's rc (124 on timeout)
-run_capped() { local cap="$1"; shift; timeout --preserve-status "$cap" "$@"; }
+# GNU coreutils `timeout` does not exist on macOS. Until 2026-07-28 this
+# was a bare `timeout ...`, so on darwin EVERY phase exited 127 — including
+# `stop_resident_daemon`'s own `run_capped 60 sovereign daemon stop`, whose
+# `|| true` then swallowed it, so the daemon was never even asked to stop
+# and the port poll blamed the daemon. One missing binary, two misleading
+# symptoms. Resolve the strategy once, announce it, and fall back.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then TIMEOUT_BIN="gtimeout"; fi
+
+run_capped() {
+  local cap="$1"; shift
+  if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" --preserve-status "$cap" "$@"; return $?; fi
+  # Portable fallback (bash 3.2 — macOS ships no newer): background the
+  # command, poll, TERM then KILL on expiry. Returns the command's own
+  # status, or 124 when we killed it, matching coreutils' convention.
+  # Like `timeout` itself, this signals the direct child only.
+  "$@" &
+  local cmd_pid=$! waited=0 grace=0
+  while kill -0 "$cmd_pid" 2>/dev/null; do
+    if [ "$waited" -ge "$cap" ]; then
+      kill -TERM "$cmd_pid" 2>/dev/null
+      grace=0
+      while [ "$grace" -lt 5 ] && kill -0 "$cmd_pid" 2>/dev/null; do sleep 1; grace=$((grace+1)); done
+      kill -KILL "$cmd_pid" 2>/dev/null
+      wait "$cmd_pid" 2>/dev/null
+      return 124
+    fi
+    sleep 1; waited=$((waited+1))
+  done
+  wait "$cmd_pid"
+}
 
 # ── Phase 0: static & render (no model) — HARD STOP ──────────────────────────
 phase0() {
@@ -483,7 +532,15 @@ phase6() {
   fi
   run_capped "$SMOKE_P6_SECS" scripts/wizard-verify.sh > "$ART/p6-wizard-verify.log" 2>&1
   rc=$?
-  [ -z "$netns" ] && restore_resident_daemon
+  if [ -z "$netns" ]; then
+    # The drive's EXIT trap kills its own supervised child; give the port a
+    # moment to actually release before we start the resident daemon onto it.
+    local w=0
+    while [ "$w" -lt 15 ] && curl -s --max-time 2 "$DAEMON_URL/v1/models" >/dev/null 2>&1; do
+      sleep 1; w=$((w+1))
+    done
+    restore_resident_daemon
+  fi
   secs=$(( $(date +%s) - t0 ))
   case "$rc" in
     0) log "  production boot chain: PASS"
@@ -549,6 +606,7 @@ print_scoreboard() {
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 log "desktop-smoke start — budget $(( BUDGET_SECS/60 ))m, primary=$(basename "$TARGET_PRIMARY" .gguf), artifacts $ART${QUICK:+ (quick)}${DRY_RUN:+ (dry-run)}${CAPTURE_BASELINE:+ (capture-baseline)}"
+log "host $(uname -s), phase caps via ${TIMEOUT_BIN:-bash fallback (no coreutils timeout)}"
 [ -z "$DRY_RUN" ] && basename "$TARGET_PRIMARY" .gguf > "$BASELINE/model.txt" 2>/dev/null || true
 
 if [ -n "$DO_BUILD" ] && [ -z "$DRY_RUN" ]; then

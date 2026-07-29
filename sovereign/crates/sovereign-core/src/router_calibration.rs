@@ -89,12 +89,137 @@ impl ScoredCase {
     /// Rejected → the decision is "abstain" and is correct exactly
     /// when `expect` is `None`.
     pub fn is_correct(&self, gate: AxisGate) -> bool {
+        !self.verdict(gate).is_error()
+    }
+
+    /// Which of the five buckets this case falls into under `gate`.
+    ///
+    /// THE bucketing rule — [`evaluate`] counts these and [`attribute`]
+    /// names them, so the per-case listing can never disagree with the
+    /// confusion matrix printed above it. Re-deriving the buckets in a
+    /// renderer is the failure this method exists to prevent.
+    pub fn verdict(&self, gate: AxisGate) -> CaseVerdict {
         if gate.admits(self.score) {
-            self.predicted.is_some() && self.predicted == self.expect
+            match (&self.expect, &self.predicted) {
+                (None, _) => CaseVerdict::FalsePositive,
+                (Some(e), Some(p)) if e == p => CaseVerdict::FiredCorrect,
+                (Some(_), _) => CaseVerdict::Mislabelled,
+            }
+        } else if self.expect.is_none() {
+            CaseVerdict::AbstainedCorrect
         } else {
-            self.expect.is_none()
+            CaseVerdict::Missed
         }
     }
+}
+
+/// What one case did under one gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaseVerdict {
+    /// Fired, with the right label.
+    FiredCorrect,
+    /// Fired when it should have abstained — the expensive error.
+    FalsePositive,
+    /// Fired for a case that should fire, with the wrong label.
+    Mislabelled,
+    /// Abstained, correctly.
+    AbstainedCorrect,
+    /// Abstained on a case that should have fired — the cheap error.
+    Missed,
+}
+
+impl CaseVerdict {
+    pub fn is_error(&self) -> bool {
+        matches!(
+            self,
+            CaseVerdict::FalsePositive | CaseVerdict::Mislabelled | CaseVerdict::Missed
+        )
+    }
+
+    /// Did the gate commit on this case (as opposed to abstaining)?
+    pub fn fired(&self) -> bool {
+        matches!(
+            self,
+            CaseVerdict::FiredCorrect | CaseVerdict::FalsePositive | CaseVerdict::Mislabelled
+        )
+    }
+
+    /// Short label for reports. Stable — the JSON surface uses the
+    /// serde form, so these are free to read as prose.
+    pub fn label(&self) -> &'static str {
+        match self {
+            CaseVerdict::FiredCorrect => "fired-correct",
+            CaseVerdict::FalsePositive => "FALSE-POSITIVE",
+            CaseVerdict::Mislabelled => "MISLABELLED",
+            CaseVerdict::AbstainedCorrect => "abstained",
+            CaseVerdict::Missed => "missed",
+        }
+    }
+}
+
+/// One case's fate under one gate, with the numbers that produced it.
+///
+/// The answer to "the report says two false positives — WHICH two?".
+/// [`GateOutcome`] deliberately keeps only counts (it is evaluated once
+/// per candidate gate, hundreds of times per axis); this is the
+/// per-case view, computed on demand for the one or two gates a human
+/// actually reads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CaseAttribution {
+    pub id: String,
+    pub verdict: CaseVerdict,
+    pub sim_positive: f32,
+    pub sim_negative: f32,
+    pub margin: f32,
+    /// Signed distance from the gate boundary. Negative on a rejected
+    /// case says how far the gate would have to move to admit it — the
+    /// "held out by 0.002 of margin" number, per case.
+    pub cushion: f32,
+    /// The label the case demands. `None` = must abstain.
+    pub expect: Option<String>,
+    /// The label the axis would emit if admitted.
+    pub predicted: Option<String>,
+}
+
+/// Attribute every case to its bucket under `gate`.
+///
+/// Tallying the result reproduces [`evaluate`]'s counts exactly — both
+/// route through [`ScoredCase::verdict`], and a test pins the agreement.
+pub fn attribute(cases: &[ScoredCase], gate: AxisGate) -> Vec<CaseAttribution> {
+    cases
+        .iter()
+        .map(|c| CaseAttribution {
+            id: c.id.clone(),
+            verdict: c.verdict(gate),
+            sim_positive: c.score.sim_positive,
+            sim_negative: c.score.sim_negative,
+            margin: c.score.margin(),
+            cushion: gate.cushion(c.score),
+            expect: c.expect.clone(),
+            predicted: c.predicted.clone(),
+        })
+        .collect()
+}
+
+/// Cases whose verdict differs between two gates — what moving the
+/// constant would ACTUALLY do, per case.
+///
+/// [`FitReport::would_change`] answers whether a move changes anything;
+/// this answers what. Returned in `(id, before, after)` order, bank
+/// order preserved.
+pub fn verdict_changes(
+    cases: &[ScoredCase],
+    before: AxisGate,
+    after: AxisGate,
+) -> Vec<(String, CaseVerdict, CaseVerdict)> {
+    cases
+        .iter()
+        .filter_map(|c| {
+            let (b, a) = (c.verdict(before), c.verdict(after));
+            (b != a).then(|| (c.id.clone(), b, a))
+        })
+        .collect()
 }
 
 /// Confusion counts for one candidate gate over one bank, plus the
@@ -288,26 +413,28 @@ pub fn evaluate(cases: &[ScoredCase], gate: AxisGate) -> GateOutcome {
     };
     for c in cases {
         let cushion = gate.cushion(c.score);
-        if gate.admits(c.score) {
+        // One bucketing rule, shared with `attribute` — see
+        // `ScoredCase::verdict`. Counting here and naming there from
+        // two copies of this match is exactly how a report grows a
+        // per-case listing that contradicts its own totals.
+        let verdict = c.verdict(gate);
+        if verdict.fired() {
             o.weakest_accept = Some(match o.weakest_accept {
                 Some(w) => w.min(cushion),
                 None => cushion,
             });
-            match (&c.expect, &c.predicted) {
-                (None, _) => o.false_positive += 1,
-                (Some(e), Some(p)) if e == p => o.fired_correct += 1,
-                (Some(_), _) => o.mislabelled += 1,
-            }
         } else {
             o.nearest_miss = Some(match o.nearest_miss {
                 Some(m) => m.max(cushion),
                 None => cushion,
             });
-            if c.expect.is_none() {
-                o.abstained_correct += 1;
-            } else {
-                o.missed += 1;
-            }
+        }
+        match verdict {
+            CaseVerdict::FiredCorrect => o.fired_correct += 1,
+            CaseVerdict::FalsePositive => o.false_positive += 1,
+            CaseVerdict::Mislabelled => o.mislabelled += 1,
+            CaseVerdict::AbstainedCorrect => o.abstained_correct += 1,
+            CaseVerdict::Missed => o.missed += 1,
         }
     }
     o
@@ -615,6 +742,117 @@ mod tests {
         // headroom 0.00 → -0.03 binds.
         assert!((o.nearest_miss.unwrap() - -0.03).abs() < 1e-6);
         assert!((o.separation() - 0.03).abs() < 1e-6);
+    }
+
+    /// THE invariant that lets a report print counts and a per-case
+    /// listing side by side: they are two views of one rule.
+    ///
+    /// Swept over every candidate gate the fitter itself would try, so
+    /// a divergence anywhere in the reachable threshold space fails
+    /// here rather than in a report a human is mid-way through reading.
+    #[test]
+    fn attribute_tallies_match_evaluate_counts_at_every_reachable_gate() {
+        let bank = binary_bank();
+        let sims: Vec<f32> = bank.iter().map(|c| c.score.sim_positive).collect();
+        let margins: Vec<f32> = bank.iter().map(|c| c.score.margin()).collect();
+        let mut checked = 0usize;
+        for &s in &candidates(&sims) {
+            for &m in &candidates(&margins) {
+                let gate = AxisGate::new(s, m);
+                let o = evaluate(&bank, gate);
+                let rows = attribute(&bank, gate);
+                assert_eq!(rows.len(), o.total(), "every case must be attributed");
+                let tally = |v: CaseVerdict| rows.iter().filter(|r| r.verdict == v).count();
+                assert_eq!(tally(CaseVerdict::FiredCorrect), o.fired_correct);
+                assert_eq!(tally(CaseVerdict::FalsePositive), o.false_positive);
+                assert_eq!(tally(CaseVerdict::Mislabelled), o.mislabelled);
+                assert_eq!(tally(CaseVerdict::AbstainedCorrect), o.abstained_correct);
+                assert_eq!(tally(CaseVerdict::Missed), o.missed);
+                assert_eq!(
+                    rows.iter().filter(|r| r.verdict.fired()).count(),
+                    o.fired(),
+                    "fired() must agree with the counted fires"
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked >= 25, "swept too few gates to mean anything");
+    }
+
+    /// The question the whole feature exists for: the report says two
+    /// false positives — which two?
+    #[test]
+    fn attribute_names_the_false_positives_rather_than_counting_them() {
+        // Loose gate: neg_near slips through.
+        let gate = AxisGate::new(0.50, 0.02);
+        let bank = binary_bank();
+        assert_eq!(evaluate(&bank, gate).false_positive, 1, "gate must leak");
+
+        let leaked: Vec<String> = attribute(&bank, gate)
+            .into_iter()
+            .filter(|r| r.verdict == CaseVerdict::FalsePositive)
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(leaked, vec!["neg_near".to_string()]);
+    }
+
+    /// A rejected case carries the distance it would have to travel —
+    /// the "held out by 0.002 of margin" number, per case.
+    #[test]
+    fn attribute_records_the_signed_cushion_per_case() {
+        let rows = attribute(&binary_bank(), AxisGate::new(0.55, 0.04));
+        let by = |id: &str| rows.iter().find(|r| r.id == id).expect("case").clone();
+
+        let weak = by("pos_weak");
+        assert_eq!(weak.verdict, CaseVerdict::FiredCorrect);
+        assert!(weak.cushion.abs() < 1e-6, "sits exactly on the floor");
+
+        let near = by("neg_near");
+        assert_eq!(near.verdict, CaseVerdict::AbstainedCorrect);
+        assert!(
+            (near.cushion - -0.03).abs() < 1e-6,
+            "0.03 of floor is what holds it out, and the row says so"
+        );
+        assert!((near.margin - 0.04).abs() < 1e-6);
+    }
+
+    /// `would_change()` says a move changes something; this says what.
+    #[test]
+    fn verdict_changes_names_the_cases_a_move_would_flip() {
+        let bank = binary_bank();
+        let leaky = AxisGate::new(0.50, 0.02);
+        let tight = AxisGate::new(0.55, 0.04);
+
+        let changes = verdict_changes(&bank, leaky, tight);
+        assert_eq!(changes.len(), 1, "exactly one case flips");
+        assert_eq!(changes[0].0, "neg_near");
+        assert_eq!(changes[0].1, CaseVerdict::FalsePositive);
+        assert_eq!(changes[0].2, CaseVerdict::AbstainedCorrect);
+
+        assert!(
+            verdict_changes(&bank, tight, tight).is_empty(),
+            "a gate cannot differ from itself"
+        );
+    }
+
+    /// `is_correct` used to carry its own copy of the bucketing match.
+    /// It is now a view of `verdict`, and must stay one.
+    #[test]
+    fn is_correct_agrees_with_the_verdict_it_delegates_to() {
+        for gate in [
+            AxisGate::new(0.50, 0.02),
+            AxisGate::new(0.55, 0.04),
+            AxisGate::new(0.90, 0.50),
+        ] {
+            for c in &binary_bank() {
+                assert_eq!(
+                    c.is_correct(gate),
+                    !c.verdict(gate).is_error(),
+                    "{} disagrees under {gate:?}",
+                    c.id
+                );
+            }
+        }
     }
 
     #[test]
