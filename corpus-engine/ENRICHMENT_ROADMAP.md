@@ -41,18 +41,27 @@ Engineering design + t-shirt sizing for every workstream:
    routine. Enrichment also feeds the verifier's training stream
    (real chunks → claims → construction-labeled corruptions). The two
    projects are one flywheel.
-5. The plan: **P0 make quality measurable → P1 faithful by construction
-   → P2 extraction economics → P3 retrieval-side exploitation (evidence-
-   gated) → P4 time as a first-class dimension → P5 frontier bets.**
+5. **The prime directive: this program is funded as a subtraction.**
+   Enrichment today is four systems, a name collision, ~9 artifact
+   stores, five entity-extraction paths, and ~12 env knobs — a new
+   engineer cannot hold it. Every phase below therefore carries a
+   **Deletes** ledger, §4.0 defines the end-state system in one
+   paragraph, and a tranche that raises the concept counts has failed
+   its gate regardless of what it shipped. The additive-only variant of
+   this roadmap is explicitly not worth funding.
+6. The plan: **P0 make quality measurable (so deletion is safe) → P1
+   faithful by construction → P2 extraction economics + the big
+   consolidations → P3 retrieval-side exploitation (evidence-gated) →
+   P4 time as a first-class dimension → P5 frontier bets.**
 
-| Phase | One-liner | Headline gate |
-|---|---|---|
-| P0 | Repair the measurement fabric | enrichment lane can fail; faithfulness measurable |
-| P1 | No unverified synthesis in evidence | chaos: competence ≥ 0.71 AND honesty ≥ 0.82 |
-| P2 | 10-100x cheaper structure, incremental by default | wiki-class atlas in hours, not years |
-| P3 | Spend the savings at query time | recall lanes move; dark knobs settled by A/B |
-| P4 | Bi-temporal facts for memory corpora | temporal_slice bench; contradiction → invalidation |
-| P5 | Navigator + visual assets | traceable multi-hop; PDF recall parity |
+| Phase | One-liner | Headline gate | Headline deletion |
+|---|---|---|---|
+| P0 | Repair the measurement fabric | enrichment lane can fail; faithfulness measurable | dead code + the ten stale-doc items |
+| P1 | No unverified synthesis in evidence | chaos: competence ≥ 0.71 AND honesty ≥ 0.82 | the unverified-abstractive artifact class |
+| P2 | Cheaper structure, incremental by default, one store | wiki-class atlas in hours, not years | 3 RAPTOR stores; 2 extraction paths; System-1 engine (migration starts); the incremental flag |
+| P3 | Spend the savings at query time | recall lanes move; dark knobs settled by A/B | settled knobs' env vars; per-query entity-graph rebuild |
+| P4 | Bi-temporal facts for memory corpora | temporal_slice bench; contradiction → invalidation | ad-hoc "current state" judgment per consumer |
+| P5 | Navigator + visual assets | traceable multi-hop; PDF recall parity | bespoke evidence-assembly paths converge on one traversal API |
 
 ---
 
@@ -288,7 +297,58 @@ exactly the substrate this bolts onto; it is text-only today.
 Phases are ordered by dependency, not calendar; P0/P1 are the
 prerequisite pair, P2/P3 the payoff pair, P4/P5 the product-defining
 pair. Every phase names its gate up front (per the bench culture:
-gate on exit codes and committed baselines, not vibes).
+gate on exit codes and committed baselines, not vibes) — and its
+**Deletes** ledger, because of §4.0.
+
+### 4.0 The end state — the system a new engineer learns (prime directive)
+
+What a new engineer must learn today, honestly: four enrichment systems
+selected per-corpus plus a name collision that needs its own warning
+section ("atlas" means two unrelated things); ~9 knowledge-artifact
+stores; five ways entities get extracted; two incremental mechanisms
+(one unwired); ~12 env knobs, several shipped dark; and
+trust-by-tribal-knowledge — knowing *which* artifacts can fabricate is
+folklore, not a property of the system.
+
+The end state, in the paragraph a new engineer should be able to hold:
+
+> **Extractors turn sources into evidence-bearing atoms in one graph
+> store. The LLM judges; it never free-writes into evidence — anything
+> abstractive persists only with a verification verdict and its
+> provenance attached. Renderers (briefs, digests, signposts, traces)
+> read the graph. Tiers are budgets — how much of the graph a corpus
+> builds — not different systems.**
+
+Systems 1-4 become *profiles* of that one pipeline (an extractor set +
+prompt assets + a budget), which is what "not a version ladder" should
+have meant all along. The measurable version:
+
+| Dimension | Today | End state |
+|---|---|---|
+| Enrichment systems | 4 + the "atlas"/"atlas" collision | 1 pipeline (extractors → graph → renderers); per-corpus profiles |
+| Knowledge-artifact stores | ~9 (atom-store family; `raptor_nodes`; `conv_raptor_nodes`; `raptor_summaries.lance`; `field_skeleton.json`; vestigial `conv_skeletons`; vault themes; `chunk_entities`) | 3 (chunks+FTS; the atom-graph family; build caches) |
+| Entity-extraction paths | 5 (GLiNER v1; Slow-LLM lark fallback; Phase-1 LLM enumeration; SCIP walk; tabular) | 2 (encoder schemas; structural) — the LLM only judges |
+| Trust model | per-artifact folklore | 1 rule: nothing unverified-abstractive in evidence; provenance end-to-end |
+| Env knobs on these paths | ~12, several dark | ≤ 4, each with a committed A/B behind its default |
+| Incremental mechanisms | 2 + an unwired flag | 1 (content-hash deltas), the only path |
+| "Explain enrichment" | a page + a warning section | the paragraph above |
+
+**The subtraction ledger** — every major addition names what it retires:
+
+| Addition | Retires |
+|---|---|
+| The verification rule (P1) | the unverified-abstractive class; silent cluster-thinning; trust folklore |
+| GLiNER2 schemas (P2.1) | the Slow-LLM lark path; the `gline-rs → orp → ort-rc` chain; LLM enumeration prompts |
+| Summary atoms in the one graph (P2/D3) | `raptor_nodes` + `conv_raptor_nodes` + `raptor_summaries.lance` + the ANN freshness special case + the atlas/atlas collision itself |
+| Graph-rendered digests (P2-P3/D4) | `field_engine.rs` + the `Domain` registry + `field_skeleton.json` |
+| Graph-resident entity PPR (P3/D5) | the per-query `conv_entity_graph` rebuild (and the planned LRU cache — an add this cancels) |
+| Budget tiers (P2/P5) | "which system does my corpus use" as a concept a user-facing engineer needs |
+| A/B'd defaults (P3.1/D2) | the dark-knob population, env vars deleted with their decisions |
+
+**The complexity ratchet.** The seven "Today" numbers above are tracked
+at every tranche exit exactly like the `quality/` baselines: a tranche
+that leaves any of them higher than it found them has failed its gate,
+whatever features it shipped.
 
 ### P0 — Make enrichment quality measurable (the gate for everything else)
 
@@ -331,6 +391,15 @@ is injected (add a canary test that breaks a resolver constant and
 asserts the lane goes red); faithfulness lane reports a number for every
 enriched corpus in CI.
 
+**Deletes:** the immediate dead-code sweep rides here — the
+effectively-dead `ConvTieredProvider`, the debouncer's five-phase v1
+pass for atlas-typed views, the zeroed `FieldModelStats` stub, the
+never-filled conv skeleton columns, and the ten stale-doc items (§6).
+More importantly, P0 is the *enabler*: every structural deletion below
+is gated on a measurement this phase creates. We measure so we can
+delete safely — the eval work is the demolition permit, not added
+process.
+
 ### P1 — Faithful by construction (no unverified synthesis in evidence)
 
 The four leverage points from note 1ab68562, plus structure:
@@ -366,6 +435,13 @@ The four leverage points from note 1ab68562, plus structure:
 **Gate:** chaos-secret-agent with enrichment ON: competence ≥ 0.71 AND
 honesty ≥ 0.82 (beat both arms of the 2026-06-17 A/B simultaneously).
 Faithfulness lane unsupported-claim rate ~0 on new trees.
+
+**Deletes:** the unverified-abstractive artifact class itself — the
+category of thing an engineer must "just know" not to trust; the three
+silent cluster-thinning failure modes (`raptor_atlas.rs:893-911` —
+extractive fallback replaces silent drop); the version-blind checkpoint
+special case. Net-new concept count: one (the verification rule), and
+it replaces folklore, which is the trade this whole roadmap wants.
 
 ### P2 — Extraction economics (structure at 10-100x lower cost, incremental by default)
 
@@ -411,6 +487,23 @@ Faithfulness lane unsupported-claim rate ~0 on new trees.
 or better atom-F1 (measured by the now-real P0 lane); incremental edit →
 patched atlas with no full rebuild, verified by the upgraded verify-v2.
 
+**Deletes:** this is the tranche where the store count and the system
+count actually drop. (a) The Slow-LLM lark entity path and its batching
+machinery, once GLiNER2 owns extraction. (b) The
+`gline-rs → orp → ort-rc` dependency chain (bare `ort`). (c) The three
+RAPTOR sidecar stores — `raptor_nodes`, `conv_raptor_nodes`,
+`raptor_summaries.lance` + its freshness-gate special case — once
+summary nodes are atoms in the one graph (sizing doc D3); this is also
+what dissolves the "atlas"/"atlas" name collision for good. (d) The
+`SOVEREIGN_ATLAS_INCREMENTAL` flag — incremental stops being an option
+and becomes the only path. (e) System-1 retirement *starts* (sizing doc
+D4): the five field phases become pipeline prompt assets over the
+graph, the ambient digest becomes a renderer, and `field_engine.rs` +
+the `Domain` registry go when the KnowledgeView parity gates
+(P0-authored) hold. The concept-graph free tier writes into the same
+atom store with statistical provenance — no new store is created by
+this phase.
+
 ### P3 — Retrieval-side exploitation (spend the build savings where users feel them)
 
 Our own prior (TIERED_RETRIEVAL.md:334-374) declined HippoRAG-2 because
@@ -442,6 +535,13 @@ re-testable; P1 changes the synthesis side it indicted. So:
 temporal/cross-conv archetypes move; every default flip carries its A/B
 in the baseline commit.
 
+**Deletes:** every settled knob's env var — the A/B protocol ends in
+*default + deletion*, not default + one more flag (target: the ~12-knob
+population drops to ≤ 4); the per-query `conv_entity_graph` rebuild,
+once PPR reads entity atoms from the graph (sizing doc D5) — which also
+*cancels* the separately-planned persistence/LRU addition rather than
+building it.
+
 ### P4 — Time as a first-class dimension (the memory moat)
 
 Our product thesis — a sovereign memory of your conversations, notes,
@@ -472,6 +572,11 @@ bi-temporal structure pays.
 correction scenario ("X, later corrected to Y") answers Y-with-history,
 never X.
 
+**Deletes:** a concept rather than a store — "current state" stops
+being every consumer's ad-hoc recency judgment and becomes one
+queryable property (an open validity window), and supersession replaces
+unbounded fact accumulation as the memory-growth story.
+
 ### P5 — Frontier bets (product-defining, evidence-gated)
 
 1. **The navigator (F7).** A bounded agentic loop over structures we
@@ -498,6 +603,14 @@ answer reconstructs its hop path). **Gate (visual):** recall parity
 with the 62%→84% published gap on a scanned-PDF golden before any
 default-on.
 
+**Deletes (navigator):** the bespoke evidence-assembly paths.
+`knowledge_query`, the DeepQuery branch, and `metalingual` each
+hand-assemble evidence today; the navigator is fundable *because* it
+ends with those converging on one budgeted traversal API — fewer query
+paths, not one more. **Visual is the honest exception:** it is the one
+workstream that adds a store, which is exactly why it stays a deferred,
+spike-gated bet rather than part of the funded core.
+
 ---
 
 ## 5. What we deliberately do not do
@@ -516,6 +629,11 @@ default-on.
   resident slots. That constraint is the product.
 - **No un-versioned synthesis.** After P1, nothing abstractive persists
   without model id + prompt_version + a verification verdict attached.
+- **No addition without a named deletion.** A workstream whose end
+  state raises any §4.0 concept count does not ship, whatever it adds.
+  The additive-only variant of this roadmap — all the features, none of
+  the consolidation — is cheaper and is explicitly not worth funding:
+  it would leave a fifth system on the pile.
 
 ## 6. Hygiene backlog surfaced by this review
 

@@ -7,6 +7,14 @@ anchored to seams verified against the code this day (file:line);
 sizes are estimates, and the spike list in §1 exists precisely to
 retire the low-confidence ones before money is committed._
 
+_Revision 2026-07-29b: the program is funded as a **net subtraction**
+(roadmap §4.0). This added the D-track (§2, after P5) — the deletions
+and consolidations, sized like everything else — recomposed the
+tranches around them, and changed two designs (P2.2 writes atoms into
+the existing store instead of a new sidecar; P3.3's persistence half is
+cancelled, subsumed by D5). The additive-only variant is cheaper by
+~4-8 weeks and is explicitly not the fundable program._
+
 **Sizing legend.** Unit = focused engineer-days on this codebase
 (operator + agent fleet pairing, the normal working mode here).
 
@@ -232,9 +240,14 @@ Design: `corpus-engine/src/enrichment/concept_graph.rs` — noun-phrase
 extraction (SP5's crate or heuristic), co-occurrence edges with
 window + df pruning (the TF-IDF motif code in `document_asset.rs:2725`
 region is the in-house precedent for the term-statistics half),
-Leiden/Louvain communities, persisted as a Lance/SQLite sidecar
-(`concept_graph.lance` + community table, following the
-`raptor_summaries.lance` sibling-table pattern). Hooks: ingest-time
+Leiden/Louvain communities. **Storage: no new store** (subtraction
+mandate) — concepts persist as Entity atoms with a statistical
+provenance variant, co-occurrence as provenance-tagged edges in the
+CSR, communities as atoms with `Composes` membership edges, all in the
+existing v2 store + ANN. Scale precedent: the columnar-structural path
+already carries ~1.5M code placeholders; a scale check on a wikipedia
+shard is part of this workstream, not a separate store's justification.
+Hooks: ingest-time
 build (post-embed, budgeted), Phase-1 seed vocabulary, community entry
 points for retrieval (P3.4), and the P5 navigator's frame. Explicitly
 LazyGraphRAG's index half; the query half arrives with P5.
@@ -301,12 +314,14 @@ filter over candidate triples (their ablation: +1.7). Adoption gate:
 the P0.4/P3.1 recall lanes — this is the honest re-litigation of
 `TIERED_RETRIEVAL.md:334-374`, and "no" remains an acceptable answer.
 
-**P3.3 — Persist the entity graph + reranker. `M (4-7d) · Med (SP4 gates)`**
-Graph persistence + LRU keyed on `(corpus, conv, graph_version)`
-replacing per-query rebuild (`S-M 2-3d`). Qwen3-Reranker as an optional
-final stage on the hybrid path behind SP4's latency verdict
-(`M 2-4d`): new optional slot role, budget-capped candidate set (top-20
-→ rerank → top-5), A/B'd on notes_tiered.
+**P3.3 — Reranker stage. `M (2-4d) · Med (SP4 gates)`**
+Qwen3-Reranker as an optional final stage on the hybrid path behind
+SP4's latency verdict: new optional slot role, budget-capped candidate
+set (top-20 → rerank → top-5), A/B'd on notes_tiered.
+_The originally-planned graph-persistence + LRU half is **cancelled**:
+D5 folds the entity graph into the atom store, which makes a bespoke
+cache for the per-query rebuild a bridge to nowhere. Net line item:
+−2-3d and one fewer cache for an engineer to know about._
 
 **P3.4 — Community entry points for LanceDB corpora. `M (3-5d) · Med`**
 Depends P2.2. Entity-poor queries route community → members → leaf
@@ -352,7 +367,77 @@ P1/P2 land, since three of its four substrates arrive there.
 Fund spikes only: pdfium page-raster + ColModernVBERT ONNX single-page
 score (`M 2-3d`), multi-vector MaxSim storage prototype on the
 sibling-table pattern (`M 1-2d`). Full integration re-planned after
-spikes.
+spikes. Per roadmap §4.0 this is the one honest store-adding workstream
+— which is why it stays a gated bet outside the funded core.
+
+### D-track — the deletions and consolidations (the point of the program)
+
+Sized like the additions, because migration is work. D-items are what
+make the roadmap a subtraction; a tranche plan without them is the
+variant we decline to fund.
+
+**D1 — Dead-code + doc-truth sweep. `S-M (1-3d) · High · T1`**
+Delete the effectively-dead `ConvTieredProvider`
+(`FolderTieredProvider` is wired for both runners,
+`enrichment_bootstrap.rs:47-60` — verify, then remove); gate the
+debouncer's v1 pass on enrichment type (`debouncer.rs:271` vs
+`manager.rs:455`); delete or fill the `FieldModelStats` stub (delete —
+D4 retires its consumer); drop the never-filled conv skeleton columns
+or document them as vestigial pending D3; land the ten stale-doc items
++ the "GMM centroid" docstring. Pure subtraction, no gate dependencies.
+
+**D2 — Knob-retirement protocol. `S (1-2d glue, inside P3.1) · High`**
+Every settled A/B ends in *default + env-var deletion + a one-line note
+in the baseline commit* — not default + one more flag. Target: the
+~12-knob population on these paths drops to ≤ 4 (`RAPTOR_GROUNDING`
+merges into the provenance-aware gate policy; `DOC_CLUSTER_*`,
+`CONV_PPR_WEIGHT`, `RAPTOR_DEDUPE`, `DOC_CHUNK_NEIGHBOURS` each resolve
+to a constant or die; `ATLAS_INCREMENTAL` deleted by P2.3).
+
+**D3 — Summary-store unification. `L (8-14d) · Med · T2`**
+The structural deletion. Design: `AtomEnvelope::Summary` (schema 2.3 →
+2.4; level, coherence, doc scope as attributes; the lossless payload
+column absorbs the rest) with **evidence = member chunk spans** through
+the canonical `AtomEnvelope::evidence()` accessor — the invariant that
+no atom kind escapes evidence checks now covers summaries by
+construction — and `Composes` edges child → parent. Embeddings ride
+`atoms_ann.lance`. Writers: the checkpointed RAPTOR builder emits atom
+deltas (`apply_atom_delta`, doc-scoped, matching the existing
+`conv_uuid` keying so corpus/conv deletion stays a doc-delta). Readers
+migrated: `fetch_signposts` (`conv_briefing.rs:438`),
+`apply_raptor_grounding` (`raptor_grounding.rs:99` — now reads the
+atlas ANN), vault-theme assembly. **Then delete:** `raptor_nodes`,
+`conv_raptor_nodes`, `raptor_summaries.lance` + its meta sidecar, the
+freshness gate + brute-force fallback special case, and the dedicated
+`raptor_index.rs` builder. Migration decision (§6): one-shot row
+converter vs lazy rebuild-on-next-enrich. Risks: write-amplification at
+conversation scale (per-conv trees × thousands — scale check against
+the 1.5M-placeholder precedent is step one); briefing latency parity.
+
+**D4 — System-1 retirement into the graph. `L (10-15d) · Med-Low · T2 start, T3 finish`**
+Gated on the KnowledgeView parity goldens P0 authors (+`M 2-3d` inside
+P0.5-extension — personal/conversational/institutional digest goldens,
+the coverage `ENRICHMENT_V1_TO_V2_ASSESS.md:112-120` says is the
+migration blocker). Mapping: skeleton canonical questions → Question
+atoms with position attributes; HDBSCAN clusters + labels → the v2
+clustering/naming phases; fault lines → the tension pipeline (the
+holistic classifier is philosophy's shipped precedent); open questions
+→ Question atoms. The ambient landscape digest becomes a renderer over
+the graph at the same splice point (`turn_prepass.rs:106` — the
+consumer contract does not move). **Then delete:** `field_engine.rs`,
+`enrichment/domains/`, the `Domain` trait + `DomainRegistry`, the
+`field_skeleton.json` writer; SEP's recipe drops its retained v1
+params. Also retires D1's stub-and-lossy-resume class wholesale.
+
+**D5 — Entity-graph fold. `M-L (5-8d) · Med · T3 (with P3.2)`**
+GLiNER2 output already lands as entity atoms + edges (P2.1); PPR runs
+over a per-conversation projection read from the CSR (mmap'd, sync —
+the BFS precedent). **Then delete:** the per-query
+`conv_entity_graph.rs` build path; and the planned LRU cache is never
+built (see P3.3). One graph, one traversal surface.
+
+**D6** is P2.1's deletion face (lark path + gline-rs chain) — sized
+there.
 
 ---
 
@@ -376,6 +461,11 @@ graph TD
   VER[verifier-v0 ships] -.->|swaps judge| P12
   VER -.-> P32
   P23[P2.3 incremental wiring] --> P51
+  P1 --> D3[D3 summary-store unification]
+  P0 --> D4[D4 System-1 retirement]
+  P21 --> D5[D5 entity-graph fold]
+  D3 --> P51
+  D5 --> P32
 ```
 
 Verifier-v0 is deliberately a dotted edge everywhere: every consumer has
@@ -385,46 +475,69 @@ a judge-based interim, so this program never blocks on that one.
 
 ## 4. Roll-up and tranche plan
 
-| Phase | Engineer-days | Confidence-weighted | Machine-time profile |
+| Track | Engineer-days | Confidence | Machine-time profile |
 |---|---|---|---|
 | Spikes | 5-8 | High (that's their job) | light |
 | P0 core (0.1-0.4) | 12-22 | High | weekly rebuilds + judge runs |
-| P0.5 extension | 5-7 | Med | bench nights |
+| P0.5 extension (incl. KnowledgeView parity goldens for D4) | 7-10 | Med | bench nights |
 | P1 | 15-28 | Med | re-validation suites |
-| P2 | 30-50 | Med (SP1/SP5 gate 2 items) | re-embeds, tree rebuilds |
-| P3 | 18-29 | Med | heavy bench nights |
+| P2 (P2.2 sidecar removed) | 28-48 | Med (SP1/SP5 gate 2 items) | re-embeds, tree rebuilds |
+| P3 (P3.3 persistence cancelled) | 15-27 | Med | heavy bench nights |
 | P4 | 13-21 | Med-High | light |
 | P5 probes only | 7-10 | Med | moderate |
-| **Total, probes included** | **~105-175 days (≈ 21-35 weeks)** | | |
+| **D-track: D1 sweep** | 1-3 | High | none |
+| **D-track: D3 summary-store unification** | 8-14 | Med | tree re-emits |
+| **D-track: D4 System-1 retirement** | 10-15 | Med-Low | digest re-builds |
+| **D-track: D5 entity-graph fold** | 5-8 | Med | bench nights |
+| **Total, probes included** | **~125-215 days (≈ 25-43 weeks)** | | |
 
-That total is the *whole program*; the recommendation is to commit it
-in tranches with kill-points, not as one block:
+Against the additive-only draft (~105-175d), the subtraction track adds
+**~4-8 weeks of migration work — and is the fundable core.** The
+cheaper variant leaves a fifth system on the pile and per roadmap §4.0
+is declined. Commit in tranches with kill-points, each exit checked
+against the complexity ratchet (systems / stores / extraction paths /
+knobs), not as one block:
 
-**Tranche 1 — "Trust" (commit now): spikes + P0 core + P1 + P2.5
-hygiene ≈ 33-63 days (7-13 weeks).**
+**Tranche 1 — "Trust" (commit now): spikes + P0 core + P1 + P2.5 + D1
+≈ 34-63 days (7-13 weeks).**
 Exit gates: the canary proves the lane can fail; faithfulness rate
 reported per corpus; chaos double-gate (competence ≥ 0.71 AND honesty
 ≥ 0.82) met with enrichment ON; all six spike answers written down.
+Ratchet at exit: dead code deleted (ConvTieredProvider, debouncer v1
+waste, stats stub), docs truth-restored; store/knob counts unchanged —
+this tranche buys the demolition permit.
 Kill-point: if SP2 shows extractive parity fails badly on our banks,
 P1.1/P1.2 re-plan around verified-abstractive-only (P1 shrinks; the
 faithfulness contract stands).
 
-**Tranche 2 — "Economics" (commit after T1 exit): P2 + P0.5 + P3.1 ≈
-41-67 days (8-13 weeks).**
+**Tranche 2 — "Economics + consolidation" (commit after T1 exit): P2 +
+P0.5 + P3.1(+D2) + D3 + D4-start ≈ 51-87 days (10-17 weeks).**
 Exit gates: wiki-class atlas in hours; incremental default with
-verify-v2 detectability; dark knobs settled by committed A/Bs.
+verify-v2 detectability; dark knobs resolved by committed A/Bs — vars
+deleted with their decisions.
+Ratchet at exit: stores 9 → ~5 (`raptor_nodes`, `conv_raptor_nodes`,
+`raptor_summaries.lance` deleted; skeleton writes stopping); extraction
+paths 5 → 2; incremental flags 1 → 0; systems 4 → 3 (System 1
+mid-retirement, KnowledgeView domains served from the graph).
 Kill-points: SP1 fail → GLiNER2 becomes v1-multitask fallback (P2.1
 drops to S-M); SP5 fail → concept graph v1 ships entity-co-occurrence
-only (P2.2 halves).
+only (P2.2 halves); D3 scale check fails → summaries stay a sibling
+table but adopt the atom envelope + evidence contract (half the
+deletion, all of the trust rule).
 
-**Tranche 3 — "Memory + multi-hop" (evidence-gated): P3.2-3.4 + P4 ≈
-28-45 days (6-9 weeks).**
+**Tranche 3 — "Memory + multi-hop" (evidence-gated): P3.2-3.4 + P4 +
+D4-finish + D5 ≈ 35-56 days (7-11 weeks).**
 Entry condition, not just exit: P3.2 starts only if T2's recall lanes
 show headroom that summary-side fixes didn't close (the recorded prior
 gets its honest test).
+Ratchet at exit: `field_engine.rs` + `domains/` + `conv_entity_graph`
+per-query builder deleted; stores at 3; knobs ≤ 4; the §4.0 end-state
+paragraph is now the literally true description of the system.
 
 **Tranche 4 — "Bets": P5 probes (in T1/T3 slack), full P5 re-planned
-after T2.**
+after T2.** The navigator's full scope is *re-sized after D3/D4*, since
+it inherits one graph + one traversal API instead of three structures —
+the bet gets cheaper because the subtraction happened first.
 
 ## 5. What this exercise changed vs. the roadmap
 
@@ -457,6 +570,8 @@ relevant tranche starts.
 | P2.4 re-embed existing corpora or new-builds-only | New-builds-only + explicit `corpus expand`-style migration verb; never silent re-embed (mesh compat) |
 | GLiNER2 path if SP1 partially succeeds (entities yes, relations no) | Adopt for entities/types; keep relations on the LLM judgment path until the runtime matures |
 | Where the faithfulness JSONL (Stream B) lives | `sovereign/bench/faithfulness/` next to the other banks, git-tracked sampled subset + full local artifact |
+| D3 migration of existing trees: one-shot row converter vs lazy rebuild-on-next-enrich | Lazy rebuild for conversation/vault corpora (per-note trees are cheap and it exercises the new writer end-to-end); one-shot converter only for the SEP-scale retrofit corpora |
+| D4 endgame: SEP's retained v1 full-corpus params | Dropped when D4 finishes; the full-corpus epistemic flow re-lands as a renderer profile over the graph, not a second system |
 
 _Proposed first commit of the program: the T1 spike bundle — it is one
 week, it retires the three lowest-confidence sizes above, and nothing
