@@ -522,7 +522,69 @@ fn plan_cache() -> &'static std::sync::Mutex<HashMap<(String, Vec<String>), Vec<
 /// `None` when there is no RPC worker to distribute to, the GGUF's block count
 /// can't be read, or an RPC device can't be mapped to an endpoint — in every case
 /// the caller falls back to a local-only load (never wedge).
-fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
+/// One device a distributed load would place blocks on, with its memory as ggml
+/// reports it right now.
+///
+/// The two figures answer two different questions and must not be collapsed:
+/// `total_bytes` is what the silicon could hold if nothing else were resident (a
+/// durable hardware fact), `free_bytes` is what is available at this instant (a
+/// reading that moves as other work loads and unloads). The fit gate consumes
+/// `free`-else-`total` as a single `capacity_bytes`, which is precisely why a
+/// refusal used to be undiagnosable — see [`placed_devices`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceMemory {
+    /// The RPC worker endpoint this device lives behind; `None` for a local
+    /// (host) device.
+    pub endpoint: Option<String>,
+    pub free_bytes: u64,
+    pub total_bytes: u64,
+}
+
+impl DeviceMemory {
+    /// The single number the fit gate judges against: live free when ggml
+    /// reports one, else the device total.
+    ///
+    /// A backend that declines to report free memory yields 0, and 0 would fail
+    /// every device — so total is the only safe fallback. Keep this the ONLY
+    /// place the free-else-total rule is written: a planner that previews a load
+    /// and a loader that performs it must collapse the two figures identically,
+    /// or the preview describes a cut the loader would not make.
+    pub fn capacity_bytes(&self) -> u64 {
+        if self.free_bytes > 0 {
+            self.free_bytes
+        } else {
+            self.total_bytes
+        }
+    }
+
+    /// Memory held by work other than the load being planned.
+    pub fn held_by_others_bytes(&self) -> u64 {
+        self.total_bytes.saturating_sub(self.free_bytes)
+    }
+}
+
+/// The devices a distributed load would place across, in PLAN ORDER (eligible
+/// RPC workers first, local GPU last), each with its live memory.
+///
+/// This is the loader's own oracle, factored out so a *preview* can quote it
+/// rather than approximate it. Approximating it is what made `svrn mesh plan`
+/// disagree with the load it previews: the plan read the gossiped device TOTAL
+/// and apportioned 14/34, while the loader read live FREE and ran 12/36 — two
+/// different cuts, so the measurement `mesh bench` had just recorded could never
+/// be found under the plan's key. Same function, same numbers, same cut.
+///
+/// BOTH figures are carried per device, not just the one the gate uses. The gate
+/// reports a single `capacity_mb` with the source string "ggml_backend_dev_memory
+/// (free, else total)", which cannot distinguish "this device is small" from
+/// "this device is momentarily busy" — and those demand opposite responses. A
+/// refusal on 2026-07-29 (worker assigned 12 blocks / 21430 MiB,
+/// capacity_mb=20000) was unresolvable from the logs for exactly that reason:
+/// 20000 could have been a 20 GB device, or a 51 GB device with 31 GB
+/// transiently held by the outgoing generation. It was the latter.
+///
+/// `None` when there is nothing to distribute to: no RPC device is registered,
+/// none is currently eligible, or a device cannot be mapped to an endpoint.
+fn placed_devices() -> Option<Vec<(crate::llama::sys::ggml_backend_dev_t, DeviceMemory)>> {
     // Ordered device set: RPC workers first, then local GPU — the order
     // `plan_shards` indexes and `with_devices` expects.
     let count = unsafe { crate::llama::sys::ggml_backend_dev_count() };
@@ -552,11 +614,6 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         return None; // nothing to distribute to — not a distributed load
     }
 
-    let n_layer = match gguf_block_count(model_path) {
-        Ok(Some(n)) if n > 0 => n,
-        _ => return None, // can't plan deterministically without the layer count
-    };
-
     // Map each RPC device to its endpoint, then KEEP ONLY ELIGIBLE workers. ggml
     // appends RPC devices in registration order (the order pushed to
     // REGISTERED_RPC), so the k-th enumerated RPC device is REGISTERED_RPC[k]. A
@@ -585,57 +642,153 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
     if eligible_rpc.is_empty() {
         return None; // every RPC device is ineligible (quarantined/left) → local-only
     }
-    let assignments: Vec<RpcWarmAssignment> = eligible_rpc
-        .iter()
-        .enumerate()
-        .map(|(i, (_, ep))| RpcWarmAssignment {
-            endpoint: ep.clone(),
-            device_index: i,
-        })
-        .collect();
-    // RPC-first device list (eligible only), then local GPU — the order
-    // `plan_shards`/`with_devices` index, and the order `assignments` renumbered.
-    let mut devs: Vec<crate::llama::sys::ggml_backend_dev_t> =
-        eligible_rpc.into_iter().map(|(d, _)| d).collect();
-    devs.extend(local);
 
-    // Per-device memory across every placed device (workers + local), in plan
-    // order. Read unconditionally (cheap FFI) so it is available regardless of
-    // the plan-cache hit/miss below. Kept per-device: the sum answers "could the
-    // cluster hold this at all", which is not the same question as "can the
-    // device this block landed on hold it".
-    //
-    // BOTH figures are logged per device, not just the one that wins. The fit
-    // gate reports a single `capacity_mb` with the source string
-    // "ggml_backend_dev_memory (free, else total)", which cannot distinguish
-    // "this device is small" from "this device is momentarily busy" — and those
-    // demand opposite responses. A refusal on 2026-07-29 (worker assigned 12
-    // blocks / 21430 MiB, capacity_mb=20000) was unresolvable from the logs for
-    // exactly that reason: 20000 could have been a 20 GB device or a 51 GB
-    // device with 31 GB transiently held by the outgoing generation.
-    let device_memory: Vec<(u64, u64)> = devs
-        .iter()
-        .map(|&d| {
+    // RPC-first device list (eligible only), then local GPU — the order
+    // `plan_shards`/`with_devices` index, and the order the warm assignments
+    // renumber against.
+    let placed: Vec<(crate::llama::sys::ggml_backend_dev_t, Option<String>)> = eligible_rpc
+        .into_iter()
+        .map(|(d, ep)| (d, Some(ep)))
+        .chain(local.into_iter().map(|d| (d, None)))
+        .collect();
+
+    let read: Vec<(crate::llama::sys::ggml_backend_dev_t, DeviceMemory)> = placed
+        .into_iter()
+        .map(|(d, endpoint)| {
             let (mut free, mut total): (usize, usize) = (0, 0);
             unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
-            (free as u64, total as u64)
+            (
+                d,
+                DeviceMemory {
+                    endpoint,
+                    free_bytes: free as u64,
+                    total_bytes: total as u64,
+                },
+            )
         })
         .collect();
-    for (i, (free, total)) in device_memory.iter().enumerate() {
+
+    // Publish the reading for out-of-band readers (`/v1/mesh/status`, and through
+    // it `svrn mesh plan`). Cached rather than re-sampled on demand because this
+    // read can round-trip to a busy worker — see `last_device_memory`.
+    *device_memory_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(DeviceMemorySnapshot {
+        observed_unix: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        devices: read.iter().map(|(_, m)| m.clone()).collect(),
+    });
+
+    Some(read)
+}
+
+/// The raw `SOVEREIGN_RPC_BLOCK_SPLIT` value when the operator has pinned the
+/// per-device block split, else `None`.
+///
+/// Published so a PREVIEW can tell the truth. When this is set the loader ignores
+/// VRAM apportionment entirely (see the `explicit` branch in `plan_distribution`),
+/// so a `svrn mesh plan` that derives a cut from capacities describes a split that
+/// will never load. On this host that was a silent 14/34-vs-12/36 disagreement:
+/// the plan looked right, the load did something else, and the measurement filed
+/// under the real cut could not be found from the plan's key.
+///
+/// Deliberately raw rather than parsed: parsing needs the model's block count and
+/// the device count, which only the caller knows. Both sides then run the SAME
+/// [`parse_block_split`](crate::embedded::parse_block_split) over the same string,
+/// so they cannot disagree about whether a pin is valid — including agreeing to
+/// ignore a malformed one.
+pub fn pinned_block_split_raw() -> Option<String> {
+    std::env::var("SOVEREIGN_RPC_BLOCK_SPLIT")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// The per-device memory the loader last observed, and when.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceMemorySnapshot {
+    /// Unix seconds at which [`placed_devices`] took this reading.
+    ///
+    /// Carried because the reading is an OBSERVATION, not a live value, and a
+    /// consumer that cannot see its age would present a stale number as current.
+    pub observed_unix: u64,
+    /// Plan order: eligible RPC workers first, local GPU last.
+    pub devices: Vec<DeviceMemory>,
+}
+
+fn device_memory_cache() -> &'static std::sync::Mutex<Option<DeviceMemorySnapshot>> {
+    static C: std::sync::OnceLock<std::sync::Mutex<Option<DeviceMemorySnapshot>>> =
+        std::sync::OnceLock::new();
+    C.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// The per-device memory the loader read the last time it planned a distributed
+/// load. `None` before any distributed load has been planned in this process.
+///
+/// **This deliberately does NOT sample.** `ggml_backend_dev_memory` on an RPC
+/// device is a synchronous round-trip to the worker, and a worker busy serving a
+/// resident model can take arbitrarily long to answer it — a 122B decoding on
+/// BeefyMac made `/v1/mesh/status` hang past 70s on 2026-07-30, which in turn
+/// broke `svrn mesh bench` (it reads that endpoint to identify the mesh). A status
+/// endpoint must not block on a remote, busy resource, so the read happens where
+/// it is already being paid for — on the load path — and every reader gets the
+/// cached observation with its timestamp.
+///
+/// The cached value is also the MORE correct thing to publish: "the memory the
+/// loader saw when it chose this cut" is exactly what explains the cut, whereas a
+/// fresh sample describes a moment the load never saw.
+pub fn last_device_memory() -> Option<DeviceMemorySnapshot> {
+    device_memory_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
+    // The device set and its live memory — the same oracle `live_device_memory`
+    // publishes to the planner, so a preview and this load cannot disagree about
+    // how much room each device has.
+    let placed = placed_devices()?;
+
+    let n_layer = match gguf_block_count(model_path) {
+        Ok(Some(n)) if n > 0 => n,
+        _ => return None, // can't plan deterministically without the layer count
+    };
+
+    let assignments: Vec<RpcWarmAssignment> = placed
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (_, m))| {
+            m.endpoint.clone().map(|endpoint| RpcWarmAssignment {
+                endpoint,
+                device_index: i,
+            })
+        })
+        .collect();
+    let devs: Vec<crate::llama::sys::ggml_backend_dev_t> =
+        placed.iter().map(|(d, _)| *d).collect();
+    let device_memory: Vec<DeviceMemory> = placed.into_iter().map(|(_, m)| m).collect();
+
+    for (i, m) in device_memory.iter().enumerate() {
         const MIB: u64 = 1024 * 1024;
         tracing::info!(
             target: "placement",
             device = i,
-            endpoint = ?assignments.iter().find(|a| a.device_index == i).map(|a| &a.endpoint),
-            free_mb = free / MIB,
-            total_mb = total / MIB,
-            held_by_others_mb = total.saturating_sub(*free) / MIB,
+            endpoint = ?m.endpoint,
+            free_mb = m.free_bytes / MIB,
+            total_mb = m.total_bytes / MIB,
+            held_by_others_mb = m.held_by_others_bytes() / MIB,
             "device memory as ggml reports it (plan order: RPC workers first, host last)"
         );
     }
+    // Kept per-device: the sum answers "could the cluster hold this at all",
+    // which is not the same question as "can the device this block landed on
+    // hold it".
     let device_vram_bytes: Vec<u64> = device_memory
         .iter()
-        .map(|&(free, total)| if free > 0 { free } else { total })
+        .map(DeviceMemory::capacity_bytes)
         .collect();
     let eligible_workers = assignments.len();
 
@@ -721,7 +874,7 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
             // ignored) rather than repaired: a run that silently used a
             // different split than the operator asked for would make the
             // experiment's result meaningless.
-            let explicit = std::env::var("SOVEREIGN_RPC_BLOCK_SPLIT").ok().and_then(|raw| {
+            let explicit = pinned_block_split_raw().and_then(|raw| {
                 match parse_block_split(&raw, n_layer, weights.len()) {
                     Some(counts) => plan_shards_explicit(n_layer, &weights, &counts),
                     None => {

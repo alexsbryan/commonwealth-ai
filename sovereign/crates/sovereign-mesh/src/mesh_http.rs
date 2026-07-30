@@ -174,6 +174,67 @@ pub struct StatusResponse {
     /// when iroh isn't running. Answers "am I actually dialable right now?".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub founder_reachability: Option<crate::daemon::FounderReachability>,
+    /// Live per-device memory as the LOADER sees it, in its plan order (eligible
+    /// RPC workers first, this host's GPU last). Empty when this node would not
+    /// distribute (no eligible RPC worker), and on any daemon predating the field.
+    ///
+    /// Published because only this process can answer the question. The gossiped
+    /// `members[].vram_gb` is a device TOTAL — what the silicon could hold if
+    /// nothing else were resident. The loader gates on live FREE, which is a
+    /// different number whenever anything is loaded, and no peer can observe it
+    /// from outside. `svrn mesh plan --from-mesh` previously had only the total,
+    /// so it apportioned a cut (14/34) that the loader did not run (12/36) — and
+    /// a plan that predicts the wrong cut cannot find the measurement recorded
+    /// under the right one. This field is what closes that gap.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub device_memory: Vec<DeviceMemoryView>,
+    /// Unix seconds at which `device_memory` was observed by the load path.
+    ///
+    /// Present whenever `device_memory` is. The reading is an observation taken
+    /// when the loader last planned a cut, NOT a live sample — publishing its age
+    /// is what keeps a consumer from presenting a stale figure as current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_memory_observed_unix: Option<u64>,
+    /// The operator's `SOVEREIGN_RPC_BLOCK_SPLIT` pin, when set — e.g. `"12,36"`.
+    ///
+    /// Published for the same reason as `device_memory`: only this process can see
+    /// it, and without it a preview lies. When a pin is active the loader does not
+    /// apportion by VRAM at all, so any capacity-derived plan — on EITHER basis —
+    /// describes a cut that will not load. A consumer parses this with the same
+    /// `parse_block_split` the loader uses, so both agree on validity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_block_split_pin: Option<String>,
+}
+
+/// One placed device's live memory, as published on `/v1/mesh/status`.
+///
+/// Both figures travel together on purpose: the difference between them is
+/// "memory held by something else right now", which is the whole distinction
+/// between "this device is too small for the job" and "this device is busy" —
+/// diagnoses with opposite repairs. Collapsing them into one capacity is what
+/// made a 2026-07-29 load refusal unreadable from the logs.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DeviceMemoryView {
+    /// The RPC worker endpoint behind this device; absent for this host's own
+    /// GPU. Lets a consumer join a row to the `rpc_workers` entry (and through
+    /// it to the mesh member) that owns it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Available at the instant of the read — the basis the load gates on.
+    pub free_mb: u64,
+    /// Physical device memory — the durable hardware fact.
+    pub total_mb: u64,
+}
+
+impl From<sovereign_inference::embedded::DeviceMemory> for DeviceMemoryView {
+    fn from(m: sovereign_inference::embedded::DeviceMemory) -> Self {
+        const MIB: u64 = 1024 * 1024;
+        Self {
+            free_mb: m.free_bytes / MIB,
+            total_mb: m.total_bytes / MIB,
+            endpoint: m.endpoint,
+        }
+    }
 }
 
 /// Cluster-health snapshot of a shared-model fleet, surfaced on
@@ -298,6 +359,22 @@ async fn mesh_status(
     // Shared-model cluster health (None unless this node is in a shared-model
     // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
     let shared_model = shared_model_status(&daemon).await;
+    // The loader's own per-device memory view, as CACHED on the load path.
+    //
+    // Never sampled here: reading an RPC device's memory round-trips to the
+    // worker, and a worker busy serving a resident model can stall that call for
+    // a minute or more — which hung this endpoint (and with it `svrn mesh bench`)
+    // on 2026-07-30. A status endpoint must not block on a remote resource. See
+    // `sovereign_inference::embedded::last_device_memory`.
+    let (device_memory, device_memory_observed_unix) =
+        match sovereign_inference::embedded::last_device_memory() {
+            Some(s) => (
+                s.devices.into_iter().map(DeviceMemoryView::from).collect(),
+                Some(s.observed_unix),
+            ),
+            None => (Vec::new(), None),
+        };
+    let rpc_block_split_pin = sovereign_inference::embedded::pinned_block_split_raw();
     let (
         peer_inflight_current,
         peer_inflight_ceiling,
@@ -329,6 +406,12 @@ async fn mesh_status(
                     active_corpus_ingests,
                     iroh_transport: vec![],     // no mesh → no peers
                     founder_reachability: None, // no mesh → no founder endpoint
+                    // Reported even without a mesh: a solo daemon can still have
+                    // RPC workers pinned by env, and the memory it would gate on
+                    // is worth seeing either way.
+                    device_memory,
+                    device_memory_observed_unix,
+                    rpc_block_split_pin,
                 })
                 .unwrap(),
             ),
@@ -392,6 +475,9 @@ async fn mesh_status(
                 active_corpus_ingests,
                 iroh_transport,
                 founder_reachability,
+                device_memory,
+                device_memory_observed_unix,
+                rpc_block_split_pin,
             })
             .unwrap(),
         ),

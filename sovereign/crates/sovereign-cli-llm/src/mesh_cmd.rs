@@ -443,7 +443,20 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
 /// daemon, which `mesh plan` reports as "not measured" rather than guessing.
 pub(crate) struct MeshDevice {
     pub(crate) name: String,
+    /// What this machine's GPU could hold if nothing else were resident — the
+    /// gossiped device TOTAL. A durable hardware fact, and the basis for "is
+    /// this configuration even viable".
     pub(crate) vram_gb: f64,
+    /// What is FREE on it right now, as the loader's own oracle reports it
+    /// (`/v1/mesh/status.device_memory`, ultimately `ggml_backend_dev_memory`).
+    ///
+    /// `None` when no live reading exists for this peer — an older daemon, or a
+    /// member with no discovered RPC worker. It is deliberately a separate field
+    /// rather than a correction to `vram_gb`: the difference between them is
+    /// "held by other work right now", which is the entire distinction between
+    /// "this node is too small" and "this node is busy". Those have opposite
+    /// repairs, so the plan reports both and names the gap instead of picking.
+    pub(crate) free_vram_gb: Option<f64>,
     pub(crate) hw_fingerprint: Option<u64>,
     pub(crate) backend: Option<String>,
     /// How this machine's rpc-server would be reached, when discovery has
@@ -461,7 +474,7 @@ pub(crate) struct MeshDevice {
 /// this host (`is_self`) last so the output head lands on it. Returns
 /// `(devices, host index)`. Prints the resolved mesh to stderr (so `--json`
 /// stays clean on stdout).
-async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
+async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<String>), String> {
     let port = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
@@ -510,9 +523,63 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
         })
         .unwrap_or_default();
 
+    // The LOADER's own per-device memory view, as the daemon publishes it. This
+    // is the second half of the two-capacity answer: `members[].vram_gb` above is
+    // the gossiped device TOTAL, and this is what is actually free right now —
+    // the number the live fit gate judges against. Only the daemon can read it
+    // (it holds the registered ggml devices), which is why it travels on the
+    // status payload rather than being sampled here.
+    //
+    // Rows are keyed by RPC endpoint; the entries with NO endpoint are this
+    // host's own local GPU device(s), summed to one figure because the plan
+    // models the host as a single device (matching `local_gpu_total_vram_gb`).
+    let dev_mem = body
+        .get("device_memory")
+        .and_then(|d| d.as_array())
+        .cloned()
+        .unwrap_or_default();
+    const MIB_PER_GB: f64 = 1024.0;
+    let free_by_endpoint: std::collections::HashMap<String, f64> = dev_mem
+        .iter()
+        .filter_map(|d| {
+            let ep = d.get("endpoint")?.as_str()?;
+            let free = d.get("free_mb")?.as_f64()?;
+            Some((ep.to_string(), free / MIB_PER_GB))
+        })
+        .collect();
+    // Age of the reading. It is an observation taken when the loader last planned
+    // a cut, not a live sample (sampling would block on a busy worker — see
+    // `last_device_memory`), so an operator has to be able to see how old it is.
+    if let Some(obs) = body
+        .get("device_memory_observed_unix")
+        .and_then(|v| v.as_u64())
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        eprintln!(
+            "  free-memory reading observed {}s ago, when the loader last planned a cut",
+            now.saturating_sub(obs)
+        );
+    }
+    let host_free_gb: Option<f64> = {
+        let local: Vec<f64> = dev_mem
+            .iter()
+            .filter(|d| d.get("endpoint").and_then(|e| e.as_str()).is_none())
+            .filter_map(|d| d.get("free_mb").and_then(|v| v.as_f64()))
+            .collect();
+        (!local.is_empty()).then(|| local.iter().sum::<f64>() / MIB_PER_GB)
+    };
+
     let mut workers: Vec<MeshDevice> = Vec::new();
     let mut host: Option<MeshDevice> = None;
     for m in &members {
+        let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
+        let endpoint = m
+            .get("node_id")
+            .and_then(|v| v.as_str())
+            .and_then(|id| worker_endpoints.get(id));
         let dev = MeshDevice {
             name: m
                 .get("name")
@@ -520,18 +587,19 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
                 .unwrap_or("?")
                 .to_string(),
             vram_gb: m.get("vram_gb").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            free_vram_gb: if is_self {
+                host_free_gb
+            } else {
+                endpoint.and_then(|ep| free_by_endpoint.get(ep).copied())
+            },
             hw_fingerprint: m.get("hw_fingerprint").and_then(|v| v.as_u64()),
             backend: m
                 .get("backend")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
-            link: m
-                .get("node_id")
-                .and_then(|v| v.as_str())
-                .and_then(|id| worker_endpoints.get(id))
+            link: endpoint
                 .map(|ep| sovereign_core::mesh_measurements::link_class_of_endpoint(ep)),
         };
-        let is_self = m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false);
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
         let can_anchor = m
             .get("can_anchor")
@@ -546,17 +614,29 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
     let host =
         host.ok_or_else(|| "could not find this node (is_self) in the mesh status".to_string())?;
 
+    // Glassbox both capacities per device, so the operator can see WHERE the two
+    // bases disagree before reading a verdict built on either.
     eprintln!(
         "Resolved live mesh: {} online anchor worker(s) + this host",
         workers.len()
     );
+    let show = |role: &str, d: &MeshDevice, suffix: &str| match d.free_vram_gb {
+        Some(free) => eprintln!(
+            "  {role}  {}: {:.0} GB total · {:.1} GB free now ({:.1} GB held by other work){suffix}",
+            d.name,
+            d.vram_gb,
+            free,
+            (d.vram_gb - free).max(0.0)
+        ),
+        None => eprintln!(
+            "  {role}  {}: {:.0} GB total · free now UNKNOWN (no live reading){suffix}",
+            d.name, d.vram_gb
+        ),
+    };
     for w in &workers {
-        eprintln!("  worker  {}: {:.0} GB VRAM", w.name, w.vram_gb);
+        show("worker", w, "");
     }
-    eprintln!(
-        "  host    {}: {:.0} GB VRAM  (holds the output head)",
-        host.name, host.vram_gb
-    );
+    show("host  ", &host, "  (holds the output head)");
     if workers.is_empty() {
         eprintln!(
             "  note: no online anchor workers — the plan will show a single-node (local) load."
@@ -567,15 +647,28 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize), String> {
     let mut devices = workers;
     devices.push(host);
     let host_idx = devices.len() - 1;
-    Ok((devices, host_idx))
+    // The operator's block-split pin, if the daemon reports one. Not a capacity —
+    // it overrides capacity entirely — so it travels beside the devices, not in
+    // them.
+    let pin = body
+        .get("rpc_block_split_pin")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    Ok((devices, host_idx, pin))
 }
 
 /// `svrn mesh plan` — dry-run a model's tensor split across a mesh, offline. Reuses
-/// the daemon's own `plan_shards` + `quantize_vram` (so the dry run matches the live
-/// load), then overlays the REAL per-block byte mass — which the live planner ignores
-/// — to show the bytes each device holds and whether they fit. Surfaces the
-/// per-device check the live load lacks (it gates only on aggregate pooled memory),
-/// with operator-set `--headroom` instead of the hardcoded 1.2×.
+/// the daemon's own `plan_shards` + `quantize_vram` and the SAME `shard_fits`
+/// decider its per-device gate runs (see `first_worker_overflow`), so the preview
+/// and the load it previews reach the same verdict — with operator-set
+/// `--headroom` for what-if planning instead of the configured factor.
+///
+/// Under `--from-mesh` it reports TWO capacity bases, never one:
+/// [`Possible`](CapacityBasis::Possible) from device totals and
+/// [`SafeNow`](CapacityBasis::SafeNow) from the loader's live free-memory reading.
+/// They routinely disagree, and which one you need depends on the question —
+/// "could this mesh ever run this model" versus "would a load right now succeed".
+/// Picking one on the operator's behalf hid a real cut mismatch for weeks.
 async fn cmd_plan(args: &[String]) -> i32 {
     use sovereign_inference::embedded as inf;
     let mut model: Option<PathBuf> = None;
@@ -603,6 +696,13 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // that is not here, so it has no identity and can never match a
     // measurement — see `SpeedSection::NotMeasurable`.
     let mut mesh_devices: Option<Vec<MeshDevice>> = None;
+    // `Some` only under `--from-mesh`, and only when the daemon reported a live
+    // reading for EVERY device. `--devices` describes hardware that is not here,
+    // so nothing can be free on it.
+    let mut devices_free_gb: Option<Vec<f64>> = None;
+    // The daemon's `SOVEREIGN_RPC_BLOCK_SPLIT`, when it reports one. Only a live
+    // daemon can have a pin; `--devices` previews nothing that would honour it.
+    let mut block_split_pin: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -673,9 +773,25 @@ async fn cmd_plan(args: &[String]) -> i32 {
             return 2;
         }
         match devices_from_live_mesh().await {
-            Ok((devs, h)) => {
+            Ok((devs, h, pin)) => {
                 devices_gb = devs.iter().map(|d| d.vram_gb).collect();
                 host_idx = Some(h);
+                block_split_pin = pin;
+                // All-or-nothing: one device missing a live reading means there
+                // is no coherent "safe now" basis to plan on, and the report says
+                // so rather than mixing bases. See `PlanInput::devices_free_gb`.
+                devices_free_gb = devs.iter().map(|d| d.free_vram_gb).collect();
+                if devices_free_gb.is_none() {
+                    let blind: Vec<&str> = devs
+                        .iter()
+                        .filter(|d| d.free_vram_gb.is_none())
+                        .map(|d| d.name.as_str())
+                        .collect();
+                    eprintln!(
+                        "  note: no live free-memory reading for {} — the plan can show what is \n        POSSIBLE (device totals) but not what is SAFE RIGHT NOW. An older peer \n        daemon, or a member with no discovered RPC worker.\n",
+                        blind.join(", ")
+                    );
+                }
                 // Retained for the speed lookup: only a real, present mesh can
                 // identify the machines a measurement would belong to.
                 mesh_devices = Some(devs);
@@ -745,6 +861,8 @@ async fn cmd_plan(args: &[String]) -> i32 {
             n_layer,
             sizes,
             devices_gb,
+            devices_free_gb,
+            block_split_pin,
             host,
             headroom,
             headroom_from_flag,
@@ -794,8 +912,27 @@ pub(crate) struct PlanInput {
     pub(crate) n_layer: u32,
     /// `(tensor_name, layer, nbytes)` from the GGUF tensor table.
     pub(crate) sizes: Vec<(String, Option<u32>, u64)>,
-    /// Per-device usable VRAM in GB, in caller order.
+    /// Per-device usable VRAM in GB, in caller order. The
+    /// [`Possible`](CapacityBasis::Possible) basis: device totals.
     pub(crate) devices_gb: Vec<f64>,
+    /// Per-device LIVE FREE memory in GB, in the same order as `devices_gb` —
+    /// the [`SafeNow`](CapacityBasis::SafeNow) basis.
+    ///
+    /// `Some` only when a live reading exists for EVERY device. That
+    /// all-or-nothing rule is deliberate: a cut apportioned from a mix of
+    /// live-free and device-total readings is neither basis, and would produce a
+    /// third split matching nothing the loader would execute — the exact class of
+    /// silent disagreement this field was added to end. Partial knowledge is
+    /// reported as "unknown", not averaged into a plausible-looking number.
+    pub(crate) devices_free_gb: Option<Vec<f64>>,
+    /// The daemon's `SOVEREIGN_RPC_BLOCK_SPLIT` pin, verbatim, when one is set.
+    ///
+    /// A pin makes both capacity bases irrelevant as predictions: the loader
+    /// obeys the pin and ignores VRAM. Carried as the raw string so this side
+    /// validates it with the SAME `parse_block_split` the loader runs — a pin the
+    /// loader would reject must be rejected here too, or the plan would confidently
+    /// preview a split nothing honours.
+    pub(crate) block_split_pin: Option<String>,
     /// Index into `devices_gb` of the host — the node that holds the output
     /// head. Validated in range by the caller.
     pub(crate) host: usize,
@@ -906,6 +1043,69 @@ pub(crate) struct MoeReport {
     pub(crate) hot_bytes: u64,
 }
 
+/// Which answer to "how much memory does each device have" a layout was built
+/// from. The two are not interchangeable and the report never merges them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum CapacityBasis {
+    /// Device TOTAL — what the silicon could hold if nothing else were resident.
+    /// Answers "is this configuration viable at all", which is a property of the
+    /// hardware and does not change because something is loaded right now.
+    Possible,
+    /// Live FREE — what is available at this instant, and therefore what the
+    /// running loader's fit gate judges against. Answers "would a load started
+    /// right now succeed, and with which cut".
+    SafeNow,
+    /// Not derived from capacity at all: the operator pinned the per-device block
+    /// counts with `SOVEREIGN_RPC_BLOCK_SPLIT`, and the loader honours the pin
+    /// over any VRAM apportionment.
+    ///
+    /// When a pin is active it OUTRANKS both other bases as a description of what
+    /// will load, because it is the only one the loader will actually obey.
+    Pinned,
+}
+
+impl CapacityBasis {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Possible => "possible (device total)",
+            Self::SafeNow => "safe now (live free)",
+            Self::Pinned => "pinned (SOVEREIGN_RPC_BLOCK_SPLIT)",
+        }
+    }
+}
+
+/// One capacity basis laid across the devices: the cut that follows from ONE
+/// answer to how much room each device has, plus the verdicts on it.
+///
+/// Exists because the two bases genuinely produce DIFFERENT cuts, and the
+/// difference was invisible before 2026-07-30. On the mesh that produced the
+/// first valid two-node 122B record, the totals basis apportioned 14/34 while
+/// the loader — reading live free — ran 12/36. The plan therefore looked up a
+/// measurement key that no run could ever file under, and reported "not
+/// measured" about a configuration it had a real 10.48 tok/s number for.
+pub(crate) struct Allocation {
+    pub(crate) basis: CapacityBasis,
+    /// Per-device rows, sorted by the operator-facing device index. Each row's
+    /// `vram()` IS the capacity this basis fed in, so the basis needs no second
+    /// copy of it.
+    pub(crate) rows: Vec<DeviceRow>,
+    pub(crate) pooled: u64,
+    pub(crate) gate_pass: bool,
+    pub(crate) nodes: NodesReport,
+}
+
+impl Allocation {
+    /// Devices whose share does not fit their own memory on this basis.
+    pub(crate) fn overflows(&self) -> Vec<&DeviceRow> {
+        self.rows.iter().filter(|r| !r.fits()).collect()
+    }
+
+    /// Whether this basis clears both gates.
+    pub(crate) fn fits(&self) -> bool {
+        self.gate_pass && self.overflows().is_empty()
+    }
+}
+
 /// Node count and the per-token hop cost that follows from it.
 pub(crate) struct NodesReport {
     pub(crate) active_nodes: usize,
@@ -930,7 +1130,35 @@ pub(crate) struct PlanReport {
     pub(crate) gate_pass: bool,
     pub(crate) rows: Vec<DeviceRow>,
     pub(crate) nodes: NodesReport,
+    /// The same layout recomputed against LIVE FREE memory — the cut a load
+    /// started right now would actually run, and the basis its fit gate judges.
+    ///
+    /// `None` when no live reading is available for every device: a `--devices`
+    /// what-if (hardware that is not here), a daemon predating
+    /// `/v1/mesh/status.device_memory`, or a peer with no discovered RPC worker.
+    ///
+    /// The fields above (`rows`, `pooled`, `gate_pass`, `nodes`) remain the
+    /// [`Possible`](CapacityBasis::Possible) basis whether or not this is
+    /// present, so their meaning never depends on what happens to be loaded.
+    pub(crate) safe_now: Option<Allocation>,
+    /// The cut the operator PINNED, when `SOVEREIGN_RPC_BLOCK_SPLIT` is set and
+    /// valid for this model and device count.
+    ///
+    /// `Some` here means neither capacity basis predicts what will load, and this
+    /// one does. Built with the same `plan_shards_explicit` the loader calls, so
+    /// the block ranges are identical rather than merely similar.
+    pub(crate) pinned: Option<Allocation>,
+    /// The raw pin as the daemon reported it, even when it could NOT be applied
+    /// (wrong device count, counts not summing to the block count). A pin the
+    /// loader will reject is worth naming: the operator set it expecting it to
+    /// take effect, and silence would let them believe it had.
+    pub(crate) block_split_pin: Option<String>,
     /// What we can honestly say about how fast this configuration runs.
+    ///
+    /// Resolved against the cut that would ACTUALLY run — `safe_now` when we have
+    /// it, else the possible basis. A measurement is filed under the placement
+    /// that produced it, so looking it up under a cut the loader would not make
+    /// is a guaranteed miss.
     pub(crate) speed: SpeedSection,
     /// The measurement key this plan looked up, when it had one. Emitted in
     /// `--json` so a script can correlate a plan with a `mesh bench` record.
@@ -974,6 +1202,8 @@ pub(crate) fn build_report(
         n_layer,
         sizes,
         devices_gb,
+        devices_free_gb,
+        block_split_pin,
         host,
         headroom,
         headroom_from_flag,
@@ -990,58 +1220,140 @@ pub(crate) fn build_report(
     let mass = inf::model_mass_from_sizes(&sizes, n_layer);
     let total_weight: u64 = mass.total_bytes();
 
-    let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
-
-    // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
-    // plan_shards places the output head on the host — the SAME functions the live
-    // load uses, so the dry run matches reality.
-    let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
-    order.push(host);
-    let weights: Vec<f32> = order
-        .iter()
-        .map(|&d| inf::quantize_vram(vram[d]) as f32)
-        .collect();
-    // Byte-mass-aware split — apportion each device a contiguous block range whose
-    // BYTES (not count) are proportional to its VRAM, folding the output head onto
-    // the host. The IDENTICAL call the live load makes, so the preview matches it.
-    let plan = inf::plan_shards_weighted(n_layer, &weights, &mass.block_bytes, mass.head_bytes);
-
-    // The per-device verdict, from the decider the live gate runs. Capacities go
-    // in PLAN order (`order[pos]`), and the display maps back through `order`
-    // below — the two index spaces look interchangeable and are not.
-    let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
-    let fits = inf::shard_fits(&plan, &capacities, &mass, headroom);
-
-    let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
-    for (pos, &d) in order.iter().enumerate() {
-        let shard = &plan[pos];
-        rows.push(DeviceRow {
-            dev: d,
-            is_host: d == host,
-            blocks: shard.blocks,
-            holds_output: shard.holds_output,
-            // `shard_fits` declines to judge when the inputs don't describe each
-            // other. Every such input is validated away before we get here
-            // except one: a GGUF whose tensor table carries no per-layer mass at
-            // all. For that model every device genuinely holds zero block bytes,
-            // so a zero row is the right answer rather than a papered-over gap.
-            fit: fits
-                .as_ref()
-                .and_then(|f| f.get(pos).copied())
-                .unwrap_or(inf::ShardFit {
-                    device_index: pos,
-                    held_bytes: 0,
-                    need_bytes: 0,
-                    capacity_bytes: capacities[pos],
-                }),
-        });
-    }
-    rows.sort_by_key(|r| r.dev);
-
-    // Aggregate gate (the live daemon's model×1.2, with YOUR headroom).
-    let pooled: u64 = vram.iter().sum();
     let gate_need = (total_weight as f64 * headroom) as u64;
-    let gate_pass = pooled >= gate_need;
+
+    // Lay the model across one capacity basis and judge it.
+    //
+    // Factored out so BOTH bases go through the identical arithmetic. If
+    // "possible" and "safe now" were computed by two code paths, a divergence
+    // between them would be indistinguishable from a divergence in the
+    // capacities — which is the confusion this whole two-basis report exists to
+    // remove.
+    // `counts`: `Some` pins the per-device block counts (plan order) instead of
+    // apportioning by capacity — the loader's `SOVEREIGN_RPC_BLOCK_SPLIT` path.
+    // The capacities still matter even then, because the FIT verdict is about
+    // whether the pinned share fits the memory available.
+    let allocate = |basis: CapacityBasis,
+                    devices_gb: &[f64],
+                    counts: Option<&[u32]>|
+     -> Allocation {
+        let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
+
+        // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
+        // plan_shards places the output head on the host — the SAME functions the live
+        // load uses, so the dry run matches reality.
+        let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
+        order.push(host);
+        let weights: Vec<f32> = order
+            .iter()
+            .map(|&d| inf::quantize_vram(vram[d]) as f32)
+            .collect();
+        // Byte-mass-aware split — apportion each device a contiguous block range whose
+        // BYTES (not count) are proportional to its VRAM, folding the output head onto
+        // the host. The IDENTICAL call the live load makes, so the preview matches it.
+        //
+        // Under a pin we call `plan_shards_explicit` instead — again the identical
+        // call, so the pinned ranges here ARE the ranges the loader computes, not a
+        // reconstruction of them. A pin that fails to tile falls back rather than
+        // wedging; `pinned` is only built from a pin `parse_block_split` accepted,
+        // so this fallback is unreachable in practice and defensive only.
+        let plan = counts
+            .and_then(|c| inf::plan_shards_explicit(n_layer, &weights, c))
+            .unwrap_or_else(|| {
+                inf::plan_shards_weighted(n_layer, &weights, &mass.block_bytes, mass.head_bytes)
+            });
+
+        // The per-device verdict, from the decider the live gate runs. Capacities go
+        // in PLAN order (`order[pos]`), and the display maps back through `order`
+        // below — the two index spaces look interchangeable and are not.
+        let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
+        let fits = inf::shard_fits(&plan, &capacities, &mass, headroom);
+
+        let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
+        for (pos, &d) in order.iter().enumerate() {
+            let shard = &plan[pos];
+            rows.push(DeviceRow {
+                dev: d,
+                is_host: d == host,
+                blocks: shard.blocks,
+                holds_output: shard.holds_output,
+                // `shard_fits` declines to judge when the inputs don't describe each
+                // other. Every such input is validated away before we get here
+                // except one: a GGUF whose tensor table carries no per-layer mass at
+                // all. For that model every device genuinely holds zero block bytes,
+                // so a zero row is the right answer rather than a papered-over gap.
+                fit: fits
+                    .as_ref()
+                    .and_then(|f| f.get(pos).copied())
+                    .unwrap_or(inf::ShardFit {
+                        device_index: pos,
+                        held_bytes: 0,
+                        need_bytes: 0,
+                        capacity_bytes: capacities[pos],
+                    }),
+            });
+        }
+        rows.sort_by_key(|r| r.dev);
+
+        // Aggregate gate (the live daemon's model×1.2, with YOUR headroom).
+        let pooled: u64 = vram.iter().sum();
+
+        // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
+        // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
+        // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
+        // skewed model may need one more node for per-device fit.
+        let mut vram_desc: Vec<u64> = vram.clone();
+        vram_desc.sort_unstable_by(|a, b| b.cmp(a));
+        let (mut min_nodes, mut acc) = (0usize, 0u64);
+        for v in &vram_desc {
+            if acc >= gate_need {
+                break;
+            }
+            acc += *v;
+            min_nodes += 1;
+        }
+        min_nodes = min_nodes.max(1);
+        let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
+
+        Allocation {
+            basis,
+            rows,
+            pooled,
+            gate_pass: pooled >= gate_need,
+            nodes: NodesReport {
+                active_nodes,
+                hops_now: active_nodes - 1,
+                min_nodes,
+                hops_min: min_nodes.saturating_sub(1),
+            },
+        }
+    };
+
+    let possible = allocate(CapacityBasis::Possible, &devices_gb, None);
+    // Only when a live reading covers EVERY device — see `PlanInput::devices_free_gb`.
+    let safe_now = devices_free_gb
+        .as_ref()
+        .filter(|free| free.len() == devices_gb.len())
+        .map(|free| allocate(CapacityBasis::SafeNow, free, None));
+
+    // A pin outranks both derived bases as a prediction, because the loader obeys
+    // it and ignores VRAM. Validated with the loader's own parser, so a pin it
+    // would reject produces no `pinned` allocation here either — the report then
+    // names the pin as INVALID rather than previewing a cut nobody honours.
+    //
+    // Judged against live free when we have it: the question a pinned split raises
+    // is not "how should the blocks be divided" (that is settled) but "does the
+    // share the operator pinned still fit the memory available".
+    let pin_counts = block_split_pin
+        .as_deref()
+        .and_then(|raw| inf::parse_block_split(raw, n_layer, devices_gb.len()));
+    let pinned = pin_counts.as_ref().map(|counts| {
+        let basis_gb = devices_free_gb
+            .as_ref()
+            .filter(|f| f.len() == devices_gb.len())
+            .unwrap_or(&devices_gb);
+        allocate(CapacityBasis::Pinned, basis_gb, Some(counts))
+    });
 
     // Block-mass uniformity → the "does heterogeneity stay safe" verdict.
     let nz: Vec<u64> = mass.block_bytes.iter().copied().filter(|&b| b > 0).collect();
@@ -1081,33 +1393,38 @@ pub(crate) fn build_report(
         None
     };
 
-    // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
-    // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
-    // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
-    // skewed model may need one more node for per-device fit.
-    let mut vram_desc: Vec<u64> = vram.clone();
-    vram_desc.sort_unstable_by(|a, b| b.cmp(a));
-    let (mut min_nodes, mut acc) = (0usize, 0u64);
-    for v in &vram_desc {
-        if acc >= gate_need {
-            break;
-        }
-        acc += *v;
-        min_nodes += 1;
-    }
-    min_nodes = min_nodes.max(1);
-    let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
-
+    // Speed is looked up against the cut that would ACTUALLY run — `safe_now`
+    // when a live reading gave us one, else the possible basis.
+    //
+    // This is the fix for a silent, total miss. A measurement is filed under the
+    // placement that produced it; if the plan predicts a different cut it queries
+    // a key nothing will ever be stored at, and reports "not measured" about a
+    // configuration it holds a real number for. Observed 2026-07-29 on the very
+    // mesh whose 10.48 tok/s two-node record had just been written: totals said
+    // 14/34, the loader ran 12/36, so the lookup missed by construction.
+    // Precedence: a pin wins (the loader obeys it), else live free, else totals.
+    let executed = pinned
+        .as_ref()
+        .or(safe_now.as_ref())
+        .unwrap_or(&possible);
     let (speed, speed_key) = resolve_speed(
-        &rows,
+        &executed.rows,
         mesh.as_deref(),
         &sizes,
         n_layer,
-        active_nodes,
+        executed.nodes.active_nodes,
         n_ctx,
         measurements,
         current_build,
     );
+
+    let Allocation {
+        rows,
+        pooled,
+        gate_pass,
+        nodes,
+        ..
+    } = possible;
 
     PlanReport {
         model_name,
@@ -1123,12 +1440,10 @@ pub(crate) fn build_report(
         gate_need,
         gate_pass,
         rows,
-        nodes: NodesReport {
-            active_nodes,
-            hops_now: active_nodes - 1,
-            min_nodes,
-            hops_min: min_nodes.saturating_sub(1),
-        },
+        nodes,
+        safe_now,
+        pinned,
+        block_split_pin,
         speed,
         speed_key,
     }
@@ -1254,24 +1569,46 @@ fn resolve_speed(
 }
 
 /// The machine-readable plan.
+///
+/// Top-level fields describe the [`Possible`](CapacityBasis::Possible) basis, as
+/// they always have. `safe_now` carries the live-free basis when one exists, so a
+/// script can gate on "will this load right now" without reparsing prose.
 pub(crate) fn render_json(r: &PlanReport) -> serde_json::Value {
-    let devices_json: Vec<serde_json::Value> = r
-        .rows
-        .iter()
-        .map(|d| {
-            serde_json::json!({
-                "device": d.dev,
-                "role": if d.is_host { "host" } else { "worker" },
-                "vram_gb": gb(d.vram()),
-                "blocks": d.blocks.map(|(a, b)| [a, b]),
-                "block_count": d.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
-                "holds_output": d.holds_output,
-                "weight_gb": gb(d.weight()),
-                "need_gb": gb(d.need()),
-                "fits": d.fits(),
+    fn devices_of(rows: &[DeviceRow]) -> Vec<serde_json::Value> {
+        rows.iter()
+            .map(|d| {
+                serde_json::json!({
+                    "device": d.dev,
+                    "role": if d.is_host { "host" } else { "worker" },
+                    "vram_gb": gb(d.vram()),
+                    "blocks": d.blocks.map(|(a, b)| [a, b]),
+                    "block_count": d.blocks.map(|(a, b)| b - a + 1).unwrap_or(0),
+                    "holds_output": d.holds_output,
+                    "weight_gb": gb(d.weight()),
+                    "need_gb": gb(d.need()),
+                    "fits": d.fits(),
+                })
             })
-        })
-        .collect();
+            .collect()
+    }
+    let devices_json = devices_of(&r.rows);
+    let safe_now_json = match &r.safe_now {
+        Some(sn) => serde_json::json!({
+            "basis": sn.basis.label(),
+            "pooled_gb": gb(sn.pooled),
+            "aggregate_gate_pass": sn.gate_pass,
+            "per_device_overflow_devices":
+                sn.overflows().iter().map(|d| d.dev).collect::<Vec<_>>(),
+            "fits": sn.fits(),
+            "nodes_used": sn.nodes.active_nodes,
+            "hops": sn.nodes.hops_now,
+            "devices": devices_of(&sn.rows),
+            // True only when no pin overrides it — a pin is what the loader
+            // obeys, and `speed` is keyed on whichever basis is executed.
+            "is_executed_cut": r.pinned.is_none(),
+        }),
+        None => serde_json::Value::Null,
+    };
     serde_json::json!({
         "model": r.model_name,
         "blocks": r.n_layer,
@@ -1305,6 +1642,24 @@ pub(crate) fn render_json(r: &PlanReport) -> serde_json::Value {
         "min_nodes": r.nodes.min_nodes,
         "min_hops": r.nodes.hops_min,
         "devices": devices_json,
+        "capacity_basis": CapacityBasis::Possible.label(),
+        "safe_now": safe_now_json,
+        "block_split_pin": r.block_split_pin,
+        "pinned": match &r.pinned {
+            Some(p) => serde_json::json!({
+                "basis": p.basis.label(),
+                "aggregate_gate_pass": p.gate_pass,
+                "per_device_overflow_devices":
+                    p.overflows().iter().map(|d| d.dev).collect::<Vec<_>>(),
+                "fits": p.fits(),
+                "nodes_used": p.nodes.active_nodes,
+                "hops": p.nodes.hops_now,
+                "devices": devices_of(&p.rows),
+                // A pin outranks both capacity bases: `speed` is keyed on this.
+                "is_executed_cut": true,
+            }),
+            None => serde_json::Value::Null,
+        },
         "speed": render_speed_json(r),
     })
 }
@@ -1507,7 +1862,7 @@ pub(crate) fn render_human(r: &PlanReport) -> String {
         let ids: Vec<String> = overflows.iter().map(|d| d.dev.to_string()).collect();
         let _ = writeln!(
             o,
-            "Per-device:     {} device(s) OVERFLOW [{}] -> the LIVE load would OOM here (it gates only on the aggregate, not per-device).",
+            "Per-device:     {} device(s) OVERFLOW [{}] -> the LIVE load refuses this cut; its own per-device gate reports WorkerOverflow.",
             overflows.len(),
             ids.join(", ")
         );
@@ -1547,8 +1902,172 @@ pub(crate) fn render_human(r: &PlanReport) -> String {
         );
     }
 
+    render_safe_now_human(&mut o, r);
+    render_pin_human(&mut o, r);
     render_speed_human(&mut o, r);
     o
+}
+
+/// The `PINNED SPLIT:` block — louder than the other two bases, because when it
+/// applies, everything derived from capacity above it is not what will load.
+///
+/// This exists because the silence was actively misleading. `SOVEREIGN_RPC_BLOCK_SPLIT`
+/// has been pinned to `12,36` on this host in a systemd drop-in since 2026-07-27
+/// (to match a worker's pre-built rpc-cache), while `mesh plan` went on deriving
+/// 14/34 from VRAM and presenting it as the plan. Both numbers were computed
+/// correctly; nothing reconciled them, so the plan and the load simply disagreed,
+/// and the measurement filed under the real cut was unreachable from the plan's key.
+fn render_pin_human(o: &mut String, r: &PlanReport) {
+    use std::fmt::Write as _;
+
+    let Some(raw) = &r.block_split_pin else {
+        return;
+    };
+
+    let Some(p) = &r.pinned else {
+        let _ = writeln!(
+            o,
+            "\nPINNED SPLIT:   SOVEREIGN_RPC_BLOCK_SPLIT={raw} is set but does NOT apply to this\n                model — it needs one count per device summing to {} blocks. The loader\n                REJECTS it too and falls back to the VRAM-derived split above, so the\n                pin is having no effect. Fix or remove it.",
+            r.n_layer
+        );
+        return;
+    };
+
+    let counts: Vec<String> = p
+        .rows
+        .iter()
+        .map(|d| {
+            format!(
+                "dev{} {}",
+                d.dev,
+                d.blocks.map(|(a, b)| b - a + 1).unwrap_or(0)
+            )
+        })
+        .collect();
+    let _ = writeln!(
+        o,
+        "\nPINNED SPLIT:   SOVEREIGN_RPC_BLOCK_SPLIT={raw} — the loader OBEYS this and ignores VRAM."
+    );
+    let _ = writeln!(
+        o,
+        "                Actual cut: {}  →  {}",
+        counts.join(" · "),
+        verdict(p.gate_pass, &p.overflows())
+    );
+    if p.rows.iter().map(|d| d.blocks).collect::<Vec<_>>()
+        != r.rows.iter().map(|d| d.blocks).collect::<Vec<_>>()
+    {
+        let _ = writeln!(
+            o,
+            "                This is NOT the VRAM-derived cut shown in the table above. The table\n                answers 'what would capacity choose'; the pin is what will load."
+        );
+    }
+}
+
+/// The `Safe now:` block — the second capacity basis, and the gap between them.
+///
+/// Everything above this point answers "could this mesh hold the model", from
+/// device totals. This answers "would a load started right now succeed", from the
+/// live free memory the loader's own gate reads. Both are true statements about
+/// different questions, and the operator is told which is which rather than being
+/// handed one number that silently means whichever was easier to obtain.
+///
+/// The gap line is the load-bearing part. A device short on free memory is not a
+/// device that is too small, and the two demand opposite responses: buy hardware
+/// versus wait for the resident model to unload. On 2026-07-29 that ambiguity
+/// turned a few seconds of teardown transience into an hours-long no-primary
+/// outage, because a single collapsed `capacity_mb=20000` could not distinguish a
+/// 20 GB device from a 51 GB device with 31 GB briefly held.
+fn render_safe_now_human(o: &mut String, r: &PlanReport) {
+    use std::fmt::Write as _;
+
+    let Some(sn) = &r.safe_now else {
+        let _ = writeln!(
+            o,
+            "\nSafe now:       UNKNOWN — no live free-memory reading for every device.\n                Everything above is what is POSSIBLE (device totals). Pass --from-mesh\n                against a daemon that reports device_memory to also see what would\n                load right now."
+        );
+        return;
+    };
+
+    let _ = writeln!(o, "\nTwo capacities, because they answer different questions:");
+    let _ = writeln!(
+        o,
+        "  possible (device total) → can this mesh EVER run this model: pooled {:.1} GB → {}",
+        gb(r.pooled),
+        verdict(r.gate_pass, &r.overflows())
+    );
+    let _ = writeln!(
+        o,
+        "  safe now (live free)    → would a load RIGHT NOW succeed:     pooled {:.1} GB → {}",
+        gb(sn.pooled),
+        verdict(sn.gate_pass, &sn.overflows())
+    );
+
+    // Per-device gap, worst first. Only devices actually holding something can
+    // overflow, so a device with no blocks is not interesting here.
+    let mut gaps: Vec<(usize, u64, u64)> = r
+        .rows
+        .iter()
+        .filter_map(|p| {
+            let s = sn.rows.iter().find(|s| s.dev == p.dev)?;
+            (p.vram() > s.vram()).then_some((p.dev, p.vram(), s.vram()))
+        })
+        .collect();
+    gaps.sort_by_key(|&(_, total, free)| std::cmp::Reverse(total.saturating_sub(free)));
+    if gaps.is_empty() {
+        let _ = writeln!(
+            o,
+            "                No gap — every device is as free as it is large; nothing else is resident."
+        );
+    } else {
+        for (dev, total, free) in &gaps {
+            let _ = writeln!(
+                o,
+                "  dev {dev}: {:.1} GB total, {:.1} GB free → {:.1} GB held by other work right now",
+                gb(*total),
+                gb(*free),
+                gb(total.saturating_sub(*free))
+            );
+        }
+    }
+
+    // The two bases cut the model differently — say so, because the split is what
+    // a measurement is keyed on and what each worker caches.
+    let cut = |a: &[DeviceRow]| -> String {
+        let mut parts: Vec<String> = a
+            .iter()
+            .filter_map(|d| d.blocks.map(|(x, y)| (d.dev, y - x + 1)))
+            .map(|(dev, n)| format!("{n}@dev{dev}"))
+            .collect();
+        parts.sort();
+        parts.join(" + ")
+    };
+    let (pc, sc) = (cut(&r.rows), cut(&sn.rows));
+    if pc != sc {
+        let _ = writeln!(
+            o,
+            "                Different cut: possible would place {pc}, but a load now places {sc}.\n                The load executes the SAFE NOW cut — that is the one Speed refers to."
+        );
+    }
+
+    if r.gate_pass && r.overflows().is_empty() && !sn.fits() {
+        let _ = writeln!(
+            o,
+            "                → This model FITS this hardware but will NOT load right now. Free the\n                  memory (retire the resident model) rather than buying VRAM. Note that the\n                  live gate does not retry: it parks, so a refusal here outlives the transient."
+        );
+    }
+}
+
+/// `PASS` / `FAIL` for one basis, naming which gate failed.
+fn verdict(gate_pass: bool, overflows: &[&DeviceRow]) -> String {
+    match (gate_pass, overflows.is_empty()) {
+        (true, true) => "PASS".to_string(),
+        (false, _) => "FAIL (aggregate: cluster too small)".to_string(),
+        (true, false) => {
+            let ids: Vec<String> = overflows.iter().map(|d| d.dev.to_string()).collect();
+            format!("FAIL (per-device overflow: dev {})", ids.join(", "))
+        }
+    }
 }
 
 /// The `Speed:` block.
@@ -1710,10 +2229,19 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Reuses the daemon's own plan_shards + quantize_vram, then overlays the real per-block\n\
-             byte mass to show the BYTES each node holds and whether they fit — the per-device check\n\
-             the live load does NOT do (it gates only on aggregate pooled memory). Reads only the GGUF\n\
-             header table: no model load, no GPU, instant even on a 400 GB split. Also reports whether\n\
-             the model's per-block mass is uniform (heterogeneous VRAM safe) or skewed (OOM risk).",
+             byte mass to show the BYTES each node holds and whether they fit — via the SAME\n\
+             shard_fits decider the live load's per-device gate runs, so a plan that says OVERFLOW\n\
+             names a cut the load would actually refuse. Reads only the GGUF header table: no model\n\
+             load, no GPU, instant even on a 400 GB split. Also reports whether the model's per-block\n\
+             mass is uniform (heterogeneous VRAM safe) or skewed (OOM risk).\n\
+             \n\
+             --from-mesh reports TWO capacities per device and does not choose between them:\n\
+             POSSIBLE is the device total — what the silicon could hold if nothing else were\n\
+             resident, i.e. whether this mesh can run the model at all. SAFE NOW is live free\n\
+             memory as the loader reads it — whether a load started this second would succeed.\n\
+             They differ whenever anything is loaded, and a large gap means 'busy', not 'too\n\
+             small'. The exit code follows POSSIBLE: a device being momentarily busy does not\n\
+             make the plan wrong. Read the SAFE NOW line for what would happen right now.",
         ),
         sovereign_cli_shared::help::HelpSection::Examples(&[
             (
@@ -2646,6 +3174,13 @@ mod plan_tests {
             n_layer: n,
             sizes,
             devices_gb,
+            // Default to the single-basis shape: these tests assert on the
+            // POSSIBLE allocation, which the top-level report fields carry
+            // whether or not a live reading exists. The two-basis tests set this
+            // explicitly.
+            devices_free_gb: None,
+            // No daemon in these tests, so no pin. The pin tests set it.
+            block_split_pin: None,
             host,
             headroom: 1.2,
             headroom_from_flag: false,
@@ -2960,6 +3495,9 @@ mod plan_tests {
             .map(|n| MeshDevice {
                 name: (*n).into(),
                 vram_gb: 64.0,
+                // No live reading — the speed tests are about identity and link
+                // class, not capacity. `two_capacity_*` covers the live basis.
+                free_vram_gb: None,
                 hw_fingerprint: fp,
                 backend: Some("vulkan".into()),
                 link,
@@ -2972,6 +3510,348 @@ mod plan_tests {
         let mut i = input(model(48, 1, 2, 0), 48, devices_gb);
         i.mesh = Some(mesh);
         i
+    }
+
+    // --- two capacities ----------------------------------------------------
+    //
+    // These pin the shape Alex asked for on 2026-07-29: report what is POSSIBLE
+    // and what is SAFE NOW, name the gap, and never silently pick one. The
+    // regression they exist to prevent is subtler than a wrong number — it is a
+    // plan that predicts a cut the loader would not run, and therefore looks up a
+    // measurement key nothing can ever be filed under.
+
+    /// Devices with BOTH capacities spelled out: `(name, total_gb, free_gb)`.
+    /// `None` free = no live reading for that device.
+    fn devs_with_free(spec: &[(&str, f64, Option<f64>)]) -> Vec<MeshDevice> {
+        spec.iter()
+            .map(|(name, total, free)| MeshDevice {
+                name: (*name).into(),
+                vram_gb: *total,
+                free_vram_gb: *free,
+                hw_fingerprint: Some(7),
+                backend: Some("vulkan".into()),
+                link: Some(mm::LinkClass::Direct),
+            })
+            .collect()
+    }
+
+    /// The live two-basis shape: worker(s) first, host last.
+    fn live_two(mesh: Vec<MeshDevice>) -> PlanInput {
+        let devices_gb = mesh.iter().map(|d| d.vram_gb).collect::<Vec<_>>();
+        let free = mesh
+            .iter()
+            .map(|d| d.free_vram_gb)
+            .collect::<Option<Vec<_>>>();
+        let mut i = input(model(48, 1, 2, 0), 48, devices_gb);
+        i.devices_free_gb = free;
+        i.mesh = Some(mesh);
+        i
+    }
+
+    /// The measured mesh, as it actually stood on 2026-07-29: a 51 GB worker with
+    /// most of its memory held by an outgoing generation, and a 124 GB host.
+    fn the_real_mesh() -> Vec<MeshDevice> {
+        devs_with_free(&[
+            ("beefymac", 51.0, Some(19.5)),
+            ("ruggedfox", 124.0, Some(110.0)),
+        ])
+    }
+
+    /// The two bases produce DIFFERENT cuts, and the report says so rather than
+    /// presenting one as the plan.
+    #[test]
+    fn two_capacities_cut_the_model_differently_and_the_gap_is_named() {
+        let r = report(live_two(the_real_mesh()));
+        let sn = r.safe_now.as_ref().expect("a live basis");
+
+        let blocks = |a: &[DeviceRow]| -> Vec<u32> {
+            let mut v: Vec<u32> = a
+                .iter()
+                .map(|d| d.blocks.map(|(x, y)| y - x + 1).unwrap_or(0))
+                .collect();
+            v.reverse(); // host last → worker share first
+            v
+        };
+        assert_ne!(
+            blocks(&r.rows),
+            blocks(&sn.rows),
+            "51 GB total vs 19.5 GB free must apportion the worker differently — \
+             if these ever match, the test mesh stopped exercising the bug"
+        );
+        // The worker holds LESS on the live basis, because it has less room.
+        let worker_possible = r.rows.iter().find(|d| !d.is_host).unwrap();
+        let worker_safe = sn.rows.iter().find(|d| !d.is_host).unwrap();
+        assert!(
+            worker_safe.blocks.map(|(x, y)| y - x + 1).unwrap_or(0)
+                < worker_possible.blocks.map(|(x, y)| y - x + 1).unwrap_or(0),
+            "the busy worker must be given a smaller share, not a larger one"
+        );
+
+        let out = render_human(&r);
+        assert!(out.contains("Two capacities"), "both bases must be shown");
+        assert!(out.contains("possible (device total)"));
+        assert!(out.contains("safe now (live free)"));
+        assert!(
+            out.contains("held by other work right now"),
+            "the gap must be NAMED, not left for the operator to subtract: {out}"
+        );
+        assert!(
+            out.contains("Different cut"),
+            "a differing cut must be called out: {out}"
+        );
+    }
+
+    /// THE regression this change exists for.
+    ///
+    /// A run is filed under the cut the loader EXECUTED (the live-free basis). The
+    /// plan must find it. Before 2026-07-30 the plan keyed on the totals basis,
+    /// predicted a different split, and reported "not measured" about a
+    /// configuration it held a real number for.
+    #[test]
+    fn speed_is_looked_up_under_the_cut_the_loader_would_execute() {
+        // The key the plan now queries.
+        let probe = report(live_two(the_real_mesh()));
+        let executed_key = probe.speed_key.clone().expect("key");
+
+        // Sanity: that key is NOT the one the totals basis would have produced.
+        // Without this, the test could pass while both bases agreed.
+        let totals_only = {
+            let mut i = live_two(the_real_mesh());
+            i.devices_free_gb = None;
+            report(i)
+        };
+        assert_ne!(
+            executed_key.placement_digest,
+            totals_only.speed_key.expect("key").placement_digest,
+            "the two bases must key differently, or this test proves nothing"
+        );
+
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                key: executed_key,
+                decode_tok_s: 10.48,
+                decode_tok_s_min: 10.27,
+                decode_tok_s_max: 10.52,
+                ttft_ms: 2444.0,
+                itl_p50_ms: 72.9,
+                itl_p95_ms: 158.1,
+                prefill_tok_s: Some(13.0),
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 170,
+                model_name: "test.gguf".into(),
+                placement_human: "36 local + 12 @beefymac".into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_753_500_000,
+                build: "test-build".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: Some(0.4),
+                verdict: mm::Verdict::Valid,
+            },
+        );
+
+        let r = build_report(live_two(the_real_mesh()), &file, "test-build");
+        assert!(
+            matches!(r.speed, SpeedSection::Measured { .. }),
+            "a record filed under the executed cut must be FOUND, not reported as a near miss"
+        );
+        assert!(render_human(&r).contains("10.5 tok/s decode"));
+    }
+
+    /// A model the hardware can hold, that cannot load this second, is reported as
+    /// exactly that — and does NOT fail the command. A busy device is not a wrong
+    /// plan; conflating the two is how one number came to mix two defects.
+    #[test]
+    fn fits_the_hardware_but_not_right_now() {
+        // 48 GB of blocks + a 2 GB head. Ample on totals; not against 12 GB free.
+        let r = report(live_two(devs_with_free(&[
+            ("beefymac", 51.0, Some(2.0)),
+            ("ruggedfox", 124.0, Some(12.0)),
+        ])));
+
+        assert!(r.gate_pass && r.overflows().is_empty(), "possible basis fits");
+        let sn = r.safe_now.as_ref().expect("a live basis");
+        assert!(!sn.fits(), "the live basis must refuse");
+        assert_eq!(
+            r.exit_code(),
+            0,
+            "exit code follows POSSIBLE — a transient residual does not make the plan wrong"
+        );
+
+        let out = render_human(&r);
+        assert!(
+            out.contains("FITS this hardware but will NOT load right now"),
+            "the operator must be told which of the two problems they have: {out}"
+        );
+        assert!(
+            out.contains("Free the"),
+            "the repair is to free memory, not to buy VRAM: {out}"
+        );
+
+        let j = render_json(&r);
+        assert_eq!(j["aggregate_gate_pass"], true);
+        assert_eq!(j["safe_now"]["fits"], false);
+    }
+
+    /// One device without a live reading means there is no coherent live basis.
+    /// Mixing free and total readings would invent a third cut matching nothing.
+    #[test]
+    fn a_partial_live_reading_yields_no_live_basis() {
+        let r = report(live_two(devs_with_free(&[
+            ("beefymac", 51.0, None),
+            ("ruggedfox", 124.0, Some(110.0)),
+        ])));
+        assert!(
+            r.safe_now.is_none(),
+            "partial knowledge must not be averaged into a plausible-looking basis"
+        );
+        let out = render_human(&r);
+        assert!(out.contains("Safe now:       UNKNOWN"), "{out}");
+        assert!(render_json(&r)["safe_now"].is_null());
+    }
+
+    /// A pin overrides BOTH capacity bases, and the plan says so instead of
+    /// presenting a VRAM-derived cut that will not load.
+    ///
+    /// This is the real 2026-07-29 configuration: `SOVEREIGN_RPC_BLOCK_SPLIT=12,36`
+    /// pinned in a systemd drop-in since 2026-07-27, against a mesh whose
+    /// capacities apportion 14/34.
+    #[test]
+    fn a_pinned_split_overrides_capacity_and_is_named() {
+        let mut i = live_two(the_real_mesh());
+        i.block_split_pin = Some("12,36".into());
+        let r = report(i);
+
+        let p = r.pinned.as_ref().expect("a valid pin applies");
+        let n = |a: &[DeviceRow], dev: usize| -> u32 {
+            a.iter()
+                .find(|d| d.dev == dev)
+                .and_then(|d| d.blocks.map(|(x, y)| y - x + 1))
+                .unwrap_or(0)
+        };
+        assert_eq!((n(&p.rows, 0), n(&p.rows, 1)), (12, 36), "the pin is obeyed");
+        // The derived cut depends on the model's mass profile (the real 122B gives
+        // 14/34; this synthetic uniform model gives 15/33). What must hold on ANY
+        // model is that capacity did NOT choose the pinned cut — otherwise the two
+        // agree by luck and this test would pass while proving nothing.
+        assert_ne!(
+            (n(&r.rows, 0), n(&r.rows, 1)),
+            (12, 36),
+            "capacity must not have independently chosen the pinned cut"
+        );
+
+        let out = render_human(&r);
+        assert!(out.contains("PINNED SPLIT"), "{out}");
+        assert!(out.contains("SOVEREIGN_RPC_BLOCK_SPLIT=12,36"), "{out}");
+        assert!(
+            out.contains("NOT the VRAM-derived cut"),
+            "the operator must be told the table above is not what loads: {out}"
+        );
+
+        let j = render_json(&r);
+        assert_eq!(j["pinned"]["is_executed_cut"], true);
+        assert_eq!(
+            j["safe_now"]["is_executed_cut"], false,
+            "a pin outranks the live-free basis"
+        );
+    }
+
+    /// Speed is keyed on the PINNED cut, because that is what the loader runs.
+    /// Without this the plan queries a key no run can ever file under — the exact
+    /// failure that made the 10.48 tok/s two-node record unquotable.
+    #[test]
+    fn speed_is_keyed_on_the_pinned_cut() {
+        let pinned_input = || {
+            let mut i = live_two(the_real_mesh());
+            i.block_split_pin = Some("12,36".into());
+            i
+        };
+        let probe = report(pinned_input());
+        let pinned_key = probe.speed_key.clone().expect("key");
+
+        // The derived bases must key differently, or this proves nothing.
+        assert_ne!(
+            pinned_key.placement_digest,
+            report(live_two(the_real_mesh()))
+                .speed_key
+                .expect("key")
+                .placement_digest,
+            "12/36 and 14/34 must hash differently"
+        );
+
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                key: pinned_key,
+                decode_tok_s: 10.48,
+                decode_tok_s_min: 10.27,
+                decode_tok_s_max: 10.52,
+                ttft_ms: 2444.0,
+                itl_p50_ms: 72.9,
+                itl_p95_ms: 158.1,
+                prefill_tok_s: Some(13.0),
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 170,
+                model_name: "test.gguf".into(),
+                placement_human: "36 local + 12 @beefymac".into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_753_500_000,
+                build: "test-build".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: Some(0.4),
+                verdict: mm::Verdict::Valid,
+            },
+        );
+
+        let r = build_report(pinned_input(), &file, "test-build");
+        assert!(
+            matches!(r.speed, SpeedSection::Measured { .. }),
+            "a record filed under the pinned cut must be FOUND"
+        );
+        assert!(render_human(&r).contains("10.5 tok/s decode"));
+    }
+
+    /// A pin the LOADER would reject must be rejected here identically, and named
+    /// as having no effect — an operator who set it believes it is in force.
+    #[test]
+    fn an_invalid_pin_is_refused_not_repaired() {
+        let mut i = live_two(the_real_mesh());
+        i.block_split_pin = Some("10,10".into()); // sums to 20, not 48
+        let r = report(i);
+
+        assert!(r.pinned.is_none(), "a non-tiling pin must not be applied");
+        let out = render_human(&r);
+        assert!(out.contains("does NOT apply"), "{out}");
+        assert!(
+            out.contains("having no effect"),
+            "the operator must learn the pin is inert: {out}"
+        );
+        assert!(render_json(&r)["pinned"].is_null());
+        assert_eq!(render_json(&r)["block_split_pin"], "10,10");
+    }
+
+    /// An idle mesh has no gap, and the report says that plainly instead of
+    /// printing a zero-width table nobody can read.
+    #[test]
+    fn an_idle_mesh_reports_no_gap() {
+        let r = report(live_two(devs_with_free(&[
+            ("beefymac", 51.0, Some(51.0)),
+            ("ruggedfox", 124.0, Some(124.0)),
+        ])));
+        let sn = r.safe_now.as_ref().expect("a live basis");
+        assert_eq!(sn.pooled, r.pooled, "identical capacities → identical pool");
+        let out = render_human(&r);
+        assert!(out.contains("No gap"), "{out}");
+        assert!(
+            !out.contains("Different cut"),
+            "identical capacities cannot cut differently: {out}"
+        );
     }
 
     /// A single-node plan has no link, and must key as `Local` rather than
