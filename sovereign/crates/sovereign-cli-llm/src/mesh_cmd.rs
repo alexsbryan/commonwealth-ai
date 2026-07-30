@@ -2166,15 +2166,18 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
                     None => String::new(),
                 }
             );
-            let _ = writeln!(
-                o,
-                "                {} run{}, {:.1}–{:.1} tok/s · build {}",
-                s.runs,
-                if s.runs == 1 { "" } else { "s" },
-                s.decode_tok_s_min,
-                s.decode_tok_s_max,
-                s.measured_build
-            );
+            // The headline above is the MEDIAN run (an operator call — see
+            // MeasurementSummary); the observed range is run medians, so an
+            // outlier run widens the band without setting the headline.
+            if s.runs == 1 {
+                let _ = writeln!(o, "                1 run · build {}", s.measured_build);
+            } else {
+                let _ = writeln!(
+                    o,
+                    "                median of {} runs · observed {:.1}–{:.1} tok/s · build {}",
+                    s.runs, s.decode_tok_s_min, s.decode_tok_s_max, s.measured_build
+                );
+            }
             if s.stale {
                 let _ = writeln!(
                     o,

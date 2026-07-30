@@ -905,23 +905,37 @@ impl MeasurementFile {
 // Lookup
 // ---------------------------------------------------------------------------
 
-/// What [`lookup`] serves back: the latest valid run for a key, with the spread
-/// across every valid run under it.
+/// What [`lookup`] serves back: the MEDIAN valid run for a key (by decode
+/// rate), with the observed spread of run medians across every valid run
+/// under it.
+///
+/// The headline policy is deliberate and was an explicit operator call
+/// (2026-07-29, THE_NEXT_MONTH Item Three): "latest" let whichever run
+/// happened most recently set the number a stranger is told, and a mean
+/// would synthesise a run nobody ran. The median run is a run that actually
+/// happened, and one outlier cannot set it — the case that forced the call
+/// was a 122B split whose four runs sat at 7.75/8.38/8.53/11.08, where
+/// "latest" plus a trial-extreme range quoted the band as 7.5–11.5.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeasurementSummary {
-    /// Headline decode rate — the latest valid run's median.
+    /// Headline decode rate — the median valid run's rate. Every other
+    /// single-run field below comes from that same run, so the summary
+    /// always describes one real run, never a composite.
     pub decode_tok_s: f64,
-    /// Slowest trial across every valid run under this key.
+    /// Slowest valid run's rate under this key. A run's rate is already its
+    /// median trial, so this is the observed floor across runs — NOT the
+    /// slowest single trial, which would widen the band with within-run
+    /// jitter the medians absorb.
     pub decode_tok_s_min: f64,
-    /// Fastest trial across every valid run under this key.
+    /// Fastest valid run's rate under this key (observed ceiling, per above).
     pub decode_tok_s_max: f64,
-    /// Latest run's median time to first token.
+    /// Median run's median time to first token.
     pub ttft_ms: f64,
-    /// Latest run's median inter-token latency.
+    /// Median run's median inter-token latency.
     pub itl_p50_ms: f64,
-    /// Latest run's 95th-percentile inter-token latency.
+    /// Median run's 95th-percentile inter-token latency.
     pub itl_p95_ms: f64,
-    /// Latest run's prefill rate, when the server reported one.
+    /// Median run's prefill rate, when the server reported one.
     pub prefill_tok_s: Option<f64>,
     /// Context length these numbers were taken at.
     pub n_ctx: u32,
@@ -929,16 +943,16 @@ pub struct MeasurementSummary {
     pub backend: Option<String>,
     /// Valid runs under this key.
     pub runs: u32,
-    /// When the latest valid run completed.
+    /// When the median run completed.
     pub measured_at: u64,
-    /// Build that took the latest valid run.
+    /// Build that took the median run.
     pub measured_build: String,
     /// Whether that build differs from the one asking. Not a reason to hide the
     /// number — a reason to show it with a warning.
     pub stale: bool,
-    /// Human-facing placement of the latest valid run.
+    /// Human-facing placement of the median run.
     pub placement_human: String,
-    /// Human-facing model name of the latest valid run.
+    /// Human-facing model name of the median run.
     pub model_name: String,
 }
 
@@ -968,39 +982,44 @@ pub fn lookup(
     if key.link == LinkClass::Unknown {
         return None;
     }
-    let valid: Vec<&MeasurementRecord> = file
+    let mut valid: Vec<&MeasurementRecord> = file
         .records
         .iter()
         .filter(|r| &r.key == key && r.verdict.is_valid())
         .collect();
+    if valid.is_empty() {
+        return None;
+    }
 
-    let latest = valid.iter().max_by_key(|r| r.measured_at)?;
-
-    let min = valid
-        .iter()
-        .map(|r| r.decode_tok_s_min)
-        .fold(f64::INFINITY, f64::min);
-    let max = valid
-        .iter()
-        .map(|r| r.decode_tok_s_max)
-        .fold(f64::NEG_INFINITY, f64::max);
+    // The median run by decode rate; ties break on recency so the pick is
+    // deterministic. For an even count the LOWER middle is taken — the
+    // conservative side, and still a run that actually happened (averaging
+    // the two middles would quote a rate nobody measured). See the policy
+    // note on [`MeasurementSummary`].
+    valid.sort_by(|a, b| {
+        a.decode_tok_s
+            .partial_cmp(&b.decode_tok_s)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.measured_at.cmp(&b.measured_at))
+    });
+    let median = valid[(valid.len() - 1) / 2];
 
     Some(MeasurementSummary {
-        decode_tok_s: latest.decode_tok_s,
-        decode_tok_s_min: min,
-        decode_tok_s_max: max,
-        ttft_ms: latest.ttft_ms,
-        itl_p50_ms: latest.itl_p50_ms,
-        itl_p95_ms: latest.itl_p95_ms,
-        prefill_tok_s: latest.prefill_tok_s,
-        n_ctx: latest.key.n_ctx,
-        backend: latest.backend.clone(),
+        decode_tok_s: median.decode_tok_s,
+        decode_tok_s_min: valid.first().expect("non-empty").decode_tok_s,
+        decode_tok_s_max: valid.last().expect("non-empty").decode_tok_s,
+        ttft_ms: median.ttft_ms,
+        itl_p50_ms: median.itl_p50_ms,
+        itl_p95_ms: median.itl_p95_ms,
+        prefill_tok_s: median.prefill_tok_s,
+        n_ctx: median.key.n_ctx,
+        backend: median.backend.clone(),
         runs: valid.len() as u32,
-        measured_at: latest.measured_at,
-        measured_build: latest.build.clone(),
-        stale: latest.build != current_build,
-        placement_human: latest.placement_human.clone(),
-        model_name: latest.model_name.clone(),
+        measured_at: median.measured_at,
+        measured_build: median.build.clone(),
+        stale: median.build != current_build,
+        placement_human: median.placement_human.clone(),
+        model_name: median.model_name.clone(),
     })
 }
 
@@ -1988,25 +2007,52 @@ mod tests {
     }
 
     #[test]
-    fn lookup_reports_the_latest_run_and_the_spread_across_all_of_them() {
+    fn lookup_reports_the_median_run_and_the_observed_spread_of_runs() {
         let mut f = MeasurementFile::new();
         record(&mut f, rec_at(key(), 100, 13.0, Verdict::Valid));
         record(&mut f, rec_at(key(), 200, 14.1, Verdict::Valid));
         let s = lookup(&f, &key(), "0.10.0").expect("two valid runs");
         assert_eq!(s.runs, 2);
         assert!(
-            (s.decode_tok_s - 14.1).abs() < 1e-9,
-            "headline is the latest run"
+            (s.decode_tok_s - 13.0).abs() < 1e-9,
+            "even count: the lower middle, a run that actually happened"
         );
         assert!(
-            (s.decode_tok_s_min - 12.8).abs() < 1e-9,
-            "min spans every run"
+            (s.decode_tok_s_min - 13.0).abs() < 1e-9,
+            "min is the slowest RUN, not the slowest trial"
         );
         assert!(
-            (s.decode_tok_s_max - 14.2).abs() < 1e-9,
-            "max spans every run"
+            (s.decode_tok_s_max - 14.1).abs() < 1e-9,
+            "max is the fastest RUN, not the fastest trial"
         );
         assert!(!s.stale);
+    }
+
+    #[test]
+    fn one_outlier_run_cannot_set_the_headline_or_arrive_last_and_steal_it() {
+        // The real store that forced the policy: 7.75/8.38/8.53/11.08, where
+        // the 11.08 was one coherently-fast outlier and the OLD latest-run
+        // headline would have quoted whatever ran most recently.
+        let mut f = MeasurementFile::new();
+        record(&mut f, rec_at(key(), 100, 7.75, Verdict::Valid));
+        record(&mut f, rec_at(key(), 200, 8.53, Verdict::Valid));
+        record(&mut f, rec_at(key(), 300, 8.38, Verdict::Valid));
+        record(&mut f, rec_at(key(), 400, 11.08, Verdict::Valid));
+        let s = lookup(&f, &key(), "0.10.0").expect("four valid runs");
+        assert_eq!(s.runs, 4);
+        assert!(
+            (s.decode_tok_s - 8.38).abs() < 1e-9,
+            "median run headlines even though the outlier arrived last"
+        );
+        assert!((s.decode_tok_s_min - 7.75).abs() < 1e-9);
+        assert!(
+            (s.decode_tok_s_max - 11.08).abs() < 1e-9,
+            "the outlier is still visible in the observed range, just not the headline"
+        );
+        assert!(
+            (s.measured_at as i64 - 300).abs() < 1,
+            "companion fields travel with the median run, not the latest"
+        );
     }
 
     #[test]
@@ -2779,9 +2825,10 @@ mod tests {
             "a quiet run and a busy run belong to the same configuration"
         );
         assert!(
-            (s.decode_tok_s_min - 7.55).abs() < 1e-9 || s.decode_tok_s_min < 7.75,
-            "the spread stays visible across conditions, min was {}",
-            s.decode_tok_s_min
+            (s.decode_tok_s_min - 7.75).abs() < 1e-9 && (s.decode_tok_s_max - 11.08).abs() < 1e-9,
+            "the spread of run medians stays visible across conditions, got {}–{}",
+            s.decode_tok_s_min,
+            s.decode_tok_s_max
         );
     }
 
