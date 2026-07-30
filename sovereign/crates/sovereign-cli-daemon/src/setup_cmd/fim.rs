@@ -711,6 +711,22 @@ async fn verify(port: u16) -> Result<Verified, String> {
 
 // ─── Editor extension ──────────────────────────────────────────────
 
+/// Where a user without a source checkout gets the `.vsix`. The extension
+/// ships on the public shelf under its own `vscode-v*` tag stream (see
+/// RELEASING.md). Same shelf as `update_cmd::REPO` — keep them in step.
+///
+/// This path matters more than it looks: anyone who installed from the CLI
+/// tarball has no `packages/vscode-sovereign` to build from, so this banner
+/// is the *only* instruction they get. It named a tag prefix that never
+/// existed (`svrn-fim-*`) until 2026-07-29.
+///
+/// Deliberately the unfiltered list. GitHub's `?q=tag:vscode-v` releases
+/// filter returns HTTP 200 with the release absent from the body (verified
+/// 2026-07-29), so a "helpful" filtered link is an empty page — worse than
+/// a list the reader can scan. There is no per-prefix `latest` pointer
+/// either; `/releases/latest` is repo-global and belongs to the desktop app.
+const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
+
 enum EditorOutcome {
     Installed { editor: String },
     /// No editor CLI on PATH, or no extension sources to build from.
@@ -939,8 +955,9 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
                 "            http://127.0.0.1:{}/v1/completions",
                 plan.client_port
             );
-            println!("          To get the extension: download the .vsix from the project's");
-            println!("          GitHub releases (tag `svrn-fim-*`) and run");
+            println!("          To get the extension: download the newest `sovereign-fim-*.vsix`");
+            println!("          from the release shelf and install it:");
+            println!("            {VSIX_RELEASES_URL}");
             println!("            code --install-extension <downloaded>.vsix");
             println!("          From a source checkout you can build it instead:");
             println!("            cd packages/vscode-sovereign && npm install && npm run package");

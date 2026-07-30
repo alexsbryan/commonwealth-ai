@@ -1,0 +1,106 @@
+{
+  "source": "/Users/alexsbryan/.cache/huggingface/hub/datasets--lrsbrgrn--HalluGuard-Preferences-76k/snapshots/33f2c3a892403ad31a735613a678963a53504243/halluguard-main.jsonl",
+  "sha256": "c98af1c6cfd18535173f1f5c7514de1115794da741fd260a6816916feeb1cdc7",
+  "rows": 76708,
+  "hard_violations": 0,
+  "soft_violations": 1351,
+  "hard_examples": [],
+  "soft_examples": [
+    [
+      93,
+      "rejected answer block malformed"
+    ],
+    [
+      169,
+      "rejected answer block malformed"
+    ],
+    [
+      242,
+      "rejected answer block malformed"
+    ],
+    [
+      262,
+      "rejected answer block malformed"
+    ],
+    [
+      397,
+      "rejected answer block malformed"
+    ],
+    [
+      462,
+      "rejected answer block malformed"
+    ],
+    [
+      496,
+      "rejected answer block malformed"
+    ],
+    [
+      545,
+      "rejected answer block malformed"
+    ],
+    [
+      706,
+      "rejected answer block malformed"
+    ],
+    [
+      744,
+      "rejected answer block malformed"
+    ]
+  ],
+  "duplicate_ids": 0,
+  "duplicate_document_claim_pairs": 41,
+  "chosen_missing_think": 0,
+  "class_counts": {
+    "HALLUCINATED_INTRINSIC": 18045,
+    "HALLUCINATED_EXTRINSIC": 20309,
+    "GROUNDED": 38354
+  },
+  "binary_balance": {
+    "grounded_pct": 50.0,
+    "hallucinated_pct": 50.0
+  },
+  "rejected_verdict_disagrees_with_chosen": {
+    "count": 19813,
+    "pct": 25.83
+  },
+  "agreement_matrix": {
+    "GROUNDED->GROUNDED": 34337,
+    "GROUNDED->HALLUCINATED_EXTRINSIC": 2535,
+    "GROUNDED->HALLUCINATED_INTRINSIC": 848,
+    "GROUNDED->MALFORMED": 634,
+    "HALLUCINATED_EXTRINSIC->GROUNDED": 2019,
+    "HALLUCINATED_EXTRINSIC->HALLUCINATED_EXTRINSIC": 17697,
+    "HALLUCINATED_EXTRINSIC->HALLUCINATED_INTRINSIC": 225,
+    "HALLUCINATED_EXTRINSIC->MALFORMED": 368,
+    "HALLUCINATED_INTRINSIC->GROUNDED": 5016,
+    "HALLUCINATED_INTRINSIC->HALLUCINATED_EXTRINSIC": 7819,
+    "HALLUCINATED_INTRINSIC->HALLUCINATED_INTRINSIC": 4861,
+    "HALLUCINATED_INTRINSIC->MALFORMED": 349
+  },
+  "char_lengths": {
+    "document": {
+      "min": 24,
+      "p50": 1748,
+      "p95": 3808,
+      "max": 12208
+    },
+    "claim": {
+      "min": 10,
+      "p50": 109,
+      "p95": 312,
+      "max": 1168
+    },
+    "chosen": {
+      "min": 1036,
+      "p50": 4040,
+      "p95": 7764,
+      "max": 11736
+    },
+    "rejected": {
+      "min": 724,
+      "p50": 2165,
+      "p95": 4798,
+      "max": 10646
+    }
+  }
+}

@@ -1,17 +1,33 @@
 # Releasing Commonwealth AI
 
-This repo ships **two** user-facing artifacts from **two independent**
-tag-triggered GitHub Actions workflows. They do not bundle — tagging one does
-not build the other.
+This repo ships **three** user-facing artifacts. The two Rust ones come from
+**independent** tag-triggered GitHub Actions workflows; the VS Code extension
+has no CI pipeline and releases from a local script. Nothing bundles — tagging
+one does not build the others.
 
-| Artifact | Tag prefix | Workflow | Output | How users get it |
+| Artifact | Tag prefix | Built by | Output | How users get it |
 |---|---|---|---|---|
 | **CLI** (`sovereign`) | `cli-v*` | `.github/workflows/cli-release.yml` | `sovereign-<target>.tar.gz` (3 binaries) + `SHA256SUMS` | `curl -fsSL https://svrnme.sh/install.sh \| sh` |
 | **Desktop app** | `desktop-v*` | `.github/workflows/desktop-release.yml` | `.dmg` / `.AppImage` / `.deb` (/ `.msi`) | download + double-click |
+| **VS Code extension** (`svrn fim`) | `vscode-v*` | `scripts/release-vsix-local.sh` | `sovereign-fim-<ver>.vsix` + `.sha256` | `svrn setup --fim`, or install the `.vsix` by hand |
 
-Each workflow creates its **own draft GitHub Release** keyed to its tag, so
-`cli-v0.1.18` and `desktop-v0.1.18` are separate release pages with separate
-assets. Different tag prefixes mean they never fire together.
+Each release is its **own** GitHub Release keyed to its tag, so `cli-v0.1.18`
+and `desktop-v0.1.18` are separate release pages with separate assets.
+Different tag prefixes mean they never fire together.
+
+**All three publish to the public shelf repo** (`alexsbryan/svrnmesh-releases`),
+not to this source repo — assets on a private repo aren't anonymously
+fetchable, which would break `install.sh`, the landing-page downloads, and the
+desktop auto-updater. Override with `RELEASES_REPO` when testing.
+
+**The tag prefix is load-bearing, and every consumer must filter on its own.**
+`landing/install.sh` takes the max-semver `cli-v*`; `landing/api/desktop/*.js`
+take the max-semver non-draft `desktop-v*`. Neither uses GitHub's
+`/releases/latest`, which is a single repo-global pointer shared by all three
+streams. A new artifact stream on this shelf **must** be invisible to the
+existing resolvers — verify that before publishing, and publish with
+`--latest=false` so the shelf's "Latest" badge keeps pointing humans at the
+desktop app rather than following whatever shipped most recently.
 
 The CLI tarball contains all three product binaries the dispatcher needs —
 `sovereign-cli` (the `sovereign` dispatcher), `sovereign-cli-daemon`, and
@@ -20,7 +36,10 @@ inside the CLI tarball.
 
 ---
 
-## Versioning — one workspace version for both
+## Versioning — one workspace version for the two Rust artifacts
+
+(The VS Code extension is exempt — it carries its own version in
+`packages/vscode-sovereign/package.json`. See its section below.)
 
 There is a single repo-wide version: `[workspace.package].version` in the root
 `Cargo.toml` (every crate inherits it via `version.workspace = true`). Both tag
@@ -233,15 +252,54 @@ to move to. Repair in place; unpublish only if the `.app` itself is bad.
 
 ---
 
-## How the two coexist on GitHub Releases
+## Releasing the VS Code extension
 
-Both workflows publish **drafts** (a tag push *stages* a release; you publish it
-manually after smoke-testing). Once published, GitHub's global "latest release"
-pointer flips to whichever stream published most recently — which is exactly why
-the CLI installer resolves `cli-v*` by name rather than trusting `latest`. The
-desktop auto-updater similarly queries for the latest `desktop-v*` tag (via the
-`svrnme.sh` manifest endpoint), so neither consumer depends on the shared
-`latest` pointer.
+`packages/vscode-sovereign` — pure TypeScript bundled by esbuild into one
+platform-neutral `.vsix`. No cross-compilation, no containers, no CI pipeline:
+`scripts/release-vsix-local.sh` **is** the release path.
+
+**It versions itself.** The extension's version lives in its own
+`package.json` and is deliberately *not* pinned to the workspace version — it
+ships on its own cadence, so `bump-desktop-version.sh` does not touch it. Bump
+it there, then:
+
+```sh
+scripts/release-vsix-local.sh              # test + package + smoke + draft
+scripts/release-vsix-local.sh --publish    # ...and publish + verify anonymously
+scripts/release-vsix-local.sh --no-upload  # build only
+```
+
+The script runs `npm test`, packages, then **installs the packaged `.vsix`
+into local VS Code before uploading** — a `.vsix` that won't install is the one
+failure a checksum cannot catch. With `--publish` it also re-downloads the
+published asset with the GitHub token stripped from the environment and checks
+the sha256, which is the only real proof that someone who is not you can get it.
+
+Two things the script handles that are easy to get wrong by hand:
+
+- **`LICENSE`.** The manifest declares `AGPL-3.0-or-later`; `vsce` only *warns*
+  when the text is missing, so a hand-packaged `.vsix` silently ships a license
+  reference with no license. The script copies the repo-root `LICENSE` in.
+- **Relative links in `README.md`.** The README is bundled into the `.vsix` and
+  rendered in the Extensions pane. `vsce` rewrites relative links against the
+  `repository` field — which is the **private** source repo, so every such link
+  is a 404 for the people actually reading it. Keep the packaged README
+  self-contained; point at `https://svrnme.sh` rather than at repo paths.
+
+Not on the Marketplace yet — this is the sideload shelf. Publishing under a
+real `sovereign` publisher ID needs an Azure DevOps PAT and a verified
+publisher, which is a beta-time decision.
+
+## How the three coexist on GitHub Releases
+
+All three publish **drafts** first (you publish manually after smoke-testing).
+Once published, GitHub's global "latest release" pointer flips to whichever
+stream published most recently — which is exactly why the CLI installer
+resolves `cli-v*` by name rather than trusting `latest`. The desktop
+auto-updater similarly queries for the latest `desktop-v*` tag (via the
+`svrnme.sh` manifest endpoint), so no consumer depends on the shared `latest`
+pointer. The extension stream publishes with `--latest=false` so the badge
+stays on the desktop app.
 
 To cut a coordinated release of both at version `X.Y.Z`: bump once, commit, then
 push both tags (`cli-vX.Y.Z` and `desktop-vX.Y.Z`) — two workflows run in

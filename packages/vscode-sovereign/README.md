@@ -49,9 +49,14 @@ would not.
 
 ### 1. Get the Sovereign daemon
 
-You need `sovereign-cli-daemon` built and runnable. See
-[`GETTING_STARTED.md`](../../docs/GETTING_STARTED.md) in the repo. If you
-can run `sovereign daemon run` and it stays up, you're done with this step.
+You need `sovereign-cli-daemon` installed and runnable:
+
+```bash
+curl -fsSL https://svrnme.sh/install.sh | sh
+```
+
+If you can run `sovereign daemon run` and it stays up, you're done with
+this step.
 
 ### 2. Download two small models
 
@@ -206,4 +211,5 @@ with prefix caching (typing only re-processes the delta), and applies
 structural stop rules (single-line vs block-body, dedupe against the text
 after your cursor) — all visible via the debug payload. Cancellation is
 real: superseded keystrokes close the socket and the model stops
-mid-token. Full design: [`sovereign/docs/INLINE_COMPLETION.md`](../../sovereign/docs/INLINE_COMPLETION.md).
+mid-token. The full design lives in `sovereign/docs/INLINE_COMPLETION.md`
+in the source tree, which opens with the beta.

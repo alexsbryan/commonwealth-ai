@@ -1,0 +1,169 @@
+{
+  "training_stream": "HalluGuard-Preferences-76k",
+  "training_rows": 76708,
+  "ngram": 13,
+  "test_sets": {
+    "LLM-AggreFact": "test.parquet (29,320 rows)",
+    "FaithBench": "15 release batches"
+  },
+  "unique_test_docs": 8405,
+  "test_shingles": 3574587,
+  "canary_hits": 0,
+  "colliding_training_rows": {
+    "LLM-AggreFact": 34,
+    "FaithBench": 0
+  },
+  "collision_examples": [
+    {
+      "train_row": 7130,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Paul was traveling to Jerusalem when the disciples wept and kissed him goodbye.'"
+    },
+    {
+      "train_row": 7573,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Stephen Peterson filed a 2012 federal lawsuit alleging that his 2011 termination from the Oak Brook Police Department r"
+    },
+    {
+      "train_row": 8598,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Burren is located in County Clare, Ireland.'"
+    },
+    {
+      "train_row": 11247,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Acknowledging powerlessness results in possessing the kingdom of heaven as stated in Matthew 5:3.'"
+    },
+    {
+      "train_row": 11595,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'Cologuard is more effective at detecting colorectal cancer than at detecting polyps that are most likely to become canc"
+    },
+    {
+      "train_row": 11864,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Betty Ford Center is named after former First Lady Betty Ford.'"
+    },
+    {
+      "train_row": 15993,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Decatur and Champaign are cities in the state of Illinois.'"
+    },
+    {
+      "train_row": 18735,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Paul's request for believers to pray for the rapid spread of the Lord's message exemplifies mutual prayer, a practice t"
+    },
+    {
+      "train_row": 21954,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Community donations following Cleo's attack established a $1,000 reward for information leading to the attacker's ident"
+    },
+    {
+      "train_row": 26683,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The tax year is the period a business uses to calculate and file its taxes.'"
+    },
+    {
+      "train_row": 29335,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Reveal",
+      "claim": "'Southern Methodist University is located in Dallas, Texas.'"
+    },
+    {
+      "train_row": 39435,
+      "benchmark": "LLM-AggreFact",
+      "subset": "AggreFact-XSum",
+      "claim": "'The two Russian nationals were smuggling 206 green sea turtles.'"
+    },
+    {
+      "train_row": 40290,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Jacuzzi brand was created by Roy Jacuzzi in 1958.'"
+    },
+    {
+      "train_row": 44020,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'John Chrysostom's *Homilies on Philippians* specifically identifies the \"flesh\" referenced in Philippians 3:3 as includ"
+    },
+    {
+      "train_row": 47960,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Without Jesus, we can do many things.'"
+    },
+    {
+      "train_row": 48194,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Gansbaai is internationally recognized as the great white shark capital of the world.'"
+    },
+    {
+      "train_row": 48973,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The author contends that internalizing 1 John's message of loving one another, as emphasized through repeated biblical "
+    },
+    {
+      "train_row": 51180,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The book argues that \"Do unto others as you would have them do unto you\" is irrelevant in the digital age.'"
+    },
+    {
+      "train_row": 51320,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Lower Santa Ynez Recreation Area has been open to the public since October 3.'"
+    },
+    {
+      "train_row": 51567,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Kenneth Stevenson's daughter was diagnosed with cancer when she was 4 years old.'"
+    },
+    {
+      "train_row": 53633,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The incident occurred on Fowler Manning Road, near the family's residence.'"
+    },
+    {
+      "train_row": 54161,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Instead of \u201ceternal life,\u201d I read \u201cexternal life.\u201d'"
+    },
+    {
+      "train_row": 55633,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The Gospel of John's narrative of the Last Supper includes Jesus washing his disciples' feet and delivering a final mes"
+    },
+    {
+      "train_row": 59173,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'Red and purple leaves that stay that color all year contain no chlorophyll.'"
+    },
+    {
+      "train_row": 60408,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The intended session RPE is not consistently achieved due to both deviations in training execution and individual diffe"
+    }
+  ],
+  "verdict": "COLLISIONS FOUND"
+}
