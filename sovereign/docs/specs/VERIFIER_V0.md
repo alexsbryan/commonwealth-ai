@@ -342,7 +342,7 @@ parent doc). The card that gates shipping:
 | **M2** | Stream B harness: corruption taxonomy implemented over Secret Agent/Saltgrass via `extract_claim_list`; 20–40k validated pairs; 0.8B mix study (A vs A+B) | every generated case passes the fairness contract; mix study shows B is non-harmful on external + helpful on internal banks |
 | **M3** | **The v0 run:** 4B LoRA on A+B; eval card | §1 targets: ≥75.7 avg / ≥84.0 RAGTruth; FaithBench reported; internal gates green |
 | **M4** | Ship: Q8_0 GGUF via model_fetch, opt-in judge slot, latency measurement in the real gate path | full §5 card green; two red lines non-regressed; adoption opt-in |
-| stretch | best-in-class push: hard-negative loop iterations, full-FT if warranted, >77.4 avg | leaderboard-top claim only with the FaithBench caveat honestly stated |
+| stretch | best-in-class push — now the §10 campaign: RLVR on Stream B labels (M3.5), span axis, self-play generations, ≥80 avg | leaderboard-top claim only with the FaithBench caveat honestly stated; every RL round gated by external non-regression |
 
 M0–M2 are cheap and mostly parallelizable with the commons build-order
 steps 1–3. The only expensive, serial thing in the plan is the M3 training
@@ -383,7 +383,116 @@ discrete, attributed, reversible actuation, exactly like every other
 stratum. No training on calibration banks, receipts, or anything the gate
 uses to certify — provenance enforces the split.
 
-## 10. Sources
+## 10. Path to the lead — the 2026 campaign (post-v0)
+
+v0's stretch goal is >77.4 — the leaderboard top at half the params. This
+section is the plan for taking the lead *considerably*: **≥80 avg BAcc on
+LLM-AggreFact single-pass**, a span-detection axis nobody at this size
+holds, and FaithBench reported honestly throughout. Nothing here changes
+M0–M4; every lever below *consumes* the M2 harness and the M3 checkpoint.
+The board has sat under 78 since mid-2025 (Bespoke-MiniCheck-7B 77.4;
+Paladin-mini's 79.31 claim only averages in their own benchmark), and the
+2026 methods that break the ceiling map directly onto assets this plan
+already builds for other reasons.
+
+### Amending the §9 RL non-goal, explicitly
+
+§9 says "No RL … J1-style verifiable-reward RL is a v1+ option once
+receipt volume exists — never RL from preference/agreement." That
+deferral was premised on receipts being the only verifiable-reward
+source. The 2026 field result (RLVR/GRPO as the standard post-training
+step; RL4HS showing span-level RL beating SFT for exactly our task) plus
+an observation about our own design changes the premise: **Stream B's
+labels-by-construction are verifiable rewards** — the corruption site is
+mechanically checkable at training time by the same code that validates
+the case at generation time. No reward model, no preference signal, no
+agreement proxy. The spirit of the non-goal (never RL from
+preference/agreement) is preserved; the letter (wait for receipts) is
+amended: the campaign runs RLVR on constructed labels at v0.5, receipts
+join at v1 as additional reward sources, not the first ones.
+
+### The four levers, in order of expected yield
+
+1. **RLVR stage on Stream B (M3.5).** GRPO with class-aware advantage
+   normalization (the RL4HS/CAPO recipe) on top of the M3 ORPO
+   checkpoint. Prompt pool = Stream B cases (+ a Stream A slice for
+   register balance); reward = verdict correctness against the
+   constructed label + span match at the corruption site + abstain
+   shaping at the strict operating points. Verifier rollouts are short
+   (chunk + claim → bounded think → verdict), so group sampling is cheap
+   relative to math-RL. This is the single most likely multi-point jump.
+2. **Span-level supervision, free.** Every generated corruption carries
+   its span offsets (a field the Stream B export includes from day one —
+   trivial now, expensive to retrofit). Train verdict + span jointly;
+   report RAGTruth span F1 as a second leaderboard axis (RL4HS-14B holds
+   58.3; a 4B beating it on constructed-span data would be a result on
+   its own). The same localization feeds the §6 gate UX.
+3. **Self-play hard negatives (the flywheel, automated).** The
+   hard-negative loop in §3 is the manual version of 2026's
+   detector/generator self-play (arXiv 2607.07993): evolve a generator
+   rewarded for corruptions the frozen detector misses, retrain, repeat.
+   Our version is *sounder than the paper's*: their labels come from
+   generator intent; ours stay fixed by mechanical construction while
+   only difficulty evolves — the corruption checker is the referee, so
+   escalation cannot rot the labels. Two to three generations, each
+   gated by the mix-study rule (non-harmful external, helpful internal).
+4. **Test-time scaling, reported honestly.** k-sample self-consistency
+   with Qwen3.5's native think budget. The card reports single-pass and
+   k=5 as separate rows; the ≥80 target is single-pass, the ensemble row
+   is the production slow-judge option and never the headline claim.
+
+The FaithBench guardrail applies with more force under RL, not less:
+optimizing hard against our distribution is exactly how a small verifier
+buys headline BAcc with off-distribution collapse. The M2 mix-study gate
+(external non-regression) runs after *every* RL round, and any round
+that trades FaithBench for LLM-AggreFact is discarded.
+
+### Budget — owned machines, and where rented capacity buys weeks
+
+Measured anchors so far (M0): 0.8B ORPO on the M2 Max ≈ 53 s/it at
+effective batch 32 → ~35 h/epoch on Stream A; eval throughput on the M2
+Max ≈ 6 h per 2,200-row per-subset card at 4-way concurrency (≈3.3 days
+for the full 29,320-row leaderboard set). Everything marked *est.* below
+is re-derived from a 1-day rollout-throughput probe before scheduling —
+the M0 discipline applies to every stage.
+
+| Stage | Owned hardware | Est. wall-clock (owned) | Rented (H100-class, ~$2.5–3/h) |
+|---|---|---|---|
+| Stream B generation + teacher labeling (40k pairs) | Halo (35B-A3B resident); rejected-side 0.8B on M2 | ~3–5 days *est.* | frontier-API chosen-side: order $50–150 |
+| M3: 4B ORPO, A+B, 2 epochs | Halo (§4 table) | ~1 week | ~16–24 h ≈ $50–75 |
+| M3.5: GRPO+span round (~30k prompts × k=8, ~96M rollout tokens) | Halo, rollouts via server-mode Q8 | ~2.5–6 days/round *est.* | ~0.5 day/round ≈ $30–60 |
+| Self-play: generator round + detector round, ×2–3 generations | Halo | ~1–2 weeks/generation *est.* | ~1–1.5 days/gen ≈ $75–150 |
+| Eval cards (per checkpoint) + full leaderboard run | M2 Max, overlapped with training | free (6 h/card; 3.3 d full set) | full set ≈ $25 |
+
+Three ways to run it:
+
+- **Owned-only:** ≈ 5–7 weeks calendar after M4, $0 marginal. The Halo
+  serializes generation → ORPO → RL rounds; the M2 Max runs every card
+  in parallel. Viable, just slow — and it monopolizes the Halo.
+- **Hybrid (recommended):** keep generation + M3 owned (they're
+  scheduled-not-babysat anyway), rent for the RL rounds and the full
+  leaderboard runs. ≈ 3–4 weeks calendar, **≈ $300–800 total**. The §8
+  escape-hatch principle already blesses this: a rented GPU for a
+  bounded run changes nothing else in the plan.
+- **Aggressive:** rent everything after M2 → ≈ 2 weeks, ~$1–1.5k. Only
+  worth it if the board moves under us and timing starts to matter.
+
+The 9B escalation (§2: only if 4B plateaus) roughly 2.2×'s the training
+rows; even the aggressive path stays under ~$3k. Provenance discipline
+is unchanged off-box: rented runs pull only public-substrate streams
+(Stream A/B), never receipts or calibration banks, and every run
+manifest records where it executed.
+
+### Sequencing note
+
+M3.5 inserts between M3 and M4 only if the M3 card lands ≥75.7 (the
+recipe-reproduction bar). If M3 undershoots, fix the base recipe first —
+RL on top of a broken SFT/ORPO checkpoint launders the problem, it
+doesn't solve it. The campaign proper (self-play generations, leaderboard
+submission) runs post-M4 as v0.5, so shipping the opt-in judge slot is
+never hostage to the leaderboard push.
+
+## 11. Sources
 
 - [HalluGuard-Preferences-76k (HF dataset)](https://huggingface.co/datasets/lrsbrgrn/HalluGuard-Preferences-76k) — 76,708 ORPO tuples, Apache 2.0, construction + filtering details
 - [HalluGuard paper note (arXiv 2510.22395)](https://github.com/AkihikoWatanabe/paper_notes/issues/3065) · [emergentmind topic page](https://www.emergentmind.com/topics/halluguard-framework) — 4B SRM, ORPO, 84.0 RAGTruth / 75.7 LLM-AggreFact
@@ -396,3 +505,5 @@ uses to certify — provenance enforces the split.
 - [mlx-lm-lora (GitHub)](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora) · [PyPI](https://pypi.org/project/mlx-lm-lora/) · [mlx-tune (Unsloth-compatible API on MLX)](https://github.com/ARahim3/mlx-tune) — native ORPO/DPO/LoRA training on Apple Silicon (the M2 lane's stack)
 - Internal: MPS long-context kernel-panic invariant `[env:macos-arm64]` (2026-07-07) — mandatory guards for any PyTorch/MPS run on the M2 box
 - Internal: `VERIFICATION_COMMONS.md` (parent design study); chaos-QA calibration arc; situated-harness study; spec-decode tokenizer invariant (Qwen3.5/3.6 vocab 248,320)
+- §10 campaign: [RL4HS — Learning to Reason for Hallucination Span Detection (arXiv 2510.02173)](https://arxiv.org/abs/2510.02173) — GRPO + CAPO span-level rewards beat SFT on RAGTruth; [Hallucination Self-Play (arXiv 2607.07993)](https://arxiv.org/abs/2607.07993) — detector/generator co-evolution, small model matches larger on RAGTruth; [Budget-aware Test-time Scaling via Discriminative Verification (arXiv 2510.14913)](https://arxiv.org/pdf/2510.14913) · [Post-Training in 2026: GRPO/DAPO/RLVR survey](https://llm-stats.com/blog/research/post-training-techniques-2026) — the RLVR consensus; [Paladin-mini (arXiv 2506.20384)](https://arxiv.org/abs/2506.20384) — the 79.31 mixed-benchmark claim and why it isn't the LLM-AggreFact top
+- Internal: `research/verifier-v0/findings/STREAM_B_DESIGN.md` — substrate survey; the corruption-site checkers that become §10's reward functions

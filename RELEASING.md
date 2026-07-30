@@ -92,7 +92,17 @@ git tag "cli-v$v"
 git push origin main "cli-v$v"
 ```
 
-The tag push triggers `cli-release.yml`. It builds the three binaries per
+> **The tag push does NOT start a build.** `cli-release.yml` and
+> `desktop-release.yml` carry only `workflow_dispatch` + `workflow_call`
+> triggers — the `on: push: tags:` trigger they once had is gone, so pushing a
+> tag and waiting is a silent no-op. Start the build one of three ways:
+> **Actions → Release (manual)** (the one-button path above, which tags for
+> you), **Actions → the individual workflow → Run workflow** with the tag as
+> input, or the fully local `scripts/release-all.sh` (below). Tagging is still
+> worth doing first — `release-all.sh` refuses to build unless both tags exist
+> and point at HEAD.
+
+Once dispatched, `cli-release.yml` builds the three binaries per
 platform (`cargo build --release -p sovereign-cli -p sovereign-cli-daemon
 -p sovereign-cli-llm`), packages `sovereign-<target>.tar.gz` + a per-file
 `.sha256`, and uploads them to a **draft** release named `cli-v$v` along with a
@@ -164,7 +174,9 @@ follow it for desktop releases. The one-line version:
 scripts/bump-desktop-version.sh 0.2.0
 git commit -am "chore(desktop): release v0.2.0"
 git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
-# → desktop-release.yml → promote the draft after smoke-testing an installer
+# then DISPATCH desktop-release.yml (the tag push alone builds nothing — see
+# the callout under "Releasing the CLI § 2") → promote the draft after
+# smoke-testing an installer
 ```
 
 No CI (or no Intel runner)? The whole four-platform matrix — macOS both

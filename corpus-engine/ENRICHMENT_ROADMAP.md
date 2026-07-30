@@ -1,0 +1,587 @@
+# Enrichment 2026 — frontier review + best-in-class roadmap
+
+_Status: research roadmap (intent per `ARCH_PRINCIPLES.md §1.2`, not a
+§1.1 contract). Written 2026-07-29 from a full audit of the four
+enrichment systems (code, docs, notes store, committed baselines) plus a
+sweep of the 2025-26 literature. Companion to
+[`ENRICHMENT.md`](./ENRICHMENT.md) (the canonical map of what IS);
+this file is what we should build next and why. Sources at the end.
+Engineering design + t-shirt sizing for every workstream:
+[`ENRICHMENT_ROADMAP_SIZING.md`](./ENRICHMENT_ROADMAP_SIZING.md)._
+
+---
+
+## 0. TL;DR
+
+1. **Our architecture is ahead of the field; our economics and our
+   proof are behind it.** Provenance-typed edges, determinism-first
+   phase layering, content-hash incremental substrate, correction
+   ledgers, reversible merge oplogs — most 2026 frameworks have none of
+   this. But we pay eager-LLM prices the frontier has abandoned
+   (measured: ~38 min/SEP article, ~680 days extrapolated to Wikipedia),
+   and the one HARD enrichment CI lane is structurally unable to catch a
+   regression.
+2. **Faithfulness is the sharpest open wound.** RAPTOR summaries can
+   fabricate ("the Russian agent Vladimir", 0 occurrences in source),
+   reach the grounding gate with provenance stripped, and the 2026-06-17
+   chaos A/B proved the trade is real: contaminated corpus scored
+   competence 0.71 / honesty 0.64, cleaned corpus 0.50 / 0.82. Neither
+   passes both. Best-in-class means both at once — faithful enrichment,
+   not no enrichment.
+3. **The frontier's central lesson is cost inversion**: build cheap
+   deterministic structure eagerly (noun-phrase concept graphs, SVD
+   extractive trees, schema-driven encoder extraction), defer LLM
+   synthesis to query time under an explicit budget, and verify anything
+   abstractive before it can be cited. LazyGraphRAG indexes at vector-RAG
+   cost and beats GraphRAG global search at 4% of its query cost;
+   SVD-RAG matches RAPTOR retrieval within 1% at 317x less build cost.
+4. **VERIFIER_V0 changes what is affordable.** A local 0.8-4B claim
+   verifier at sub-second per claim makes *build-time verification of
+   every summary* — the leverage the fabrication note rated "heavy" —
+   routine. Enrichment also feeds the verifier's training stream
+   (real chunks → claims → construction-labeled corruptions). The two
+   projects are one flywheel.
+5. The plan: **P0 make quality measurable → P1 faithful by construction
+   → P2 extraction economics → P3 retrieval-side exploitation (evidence-
+   gated) → P4 time as a first-class dimension → P5 frontier bets.**
+
+| Phase | One-liner | Headline gate |
+|---|---|---|
+| P0 | Repair the measurement fabric | enrichment lane can fail; faithfulness measurable |
+| P1 | No unverified synthesis in evidence | chaos: competence ≥ 0.71 AND honesty ≥ 0.82 |
+| P2 | 10-100x cheaper structure, incremental by default | wiki-class atlas in hours, not years |
+| P3 | Spend the savings at query time | recall lanes move; dark knobs settled by A/B |
+| P4 | Bi-temporal facts for memory corpora | temporal_slice bench; contradiction → invalidation |
+| P5 | Navigator + visual assets | traceable multi-hop; PDF recall parity |
+
+---
+
+## 1. Where we stand — the honest map
+
+### 1.1 Genuinely strong (a redesign must not lose these)
+
+- **Trust-discriminated structure.** Every edge carries
+  `EdgeProvenance` (`LlmExtraction | Derived | ScipStructural | …`,
+  `atlas/edges.rs:99`), preserved down into the CSR byte
+  (`CSR_VERSION 2`). Consumers can hedge on how an edge was made. No
+  mainstream framework (GraphRAG, LightRAG, HippoRAG) types this.
+- **Determinism-first layering.** Clustering, resolution 3a/3b, gaps,
+  grounding detection, traversal are deterministic; the LLM is confined
+  to extraction, naming, judgment. Deterministic selectors feed LLM
+  judges, never the reverse (`analysis/tensions.rs:71`).
+- **The incremental substrate.** Content-hash atom ids, `doc_to_atoms`
+  sidecar, `apply_atom_delta` (`atlas/atoms_delta.rs:75`), body-hash
+  code-intel cache, per-note RAPTOR checkpoints with input-hash reset,
+  blake3 content-current skip gates. The plumbing for
+  frontier-grade incrementality exists — most of it is simply not wired
+  to production triggers yet (§1.2, W4).
+- **The DI seam + progressive availability.** One RAPTOR builder serves
+  docs/conversations/vaults via `TieredEnrichmentProvider`
+  (`enrichment/tiered.rs:110`); consumers degrade on *emptiness*, never
+  on tier checks, so a mid-enrichment corpus is thinner, not broken.
+- **Cache keys carry model identity.** `PhaseCache` stamps
+  `{model, fingerprint}`; `section_cache` keys
+  `(text, prompt_version, model_id)`. A model swap is a clean miss.
+  (RAPTOR's checkpoint is the exception — see W1.)
+- **Glass-box audit trails.** `MatchTrace` with alternatives-considered,
+  grouped rejection reasons, reversible Merge/Split oplog, stable gap
+  signatures requiring ≥2-corpus convergence before schema revision.
+- **The opt-out lesson is institutionalized.**
+  `Recipe::opts_out_of_auto_enrichment()` exists because unconditional
+  enrichment contaminated retrieval-only corpora. Enrichment intent is
+  recipe-owned.
+- **Honest negative documentation.** `TIERED_RETRIEVAL.md:334-374`
+  records *why* HippoRAG-2 was not adopted (observed failures were
+  synthesis-side, not retrieval-side). §4/P3 engages that argument
+  rather than overriding it.
+
+### 1.2 Five findings that bend the roadmap
+
+**W1 — Abstractive enrichment is unverified, and it fabricates.**
+The RAPTOR summarizer prompt invites synthesis ("what shifts"), its only
+content rule is a no-quote-character grammar, temp 0.2 ≠ faithfulness
+(confirmed live: temp-0 still fabricates), and nothing scores a summary
+against its member chunks. Provenance is dropped at every
+`EvidenceContext{chunks: map(|c| c.content)}` site, so a fabricated
+summary can support a fabricated answer at the grounding gate. The
+checkpoint hash covers only `(chunk_id, embed_dim)` — no
+`prompt_version` on `RaptorNode`, so a fixed prompt does NOT rebuild
+stale trees. Silent-thinning failure modes compound it: a dropped
+summary call drops the whole cluster (`raptor_atlas.rs:893-911`).
+Chaos A/B (note 1ab68562): contaminated competence 0.71 / honesty 0.64;
+clean 0.50 / 0.82. The same blindness applies to System-1 cluster
+labels/fault lines and System-4 symbol summaries — no grounding grade
+anywhere.
+
+**W2 — Eager-LLM economics cap us at small corpora.**
+Measured atlas throughput: `sep-al-farabi` 38 min (79% Phase-1); plan
+~80 days for SEP end-to-end; ATLAS.md's own Wikipedia extrapolation is
+~680 days. Meanwhile the deterministic `structure_first` pass lifts ~51K
+articles in under a minute. Tiered is better (1.5/6/12 min per
+1000-chunk doc for T1/T2/T3) but still spends an LLM call per cluster on
+every tree. On owned hardware "API cost" is wall-clock and thermal
+budget — the scarcest UX resource we have.
+
+**W3 — The measurement fabric cannot catch a regression.**
+The single HARD enrichment lane: (a) never rebuilds — `rebuild: false`
+(`bench_cmd/all.rs:247`), so prompt/resolver regressions cannot
+register; (b) diffs only `axis_scores`, which is `{}` in the only
+committed default baseline (`literary/baselines/bk-book-1/latest.json`)
+→ always green; (c) precision = `matched/(matched+forbidden_hit)`
+(`enrich_cmd/eval.rs:977`) — structurally 1.0; over-extraction is free
+(Enron shows 3,202 unmatched predicted clusters). Six goldens exist, one
+has a baseline; the bk-book-1 baseline is unmoved for ~7 weeks with
+concept 0/2, event 2/5. Variance tooling (`eval-median`) exists but the
+gate fires on single runs at a 0.5-pt threshold. There is no edge-F1,
+no tension precision (outside governance), no merge-precision metric, no
+summary-faithfulness metric, and no lane that joins enrichment to
+end-task QA lift.
+
+**W4 — Incrementality is built but unwired.**
+`SOVEREIGN_ATLAS_INCREMENTAL` is read and unused — production pays the
+full rebuild the INCREMENTAL_ATLAS doc opens by costing at ~16,000x.
+The vault path *is* delta-correct (`reenrich_changed_sources`), but
+watched-folder GLiNER deltas bypass `CorpusEngine::ingest`, attached
+docs lack `display.category` so Phase-B incremental never reaches them,
+and the code-atlas patch path drops incoming call edges + never
+recomputes salience, degrading "what calls X" monotonically between full
+rebuilds — undetected, because `verify-v2` checks counts only.
+
+**W5 — Retrieval-side exploitation lags the build-side investment,
+and the docs have drifted from the code.**
+Dark/unbenched: `SOVEREIGN_DOC_CLUSTER_WEIGHT` default 0.0 (whole T3
+blend inert), `SOVEREIGN_CONV_PPR_WEIGHT=0.25` never swept, RAPTOR
+dedupe off, bucket slot-routing aspirational. Per-query entity-graph
+rebuild with no cache. Type-collapse in entity nodes ("Swift" Person vs
+"SWIFT" Org). Doc drift is systemic: ENRICHMENT_V2.md materially stale
+(8→11 atoms, deferred-features that shipped, shipped-features marked
+next-up); TIERED_RETRIEVAL.md + ENRICHMENT.md still say the doc-path T2
+is Slow-LLM-only and GLiNER is conversation-scoped — the code has a
+GLiNER document fast path with LLM fallback (`document_asset.rs:1814`);
+the RAPTOR quote-span docstring describes cosine selection the code does
+not do (longest-sentence heuristic, `raptor_atlas.rs:972`). Plus pure
+waste: the KnowledgeView debouncer runs a full five-phase v1 pass for a
+view whose consumer reads v2 atoms (`debouncer.rs:271` vs
+`manager.rs:455`).
+
+---
+
+## 2. The 2026 frontier
+
+Eight findings, ordered by how much they should bend our roadmap.
+
+### F1. The graph-construction cost cliff: eager LLM enrichment lost the argument
+Microsoft's LazyGraphRAG replaces index-time LLM extraction with **NLP
+noun-phrase concept graphs** (index cost = vector RAG, 0.1% of full
+GraphRAG) and defers all LLM work to query time behind a **relevance-test
+budget**: 3-5 expanded subqueries → embedding-ranked chunks → best-first
+community ranking → sentence-level relevance assessor under the budget →
+claim extraction over surviving chunk groups → ranked-claim synthesis.
+At budget 500 it beats GraphRAG global search on quality at 4% of its
+query cost (700x cheaper at parity); at budget 100 it costs the same as
+an 8K-token vector-RAG query. LightRAG lands the same direction:
+dual-level retrieval over a lightweight graph, ~60% less index cost,
+**incremental graph patches instead of rebuilds** (EMNLP 2025). SVD-RAG
+(July 2026) removes the LLM from hierarchical summarization entirely:
+per-cluster SVD over sentence-embedding matrices, select sentences by
+principal-component energy (τ=0.95) — MRR within 1% of RAPTOR (0.867 vs
+0.875), Recall@1 slightly better (0.483 vs 0.458), 317x faster tree
+build, ~85% fewer tokens, fully deterministic. (Caveat: benchmarked at
+38-205 chunks; extractive summaries read less fluently and run ~1.8x
+longer.)
+
+### F2. Retrieval graphs converged on dual-node PPR + query-to-triple
+HippoRAG 2 (ICML 2025) is the reference upgrade of our T2: phrase nodes
+from OpenIE triples + synonym edges, **plus passage nodes** via
+contains-edges (dense-sparse integration), **query-to-triple** matching
+(ablations: NER-to-node −28% recall@5, query-to-node −55% on MuSiQue),
+an LLM recognition-memory filter over candidate triples, then PPR with
+balanced reset probabilities (passage weight 0.05). Results: recall@5
++18.3 pts over NV-Embed-v2 on 2Wiki, +7.2 on MuSiQue; answer F1 +4.9
+avg; passage-node ablation −13%; gains stable under incremental corpus
+growth. Microsoft's DRIFT search teaches the same lesson from the other
+side: enter local search through community summaries, not raw entity
+matches.
+
+### F3. Temporal knowledge graphs are table stakes for memory corpora
+Zep/Graphiti: every edge is **bi-temporal** — (t_valid, t_invalid) plus
+ingestion time; a contradiction closes the old fact's validity window
+instead of deleting it; episodes stay linked as provenance. This is what
+makes "what did X believe in March" and retroactive correction
+answerable (94.8% vs 93.4% for MemGPT on DMR). Entity-event KG work
+(arXiv 2506.05939) pushes the same temporal-causal consistency for RAG
+generally. Our conversation/vault corpora — the memory heart of the
+product — have no validity intervals anywhere.
+
+### F4. Faithfulness moved from vibes to claim-level machinery
+The 2026 eval stack decomposes outputs into atomic claims and NLI-checks
+each against evidence (FActScore → RAGTruth → RAGChecker → the 2026
+agent-provenance survey). Small trained verifiers (MiniCheck-7B 77.4
+LLM-AggreFact BAcc; HalluGuard-Qwen3-4B 84.0 RAGTruth) match frontier
+judges at a fraction of the cost — the bet `VERIFIER_V0.md` is already
+making, with FaithBench as the honest yardstick (small classifiers
+collapse there). Frontier position: **anything synthesized at build time
+is verified before it can ever be cited.**
+
+### F5. Chunk-context augmentation is the cheapest large win still on the table
+Contextual retrieval (prepend a 50-100-token "where this chunk sits"
+preamble before embedding; layer with BM25 + rerank) reports 35-49%
+retrieval-failure reduction in the original write-up, 5-15% in
+independent replications. Late chunking (arXiv 2409.04701) gets a
+related benefit with zero LLM calls: embed the whole document through a
+long-context embedder, pool per-chunk *after* the transformer pass.
+Training-free on the Qwen3-Embedding family we already ship (0.6B today;
+4B/8B tiers + a matching Qwen3-Reranker exist upstream — noting the
+mesh's `EmbedModelInfo` bit-compatibility contract makes an embedder
+change a corpus-version event).
+
+### F6. Structured extraction went schema-driven and CPU-sized
+GLiNER2 (arXiv 2507.18546; pip + HF checkpoints, ~205M params) unifies
+NER, classification, and **hierarchical structured extraction (entities
+with attributes; relations)** in one encoder pass with a declarative
+schema — CPU-viable, no LLM. GLiNER-Relex (May 2026) adds joint NER+RE;
+an Apple-Silicon port exists (GLiNER2Swift). Our `gliner_small-v2.1`
+usage is one generation and several capability classes behind; the
+recipe-declared `[[enrichment.entity_types]]` investigation schema is
+exactly the declarative interface GLiNER2 wants.
+
+### F7. Reasoning-based navigation is displacing one-shot top-K for long documents
+PageIndex-style retrieval — build a ToC-shaped tree, let a model
+*navigate* it with bounded reasoning — hits 98.7% on FinanceBench with
+full traceability. The agentic-RAG literature (arXiv 2501.09136,
+2506.10408) generalizes: the retriever decides when/what/how to retrieve
+iteratively, at 3-10x token cost — which local inference makes
+palatable. We already own the substrate (RAPTOR trees are navigable
+ToCs; the atlas CSR is BFS-traversable in `atlas-query`); what's missing
+is the navigator loop in chat.
+
+### F8. Visual-document retrieval matured into a small-model recipe
+ColPali-class page-as-image retrieval (patch embeddings + MaxSim late
+interaction) closes the gap OCR pipelines leave on visually rich PDFs
+(financial-PDF case study: 62% dense recall vs 84% ColQwen). The
+efficiency frontier reached us: ColModernVBERT at ~250M params is within
+0.6 NDCG@5 of ColPali. Our content-addressed asset store (AD-1/AD-2) is
+exactly the substrate this bolts onto; it is text-only today.
+
+---
+
+## 3. Gap analysis — us vs. the frontier
+
+| Theme | Frontier position | Us today | Verdict |
+|---|---|---|---|
+| Build-time cost | Deterministic/statistical structure eagerly; LLM deferred behind budgets (F1) | Eager LLM per section/cluster; deterministic paths exist (`structure_first`, TF-IDF motifs, TextTiling) but LLM remains the default spine | **Behind — the biggest lever** |
+| Faithfulness of synthesized artifacts | Verified before citable (F4) | Unverified; provenance stripped at evidence assembly; no faithfulness metric | **Behind — the sharpest risk** |
+| Incremental maintenance | Graph patches on change (F1, LightRAG; Graphiti) | Substrate built (hashes, deltas, checkpoints); production triggers unwired (W4) | **Even on design, behind on wiring** |
+| Entity/relation extraction | Schema-driven 205M encoder, joint NER+RE, CPU (F6) | GLiNER v1 small, entities only, type-collapse; LLM fallbacks | **Behind, cheap to close** |
+| Multi-hop graph retrieval | Dual-node PPR, query-to-triple, recognition filter (F2) | HippoRAG-1-style PPR over co-occurrence graph, w=0.25 unbenched, per-query rebuild | **Behind, but adoption must clear our own prior (TIERED_RETRIEVAL.md:334)** |
+| Temporal validity | Bi-temporal edges, invalidation-not-deletion (F3) | None; State/Event/Transition atoms + timestamps exist as raw material | **Absent; high product fit** |
+| Chunk-context | Contextual/late chunking standard (F5) | Chunk text embedded bare; `topic_context` only on query side | **Absent; cheap** |
+| Provenance/trust typing | Rare in frameworks | `EdgeProvenance` everywhere, oplogs, MatchTrace | **Ahead** |
+| Progressive availability | Rare | T1→T3 additive, emptiness-degrading consumers | **Ahead** |
+| Verification machinery to pair with | External eval services | Chaos two-red-line culture, grounding gate, verifier-v0 in flight | **Ahead — the differentiator** |
+| Visual assets | Late-interaction page retrieval (F8) | Asset store stores bytes; no visual index | **Absent; deferred bet** |
+
+---
+
+## 4. The roadmap
+
+Phases are ordered by dependency, not calendar; P0/P1 are the
+prerequisite pair, P2/P3 the payoff pair, P4/P5 the product-defining
+pair. Every phase names its gate up front (per the bench culture:
+gate on exit codes and committed baselines, not vibes).
+
+### P0 — Make enrichment quality measurable (the gate for everything else)
+
+The system's own assessment doc says it: "you cannot gate a migration
+you can't measure" (`ENRICHMENT_V1_TO_V2_ASSESS.md:112-120`).
+
+1. **Repair the HARD lane.** Diff *all* populated axes (legacy named
+   fields + `axis_scores`), fail on missing/empty baseline instead of
+   auto-green `FirstRun`, and record `{model, prompt_version}`
+   fingerprints in the baseline so a static-artifact score can never be
+   mistaken for a pipeline score. Add a scheduled `--rebuild` tier
+   (weekly, alongside lint-gate/api-gate cadence) since per-PR rebuild is
+   too slow. Wire `eval-median` variance into the threshold: gate at
+   `max(0.5pt, observed spread)`.
+2. **Make over-extraction cost something.** Add unmatched-extraction
+   mass as a scored quantity next to the forbidden-only FP (per-axis
+   `unmatched_rate`), with a sampled adjudication loop to calibrate how
+   much of it is junk.
+3. **Faithfulness lane (the W1 instrument).** Score every RAPTOR node
+   summary against its member chunks — judge now, verifier-v0 when it
+   ships — reporting unsupported-claim rate per corpus. Extend the same
+   harness to System-1 cluster labels/fault lines and System-4 symbol
+   summaries (vs. symbol body). This lane is also **Stream B data
+   generation** for the verifier: (chunks, summary-claim,
+   support/corruption label) tuples fall out of the harness for free.
+4. **Retrieval-utility A/B lane.** One command that runs a QA bank with
+   enrichment surfaces toggled (`SOVEREIGN_RAPTOR_GROUNDING`,
+   `--with-atlas`, PPR weight) and reports the *joined* verdict —
+   institutionalizing what the chaos contamination A/B and the wikipedia
+   `--with-atlas` probe (50/71 → 79/83 sources/facts) were done by hand.
+5. **Close the cheap metric holes**: edge-F1 goldens (Involves/Grounds/
+   Transition on the two corpora that already have atom goldens),
+   merge-precision on a synthetic personal-corpus ER golden (Enron
+   methodology, non-email register), baselines for the other five
+   goldens. Promote the enron ER bench into the tracked set with a hard
+   `bench gate` twin.
+
+**Gate:** the enrichment lane demonstrably fails when a known regression
+is injected (add a canary test that breaks a resolver constant and
+asserts the lane goes red); faithfulness lane reports a number for every
+enriched corpus in CI.
+
+### P1 — Faithful by construction (no unverified synthesis in evidence)
+
+The four leverage points from note 1ab68562, plus structure:
+
+1. **Extractive floor.** Adopt SVD-RAG-style extractive selection as the
+   *default* summary body for RAPTOR cluster nodes (we already store
+   quote spans and rank members by centroid cosine — the machinery is
+   90% present). Extractive nodes cannot fabricate; they are
+   deterministic and free. Measure retrieval parity on the summarize
+   banks (SVD-RAG's evidence says within 1%; verify on ours).
+2. **Verified abstractive lift.** Keep the abstractive summary as an
+   optional layer on top, generated with the faithful prompt (leverage
+   A) and **persisted only if the verifier passes its claims against
+   member chunks** (leverage D — affordable once verifier-v0 ships;
+   judge-scored at lower volume until then). Failed summaries fall back
+   to the extractive floor, flagged for the correction ledger.
+3. **Version-stamped trees.** Add `prompt_version` (and summarizer model
+   id) to `RaptorNode` + the checkpoint hash (leverage C), matching the
+   discipline PhaseCache/section_cache already have. A prompt fix then
+   *does* rebuild stale trees — incrementally, per node, via the
+   existing checkpoint machinery.
+4. **Provenance-aware evidence.** Stop stripping source tags at
+   `EvidenceContext` assembly (leverage B). Stratify: summary-derived
+   evidence supports thematic/structural claims; factual claims must
+   trace to leaf chunks (the gate already knows how to demand witnesses
+   — this extends the chaos fairness contract into the evidence path).
+   Kill the silent-thinning modes: a dropped cluster summary becomes an
+   extractive node, never a hole.
+5. Apply the same contract to System-4 symbol summaries (graded against
+   the symbol body — this is CODE_INTEL_CHAT's unbuilt Inc 3) and
+   System-1 fault lines.
+
+**Gate:** chaos-secret-agent with enrichment ON: competence ≥ 0.71 AND
+honesty ≥ 0.82 (beat both arms of the 2026-06-17 A/B simultaneously).
+Faithfulness lane unsupported-claim rate ~0 on new trees.
+
+### P2 — Extraction economics (structure at 10-100x lower cost, incremental by default)
+
+1. **GLiNER2 adoption.** Upgrade `sovereign-gliner` to the GLiNER2
+   generation: schema-driven multi-task extraction (entities + types +
+   attributes + relations) on CPU/ANE. Targets, in order: (a) the
+   conversation/vault path (replacing v1, fixing type-collapse by
+   extracting types jointly); (b) the document T2 (retiring the LLM
+   fallback); (c) **typed-atom seeding for System 2** — GLiNER2 output
+   becomes deterministic Entity/Relation candidate atoms
+   (`EdgeProvenance::EncoderExtraction`, a new variant), shrinking
+   Phase-1's LLM surface to judgment instead of enumeration; (d) the
+   recipe `[[enrichment.entity_types]]` investigation schema compiles
+   directly to a GLiNER2 schema — recipe authors get NER for free.
+2. **Concept-graph free tier (LazyGraphRAG's index).** A deterministic
+   noun-phrase/co-occurrence concept graph + graph-statistic communities
+   as the *universal* baseline enrichment for every corpus — built at
+   ingest for roughly embedding cost, feeding: community entry points
+   for retrieval, seed vocabulary for Phase-1, and the lazy query tier
+   (P5). `structure_first` proved the pattern for code (51K articles,
+   <1 min, no LLM); this is its text-corpus sibling.
+3. **Wire the incremental machinery** (W4): flip
+   `SOVEREIGN_ATLAS_INCREMENTAL` from read-but-unused to the default
+   path via `apply_atom_delta`; route watched-folder deltas through the
+   GLiNER hook; give attached docs the category tag Phase-B needs; fix
+   the code-atlas patch gaps (recompute incoming edges + salience for
+   touched atoms, or schedule a bounded repair pass) and upgrade
+   `verify-v2` from count-equality to sampled edge-set equality so
+   monotonic degradation is detectable.
+4. **Structural contextual retrieval (F5, zero LLM).** Prepend
+   deterministic context to chunk text at embed time — doc title,
+   section path, owning RAPTOR-node summary line, top entities — all
+   artifacts we already build. Benchmark against the notes_tiered
+   failure classes. Evaluate late chunking as the follow-on (needs
+   long-context embed batching; no model change).
+5. **Retire measured waste**: the debouncer's v1 pass for atlas-typed
+   views (W5), Phase-1b's serial 4-chunk batching where GLiNER2
+   covers it, and the six stale-doc mismatches in the hygiene table
+   (§6) — each is an hour of work and a trust repair.
+
+**Gate:** end-to-end atlas build on a wiki-class corpus in hours (vs.
+680-day extrapolation); vault/doc enrichment wall-clock halved at equal
+or better atom-F1 (measured by the now-real P0 lane); incremental edit →
+patched atlas with no full rebuild, verified by the upgraded verify-v2.
+
+### P3 — Retrieval-side exploitation (spend the build savings where users feel them)
+
+Our own prior (TIERED_RETRIEVAL.md:334-374) declined HippoRAG-2 because
+observed failures were synthesis-side. P0's lanes make that claim
+re-testable; P1 changes the synthesis side it indicted. So:
+
+1. **Settle the dark knobs by measurement, not archaeology**: the PPR
+   weight sweep (0.0/0.15/0.25/0.4 — explicitly requested, never run),
+   the T3 cluster-score blend (spec'd at 0.25, shipped dark at 0.0),
+   RAPTOR dedupe, chunk-neighbour expansion. Each becomes one entry in
+   the P0.4 A/B lane; defaults flip only on wins.
+2. **Query-to-triple + passage nodes, scoped.** Prototype HippoRAG-2's
+   two highest-ablation components on the conversation graph we already
+   build (phrase nodes exist as entities; passage nodes = chunks; the
+   "triples" are GLiNER2 relations from P2.1): query-to-triple seeding
+   replacing surface-form matching, passage-node integration replacing
+   the clique fallback. Verifier-v0 doubles as the recognition-memory
+   filter (it is a relevance/entailment judge). Adopt only on recall
+   lane wins — the honest re-litigation our prior deserves.
+3. **Persist the entity graph** (per-query rebuild + LRU today) and
+   add the Qwen3-Reranker as an optional final stage on the hybrid
+   scorer path, A/B'd on notes_tiered failure classes.
+4. **Community entry points for local search** (DRIFT's lesson): route
+   entity-poor queries through concept-graph communities (P2.2) before
+   leaf retrieval on LanceDB corpora, which today have no tiered path
+   at all.
+
+**Gate:** notes_tiered hit@5 by failure class + conversation-bench
+temporal/cross-conv archetypes move; every default flip carries its A/B
+in the baseline commit.
+
+### P4 — Time as a first-class dimension (the memory moat)
+
+Our product thesis — a sovereign memory of your conversations, notes,
+and work — is exactly the corpus class where Zep/Graphiti proved
+bi-temporal structure pays.
+
+1. **Bi-temporal envelope fields** on State/Relation/Claim atoms:
+   `valid_from`, `valid_to`, `observed_at` (ingestion time already
+   exists). Additive schema bump (2.3 → 2.4), `#[serde(default)]`
+   per back-compat convention.
+2. **Invalidation, not deletion.** Extend reconciliation — which already
+   owns contradiction-shaped work (identity merges, reversible oplog) —
+   with a fact-contradiction signal: a new State/Claim atom that
+   contradicts a live one closes the old atom's validity window and
+   writes a typed `Supersedes` edge, oplogged and reversible. The
+   governance mootness machinery (superseded rules are not open
+   conflicts) is the in-house precedent to generalize.
+3. **Temporal retrieval surface**: `atlas-query --as-of`, and the
+   conversation-bench `temporal_slice`/`trend` archetypes get a typed
+   path (current-state queries filter to open validity windows; history
+   queries traverse closed ones).
+4. **Episode provenance stays cheap**: conversations already key chunks
+   by `conv_uuid` + timestamps; the typed-extension pass gains
+   validity stamping from message time.
+
+**Gate:** temporal_slice + decision_trace archetypes in
+`bench/conversation` scored with typed-path on/off; a planted
+correction scenario ("X, later corrected to Y") answers Y-with-history,
+never X.
+
+### P5 — Frontier bets (product-defining, evidence-gated)
+
+1. **The navigator (F7).** A bounded agentic loop over structures we
+   already ship: concept-graph communities → RAPTOR tree descent →
+   atom-graph traversal → leaf chunks, with the LazyGraphRAG budget
+   controlling relevance tests, every hop logged as a MatchTrace-style
+   trail (glassbox by construction). This becomes the DeepQuery spine
+   for big corpora and the "lazy atlas": claims extracted at query time
+   are **written back** as verified atoms via `apply_atom_delta`, so the
+   corpus densifies where users actually look — eager enrichment only
+   where it provably pays, permanent value from every expensive query.
+   The mesh compounds it: Blanket peer-assist can pre-warm hot
+   communities during idle windows.
+2. **Visual assets (F8).** A ColModernVBERT-class (~250M) late-
+   interaction index over asset-store page images, feature-gated like
+   GLiNER, starting with the described-asset PDF verticals where OCR
+   demonstrably loses (financial/scanned documents). Multi-vector
+   storage fits the existing Lance sibling-table pattern
+   (`raptor_summaries.lance` precedent).
+
+**Gate (navigator):** multi-hop QA on the summarize/obscure banks vs.
+one-shot top-K at equal token budget, plus trace-completeness (every
+answer reconstructs its hop path). **Gate (visual):** recall parity
+with the 62%→84% published gap on a scanned-PDF golden before any
+default-on.
+
+---
+
+## 5. What we deliberately do not do
+
+- **No merge of the four systems into one.** Their coexistence is
+  load-bearing (`ENRICHMENT.md`: "not a version ladder"). Convergence
+  happens at the *substrate* (atoms + provenance + delta) and the
+  *query* layer (navigator), not by forcing one enrichment shape.
+- **No full-GraphRAG community summarization.** LazyGraphRAG's own
+  authors showed the eager version is dominated; we skip straight to
+  the lazy form.
+- **No wholesale HippoRAG-2 adoption without clearing our own recorded
+  prior** — components enter behind recall-lane evidence (P3.2).
+- **No cloud calls, ever.** Every technique above runs on local
+  encoders (GLiNER2, ColModernVBERT), local SLMs (verifier), or the
+  resident slots. That constraint is the product.
+- **No un-versioned synthesis.** After P1, nothing abstractive persists
+  without model id + prompt_version + a verification verdict attached.
+
+## 6. Hygiene backlog surfaced by this review
+
+Cheap, high-trust fixes; each is prose-drift or measured waste, with the
+evidence ref. (These are doc-contract repairs per §1.1 — do them in the
+same PRs that touch the areas.)
+
+| Item | Evidence |
+|---|---|
+| ENRICHMENT_V2.md: atom/edge counts, schema version, shipped-vs-deferred tables all stale | agent audit vs `atoms.rs:987`, `edges.rs:45` |
+| TIERED_RETRIEVAL.md + ENRICHMENT.md: doc-path T2 described as Slow-LLM/lark; GLiNER described conversation-only — both false since the doc fast path | `document_asset.rs:1814-1893` |
+| RAPTOR quote-span docstring claims cosine selection; code is longest-sentence | `raptor_atlas.rs:11-12` vs `:972` |
+| Grammar-noop comments cite a deleted file (`embedded.rs:3140`); verify against `json_grammar.rs` and fix the Person-default rationale if enforcement now binds | `resolution.rs:234`, `tension_classifier.rs:31-35` |
+| Debouncer runs v1 field pass for atlas-typed views whose digest reads v2 atoms | `debouncer.rs:271` vs `manager.rs:455` |
+| `FieldModelStats` is a zeros stub written to every skeleton | `field_engine.rs:775` |
+| Field-engine resume silently drops clusters/fault-lines/open-questions | `field_engine.rs:219-225,321-327` |
+| `ConvTieredProvider` effectively dead (FolderTieredProvider wired for both paths); stale v0-scope docstrings | `enrichment_bootstrap.rs:47-60` |
+| Retrieval docs point at pre-split `runtime/retrieval.rs` line numbers | agent audit |
+| Retrieval-only bench corpora contaminated on disk pre-opt-out need re-install | note 1ab68562 |
+
+## 7. How this compounds
+
+**With the verifier (VERIFIER_V0.md).** Enrichment is both the
+verifier's *customer* (P1 build-time gating; P3 recognition filter;
+P5 write-back verification) and its *supplier* (P0.3's faithfulness
+harness generates construction-labeled training tuples through the
+production interface — exactly the Stream B distribution argument).
+Every phase makes the other project stronger; neither waits on the
+other (judge-scored interim paths are specified).
+
+**With the mesh.** Cheaper eager enrichment (P2) shrinks what Blanket
+grants need to cover; the lazy tier (P5) gives idle peers well-shaped
+work units (pre-warm a community, verify a tree); bi-temporal atoms (P4)
+gossip cleanly because invalidation is append-shaped, matching the
+oplog/gossip discipline the mesh already has.
+
+**With the glassbox thesis.** Every proposed mechanism keeps or extends
+a trace: extractive floors are quotable by construction, verifier
+verdicts attach to nodes, navigator hops log as trails, invalidations
+are oplogged. Best-in-class *for us* means the user can always ask "why
+does the system believe this?" and get an answer with line numbers.
+
+---
+
+## 8. Sources
+
+Internal: `ENRICHMENT.md`, `ENRICHMENT_V2.md`, `ATLAS.md`,
+`INCREMENTAL_ATLAS.md`, `TIERED_RETRIEVAL.md`, `PROGRESSIVE_ENRICHMENT.md`,
+`RAPTOR_ANN_INDEX.md`, `ATLAS_STORAGE_V2.md`, `CODE_INTEL_CHAT.md`,
+`VERIFIER_V0.md`, `ENRICHMENT_V1_TO_V2_ASSESS.md`, notes store
+(esp. 1ab68562 — RAPTOR contamination + chaos A/B), committed baselines
+under `sovereign/bench/*/baselines/`.
+
+External:
+- LazyGraphRAG — [Microsoft Research blog](https://www.microsoft.com/en-us/research/blog/lazygraphrag-setting-a-new-standard-for-quality-and-cost/)
+- HippoRAG 2 — [From RAG to Memory (arXiv 2502.14802, ICML 2025)](https://arxiv.org/abs/2502.14802)
+- SVD-RAG — [arXiv 2607.10316](https://arxiv.org/html/2607.10316v1)
+- Zep/Graphiti — [arXiv 2501.13956](https://arxiv.org/abs/2501.13956); [temporal KG overview](https://www.getzep.com/ai-agents/temporal-knowledge-graph/)
+- Entity-event temporal KGs — [arXiv 2506.05939](https://arxiv.org/pdf/2506.05939)
+- LightRAG — [GitHub (EMNLP 2025)](https://github.com/hkuds/lightrag)
+- GLiNER2 — [arXiv 2507.18546](https://arxiv.org/abs/2507.18546); [GLiNER-Relex (arXiv 2605.10108)](https://arxiv.org/html/2605.10108v1); [fastino-ai/GLiNER2](https://github.com/fastino-ai/GLiNER2)
+- Late chunking — [arXiv 2409.04701](https://arxiv.org/abs/2409.04701); [Jina write-up](https://jina.ai/news/late-chunking-in-long-context-embedding-models/)
+- Agentic RAG surveys — [arXiv 2501.09136](https://arxiv.org/abs/2501.09136); [arXiv 2506.10408](https://arxiv.org/pdf/2506.10408)
+- DRIFT search — [Microsoft Research blog](https://www.microsoft.com/en-us/research/blog/introducing-drift-search-combining-global-and-local-search-methods-to-improve-quality-and-efficiency/)
+- PageIndex — [VectifyAI/PageIndex](https://github.com/VectifyAI/PageIndex)
+- Visual retrieval — [ColPali/ColQwen ecosystem](https://huggingface.co/learn/cookbook/multimodal_rag_using_document_retrieval_and_vlms); [multimodal RAG 2026 survey](https://bigdataboutique.com/blog/multimodal-rag-retrieval-over-images-pdfs-and-text)
+- Evidence provenance survey — [arXiv 2606.04990](https://arxiv.org/pdf/2606.04990)
+- SVD/tree successors — [DTCRS (arXiv 2604.07012)](https://arxiv.org/pdf/2604.07012); [Bridge-RAG (arXiv 2603.26668)](https://arxiv.org/pdf/2603.26668)
+- Embedding landscape — [open-source embedding guide 2026](https://www.bentoml.com/blog/a-guide-to-open-source-embedding-models)

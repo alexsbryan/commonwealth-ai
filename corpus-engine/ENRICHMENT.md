@@ -11,6 +11,10 @@ authoritative for their own system: [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md)
 this file is a contract — every path, table, and CLI claim below
 resolves against the code on the commit it appears in.
 
+Forward-looking work lives one layer up:
+[`ENRICHMENT_ROADMAP.md`](./ENRICHMENT_ROADMAP.md) (2026 frontier review
++ best-in-class plan) — intent per §1.2, not a contract.
+
 ---
 
 ## TL;DR — three systems, one selector
