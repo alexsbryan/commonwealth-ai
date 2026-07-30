@@ -2504,6 +2504,110 @@ topology rather than from the daemon's mode string (which has five values:
 two vocabularies cannot drift. The daemon's own word is preserved verbatim in the
 record's `placement_human`.
 
+**A record carries the pre-image of its own key** (`MeasurementRecord.witness`,
+added 2026-07-30). Both digests in the key are one-way, which is right for
+`lookup` — an equality test — but it meant a record could state a number without
+being able to say what the number was *for*. Two runs of this fleet four hours
+apart filed under different placement digests with identical `placement_human`
+labels, and an exhaustive search over every integer split of the model across
+both machines could not reconstruct what the earlier one described. So
+`PlacementWitness` stores the exact `(mode, total_blocks, shards)` the digest was
+computed from, plus a `MachineWitness` per named machine (`vram_gb`, `backend`)
+because `host_hw_fingerprint: 7602642063143971880` is not something a reader can
+weigh. It is *checkable* rather than asserted: `PlacementWitness::explains`
+re-runs `placement_digest` over the stored fields, and `Configuration::faithful`
+applies that check at the point of use, so a witness built from different inputs
+than its key is treated as absent rather than quoted. Descriptions are
+deliberately outside the digest — improving what a peer advertises must not
+orphan every record naming it — and are deliberately **capacities and labels,
+never rates**, so nothing here can be divided by anything else to resurrect the
+§4.5 size-law. Not a schema bump: unlike v1→v2, whose missing field was a *key*
+field, old rows still serve exact hits and are kept saying "not recorded".
+
+**A record also carries the conditions it met** (`MeasurementRecord.conditions`,
+added 2026-07-29). The witness above explains *what* a run measured; this is the
+other half — the co-resident slot set, host RSS before and after, daemon uptime,
+and the wall-clock span of the trials. It exists because four runs under one key
+came back 7.75 / 8.38 / 8.53 / 11.08 tok/s and nothing recorded could say which
+of them met a busy machine. Every field is something that can differ between two
+runs of an *identical* configuration, which is exactly the class the key cannot
+hold — so `RunConditions` sits beside the key and **never in it**. Keying on them
+would give every run a unique unmatched key, `lookup` would never find more than
+one run, and the variance the field exists to expose would become structurally
+invisible (test `conditions_never_reach_the_key`). Two traps are closed by
+construction: an empty slot list renders as the *finding* "nothing else resident"
+rather than as silence, and a role whose `model_id` equals the primary's is not
+counted — with `[models].fast` absent, `fast_path()` falls back to the primary
+GGUF and `/status` reports a `fast` slot holding the measured model itself, which
+filtering by role name alone would have recorded as its own co-resident. Old rows
+say "conditions not recorded", never implying a quiet box. `link_rtt_ms` stays
+`None`: iroh 1.0 exposes no per-peer RTT on `remote_info`, and a timed round trip
+would measure the link *plus* the peer's request handling, which must not be filed
+under that name. `mesh bench --history` also prints each row's abbreviated `pd2:`
+key and warns when two rows share a `placement_human` under different digests —
+the misreading that once produced a reported variance that was never real.
+
+This is what makes `near_misses` load-bearing. The key pins the exact split *and*
+the exact silicon, so a reader on hardware we have never seen essentially never
+gets an exact hit, and `differs by: split, host-hardware` gives them nothing to
+judge with. `near_misses` now returns a `Difference { facet, theirs, ours }` per
+facet — `beefymac 12 · ruggedfox 36 +head` against `beefymac 24 · ruggedfox 24
++head` — rendered in both the human plan and `--json` (`differences[]`), with
+`differs_by` *derived* from it so the two cannot disagree. `theirs`/`ours` are
+`None` where that side kept no witness: the difference is real, and declining to
+characterise it is the point. `n_ctx`, `link` and `probe_version` live in the key
+itself, so even a pre-witness record reports "measured: 32768 · yours: 8192".
+
+**Measurements travel** (2026-07-30). A measurement is worth most to the machine
+that did not take it: locally it recalls what a run felt like, on a peer it
+answers what a configuration *would* feel like on hardware the reader cannot try.
+Records gossip under `app_id = "mesh-measurements"` as versioned `to_wire`
+envelopes (a peer on another `SCHEMA_VERSION` is dropped by `from_wire`, not
+half-read), keyed by `wire_key` — `{measured_at:010}/{hash}`, derived from the
+record so a republish overwrites its own entry rather than accumulating copies,
+and lexicographically chronological so a raw `scan` is readable. The rate enters
+that hash **quantized to 0.001 tok/s** because `serde_json` is built without
+`float_roundtrip`: a record passes through JSON twice (file, then wire) and can
+come back one ULP off, which would otherwise let the same run compute two keys
+and leave an orphan entry LWW could never overwrite.
+
+Three constraints make travel safe rather than merely working:
+
+- **Peer records never enter `MeasurementFile`.** `lookup` still answers only
+  "what did *this* machine measure", so no peer's number can be served as the
+  reader's own — `mesh plan` keeps saying "not measured **here**" and offers the
+  peer's beside it. They reach the operator only through `near_misses`, carrying
+  `NearMiss.taken_by` (`None` = this machine, `Some(name)` = a peer).
+- **Invalid runs do not travel.** `to_wire` refuses them: a failure is glassbox
+  material for the operator who caused it and noise, or worse a mis-read
+  capability claim, to everyone else. `--history` still shows them locally.
+- **Origin comes from the KV entry, not the payload.** A node cannot claim to be
+  someone else by writing a name into bytes it controls. `ForeignRecord` pairs the
+  gossip-carried origin with the record; the friendly name is resolved against
+  live membership at read time, so a departed peer keeps its records and loses
+  only its name.
+
+An exact-key *peer* hit is kept (`NearMiss::is_exact`) rather than filtered as a
+non-miss — someone with the same silicon, split, link and context measured the
+thing being asked about, and that is the most informative record travel can
+deliver. It is still never the headline.
+
+The pipes: `svrn mesh bench` runs in the CLI, and gossip publishes from the
+daemon's `MeshStore`, which is `in_memory()` — no file to open, no lock to share.
+So the daemon hands over a door at `POST`/`GET /v1/mesh/measurements`
+(`mesh_http.rs`, localhost-only like its siblings; `?include_self=true` is a
+diagnostic that shows what this node has put on the wire). The CLI's only caller
+is `mesh_travel.rs`. Disk is written *before* the wire, so `mesh bench` works with
+no daemon and a failed publish reads as "not on the mesh yet", never as a lost
+record. Because the buffer empties on daemon restart,
+`bootstrap::republish_local_measurements` reloads the durable file at boot —
+without it every node's history would evaporate from the mesh one restart at a
+time while looking perfectly intact locally. Verified live: `published=3
+withheld=3 total=6` at boot, and re-POSTing a record returns the same key with no
+new entry. **Not** routed through `NodeCapabilities.benchmark`, which stays
+`None` — that field feeds the ranked-dispatch clamp and arms the §4.5 size-law;
+`gossip_never_advertises_a_benchmark` fails the build if it is populated.
+
 The strong-peer-topology roadmap (latency-class hierarchy: cascade
 routing, draft-on-spoke/verify-on-hub speculation, hub queue
 discipline — each reality-checked against this codebase) is

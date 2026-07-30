@@ -39,6 +39,10 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/leave", post(mesh_leave))
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
+        .route(
+            "/v1/mesh/measurements",
+            post(publish_measurement).get(peer_measurements),
+        )
         // Router-level loopback guard — defense in depth on top of
         // the per-handler `enforce_localhost` checks. Adding a new
         // route to this module inherits the guard for free; the
@@ -487,6 +491,279 @@ async fn mesh_status(
 
 /// `POST /v1/mesh/create` — promote the solo daemon to a joinable mesh
 /// and return the shareable invite.
+// ---------------------------------------------------------------------------
+// Measurements
+// ---------------------------------------------------------------------------
+//
+// Why these two routes exist at all: `svrn mesh bench` measures, and it runs in
+// the CLI process. Gossip publishes from the daemon's `MeshStore`, which is
+// `in_memory()` (`bootstrap.rs`) and therefore unreachable from any other
+// process — there is no file to open and no lock to share. So a measurement
+// taken by the CLI cannot travel without the daemon handing it a door. This is
+// that door, in both directions:
+//
+//   POST — "here is a run I just took, put it on the wire"
+//   GET  — "what have peers measured?"
+//
+// Symmetric with the rest of this module: localhost-only, and shaped like the
+// CLI subcommand that drives it. Both are deliberately thin. The policy lives in
+// `sovereign_core::mesh_measurements` (what may travel, under what key, in what
+// envelope) so that the CLI and the daemon cannot disagree about it.
+
+/// Result of `POST /v1/mesh/measurements`.
+#[derive(Debug, Serialize)]
+pub struct PublishMeasurementResponse {
+    /// Whether the record entered the gossip buffer.
+    pub published: bool,
+    /// The KV key it published under. Derived from the record, so a republish of
+    /// the same run reuses it rather than adding a copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Why not, when `published` is false. Present so the CLI can say something
+    /// specific instead of "publish failed".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+}
+
+/// One peer's measurement, as `GET /v1/mesh/measurements` returns it.
+#[derive(Debug, Serialize)]
+pub struct PeerMeasurementDto {
+    /// Hex node id of the publisher, from the KV entry's own origin — not from
+    /// anything inside the payload, which the publisher controls.
+    pub origin_node: String,
+    /// Friendly mesh name, resolved against live membership. Absent when the
+    /// peer has left or was never named.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_name: Option<String>,
+    /// What they measured.
+    pub record: sovereign_core::mesh_measurements::MeasurementRecord,
+}
+
+/// Query for `GET /v1/mesh/measurements`.
+#[derive(Debug, Deserialize, Default)]
+pub struct PeerMeasurementsQuery {
+    /// Include this node's own published records. **Diagnostic only.**
+    ///
+    /// The default excludes them, and the CLI must never set this: our own runs
+    /// are authoritative on disk, and a consumer that fed a self-origin record
+    /// into `near_misses` would show the operator their own measurement labelled
+    /// with their own node name, as though a stranger had confirmed it.
+    ///
+    /// It exists because without it there is no way to see what this node has
+    /// actually put on the wire — which makes the one property the design leans
+    /// on, that a republish overwrites its own entry rather than accumulating
+    /// copies, unverifiable on a live machine.
+    ///
+    /// Accepts `1`, `true`, `yes`, `on`, or the bare flag. A diagnostic an
+    /// operator reaches for with `curl` must not answer `400` because they typed
+    /// the wrong spelling of true.
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub include_self: bool,
+}
+
+/// Deserialize a query flag the way a person types one.
+fn lenient_bool<'de, D>(d: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(d)?;
+    Ok(match raw.as_deref().map(str::trim) {
+        // `?include_self` with no value reads as "yes"; that is what a bare flag
+        // means everywhere else in this CLI's vocabulary.
+        None | Some("") => true,
+        Some(v) => matches!(
+            v.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "y" | "on"
+        ),
+    })
+}
+
+/// Response body for `GET /v1/mesh/measurements`.
+#[derive(Debug, Serialize)]
+pub struct PeerMeasurementsResponse {
+    /// Peer records, newest first. Excludes this node's own — the CLI already
+    /// holds those on disk, and they are the authoritative copy — unless
+    /// [`PeerMeasurementsQuery::include_self`] was set.
+    pub records: Vec<PeerMeasurementDto>,
+    /// Entries that were present but could not be read as measurements, usually
+    /// a peer on an incompatible schema. Reported rather than swallowed: a
+    /// reader seeing `records: []` deserves to know whether the mesh is quiet or
+    /// whether it is talking in a dialect this build does not speak.
+    pub unreadable: usize,
+}
+
+/// Publish a locally-taken measurement to the mesh.
+async fn publish_measurement(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(record): Json<sovereign_core::mesh_measurements::MeasurementRecord>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let refuse = |why: &str| {
+        (
+            StatusCode::OK,
+            Json(PublishMeasurementResponse {
+                published: false,
+                key: None,
+                refused: Some(why.to_string()),
+            }),
+        )
+            .into_response()
+    };
+
+    // Not an error: a solo daemon has nowhere to publish to, and `mesh bench`
+    // on a solo node is a completely normal thing to do. Saying so beats a 503
+    // the CLI would have to interpret.
+    let Some(app_state) = daemon.app_state().await else {
+        return refuse("the daemon has no mesh state yet");
+    };
+
+    let Some(bytes) = sovereign_core::mesh_measurements::to_wire(&record) else {
+        return refuse("an invalid run does not travel");
+    };
+    let key = sovereign_core::mesh_measurements::wire_key(&record);
+    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+
+    if let Err(e) = app_state.inner.mesh_store.set(
+        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+        &key,
+        bytes::Bytes::from(bytes),
+        self_id,
+    ) {
+        tracing::warn!(key = %key, error = %e, "mesh-measurements: store write failed");
+        return refuse("the gossip buffer rejected the write");
+    }
+
+    // Push now rather than waiting up to a full anti-entropy round. A bench run
+    // costs the operator minutes; making them wait another gossip interval to
+    // see it land on the peer they were benchmarking against would make the
+    // feature feel broken. Best-effort by design — the next round carries it
+    // anyway if every peer is unreachable right now.
+    crate::gossip::broadcast_now(
+        &app_state,
+        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+        &key,
+    )
+    .await;
+
+    tracing::info!(
+        target = "mesh_measurements",
+        key = %key,
+        decode_tok_s = record.decode_tok_s,
+        model = %record.model_name,
+        placement = %record.placement_human,
+        "mesh-measurements: published a run to the mesh"
+    );
+
+    (
+        StatusCode::OK,
+        Json(PublishMeasurementResponse {
+            published: true,
+            key: Some(key),
+            refused: None,
+        }),
+    )
+        .into_response()
+}
+
+/// Every measurement peers have gossiped to this node.
+async fn peer_measurements(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<PeerMeasurementsQuery>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let empty = || {
+        (
+            StatusCode::OK,
+            Json(PeerMeasurementsResponse {
+                records: Vec::new(),
+                unreadable: 0,
+            }),
+        )
+            .into_response()
+    };
+    let Some(app_state) = daemon.app_state().await else {
+        return empty();
+    };
+
+    let entries = match app_state
+        .inner
+        .mesh_store
+        .scan(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID, "")
+    {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh-measurements: peer scan failed");
+            return empty();
+        }
+    };
+
+    // Friendly names for whoever is currently in the mesh. A peer that has left
+    // keeps its records and loses its name — the id still identifies it.
+    let names: std::collections::HashMap<String, String> = daemon
+        .mesh_state()
+        .await
+        .map(|s| {
+            s.members
+                .iter()
+                .filter(|m| !m.name.trim().is_empty())
+                .map(|m| (m.node_id.to_lowercase(), m.name.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // `None` drops the own-origin filter entirely; see `include_self`.
+    let self_id = (!q.include_self)
+        .then(|| *app_state.inner.self_node_id_swap.load_full().as_ref());
+    (StatusCode::OK, Json(peer_view(entries, self_id, &names))).into_response()
+}
+
+/// Turn raw KV entries into the peer view. Pure, so every decision in it is
+/// testable without a live daemon: which entries are ours, which are unreadable,
+/// how a publisher is named, and what order a reader sees them in.
+///
+/// `self_id` is the node whose records to exclude. `None` excludes nothing — the
+/// diagnostic path, never the one the CLI takes.
+fn peer_view(
+    entries: Vec<commonwealth_state::StoreEntry>,
+    self_id: Option<commonwealth_core::ids::NodeId>,
+    names: &std::collections::HashMap<String, String>,
+) -> PeerMeasurementsResponse {
+    let mut unreadable = 0usize;
+    let mut records: Vec<PeerMeasurementDto> = Vec::new();
+    for entry in entries {
+        // Our own runs live in `~/.sovereign/mesh-measurements.json`, which the
+        // CLI reads directly and which is the authoritative copy. Returning them
+        // here would double-count every local record as also being a peer's —
+        // and worse, `near_misses` would show the reader their own measurement
+        // labelled with their own node name, as though a stranger had confirmed
+        // it.
+        if self_id == Some(entry.origin) {
+            continue;
+        }
+        let Some(record) = sovereign_core::mesh_measurements::from_wire(&entry.value) else {
+            unreadable += 1;
+            continue;
+        };
+        let origin_node = hex::encode(entry.origin.as_bytes());
+        records.push(PeerMeasurementDto {
+            origin_name: names.get(&origin_node).cloned(),
+            origin_node,
+            record,
+        });
+    }
+    records.sort_by(|a, b| b.record.measured_at.cmp(&a.record.measured_at));
+    PeerMeasurementsResponse {
+        records,
+        unreadable,
+    }
+}
+
 async fn mesh_create(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
@@ -1125,5 +1402,222 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 400);
+    }
+
+    // -- Measurements -------------------------------------------------------
+
+    fn node(b: u8) -> commonwealth_core::ids::NodeId {
+        commonwealth_core::ids::NodeId::from_u128(u128::from(b))
+    }
+
+    fn a_measurement(tok_s: f64, at: u64) -> sovereign_core::mesh_measurements::MeasurementRecord {
+        use sovereign_core::mesh_measurements as mm;
+        let host = mm::HostIdentity::from_live_mesh(Some(0xf0f)).expect("a fingerprint is a host");
+        mm::MeasurementRecord {
+            key: mm::MeasurementKey::for_plan(
+                host,
+                "mf1:deadbeef".into(),
+                "pd2:cafef00d".into(),
+                32768,
+                mm::LinkClass::Direct,
+            ),
+            decode_tok_s: tok_s,
+            decode_tok_s_min: tok_s - 0.1,
+            decode_tok_s_max: tok_s + 0.1,
+            ttft_ms: 2203.0,
+            itl_p50_ms: 90.0,
+            itl_p95_ms: 98.0,
+            prefill_tok_s: None,
+            cold_load_s: None,
+            trials: 3,
+            content_frames: 256,
+            model_name: "Qwen3.5-122B".into(),
+            placement_human: "36 local + 12 @beefymac".into(),
+            nodes: 2,
+            hops: 1,
+            measured_at: at,
+            build: "0.10.0".into(),
+            backend: Some("vulkan".into()),
+            link_rtt_ms: None,
+            verdict: mm::Verdict::Valid,
+            witness: None,
+            conditions: None,
+        }
+    }
+
+    fn entry(origin: commonwealth_core::ids::NodeId, value: Vec<u8>) -> commonwealth_state::StoreEntry {
+        commonwealth_state::StoreEntry {
+            app_id: sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID.to_string(),
+            key: "k".into(),
+            value: bytes::Bytes::from(value),
+            timestamp: 0,
+            origin,
+        }
+    }
+
+    #[test]
+    fn our_own_published_records_are_not_returned_as_a_peers() {
+        use sovereign_core::mesh_measurements as mm;
+        let me = node(1);
+        let entries = vec![
+            entry(me, mm::to_wire(&a_measurement(7.75, 100)).unwrap()),
+            entry(node(2), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
+        ];
+        let view = peer_view(entries, Some(me), &Default::default());
+        assert_eq!(
+            view.records.len(),
+            1,
+            "the local copy on disk is authoritative; echoing it back would show \
+             the reader their own run wearing their own node name"
+        );
+        assert_eq!(view.records[0].record.decode_tok_s, 11.08);
+    }
+
+    /// Through the real router, because the thing being tested is what axum's
+    /// extractor does with an operator's `curl` — not what a parser would do in
+    /// isolation. `?include_self=1` answered 400 before this was lenient.
+    #[tokio::test]
+    async fn the_diagnostic_flag_accepts_however_a_person_spelled_it() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+        for q in [
+            "?include_self=1",
+            "?include_self=true",
+            "?include_self=YES",
+            "?include_self=on",
+            "?include_self",
+            "?include_self=0",
+            "?include_self=false",
+            "",
+        ] {
+            let resp = client
+                .get(format!("{base}/v1/mesh/measurements{q}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.status(),
+                200,
+                "a diagnostic an operator reaches for with curl must not answer \
+                 400 because they typed the wrong spelling of true: {q:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_diagnostic_path_shows_our_own_records_and_still_names_the_origin() {
+        use sovereign_core::mesh_measurements as mm;
+        let me = node(1);
+        let entries = vec![
+            entry(me, mm::to_wire(&a_measurement(7.75, 100)).unwrap()),
+            entry(node(2), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
+        ];
+        let view = peer_view(entries, None, &Default::default());
+        assert_eq!(view.records.len(), 2, "None excludes nothing");
+        assert!(
+            view.records
+                .iter()
+                .any(|r| r.origin_node == hex::encode(me.as_bytes())),
+            "our own record must still say it is ours — the origin is what makes \
+             this diagnostic rather than misleading"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_counted_not_swallowed() {
+        use sovereign_core::mesh_measurements as mm;
+        let entries = vec![
+            entry(node(2), b"{not a measurement".to_vec()),
+            entry(node(3), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
+        ];
+        let view = peer_view(entries, Some(node(1)), &Default::default());
+        assert_eq!(view.records.len(), 1);
+        assert_eq!(
+            view.unreadable, 1,
+            "\"no peer has measured this\" and \"a peer has, in a dialect we do \
+             not speak\" send an operator to different places"
+        );
+    }
+
+    #[test]
+    fn a_publisher_is_named_when_the_mesh_knows_it_and_identified_when_not() {
+        use sovereign_core::mesh_measurements as mm;
+        let known = node(2);
+        let mut names = std::collections::HashMap::new();
+        names.insert(hex::encode(known.as_bytes()), "BeefyMac".to_string());
+
+        let entries = vec![
+            entry(known, mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
+            entry(node(9), mm::to_wire(&a_measurement(9.0, 300)).unwrap()),
+        ];
+        let view = peer_view(entries, Some(node(1)), &names);
+        let by_name: std::collections::HashMap<_, _> = view
+            .records
+            .iter()
+            .map(|r| (r.origin_node.clone(), r.origin_name.clone()))
+            .collect();
+        assert_eq!(
+            by_name[&hex::encode(known.as_bytes())],
+            Some("BeefyMac".to_string())
+        );
+        assert_eq!(
+            by_name[&hex::encode(node(9).as_bytes())],
+            None,
+            "a peer that has left keeps its records and loses only its name"
+        );
+    }
+
+    #[test]
+    fn peers_are_returned_newest_first() {
+        use sovereign_core::mesh_measurements as mm;
+        let entries = vec![
+            entry(node(2), mm::to_wire(&a_measurement(7.0, 100)).unwrap()),
+            entry(node(3), mm::to_wire(&a_measurement(11.0, 900)).unwrap()),
+            entry(node(4), mm::to_wire(&a_measurement(9.0, 500)).unwrap()),
+        ];
+        let view = peer_view(entries, Some(node(1)), &Default::default());
+        let times: Vec<u64> = view.records.iter().map(|r| r.record.measured_at).collect();
+        assert_eq!(times, vec![900, 500, 100]);
+    }
+
+    #[tokio::test]
+    async fn publishing_without_a_mesh_is_declined_with_a_reason_not_an_error() {
+        // The harness's daemon is not running, which is exactly the state of a
+        // machine that has never run `mesh create`. `mesh bench` on such a
+        // machine is completely normal, so this path must be a 200 with a reason
+        // the CLI can print — not a 5xx it would have to interpret.
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/mesh/measurements"))
+            .json(&a_measurement(11.08, 200))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["published"], false);
+        assert!(
+            body["refused"].as_str().is_some_and(|s| !s.is_empty()),
+            "a refusal without a reason is a failure the operator cannot act on: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn reading_peers_without_a_mesh_is_empty_not_an_error() {
+        let (_daemon, base, _tmp) = spawn_test_router().await;
+        let resp = reqwest::Client::new()
+            .get(format!("{base}/v1/mesh/measurements"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            200,
+            "`mesh plan` is a useful command on a solo machine; the peer half \
+             going missing must make the answer smaller, not fail it"
+        );
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["records"].as_array().map(Vec::len), Some(0));
+        assert_eq!(body["unreadable"], 0);
     }
 }

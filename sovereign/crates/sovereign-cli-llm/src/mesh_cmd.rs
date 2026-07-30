@@ -851,6 +851,27 @@ async fn cmd_plan(args: &[String]) -> i32 {
         .map(|c| c.models.effective_context_size())
         .unwrap_or(16384);
 
+    // What peers have measured. A key pins the exact silicon *and* the exact
+    // split, so an operator asking about a configuration they have never run will
+    // essentially never get a local hit — which makes the peer half the part most
+    // likely to answer the question they actually asked. Degrades to empty with
+    // no daemon; never fatal.
+    let peers = crate::mesh_travel::peer_history().await;
+    if let Some(note) = &peers.note {
+        eprintln!("mesh plan: peer measurements unavailable — {note}");
+    }
+    // On stderr rather than in the plan: it is a fact about the mesh, not about
+    // this model. But it does have to be said — otherwise a peer running an
+    // incompatible schema is indistinguishable from a peer who has measured
+    // nothing, and the operator would go looking for the wrong problem.
+    if peers.unreadable > 0 {
+        eprintln!(
+            "mesh plan: {} peer measurement(s) could not be read — a peer is probably on an \
+             incompatible schema; upgrade it or ignore this",
+            peers.unreadable
+        );
+    }
+
     let report = build_report(
         PlanInput {
             model_name: model
@@ -870,6 +891,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
             n_ctx,
         },
         &sovereign_core::mesh_measurements::load(),
+        &peers.records,
         env!("CARGO_PKG_VERSION"),
     );
 
@@ -1193,6 +1215,7 @@ impl PlanReport {
 pub(crate) fn build_report(
     input: PlanInput,
     measurements: &sovereign_core::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_core::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> PlanReport {
     use sovereign_inference::embedded as inf;
@@ -1415,6 +1438,7 @@ pub(crate) fn build_report(
         executed.nodes.active_nodes,
         n_ctx,
         measurements,
+        peers,
         current_build,
     );
 
@@ -1465,6 +1489,7 @@ fn resolve_speed(
     active_nodes: usize,
     n_ctx: u32,
     measurements: &sovereign_core::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_core::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> (
     SpeedSection,
@@ -1509,6 +1534,11 @@ fn resolve_speed(
     // than keyed on its name alone, which mirrors `mesh bench`'s refusal to
     // file such a run: neither side invents an identity the other cannot check.
     let mut shards: Vec<mm::PlacementShard> = Vec::new();
+    // What each of those machines *is*, so a near miss can say how a measured
+    // configuration differs from this one in terms the reader can weigh. Purely
+    // descriptive — see `mm::MachineWitness`; it is never hashed, so improving
+    // what a peer advertises cannot orphan the records naming it.
+    let mut machines: Vec<mm::MachineWitness> = Vec::new();
     for r in rows.iter().filter(|r| r.blocks.is_some() || r.holds_output) {
         let dev = mesh.get(r.dev);
         let name = dev
@@ -1520,6 +1550,11 @@ fn resolve_speed(
                 None,
             );
         };
+        machines.push(mm::MachineWitness {
+            node_key: name.clone(),
+            vram_gb: dev.map(|d| d.vram_gb.round() as u32).unwrap_or(0),
+            backend: dev.and_then(|d| d.backend.clone()),
+        });
         shards.push(mm::PlacementShard {
             node_key: name,
             hw: Some(hw),
@@ -1549,6 +1584,14 @@ fn resolve_speed(
         .collect();
     let link = mm::LinkClass::summarize(&worker_links);
 
+    // The same three values the digest is built from, so this plan can describe
+    // itself to the reader on the other side of a near miss.
+    let witness = mm::PlacementWitness {
+        mode: mode.to_string(),
+        total_blocks: n_layer,
+        shards: shards.clone(),
+        machines,
+    };
     let key = mm::MeasurementKey::for_plan(
         host,
         mm::model_fingerprint(sizes, n_layer),
@@ -1556,13 +1599,17 @@ fn resolve_speed(
         n_ctx,
         link,
     );
+    debug_assert!(
+        witness.explains(&key.placement_digest),
+        "the witness and the key were built from different inputs"
+    );
 
     let section = match mm::lookup(measurements, &key, current_build) {
         Some(summary) => SpeedSection::Measured {
             summary: Box::new(summary),
         },
         None => SpeedSection::NotMeasured {
-            near: mm::near_misses(measurements, &key),
+            near: mm::near_misses(measurements, peers, &key, Some(&witness)),
         },
     };
     (section, Some(key))
@@ -1719,6 +1766,26 @@ fn render_speed_json(r: &PlanReport) -> serde_json::Value {
                     "decode_tok_s": n.decode_tok_s,
                     "measured_at": n.measured_at,
                     "differs_by": n.differs_by,
+                    // Null means this machine measured it. A name means a peer
+                    // did, and a consumer must not present the two alike — one
+                    // is a fact about hardware the reader controls, the other a
+                    // report about hardware they have never seen.
+                    "taken_by": n.taken_by,
+                    // True only for a peer: an exact local hit is a hit, and
+                    // `lookup` serves it above rather than as a near miss.
+                    "exact": n.is_exact(),
+                    // What else was running when this was taken. Null means the
+                    // record predates conditions — NOT that the box was quiet.
+                    "conditions": n.conditions,
+                    // One entry per `differs_by` facet, in the same order.
+                    // `measured`/`yours` are null where that side kept no
+                    // witness to describe — a real difference we decline to
+                    // characterise, not an absent one.
+                    "differences": n.detail.iter().map(|d| serde_json::json!({
+                        "facet": d.facet,
+                        "measured": d.theirs,
+                        "yours": d.ours,
+                    })).collect::<Vec<_>>(),
                 }))
                 .collect::<Vec<_>>()
                 .into(),
@@ -2142,17 +2209,72 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
                     "                choice alone has moved decode by ~2.3x on this fleet."
                 );
             }
-            for n in near.iter().take(2) {
+            // A peer who measured *this* configuration outranks any near miss,
+            // however recent — it is the only thing here that describes what was
+            // actually asked about. Presentation order, chosen here rather than
+            // in the sort, because the store's ranking is general-purpose and
+            // this priority is a judgement about what a reader needs first.
+            let (exact, differing): (Vec<_>, Vec<_>) = near.iter().partition(|n| n.is_exact());
+            for n in exact.iter().take(2) {
+                let who = n.taken_by.as_deref().unwrap_or("this machine");
                 let _ = writeln!(
                     o,
-                    "                Measured on this mesh: {} → {:.1} tok/s.",
-                    n.placement_human, n.decode_tok_s
+                    "                {who} measured this configuration: {:.1} tok/s.",
+                    n.decode_tok_s
                 );
+                let _ = writeln!(
+                    o,
+                    "                Same model, split, hardware fingerprint, link and context — but"
+                );
+                let _ = writeln!(
+                    o,
+                    "                their machine, so it is a report, not your measurement."
+                );
+                // An exact-key hit is the strongest thing on this surface, which
+                // is exactly why the load it was taken under has to travel with
+                // it. Same configuration on a busy box is not the same claim.
+                if let Some(c) = &n.conditions {
+                    let _ = writeln!(o, "                On their box at the time: {c}.");
+                }
+            }
+            for n in differing.iter().take(2) {
+                match n.taken_by.as_deref() {
+                    Some(who) => {
+                        let _ = writeln!(
+                            o,
+                            "                Measured by {who}: {} → {:.1} tok/s.",
+                            n.placement_human, n.decode_tok_s
+                        );
+                    }
+                    None => {
+                        let _ = writeln!(
+                            o,
+                            "                Measured here: {} → {:.1} tok/s.",
+                            n.placement_human, n.decode_tok_s
+                        );
+                    }
+                }
                 let _ = writeln!(
                     o,
                     "                That is a different configuration ({}), so its number does not apply here.",
                     n.differs_by.join(", ")
                 );
+                if let Some(c) = &n.conditions {
+                    let _ = writeln!(o, "                Taken with: {c}.");
+                }
+                // Name each difference concretely where both sides could be
+                // described. A facet that cannot be is still listed above: the
+                // difference is real, and what is missing is an honest account
+                // of it — which is not a licence to invent one.
+                for d in n.detail.iter() {
+                    if let (Some(theirs), Some(ours)) = (&d.theirs, &d.ours) {
+                        let _ = writeln!(
+                            o,
+                            "                  {:<14} measured: {theirs}   yours: {ours}",
+                            d.facet
+                        );
+                    }
+                }
             }
             if near.is_empty() {
                 let _ = writeln!(
@@ -3198,6 +3320,7 @@ mod plan_tests {
         build_report(
             i,
             &sovereign_core::mesh_measurements::MeasurementFile::new(),
+            &[],
             "test-build",
         )
     }
@@ -3630,6 +3753,8 @@ mod plan_tests {
         mm::record(
             &mut file,
             mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
                 key: executed_key,
                 decode_tok_s: 10.48,
                 decode_tok_s_min: 10.27,
@@ -3653,7 +3778,7 @@ mod plan_tests {
             },
         );
 
-        let r = build_report(live_two(the_real_mesh()), &file, "test-build");
+        let r = build_report(live_two(the_real_mesh()), &file, &[], "test-build");
         assert!(
             matches!(r.speed, SpeedSection::Measured { .. }),
             "a record filed under the executed cut must be FOUND, not reported as a near miss"
@@ -3786,6 +3911,8 @@ mod plan_tests {
         mm::record(
             &mut file,
             mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
                 key: pinned_key,
                 decode_tok_s: 10.48,
                 decode_tok_s_min: 10.27,
@@ -3809,7 +3936,7 @@ mod plan_tests {
             },
         );
 
-        let r = build_report(pinned_input(), &file, "test-build");
+        let r = build_report(pinned_input(), &file, &[], "test-build");
         assert!(
             matches!(r.speed, SpeedSection::Measured { .. }),
             "a record filed under the pinned cut must be FOUND"
@@ -4177,6 +4304,8 @@ mod plan_tests {
         mm::record(
             &mut file,
             mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
                 key,
                 decode_tok_s: 14.1,
                 decode_tok_s_min: 13.9,
@@ -4203,6 +4332,7 @@ mod plan_tests {
         let r = build_report(
             live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
             &file,
+            &[],
             "test-build",
         );
         assert!(matches!(r.speed, SpeedSection::Measured { .. }));
@@ -4222,6 +4352,116 @@ mod plan_tests {
         );
     }
 
+    /// The near miss says *how* the measured configuration differed, not merely
+    /// that it did.
+    ///
+    /// This is the surface that has to carry the weight once a record can come
+    /// from a machine the reader has never seen: the key pins the exact split
+    /// and the exact silicon, so an exact hit is vanishingly unlikely, and
+    /// `differs by: split` gives a stranger nothing to judge with.
+    #[test]
+    fn a_near_miss_names_both_splits_when_the_record_kept_a_witness() {
+        let mut key = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))))
+            .speed_key
+            .expect("key");
+
+        // The same model on the same two machines, cut 12/36 instead of evenly.
+        let measured = mm::PlacementWitness {
+            mode: "distributed".into(),
+            total_blocks: 48,
+            shards: vec![
+                mm::PlacementShard {
+                    node_key: "beefymac".into(),
+                    hw: Some(7),
+                    blocks: Some((0, 11)),
+                    holds_output: false,
+                },
+                mm::PlacementShard {
+                    node_key: "ruggedfox".into(),
+                    hw: Some(7),
+                    blocks: Some((12, 47)),
+                    holds_output: true,
+                },
+            ],
+            machines: vec![
+                mm::MachineWitness {
+                    node_key: "beefymac".into(),
+                    vram_gb: 64,
+                    backend: Some("vulkan".into()),
+                },
+                mm::MachineWitness {
+                    node_key: "ruggedfox".into(),
+                    vram_gb: 64,
+                    backend: Some("vulkan".into()),
+                },
+            ],
+        };
+        key.placement_digest = measured.digest();
+
+        let mut file = mm::MeasurementFile::new();
+        mm::record(
+            &mut file,
+            mm::MeasurementRecord {
+                witness: Some(measured),
+                conditions: None,
+                key,
+                decode_tok_s: 11.7,
+                decode_tok_s_min: 11.7,
+                decode_tok_s_max: 11.7,
+                ttft_ms: 800.0,
+                itl_p50_ms: 80.0,
+                itl_p95_ms: 90.0,
+                prefill_tok_s: None,
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 128,
+                model_name: "test.gguf".into(),
+                placement_human: "36 local + 12 @beefymac".into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_753_400_000,
+                build: "test-build".into(),
+                backend: Some("vulkan".into()),
+                link_rtt_ms: None,
+                verdict: mm::Verdict::Valid,
+            },
+        );
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            &[],
+            "test-build",
+        );
+        let SpeedSection::NotMeasured { near } = &r.speed else {
+            panic!("a different split is not a hit");
+        };
+        assert_eq!(near[0].differs_by, vec!["split"]);
+        assert_eq!(
+            near[0].detail[0].theirs.as_deref(),
+            Some("beefymac 12 · ruggedfox 36 +head")
+        );
+        let ours = near[0].detail[0]
+            .ours
+            .clone()
+            .expect("the plan describes its own split");
+
+        let out = render_human(&r);
+        assert!(
+            out.contains("measured: beefymac 12 · ruggedfox 36 +head"),
+            "the human output must name the measured split, not just the facet:\n{out}"
+        );
+        assert!(
+            out.contains(&format!("yours: {ours}")),
+            "and the one being planned, to compare against:\n{out}"
+        );
+
+        let d = &render_json(&r)["speed"]["near_misses"][0]["differences"][0];
+        assert_eq!(d["facet"], "split");
+        assert_eq!(d["measured"], "beefymac 12 · ruggedfox 36 +head");
+        assert_eq!(d["yours"], ours);
+    }
+
     /// A record taken on a different split is named as context but never
     /// becomes this plan's number.
     #[test]
@@ -4234,6 +4474,8 @@ mod plan_tests {
         mm::record(
             &mut file,
             mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
                 key,
                 decode_tok_s: 11.7,
                 decode_tok_s_min: 11.7,
@@ -4260,6 +4502,7 @@ mod plan_tests {
         let r = build_report(
             live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
             &file,
+            &[],
             "test-build",
         );
         let SpeedSection::NotMeasured { near } = &r.speed else {
@@ -4283,6 +4526,164 @@ mod plan_tests {
             "a near miss must NEVER populate this plan's rate"
         );
         assert_eq!(s["near_misses"][0]["decode_tok_s"], 11.7);
+        assert!(
+            s["near_misses"][0]["taken_by"].is_null(),
+            "null is this machine's own run"
+        );
+    }
+
+    // -- Travel -------------------------------------------------------------
+
+    /// A peer's record, as `GET /v1/mesh/measurements` would deliver it.
+    fn peer_record(key: mm::MeasurementKey, tok_s: f64, placement: &str) -> mm::ForeignRecord {
+        mm::ForeignRecord {
+            origin_node: "b88252e4325bc3771122334455667788".into(),
+            origin_name: Some("BeefyMac".into()),
+            record: mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
+                key,
+                decode_tok_s: tok_s,
+                decode_tok_s_min: tok_s - 0.1,
+                decode_tok_s_max: tok_s + 0.1,
+                ttft_ms: 2203.0,
+                itl_p50_ms: 90.0,
+                itl_p95_ms: 98.0,
+                prefill_tok_s: None,
+                cold_load_s: None,
+                trials: 3,
+                content_frames: 256,
+                model_name: "test.gguf".into(),
+                placement_human: placement.into(),
+                nodes: 2,
+                hops: 1,
+                measured_at: 1_785_000_000,
+                build: "test-build".into(),
+                backend: Some("metal".into()),
+                link_rtt_ms: None,
+                verdict: mm::Verdict::Valid,
+            },
+        }
+    }
+
+    /// The whole point of travel: an empty local store still answers, because a
+    /// peer measured the thing being asked about.
+    #[test]
+    fn a_peer_measurement_reaches_the_plan_and_is_attributed() {
+        let probe = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let key = probe.speed_key.clone().expect("key");
+        let file = mm::MeasurementFile::new();
+        let peers = [peer_record(key, 11.08, "36 local + 12 @beefymac")];
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            &peers,
+            "test-build",
+        );
+
+        // Still "not measured" — `lookup` reads local records only, so a peer's
+        // number never becomes this machine's measurement.
+        let SpeedSection::NotMeasured { near } = &r.speed else {
+            panic!("a peer's record must not be served as a local hit");
+        };
+        assert_eq!(near.len(), 1);
+        assert_eq!(near[0].taken_by.as_deref(), Some("BeefyMac"));
+        assert!(near[0].is_exact(), "same key, so nothing differs");
+
+        let out = render_human(&r);
+        assert!(out.contains("not measured for this configuration"));
+        assert!(
+            out.contains("BeefyMac measured this configuration: 11.1 tok/s"),
+            "the peer's number must be named as theirs: {out}"
+        );
+        assert!(
+            out.contains("their machine, so it is a report, not your measurement"),
+            "and disclaimed as not the reader's own: {out}"
+        );
+
+        let s = &render_json(&r)["speed"];
+        assert_eq!(s["status"], "not_measured");
+        assert!(
+            s["decode_tok_s"].is_null(),
+            "a peer's number must NEVER populate this plan's rate"
+        );
+        assert_eq!(s["near_misses"][0]["taken_by"], "BeefyMac");
+        assert_eq!(s["near_misses"][0]["exact"], true);
+    }
+
+    /// A local measurement wins the headline even when a peer also has one: the
+    /// reader's own hardware is the fact, the peer's is a report about it.
+    #[test]
+    fn a_local_hit_still_beats_a_peer_with_the_same_key() {
+        let probe = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let key = probe.speed_key.clone().expect("key");
+        let mut file = mm::MeasurementFile::new();
+        mm::record(&mut file, peer_record(key.clone(), 7.75, "mine").record);
+        let peers = [peer_record(key, 11.08, "theirs")];
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            &peers,
+            "test-build",
+        );
+        let SpeedSection::Measured { summary } = &r.speed else {
+            panic!("a local record under the asked-for key is a hit");
+        };
+        assert_eq!(summary.decode_tok_s, 7.75);
+        let out = render_human(&r);
+        assert!(
+            !out.contains("11.1"),
+            "a peer's faster number must not appear beside a local hit as if it \
+             were an alternative reading of the same machine: {out}"
+        );
+    }
+
+    /// A peer on a machine that differs is a near miss like any other, and the
+    /// facets that differ are named.
+    #[test]
+    fn a_peer_on_different_hardware_is_a_named_near_miss() {
+        let probe = report(live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))));
+        let mut other = probe.speed_key.clone().expect("key");
+        other.host_hw_fingerprint = 0xdead_beef;
+        let file = mm::MeasurementFile::new();
+        let peers = [peer_record(other, 22.4, "24 local + 24 @othermac")];
+
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            &peers,
+            "test-build",
+        );
+        let SpeedSection::NotMeasured { near } = &r.speed else {
+            panic!("different host hardware is not a hit");
+        };
+        assert_eq!(near[0].differs_by, vec!["host-hardware"]);
+        assert!(!near[0].is_exact());
+
+        let out = render_human(&r);
+        assert!(
+            out.contains("Measured by BeefyMac: 24 local + 24 @othermac → 22.4 tok/s"),
+            "{out}"
+        );
+        assert!(out.contains("does not apply here"));
+    }
+
+    /// With no daemon there are no peers, and that must read exactly as it did
+    /// before travel existed.
+    #[test]
+    fn no_peers_is_the_pre_travel_behaviour_unchanged() {
+        let file = mm::MeasurementFile::new();
+        let r = build_report(
+            live(mesh_devs(&["beefymac", "ruggedfox"], Some(7))),
+            &file,
+            &[],
+            "test-build",
+        );
+        let out = render_human(&r);
+        assert!(out.contains("Sovereign does not quote throughput it has not measured."));
+        assert!(!out.contains("Measured by"));
     }
 
     /// A record from a different build is still shown — with a warning. Hiding
@@ -4295,6 +4696,8 @@ mod plan_tests {
         mm::record(
             &mut file,
             mm::MeasurementRecord {
+                witness: None,
+                conditions: None,
                 key,
                 decode_tok_s: 14.1,
                 decode_tok_s_min: 14.0,
@@ -4317,7 +4720,7 @@ mod plan_tests {
                 verdict: mm::Verdict::Valid,
             },
         );
-        let r = build_report(live(mesh_devs(&["a", "b"], Some(7))), &file, "0.10.0");
+        let r = build_report(live(mesh_devs(&["a", "b"], Some(7))), &file, &[], "0.10.0");
         assert!(render_human(&r).contains("(!) recorded on a different build"));
         assert_eq!(render_json(&r)["speed"]["stale"], true);
     }

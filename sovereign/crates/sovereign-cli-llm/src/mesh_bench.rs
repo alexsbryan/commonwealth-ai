@@ -921,6 +921,13 @@ pub(crate) struct MeshView {
     pub(crate) endpoint_nodes: HashMap<String, NodeIdentity>,
     /// Member name → online.
     pub(crate) online: HashMap<String, bool>,
+    /// Member name → what that machine is, for the record's witness.
+    ///
+    /// Descriptive only. The digest keys on the *fingerprint*, which is opaque;
+    /// this is what lets a reader who did not run the measurement see that the
+    /// worker was a 51 GB metal machine rather than the integer
+    /// `8092819206175989101`. See [`mm::MachineWitness`].
+    pub(crate) machines: HashMap<String, mm::MachineWitness>,
 }
 
 impl MeshView {
@@ -956,6 +963,21 @@ impl MeshView {
                 name.clone(),
                 m.get("status").and_then(|s| s.as_str()) == Some("online"),
             );
+            view.machines.insert(
+                name.clone(),
+                mm::MachineWitness {
+                    node_key: name.clone(),
+                    vram_gb: m
+                        .get("vram_gb")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        .min(u64::from(u32::MAX)) as u32,
+                    backend: m
+                        .get("backend")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
+                },
+            );
             if m.get("is_self").and_then(|b| b.as_bool()).unwrap_or(false) {
                 view.self_name = name;
                 view.self_hw_fingerprint = hw;
@@ -981,6 +1003,35 @@ impl MeshView {
             }
         }
         view
+    }
+
+    /// The witness for a placement, built from the same inputs as its digest.
+    ///
+    /// `mode` and `total_blocks` must be exactly what
+    /// [`mm::placement_digest`] was called with, or the record will carry a
+    /// witness that explains some other configuration —
+    /// [`mm::PlacementWitness::explains`] is what catches that, and the readers
+    /// treat an unfaithful witness as no witness at all.
+    ///
+    /// Only machines actually named in `shards` are described. A peer that
+    /// holds no blocks is not part of this configuration, and describing it
+    /// would make the record's explanation depend on who happened to be online
+    /// when it was written.
+    pub(crate) fn witness(
+        &self,
+        mode: &str,
+        total_blocks: u32,
+        shards: &[mm::PlacementShard],
+    ) -> mm::PlacementWitness {
+        mm::PlacementWitness {
+            mode: mode.to_string(),
+            total_blocks,
+            shards: shards.to_vec(),
+            machines: shards
+                .iter()
+                .filter_map(|s| self.machines.get(&s.node_key).cloned())
+                .collect(),
+        }
     }
 }
 
@@ -1141,6 +1192,60 @@ pub(crate) fn primary_children_failed(
 /// Daemon uptime in seconds, for the liveness comparison.
 pub(crate) fn uptime_from_status(body: &serde_json::Value) -> Option<u64> {
     body.get("process")?.get("uptime_seconds")?.as_u64()
+}
+
+/// Daemon resident-set size in MB, for [`mm::RunConditions`].
+pub(crate) fn rss_mb_from_status(body: &serde_json::Value) -> Option<u64> {
+    body.get("process")?.get("rss_mb")?.as_u64()
+}
+
+/// Roles resident **alongside** the primary, sorted, for [`mm::RunConditions`].
+///
+/// The measured model is excluded on purpose: it is the thing being measured,
+/// not something competing with it. Everything else that reports
+/// `resident: true` holds memory and can take GPU time during the trials, which
+/// is the whole reason to record this.
+///
+/// Excluded on **two** grounds, because the role name alone is not enough:
+///
+/// - `role == "primary"`, the obvious case.
+/// - Any role whose `model_id` equals the primary's. When `[models].fast` is
+///   absent, `fast_path()` falls back to the primary GGUF and `/status` reports
+///   a `fast` slot holding the *same model* — observed live 2026-07-29 with
+///   `fast` and `primary` both `Qwen3.6-35B-A3B-MTP-UD-Q6_K`. Filtering by name
+///   alone would have recorded the measured model as its own co-resident and
+///   made an evicted-slot run look like a co-resident one, quietly inverting the
+///   experiment this field exists to support.
+///
+/// Read from the in-process `inference.resident` array only. A compute child is
+/// deliberately not counted: the primary is precisely what runs there in the
+/// child-hosted mode (see [`primary_is_serving`]), so counting children would
+/// list the measured model as its own co-resident by the other route.
+pub(crate) fn co_resident_roles(
+    body: &serde_json::Value,
+    primary_model_id: &str,
+) -> Vec<String> {
+    let mut roles: Vec<String> = body
+        .get("inference")
+        .and_then(|i| i.get("resident"))
+        .and_then(|r| r.as_array())
+        .map(|slots| {
+            slots
+                .iter()
+                .filter(|s| s.get("resident").and_then(|r| r.as_bool()) == Some(true))
+                // An alias of the measured model, under any role name.
+                .filter(|s| {
+                    s.get("model_id").and_then(|m| m.as_str()) != Some(primary_model_id)
+                })
+                .filter_map(|s| s.get("role").and_then(|r| r.as_str()))
+                .filter(|role| *role != "primary")
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    roles.sort();
+    roles.dedup();
+    roles
 }
 
 /// Judge liveness from two uptime readings.
@@ -1465,6 +1570,10 @@ async fn run_bench(args: BenchArgs) -> i32 {
     let peers_before = peer_liveness(&shards, &mesh);
 
     // ── the timed trials ───────────────────────────────────────────────────
+    // Wall clock across the trials, for `RunConditions::run_span_s`. Not a
+    // performance figure — a cross-check: two runs of the same trial count whose
+    // spans differ sharply were not taken under the same load.
+    let trials_started = std::time::Instant::now();
     let mut trials: Vec<Trial> = Vec::with_capacity(args.trials as usize);
     for n in 0..args.trials {
         eprintln!("[{}/{}] timed trial …", n + 2, args.trials + 1);
@@ -1546,6 +1655,9 @@ async fn run_bench(args: BenchArgs) -> i32 {
     // Classified from the placement this run measured, not from what discovery
     // might choose next time — the number belongs to the link it was taken on.
     let link = placement_link(&placement_before);
+    // Built from the same three values the digest is, on the next line, so the
+    // witness cannot drift from the key it explains.
+    let witness = mesh.witness(digest_mode(&shards), n_layer, &shards);
     let key = mm::MeasurementKey::for_plan(
         host,
         fingerprint,
@@ -1553,8 +1665,24 @@ async fn run_bench(args: BenchArgs) -> i32 {
         n_ctx,
         link,
     );
+    debug_assert!(
+        witness.explains(&key.placement_digest),
+        "the witness and the key were built from different inputs"
+    );
+    // Read from the two `/status` bodies already in hand — the before-poll and
+    // the after-poll — so recording the conditions costs no extra round trip and
+    // cannot itself perturb what it is measuring.
+    let conditions = mm::RunConditions {
+        co_resident_roles: co_resident_roles(&status_body, &primary_model_id),
+        host_rss_mb_before: rss_mb_from_status(&status_body),
+        host_rss_mb_after: after_body.as_ref().and_then(rss_mb_from_status),
+        host_uptime_s: uptime_before,
+        run_span_s: Some(trials_started.elapsed().as_secs_f64()),
+    };
     let record = mm::MeasurementRecord {
         key: key.clone(),
+        witness: Some(witness),
+        conditions: Some(conditions),
         decode_tok_s: agg.decode_tok_s,
         decode_tok_s_min: agg.decode_tok_s_min,
         decode_tok_s_max: agg.decode_tok_s_max,
@@ -1572,8 +1700,18 @@ async fn run_bench(args: BenchArgs) -> i32 {
         measured_at: now_unix(),
         build: env!("CARGO_PKG_VERSION").to_string(),
         backend: mesh.self_backend.clone(),
-        // Week 3, with a real remote worker to time against. `None` is the
-        // honest value here, not zero: a zero would read as "no latency".
+        // Still `None`, and `None` is the honest value — not zero, which would
+        // read as "no latency". Checked 2026-07-30: iroh 1.0 does not expose a
+        // per-peer RTT on `remote_info` (the RTT machinery in
+        // `socket/biased_rtt_path_selector.rs` is internal), so
+        // `MeshIrohAccess::peer_path_on` can classify the path but not time it.
+        // The two candidates are quinn connection stats, reachable only where a
+        // connection is held (daemon-side, and only if one exists), or an
+        // explicit timed round trip to the peer — which would measure the link
+        // PLUS the peer's own request handling, and must not be filed under a
+        // field named `link_rtt_ms` as though it were link latency alone.
+        // Until one is built, `RunConditions` carries what can be observed
+        // honestly instead.
         link_rtt_ms: None,
         verdict: verdict.clone(),
     };
@@ -1588,14 +1726,20 @@ async fn run_bench(args: BenchArgs) -> i32 {
         Err(e) => format!("NOT recorded — writing the store failed: {e}"),
     };
 
+    // Disk first, mesh second, and in that order for a reason: the local record
+    // is the authoritative copy and the gossip buffer is a wire buffer the daemon
+    // rebuilds from this file at every boot. So publishing can fail without
+    // anything being lost, and `mesh bench` still works with no daemon at all.
+    let travel = crate::mesh_travel::publish(&record).await;
+
     if args.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&render_bench_json(&record, &store_note))
+            serde_json::to_string_pretty(&render_bench_json(&record, &store_note, &travel))
                 .unwrap_or_default()
         );
     } else {
-        print!("{}", render_bench_human(&record, &store_note));
+        print!("{}", render_bench_human(&record, &store_note, &travel));
     }
     if verdict.is_valid() {
         exit::OK
@@ -1771,6 +1915,33 @@ async fn timed_trial(port: u16) -> Result<Vec<Frame>, String> {
     Ok(frames)
 }
 
+/// A placement digest shortened for a table column.
+///
+/// Disambiguation only — never an identity. Two runs whose abbreviations differ
+/// definitely measured different configurations; two whose abbreviations match
+/// should be compared on the full digest before anyone calls them one spread.
+pub(crate) fn abbreviated_digest(digest: &str) -> String {
+    match digest.split_once(':') {
+        Some((tag, hash)) => format!("{tag}:{}", &hash[..hash.len().min(8)]),
+        None => digest.chars().take(12).collect(),
+    }
+}
+
+/// Whether any two runs share a placement *description* while sitting under
+/// different placement *keys*.
+///
+/// Pairwise across the whole set, not adjacent rows: the store is ordered by
+/// key then by time, so two rows describing the same split under different
+/// digests are usually separated by other rows.
+pub(crate) fn has_ambiguous_placement(rows: &[&mm::MeasurementRecord]) -> bool {
+    rows.iter().enumerate().any(|(i, a)| {
+        rows[i + 1..].iter().any(|b| {
+            a.placement_human == b.placement_human
+                && a.key.placement_digest != b.key.placement_digest
+        })
+    })
+}
+
 /// `--history`: every run filed for this model, invalid ones included.
 ///
 /// Filtered by model fingerprint rather than by the full key on purpose — an
@@ -1798,9 +1969,20 @@ fn show_history(sizes: &[(String, Option<u32>, u64)], n_layer: u32) -> i32 {
             mm::Verdict::Invalid { problems } => format!("INVALID ({} problem(s))", problems.len()),
         };
         println!(
-            "  {verdict}  {:>7.2} tok/s   {:<28}  {} trial(s)  build {}",
-            r.decode_tok_s, r.placement_human, r.trials, r.build
+            "  {verdict}  {:>7.2} tok/s   {:<28}  {} trial(s)  build {}  {}",
+            r.decode_tok_s,
+            r.placement_human,
+            r.trials,
+            r.build,
+            abbreviated_digest(&r.key.placement_digest),
         );
+        // The conditions, indented under their run. This is the line that makes
+        // two rows at different rates comparable — or shows that they are not.
+        if let Some(line) = r.conditions.as_ref().and_then(|c| c.describe()) {
+            println!("      · {line}");
+        } else {
+            println!("      · conditions not recorded (run predates 2026-07-30)");
+        }
         if let mm::Verdict::Invalid { problems } = &r.verdict {
             for p in problems {
                 println!("      ! {p}");
@@ -1811,6 +1993,18 @@ fn show_history(sizes: &[(String, Option<u32>, u64)], n_layer: u32) -> i32 {
         "\n  Only VALID runs on the exact split being planned are served back to `mesh plan`;\n  \
          the others are here so the failure is inspectable."
     );
+    // Earned the hard way: two runs 69 minutes apart both rendered "36 local +
+    // 12 @BeefyMac" while sitting under DIFFERENT placement digests, and a
+    // reader compared them as one configuration and filed a 26% variance that
+    // was never real. The human string is a description, not an identity, so the
+    // key it belongs to is now on the row beside it.
+    if has_ambiguous_placement(&rows) {
+        println!(
+            "  NOTE: two runs above share a placement description but sit under different\n  \
+             keys (the trailing pd2: tag). They measured different configurations and must\n  \
+             not be compared as a spread."
+        );
+    }
     if let Some(p) = mm::store_path() {
         println!("  store: {}", p.display());
     }
@@ -1822,7 +2016,11 @@ fn show_history(sizes: &[(String, Option<u32>, u64)], n_layer: u32) -> i32 {
 // ---------------------------------------------------------------------------
 
 /// The machine-readable run.
-pub(crate) fn render_bench_json(r: &mm::MeasurementRecord, store_note: &str) -> serde_json::Value {
+pub(crate) fn render_bench_json(
+    r: &mm::MeasurementRecord,
+    store_note: &str,
+    travel: &crate::mesh_travel::Published,
+) -> serde_json::Value {
     let (verdict, problems) = match &r.verdict {
         mm::Verdict::Valid => ("valid", Vec::new()),
         mm::Verdict::Invalid { problems } => ("invalid", problems.clone()),
@@ -1831,6 +2029,11 @@ pub(crate) fn render_bench_json(r: &mm::MeasurementRecord, store_note: &str) -> 
         "verdict": verdict,
         "problems": problems,
         "store": store_note,
+        // Whether this run reached the mesh, kept separate from `store` because
+        // they can and do differ: a record is written to disk before it is
+        // published, and a consumer that conflates them would report data loss
+        // for a daemon that was merely not running.
+        "travel": travel.as_json(),
         "key": {
             "probe_version": r.key.probe_version,
             "model_fingerprint": r.key.model_fingerprint,
@@ -1841,6 +2044,16 @@ pub(crate) fn render_bench_json(r: &mm::MeasurementRecord, store_note: &str) -> 
         },
         "model": r.model_name,
         "placement": r.placement_human,
+        // The inputs `placement_digest` was computed from, so a consumer can
+        // say what changed when a key changes. Null on a record filed before
+        // 2026-07-30, when only the hash was kept.
+        "witness": r.witness,
+        "split": r.witness.as_ref().map(|w| w.describe_split()),
+        // What else was true of the box while this ran. Null on a record filed
+        // before 2026-07-30 — which means "not recorded", NOT "the box was
+        // quiet"; a consumer that reads the absence as quiet has invented a
+        // condition nobody observed.
+        "conditions": r.conditions,
         "nodes": r.nodes,
         "hops": r.hops,
         "decode_tok_s": r.decode_tok_s,
@@ -1863,7 +2076,11 @@ pub(crate) fn render_bench_json(r: &mm::MeasurementRecord, store_note: &str) -> 
 }
 
 /// The human-readable run.
-pub(crate) fn render_bench_human(r: &mm::MeasurementRecord, store_note: &str) -> String {
+pub(crate) fn render_bench_human(
+    r: &mm::MeasurementRecord,
+    store_note: &str,
+    travel: &crate::mesh_travel::Published,
+) -> String {
     use std::fmt::Write;
     let mut o = String::new();
     let _ = writeln!(o);
@@ -1892,6 +2109,17 @@ pub(crate) fn render_bench_human(r: &mm::MeasurementRecord, store_note: &str) ->
     }
     if let Some(b) = &r.backend {
         let _ = writeln!(o, "Backend:        {b}");
+    }
+    // What else was true of the box. Shown for every run, valid or not, because
+    // it is the context a reader needs to judge whether two runs are comparable
+    // — the question that went unanswerable when one key came back 43% apart.
+    if let Some(c) = &r.conditions {
+        if let Some(line) = c.describe() {
+            let _ = writeln!(o, "Conditions:     {line}");
+        }
+        if let Some(span) = c.run_span_s {
+            let _ = writeln!(o, "Run span:       {span:.0} s across the timed trials");
+        }
     }
     let _ = writeln!(o);
 
@@ -1952,7 +2180,30 @@ pub(crate) fn render_bench_human(r: &mm::MeasurementRecord, store_note: &str) ->
     }
     let _ = writeln!(o);
     let _ = writeln!(o, "  {store_note}");
-    let _ = writeln!(o, "  key: {}", r.key.placement_digest);
+    // Two lines, not one, because they answer different questions: the store note
+    // is "is my measurement safe", this is "can anyone else see it". Only shown
+    // for a valid run — an invalid one never travels, and saying so beneath a run
+    // that already failed adds a second disappointment for no information.
+    if r.verdict.is_valid() {
+        let _ = writeln!(o, "  {}", travel.note());
+    }
+    // The digest beside what it was computed from. Without the second half this
+    // line is a hash the operator cannot check, and a key that changes for an
+    // unknown reason is a number nobody can attribute later — which is exactly
+    // what happened to this fleet's 16:05 run on 2026-07-29.
+    match &r.witness {
+        Some(w) => {
+            let _ = writeln!(
+                o,
+                "  key: {}  ({})",
+                r.key.placement_digest,
+                w.describe_split()
+            );
+        }
+        None => {
+            let _ = writeln!(o, "  key: {}", r.key.placement_digest);
+        }
+    }
     o
 }
 
