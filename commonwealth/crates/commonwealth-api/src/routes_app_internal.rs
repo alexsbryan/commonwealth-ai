@@ -113,7 +113,87 @@ fn hex_to_node_id(hex: &str) -> Option<commonwealth_core::ids::NodeId> {
     }
     let mut arr = [0u8; 16];
     arr.copy_from_slice(&bytes);
+    // Senders hex-encode `origin.as_bytes()` verbatim (sovereign-mesh's
+    // `gossip.rs`), and NodeId stores its u128 big-endian (`from_u128` calls
+    // `to_be_bytes`), so decoding must invert with `from_be_bytes`. Using
+    // `from_le_bytes` here reversed all 16 bytes of every remote node id, so
+    // `origin` never matched a member and peer measurements rendered as
+    // "Measured by node-<reversed-hex>" instead of the node's name. Same bug,
+    // same fix as `commonwealth_state::store::node_id_from_bytes`.
     Some(commonwealth_core::ids::NodeId::from_u128(
-        u128::from_le_bytes(arr),
+        u128::from_be_bytes(arr),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use commonwealth_core::ids::NodeId;
+
+    /// Regression pin for the gossip-side twin of the `store.rs` origin
+    /// reversal. `hex_to_node_id` decoded the sender's verbatim big-endian
+    /// bytes with `u128::from_le_bytes`, so every remote `StoreEntry.origin`
+    /// arrived with all 16 bytes reversed. Nothing failed loudly — the id was
+    /// still well-formed, it just matched no member, so peer measurements
+    /// rendered as "Measured by node-<reversed-hex>" instead of the node's
+    /// name.
+    ///
+    /// The fixtures are the two real node ids from the live Meshsonics mesh
+    /// that exposed this on 2026-07-30. Low-int fixtures like `from_u128(1)`
+    /// CANNOT catch a reversal: `Display` prints only the first 8 bytes, and
+    /// the halves are indistinguishable reversed.
+    #[test]
+    fn origin_hex_round_trips_without_byte_reversal() {
+        for hex in [
+            "b88252e4325bc377465f51a0c0b6830d", // BeefyMac
+            "44ae76142b0c3c723051ff98f043104a", // RuggedFox
+        ] {
+            let decoded = hex_to_node_id(hex).expect("well-formed 16-byte hex");
+            assert_eq!(
+                decoded.to_hex(),
+                hex,
+                "decoding must be the exact inverse of the sender's \
+                 hex::encode(origin.as_bytes())"
+            );
+
+            // And explicitly pin the failure mode, so a future endianness
+            // regression names itself rather than surfacing as a silent
+            // attribution miss on a peer's dashboard.
+            let reversed: String = {
+                let mut b = *decoded.as_bytes();
+                b.reverse();
+                hex::encode(b)
+            };
+            assert_ne!(
+                decoded.to_hex(),
+                reversed,
+                "fixture must have distinguishable halves to be able to \
+                 detect a reversal at all"
+            );
+            assert!(
+                hex_to_node_id(&reversed).expect("valid hex") != decoded,
+                "byte-reversed input must not decode to the same NodeId"
+            );
+        }
+    }
+
+    #[test]
+    fn origin_hex_rejects_malformed_input() {
+        assert!(hex_to_node_id("not-hex").is_none());
+        assert!(hex_to_node_id("b88252e4").is_none(), "too short");
+        assert!(
+            hex_to_node_id("b88252e4325bc377465f51a0c0b6830d00").is_none(),
+            "too long"
+        );
+    }
+
+    /// The sender side is `hex::encode(origin.as_bytes())`; this pins that
+    /// `NodeId::to_hex` is that same encoding, so the two halves of the wire
+    /// contract cannot drift apart independently.
+    #[test]
+    fn to_hex_matches_the_senders_encoding() {
+        let id = NodeId::from_u128(0x1122_3344_5566_7788_AABB_CCDD_EEFF_0011);
+        assert_eq!(id.to_hex(), hex::encode(id.as_bytes()));
+        assert_eq!(hex_to_node_id(&id.to_hex()), Some(id));
+    }
 }
