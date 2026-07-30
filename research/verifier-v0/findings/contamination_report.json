@@ -163,6 +163,60 @@
       "benchmark": "LLM-AggreFact",
       "subset": "ClaimVerify",
       "claim": "'The intended session RPE is not consistently achieved due to both deviations in training execution and individual diffe"
+    },
+    {
+      "train_row": 62763,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Blessed is the one who trusts in Him.'"
+    },
+    {
+      "train_row": 63448,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Lifestyle changes increased telomere length without an increase in telomerase activity.'"
+    },
+    {
+      "train_row": 65002,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'A diagnosis of major depressive disorder can be confirmed with exactly five total symptoms, including depressed mood or"
+    },
+    {
+      "train_row": 66783,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'In the vicinity of the intersection of 18th Street and Muhammad Ali Boulevard, there have been at least three vehicle c"
+    },
+    {
+      "train_row": 68111,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Cleveland Police evidence log #CPD-2012-15873 confirms the home invasion suspects left a handwritten note on Melt Bar a"
+    },
+    {
+      "train_row": 68577,
+      "benchmark": "LLM-AggreFact",
+      "subset": "AggreFact-XSum",
+      "claim": "'Georgina Callandar survived the explosion at the Manchester Arena.'"
+    },
+    {
+      "train_row": 68966,
+      "benchmark": "LLM-AggreFact",
+      "subset": "Reveal",
+      "claim": "'Chrysler acquired the Dodge Brothers Company in 1927.'"
+    },
+    {
+      "train_row": 69015,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The Diatessaron of Tatian, as reconstructed from the Dura-Europos fragments, uniquely combines Acts 1:8 and Matthew 3:1"
+    },
+    {
+      "train_row": 70578,
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The May 2020 newsletter from Immanuel Lutheran Church is the only highlighted edition that does not include a direct Bi"
     }
   ],
   "verdict": "COLLISIONS FOUND"

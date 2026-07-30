@@ -955,8 +955,8 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
                 "            http://127.0.0.1:{}/v1/completions",
                 plan.client_port
             );
-            println!("          To get the extension: download the newest `sovereign-fim-*.vsix`");
-            println!("          from the release shelf and install it:");
+            println!("          To get the extension: open the release shelf, pick the newest");
+            println!("          `vscode-v*` release, download its `sovereign-fim-*.vsix`, then:");
             println!("            {VSIX_RELEASES_URL}");
             println!("            code --install-extension <downloaded>.vsix");
             println!("          From a source checkout you can build it instead:");
@@ -1130,6 +1130,27 @@ mod tests {
         std::fs::write(&new, b"new").unwrap();
         std::fs::write(tmp.path().join("notes.txt"), b"ignore me").unwrap();
         assert_eq!(existing_vsix(tmp.path()), Some(new));
+    }
+
+    /// The no-source-checkout banner is the only install instruction a
+    /// tarball user ever sees, and for months it pointed at a tag prefix
+    /// (`svrn-fim-*`) that no release has ever used. Nothing failed loudly
+    /// — the text just sent people hunting. Pin the shelf so a future edit
+    /// can't quietly reintroduce a dead pointer.
+    #[test]
+    fn vsix_releases_url_points_at_the_public_shelf() {
+        assert!(
+            VSIX_RELEASES_URL.starts_with("https://github.com/alexsbryan/svrnmesh-releases"),
+            "the .vsix must be sourced from the public shelf, not the private source repo: {VSIX_RELEASES_URL}"
+        );
+        assert!(
+            VSIX_RELEASES_URL.ends_with("/releases"),
+            "must be the unfiltered release list — GitHub's ?q=tag: filter renders an empty page: {VSIX_RELEASES_URL}"
+        );
+        assert!(
+            !VSIX_RELEASES_URL.contains("svrn-fim"),
+            "`svrn-fim-*` is not a real tag stream; the extension ships under `vscode-v*`"
+        );
     }
 
     #[test]

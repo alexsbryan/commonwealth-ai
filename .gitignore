@@ -119,6 +119,7 @@ dist/
 # `npm run package`; releases attach it on GitHub instead of tracking it.
 node_modules/
 packages/vscode-sovereign/*.vsix
+packages/vscode-sovereign/*.vsix.sha256
 
 
 .cargo-container-arm64/
