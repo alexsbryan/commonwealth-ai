@@ -8,6 +8,7 @@
 //!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
+//!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
 //!
 //! Ratchet contract (uniform across gates): baselines live in
 //! `quality/baselines/`, are machine-written only (`--update-baseline`
@@ -20,6 +21,7 @@ mod arch_gate;
 mod boundary_gate;
 mod common;
 mod docs_gate;
+mod env_gate;
 mod layer_gate;
 mod lint_gate;
 mod lock_gate;
@@ -36,6 +38,7 @@ fn main() {
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
         "api-gate" => api_gate::run(&args[1..]),
+        "env-gate" => env_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
@@ -72,6 +75,9 @@ fn print_usage() {
     );
     eprintln!(
         "  lock-gate [--update-baseline|--tighten]   No NEW duplicate crate versions in Cargo.lock"
+    );
+    eprintln!(
+        "  env-gate [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml; renders docs/ENV_FLAGS.md"
     );
     eprintln!(
         "  lint-gate --from <clippy.json> [--update-baseline|--tighten]  Per-crate/lint warning-count ratchet"

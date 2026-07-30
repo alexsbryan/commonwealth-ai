@@ -306,10 +306,7 @@ pub struct DriftPostureTool {
 
 impl DriftPostureTool {
     pub fn new() -> Self {
-        let drift_dir = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(".sovereign")
-            .join("drift");
+        let drift_dir = sovereign_contracts::rebrand::drift_dir();
         Self {
             workspace_root: None,
             drift_dir,

@@ -60,6 +60,24 @@ after the next re-index (commit + clean tree → daemon reindexes).
 | 17 | **Complexity budget burn-down** — cognitive_complexity 240 + too_many_lines 128, opportunistic (only when touching the function anyway); never a dedicated sweep. | trend ↓ |
 | 18 | **Month-later blocking flips** (~2026-08, after 4 clean weeks): delete `continue-on-error` on gates/deny/clippy lanes; commit `.github/rulesets/main.json`; update CONTRIBUTING. | every red on main is a genuine regression |
 
+## P2-C — config/state plane (center-of-mass census 2026-07-30; map: SYSTEM_OVERVIEW §8.1)
+
+Declared debt from the 2026-07-29/30 census (note `ff6daef9`) and the P0-P2
+fixes that landed with it. Each item was left OUT of that arc deliberately.
+
+| # | Item | Evidence | Done when |
+|---|---|---|---|
+| 19 | **Work-atlas claim split-brain** (operator-deferred 2026-07-30): the CLI writes claims to durable `.sovereign/mesh.db` (`sovereign-cli-llm/src/claim_cmd.rs`) while the daemon's atlas store is in-memory (`daemon_cmd/bootstrap.rs`) — CLI claims never gossip; the `claim_cmd.rs:4` "share mesh.db" comment is FALSE (2026-07-30 invariant note). Unify on one store behind the daemon. | invariant note + census | a `sovereign claim` from the CLI is visible in a peer's `work_in_flight` |
+| 20 | **`mesh.json` three homes** — platform data dir (`rebrand::mesh_data_dir`, desktop-shared), plus legacy/per-user variants observed in the census. Collapse to the one accessor everywhere and delete the stragglers. | census | one derivation; grep for `mesh.json` shows only the accessor |
+| 21 | **`notes.db` dual-home** — repo-local `.sovereign/notes.db` vs per-user root, reconciled by the `active_notes_db` pointer; `reflect_cmd.rs` *searches* candidate paths (~546-610). The trivial derivations were routed in P2; the search logic + pointer protocol need one owner. | census | one documented resolution order; reflect_cmd stops probing |
+| 22 | **Project-identity triplication** — repo `.sovereign/project.toml` + `.sovereign/project.json` + per-user `projects.json`. Writer/reader of the latter now share `rebrand::projects_json()`; the repo-local pair still self-describes independently. | census | one identity record with the other two derived or deleted |
+| 23 | **Config-shadowing env vars (~25 declared)** — every `shadows = "<field>"` entry in `quality/env-flags.toml` is an env var duplicating a `SetupConfig` field with its own precedence chain, incl. `SOVEREIGN_CLIENT_TOKEN` (an auth secret). Rewire each to read config-with-env-override through one helper, then drop the `shadows` key as each unifies. | `rg 'shadows = ' quality/env-flags.toml` | `shadows` key count → 0 |
+| 24 | **`providers.toml`** — undocumented per-user surface; either document it in SYSTEM_OVERVIEW §8.1 with writer/readers or fold it into `SetupConfig`. | census | documented or deleted |
+| 25 | **`watcher-heartbeat` `.tmp.<pid>` leak** — the heartbeat writer's temp files accumulate next to the real file. Clean up on write or sweep on daemon start. | census | zero stale `.tmp.*` after a daemon cycle |
+| 26 | **`worker_pod_provider.rs` byte-duplicate** (cli-dev + cli-llm; diverged only by rustfmt drift as of 2026-07-30 — `owner_key_path` now unified through the SSOT). A true module dedupe canNOT go to sovereign-cli-shared: the module needs sovereign-mesh (trait) + sovereign-pipeline (pod shell-outs), exactly the dep cycle its header documents. Needs a home decision (new leaf crate, or sovereign-pipeline absorbing the trait impl). | `diff` the two files | one module, one owner |
+| 27 | **`SOVEREIGN_HOME` third data-root spelling** — deprecated in the registry; `watched/enrich.rs` still honors it before the SSOT. Find/convert its setters, then delete the read. | env-gate census | name leaves `quality/env-flags.toml` (deprecated entry removed) + zero read sites |
+| 28 | **`config.toml.bak-*` sprawl** — 25+ experiment backups accumulate untracked in the per-user root with no retention rule. Give `svrn setup` (or the experiment scripts) a dated `backups/config/` convention + a keep-last-N sweep. | `ls ~/.svrnmesh/config.toml.bak-*` | backups live under one dir with a retention rule |
+
 ---
 
 ## Execution record — 2026-07-12 (P0 + P1 batch)

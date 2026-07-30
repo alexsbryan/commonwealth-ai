@@ -304,7 +304,10 @@ async fn resolve_via_project_registry(
     rel: &std::path::Path,
     corpus_id: &str,
 ) -> Option<std::path::PathBuf> {
-    let path = dirs::home_dir()?.join(".sovereign").join("projects.json");
+    // Rebrand-aware: prefers a populated `~/.svrnmesh` over the legacy
+    // `~/.sovereign` (a hardcoded legacy path here bypassed the rebrand
+    // bridge until 2026-07-30).
+    let path = sovereign_contracts::rebrand::projects_json();
     let body = tokio::fs::read_to_string(&path).await.ok()?;
     resolve_in_roots(rel, &registry_roots(&body, corpus_id))
 }

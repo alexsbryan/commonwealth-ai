@@ -35,6 +35,8 @@ mod cache_audit_cmd;
 mod charter_cmd;
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
+#[cfg(feature = "dev-tools")]
+mod posture_cmd;
 mod daemon_bin;
 mod design_cmd;
 mod dev_bin;
@@ -315,6 +317,7 @@ const DEV_VERBS: &[&str] = &[
     "claim",
     "nudge",
     "contract",
+    "posture",
 ];
 
 /// Every top-level verb the dispatcher routes — the complete surface
@@ -366,6 +369,7 @@ const ALL_VERBS: &[&str] = &[
     "pipeline",
     "plan",
     "portfolio",
+    "posture",
     "project",
     "proxy",
     "reading-diag",
@@ -433,6 +437,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     (
         "contract",
         "What the CLI promises, how much is proven, when it last ran",
+    ),
+    (
+        "posture",
+        "Artifact age + verdict per quality subsystem, one table",
     ),
 ];
 
@@ -929,6 +937,13 @@ async fn async_main() {
                 // The CLI's own quality surface. In-process and dev-gated: it
                 // reads docs/cli-contract.toml, which only a source checkout has.
                 let code = contract_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "posture" => {
+                // Read-only roll-up of every posture-bearing subsystem's
+                // artifact age (drift/arch/capability/nightly/watchers/…).
+                let code = posture_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

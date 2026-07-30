@@ -51,8 +51,8 @@ pub async fn run(args: &[String]) -> i32 {
     println!();
 
     // ── Load archaeology sidecar ──────────────────────────────
-    let archaeology_path = home_dir()
-        .join(".sovereign/indexes")
+    let archaeology_path = sovereign_root()
+        .join("indexes")
         .join(&parsed.atlas_corpus_id)
         .join("atlas")
         .join("git_archaeology.json");
@@ -151,8 +151,8 @@ pub async fn run(args: &[String]) -> i32 {
     let md = render_markdown(&report, diff.as_ref());
 
     let output_md = parsed.output.clone().unwrap_or_else(|| {
-        home_dir()
-            .join(".sovereign/eval")
+        sovereign_root()
+            .join("eval")
             .join(format!("{}.eval.md", parsed.atlas_corpus_id))
     });
     if let Some(parent) = output_md.parent() {
@@ -165,7 +165,7 @@ pub async fn run(args: &[String]) -> i32 {
     println!("  ✓ wrote {}", output_md.display());
 
     // ── Append CSV history ────────────────────────────────────
-    let history_path = home_dir().join(".sovereign/eval/history.csv");
+    let history_path = sovereign_root().join("eval/history.csv");
     if let Err(e) = append_history_row(&history_path, &report, diff.as_ref()) {
         eprintln!("⚠ history append failed (non-fatal): {e}");
     } else {
@@ -327,13 +327,16 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 
 // ── IO helpers ───────────────────────────────────────────────
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn default_baseline_path(atlas: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/eval/baselines")
+    sovereign_root()
+        .join("eval/baselines")
         .join(format!("{atlas}.eval.json"))
 }
 

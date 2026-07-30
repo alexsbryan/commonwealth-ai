@@ -1,0 +1,824 @@
+# env-flags.toml — the DECLARED registry of the env-knob plane.
+#
+# One [[flag]] per env var. This is declaration, not plumbing: the
+# `std::env::var` read sites stay where they are; `cargo run -p xtask --
+# env-gate` censuses the workspace (Rust literals, the `svrnmesh_env`
+# wrapper, `${SOVEREIGN_*}` in scripts/ + .claude/hooks/) and fails on any
+# NEW name missing from this file. Pre-registry debt rides the shrink-only
+# baseline `quality/baselines/env_unregistered.txt`.
+#
+# Names use the canonical `SOVEREIGN_` prefix; every var is mirrored to
+# `SVRNMESH_*` by sovereign-contracts/src/rebrand.rs, so the census
+# canonicalizes both spellings to one name.
+#
+# Fields:
+#   name     canonical env-var name (required)
+#   cluster  subsystem grouping for the generated doc (required)
+#   default  human-readable default — "on", "off", a number (required)
+#   purpose  one line a stranger can act on (required)
+#   status   guard | shipped | experiment | deprecated (required)
+#            guard = safety/kill-switch; shipped = default-on product
+#            behavior; experiment = A/B lever; deprecated = scheduled removal
+#   alias_of optional — this name duplicates another registered knob
+#   shadows  optional — the SetupConfig field this env var duplicates
+#            (declared debt: precedence chains to be unified later)
+#
+# Two in-code tables remain the runtime-facing SSOT for their subsystems and
+# are pin-tested to appear here: `retrieval_pipeline_flags()`
+# (sovereign-core/src/runtime/retrieval_pipeline.rs) and
+# `grounding_gate_flags()` (sovereign-core/src/runtime/grounding/config.rs).
+#
+# The generated human view is docs/ENV_FLAGS.md
+# (cargo run -p xtask -- env-gate --update-doc).
+
+schema_version = 1
+
+# Env names the census may observe that are owned by third-party software
+# (none yet — standard vars like HOME/PATH are outside the censused prefix).
+third_party_allowlist = []
+
+# ── grounding ───────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_GROUNDING_GATE"
+cluster = "grounding"
+default = "on"
+status = "shipped"
+purpose = "Global on/off for the hold→verify→retry→abstain gate on answer-producing surfaces (the Grounded-Everywhere contract). =0/false disables (naked benches, latency debugging)."
+
+[[flag]]
+name = "SOVEREIGN_GROUNDING_GATE_<SURFACE>"
+cluster = "grounding"
+default = "unset"
+status = "shipped"
+purpose = "Per-surface override (=1 force on, =0 force off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE, PROXY_ARGUMENT}. Read dynamically (never appears in the census)."
+
+[[flag]]
+name = "SOVEREIGN_GV_THRESHOLD"
+cluster = "grounding"
+default = "0.9"
+status = "shipped"
+purpose = "Violation-probability threshold τ for the external grounding verifier — ONE default for the production gate and the chaos bench (grounding_gate_threshold(); bench override: --gv-threshold)."
+
+[[flag]]
+name = "SOVEREIGN_GATE_EXCLUDE_RAPTOR"
+cluster = "grounding"
+default = "on"
+status = "guard"
+purpose = "Exclude RAPTOR summary chunks from the gate's evidence view (a summary is not verbatim source). =0 includes them."
+
+[[flag]]
+name = "SOVEREIGN_CITATION_GROUNDING"
+cluster = "grounding"
+default = "on"
+status = "shipped"
+purpose = "Quote-first citation grounding on entity-anchored fact queries: the model copies a verbatim supporting sentence before answering (7x confab reduction, 2026-06-24). =0 to A/B off."
+
+[[flag]]
+name = "SOVEREIGN_CITATION_BROAD"
+cluster = "grounding"
+default = "on"
+status = "shipped"
+purpose = "Run quote-first citation grounding on ALL gated factual answers, not just entity-anchored ones (entity_anchored alone tripped 0 times on the chaos stream). =0 to A/B off."
+
+[[flag]]
+name = "SOVEREIGN_SPECIFICS_SCAN"
+cluster = "grounding"
+default = "on"
+status = "shipped"
+purpose = "Long-form holistic specifics scan inside gate_longform: one judge pass over the whole answer vs full evidence, catching fabricated specifics the per-claim audit misses. =0 disables."
+
+[[flag]]
+name = "SOVEREIGN_SHORT_SPECIFICS_SCAN"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "SHELVED short-path second-opinion specifics scan on released single-claim answers; dormant pending clean-evidence validation (target category proved ~90% measurement artifact)."
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Round-0 → sufficiency-judge → sub-query formulation → round-2 retrieval loop on KnowledgeQuery (the agentic evidence loop)."
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ_THRESHOLD"
+cluster = "grounding"
+default = "0.5"
+status = "experiment"
+purpose = "Insufficiency probability above which the agentic loop's round-2 formulation fires."
+
+[[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
+cluster = "grounding"
+default = "12"
+status = "experiment"
+purpose = "How many round-0 chunks the agentic loop's sufficiency judge reads."
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ_DEBUG"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Mirror gate + agentic-loop trace lines to stderr for bench/CLI surfaces with no tracing subscriber."
+
+# ── retrieval ───────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_ATLAS_GROUNDING"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Atlas graph-walk grounding: cosine seeds → BFS over typed edges → FTS-fetch evidence chunks. =0/false/off/no disables."
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "One fast-slot structured-output call plans the turn's demands (sub_queries, entities, stance contrast); feeds the epistemic demand set."
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN_FANOUT"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Fan the demand plan's sub_queries out into corpus search. Off after the 2026-07-19 A/B (2-3x slower for flat recall)."
+
+[[flag]]
+name = "SOVEREIGN_QUERY_DECOMP"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass."
+
+[[flag]]
+name = "SOVEREIGN_DECOMP_DECAY"
+cluster = "retrieval"
+default = "1.0"
+status = "experiment"
+purpose = "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)."
+
+[[flag]]
+name = "SOVEREIGN_TITLE_EXPAND"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Enumeration-class questions get top-degree typed atoms injected as virtual chunks. Net-negative on focused enumeration (2026-06-04 bench); keep gated."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_OVERVIEW"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Overview/summary questions inject the scoped corpus's atlas Claim atoms as virtual chunks. Independent of SOVEREIGN_ATOM_ENUM; question-shape detected, no LLM call."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_TOPK"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "How many enumerated atoms become virtual chunks. SHARED between the experimental entity path and the shipped overview path — load-bearing."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_SCORE"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "Score stamped on enumerated virtual chunks. Shared with the shipped overview path — load-bearing."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_POOL"
+cluster = "retrieval"
+default = "see helper"
+status = "experiment"
+purpose = "Atom-enumeration candidate-pool cap before ranking."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_RANK"
+cluster = "retrieval"
+default = "rrf"
+status = "experiment"
+purpose = "Atom-enumeration ranking mode."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_NOFILTER"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Ablation hatch: disable the enumeration-question classifier filter."
+
+[[flag]]
+name = "SOVEREIGN_ATOM_ENUM_RELATIONS"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Include relation atoms in the enumeration."
+
+[[flag]]
+name = "SOVEREIGN_RAPTOR_GROUNDING"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "RAPTOR collapsed-tree summary nodes injected as virtual chunks (position picked by SOVEREIGN_RAPTOR_LATE)."
+
+[[flag]]
+name = "SOVEREIGN_RAPTOR_LATE"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge."
+
+[[flag]]
+name = "SOVEREIGN_RAPTOR_TOP_M"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "Top-M RAPTOR summary nodes injected."
+
+[[flag]]
+name = "SOVEREIGN_RAPTOR_MIN_LEVEL"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "Minimum RAPTOR tree level for injected summaries."
+
+[[flag]]
+name = "SOVEREIGN_RAPTOR_DEDUPE"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "Collapse one entry's multi-level RAPTOR nodes to its best."
+
+[[flag]]
+name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). Wikipedia-specific, never promoted."
+
+[[flag]]
+name = "SOVEREIGN_PPR_EXPAND"
+cluster = "retrieval"
+default = "on (dark without a reranker)"
+status = "shipped"
+purpose = "PPR walk + typed edges over the link graph propose answer-side articles; cross-encoder admission gate injects only CE-yes candidates."
+
+[[flag]]
+name = "SOVEREIGN_MERGE_SELECT"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Demand-aware merge composition (pins + per-entity demand slots + greedy diminishing-returns selector) replacing the cap/reserve/truncate heuristic pile. =0 restores the legacy stack."
+
+[[flag]]
+name = "SOVEREIGN_META_BRIDGE"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Cross-corpus bridge boost: question entities matching a bridge topic pull the linked corpus's framing via typed edges. Built by `sovereign meta-atlas align`."
+
+[[flag]]
+name = "SOVEREIGN_CONV_PPR_WEIGHT"
+cluster = "retrieval"
+default = "see helper"
+status = "shipped"
+purpose = "Post-pipeline PPR rerank weight for conversation-corpus chunks."
+
+[[flag]]
+name = "SOVEREIGN_HISTORY_RETRIEVAL"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "History layer: retrieval over prior conversation turns. =0 disables."
+
+[[flag]]
+name = "SOVEREIGN_COMPACTION_DISABLE"
+cluster = "retrieval"
+default = "off"
+status = "guard"
+shadows = "memory.compaction"
+purpose = "History layer escape hatch: =1 disables dropped-history compaction."
+
+[[flag]]
+name = "SOVEREIGN_FORENSIC"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Debug hatch: =1 enables audit_pipeline_stage composition snapshots between retrieval steps."
+
+[[flag]]
+name = "SOVEREIGN_EPISTEMIC_STATE"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Post-pipeline per-turn epistemic ledger assembled into message metadata (pure collation, no model calls). =0 disables."
+
+[[flag]]
+name = "SOVEREIGN_COVERAGE_PROBE"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "On gap/abstain turns: cross-corpus nearest-chunk-cosine probe classifying a gap as TopicUncovered vs ClaimUncovered. =0 disables."
+
+[[flag]]
+name = "SOVEREIGN_COVERAGE_NEAR_SIM"
+cluster = "retrieval"
+default = "0.55"
+status = "shipped"
+purpose = "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split."
+
+# ── mesh ────────────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_DISABLE_PEER_INFERENCE"
+cluster = "mesh"
+default = "unset"
+status = "guard"
+purpose = "Kill-switch: =1 keeps all inference local instead of load-balancing to mesh peers (solo bench runs, reproducibility). Read in sovereign-mesh/src/peer_inference.rs."
+
+[[flag]]
+name = "SOVEREIGN_DISABLE_AUTO_COLLAB"
+cluster = "mesh"
+default = "unset"
+status = "guard"
+purpose = "Kill-switch: disable auto-collaboration (peer ingest handoff) on the mesh."
+
+[[flag]]
+name = "SOVEREIGN_DISABLE_MDNS"
+cluster = "mesh"
+default = "unset"
+status = "guard"
+shadows = "discovery.mdns"
+purpose = "Kill-switch: disable mDNS LAN peer discovery."
+
+[[flag]]
+name = "SOVEREIGN_IROH"
+cluster = "mesh"
+default = "unset"
+status = "guard"
+shadows = "iroh.enabled"
+purpose = "Toggle for the iroh (no-VPN) mesh transport."
+
+[[flag]]
+name = "SOVEREIGN_JOIN_HOST"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+purpose = "Mesh join target host override."
+
+[[flag]]
+name = "SOVEREIGN_ADVERTISE_ADDR"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+purpose = "Address this node advertises to mesh peers."
+
+[[flag]]
+name = "SOVEREIGN_PRIMARY_SIBLINGS"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "models.primary_pool.copies"
+purpose = "Distributed-inference primary's sibling set override."
+
+[[flag]]
+name = "SOVEREIGN_USE_SUPERVISOR"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+purpose = "Route distributed-inference workers through the supervisor."
+
+[[flag]]
+name = "SOVEREIGN_WORKER_RUNNER"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+purpose = "Distributed-inference worker runner selector."
+
+# ── inference ───────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_MTP_DISABLE"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
+
+[[flag]]
+name = "SOVEREIGN_MTP_QUARANTINE_DISABLE"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Kill-switch: disable the MTP quarantine (the guard that benches a model before trusting its MTP head)."
+
+[[flag]]
+name = "SOVEREIGN_FORCE_CPU_CHAT"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Force chat inference onto CPU (Gemma4+Metal crash workaround)."
+
+[[flag]]
+name = "SOVEREIGN_SKIP_VRAM_CHECK"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Skip the model-fit VRAM check before load."
+
+[[flag]]
+name = "SOVEREIGN_BLOCK_NON_LATIN"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Unicode-crash denylist: block non-Latin scripts in generation."
+
+[[flag]]
+name = "SOVEREIGN_ALTERNATION_GRAMMAR"
+cluster = "inference"
+default = "unset"
+status = "guard"
+shadows = "daemon.alternation_grammar"
+purpose = "Grammar-constraint alternation mode — breaks tool-calling if wrong; do not change casually."
+
+[[flag]]
+name = "SOVEREIGN_FORCE_TOOL_CALLS"
+cluster = "inference"
+default = "unset"
+status = "guard"
+shadows = "daemon.force_tool_calls"
+purpose = "Force the tool-call constraint path."
+
+[[flag]]
+name = "SOVEREIGN_EXACTVAL_FIX"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "Anti-fabrication exact-value fix in constrained decoding."
+
+# ── infra-paths ─────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_DATA_DIR"
+cluster = "infra-paths"
+default = "~/.svrnmesh (legacy-aware)"
+status = "shipped"
+shadows = "data.dir"
+purpose = "Per-user data root override. ONE derivation: sovereign_contracts::rebrand::data_dir() — read sites must not re-derive the fallback chain (pre-2026-07-30 chains wrote into CWD when HOME was unset)."
+
+[[flag]]
+name = "SOVEREIGN_PORT"
+cluster = "infra-paths"
+default = "9741"
+status = "shipped"
+shadows = "daemon.client_port"
+purpose = "Daemon API port override (read via svrnmesh_env; also gates the rebrand migrator's daemon-liveness probe)."
+
+[[flag]]
+name = "SOVEREIGN_CLIENT_TOKEN"
+cluster = "infra-paths"
+default = "unset"
+status = "shipped"
+shadows = "client_token"
+purpose = "Daemon client auth token. Env-only override of the SetupConfig field — an auth secret living in a shadow precedence chain (declared debt; see CLEANUP.md)."
+
+[[flag]]
+name = "SOVEREIGN_DAEMON_URL"
+cluster = "infra-paths"
+default = "http://localhost:9741"
+status = "shipped"
+purpose = "Daemon base URL for CLI clients (one of the daemon-endpoint synonym cluster — see aliases)."
+
+[[flag]]
+name = "SOVEREIGN_BIND"
+cluster = "infra-paths"
+default = "unset"
+status = "shipped"
+shadows = "daemon.client_bind"
+purpose = "Daemon bind address override."
+
+[[flag]]
+name = "SOVEREIGN_CORPORA_DIR"
+cluster = "infra-paths"
+default = "under data root"
+status = "shipped"
+purpose = "Corpora storage directory override."
+
+[[flag]]
+name = "SOVEREIGN_RECIPES_DIR"
+cluster = "infra-paths"
+default = "under data root"
+status = "shipped"
+purpose = "Recipe registry directory override."
+
+[[flag]]
+name = "SOVEREIGN_DB_PATH"
+cluster = "infra-paths"
+default = "under data root"
+status = "shipped"
+purpose = "State-store DB path override (normally rebrand::state_db_path under the data root)."
+
+[[flag]]
+name = "SOVEREIGN_MODELS_DIR"
+cluster = "infra-paths"
+default = "under data root"
+status = "shipped"
+shadows = "data.dir"
+purpose = "GGUF model directory override."
+
+[[flag]]
+name = "SOVEREIGN_WORKSPACE_DIR"
+cluster = "infra-paths"
+default = "unset"
+status = "shipped"
+purpose = "Agent workspace (shell/file tool sandbox) root override."
+
+[[flag]]
+name = "SOVEREIGN_SESSIONS_DIR"
+cluster = "infra-paths"
+default = "under data root"
+status = "shipped"
+purpose = "Session-frame storage override (session continuity; read dynamically with both prefixes)."
+
+# ── bench ───────────────────────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_CHAOS_TYPED_VERDICT"
+cluster = "bench"
+default = "on"
+status = "shipped"
+purpose = "Chaos scorer derives answer-vs-abstain from the typed epistemic verdict (parity-proven 43/43 vs the gate-action prefix, 2026-07-19). =0 forces legacy."
+
+[[flag]]
+name = "SOVEREIGN_CHAOS_EXTRACTION_SCORER"
+cluster = "bench"
+default = "on"
+status = "shipped"
+purpose = "Chaos scorer uses the extraction test (does a reader come away with an answer?) instead of decline-detection. =0 falls back."
+
+# ── mesh: shared-model / RPC config shadows ─────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_SHARED_MODEL_ID"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.model_id"
+purpose = "Distributed-inference shared model id override (bootstrap.rs env-or-config)."
+
+[[flag]]
+name = "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.host_node_id"
+purpose = "Distributed-inference host node id override."
+
+[[flag]]
+name = "SOVEREIGN_RPC_SERVE"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.role"
+purpose = "Anchor/host half of the shared-model role (env half of the config's role field)."
+
+[[flag]]
+name = "SOVEREIGN_RPC_DISCOVER"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.role"
+purpose = "Discover half of the shared-model role."
+
+[[flag]]
+name = "SOVEREIGN_RPC_QUORUM_ANCHORS"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.quorum_anchors"
+purpose = "Anchor quorum for the pooled shared model."
+
+[[flag]]
+name = "SOVEREIGN_RPC_MIN_POOLED_GB"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.min_pooled_gb"
+purpose = "Minimum pooled VRAM before the shared model loads."
+
+[[flag]]
+name = "SOVEREIGN_RPC_HEADROOM"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.headroom"
+purpose = "Per-device VRAM headroom for the byte-aware shard split (env wins when pre-set, setup_config.rs)."
+
+[[flag]]
+name = "SOVEREIGN_RPC_SHARD_FETCH"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "shared_model.shard_fetch"
+purpose = "Shard-fetch strategy for distributed model load."
+
+[[flag]]
+name = "SOVEREIGN_IROH_RELAY_ONLY"
+cluster = "mesh"
+default = "unset"
+status = "guard"
+shadows = "iroh.relay_urls"
+purpose = "Force the iroh transport onto relay-only paths (what iroh.relay_urls/discovery express declaratively)."
+
+# ── inference: fit-check + model-selection shadows ──────────────────
+
+[[flag]]
+name = "SOVEREIGN_STRICT_VRAM_CHECK"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Make the preflight VRAM check strict (fail instead of warn). Same family as SOVEREIGN_SKIP_VRAM_CHECK — the fit-check knob cluster."
+
+[[flag]]
+name = "SOVEREIGN_SKIP_PER_DEVICE_FIT"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Skip the per-device fit check in the RPC byte-aware shard split."
+
+[[flag]]
+name = "SOVEREIGN_SKIP_LOCAL_FIT_CHECK"
+cluster = "inference"
+default = "unset"
+status = "guard"
+purpose = "Skip the local fit check before joining a distributed load (rpc_distribution.rs)."
+
+[[flag]]
+name = "SOVEREIGN_LOCAL_FIT_CHECK_SKIP"
+cluster = "inference"
+default = "unset"
+status = "deprecated"
+alias_of = "SOVEREIGN_SKIP_LOCAL_FIT_CHECK"
+purpose = "Word-order twin read in the SAME fallback expression as its alias target — one knob, two spellings; scheduled to collapse onto the alias target."
+
+[[flag]]
+name = "SOVEREIGN_GPU_LAYERS"
+cluster = "inference"
+default = "unset"
+status = "shipped"
+shadows = "compute.slot[].n_gpu_layers"
+purpose = "GPU offload layer-count override for the embedded engine."
+
+[[flag]]
+name = "SOVEREIGN_ALLOW_INPROCESS_DISTRIBUTED_PRIMARY"
+cluster = "inference"
+default = "unset"
+status = "guard"
+shadows = "compute.distributed_primary"
+purpose = "Override the containment guard that compute.distributed_primary arms (in-process distributed primary)."
+
+[[flag]]
+name = "SOVEREIGN_MODEL"
+cluster = "inference"
+default = "unset"
+status = "shipped"
+shadows = "models.primary"
+purpose = "Primary chat model override (sovereign-server config env path)."
+
+[[flag]]
+name = "SOVEREIGN_EMBED_MODEL"
+cluster = "inference"
+default = "unset"
+status = "shipped"
+shadows = "models.embed"
+purpose = "Embed model override — takes a GGUF PATH. Near-synonym of SOVEREIGN_EMBED_MODEL_ID, which takes an id string; same meaning, incompatible values."
+
+[[flag]]
+name = "SOVEREIGN_EMBED_MODEL_ID"
+cluster = "inference"
+default = "unset"
+status = "shipped"
+purpose = "Embed model override for notes embeddings — takes a model ID string (corpus-engine-notes). Near-synonym of SOVEREIGN_EMBED_MODEL (a path); same meaning, incompatible values."
+
+[[flag]]
+name = "SOVEREIGN_RERANK_MODEL_PATH"
+cluster = "inference"
+default = "unset"
+status = "experiment"
+shadows = "models.extra"
+purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon; one owner decision pending (docs/archive/RERANK_EXPERIMENT.md)."
+
+[[flag]]
+name = "SOVEREIGN_CONTENT_TEMPERATURE"
+cluster = "inference"
+default = "unset"
+status = "experiment"
+purpose = "Sampler content-temperature override. Near-synonym of SOVEREIGN_SYNTH_TEMP (desktop synthesis temperature) — the temperature knob cluster."
+
+[[flag]]
+name = "SOVEREIGN_SYNTH_TEMP"
+cluster = "inference"
+default = "unset"
+status = "experiment"
+purpose = "Desktop synthesis temperature override. Near-synonym of SOVEREIGN_CONTENT_TEMPERATURE."
+
+# ── infra-paths: data-root spellings + endpoints ────────────────────
+
+[[flag]]
+name = "SOVEREIGN_HOME"
+cluster = "infra-paths"
+default = "unset"
+status = "deprecated"
+shadows = "data.dir"
+purpose = "THIRD spelling of the data root (hand-rolled ~/.sovereign in watched/enrich.rs) that bypasses rebrand::data_dir() entirely — scheduled to route through the SSOT accessor."
+
+[[flag]]
+name = "SOVEREIGN_DAEMON_BASE"
+cluster = "infra-paths"
+default = "unset"
+status = "deprecated"
+alias_of = "SOVEREIGN_DAEMON_URL"
+purpose = "Example-code spelling of the daemon base URL; use SOVEREIGN_DAEMON_URL."
+
+[[flag]]
+name = "SOVEREIGN_COMMAND_BRIDGE_PORT"
+cluster = "infra-paths"
+default = "9745"
+status = "shipped"
+purpose = "Desktop command-bridge port (the real-mode harness endpoint)."
+
+# ── cli-binaries: sibling binary path overrides ─────────────────────
+
+[[flag]]
+name = "SOVEREIGN_CLI_LLM_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-llm sibling the dispatcher execs."
+
+[[flag]]
+name = "SOVEREIGN_CLI_DEV_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-dev sibling."
+
+[[flag]]
+name = "SOVEREIGN_CLI_DAEMON_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-daemon sibling."
+
+[[flag]]
+name = "SOVEREIGN_CLI_PATH"
+cluster = "cli-binaries"
+default = "unset"
+status = "shipped"
+purpose = "Desktop supervisor's path to the sovereign CLI. One of THREE names for 'where is the CLI' (with SOVEREIGN_BIN, SOVEREIGN_CLI) — the sibling-binary synonym cluster."
+
+[[flag]]
+name = "SOVEREIGN_BIN"
+cluster = "cli-binaries"
+default = "unset"
+status = "shipped"
+purpose = "Drift orchestrator's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_CLI_PATH)."
+
+[[flag]]
+name = "SOVEREIGN_CLI"
+cluster = "cli-binaries"
+default = "unset"
+status = "shipped"
+purpose = "Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_CLI_PATH)."
+
+[[flag]]
+name = "SOVEREIGN_SERVER_PATH"
+cluster = "cli-binaries"
+default = "unset"
+status = "shipped"
+purpose = "Mobile host's path to the sovereign server binary."
+
+# ── bench: harness selection ────────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_HARNESS"
+cluster = "bench"
+default = "unset"
+status = "shipped"
+purpose = "Bench harness selector."
+
+[[flag]]
+name = "SOVEREIGN_FRONTDOOR"
+cluster = "bench"
+default = "unset"
+status = "deprecated"
+alias_of = "SOVEREIGN_HARNESS"
+purpose = "Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named)."

@@ -13,13 +13,23 @@ provenance: hand-written
 notes: [e4ed7df5, bdd88cae, fdb964e6, "34139298"]
 ---
 
+## Objective
+
+The agent-efficiency initiative: heterogeneous agents must be able to count on
+the code-intel toolchain *mid-work* instead of reverting to raw reads.
+Specified in `MEMORY_MODEL.md §5`.
+
+- **Done when:** a fleet agent's own audit shows code-intel calls carrying the
+  lookups that raw reads used to — `sovereign cache-audit --sort ratio` — not
+  merely tools that exist and answer when asked.
+- **Not worth continuing if:** agents keep beating the tools with plain grep.
+  Then the toolchain is ceremony, and the honest move is to say so and delete
+  it rather than keep tuning it.
+
 ## Goal
 
-Make the code-intel toolchain dependable for agents *mid-work* (the
-agent-efficiency initiative: heterogeneous agents must be able to count on
-these tools instead of reverting to raw reads). This session: the P0 index
-wipe, incremental freshness while an agent edits, and exposing the code fact
-base to agents.
+This session: the P0 index wipe, incremental freshness while an agent edits,
+and exposing the code fact base to agents.
 
 ## State
 

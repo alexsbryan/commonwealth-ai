@@ -70,7 +70,7 @@ pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfi
 // the docs flag table renders from it (same contract as
 // `retrieval_pipeline_flags`).
 #[allow(unused_imports)]
-pub use config::grounding_gate_flags;
+pub use config::{grounding_gate_flags, grounding_gate_threshold};
 #[allow(unused_imports)]
 pub(crate) use judge::{verify_grounding, GateVerdict};
 pub(crate) use pipeline::StreamingVerifier;

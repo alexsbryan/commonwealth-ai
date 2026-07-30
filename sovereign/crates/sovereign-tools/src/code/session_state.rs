@@ -14,11 +14,20 @@
 //! preserved, and every write re-stamps `provenance: self-reported`
 //! (an encode-time write upgrades a distilled frame — the stronger
 //! evidence wins). The schema-v1 contract is enforced at write time:
-//! all eight sections always present, and the whole document must fit
-//! the 2,000-token budget — an over-budget upsert is REJECTED with
+//! all nine sections always present, and the whole document must fit
+//! the 2,100-token budget — an over-budget upsert is REJECTED with
 //! per-section token counts so the caller trims instead of shipping a
 //! bloated frame (the spec: "a frame that cannot fit must drop
 //! detail, never sections").
+//!
+//! `## Objective` (2026-07-29) is the one section a successor must
+//! INHERIT rather than re-author. It exists because the frames on this
+//! host measurably lost their own point across a lineage: 21 of 63
+//! non-empty frames stated their goal as a delta from a previous frame,
+//! and in one three-frame chain the objective's own name disappeared
+//! entirely. The write-time guard in [`upsert_frame`] is what turns the
+//! spec's long-standing "a successor must know *why*" from an
+//! aspiration into a checked precondition.
 
 use std::path::{Path, PathBuf};
 
@@ -33,8 +42,13 @@ use sovereign_core::types::{
     ToolExample,
 };
 
-/// The eight schema-v1 sections, in contract order (SESSION_CONTINUITY §2).
-pub const FRAME_SECTIONS: [&str; 8] = [
+/// The nine schema-v1 sections, in contract order (SESSION_CONTINUITY §2).
+///
+/// `Objective` is FIRST deliberately: it is the altitude-setter, and
+/// [`Frame::render_for_prompt`] preserves this order, so a successor
+/// reads the forest before the trees.
+pub const FRAME_SECTIONS: [&str; 9] = [
+    "Objective",
     "Goal",
     "State",
     "Next",
@@ -45,8 +59,18 @@ pub const FRAME_SECTIONS: [&str; 8] = [
     "Verification",
 ];
 
+/// The sections that describe *work*. A frame carrying any of these is
+/// making claims about an initiative, so [`upsert_frame`] requires it to
+/// also say what the initiative IS — see the `Objective` guard there.
+const WORK_SECTIONS: [&str; 4] = ["Goal", "State", "Next", "Decisions"];
+
 /// Hard cap on the rendered frame (SESSION_CONTINUITY §2).
-pub const FRAME_TOKEN_BUDGET: usize = 2_000;
+///
+/// Raised 2,000 → 2,100 when `Objective` was split out of `Goal`: the
+/// objective got ~150 and `Goal` dropped 100 → ~50, since half its
+/// contract moved out. A hundred tokens per boot is a trivial price
+/// against a session of specious tweaking — the failure this buys off.
+pub const FRAME_TOKEN_BUDGET: usize = 2_100;
 
 /// The session frame's contract, expressed in the shared frame
 /// primitive. Parse / upsert / render / budget mechanics live in
@@ -85,6 +109,123 @@ pub struct UpsertOutcome {
     pub created: bool,
     pub sections_updated: Vec<String>,
     pub approx_tokens: usize,
+    /// `## Next` items this frame's ancestors were also carrying, worst
+    /// first. Advisory — see [`carried_items`].
+    pub carried: Vec<Carried>,
+    /// How many consecutive frames (this one included) have stated the
+    /// same `## Objective`. 1 = fresh or changed. A large number is not
+    /// automatically bad — a long initiative is legitimate — but it is
+    /// the number to look at when the work starts feeling like tweaking.
+    pub objective_sessions: usize,
+}
+
+/// One `## Next` item that predates this frame.
+#[derive(Debug, Clone)]
+pub struct Carried {
+    /// The item as written in THIS frame.
+    pub item: String,
+    /// Consecutive ancestor frames also carrying it. `2` means two
+    /// frames before this one already listed it.
+    pub depth: usize,
+}
+
+/// The predecessor sidecar. Written by `sovereign session frames
+/// --claim-window` at the boot hand-off — the one moment both session
+/// ids are known — and read here, so the writer needs no lineage
+/// machinery of its own (that lives in `sovereign-cli`, which this crate
+/// cannot see under the repo's feature contract).
+const PREDECESSOR_FILE: &str = "predecessor";
+
+/// Bound on the ancestor walk. Matches `session_lineage::MAX_HOPS`; a
+/// cycle or a pathological chain must not turn a frame write into an
+/// unbounded filesystem crawl.
+const MAX_LINEAGE_HOPS: usize = 8;
+
+/// Where frames live, honouring the same override the CLI reader uses
+/// (`sovereign-cli`'s `session_cmd::sessions_root`).
+///
+/// The two MUST agree. Until 2026-07-29 this side hardcoded
+/// `~/.sovereign/sessions` while the reader honoured `SESSIONS_DIR`, so
+/// setting the override moved the reader and left the writer pointed at
+/// the live store — a sandboxed end-to-end run silently wrote real
+/// frames, which is the exact failure the override exists to prevent.
+/// Found by trying to test the boot advisory without touching the live
+/// store, and getting six junk frames in it instead.
+fn default_sessions_root() -> PathBuf {
+    let override_dir = ["SVRNMESH_", "SOVEREIGN_"]
+        .iter()
+        .find_map(|p| std::env::var(format!("{p}SESSIONS_DIR")).ok());
+    sessions_root_from(override_dir.as_deref())
+}
+
+/// The pure half, so the precedence is testable without mutating process
+/// environment inside a shared test binary.
+fn sessions_root_from(override_dir: Option<&str>) -> PathBuf {
+    match override_dir.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => PathBuf::from(v),
+        None => dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/"))
+            .join(".sovereign")
+            .join("sessions"),
+    }
+}
+
+/// This session's predecessor, if the boot hand-off recorded one.
+fn predecessor_of(sessions_root: &Path, session_id: &str) -> Option<String> {
+    let raw = std::fs::read_to_string(sessions_root.join(session_id).join(PREDECESSOR_FILE)).ok()?;
+    let id = raw.trim();
+    // A sidecar naming this session, or naming a path, is corrupt input
+    // rather than a lineage — refuse it instead of walking it.
+    if id.is_empty() || id == session_id || id.contains(['/', '\\']) {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+/// Ancestor frames, nearest first, following the recorded chain.
+///
+/// Prefers each ancestor frame's own `predecessor:` FRONTMATTER over the
+/// sidecar: the sidecar is per-machine and prunes with the window
+/// pointers (14 days), while the frontmatter is durable. The sidecar is
+/// the bootstrap for the newest hop, which has not been stamped yet.
+/// `first` is the nearest ancestor's id — the caller supplies it because
+/// only the caller holds the current frame (whose `predecessor:` stamp is
+/// the durable answer, with the sidecar as bootstrap).
+fn ancestors(sessions_root: &Path, session_id: &str, first: Option<&str>) -> Vec<Frame> {
+    let mut out: Vec<Frame> = Vec::new();
+    let mut seen = vec![session_id.to_string()];
+    let mut next_id = first.map(str::to_string);
+    while out.len() < MAX_LINEAGE_HOPS {
+        let Some(prev) = next_id.take() else {
+            break;
+        };
+        // Cycles are possible if a window pointer is hand-edited or a
+        // session re-attaches to its own descendant.
+        if seen.contains(&prev) {
+            break;
+        }
+        let Ok(text) = std::fs::read_to_string(sessions_root.join(&prev).join("frame.md")) else {
+            break;
+        };
+        let parsed = SCHEMA.parse(&text);
+        next_id = parsed
+            .get("predecessor")
+            .map(str::to_string)
+            .filter(|p| !p.is_empty() && !p.contains(['/', '\\']))
+            .or_else(|| predecessor_of(sessions_root, &prev));
+        out.push(parsed);
+        seen.push(prev);
+    }
+    out
+}
+
+/// One section's body from each ancestor, nearest first — the shape the
+/// shared combinators in `sovereign_contracts::frame` consume.
+fn ancestor_bodies(ancestors: &[Frame], section: &str) -> Vec<String> {
+    ancestors
+        .iter()
+        .map(|f| f.body(section).unwrap_or_default().to_string())
+        .collect()
 }
 
 fn now_iso() -> String {
@@ -192,6 +333,56 @@ pub fn upsert_frame(
         sections_updated.push(canonical.to_string());
     }
 
+    // A frame may not claim work without saying what the work is FOR.
+    //
+    // WHY THIS IS A HARD ERROR AND NOT A LINT. Audited 2026-07-29 over the
+    // 67 frames banked on this host: 21 of 63 non-empty frames define
+    // their goal as a DELTA from a previous frame ("Item One's remaining
+    // half", "continue frame `d9935a7b`'s Next item 2"). Walk one lineage
+    // — 311ec4b7 → 8815fdb9 → c96d55a6, all on 2026-07-29 — and the word
+    // "wedge", which 311ec4b7 named as the whole point, is simply gone two
+    // frames later. The objective was never absent from the CONTRACT
+    // (SESSION_CONTINUITY §2 has always asked `Goal` for "the task AND the
+    // standing objective it serves"); it was absent because it was the
+    // second half of a ~100-token field whose first half always wins.
+    //
+    // The check is on the POST-WRITE body, not on `created`, so a legacy
+    // eight-section frame is also asked once — the successors most at risk
+    // of ratholing are precisely the ones resuming a long lineage.
+    //
+    // Timing is what makes this cheap to satisfy rather than a nag: an
+    // agent's first frame write happens while the predecessor's frame is
+    // still whole in its context (the boot hook injects it), so inheriting
+    // the objective is a COPY, not a re-derivation.
+    let touches_work = update
+        .sections
+        .iter()
+        .any(|(n, _)| canonical_section(n).is_some_and(|c| WORK_SECTIONS.contains(&c)));
+    let objective_blank = frame.body("Objective").is_none_or(|b| b.trim().is_empty());
+    if touches_work && objective_blank {
+        return Err(format!(
+            "session_state: refusing to write {} without an `objective`.\n\
+             \n\
+             The objective is the standing outcome this session's work serves — \
+             what a USER gets when the initiative lands, not this session's \
+             increment. It must carry:\n\
+             \x20 • the outcome, and where it is specified (doc path + section, or plan path)\n\
+             \x20 • `Done when:` — a falsifiable test at INITIATIVE altitude\n\
+             \x20 • `Not worth continuing if:` — the exit condition\n\
+             \n\
+             If you are continuing a predecessor, COPY its `## Objective` verbatim \
+             (`sovereign session frames <predecessor-id>`) and edit it only if the \
+             objective genuinely changed. Restating it as a delta from the last \
+             frame (\"item two's remaining half\") is the failure this guard exists \
+             to catch.",
+            sections_updated
+                .iter()
+                .map(|s| format!("`{s}`"))
+                .collect::<Vec<_>>()
+                .join(" + ")
+        ));
+    }
+
     if let Some(status) = &update.status {
         if !matches!(status.as_str(), "in-flight" | "completed" | "abandoned") {
             return Err(format!(
@@ -233,6 +424,34 @@ pub fn upsert_frame(
     // The encode-time write is the strongest evidence path — always.
     frame.set("provenance", "self-reported".into());
 
+    // Record the chain in the frame itself. The sidecar is per-machine
+    // and prunes with the window pointers; the frontmatter is durable, so
+    // once stamped a lineage stays walkable offline and forever.
+    // The frame's own stamp wins over the sidecar: it is durable, while
+    // the sidecar prunes with the window pointers after 14 days. The
+    // sidecar is how the stamp gets there in the first place.
+    let nearest = frame
+        .get("predecessor")
+        .map(str::to_string)
+        .filter(|p| !p.is_empty() && p != session_id && !p.contains(['/', '\\']))
+        .or_else(|| predecessor_of(sessions_root, session_id));
+    if let Some(prev) = &nearest {
+        frame.set("predecessor", prev.clone());
+    }
+    let ancestry = ancestors(sessions_root, session_id, nearest.as_deref());
+
+    let carried = sovereign_contracts::frame::carried_across(
+        frame.body("Next").unwrap_or_default(),
+        &ancestor_bodies(&ancestry, "Next"),
+    )
+    .into_iter()
+    .map(|(item, depth)| Carried { item, depth })
+    .collect::<Vec<_>>();
+    let objective_sessions = sovereign_contracts::frame::same_across(
+        frame.body("Objective").unwrap_or_default(),
+        &ancestor_bodies(&ancestry, "Objective"),
+    );
+
     let rendered = frame.render();
     let total = frame
         .check_budget(&SCHEMA)
@@ -251,6 +470,8 @@ pub fn upsert_frame(
         created,
         sections_updated,
         approx_tokens: total,
+        carried,
+        objective_sessions,
     })
 }
 
@@ -263,12 +484,8 @@ pub struct SessionStateTool {
 
 impl SessionStateTool {
     pub fn new() -> Self {
-        let root = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(".sovereign")
-            .join("sessions");
         Self {
-            sessions_root: root,
+            sessions_root: default_sessions_root(),
             workspace_root: None,
         }
     }
@@ -292,7 +509,8 @@ impl Default for SessionStateTool {
     }
 }
 
-const SECTION_PARAMS: [&str; 8] = [
+const SECTION_PARAMS: [&str; 9] = [
+    "objective",
     "goal",
     "state",
     "next",
@@ -336,16 +554,26 @@ impl Tool for SessionStateTool {
             }),
         );
         for p in SECTION_PARAMS {
-            properties.insert(
-                p.into(),
-                json!({
-                    "type": "string",
-                    "description": format!(
-                        "Replacement markdown body for the `{}` section. Pointers over prose: cite file:line, symbols, note ids.",
-                        canonical_section(p).unwrap_or(p)
-                    )
-                }),
-            );
+            // `objective` earns a bespoke description: it is the one
+            // section a successor must NOT re-derive, and the generic
+            // "replacement body" wording invited exactly the delta-goal
+            // restatement the audit found in 21 of 63 frames.
+            let description = if p == "objective" {
+                "The STANDING outcome this session's work serves — what a user gets when the \
+                 initiative lands, NOT this session's increment. Inherited, not re-authored: \
+                 when continuing a predecessor, copy its `## Objective` verbatim and edit only \
+                 if the objective genuinely changed. Must carry the outcome + where it is \
+                 specified (doc path/section or plan path), a `Done when:` line that is \
+                 falsifiable at INITIATIVE altitude, and a `Not worth continuing if:` exit \
+                 condition. Never phrase it as a delta from the last frame."
+                    .to_string()
+            } else {
+                format!(
+                    "Replacement markdown body for the `{}` section. Pointers over prose: cite file:line, symbols, note ids.",
+                    canonical_section(p).unwrap_or(p)
+                )
+            };
+            properties.insert(p.into(), json!({ "type": "string", "description": description }));
         }
         properties.insert(
             "status".into(),
@@ -366,20 +594,23 @@ impl Tool for SessionStateTool {
         ToolDescriptor {
             id: "session_state".to_string(),
             name: "Session State Upsert".to_string(),
-            description: "Upsert your session frame (the successor-facing gist: goal, \
-                          state, next, decisions, invariants, dead ends, working set, \
+            description: "Upsert your session frame (the successor-facing gist: objective, \
+                          goal, state, next, decisions, invariants, dead ends, working set, \
                           verification) at transitions — task start, plan step done, \
                           blocker hit — NOT only at session end. Provided sections \
                           replace their previous body; others are preserved. Writes \
-                          are rejected over the 2k-token budget with per-section \
+                          are rejected over the 2.1k-token budget with per-section \
                           counts so you trim instead of bloating. Encode-time writes \
                           are the strong continuity path (self-reported frames grade \
                           100% vs 17% for post-hoc distillation); a current frame is \
                           what lets a successor session resume your work without \
-                          re-reading the repo. Sections are FLAT string params — one \
-                          key per section (goal, state, next, decisions, invariants, \
-                          dead_ends, working_set, verification); there is no `sections` \
-                          array and no `section`/`content` pair."
+                          re-reading the repo. `objective` is the standing outcome the \
+                          work serves and is REQUIRED alongside any of goal/state/next/\
+                          decisions — inherit it from your predecessor rather than \
+                          restating it as a delta. Sections are FLAT string params — one \
+                          key per section (objective, goal, state, next, decisions, \
+                          invariants, dead_ends, working_set, verification); there is no \
+                          `sections` array and no `section`/`content` pair."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -410,7 +641,19 @@ impl Tool for SessionStateTool {
                     "created": { "type": "boolean" },
                     "sections_updated": { "type": "array", "items": { "type": "string" } },
                     "approx_tokens": { "type": "integer" },
-                    "budget_tokens": { "type": "integer" }
+                    "budget_tokens": { "type": "integer" },
+                    "objective_sessions": { "type": "integer" },
+                    "carried": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item": { "type": "string" },
+                                "depth": { "type": "integer" }
+                            }
+                        }
+                    },
+                    "advice": { "type": "string" }
                 }
             })),
         }
@@ -512,13 +755,39 @@ impl Tool for SessionStateTool {
         )
         .map_err(Error::InvalidInput)?;
 
-        Ok(StepOutput::Json(json!({
+        // The advisory rides the WRITE response on purpose. It is the one
+        // moment the author is holding the backlog and can still act —
+        // a report delivered at boot arrives before there is anything to
+        // compare, and one delivered at session end arrives too late.
+        let carried = json!(outcome
+            .carried
+            .iter()
+            .map(|c| json!({
+                "depth": c.depth,
+                // Enough to recognise the item, not enough to re-paste it.
+                "item": c.item.chars().take(120).collect::<String>(),
+            }))
+            .collect::<Vec<_>>());
+        let mut doc = json!({
             "path": outcome.path.display().to_string(),
             "created": outcome.created,
             "sections_updated": outcome.sections_updated,
             "approx_tokens": outcome.approx_tokens,
             "budget_tokens": FRAME_TOKEN_BUDGET,
-        })))
+            "objective_sessions": outcome.objective_sessions,
+            "carried": carried,
+        });
+        if let Some(worst) = outcome.carried.first() {
+            doc["advice"] = json!(format!(
+                "{} `Next` item(s) predate this frame; the oldest has ridden {} consecutive \
+                 frames unacted-on. Carrying an item is a decision — do it, or drop it, or \
+                 say in `Objective` why it stays. Recopying a backlog is how a lineage \
+                 turns into tweaking.",
+                outcome.carried.len(),
+                worst.depth + 1
+            ));
+        }
+        Ok(StepOutput::Json(doc))
     }
 }
 
@@ -543,6 +812,11 @@ mod tests {
         }
     }
 
+    /// A standing objective, for tests whose subject is something other
+    /// than the objective guard. Real ones carry `Done when:` /
+    /// `Not worth continuing if:` — see SESSION_CONTINUITY §2.1.
+    const OBJ: &str = "- E4 continuity: a successor resumes without re-reading the repo.";
+
     #[test]
     fn creates_a_schema_v1_frame_with_all_sections() {
         let root = tmp_root("create");
@@ -550,7 +824,11 @@ mod tests {
             &root,
             "sess-1",
             None,
-            update_with(&[("goal", "- ship E4a"), ("next", "- register the tool")]),
+            update_with(&[
+                ("objective", OBJ),
+                ("goal", "- ship E4a"),
+                ("next", "- register the tool"),
+            ]),
         )
         .unwrap();
         assert!(out.created);
@@ -567,7 +845,13 @@ mod tests {
     #[test]
     fn patch_replaces_named_section_and_preserves_others() {
         let root = tmp_root("patch");
-        upsert_frame(&root, "s", None, update_with(&[("goal", "original goal")])).unwrap();
+        upsert_frame(
+            &root,
+            "s",
+            None,
+            update_with(&[("objective", OBJ), ("goal", "original goal")]),
+        )
+        .unwrap();
         let out =
             upsert_frame(&root, "s", None, update_with(&[("state", "- step 1 done")])).unwrap();
         assert!(!out.created);
@@ -606,7 +890,13 @@ mod tests {
     fn over_budget_upsert_is_rejected_and_writes_nothing() {
         let root = tmp_root("budget");
         let big = "word ".repeat(3000); // ~3.7k tokens
-        let err = upsert_frame(&root, "s3", None, update_with(&[("state", &big)])).unwrap_err();
+        let err = upsert_frame(
+            &root,
+            "s3",
+            None,
+            update_with(&[("objective", OBJ), ("state", &big)]),
+        )
+        .unwrap_err();
         assert!(err.contains("budget"), "{err}");
         assert!(err.contains("State"), "per-section counts named: {err}");
         assert!(!root.join("s3").join("frame.md").exists());
@@ -724,7 +1014,12 @@ mod tests {
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let out = tool
             .execute(
-                &json!({"session_id": "s10", "goal": "- ship E4a", "next": "- register"}),
+                &json!({
+                    "session_id": "s10",
+                    "objective": "- E4 continuity: successors resume without re-reading.",
+                    "goal": "- ship E4a",
+                    "next": "- register"
+                }),
                 &ctx(),
             )
             .await
@@ -733,16 +1028,389 @@ mod tests {
             panic!("expected json output")
         };
         assert_eq!(v["created"], json!(true));
-        assert_eq!(v["sections_updated"], json!(["Goal", "Next"]));
+        assert_eq!(v["sections_updated"], json!(["Objective", "Goal", "Next"]));
         let text = std::fs::read_to_string(root.join("s10").join("frame.md")).unwrap();
         assert!(text.contains("- ship E4a"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The guard's whole reason for existing: a frame may claim work
+    /// only if it also says what the work is FOR.
+    #[test]
+    fn work_without_a_standing_objective_is_rejected() {
+        let root = tmp_root("obj_guard");
+        let err = upsert_frame(
+            &root,
+            "o1",
+            None,
+            update_with(&[("goal", "- finish item one's remaining half")]),
+        )
+        .unwrap_err();
+        assert!(err.contains("objective"), "names the missing field: {err}");
+        assert!(
+            err.contains("Done when:") && err.contains("Not worth continuing if:"),
+            "teaches the required shape, not just the field name: {err}"
+        );
+        assert!(
+            err.contains("sovereign session frames"),
+            "tells the caller how to INHERIT rather than re-derive: {err}"
+        );
+        assert!(
+            !root.join("o1").join("frame.md").exists(),
+            "a rejected write must bank nothing"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A blank-but-present objective is the same failure as an absent
+    /// one — the guard reads the body, not the key.
+    #[test]
+    fn a_whitespace_objective_does_not_satisfy_the_guard() {
+        let root = tmp_root("obj_blank");
+        let err = upsert_frame(
+            &root,
+            "o2",
+            None,
+            update_with(&[("objective", "   \n  "), ("state", "- done")]),
+        )
+        .unwrap_err();
+        assert!(err.contains("objective"), "{err}");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The check is on the POST-WRITE body, not on `created` — so the 67
+    /// legacy eight-section frames banked before 2026-07-29 are asked
+    /// once, on their next work write. Those lineages are exactly the
+    /// ones most at risk of ratholing.
+    #[test]
+    fn a_legacy_frame_without_an_objective_is_asked_once() {
+        let root = tmp_root("obj_legacy");
+        let dir = root.join("o3");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("frame.md"),
+            "---\nschema: session-frame/v1\nsession_id: o3\n---\n\n## Goal\n\nold goal\n",
+        )
+        .unwrap();
+
+        let err = upsert_frame(&root, "o3", None, update_with(&[("state", "- more")])).unwrap_err();
+        assert!(err.contains("objective"), "legacy frame is asked: {err}");
+        assert!(
+            std::fs::read_to_string(dir.join("frame.md"))
+                .unwrap()
+                .contains("old goal"),
+            "the rejected write must not have clobbered the legacy frame"
+        );
+
+        // ...and once answered, it is answered for good: the objective
+        // persists through later section patches without being restated.
+        upsert_frame(
+            &root,
+            "o3",
+            None,
+            update_with(&[("objective", OBJ), ("state", "- more")]),
+        )
+        .unwrap();
+        let out = upsert_frame(&root, "o3", None, update_with(&[("next", "- step 2")])).unwrap();
+        let text = std::fs::read_to_string(&out.path).unwrap();
+        assert!(
+            text.contains(OBJ),
+            "objective must survive a later patch — inheritance is the point"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The guard must not become a tax on non-work writes. Banking a
+    /// verification result or flipping status is not a claim about an
+    /// initiative, so it proceeds with a blank objective.
+    #[test]
+    fn non_work_writes_are_not_gated_on_the_objective() {
+        let root = tmp_root("obj_nonwork");
+        upsert_frame(
+            &root,
+            "o4",
+            None,
+            update_with(&[("verification", "- suite 8618/0")]),
+        )
+        .expect("a verification-only write is not a work claim");
+        let mut update = update_with(&[]);
+        update.status = Some("abandoned".into());
+        upsert_frame(&root, "o4", None, update).expect("status-only write is not a work claim");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// Guard order matters: an unknown section name must be reported as
+    /// such, not masked by the objective guard.
+    #[test]
+    fn shape_errors_are_reported_before_the_objective_guard() {
+        let root = tmp_root("obj_order");
+        let err = upsert_frame(&root, "o5", None, update_with(&[("vibes", "x")])).unwrap_err();
+        assert!(
+            err.contains("unknown section"),
+            "the caller's actual mistake wins: {err}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The writer's section list is half of a contract whose other half
+    /// lives in `sovereign-cli`'s `session_cmd::FRAME_SECTIONS` (the
+    /// `## `-prefixed twin). The crates cannot see each other under the
+    /// repo's feature contract — `sovereign-tools` reaches `sovereign-cli`
+    /// only via the `awareness` feature, which the lint/test gate does
+    /// not enable — so this pins the contract on each side instead.
+    #[test]
+    fn the_section_contract_is_pinned() {
+        assert_eq!(
+            FRAME_SECTIONS,
+            [
+                "Objective",
+                "Goal",
+                "State",
+                "Next",
+                "Decisions",
+                "Invariants",
+                "Dead ends",
+                "Working set",
+                "Verification",
+            ],
+            "SESSION_CONTINUITY §2 order — update session_cmd::FRAME_SECTIONS too"
+        );
+        assert_eq!(
+            FRAME_SECTIONS[0], "Objective",
+            "the altitude-setter renders first, so a successor reads why before what"
+        );
+        assert_eq!(SECTION_PARAMS.len(), FRAME_SECTIONS.len());
+    }
+
+    /// Link `child`'s frame to `parent`'s, the way the boot hand-off
+    /// (`session frames --claim-window`) does.
+    fn link(root: &Path, child: &str, parent: &str) {
+        let dir = root.join(child);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(PREDECESSOR_FILE), parent).unwrap();
+    }
+
+    /// The end-to-end case this whole mechanism exists for, rebuilt from
+    /// the frames that motivated it: `311ec4b7` → `8815fdb9` →
+    /// `c96d55a6`, all banked 2026-07-29, all carrying the same two
+    /// backlog items nobody did and nobody dropped.
+    #[test]
+    fn a_recopied_backlog_is_reported_with_its_depth() {
+        let root = tmp_root("carried");
+        let pin = "- Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — needs BeefyMac.";
+        let overflow = "- WorkerOverflow capacity basis (note cc8d033f) — park on `total`, \
+                        retry on `free`.";
+
+        upsert_frame(
+            &root,
+            "gen1",
+            None,
+            update_with(&[("objective", OBJ), ("next", &format!("{pin}\n{overflow}"))]),
+        )
+        .unwrap();
+
+        link(&root, "gen2", "gen1");
+        upsert_frame(
+            &root,
+            "gen2",
+            None,
+            update_with(&[("objective", OBJ), ("next", &format!("{pin}\n{overflow}"))]),
+        )
+        .unwrap();
+
+        // Third hop: the pin item is ELABORATED rather than recopied —
+        // the case a strict string compare would miss — and a genuinely
+        // new item joins it.
+        link(&root, "gen3", "gen2");
+        let out = upsert_frame(
+            &root,
+            "gen3",
+            None,
+            update_with(&[(
+                "objective",
+                OBJ,
+            ), (
+                "next",
+                "- Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — `mesh plan` on the 35B reports \
+                 the pin does NOT apply (needs 41 blocks) and the loader rejects it too.\n\
+                 - WorkerOverflow capacity basis (note cc8d033f) — park on `total`, retry on \
+                 `free`.\n\
+                 - Brand new item nobody has ever carried before, about gossip drains.",
+            )]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            out.carried.len(),
+            2,
+            "exactly the two recopied items: {:?}",
+            out.carried
+        );
+        assert!(
+            out.carried.iter().all(|c| c.depth == 2),
+            "both rode two ancestors: {:?}",
+            out.carried
+        );
+        assert!(
+            !out.carried.iter().any(|c| c.item.contains("Brand new")),
+            "a fresh item is not a carried one"
+        );
+        assert_eq!(
+            out.objective_sessions, 3,
+            "the objective rode all three frames unchanged"
+        );
+
+        let text = std::fs::read_to_string(&out.path).unwrap();
+        assert!(
+            text.contains("predecessor: gen2"),
+            "the chain is stamped into the frame, so it outlives the sidecar"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// CONSECUTIVE is load-bearing. An item that was dropped and came
+    /// back is a re-prioritisation, not a rut, and flagging it would
+    /// punish exactly the behaviour this feature wants to encourage.
+    #[test]
+    fn an_item_that_was_dropped_and_returned_is_not_a_rut() {
+        let root = tmp_root("carried_gap");
+        let item = "- WorkerOverflow capacity basis (note cc8d033f) — park on `total`, retry \
+                    on `free`.";
+        upsert_frame(
+            &root,
+            "g1",
+            None,
+            update_with(&[("objective", OBJ), ("next", item)]),
+        )
+        .unwrap();
+        link(&root, "g2", "g1");
+        upsert_frame(
+            &root,
+            "g2",
+            None,
+            update_with(&[("objective", OBJ), ("next", "- something else entirely, about TLS")]),
+        )
+        .unwrap();
+        link(&root, "g3", "g2");
+        let out = upsert_frame(
+            &root,
+            "g3",
+            None,
+            update_with(&[("objective", OBJ), ("next", item)]),
+        )
+        .unwrap();
+        assert!(
+            out.carried.is_empty(),
+            "the chain was broken at g2, so g3 is not recopying: {:?}",
+            out.carried
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A changed objective resets the streak — that is the whole signal.
+    #[test]
+    fn changing_the_objective_resets_its_streak() {
+        let root = tmp_root("obj_streak");
+        upsert_frame(
+            &root,
+            "o_a",
+            None,
+            update_with(&[("objective", OBJ), ("goal", "g")]),
+        )
+        .unwrap();
+        link(&root, "o_b", "o_a");
+        let out = upsert_frame(
+            &root,
+            "o_b",
+            None,
+            update_with(&[
+                ("objective", "- Something completely different: ship the mesh installer."),
+                ("goal", "g"),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(out.objective_sessions, 1, "a new objective starts at one");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A hand-edited pointer must not turn a frame write into an
+    /// unbounded crawl — or a hang.
+    #[test]
+    fn a_lineage_cycle_terminates() {
+        let root = tmp_root("cycle");
+        link(&root, "c_a", "c_b");
+        link(&root, "c_b", "c_a");
+        upsert_frame(
+            &root,
+            "c_a",
+            None,
+            update_with(&[("objective", OBJ), ("next", "- do a thing that is long enough")]),
+        )
+        .unwrap();
+        let out = upsert_frame(
+            &root,
+            "c_b",
+            None,
+            update_with(&[("objective", OBJ), ("next", "- do a thing that is long enough")]),
+        )
+        .unwrap();
+        assert_eq!(out.carried.len(), 1, "one hop, then the cycle is cut");
+        assert_eq!(out.carried[0].depth, 1);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// No lineage recorded is the common case (a first session, a plain
+    /// shell, no `ps`). It must be silent, not degraded.
+    #[test]
+    fn a_frame_without_a_predecessor_reports_no_carry() {
+        let root = tmp_root("no_pred");
+        let out = upsert_frame(
+            &root,
+            "solo",
+            None,
+            update_with(&[("objective", OBJ), ("next", "- a perfectly ordinary next item")]),
+        )
+        .unwrap();
+        assert!(out.carried.is_empty());
+        assert_eq!(out.objective_sessions, 1);
+        let text = std::fs::read_to_string(&out.path).unwrap();
+        assert!(
+            !text.contains("predecessor:"),
+            "no lineage means no stamp, not an empty one"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The writer must honour the SAME root override the CLI reader does.
+    /// When it did not, a sandboxed end-to-end run moved the reader and
+    /// left the writer pointed at the live store — six junk frames landed
+    /// in it before this was caught (2026-07-29).
+    #[test]
+    fn the_sessions_root_override_wins_over_the_home_default() {
+        assert_eq!(sessions_root_from(Some("/tmp/sandbox")), PathBuf::from("/tmp/sandbox"));
+        assert!(
+            sessions_root_from(None).ends_with(".sovereign/sessions"),
+            "no override falls back to the live store"
+        );
+        assert!(
+            sessions_root_from(Some("   ")).ends_with(".sovereign/sessions"),
+            "a blank override is not an override"
+        );
+    }
+
+    /// A sidecar pointing at itself is corrupt input, not a lineage.
+    #[test]
+    fn a_self_referential_sidecar_is_refused() {
+        let root = tmp_root("self_ref");
+        link(&root, "s_x", "s_x");
+        assert_eq!(predecessor_of(&root, "s_x"), None);
         std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
     fn completed_status_stamps_ended_at() {
         let root = tmp_root("ended");
-        let mut update = update_with(&[("goal", "g")]);
+        let mut update = update_with(&[("objective", OBJ), ("goal", "g")]);
         update.status = Some("completed".into());
         let out = upsert_frame(&root, "s5", None, update).unwrap();
         let text = std::fs::read_to_string(&out.path).unwrap();

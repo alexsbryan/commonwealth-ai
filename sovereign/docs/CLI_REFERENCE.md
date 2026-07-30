@@ -589,6 +589,12 @@ The `census` split is the number to read. A step in a `skip_live` journey is a w
 
 See [TESTING_SURFACE.md](TESTING_SURFACE.md#the-cli-quality-surface) for the layers behind it and how to run each lane.
 
+### `svrn posture`
+
+One read-only table: artifact age + verdict for every posture-bearing quality subsystem — drift report, arch census, capability map, the CLI-contract nightly verdict, the watcher heartbeat (honoring a repo's `[watchers] enabled = false` opt-out as *off (by design)*, not a fault), the env-gate legacy baseline count, and the committed bench-baseline age range. Each row names the command that refreshes its artifact. `--features dev-tools`; repo-scoped rows degrade to `no repo context` outside a source checkout.
+
+Added 2026-07-30 because the per-subsystem posture tools only answer when asked, and in practice none were: the drift and arch reports had both been weeks stale with nothing anywhere aggregating that fact. This verb is the aggregation — the one place a neglected corner shows up on its own.
+
 ## HTTP endpoints
 
 `localhost:9741` serves both the OpenAI-compatible `/v1/*` API and the MCP JSON-RPC server at `/mcp`. `sovereign-server` exposes additional conversation/task APIs when run standalone:

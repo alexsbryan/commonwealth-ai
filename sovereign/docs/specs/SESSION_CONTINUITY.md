@@ -43,7 +43,7 @@ learned" log** (decision/invariant/attempt survive the session and serve
 
 ## 2. The frame schema (v1) — CONTRACT
 
-One markdown file. YAML frontmatter + eight fixed `##` sections, in order.
+One markdown file. YAML frontmatter + nine fixed `##` sections, in order.
 Machine-checkable: a validator can assert frontmatter keys and section
 presence; a grader can score section-by-section (§5).
 
@@ -64,12 +64,13 @@ notes: [<note-id>, ...]         # durable notes written during the session
 ---
 ```
 
-Sections, each with its budget share (total ≤ 2,000 tokens — hard cap,
+Sections, each with its budget share (total ≤ 2,100 tokens — hard cap,
 enforced by writers; a frame that cannot fit must drop detail, never sections):
 
 | Section | Budget | Contract |
 |---|---|---|
-| `## Goal` | ~100 | The task AND the standing objective it serves. A successor must know *why*, not just *what*. |
+| `## Objective` | ~150 | The STANDING outcome the work serves — see §2.1. **Inherited, not re-authored.** |
+| `## Goal` | ~50 | The task this session took on. Just the *what*; the *why* is `## Objective`. |
 | `## State` | ~400 | Done (with proof — test counts, live verification), in-flight, not-started. Facts only; no narrative. |
 | `## Next` | ~250 | Ranked, concrete actions with `file:line`/symbol anchors. The single highest-value section for a successor. |
 | `## Decisions` | ~350 | Choice + the *why* + note-id pointer where one exists. |
@@ -89,6 +90,147 @@ Rules that keep frames honest:
   `lags_graph`.
 - **Verification claims carry their evidence** ("7928 pass / 0 fail,
   cargo exit 0"), mirroring the report-actual-metrics convention.
+
+---
+
+### 2.1 `## Objective` — the standing outcome (CONTRACT)
+
+**The failure this section exists to prevent.** A frame is written by one
+session, so every section naturally describes *that session*. The objective is
+the one thing that is NOT session-scoped — it belongs to the initiative, which
+outlives any frame. When it shared a slot with the per-session task, it lost.
+Measured over the 67 frames banked on RuggedFox (2026-07-29):
+
+- **21 of 63** non-empty frames stated their goal as a *delta from a previous
+  frame* — "Item One's remaining half", "continue frame `d9935a7b`'s Next item
+  2", "P4 DONE". The reason is mechanical, not sloppiness: a successor authors
+  `Goal` fresh, and what is freshest in a successor's mind is the delta from the
+  frame it just booted from. Each hop is a faithful summary of the last hop, and
+  the chain drifts.
+- Walk one lineage — `1b0e75f9` → `cde083ff` → `311ec4b7` → `8815fdb9` →
+  `c96d55a6`, all on 2026-07-29. `311ec4b7` states the point plainly: "the wedge
+  is *what can my hardware do BEFORE I commit* — a stranger's first run always
+  says not measured." Two frames later the word *wedge* does not appear. The
+  work continued; the reason for it did not survive.
+- The same lineage recopied its own unglamorous backlog **verbatim** across
+  three frames (the 43% spread, the `WorkerOverflow` capacity basis, retiring
+  the block-split pin, the gossip stall). Nobody did them, nobody dropped them,
+  nobody re-ranked them against the objective. That is the rut: a frame can
+  carry a stale backlog forever at zero cost.
+
+**Required content.** Three parts, and the last two are what make this section
+anti-rut rather than merely anti-amnesia:
+
+1. **The outcome**, stated as what a *user* gets when the initiative lands — not
+   the increment, not the mechanism. Plus where it is specified: a doc path and
+   section, or a plan path, so a successor can go deep on demand instead of by
+   default.
+2. **`Done when:`** — a falsifiable test at *initiative* altitude. Not "the
+   gossip poller ships" but "a second node quotes a measurement it did not
+   take." If you cannot write a test that could come back false, you do not yet
+   have an objective; you have a direction.
+3. **`Not worth continuing if:`** — the exit condition. The frames are already
+   strong at falsification one altitude down (`## Dead ends`, and verdicts like
+   "F10 is a DO-NOT-BUILD"). This applies the same discipline to the initiative,
+   so abandoning it is a *legible outcome* rather than an admission.
+
+**Inheritance is the load-bearing rule.** When continuing a predecessor, COPY
+its `## Objective` verbatim; edit it only when the objective genuinely changed,
+and when it does, say so in `## Decisions`. Re-deriving it each session is the
+exact mechanism that produced the drift above.
+
+This is cheap to satisfy because of *when* it is asked. An agent's first frame
+write happens while the boot-injected predecessor frame is still whole in its
+context, so inheriting the objective is a copy — not research.
+
+**Enforcement.** `upsert_frame` rejects any write touching `Goal`, `State`,
+`Next` or `Decisions` while the frame's `Objective` would be blank
+(`sovereign-tools/src/code/session_state.rs`). The check is on the post-write
+body rather than on frame creation, so a legacy eight-section frame is asked
+once too — the successors most at risk of ratholing are precisely the ones
+resuming a long lineage. Distillation asks for it separately from `Goal` and is
+instructed to answer `none stated` rather than infer one, since a fabricated
+objective is worse than an absent one.
+
+---
+
+### 2.2 Lineage and carried items — the recopied backlog (CONTRACT)
+
+§2.1 stops a lineage losing its *objective*. This stops it accumulating a
+*backlog nobody owns*. Same audit, second finding: `311ec4b7` → `8815fdb9` →
+`c96d55a6` recopied four `## Next` items verbatim across three frames — the 43%
+spread, the `WorkerOverflow` capacity basis, retiring the block-split pin, the
+gossip stall. None were done. None were dropped. None were re-ranked against the
+objective. A frame can carry a stale backlog forever at zero cost, so it does.
+
+**Frames form a chain.** Frontmatter gains an optional `predecessor: <session-id>`.
+It is stamped by the writer from a `predecessor` sidecar file that
+`sovereign session frames --claim-window` drops beside the incoming session's
+frame directory at the boot hand-off — **the only moment both ids are known**,
+since the window pointer still holds the outgoing session while the claim names
+the incoming one. The sidecar is per-machine and prunes with the window
+pointers; the frontmatter is durable, so once stamped a lineage stays walkable
+offline and indefinitely.
+
+The hand-off is a *file* rather than a function call because `sovereign-tools`
+(the writer) cannot see `session_lineage` (in `sovereign-cli`) under the repo's
+feature contract. Both sides treat the file as the contract: a bare session id,
+no decoration.
+
+**What the writer reports.** Every upsert walks up to 8 ancestors (cycle-safe)
+and returns, on the write response:
+
+| Field | Meaning |
+|---|---|
+| `carried[]` | `## Next` items **consecutive** ancestors were also carrying, with `depth` |
+| `objective_sessions` | consecutive frames stating this same objective; 1 = fresh or changed |
+| `advice` | present only when something is carried; names the count and the worst depth |
+
+**Two surfaces, one computation.** The write response answers "am I recopying?"
+The boot payload answers "what am I about to inherit?" — the donor frame's own
+carried count, measured against *its* ancestors, delivered before the successor
+picks up anything:
+
+```
+⟳ **3 of 4 `Next` items in this frame were already inherited** — the longest has
+ridden 3 frames without being done or dropped. Re-rank against `## Objective`
+before continuing it: do an item, drop it, or say why it stays.
+```
+
+It appears on `sovereign session frames` (human), in the `predecessor` object of
+its `--json` (`carried_items`, `next_items`, `carried_worst_frames`,
+`objective_sessions`, `inherited_advice`), and the boot hook emits
+`inherited_advice` verbatim under the injected frame. Both surfaces call the
+same combinators in `sovereign_contracts::frame`, so they cannot disagree — an
+advisory that changes its mind between boot and write is worse than none.
+
+**It stays silent for a healthy handoff.** Nothing carried and an objective
+under 4 sessions old prints nothing at all. A signal that fires on every boot is
+one agents learn to skip.
+
+**Design rules, each of which is load-bearing:**
+
+- **The write-side advisory rides the WRITE, not the boot.** At boot the
+  successor has not written a `Next` yet, so there is nothing of its own to
+  compare. At session end it is too late to act. The write is the one moment the
+  author is holding the backlog.
+- **CONSECUTIVE ancestors only.** An item that appeared, was dropped, and came
+  back is a re-prioritisation — legitimate, and precisely the behaviour this
+  feature wants to encourage. Flagging it would punish the cure.
+- **Matching uses the overlap coefficient** (`|A∩B| / min(|A|,|B|)`), not
+  Jaccard. The real failure mode is an item that gets *elaborated* as it is
+  carried, not reworded: the block-split item grew from 6 content words to 18
+  between frames, scoring 0.22 by Jaccard and 0.83 by overlap. Overlap asks "is
+  one of these contained in the other", which is the actual question.
+- **Biased toward under-reporting.** Items under 3 content words never match. A
+  missed carry costs nothing; a false one teaches agents to ignore the signal.
+- **Advisory, never blocking.** Carrying an item is often right. The contract is
+  that carrying it must be a *decision* — do it, drop it, or say in
+  `## Objective` why it stays.
+
+Every failure path degrades silently: no `ps`, no sidecar, an unreadable
+ancestor, a hand-edited cycle. Lineage sharpens the signal; it is never a
+precondition for writing a frame.
 
 ---
 

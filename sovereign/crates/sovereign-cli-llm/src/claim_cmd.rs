@@ -443,9 +443,7 @@ fn open_atlas() -> Result<CliCtx, i32> {
     let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
     let store = Arc::new(WorkAtlasStore::new(Arc::new(mesh), node_id));
 
-    let cfg_path = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("work-atlas.toml"))
-        .unwrap_or_else(|| sovereign_dir.join("work-atlas.toml"));
+    let cfg_path = sovereign_contracts::rebrand::work_atlas_toml();
     let config = WorkAtlasConfig::load_or_default(&cfg_path).unwrap_or_else(|e| {
         eprintln!("claim: config load failed ({e}); using defaults");
         WorkAtlasConfig::defaults()

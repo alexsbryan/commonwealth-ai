@@ -132,12 +132,12 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
         }
         return Ok(p.clone());
     }
-    let canonical_meta = home_dir()
-        .join(".sovereign/indexes")
+    let canonical_meta = sovereign_root()
+        .join("indexes")
         .join(&args.corpus_id)
         .join("_corpus_meta.json");
-    let partition_meta = home_dir()
-        .join(".sovereign/indexes")
+    let partition_meta = sovereign_root()
+        .join("indexes")
         .join(format!("{}-partition-local", args.corpus_id))
         .join("_corpus_meta.json");
     let meta_path = if canonical_meta.exists() {
@@ -180,8 +180,11 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
     Ok(p)
 }
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn sidecar_json_path(md: &Path) -> PathBuf {

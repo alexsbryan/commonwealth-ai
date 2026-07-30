@@ -279,6 +279,129 @@ pub fn approx_tokens(s: &str) -> usize {
     s.chars().count() / 4
 }
 
+// ── Carried-item detection ───────────────────────────────────────────
+//
+// A frame can recopy its own backlog forever at zero cost. Measured on
+// RuggedFox 2026-07-29 across the lineage 311ec4b7 → 8815fdb9 →
+// c96d55a6: four `## Next` items rode all three frames — the 43% spread,
+// the WorkerOverflow capacity basis, retiring the block-split pin, the
+// gossip stall. None were done, none dropped, none re-ranked. Inheriting
+// an item should be a decision; without a signal it is the default.
+//
+// These are pure combinators over rendered bodies. The chain walk that
+// feeds them lives in the writer, which owns the filesystem.
+
+/// Words too common to carry identity. Deliberately tiny — this is
+/// noise reduction for short technical bullets, not English NLP.
+const STOPWORDS: [&str; 24] = [
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "in", "is", "it", "of",
+    "on", "or", "that", "the", "then", "this", "to", "with", "still",
+];
+
+/// Split a section body into items. Recognises `- `, `* ` and `1. `
+/// markers; lines that continue an item are folded into it, and prose
+/// before the first marker is ignored (frames often open `## Next` with
+/// a framing paragraph — see `311ec4b7`).
+pub fn bullet_items(body: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    for line in body.lines() {
+        let t = line.trim();
+        let is_marker = t.starts_with("- ")
+            || t.starts_with("* ")
+            || t.split_once(". ")
+                .is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+        if is_marker {
+            items.push(t.to_string());
+        } else if !t.is_empty() {
+            if let Some(last) = items.last_mut() {
+                last.push(' ');
+                last.push_str(t);
+            }
+        }
+    }
+    items
+}
+
+/// An item's identity: lowercased content words, markdown and
+/// punctuation stripped, stopwords dropped.
+fn content_words(item: &str) -> Vec<String> {
+    item.to_lowercase()
+        .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+        .map(|w| w.trim_matches('.').to_string())
+        .filter(|w| w.len() > 1 && !STOPWORDS.contains(&w.as_str()))
+        .collect()
+}
+
+/// True when two `## Next` items name the same piece of work.
+///
+/// Uses the OVERLAP coefficient (`|A∩B| / min(|A|,|B|)`), not Jaccard,
+/// because the real failure mode is an item that gets *elaborated* as it
+/// is carried rather than reworded. Jaccard punishes that: the block-split
+/// item went from "Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — needs
+/// BeefyMac" to a 22-word version, scoring 0.22 by Jaccard and 0.83 by
+/// overlap. Overlap says "one of these is contained in the other", which
+/// is exactly the question.
+///
+/// Biased toward under-reporting: a missed carry costs nothing, a false
+/// one trains agents to ignore the signal.
+pub fn items_match(a: &str, b: &str) -> bool {
+    // Sets on BOTH sides: a repeated word must not inflate either the
+    // overlap or the denominator.
+    let sa: std::collections::BTreeSet<String> = content_words(a).into_iter().collect();
+    let sb: std::collections::BTreeSet<String> = content_words(b).into_iter().collect();
+    // Too short to have an identity — two three-word bullets can collide
+    // by accident, and a false positive is the expensive error here.
+    if sa.len() < 3 || sb.len() < 3 {
+        return false;
+    }
+    let hits = sa.intersection(&sb).count();
+    hits * 10 >= sa.len().min(sb.len()) * 6
+}
+
+/// Items in `next_body` that CONSECUTIVE ancestors were also carrying,
+/// as `(item, depth)`, worst first. `ancestor_next_bodies` is nearest
+/// ancestor first.
+///
+/// CONSECUTIVE is the load-bearing word. An item that appeared, was
+/// dropped, and came back is a re-prioritisation — legitimate, and
+/// precisely the behaviour this wants to encourage. Flagging it would
+/// punish the cure.
+///
+/// Lives here, not in either caller, because the frame WRITER and the
+/// boot-time READER must agree exactly: an advisory that changes its mind
+/// between "what you were told at boot" and "what you are told on write"
+/// is worse than no advisory.
+pub fn carried_across(next_body: &str, ancestor_next_bodies: &[String]) -> Vec<(String, usize)> {
+    let ancestors: Vec<Vec<String>> = ancestor_next_bodies
+        .iter()
+        .map(|b| bullet_items(b))
+        .collect();
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for item in bullet_items(next_body) {
+        let depth = ancestors
+            .iter()
+            .take_while(|theirs| theirs.iter().any(|t| items_match(&item, t)))
+            .count();
+        if depth > 0 {
+            out.push((item, depth));
+        }
+    }
+    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out
+}
+
+/// How many consecutive frames (this one included) say the same thing in
+/// a section. `0` when `body` is blank; `1` means fresh or just changed.
+pub fn same_across(body: &str, ancestor_bodies: &[String]) -> usize {
+    if body.trim().is_empty() {
+        return 0;
+    }
+    1 + ancestor_bodies
+        .iter()
+        .take_while(|theirs| !theirs.trim().is_empty() && items_match(body, theirs))
+        .count()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,6 +411,113 @@ mod tests {
         sections: &["Topics", "Entities", "Open threads"],
         token_budget: 100,
     };
+
+    // ── Carried-item detection ───────────────────────────────────────
+    // The fixtures below are VERBATIM from the frames that motivated
+    // this: `8815fdb9` and `c96d55a6`, banked on RuggedFox 2026-07-29.
+    // Synthetic fixtures would have let a too-strict matcher pass.
+
+    /// `## Next` bodies open with framing prose often enough (`311ec4b7`)
+    /// that swallowing it as an item would poison every comparison.
+    #[test]
+    fn bullet_items_folds_continuations_and_ignores_leading_prose() {
+        let body = "**THE STRUCTURAL GAP (verified this session):** measurements never\n\
+                    leave the machine that took them.\n\
+                    \n\
+                    1. **Make a measurement travel.** (a) gossip records peer-to-peer\n\
+                    (b) a published corpus keyed by hw fingerprints.\n\
+                    2. Retire the block-split pin.\n\
+                    - a dash item too\n";
+        let items = bullet_items(body);
+        assert_eq!(items.len(), 3, "leading prose is not an item: {items:?}");
+        assert!(
+            items[0].contains("gossip records peer-to-peer")
+                && items[0].contains("published corpus"),
+            "continuation lines fold into their item: {:?}",
+            items[0]
+        );
+        assert!(items[2].starts_with("- a dash item"));
+    }
+
+    /// The real failure mode is an item that gets ELABORATED as it is
+    /// carried, not reworded. This exact pair rode `8815fdb9` and
+    /// `c96d55a6`; Jaccard scores it 0.22 and would miss it entirely.
+    #[test]
+    fn an_elaborated_item_still_matches_its_earlier_self() {
+        let earlier = "4. Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — needs BeefyMac.";
+        let later = "5. Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — `mesh plan` on the 35B \
+                     reports the pin does NOT apply (needs 41 blocks) and the loader \
+                     rejects it too.";
+        assert!(items_match(earlier, later), "elaboration must still match");
+        assert!(items_match(later, earlier), "and the relation is symmetric");
+    }
+
+    #[test]
+    fn a_verbatim_recopy_matches() {
+        let a = "3. WorkerOverflow capacity basis (note cc8d033f) — park on `total`, \
+                 retry on `free`.";
+        assert!(items_match(a, a));
+    }
+
+    /// A false positive is the expensive error: it trains agents to
+    /// ignore the signal. Two unrelated items that share filler must not
+    /// collide, and neither must two items too short to have identity.
+    /// CONSECUTIVE is load-bearing: a gap in the chain means the item was
+    /// dropped and revived, which is re-prioritisation — the behaviour
+    /// this feature exists to ENCOURAGE, not flag.
+    #[test]
+    fn carried_across_counts_only_consecutive_ancestors() {
+        let item = "- WorkerOverflow capacity basis (note cc8d033f) — park on `total`, retry \
+                    on `free`.";
+        let other = "- something else entirely, concerning TLS certificate rotation";
+
+        let unbroken = carried_across(item, &[item.to_string(), item.to_string()]);
+        assert_eq!(unbroken.len(), 1);
+        assert_eq!(unbroken[0].1, 2, "two consecutive ancestors");
+
+        let broken = carried_across(item, &[other.to_string(), item.to_string()]);
+        assert!(
+            broken.is_empty(),
+            "the nearest ancestor dropped it, so this is a revival: {broken:?}"
+        );
+    }
+
+    /// Worst first, so a renderer can name the oldest without sorting.
+    #[test]
+    fn carried_across_reports_worst_first() {
+        let shallow = "- Cross-machine hop is UNOBSERVED, BeefyMac offline, needs the new build";
+        let deep = "- WorkerOverflow capacity basis (note cc8d033f) — park on `total`, retry \
+                    on `free`.";
+        let out = carried_across(
+            &format!("{shallow}\n{deep}"),
+            &[format!("{shallow}\n{deep}"), deep.to_string()],
+        );
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].1, 2, "the deeper item leads: {out:?}");
+        assert!(out[0].0.contains("WorkerOverflow"));
+    }
+
+    #[test]
+    fn same_across_counts_the_frame_itself_and_resets_on_change() {
+        let obj = "- Mesh users get a trustworthy speed number before committing hardware.";
+        let other = "- Something entirely different about the desktop installer surface.";
+        assert_eq!(same_across(obj, &[]), 1, "no ancestors, but this frame counts");
+        assert_eq!(same_across(obj, &[obj.to_string(), obj.to_string()]), 3);
+        assert_eq!(same_across(obj, &[other.to_string()]), 1, "a change resets");
+        assert_eq!(same_across("   ", &[obj.to_string()]), 0, "blank is not a streak");
+    }
+
+    #[test]
+    fn unrelated_items_do_not_collide() {
+        assert!(!items_match(
+            "- Fix the flaky test in `scheduler_core`",
+            "- Fix the daemon restart race"
+        ));
+        assert!(
+            !items_match("- commit it", "- commit it"),
+            "too short to carry identity, even when identical"
+        );
+    }
 
     #[test]
     fn round_trips_sections_and_unknown_frontmatter() {

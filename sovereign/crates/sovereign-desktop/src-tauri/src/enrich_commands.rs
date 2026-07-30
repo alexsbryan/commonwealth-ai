@@ -94,9 +94,7 @@ fn enrichment_root() -> PathBuf {
 }
 
 fn sovereign_root() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign")
+    sovereign_contracts::rebrand::data_dir()
 }
 
 fn index_root_for(corpus_id: &str) -> PathBuf {
@@ -403,17 +401,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn enrichment_root_nests_under_dot_sovereign() {
+    fn enrichment_root_nests_under_branded_data_root() {
         let root = enrichment_root();
         assert!(
             root.ends_with("enrichment"),
             "enrichment root should end with `enrichment`, got {}",
             root.display()
         );
-        assert!(
-            root.to_string_lossy().contains(".sovereign"),
-            "enrichment root should be under ~/.sovereign, got {}",
-            root.display()
+        // Since 2026-07-30 the root comes from the rebrand-aware SSOT
+        // (`rebrand::data_dir()`): `~/.svrnmesh` preferred, populated legacy
+        // `~/.sovereign` honored, SOVEREIGN_DATA_DIR override respected —
+        // so pin the derivation, not one brand spelling.
+        assert_eq!(
+            root,
+            sovereign_contracts::rebrand::data_dir().join("enrichment"),
+            "enrichment root must derive from the shared data root"
         );
     }
 

@@ -88,8 +88,11 @@ async fn http_post_json(url: &str, body: serde_json::Value) -> Option<reqwest::R
 
 // ── Checks ────────────────────────────────────────────────────────────────────
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 async fn check_server_running() -> CheckResult {
@@ -196,7 +199,7 @@ async fn check_scip_indexed() -> CheckResult {
     // that has failed every export for a week (e.g. the rust-analyzer
     // proxy was unresolved) still showed green. Open each DB and ask
     // it directly how many symbols it holds.
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     let mut populated: Vec<String> = Vec::new();
     let mut empty: Vec<String> = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&indexes_dir) {
@@ -279,7 +282,7 @@ async fn check_code_indexed() -> CheckResult {
     // doctor reported all-green. (`callers` / `callees` / `blast`
     // still worked off the SCIP SQLite, which is what made the
     // failure mode look like a tool bug instead of a data outage.)
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
         return CheckResult {
             name: "code_indexed",
@@ -352,7 +355,7 @@ async fn check_code_indexed() -> CheckResult {
 }
 
 fn check_notes_db() -> CheckResult {
-    let db = home_dir().join(".sovereign").join("notes.db");
+    let db = sovereign_root().join("notes.db");
     if db.exists() {
         CheckResult {
             name: "notes_db",
@@ -374,8 +377,8 @@ fn check_notes_db() -> CheckResult {
 
 fn check_project_indexed() -> CheckResult {
     // Lives under the indexes directory, not directly in ~/.sovereign/.
-    let project_db = home_dir()
-        .join(".sovereign")
+    let project_db = sovereign_root()
+        
         .join("indexes")
         .join("project_docs.db");
     if project_db.exists() {
@@ -612,10 +615,7 @@ fn find_watcher_health(v: &serde_json::Value) -> Option<serde_json::Value> {
 /// loop itself broke (or something else is dumping into the dir).
 fn check_log_dir_size() -> CheckResult {
     const WARN_BYTES: u64 = 1024 * 1024 * 1024; // 1 GiB
-    let log_dir = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".sovereign")
-        .join("logs");
+    let log_dir = sovereign_root().join("logs");
     let total: u64 = std::fs::read_dir(&log_dir)
         .map(|entries| {
             entries
@@ -1409,7 +1409,7 @@ async fn check_project_watchers() -> CheckResult {
 /// the doctor-level complement of the daemon's automatic
 /// quarantine-on-open behaviour.
 fn check_scip_integrity() -> CheckResult {
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
         return CheckResult {
             name: "scip_integrity",
@@ -1581,7 +1581,7 @@ fn orphaned_index_ids() -> Vec<String> {
 /// turns doctor's advice from "go figure out the path" into an exact,
 /// copy-pasteable command.
 fn orphaned_indexes() -> Vec<(String, Option<String>)> {
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
         return Vec::new();
     };
@@ -1632,7 +1632,7 @@ async fn check_code_tools_see_corpora() -> CheckResult {
     // Open each index and ask the REAL predicate about the REAL `IndexInfo`
     // — same `kind` derivation, same `has_code_graph` rule the tools use. No
     // corpus engine (and so no EmbedFn) is needed to answer this.
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     let mut visible: Vec<String> = Vec::new();
     for id in &on_disk {
         let Ok(index) = corpus_engine::CorpusIndex::open(&indexes_dir.join(id)).await else {
@@ -1749,7 +1749,7 @@ async fn check_watcher_freshness() -> CheckResult {
         };
     }
 
-    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    let indexes_dir = sovereign_root().join("indexes");
     // Allow this many seconds between source mtime and export time
     // before we flag. Covers normal debounce (2s) + worker latency +
     // the export run itself. Anything past this is a real wedge.

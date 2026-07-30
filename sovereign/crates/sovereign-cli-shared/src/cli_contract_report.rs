@@ -216,6 +216,9 @@ pub fn nightly_candidates() -> Vec<PathBuf> {
     if let Ok(dir) = std::env::var("JOURNEY_NIGHTLY_DIR") {
         out.push(PathBuf::from(dir).join("latest.json"));
     }
+    // Deliberate LEGACY-dir probe (candidate list, not a derivation): the
+    // branded-root candidate below covers the post-migration layout.
+    #[allow(clippy::disallowed_methods)]
     if let Some(home) = dirs::home_dir() {
         out.push(home.join(".sovereign").join("journey-nightly").join("latest.json"));
     }

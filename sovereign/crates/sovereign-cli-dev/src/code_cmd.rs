@@ -81,15 +81,9 @@ async fn cmd_finalize(args: &[String]) -> i32 {
         return if args.is_empty() { 1 } else { 0 };
     }
     let corpus_id = args[0].clone();
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => {
-            eprintln!("Cannot resolve home directory");
-            return 1;
-        }
-    };
-    let data_dir = home.join(".sovereign").join("indexes");
-    let recipes_dir = home.join(".sovereign").join("recipes");
+    let root = sovereign_root();
+    let data_dir = root.join("indexes");
+    let recipes_dir = root.join("recipes");
 
     // `finalise_solo_ingest` only inspects the filesystem — no embed
     // calls. A noop EmbedFn keeps the engine constructable without
@@ -183,14 +177,7 @@ async fn cmd_facts(args: &[String]) -> i32 {
 
     let facts = corpus_engine::facts::extract_facts(&repo, &roots);
 
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => {
-            eprintln!("cannot resolve home directory");
-            return 1;
-        }
-    };
-    let out_dir = home.join(".sovereign").join("indexes").join(&corpus_id);
+    let out_dir = sovereign_root().join("indexes").join(&corpus_id);
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
         eprintln!("cannot create {}: {e}", out_dir.display());
         return 1;
@@ -234,10 +221,10 @@ fn clip(s: &str, n: usize) -> String {
 }
 
 /// Load capability-ENTRY vectors (name, embedding) for entry-restricted resolution.
-fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
+fn load_entries(root: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
     let mut entry_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Ok(txt) = std::fs::read_to_string(
-        home.join(".sovereign/capabilities")
+        root.join("capabilities")
             .join(corpus)
             .join("capability_map.json"),
     ) {
@@ -274,7 +261,7 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
         }
     }
     let side = match std::fs::read_to_string(
-        home.join(".sovereign/specs/_fn_vecs")
+        root.join("specs/_fn_vecs")
             .join(format!("{corpus}.json")),
     ) {
         Ok(s) => s,
@@ -290,7 +277,7 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
         None => return Vec::new(),
     };
     let bin = match std::fs::read(
-        home.join(".sovereign/specs/_fn_vecs")
+        root.join("specs/_fn_vecs")
             .join(format!("{corpus}.bin")),
     ) {
         Ok(b) => b,
@@ -473,14 +460,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
         }
     };
 
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => {
-            eprintln!("cannot resolve home directory");
-            return 1;
-        }
-    };
-    let idx = home.join(".sovereign").join("indexes").join(&corpus);
+    let idx = sovereign_root().join("indexes").join(&corpus);
 
     // Load facts from the SQLite store (migrating a legacy facts.json in on
     // first read). `check-spec`'s deterministic checks iterate `Facts` in
@@ -511,7 +491,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
         Some(g) => Some(corpus_engine::facts_check::build_adjacency(g).await), // load edges once → fast in-memory BFS
         None => None,
     };
-    let entries = load_entries(&home, &corpus);
+    let entries = load_entries(&sovereign_root(), &corpus);
     let claims = match load_claims(&claims_path) {
         Ok(c) => c,
         Err(e) => {
@@ -713,7 +693,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     };
 
     // ── Open NoteStore + write ───────────────────────────────
-    let notes_path = home_dir().join(".sovereign").join("notes.db");
+    let notes_path = sovereign_root().join("notes.db");
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
@@ -968,7 +948,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     };
 
     // ── Notes store ───────────────────────────────────────────
-    let notes_path = home_dir().join(".sovereign").join("notes.db");
+    let notes_path = sovereign_root().join("notes.db");
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
@@ -989,8 +969,8 @@ async fn cmd_brief(args: &[String]) -> i32 {
         } else {
             format!("{id}-self-atlas")
         };
-        let candidate = home_dir()
-            .join(".sovereign")
+        let candidate = sovereign_root()
+            
             .join("indexes")
             .join(&name)
             .join("atlas");
@@ -1026,7 +1006,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     // ~/.sovereign/drift/; falls through to None if neither the
     // fingerprint nor the report exists yet (`render_drift_posture`
     // is itself robust to the empty case).
-    let drift_dir_path = home_dir().join(".sovereign").join("drift");
+    let drift_dir_path = sovereign_root().join("drift");
     let drift_dir_opt: Option<&Path> = if drift_dir_path.exists() {
         Some(drift_dir_path.as_path())
     } else {
@@ -1214,8 +1194,8 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
         }
     };
 
-    let db_path = home_dir()
-        .join(".sovereign")
+    let db_path = sovereign_root()
+        
         .join("indexes")
         .join(&corpus_id)
         .join("scip_graph.db");
@@ -1257,8 +1237,8 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     let map = build_capability_map(&symbols, &refs, &opts);
 
     let out_dir = out_dir.unwrap_or_else(|| {
-        home_dir()
-            .join(".sovereign")
+        sovereign_root()
+            
             .join("capabilities")
             .join(&corpus_id)
     });
@@ -1316,8 +1296,11 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     0
 }
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {

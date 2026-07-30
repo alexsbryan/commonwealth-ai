@@ -35,10 +35,7 @@ fn cached_atoms_json(corpus_id: &str) -> Option<std::sync::Arc<serde_json::Value
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()));
 
-    let base = std::env::var("SOVEREIGN_DATA_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
-    let path = base
+    let path = sovereign_contracts::rebrand::data_dir()
         .join("indexes")
         .join(corpus_id)
         .join("atlas")

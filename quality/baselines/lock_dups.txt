@@ -50,7 +50,6 @@ lru
 lz4_flex
 markup5ever
 md-5
-netlink-packet-route
 nom
 ordered-float
 pem-rfc7468

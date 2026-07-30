@@ -1,7 +1,15 @@
-# Environment-variable audit — dead-codepath survey
+# Environment-variable audit — dead-codepath survey (historical)
+
+> **The living inventory is now [`docs/ENV_FLAGS.md`](./ENV_FLAGS.md)**, generated
+> from the declared registry `quality/env-flags.toml` and enforced by
+> `cargo run -p xtask -- env-gate` (a NEW env var must be declared; pre-registry
+> debt rides the shrink-only baseline `quality/baselines/env_unregistered.txt`).
+> This file remains as the 2026-07-13 point-in-time survey — its Traps section
+> ("looks dead, has a live consumer") is still the archaeology to read before
+> removing anything.
 
 **Date:** 2026-07-13
-**Scope:** all app-specific `SOVEREIGN_*` / `LLAMA_*` env vars across the monorepo (238 distinct names, 908 `env::var` read sites in 245 files).
+**Scope:** all app-specific `SOVEREIGN_*` / `LLAMA_*` env vars across the monorepo (238 distinct names, 908 `env::var` read sites in 245 files — 267 names by the 2026-07-30 env-gate census).
 **Goal:** identify large dead codepaths behind env vars unlikely to be used again, as removal candidates.
 **Outcome:** survey only. No code was removed — see "Why nothing was removed" below.
 

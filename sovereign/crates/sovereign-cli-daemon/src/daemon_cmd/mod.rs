@@ -270,7 +270,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Ordered FIRST so a daemon that's been running for days and
     // produced a 5-GB log doesn't make the operator's `tail -f` drop
     // dead before the new daemon prints its first useful line.
-    let log_dir = home_dir_buf().join(".sovereign").join("logs");
+    let log_dir = sovereign_root().join("logs");
     crate::log_rotation::rotate_daemon_logs(
         &log_dir,
         crate::log_rotation::DEFAULT_SIZE_CAP_BYTES,
@@ -1011,10 +1011,10 @@ unsafe fn fast_exit_skip_destructors(code: i32) -> ! {
     libc_exit_no_finalize(code)
 }
 
-fn home_dir_buf() -> std::path::PathBuf {
-    std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
+/// Branded per-user data root (rebrand-aware path SSOT) — the daemon's
+/// pidfile, workspace pointer, and logs all hang off it.
+pub(crate) fn sovereign_root() -> std::path::PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 /// Surface orphaned per-corpus SCIP indexes at startup.

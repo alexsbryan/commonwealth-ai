@@ -287,6 +287,16 @@ else:
                  "`sovereign session frames` lists the others and "
                  "`sovereign session attach <id>` re-points this window._\n")
 
+            # What is being INHERITED, not just what was done. Pre-rendered by
+            # the CLI so this surface and the `session_state` write response
+            # can never disagree; absent (and silent) for a healthy handoff.
+            # SESSION_CONTINUITY.md §2.2.
+            if pred.get("inherited_advice"):
+                prov["inherited_carried"] = pred.get("carried_items")
+                prov["inherited_worst_frames"] = pred.get("carried_worst_frames")
+                prov["objective_sessions"] = pred.get("objective_sessions")
+                emit(f"\n{pred['inherited_advice']}\n")
+
         # (b′) A predecessor with no frame is worth saying out loud — the
         # successor should know its lineage resolved but the donor banked
         # nothing, rather than silently reading it as "fresh start".

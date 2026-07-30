@@ -284,13 +284,13 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// Canonical path: `~/.sovereign/projects.json`. Used by
-    /// `sovereign project register|unregister|list` and by the
-    /// daemon at startup.
+    /// Canonical path: `<branded root>/projects.json` (rebrand-aware —
+    /// prefers a populated `~/.svrnmesh`). Used by `sovereign project
+    /// register|unregister|list` and by the daemon at startup; readers
+    /// (symbol_lookup, doctor) resolve through the SAME accessor so
+    /// writer and reader cannot split.
     pub fn default_path() -> PathBuf {
-        dirs::home_dir()
-            .map(|h: PathBuf| h.join(".sovereign").join("projects.json"))
-            .unwrap_or_else(|| PathBuf::from("projects.json"))
+        sovereign_contracts::rebrand::projects_json()
     }
 
     /// Load from the canonical path. Missing file → empty registry.

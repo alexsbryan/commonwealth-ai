@@ -175,13 +175,15 @@ pub fn config_path(corpus_id: &str) -> PathBuf {
 }
 
 fn sovereign_root() -> PathBuf {
+    // SOVEREIGN_HOME is a deprecated third spelling of the data root
+    // (registered in quality/env-flags.toml); kept for compatibility
+    // until its setters are gone. Everything else routes through the
+    // rebrand-aware SSOT (which also honors SOVEREIGN_DATA_DIR and
+    // never falls back to a CWD-relative `.sovereign`).
     if let Ok(p) = std::env::var("SOVEREIGN_HOME") {
         return PathBuf::from(p);
     }
-    if let Some(home) = dirs::home_dir() {
-        return home.join(".sovereign");
-    }
-    PathBuf::from(".sovereign")
+    sovereign_contracts::rebrand::data_dir()
 }
 
 /// Folder-ingest v1 §3.3 cost-estimate range surfaced to the user

@@ -496,9 +496,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&atlas_mesh_store),
         atlas_node_id,
     ));
-    let atlas_cfg_path = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("work-atlas.toml"))
-        .unwrap_or_else(|| sovereign_dir.join("work-atlas.toml"));
+    let atlas_cfg_path = sovereign_cli_shared::dirs::work_atlas_toml();
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::load_or_default(&atlas_cfg_path)
         .unwrap_or_else(|e| {
             tracing::warn!(

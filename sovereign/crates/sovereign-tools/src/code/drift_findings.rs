@@ -142,10 +142,7 @@ pub struct DriftFindingsTool {
 
 impl DriftFindingsTool {
     pub fn new() -> Self {
-        let drift_dir = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(".sovereign")
-            .join("drift");
+        let drift_dir = sovereign_contracts::rebrand::drift_dir();
         Self { drift_dir }
     }
 

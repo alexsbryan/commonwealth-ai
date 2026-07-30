@@ -20,6 +20,10 @@ arch-layers = { workspace = true }
 # string scan mis-read diagnostics whose children precede the top-level
 # `level` field (every clippy lint with a help child), so: real parser.
 serde_json = { workspace = true }
+# env-gate parses quality/env-flags.toml (registry) and censuses the
+# workspace's env-var read sites (multiline-tolerant literal patterns).
+toml = { workspace = true }
+regex = { workspace = true }
 
 [lints]
 workspace = true

@@ -172,6 +172,19 @@ work.
 *The full surface-by-surface posture, including the honest gap ledger:
 [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md). Reporting: [`SECURITY.md`](../SECURITY.md).*
 
+**Configuration & state, in one breath.** Everything mutable lives on four
+roots: committed contracts in the repo (`quality/*.toml`,
+`sovereign/docs/cli-contract.toml`, `sovereign/models.toml` — reviewed like
+code, several machine-enforced); the per-checkout `.sovereign/` dir (project
+identity, notes, ATOS state); the per-user root `~/.svrnmesh` (legacy
+`~/.sovereign` symlink) holding `config.toml` and every index, model, and
+report; and the platform data dir for the shared mesh identity. Two rules
+keep it coherent: paths are derived only through the
+`sovereign_contracts::rebrand` / `sovereign_cli_shared::dirs` accessors
+(clippy-banned otherwise), and every env-var knob is declared in
+`quality/env-flags.toml` (gate-enforced; rendered at `docs/ENV_FLAGS.md`).
+The full map: [`sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §8.1.
+
 ## 7. Where to start
 
 1. **Run it.** `svrn setup` then `svrn chat` — the

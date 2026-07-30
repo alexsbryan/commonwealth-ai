@@ -382,10 +382,7 @@ impl Tool for BriefingTool {
         // Drift dir mirrors the CLI default (~/.sovereign/drift);
         // atlas/inquiries sections resolve the same conventions as
         // `cmd_brief` where the daemon can know them.
-        let drift_dir = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(".sovereign")
-            .join("drift");
+        let drift_dir = sovereign_contracts::rebrand::drift_dir();
         let drift_dir_opt = drift_dir.exists().then_some(drift_dir);
         let inquiries_dir = repo_root.join("inquiries");
         let inquiries_dir_opt = inquiries_dir.is_dir().then_some(inquiries_dir);

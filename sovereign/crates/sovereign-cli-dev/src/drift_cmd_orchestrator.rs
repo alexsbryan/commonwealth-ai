@@ -548,9 +548,9 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     // Mirror to the canonical agent path so `drift_posture` /
     // `drift_findings` can find the latest report without the
     // operator having to remember to point `--output` at it.
-    let canonical_dir = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("drift"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign/drift"));
+    // Must match the READ side (`rebrand::drift_dir()` in drift_posture /
+    // drift_findings / briefing) — both derive from the same branded root.
+    let canonical_dir = sovereign_root().join("drift");
     match mirror_to_canonical(&canonical_dir, &output_path, &narrative_abs) {
         Ok(canonical_md) => {
             info!(
@@ -701,7 +701,7 @@ async fn probe_chat(model: &str) -> bool {
 }
 
 fn ensure_recipe(corpus_id: &str, doc_path: &Path) -> bool {
-    let recipe_dir = home_dir().join(".sovereign/recipes").join(corpus_id);
+    let recipe_dir = sovereign_root().join("recipes").join(corpus_id);
     let recipe_toml = recipe_dir.join("recipe.toml");
     if recipe_toml.exists() {
         println!("    · recipe '{corpus_id}' exists (cached)");
@@ -806,8 +806,8 @@ fn patch_chat_model_in_config(cfg_path: &Path, chat_model: &str) {
 
 fn wait_for_corpus(corpus_id: &str, max_seconds: u64) {
     let start = std::time::Instant::now();
-    let meta = home_dir()
-        .join(".sovereign/indexes")
+    let meta = sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("_corpus_meta.json");
     while start.elapsed().as_secs() < max_seconds {
@@ -819,23 +819,23 @@ fn wait_for_corpus(corpus_id: &str, max_seconds: u64) {
 }
 
 fn corpus_exists(corpus_id: &str) -> bool {
-    let canonical = home_dir()
-        .join(".sovereign/indexes")
+    let canonical = sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("_corpus_meta.json");
     if canonical.exists() {
         return true;
     }
-    let partition = home_dir()
-        .join(".sovereign/indexes")
+    let partition = sovereign_root()
+        .join("indexes")
         .join(format!("{corpus_id}-partition-local"))
         .join("_corpus_meta.json");
     partition.exists()
 }
 
 fn pick_source_corpus(project_id: &str) -> String {
-    let partition = home_dir()
-        .join(".sovereign/indexes")
+    let partition = sovereign_root()
+        .join("indexes")
         .join(format!("{project_id}-partition-local"))
         .join("_corpus_meta.json");
     if partition.exists() {
@@ -846,8 +846,8 @@ fn pick_source_corpus(project_id: &str) -> String {
 }
 
 fn atlas_atoms_path(corpus_id: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/indexes")
+    sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("atlas")
         .join("atoms.json")
@@ -876,29 +876,32 @@ fn atlas_has_content(corpus_id: &str) -> bool {
 }
 
 fn cross_corpus_path(corpus_id: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/indexes")
+    sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("atlas")
         .join("cross_corpus_edges.json")
 }
 
 fn enrich_config_path(corpus_id: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/enrichment")
+    sovereign_root()
+        .join("enrichment")
         .join(corpus_id)
         .join("config.json")
 }
 
 fn chapters_path(corpus_id: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/indexes")
+    sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("chapters.json")
 }
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn basename_id(p: &Path) -> Option<String> {
@@ -985,8 +988,8 @@ fn run_code_index_with_retry(sovereign_bin: &str, code_path: &Path, project_id: 
         // create_or_resume + promote-to-canonical don't trip on
         // existing state from the failed attempt.
         for suffix in ["", "-partition-local"] {
-            let dir = home_dir()
-                .join(".sovereign/indexes")
+            let dir = sovereign_root()
+                .join("indexes")
                 .join(format!("{project_id}{suffix}"));
             if dir.exists() {
                 if let Err(e) = std::fs::remove_dir_all(&dir) {

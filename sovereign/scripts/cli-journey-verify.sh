@@ -247,6 +247,14 @@ declare -A FIX=(
   # legacy — so the atlas journey has to name one. `literary_atlas` suits the
   # markdown fixture corpus; `philosophy_atlas` is the other built-in.
   [pipeline]="${SOVEREIGN_JOURNEY_PIPELINE:-literary_atlas}"
+  # ── spec-to-code ───────────────────────────────────────────────────────
+  # {spec} is a markdown spec whose claims describe {project_root}'s code
+  # (sections need `## ` headers and >200 chars each to be processed);
+  # {claims} is where `enrich spec-intel` writes its output —
+  # <data.dir>/specs/<corpus>/<spec-stem>/claims.json — read back by
+  # check-spec, so the two values must agree on the spec's file stem.
+  [spec]="${SOVEREIGN_JOURNEY_SPEC:-}"
+  [claims]="${SOVEREIGN_JOURNEY_CLAIMS:-}"
   # Distinctive and single-token so the read-back assertion survives any
   # column truncation in `notes` output.
   [content]="${SOVEREIGN_JOURNEY_CONTENT:-journey-roundtrip-probe}"

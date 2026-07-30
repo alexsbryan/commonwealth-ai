@@ -3,7 +3,7 @@
 //! start / stop / restart / reload / status, the pidfile + port-probe
 //! plumbing, and graceful-shutdown signal handling.
 
-use super::home_dir_buf;
+use super::sovereign_root;
 
 /// The port this host's daemon is actually configured to serve on.
 ///
@@ -653,7 +653,7 @@ fn parse_ready_timeout(raw: Option<&str>) -> std::time::Duration {
 
 /// Path to the pidfile written by `daemon start`.
 pub(super) fn daemon_pid_path() -> std::path::PathBuf {
-    home_dir_buf().join(".sovereign").join("daemon.pid")
+    sovereign_root().join("daemon.pid")
 }
 
 /// Single-instance run lock (DAEMON_RESILIENCE.md P0.5).
@@ -681,7 +681,7 @@ pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
     {
         return Ok(None);
     }
-    let dir = home_dir_buf().join(".sovereign");
+    let dir = sovereign_root();
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("daemon.lock");
     match try_flock_exclusive(&path) {

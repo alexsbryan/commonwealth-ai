@@ -321,12 +321,12 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
         }
         return Ok(p.clone());
     }
-    let canonical_meta = home_dir()
-        .join(".sovereign/indexes")
+    let canonical_meta = sovereign_root()
+        .join("indexes")
         .join(source_corpus_id)
         .join("_corpus_meta.json");
-    let partition_meta = home_dir()
-        .join(".sovereign/indexes")
+    let partition_meta = sovereign_root()
+        .join("indexes")
         .join(format!("{source_corpus_id}-partition-local"))
         .join("_corpus_meta.json");
     let meta_path = if canonical_meta.exists() {
@@ -365,13 +365,16 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
     Ok(p)
 }
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn atlas_dir_for(corpus_id: &str) -> PathBuf {
-    home_dir()
-        .join(".sovereign/indexes")
+    sovereign_root()
+        .join("indexes")
         .join(corpus_id)
         .join("atlas")
 }
@@ -411,9 +414,9 @@ fn anchor_chunk_id(atom: &AtomEnvelope) -> Option<&str> {
 /// stores for code atoms — see `code_walk.rs:650`) to the chunk's
 /// `file_path` taken from `metadata_raw`.
 async fn build_chunk_path_map(corpus_id: &str) -> Result<HashMap<String, PathBuf>, String> {
-    let canonical = home_dir().join(".sovereign/indexes").join(corpus_id);
-    let partition = home_dir()
-        .join(".sovereign/indexes")
+    let canonical = sovereign_root().join("indexes").join(corpus_id);
+    let partition = sovereign_root()
+        .join("indexes")
         .join(format!("{corpus_id}-partition-local"));
     // Use `_corpus_meta.json` as the existence marker — the bare `<id>`
     // directory is sometimes pre-created for SCIP graph DB even when
@@ -426,7 +429,7 @@ async fn build_chunk_path_map(corpus_id: &str) -> Result<HashMap<String, PathBuf
         return Err(format!(
             "no chunk index for corpus '{corpus_id}' at {} (or partition-local sibling) — \
              run `svrn code index <path> --corpus-id {corpus_id}` first",
-            home_dir().join(".sovereign/indexes").display()
+            sovereign_root().join("indexes").display()
         ));
     };
     let index = corpus_engine::CorpusIndex::open(&index_dir)

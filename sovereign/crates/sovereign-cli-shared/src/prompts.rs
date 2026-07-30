@@ -87,6 +87,9 @@ pub fn prompt_path(prompt: &str) -> Result<Option<PathBuf>, String> {
         return Ok(None);
     }
     let expanded = if let Some(rest) = trimmed.strip_prefix("~/") {
+        // Legitimate home_dir use: tilde-expanding USER input wants the
+        // real home, not the sovereign data root.
+        #[allow(clippy::disallowed_methods)]
         dirs::home_dir()
             .map(|h| h.join(rest))
             .unwrap_or_else(|| PathBuf::from(&trimmed))

@@ -27,10 +27,7 @@ use sovereign_pipeline::pod;
 /// alongside the pipeline pod ledger so a single `chmod 700
 /// ~/.sovereign` covers both.
 pub fn owner_key_path() -> PathBuf {
-    let base = dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign"));
-    base.join("worker_owner_key.bin")
+    sovereign_cli_shared::dirs::sovereign_root().join("worker_owner_key.bin")
 }
 
 /// Load the owner's signing key, generating + persisting a fresh one

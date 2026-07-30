@@ -19,8 +19,11 @@ use corpus_engine::CorpusIndex;
 
 use sovereign_cli_shared::help::{Help, HelpSection};
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 const PRODUCER_VERSION: &str = concat!("sovereign-cli/", env!("CARGO_PKG_VERSION"));
@@ -258,7 +261,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
         return 2;
     };
 
-    let index_dir = home_dir().join(".sovereign/indexes").join(&corpus_id);
+    let index_dir = sovereign_root().join("indexes").join(&corpus_id);
     if !index_dir.exists() {
         eprintln!("Index directory not found: {}", index_dir.display());
         eprintln!(
@@ -266,7 +269,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
         );
         return 1;
     }
-    let enrichment_root = home_dir().join(".sovereign/enrichment").join(&corpus_id);
+    let enrichment_root = sovereign_root().join("enrichment").join(&corpus_id);
     let atlas_in_index = index_dir.join("atlas").is_dir();
     let enrichment_dir = if parsed.include_atlas && enrichment_root.exists() {
         Some(enrichment_root.clone())
@@ -328,8 +331,8 @@ async fn cmd_publish(args: &[String]) -> i32 {
         .clone()
         .unwrap_or_else(|| default_snapshot_id(&corpus_id, &index_dir));
     let output_path = parsed.output.clone().unwrap_or_else(|| {
-        home_dir()
-            .join(".sovereign/snapshots")
+        sovereign_root()
+            .join("snapshots")
             .join(format!("{snapshot_id}.tar.zst"))
     });
 
@@ -386,7 +389,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
         // sorted by id for deterministic manifest output.
         let mut sibling_index_dirs: Vec<(String, PathBuf)> = Vec::new();
         if !parsed.include_siblings.is_empty() {
-            let indexes_root = home_dir().join(".sovereign/indexes");
+            let indexes_root = sovereign_root().join("indexes");
             let entries = match std::fs::read_dir(&indexes_root) {
                 Ok(e) => e,
                 Err(e) => {
@@ -814,7 +817,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     let sovereign_data_dir = parsed
         .into
         .clone()
-        .unwrap_or_else(|| home_dir().join(".sovereign"));
+        .unwrap_or_else(|| sovereign_root());
     if !sovereign_data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&sovereign_data_dir) {
             eprintln!("cannot create {}: {e}", sovereign_data_dir.display());

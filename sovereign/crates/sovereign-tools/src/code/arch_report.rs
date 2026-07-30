@@ -278,11 +278,9 @@ pub fn render_report(data: &ArchReportData) -> String {
 /// Persist under `~/.sovereign/arch/<corpus>/` (the capability_findings
 /// pattern). Returns the directory written.
 pub fn persist_arch_report(data: &ArchReportData, markdown: &str) -> Result<PathBuf> {
-    let base = std::env::var("SOVEREIGN_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".sovereign")))
-        .unwrap_or_else(|_| PathBuf::from(".sovereign"));
-    let dir = base.join("arch").join(&data.corpus_id);
+    let dir = sovereign_contracts::rebrand::data_dir()
+        .join("arch")
+        .join(&data.corpus_id);
     let io_err = |e: std::io::Error| Error::Tool {
         tool_id: "arch_report".into(),
         message: format!("persist: {e}"),
@@ -594,12 +592,8 @@ impl Default for ArchReportTool {
 
 impl ArchReportTool {
     pub fn new() -> Self {
-        let base = std::env::var("SOVEREIGN_DATA_DIR")
-            .map(PathBuf::from)
-            .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".sovereign")))
-            .unwrap_or_else(|_| PathBuf::from(".sovereign"));
         Self {
-            indexes_dir: base.join("indexes"),
+            indexes_dir: sovereign_contracts::rebrand::data_dir().join("indexes"),
             project_root: None,
         }
     }

@@ -4723,7 +4723,7 @@ dependencies = [
  "float_next_after",
  "geo-types",
  "geographiclib-rs",
- "i_overlay 4.0.7",
+ "i_overlay",
  "log",
  "num-traits",
  "robust",
@@ -5699,25 +5699,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "i_float"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "519b2780a1187eeed09145e5d168863c87f0d704abe84084206ebd897f99c6dc"
-dependencies = [
- "libm",
-]
-
-[[package]]
 name = "i_key_sort"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9190f86706ca38ac8add223b2aed8b1330002b5cdbbce28fb58b10914d38fc27"
-
-[[package]]
-name = "i_key_sort"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d73d122b937fca067feb0ad74f62388920272b27c356d4df2d0cfdd59e044cf0"
 
 [[package]]
 name = "i_overlay"
@@ -5725,23 +5710,11 @@ version = "4.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413183068e6e0289e18d7d0a1f661b81546e6918d5453a44570b9ab30cbed1b3"
 dependencies = [
- "i_float 1.15.0",
- "i_key_sort 0.6.0",
- "i_shape 1.14.0",
- "i_tree 0.16.0",
+ "i_float",
+ "i_key_sort",
+ "i_shape",
+ "i_tree",
  "rayon",
-]
-
-[[package]]
-name = "i_overlay"
-version = "7.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf284de04038af713dad8b4a88d2bc97f1c8c0a87fc1f43e28e3b965d0136d9e"
-dependencies = [
- "i_float 3.0.0",
- "i_key_sort 0.10.3",
- "i_shape 3.0.0",
- "i_tree 0.19.0",
 ]
 
 [[package]]
@@ -5750,16 +5723,7 @@ version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ea154b742f7d43dae2897fcd5ead86bc7b5eefcedd305a7ebf9f69d44d61082"
 dependencies = [
- "i_float 1.15.0",
-]
-
-[[package]]
-name = "i_shape"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90b2ee7bae072887c579a2f2fd2a7fa1c29cceecfae1998ef940061c5570afff"
-dependencies = [
- "i_float 3.0.0",
+ "i_float",
 ]
 
 [[package]]
@@ -5767,12 +5731,6 @@ name = "i_tree"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35e6d558e6d4c7b82bc51d9c771e7a927862a161a7d87bf2b0541450e0e20915"
-
-[[package]]
-name = "i_tree"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9d4a992a9fe83130f41ceacceac3bb116a4355dfc9c8d6ecea4f1e4b4c6caf"
 
 [[package]]
 name = "iana-time-zone"
@@ -12069,6 +12027,7 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-agent-bench",
  "sovereign-cli-shared",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-store",
  "sovereign-tools",
@@ -12230,6 +12189,7 @@ dependencies = [
  "dirs 5.0.1",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "tokio",
  "toml 0.8.2",
  "tracing",
@@ -12470,6 +12430,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-inference",
  "sovereign-store",
@@ -12646,7 +12607,7 @@ dependencies = [
  "flate2",
  "futures",
  "glob",
- "i_overlay 7.0.2",
+ "i_overlay",
  "ignore",
  "image",
  "imageproc",
@@ -16170,7 +16131,9 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "arch-layers",
+ "regex",
  "serde_json",
+ "toml 0.8.2",
 ]
 
 [[package]]

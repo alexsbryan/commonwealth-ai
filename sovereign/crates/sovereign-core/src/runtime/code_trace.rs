@@ -74,10 +74,9 @@ struct CodeHit {
 /// (`runtime/evidence_loop.rs`). The scip db and the v2 atlas dir are siblings
 /// under it; one canonical layout, several readers.
 fn index_root(corpus_id: &str) -> PathBuf {
-    let base = std::env::var("SOVEREIGN_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
-    base.join("indexes").join(corpus_id)
+    sovereign_contracts::rebrand::data_dir()
+        .join("indexes")
+        .join(corpus_id)
 }
 
 /// `<data>/indexes/<corpus_id>/scip_graph.db` — the 1-hop trace's SQLite graph.

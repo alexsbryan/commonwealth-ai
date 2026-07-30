@@ -195,8 +195,8 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
     // The actual run-id is allocated by `cmd_run`, so write to a
     // sidecar keyed by branch_name; operators can correlate via the
     // branch name printed above.
-    let sidecar = home_dir()
-        .join(".sovereign")
+    let sidecar = sovereign_root()
+        
         .join("replay-synth")
         .join(&branch_name);
     let _ = std::fs::create_dir_all(&sidecar);
@@ -422,10 +422,11 @@ fn git_checkout_new_branch(workdir: &Path, branch: &str, base_sha: &str) -> Resu
     Ok(())
 }
 
-fn home_dir() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn print_help() {

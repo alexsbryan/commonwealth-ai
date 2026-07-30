@@ -147,7 +147,7 @@ pub async fn cmd_map(args: &[String]) -> i32 {
     let data_dir = cfg
         .as_ref()
         .map(|c| c.data.dir.clone())
-        .unwrap_or_else(|| home_dir().join(".sovereign"));
+        .unwrap_or_else(|| sovereign_root());
     let port = cfg.as_ref().map(|c| c.daemon.client_port).unwrap_or(9741);
     let base_url = format!("http://localhost:{port}");
 
@@ -616,6 +616,9 @@ fn tally_from_findings(md_path: &Path) -> Option<String> {
     Some(core.trim().trim_end_matches('.').trim().to_string())
 }
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }

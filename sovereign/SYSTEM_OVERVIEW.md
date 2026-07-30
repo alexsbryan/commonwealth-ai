@@ -3380,8 +3380,8 @@ Default ports:
 | Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
 | Know what a comparable project does (exo) before designing distributed inference | `docs/internal/EXO_COMPARATIVE_STUDY.md` — teardown of exo-explore/exo @ `b5375f8`: what to adopt, what we already lead on, and where both projects are stuck (notably: exo has **no** measured throughput or link-bandwidth signal either, which reframes SCHEDULER_QUALITY F10) |
 | Know which CLI *use cases* are promised, and whether they still work | `docs/cli-contract.toml` — `[[command]]` rows are the verb surface, `[[journey]]` rows are the 32 **sequenced** use cases (tiered 1-5 by user impact) and `[[stranded]]` is the ledger of verbs belonging to no journey. Enforced by `cli_contract_journeys` (static ratchet), `cli_journey_dispatch` (offline), `scripts/cli-journey-verify.sh` (live read-only) and `scripts/cli-journey-sandbox.sh` (live **mutating**, boots its own daemon in a private netns on :19741). See `docs/TESTING_SURFACE.md` L4j. First live run 2026-07-28 found six real CLI defects, incl. `daemon status` writing its answer to stderr and the whole `daemon`/`project` verb family ignoring a configured `client_port` |
-| Know which *promises* the CLI makes, and how much of each is actually proven | `[[experience]]` rows in the same manifest (added 2026-07-29) — 15 promises, each citing where it is promised and listing the **capabilities** it is made of; journeys declare which one they serve. `cli_contract_journeys::every_capability_is_exercised` requires each capability to be driven by a step that asserts OUTPUT (a read inline, a mutation by a later step), because every code-intelligence tool here exits **0** when it finds nothing. `MAX_UNSERVED_EXPERIENCES` is the gap register: `code-intel-chat` is declared with no journey rather than silently uncovered. `svrn contract map` renders it (or `cargo test -p sovereign-cli --test cli_contract_journeys --features dev-tools print_the_experience_map -- --nocapture` — same renderer), including the number no ratchet can fail on: steps that assert output, 72/136 repo-wide, with `correctness-loops` at 0/9 and `mesh-federation` carrying no live journey at all |
-| **See what the CLI promises and how much of it can actually fail** | **`svrn contract`** (dev-tools; `map` / `census` / `nightly` views) — the one front door, added 2026-07-30 because every layer of this surface was previously reachable only by knowing it existed. `census` is the number to read: it splits the manifest into steps **a lane runs** (74: 57 assert output, 17 exit-code-only mutations proven downstream, **0 asserting nothing**) and steps **nothing runs** (62 in 14 `skip_live` journeys, 44 asserting nothing) — because a step in a never-run journey is a written intention, and adding `exit = 0` to it satisfies a ratchet without adding evidence. Four gates: `live_steps_all_assert_something`, `live_read_steps_assert_output` and `every_live_journey_asserts_output_somewhere` are **hard zeros**; `steps_no_lane_runs_do_not_grow` caps the never-run debt at 62, shrink-only. Rendered by `sovereign_cli_shared::cli_contract_report`, shared with the cargo test so the reported number and the enforced number are the same one. `svrn contract` is itself journeyed (`cli-quality` / `contract-audit`) |
+| Know which *promises* the CLI makes, and how much of each is actually proven | `[[experience]]` rows in the same manifest (added 2026-07-29) — 15 promises, each citing where it is promised and listing the **capabilities** it is made of; journeys declare which one they serve. `cli_contract_journeys::every_capability_is_exercised` requires each capability to be driven by a step that asserts OUTPUT (a read inline, a mutation by a later step), because every code-intelligence tool here exits **0** when it finds nothing. `MAX_UNSERVED_EXPERIENCES` is the gap register: `code-intel-chat` is declared with no journey rather than silently uncovered. `svrn contract map` renders it (or `cargo test -p sovereign-cli --test cli_contract_journeys --features dev-tools print_the_experience_map -- --nocapture` — same renderer), including the number no ratchet can fail on: steps that assert output, 77/141 repo-wide, with `correctness-loops` at 0/9 and `mesh-federation` carrying no live journey at all |
+| **See what the CLI promises and how much of it can actually fail** | **`svrn contract`** (dev-tools; `map` / `census` / `nightly` views) — the one front door, added 2026-07-30 because every layer of this surface was previously reachable only by knowing it existed. `census` is the number to read: it splits the manifest into steps **a lane runs** (79: 62 assert output, 17 exit-code-only mutations proven downstream, **0 asserting nothing**) and steps **nothing runs** (62 in 14 `skip_live` journeys, 44 asserting nothing) — because a step in a never-run journey is a written intention, and adding `exit = 0` to it satisfies a ratchet without adding evidence. Four gates: `live_steps_all_assert_something`, `live_read_steps_assert_output` and `every_live_journey_asserts_output_somewhere` are **hard zeros**; `steps_no_lane_runs_do_not_grow` caps the never-run debt at 62, shrink-only. Rendered by `sovereign_cli_shared::cli_contract_report`, shared with the cargo test so the reported number and the enforced number are the same one. `svrn contract` is itself journeyed (`cli-quality` / `contract-audit`) |
 | Run the *capability* half of the journey harness | Journeys declare `needs = ["operator-home" \| "indexed-repo"]` for state a throwaway sandbox cannot have. `cli-journey-sandbox.sh` passes `--lacks` for both and `cli-journey-nightly.sh` then runs exactly that remainder READ-ONLY against the operator's own daemon, so nothing is dropped by both lanes. Replaced a hardcoded `SANDBOX_EXCLUDES` array of journey ids that was invisible from the manifest |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
@@ -3404,6 +3404,61 @@ Default ports:
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
 | Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
+
+| Is any quality subsystem's posture stale? | **`svrn posture`** (dev-tools) — one read-only table: artifact age + verdict for drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines; each row names its refresh command. Added 2026-07-30 because drift and arch had both been weeks stale with nothing aggregating that fact |
+
+### 8.1 Where configuration and state live
+
+The system's configuration and mutable state live on four roots. The rule that
+holds them together (center-of-mass program, 2026-07-30): **path derivations
+come from the SSOT accessors** — `sovereign_contracts::rebrand`
+(`svrnmesh_root` / `data_dir` / `projects_json` / `work_atlas_toml` /
+`drift_dir` / `state_db_path` / `mesh_data_dir`) or their
+`sovereign_cli_shared::dirs` wrappers — enforced by a `clippy.toml`
+`disallowed-methods` ban on hand-rolled `dirs::home_dir` joins. **Env-var
+overrides are declared** in `quality/env-flags.toml` (enforced by `cargo run
+-p xtask -- env-gate`; human view generated at `docs/ENV_FLAGS.md`), and ~25
+of them shadow `SetupConfig` fields — declared debt via the registry's
+`shadows` key, unification deferred to `quality/CLEANUP.md`.
+
+**Committed contracts (versioned, reviewed):**
+
+| Surface | What it declares | Writer | Enforced / read by |
+|---|---|---|---|
+| `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
+| `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
+| `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
+| `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
+| `models.toml` | model selection per hardware | humans | daemon model selection |
+| `../sovereign-recipes/registry.toml` | recipe registry | humans | `corpus-engine/src/registry.rs` |
+| `../clippy.toml` | lint budgets + the path-SSOT ban | humans | clippy / lint-gate ratchet |
+
+**Repo-local `.sovereign/` (per-checkout):** `project.toml` + `project.json`
+(project identity — triplicated with the per-user `projects.json`; on the
+CLEANUP ledger), `sovereign.toml` (per-repo daemon/watcher posture — watchers
+deliberately off in this repo), `notes.db` (gossiped working notes; dual-homed
+with the per-user root via the `active_notes_db` pointer — CLEANUP),
+`mesh.db` (CLI work-atlas claims — **split-brain**: the daemon keeps its
+atlas store in memory, so CLI claims never gossip; CLEANUP), `features.db`
+(ATOS), `SOVEREIGN.md` (the repo charter agents read).
+
+**Per-user root** — `~/.svrnmesh`, with `~/.sovereign` as the transitional
+symlink the migrator leaves behind (`rebrand::run_startup_migration`); on this
+host the migration has run. Key members: `config.toml` (`SetupConfig` — THE
+per-user config; note the accumulating `config.toml.bak-*` experiment
+siblings), `work-atlas.toml` (atlas node config + privacy default),
+`projects.json` (project registry — writer `sovereign project register` and
+readers now share one accessor), `~/.svrnmesh/indexes/<corpus>/` (LanceDB
+chunks, `scip_graph.db`, atlas), `~/.svrnmesh/drift/` (drift-report mirror),
+`~/.svrnmesh/arch/` + `~/.svrnmesh/capabilities/` (posture artifacts),
+`~/.svrnmesh/sessions/` (session-continuity frames), plus the models /
+corpora / recipes / logs trees, `workspace`, `daemon.pid`,
+`worker_owner_key.bin`, and the `active_notes_db` pointer.
+
+**Platform data dir** — `~/.local/share/svrnmesh` (legacy `sovereign` name
+still common on migrated hosts; resolve via `rebrand::mesh_data_dir`):
+`mesh.json`, `node_id`, `join_key.secret` — the mesh identity, deliberately
+platform-native so the desktop app and CLI share it.
 
 ---
 
@@ -3536,6 +3591,33 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
 | `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
+
+### 10.1c Size-debt acceptance — 2026-07-30 red-gate sweep
+
+The arch-gate baseline was refrozen 2026-07-30 (137 oversized files) after the
+May–July arcs grew the workspace past the previous freeze. Files that were
+already rows above stay governed by their own entries (`conv_tiered.rs` note:
+the growth its row predicted has now happened — it crossed 1,200 at 1,310).
+The rows below ledger the files that became oversized WITHOUT an entry,
+grouped by the arc that grew them; each group splits when its surface
+stabilises, same contract as every other row in this section.
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| Mesh measurement + allocation arc | `sovereign-cli-llm/src/mesh_cmd.rs` (4,730 — grew +3,419), `sovereign-cli-llm/src/mesh_bench.rs` (2,275) + `mesh_bench/tests.rs` (1,583), `sovereign-core/src/mesh_measurements.rs` (2,925), `sovereign-mesh/src/decision_log.rs` (1,348), `sovereign-mesh/src/mesh_http.rs` (1,623), `sovereign-mesh/src/mesh_sim/mod.rs` (2,380), `sovereign-mesh/tests/mesh_sim_scoreboard.rs` (2,750), `sovereign-mesh/src/scheduler_core.rs` (1,215), `sovereign-mesh/tests/chat_completion_e2e.rs` (1,511) | The allocation/measurement/plan surface is the hottest current iteration (RunConditions, median-run headlines, gossip-travel measurements — commits through `df88e073`). Splitting mid-arc obscures blame on an algorithm still settling; `mesh_cmd.rs` splits along its verb families (plan/measure/bench) once the measurement schema freezes. |
+| 122B distributed inference | `sovereign-inference/src/embedded/rpc_warm_cache.rs` (1,606), `sovereign-mesh/src/rpc_warm_http.rs` (1,236) | RPC warm-cache + its HTTP surface; ggml-RPC-over-iroh is still an open workstream (`docs/QWEN122B_DISTRIBUTED_HANDOFF.md`) — the seam moves with it. |
+| Session continuity + context-spend arc | `sovereign-cli/src/session_cmd.rs` (3,215), `sovereign-tools/src/code/session_state.rs` (1,421), `sovereign-cli/src/cache_audit_cmd.rs` (2,312) | Frame lineage/objective machinery and the cache auditor grew together with `docs/specs/SESSION_CONTINUITY.md` §2; `session_cmd.rs` splits per verb (frames/attach/distill) once the frame contract stops moving. |
+| CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,390), `sovereign-cli/src/main.rs` (1,202) | Contract model + dispatcher; `main.rs` sits 2 lines over the ceiling and shrinks when the next verb family moves out-of-process. |
+| Compute-child process boundary | `sovereign-compute/src/manager.rs` (1,585), `sovereign-compute/src/supervisor.rs` (1,532) | New crate (P1, 2026-07); manager/supervisor cohere as one lifecycle state machine until a second child type exists to force the seam. |
+| Retrieval redesign 2026H2 | `sovereign-core/src/runtime/retrieval/history.rs` (1,310), `sovereign-core/src/runtime/retrieval/query_expansion.rs` (1,578), `sovereign-tools/src/raptor_atlas.rs` (1,389) | ANN-refine + expansion pipeline under active redesign (S4 gate validated, blocked on chunk-eviction fix); splitting before S4 lands re-merges. |
+| Router calibration | `sovereign-core/src/router_calibration.rs` (1,317) | Calibration bank + heuristic floor; splits from the router once the framework-routing matrix (v1, 4 cells) grows its next cell. |
+| Desktop command families | `sovereign-desktop/src-tauri/src/governance_commands.rs` (1,215), `sovereign-desktop/src-tauri/src/local_corpus_commands.rs` (1,295) | Per-surface Tauri command modules; each splits along its sub-page boundary when the Svelte-side W1–W6 work resumes. |
+| Meshapp platform SDK | `sovereign-meshapp/src/wrapped.rs` (1,210), `sovereign-meshapp/src/wrapped/semantic.rs` (1,403) | Wrapped-projection + semantic layer; the `_sdk/` catalog contract is newer than either file — split follows the SDK's shape. |
+| OICP studio extraction | `oicp-client/src/lib.rs` (1,754) | The corpus-engine-free client carve-out landed as one file by design (boundary-gate leaf); splits into transport/session/structured-output modules on next growth. |
+| Chaos scoring | `sovereign-eval/src/chaos_monkey/score.rs` (1,381) | Rubric scorer for the reliability-report sweep; per-dimension split lands with the pinned-critic work. |
+| Reindexer liveness | `sovereign-mesh/src/reindexer.rs` (1,519) | Freshness gate + heartbeat + supervisor self-heal grew together (watcher-liveness hardening); split waits for the watcher re-enable decision. |
+| corpus-engine index search | `corpus-engine/src/index/search.rs` (1,213) | 13 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
+| Iroh transport (cmnwlth) | `commonwealth/crates/commonwealth-transport/src/iroh.rs` (1,280) | No-VPN mesh arc (invite/join/gossip over iroh) landed as one transport module; splits dialer/acceptor/relay once the relay-floor characterization settles. |
 
 ### 10.2 cmnwlth deferrals
 

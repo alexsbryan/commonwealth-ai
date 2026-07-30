@@ -466,6 +466,14 @@ feature = "dev-tools"
 path = "contract nightly"
 binary = "dispatcher"
 feature = "dev-tools"
+# posture — the cross-subsystem roll-up beside `contract`'s CLI-only view:
+# one read-only table of artifact age + verdict per quality subsystem
+# (drift / arch / capability / contract-nightly / watchers / env-gate /
+# bench baselines), each row naming its refresh command.
+[[command]]
+path = "posture"
+binary = "dispatcher"
+feature = "dev-tools"
 
 # drift — bare (spec diff), accept, detect.
 [[command]]
@@ -1959,12 +1967,15 @@ experience = "spec-to-code"
 tier = 4
 doc = "docs/CHECK_CODE_AGAINST_SPEC.md"
 [[journey.step]]
-run = "code facts {repo} --corpus-id {corpus}"
+run = "code facts {project_root} --corpus-id {project}"
 mutates = true
 note = """REAL but UNDECLARED: `code facts` has no [[command]] row \
 (CLI_REFERENCE omits it). The summary line is unconditional and on stdout \
 (`… N construction-fields · N string-literals · N function-defs → path`, \
-code_cmd.rs:212), so this mutation can assert its own effect."""
+code_cmd.rs:212), so this mutation can assert its own effect. Tokens: \
+{project}/{project_root} (the CODE-corpus namespace), never {corpus} — the \
+fact base must land in the same indexes/<id>/ dir as the project's \
+scip_graph.db so check-spec finds both."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "construction-fields"
@@ -1973,13 +1984,19 @@ run = "enrich spec-intel {spec} --corpus {corpus}"
 mutates = true
 note = """REAL but UNDECLARED: `enrich spec-intel` has no [[command]] row. Its \
 closing summary is on stdout (spec_intel.rs:433) and names the spec it read, so \
-this step asserts it rather than the per-section chatter above it."""
+this step asserts it rather than the per-section chatter above it. {corpus} \
+(the KNOWLEDGE corpus) is deliberate here: spec-intel takes its chat model + \
+daemon base_url from that corpus's EnrichConfig, which the enrich-atlas \
+journey creates earlier in the same lane — the claims land at \
+<data.dir>/specs/<corpus>/<spec-stem>/claims.json."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "=== spec-intel:"
 [[journey.step]]
-run = "code check-spec --corpus {corpus} --claims {claims}"
-note = "REAL but UNDECLARED: `code check-spec` has no [[command]] row"
+run = "code check-spec --corpus {project} --claims {claims}"
+note = """REAL but UNDECLARED: `code check-spec` has no [[command]] row. \
+{project} again (facts + optional scip graph from the code-corpus dir); \
+{claims} is the file the previous step wrote."""
 [journey.step.expect]
 stdout_non_empty = true
 
@@ -2491,6 +2508,18 @@ that is where a quality tool starts dying."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "run it yourself"
+[[journey.step]]
+run = "posture"
+note = """the cross-subsystem sibling of `contract nightly`: one table of artifact \
+age per quality subsystem, added 2026-07-30 because drift AND arch had been weeks \
+stale with nothing anywhere aggregating that fact. Asserts the drift ROW (a \
+subsystem the registry walked), not the header — the header prints before any \
+source is read, so it is exactly what a broken walk still looks like. On a host \
+that has never run drift the row still renders (`never_run`), so this assertion \
+is lane-independent."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "drift"
 
 # ═════════════════════════════════════════════════════════════════════════
 # STRANDED — verbs that belong to no journey.

@@ -17,14 +17,18 @@ use std::path::PathBuf;
 
 /// Root of the per-user data directory. Every mutable piece of
 /// sovereign state lives underneath: models, corpora, mesh.json,
-/// notes.db, per-project indexes, logs.
+/// notes.db, per-project indexes, logs. Delegates to the rebrand-aware
+/// SSOT (`sovereign_contracts::rebrand`) — prefer `~/.svrnmesh`, fall
+/// back to a populated legacy `~/.sovereign`.
 pub fn sovereign_root() -> PathBuf {
-    // Prefer `~/.svrnmesh`; fall back to a populated legacy `~/.sovereign`
-    // so this resolves correctly whether or not the rename migration has run.
-    match dirs::home_dir() {
-        Some(home) => resolve_branded_dir(home.join(".svrnmesh"), home.join(".sovereign")),
-        None => PathBuf::from("."),
-    }
+    sovereign_contracts::rebrand::svrnmesh_root()
+}
+
+/// `<root>/work-atlas.toml` — pass-through to the SSOT accessor for
+/// crates (sovereign-cli-dev) that depend on this crate but not on
+/// sovereign-contracts directly.
+pub fn work_atlas_toml() -> PathBuf {
+    sovereign_contracts::rebrand::work_atlas_toml()
 }
 
 /// Where per-project code intelligence indexes live
@@ -44,14 +48,11 @@ pub fn sovereign_meshapps() -> PathBuf {
 
 /// Where the embedded Commonwealth mesh persists its `mesh.json` —
 /// shared with `sovereign-desktop` so a mesh created from either
-/// surface is picked up by the other. Intentionally uses
-/// `dirs::data_dir()` (platform-native data dir) rather than our
-/// `sovereign_root()` so it matches the desktop app's storage.
+/// surface is picked up by the other. Intentionally uses the
+/// platform-native data dir rather than `sovereign_root()` so it
+/// matches the desktop app's storage. Delegates to the SSOT.
 pub fn mesh_data_dir() -> PathBuf {
-    match dirs::data_dir() {
-        Some(data) => resolve_branded_dir(data.join("svrnmesh"), data.join("sovereign")),
-        None => PathBuf::from("."),
-    }
+    sovereign_contracts::rebrand::mesh_data_dir()
 }
 
 /// Same shape as `project_cmd::default_data_dir` before the split:
@@ -64,26 +65,6 @@ pub fn default_data_dir() -> Option<PathBuf> {
     } else {
         Some(p)
     }
-}
-
-/// Prefer the rebranded dir when it holds data; fall back to a populated
-/// legacy dir; else (fresh install) use the new dir. Mirrors
-/// `sovereign_core::rebrand::resolve_branded_dir` (duplicated because this
-/// crate has no dependency on `sovereign-core`).
-fn resolve_branded_dir(new: PathBuf, legacy: PathBuf) -> PathBuf {
-    if dir_is_populated(&new) {
-        new
-    } else if legacy.exists() {
-        legacy
-    } else {
-        new
-    }
-}
-
-fn dir_is_populated(p: &std::path::Path) -> bool {
-    std::fs::read_dir(p)
-        .map(|mut entries| entries.next().is_some())
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

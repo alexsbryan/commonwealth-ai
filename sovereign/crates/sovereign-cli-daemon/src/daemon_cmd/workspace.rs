@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use super::home_dir_buf;
+use super::sovereign_root;
 
 /// Resolve the workspace directory the daemon should watch for
 /// lint/test changes. Returns `None` when the user has not opted in,
@@ -46,7 +46,7 @@ pub(super) fn resolve_workspace_dir() -> Option<PathBuf> {
     // 2. User-pinned path written to `~/.sovereign/workspace`.
     //    Honoured when the user wants a non-default location (e.g.
     //    multi-checkout dev with switching).
-    let workspace_file = home_dir_buf().join(".sovereign").join("workspace");
+    let workspace_file = sovereign_root().join("workspace");
     if let Ok(contents) = std::fs::read_to_string(&workspace_file) {
         let trimmed = contents.trim();
         if !trimmed.is_empty() {

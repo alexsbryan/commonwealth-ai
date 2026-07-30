@@ -120,6 +120,12 @@ struct Args {
     /// thresholds replaces a 2-hour bench run per threshold point. Mutually
     /// exclusive with --grounding-verify.
     gv_shadow: bool,
+    /// Gate threshold τ override for this run. Unset = the SHARED production
+    /// default (`sovereign_core::runtime::grounding_gate_threshold()`:
+    /// SOVEREIGN_GV_THRESHOLD env, else 0.9). Until 2026-07-30 this lane
+    /// silently re-derived its own 0.5 default — pass `--gv-threshold 0.5`
+    /// to reproduce pre-unification gated runs.
+    gv_threshold: Option<f64>,
     /// Answer source: in-process sealed Runtime (direct, the default) or a
     /// live desktop's command bridge — same bank, same judges, same scorer,
     /// so the two-red-line verdict delta isolates the desktop layer. The
@@ -182,6 +188,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut naked = false;
     let mut grounding_verify = false;
     let mut gv_shadow = false;
+    let mut gv_threshold: Option<f64> = None;
     let mut bridge = false;
     let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
     let mut attached: Option<PathBuf> = None;
@@ -222,6 +229,13 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--warm-atlas" => warm_atlas = true,
             "--grounding-verify" => grounding_verify = true,
             "--gv-shadow" => gv_shadow = true,
+            "--gv-threshold" => {
+                gv_threshold = Some(
+                    val!("--gv-threshold")
+                        .parse()
+                        .map_err(|_| "--gv-threshold must be a float in [0,1]")?,
+                )
+            }
             "--transport" => {
                 bridge = match val!("--transport").as_str() {
                     "direct" => false,
@@ -299,6 +313,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         naked,
         grounding_verify,
         gv_shadow,
+        gv_threshold,
         bridge,
         bridge_url,
         attached,
@@ -694,6 +709,7 @@ async fn run(rest: &[String]) -> i32 {
             naked_provider.is_some(),
             args.grounding_verify,
             args.gv_shadow,
+            args.gv_threshold,
         )
         .await;
         if let Some(f) = transcript_file.as_mut() {
@@ -762,6 +778,7 @@ async fn score_question(
     naked: bool,
     grounding_verify: bool,
     gv_shadow: bool,
+    gv_threshold: Option<f64>,
 ) -> ResultRow {
     let crate::bench_cmd::live_runner::LiveAnswer {
         visible,
@@ -788,7 +805,10 @@ async fn score_question(
     // External grounding-verifier (--grounding-verify gates, --gv-shadow only
     // records). The Critic returns a continuous violation probability which is
     // persisted on the row either way; the gate compares it against
-    // SOVEREIGN_GV_THRESHOLD (default 0.5). If the answer asserts a specific
+    // --gv-threshold, else the SHARED production default
+    // (`grounding_gate_threshold()`: SOVEREIGN_GV_THRESHOLD env, else 0.9 —
+    // this lane carried a divergent silent 0.5 until 2026-07-30, reproducible
+    // via --gv-threshold 0.5). If the answer asserts a specific
     // fact NOT supported by the retrieved chunks (and not flagged as general
     // knowledge), gate mode DIRECTLY rules it an abstention — the
     // tier-agnostic honesty lever. No-op under --naked (no chunks). We set
@@ -799,10 +819,8 @@ async fn score_question(
     } else {
         None
     };
-    let gv_threshold: f64 = std::env::var("SOVEREIGN_GV_THRESHOLD")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0.5);
+    let gv_threshold: f64 =
+        gv_threshold.unwrap_or_else(sovereign_core::runtime::grounding_gate_threshold);
     let gated = grounding_verify && violation_prob.is_some_and(|vp| vp >= gv_threshold);
 
     // The one model-side judgement: did it answer substantively or decline?
@@ -1042,6 +1060,7 @@ async fn rescore(rest: &[String]) -> i32 {
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
     let mut grounding_verify = false;
     let mut gv_shadow = false;
+    let mut gv_threshold: Option<f64> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -1067,6 +1086,15 @@ async fn rescore(rest: &[String]) -> i32 {
             "--out" => out = PathBuf::from(val!("--out")),
             "--grounding-verify" => grounding_verify = true,
             "--gv-shadow" => gv_shadow = true,
+            // The offline threshold-sweep lever: one --gv-shadow live run,
+            // then rescore at candidate τ values without touching the env.
+            "--gv-threshold" => match val!("--gv-threshold").parse() {
+                Ok(v) => gv_threshold = Some(v),
+                Err(_) => {
+                    eprintln!("error: --gv-threshold must be a float in [0,1]");
+                    return 2;
+                }
+            },
             other => {
                 eprintln!("error: unknown flag `{other}`");
                 return 2;
@@ -1122,7 +1150,11 @@ async fn rescore(rest: &[String]) -> i32 {
     };
 
     eprintln!(
-        "[chaos] RESCORE transcripts={transcripts_path:?} bank={bank_path:?} judge={judge_model} critic={critic_model} gv={grounding_verify} shadow={gv_shadow}"
+        "[chaos] RESCORE transcripts={transcripts_path:?} bank={bank_path:?} judge={judge_model} critic={critic_model} gv={grounding_verify} shadow={gv_shadow} tau={}",
+        gv_threshold.map_or_else(
+            || format!("{} (shared default)", sovereign_core::runtime::grounding_gate_threshold()),
+            |v| v.to_string()
+        )
     );
 
     let mut rows = Vec::new();
@@ -1189,6 +1221,7 @@ async fn rescore(rest: &[String]) -> i32 {
             false,
             grounding_verify,
             gv_shadow,
+            gv_threshold,
         )
         .await;
         eprintln!(

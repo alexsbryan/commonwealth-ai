@@ -2197,9 +2197,7 @@ pub(super) fn setup_watchers_and_work_atlas(
     // broadcaster in once `app_state` is available.
     let work_atlas_broadcaster = Arc::new(sovereign_work_atlas::tools::DeferredBroadcaster::new());
     let work_atlas_cfg = {
-        let path = dirs::home_dir()
-            .map(|h| h.join(".sovereign").join("work-atlas.toml"))
-            .unwrap_or_else(|| data_dir.join("work-atlas.toml"));
+        let path = sovereign_core::rebrand::work_atlas_toml();
         sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path).unwrap_or_else(|e| {
             tracing::warn!(
                 error = %e,

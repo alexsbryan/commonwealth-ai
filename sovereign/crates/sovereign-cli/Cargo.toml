@@ -23,6 +23,11 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-store = { workspace = true }
+# Bottom-layer `contract` crate (ARCH_LAYERS.toml). Needed for the shared
+# frame combinators: the boot-time frame READER and the frame WRITER
+# (sovereign-tools) must compute the carried-item advisory identically, and
+# sovereign-cli cannot see sovereign-tools in a gated build.
+sovereign-contracts = { workspace = true }
 sovereign-agent-bench = { workspace = true, optional = true }
 # `awareness_cmd` (the `awareness` feature only) needs the heavy
 # `knowledge_view` surface from sovereign-tools. Default + `dev-tools`

@@ -81,6 +81,32 @@ recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
   hold the state; your encode-time writes are the strong path
   (auto-distilled frames recall ~17% and never authorize a split). A
   wrap-up request should be a final small upsert, not a from-scratch write.
+- **`objective` is required, and you INHERIT it — you do not re-author it.**
+  Any write touching `goal`/`state`/`next`/`decisions` is rejected while the
+  frame's `## Objective` is blank. It holds the STANDING outcome the work
+  serves — what a user gets when the initiative lands — plus `Done when:`
+  (falsifiable at initiative altitude) and `Not worth continuing if:`. When
+  continuing a predecessor, copy its `## Objective` verbatim from the frame
+  the boot hook already injected; edit it only if the objective genuinely
+  changed, and say so in `Decisions` when it does. **Restating it as a delta
+  from the last frame ("item two's remaining half") is the specific failure
+  this exists to stop** — audited 2026-07-29, 21 of 63 frames did exactly
+  that, and one three-session chain lost the name of its own objective.
+  Contract: `SESSION_CONTINUITY.md §2.1`.
+- **Re-rank `Next` against the objective before you continue it.** The same
+  audit found a lineage recopying four backlog items verbatim across three
+  frames — carried forever, never done, never dropped. Inheriting an item is
+  a decision, not a default: drop what the objective does not need. The write
+  response now tells you: `carried[]` lists `Next` items your ancestors were
+  also carrying (with `depth`), and `objective_sessions` counts how many
+  consecutive frames have stated this same objective. **Act on it in the same
+  turn** — do the item, drop it, or say in `Objective` why it stays. It is
+  advisory because carrying is often right; it is reported because carrying
+  silently never is. Contract: `SESSION_CONTINUITY.md §2.2`.
+- **Use the HARNESS session id, not the one `declare_scope` returns.** They are
+  different namespaces. A frame banked under the daemon's session id is an
+  orphan the boot hook can never find (hit live 2026-07-29). Your harness id is
+  in the scratchpad path and the boot banner.
 - **As the successor:** the boot hook injects the frame **index** (one line
   per live frame), and the first prompt injects the top-ranked frame whole.
   If that frame is not the work you are continuing, the index is right there
@@ -195,7 +221,9 @@ need the conclusion:
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
 | "Which crates/files across the workspace do X?" | `Explore` subagent (max 3 concurrent, one message) |
 | "Code intel is down and I need a broad sweep" | `Explore` subagent — keep the file dumps out of your context |
-| "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock gates) |
+| "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock/env gates) |
+| "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench), each row names its refresh command |
+| "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |

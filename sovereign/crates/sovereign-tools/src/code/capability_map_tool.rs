@@ -30,14 +30,10 @@ impl Default for CapabilityMapTool {
 
 impl CapabilityMapTool {
     /// Resolve the indexes dir the same way the runtime locates code corpora:
-    /// `$SOVEREIGN_DATA_DIR` (or `$HOME/.sovereign`) `/indexes`.
+    /// the shared data root (`rebrand::data_dir()`) `/indexes`.
     pub fn new() -> Self {
-        let base = std::env::var("SOVEREIGN_DATA_DIR")
-            .map(PathBuf::from)
-            .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".sovereign")))
-            .unwrap_or_else(|_| PathBuf::from(".sovereign"));
         Self {
-            indexes_dir: base.join("indexes"),
+            indexes_dir: sovereign_contracts::rebrand::data_dir().join("indexes"),
         }
     }
 

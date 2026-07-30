@@ -33,12 +33,8 @@ impl Default for ArchPostureTool {
 
 impl ArchPostureTool {
     pub fn new() -> Self {
-        let base = std::env::var("SOVEREIGN_DATA_DIR")
-            .map(PathBuf::from)
-            .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".sovereign")))
-            .unwrap_or_else(|_| PathBuf::from(".sovereign"));
         Self {
-            data_dir: base,
+            data_dir: sovereign_contracts::rebrand::data_dir(),
             project_root: None,
         }
     }

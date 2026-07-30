@@ -43,7 +43,7 @@ This trips everyone up:
 |---|---|---|
 | `SOVEREIGN_GROUNDING_GATE` | **on** | Global gate on/off. `=0`/`false` disables (naked benches, latency debugging); unset or anything else = on. |
 | `SOVEREIGN_GROUNDING_GATE_<SURFACE>` | unset | Per-surface override (`=1` force on, `=0` force off). `<SURFACE>` ∈ `KNOWLEDGE_QUERY`, `DEEP_QUERY`, `ATTACHED_DOC`, `COMPLEX_TASK`, `SIMPLE_QUERY`, `REFINEMENT`, `GOVERNANCE`. Beats the global default for that surface. |
-| `SOVEREIGN_GV_THRESHOLD` | `0.9` | Violation-probability threshold τ. The answer abstains when its grounding-violation probability ≥ τ. Bench-calibrated; lower = stricter (more abstention). |
+| `SOVEREIGN_GV_THRESHOLD` | `0.9` | Violation-probability threshold τ. The answer abstains when its grounding-violation probability ≥ τ. Bench-calibrated; lower = stricter (more abstention). One shared default (`grounding_gate_threshold()`) for the production gate AND the chaos bench; `bench chaos-monkey run/rescore --gv-threshold <τ>` overrides per-run (the bench's silent divergent 0.5 default was unified onto this on 2026-07-30 — pass `--gv-threshold 0.5` to reproduce older gated runs). |
 | `SOVEREIGN_GATE_EXCLUDE_RAPTOR` | **on** | Exclude RAPTOR *summary* chunks from the gate's evidence view (a summary isn't verbatim source). `=0` to include them. |
 
 ### Agentic evidence loop (round-2 retrieval)
@@ -57,7 +57,7 @@ This trips everyone up:
 ### Citation grounding — EXPERIMENTAL, default OFF
 | Var | Default | Effect |
 |---|---|---|
-| `SOVEREIGN_CITATION_GROUNDING` | **off** | On entity-anchored *fact* queries, force the model to copy a verbatim supporting sentence before answering; ground by quote-existence + answer-in-quote. Recovers cases where a small model confabulates a fact that's actually in one retrieved sentence (e.g. "the Doctor" for Ossipon). **Not yet a measurable aggregate win** — the bench's fast abstain-classifier mis-scores the short citation answer format, so individual recoveries don't always land in the competence number. Leave off unless you're iterating on it. See `runtime/grounding/citation.rs`. |
+| `SOVEREIGN_CITATION_GROUNDING` | **on** | On entity-anchored *fact* queries, force the model to copy a verbatim supporting sentence before answering; ground by quote-existence + answer-in-quote. Default flipped ON 2026-06-24: pooled iter8+9 attach-mode QA showed quote-grounded answers break at 3.6% vs 25.9% ungrounded (7x reduction — the model copies the span instead of confabulating the specific). Set `=0` to A/B off. See `runtime/grounding/citation.rs`. (This row said **off** until the 2026-07-30 registry sync — the code default had been ON for five weeks.) |
 
 ### Observability
 | Var | Default | Effect |

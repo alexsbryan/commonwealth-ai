@@ -31,9 +31,14 @@ use crate::cache_audit_cmd::{resolve_transcript_dir, short_session_id};
 use crate::session_lineage;
 use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
-/// The eight body sections of a session-frame/v1, in contract order
+/// The nine body sections of a session-frame/v1, in contract order
 /// (`SESSION_CONTINUITY.md §2`). Validation and grading key off this list.
+///
+/// Must stay in lockstep with `sovereign_tools::code::session_state::
+/// FRAME_SECTIONS` (the writer's list, unprefixed). The
+/// `the_reader_and_writer_agree_on_the_contract` test is the lock.
 pub(crate) const FRAME_SECTIONS: &[&str] = &[
+    "## Objective",
     "## Goal",
     "## State",
     "## Next",
@@ -427,6 +432,153 @@ fn head_at_end_of(cwd: &str, ended_at: &str) -> String {
     }
 }
 
+/// What a successor is about to INHERIT, measured before it starts.
+///
+/// The write-time advisory (`session_state`) catches a frame recopying a
+/// backlog. This catches the same thing one moment earlier — at boot, when
+/// the successor is reading the handoff and has not yet decided what to
+/// work on. Same combinators (`sovereign_contracts::frame`), so the two
+/// surfaces can never disagree.
+struct Inherited {
+    /// `## Next` items the donor was already carrying from ITS ancestors.
+    carried: usize,
+    /// Total frames the longest-lived of those has ridden.
+    worst_frames: usize,
+    /// Consecutive frames stating the donor's objective.
+    objective_sessions: usize,
+    /// Items in the donor's `## Next` altogether, for proportion.
+    next_items: usize,
+}
+
+/// One frontmatter scalar. Frames are written by
+/// `sovereign_contracts::frame::Frame::render`, so the form is stable:
+/// `key: value` inside the leading `---` block.
+fn frontmatter_value(text: &str, key: &str) -> Option<String> {
+    let body = text.strip_prefix("---")?;
+    let end = body.find("\n---")?;
+    body[..end].lines().find_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        (k.trim() == key).then(|| v.trim().to_string())
+    })
+}
+
+/// Ancestor frame texts, nearest first, bounded and cycle-safe.
+///
+/// Prefers the durable `predecessor:` frontmatter and falls back to the
+/// `predecessor` sidecar, matching the writer — the sidecar prunes with
+/// the window pointers, the frontmatter does not.
+fn ancestor_texts(root: &Path, session_id: &str, start_text: &str) -> Vec<String> {
+    const MAX_HOPS: usize = 8;
+    // The durable stamp first, the prunable sidecar as fallback — the same
+    // precedence the writer uses, so both surfaces walk the same chain.
+    let step = |text: &str, id: &str| -> Option<String> {
+        frontmatter_value(text, "predecessor")
+            .or_else(|| std::fs::read_to_string(root.join(id).join("predecessor")).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && !s.contains(['/', '\\']))
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut seen = vec![session_id.to_string()];
+    let mut next_id = step(start_text, session_id);
+    while out.len() < MAX_HOPS {
+        let Some(prev) = next_id.take() else { break };
+        if seen.contains(&prev) {
+            break;
+        }
+        let Ok(text) = std::fs::read_to_string(root.join(&prev).join("frame.md")) else {
+            break;
+        };
+        next_id = step(&text, &prev);
+        out.push(text);
+        seen.push(prev);
+    }
+    out
+}
+
+/// `None` when there is no lineage to measure or nothing was carried —
+/// silence is the correct output for a healthy handoff.
+fn inherited_state(root: &Path, session_id: &str, frame_path: &Path) -> Option<Inherited> {
+    let text = std::fs::read_to_string(frame_path).ok()?;
+    let ancestors = ancestor_texts(root, session_id, &text);
+    if ancestors.is_empty() {
+        return None;
+    }
+    let sect = |t: &str, h: &str| section_body(t, h).unwrap_or_default();
+    let next = sect(&text, "## Next");
+    let carried = sovereign_contracts::frame::carried_across(
+        &next,
+        &ancestors
+            .iter()
+            .map(|t| sect(t, "## Next"))
+            .collect::<Vec<_>>(),
+    );
+    Some(Inherited {
+        carried: carried.len(),
+        // +1: depth counts ANCESTORS carrying it; the donor makes one more.
+        worst_frames: carried.first().map(|(_, d)| d + 1).unwrap_or(0),
+        objective_sessions: sovereign_contracts::frame::same_across(
+            &sect(&text, "## Objective"),
+            &ancestors
+                .iter()
+                .map(|t| sect(t, "## Objective"))
+                .collect::<Vec<_>>(),
+        ),
+        next_items: sovereign_contracts::frame::bullet_items(&next).len(),
+    })
+}
+
+impl Inherited {
+    /// The sentence a successor reads at boot. `None` when there is
+    /// nothing worth saying — a fresh objective with nothing carried is
+    /// the healthy case and must stay quiet, or the signal becomes noise.
+    fn advice(&self) -> Option<String> {
+        if self.carried == 0 && self.objective_sessions < 4 {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if self.carried > 0 {
+            parts.push(format!(
+                "**{} of {} `Next` items in this frame were already inherited** — the \
+                 longest has ridden {} frames without being done or dropped",
+                self.carried, self.next_items, self.worst_frames
+            ));
+        }
+        if self.objective_sessions >= 4 {
+            parts.push(format!(
+                "this objective has stood unchanged for {} sessions",
+                self.objective_sessions
+            ));
+        }
+        Some(format!(
+            "⟳ {}. Re-rank against `## Objective` before continuing it: do an item, \
+             drop it, or say why it stays. Inheriting a backlog unexamined is how a \
+             lineage turns into tweaking.",
+            parts.join("; ")
+        ))
+    }
+}
+
+/// Record the incoming session's predecessor beside where its frame will
+/// live, for the frame writer to stamp into frontmatter.
+///
+/// Best-effort by construction: every failure is silent. A missing
+/// sidecar costs a lineage hop in an advisory signal — it must never be
+/// the reason a boot hook reports an error, and it must never be the
+/// reason a frame write fails.
+fn record_predecessor(root: &Path, session_id: &str, predecessor: &str) {
+    if session_id == predecessor
+        || session_id.contains(['/', '\\'])
+        || predecessor.contains(['/', '\\'])
+    {
+        return;
+    }
+    let dir = root.join(session_id);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let _ = std::fs::write(dir.join("predecessor"), predecessor);
+}
+
 /// Which contract sections are missing from a synthesized body. Empty =
 /// valid. Order is not enforced in v1 (graders read sections by heading).
 pub(crate) fn missing_sections(body: &str) -> Vec<&'static str> {
@@ -487,10 +639,20 @@ fn retrieval_system_prompt() -> &'static str {
 /// are the lever now.
 fn section_question(heading: &str) -> &'static str {
     match heading {
-        "## Goal" => {
-            "What task was this session working on, and what larger objective does it \
-             serve? Answer in 1-2 bullets."
+        // Goal and Objective ask DIFFERENT questions on purpose. Until
+        // 2026-07-29 `## Goal` asked for both the task and "what larger
+        // objective does it serve", and the objective lost every time —
+        // frame `ad5fee8c` even echoed this prompt's own words back as
+        // its body ("The larger objective it serves From the assistant
+        // text, particularly, I can see…"). One question per section.
+        "## Objective" => {
+            "What STANDING objective does this session's work serve — the outcome for a \
+             user, or the initiative named in a spec or plan document, NOT the increment \
+             this session delivered? Quote the doc path and section if one is named. If \
+             the transcript never states an objective above the immediate task, answer \
+             exactly `none stated` — do not infer one."
         }
+        "## Goal" => "What task was this session working on? Answer in 1-2 bullets.",
         "## State" => {
             "What did this session complete? One bullet per completed piece of work, each \
              with its proof (test counts, live verification, measurements). Add bullets \
@@ -1456,8 +1618,14 @@ fn resolve_predecessor(
     })
 }
 
-fn predecessor_json(p: &Predecessor) -> serde_json::Value {
-    serde_json::json!({
+fn predecessor_json(p: &Predecessor, root: &Path) -> serde_json::Value {
+    // What the successor is inheriting, computed before it starts. Absent
+    // when there is no lineage or nothing is stale — see `Inherited::advice`.
+    let inherited = p
+        .path
+        .as_ref()
+        .and_then(|fp| inherited_state(root, &p.pointer.session_id, fp));
+    let mut doc = serde_json::json!({
         "session_id": p.pointer.session_id,
         "short_id": short_session_id(&p.pointer.session_id),
         "path": p.path.as_ref().map(|x| x.display().to_string()),
@@ -1472,7 +1640,19 @@ fn predecessor_json(p: &Predecessor) -> serde_json::Value {
         "has_frame": p.path.is_some(),
         "repo": p.pointer.repo,
         "branch": p.pointer.branch,
-    })
+    });
+    if let Some(i) = &inherited {
+        doc["carried_items"] = serde_json::json!(i.carried);
+        doc["carried_worst_frames"] = serde_json::json!(i.worst_frames);
+        doc["next_items"] = serde_json::json!(i.next_items);
+        doc["objective_sessions"] = serde_json::json!(i.objective_sessions);
+        // Pre-rendered so every consumer says the same thing. The boot hook
+        // emits this verbatim rather than composing its own sentence.
+        if let Some(advice) = i.advice() {
+            doc["inherited_advice"] = serde_json::json!(advice);
+        }
+    }
+    doc
 }
 
 fn window_json(win: Option<&session_lineage::WindowKey>) -> serde_json::Value {
@@ -1551,6 +1731,20 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
         }
     }
 
+    // Hand the incoming session its predecessor's id, as a sidecar next to
+    // where its frame will live. THIS IS THE ONLY MOMENT BOTH IDS ARE
+    // KNOWN: the window pointer still holds the outgoing session and the
+    // claim names the incoming one. The frame writer (`sovereign-tools`)
+    // reads it to stamp `predecessor:` into frontmatter, which is what
+    // makes a lineage walkable offline — and that walk is what lets a
+    // frame notice it is recopying a backlog its ancestors already carried.
+    // sovereign-tools cannot call session_lineage (the crates do not see
+    // each other under the repo's feature contract), so the hand-off is a
+    // file rather than a function call.
+    if let (Some(sid), Some(p)) = (claiming, predecessor.as_ref()) {
+        record_predecessor(&root, sid, &p.pointer.session_id);
+    }
+
     let frames = load_frames(
         &root,
         max_age_days,
@@ -1571,7 +1765,7 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
             "window": window_json(win.as_ref()),
             // The deterministic answer when there is one. A caller with a
             // predecessor should inject it and skip selection entirely.
-            "predecessor": predecessor.as_ref().map(predecessor_json),
+            "predecessor": predecessor.as_ref().map(|p| predecessor_json(p, &root)),
             "bind_error": bind_error,
             // Rank order. The head is the selection; the rest is the evidence
             // for why, so a caller can disagree with it.
@@ -1601,6 +1795,16 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
                 short_session_id(&p.pointer.session_id),
             ),
         }
+        // Same sentence the boot hook injects, so a human running this by
+        // hand sees exactly what an agent sees.
+        if let Some(advice) = p
+            .path
+            .as_ref()
+            .and_then(|fp| inherited_state(&root, &p.pointer.session_id, fp))
+            .and_then(|i| i.advice())
+        {
+            println!("{advice}\n");
+        }
     }
     if let Some(e) = &bind_error {
         eprintln!("frames: could not bind this window ({e}) — lineage will not carry forward");
@@ -1620,10 +1824,16 @@ fn run_lineage(flags: &BTreeMap<String, String>) -> i32 {
     let win = session_lineage::resolve_window();
     let predecessor = resolve_predecessor(win.as_ref(), None);
     if flags.contains_key("json") {
+        // No home dir means no frames to measure a lineage against; the
+        // window view itself still answers, so degrade rather than fail.
+        let root = sessions_root();
         let doc = serde_json::json!({
             "schema": "window-lineage-view/v1",
             "window": window_json(win.as_ref()),
-            "attached": predecessor.as_ref().map(predecessor_json),
+            "attached": predecessor
+                .as_ref()
+                .zip(root.as_ref())
+                .map(|(p, r)| predecessor_json(p, r)),
         });
         println!("{}", serde_json::to_string(&doc).unwrap_or_default());
         return 0;
@@ -2301,6 +2511,113 @@ pub async fn run(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The boot advisory must stay QUIET for a healthy handoff. A signal
+    /// that fires on every boot is a signal agents learn to skip.
+    #[test]
+    fn a_healthy_handoff_produces_no_boot_advisory() {
+        let clean = Inherited {
+            carried: 0,
+            worst_frames: 0,
+            objective_sessions: 2,
+            next_items: 5,
+        };
+        assert!(clean.advice().is_none());
+    }
+
+    /// Two independent triggers: a recopied backlog, and an objective that
+    /// has stood so long it is worth re-examining even with a clean Next.
+    #[test]
+    fn the_boot_advisory_names_the_count_and_the_worst_age() {
+        let stale = Inherited {
+            carried: 2,
+            worst_frames: 3,
+            objective_sessions: 3,
+            next_items: 6,
+        };
+        let msg = stale.advice().expect("carried items must speak up");
+        assert!(msg.contains("2 of 6"), "names the proportion: {msg}");
+        assert!(msg.contains("3 frames"), "names the worst age: {msg}");
+        assert!(
+            !msg.contains("stood unchanged"),
+            "3 sessions is not yet long enough to nag about the objective: {msg}"
+        );
+
+        let long = Inherited {
+            carried: 0,
+            worst_frames: 0,
+            objective_sessions: 6,
+            next_items: 3,
+        };
+        let msg = long.advice().expect("a long-standing objective speaks up alone");
+        assert!(msg.contains("6 sessions"), "{msg}");
+    }
+
+    /// The chain walk must survive the states it will actually meet: a
+    /// legacy frame with no `predecessor:`, and a hand-edited cycle.
+    #[test]
+    fn the_ancestor_walk_terminates_on_legacy_frames_and_cycles() {
+        let tmp = std::env::temp_dir().join(format!("anc_walk_{}", std::process::id()));
+        let write = |id: &str, body: &str| {
+            let d = tmp.join(id);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("frame.md"), body).unwrap();
+        };
+        // a → b (stamped) → c (legacy, no stamp) → stop.
+        write("a", "---\nsession_id: a\npredecessor: b\n---\n\n## Next\n\n- x\n");
+        write("b", "---\nsession_id: b\npredecessor: c\n---\n\n## Next\n\n- x\n");
+        write("c", "---\nsession_id: c\n---\n\n## Next\n\n- x\n");
+        assert_eq!(
+            ancestor_texts(&tmp, "a", &std::fs::read_to_string(tmp.join("a").join("frame.md")).unwrap()).len(),
+            2,
+            "walks to the legacy frame and stops there"
+        );
+
+        write("p", "---\nsession_id: p\npredecessor: q\n---\n\n## Next\n\n- y\n");
+        write("q", "---\nsession_id: q\npredecessor: p\n---\n\n## Next\n\n- y\n");
+        let p_text = std::fs::read_to_string(tmp.join("p").join("frame.md")).unwrap();
+        assert_eq!(ancestor_texts(&tmp, "p", &p_text).len(), 1, "the cycle is cut");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn frontmatter_value_reads_only_the_leading_block() {
+        let f = "---\nsession_id: abc\npredecessor: xyz\n---\n\n## Goal\n\npredecessor: lie\n";
+        assert_eq!(frontmatter_value(f, "predecessor").as_deref(), Some("xyz"));
+        assert_eq!(frontmatter_value(f, "missing"), None);
+        assert_eq!(frontmatter_value("no frontmatter here", "predecessor"), None);
+    }
+
+    /// The boot hand-off writes the sidecar the frame writer reads. The
+    /// two crates cannot see each other, so the FILE is the contract —
+    /// its name and its bare-id contents are load-bearing on both sides
+    /// (`sovereign-tools::code::session_state::PREDECESSOR_FILE`).
+    #[test]
+    fn the_predecessor_handoff_writes_a_bare_id_the_writer_can_read() {
+        let tmp = std::env::temp_dir().join(format!("pred_handoff_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        record_predecessor(&tmp, "child-sess", "parent-sess");
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("child-sess").join("predecessor")).unwrap(),
+            "parent-sess",
+            "a bare id, no newline or decoration — the reader only trims"
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// Every failure path is silent by construction: a lineage hop is an
+    /// advisory signal, never a reason for a boot hook to error.
+    #[test]
+    fn the_predecessor_handoff_refuses_nonsense_without_failing() {
+        let tmp = std::env::temp_dir().join(format!("pred_bad_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        record_predecessor(&tmp, "same", "same");
+        assert!(!tmp.join("same").exists(), "a session is not its own parent");
+        record_predecessor(&tmp, "../escape", "p");
+        record_predecessor(&tmp, "c", "../escape");
+        assert!(!tmp.join("c").exists(), "path separators are refused");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
 
     #[test]
     fn section_body_extracts_between_headings() {

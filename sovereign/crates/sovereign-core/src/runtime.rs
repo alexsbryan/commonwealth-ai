@@ -148,6 +148,10 @@ pub use grounding::{assess_asserted_value, AssertedValue};
 // shapes); `answer_declines` is the loose contains-form the specifics
 // guard uses.
 pub use grounding::{answer_declines, released_pure_decline};
+// The shared grounding-verifier threshold τ (SOVEREIGN_GV_THRESHOLD, else the
+// bench-calibrated 0.9) — public so the chaos bench gates against the SAME
+// default the production gate uses instead of re-deriving its own.
+pub use grounding::grounding_gate_threshold;
 mod formatters;
 mod handlers;
 mod intent_helpers;

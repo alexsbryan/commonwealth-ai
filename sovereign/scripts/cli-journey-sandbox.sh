@@ -379,6 +379,33 @@ RS
   echo
 fi
 
+# A tiny spec whose claims describe the seeded project repo, so spec-check can
+# drive facts → spec-intel → check-spec end to end. {claims} is where
+# `enrich spec-intel` writes: <data.dir>/specs/<corpus>/<spec-stem>/claims.json
+# (observed 2026-07-30 — spec-intel's own help omits the <corpus> segment), and
+# data.dir in a fresh sandbox is $HOME/.sovereign because that is what
+# `setup --yes` writes into config.toml. The stem in CLAIMS_FILE must match
+# SPEC_FILE's basename. Exported only when the project repo seeded
+# (spec-check's first step needs {project_root}).
+SPEC_FILE="${SOVEREIGN_JOURNEY_SPEC:-$SANDBOX_HOME/journey-spec.md}"
+CLAIMS_FILE="${SOVEREIGN_JOURNEY_CLAIMS:-$SANDBOX_HOME/.sovereign/specs/$JOURNEY_CORPUS/journey-spec/claims.json}"
+if [ -z "${SOVEREIGN_JOURNEY_SPEC:-}" ] && [ -n "$PROJECT_ROOT" ]; then
+  cat >"$SPEC_FILE" <<'MD'
+# journey-project spec
+
+## Fixture marker
+
+The `journey-project` library exposes one public function,
+`journey_fixture_marker`, which takes no arguments and returns the static
+string "journey-project". The marker exists so a code index built over this
+repository has at least one function definition and one string literal to
+report, and callers rely on the returned string equalling the project id
+exactly — renaming the project without updating the marker is a drift bug.
+MD
+  echo "sandbox: spec fixture seeded ($SPEC_FILE)"
+  echo
+fi
+
 # Hand off. SOVEREIGN_JOURNEY_ISOLATED=1 is this script asserting what it has
 # actually provided — a throwaway HOME on a non-default port in a private
 # netns. It is the runner's safety interlock, and the only place in the repo
@@ -430,6 +457,8 @@ run_one() { # $1 = journey id; remaining = passthrough flags
       ${MCP_URL:+SOVEREIGN_JOURNEY_MCP_URL="$MCP_URL"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT="$PROJECT_ID"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT_ROOT="$PROJECT_ROOT"} \
+      ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_SPEC="$SPEC_FILE"} \
+      ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_CLAIMS="$CLAIMS_FILE"} \
     "$RUNNER" --mutating "${SANDBOX_LACKS[@]}" --journey "$jid" "$@" \
     2>&1 | grep -vE '^cli-journey: |^ +steps +[0-9]|^ +coverage |^ +manifest |^$'
   return "${PIPESTATUS[0]}"

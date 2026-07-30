@@ -22,9 +22,12 @@ schema_version = 1
 
 # Wire protocol + daemon↔package contract + the quality-policy leaf. The
 # liftable crates: budgets pinned exactly in boundary-gate's allowed_leaf_deps.
+# sovereign-time is the Tier-0 wall-clock leaf (zero deps by design — its own
+# doc comment is the contract); it lives at the bottom so the light app crates
+# can share it without pulling sovereign-core.
 [[layer]]
 name = "contract"
-crates = ["oicp-types", "sovereign-contracts", "oicp-client", "arch-layers"]
+crates = ["oicp-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
 
 # The knowledge layer: corpus-engine + its carve-outs. Self-contained by
 # design — neither sovereign nor commonwealth types appear here.
@@ -61,6 +64,10 @@ crates = [
     # Supervised compute-child process boundary (P1). Depends on
     # sovereign-inference (same layer) + sovereign-contracts (lower).
     "sovereign-compute",
+    # GLiNER NER inference (ort/gline-rs carve-out). Depends on sovereign-core
+    # + sovereign-store (same layer) + corpus-engine (lower); consumed from
+    # capabilities (sovereign-tools) and hosts.
+    "sovereign-gliner",
 ]
 
 # Capabilities over the runtime: tool implementations, work atlas, workflow

@@ -26,7 +26,11 @@
 //!
 //! All of this is transitional: once the ecosystem has moved, the legacy
 //! fallbacks, the symlink, and the env mirror are dropped (see the rename
-//! plan, "Later release").
+//! plan, "Later release"). That end state is now COMPUTABLE rather than
+//! aspirational: `cargo run -p xtask -- env-gate` censuses every env-var
+//! read site in the workspace (canonicalizing both prefixes), so
+//! [`promote_legacy_env`] can be deleted the day the census shows zero
+//! sites reading the legacy `SOVEREIGN_` prefix only.
 
 use std::ffi::OsString;
 use std::net::{SocketAddr, TcpStream};
@@ -94,6 +98,9 @@ pub fn promote_legacy_env() {
 /// The per-user data root, preferring `~/.svrnmesh` and falling back to a
 /// populated legacy `~/.sovereign`. Falls back to `.` if home is unknown
 /// (matching the prior `default_data_dir` behaviour).
+// The ONE place the home-dir → branded-root derivation is allowed to live
+// (clippy.toml bans `dirs::home_dir` everywhere else for sovereign paths).
+#[allow(clippy::disallowed_methods)]
 pub fn svrnmesh_root() -> PathBuf {
     match dirs::home_dir() {
         Some(home) => resolve_branded_dir(
@@ -132,6 +139,45 @@ fn dir_is_populated(p: &Path) -> bool {
     std::fs::read_dir(p)
         .map(|mut entries| entries.next().is_some())
         .unwrap_or(false)
+}
+
+// ─── Canonical per-user paths (SSOT accessors) ─────────────────────
+
+/// The per-user data root, honoring the `SVRNMESH_DATA_DIR` /
+/// `SOVEREIGN_DATA_DIR` override and falling back to [`svrnmesh_root`].
+/// This is THE derivation for "where does per-user state live" — read
+/// sites must not re-derive it. Behavior note (2026-07-30): the previous
+/// hand-rolled chains fell back to a bare relative `.sovereign` when both
+/// the override and HOME were unset, silently writing into the process
+/// CWD; this accessor never returns a relative path on that edge (it
+/// returns [`svrnmesh_root`]'s `.` only when home resolution itself
+/// fails, matching every other getter here).
+pub fn data_dir() -> PathBuf {
+    match svrnmesh_env("DATA_DIR") {
+        Some(v) => PathBuf::from(v),
+        None => svrnmesh_root(),
+    }
+}
+
+/// The project registry written by `sovereign project register`
+/// (`sovereign-mesh/src/projects.rs`) and read by the daemon's startup
+/// re-registration and code-tool path resolution. Deliberately rooted at
+/// [`svrnmesh_root`] (home-based), NOT [`data_dir`] — the writer has
+/// never honored the `DATA_DIR` override, and reader/writer must agree.
+pub fn projects_json() -> PathBuf {
+    svrnmesh_root().join("projects.json")
+}
+
+/// `<root>/work-atlas.toml` — per-node work-atlas config, read by the
+/// daemon bootstrap, `svrn project serve`, and `sovereign claim`.
+pub fn work_atlas_toml() -> PathBuf {
+    svrnmesh_root().join("work-atlas.toml")
+}
+
+/// `<root>/drift/` — persisted drift reports (the `latest.md.json`
+/// mirror `drift_posture`/`drift_findings`/`briefing` read).
+pub fn drift_dir() -> PathBuf {
+    svrnmesh_root().join("drift")
 }
 
 // ─── State-DB filename migration ───────────────────────────────────
@@ -193,6 +239,7 @@ fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
 /// fresh installs are no-ops), and a transitional symlink bridges any
 /// not-yet-converted hard-coded `~/.sovereign` path. The state-DB *filename*
 /// rename is handled lazily and gated separately in [`state_db_path`].
+#[allow(clippy::disallowed_methods)] // SSOT crate: migrates the raw home-dir layout itself
 pub fn run_startup_migration() {
     // Defer to a running daemon: it migrates the data dirs itself at startup
     // (before it binds the API port), and renaming a dir out from under
@@ -307,6 +354,43 @@ mod tests {
             append_suffix(&db, "-shm"),
             PathBuf::from("/x/svrnmesh.db-shm")
         );
+    }
+
+    #[test]
+    fn data_dir_honors_override_and_is_never_relative() {
+        // Explicit override wins (legacy prefix).
+        std::env::set_var("SOVEREIGN_DATA_DIR", "/tmp/svrnmesh-data-dir-test");
+        // The branded prefix must win over the legacy one when both exist.
+        std::env::set_var("SVRNMESH_DATA_DIR", "/tmp/svrnmesh-data-dir-test-new");
+        assert_eq!(data_dir(), PathBuf::from("/tmp/svrnmesh-data-dir-test-new"));
+        std::env::remove_var("SVRNMESH_DATA_DIR");
+        assert_eq!(data_dir(), PathBuf::from("/tmp/svrnmesh-data-dir-test"));
+        std::env::remove_var("SOVEREIGN_DATA_DIR");
+        // Unset: the branded home root — NEVER the bare relative `.sovereign`
+        // the pre-2026-07-30 hand-rolled chains fell back to (which wrote
+        // into the process CWD).
+        let d = data_dir();
+        assert_ne!(d, PathBuf::from(".sovereign"));
+        assert!(d.is_absolute() || d == PathBuf::from("."));
+    }
+
+    #[test]
+    fn projects_json_prefers_populated_branded_home() {
+        let tmp = std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        for d in [".svrnmesh", ".sovereign"] {
+            std::fs::create_dir_all(tmp.join(d)).unwrap();
+            std::fs::write(tmp.join(d).join("marker"), b"x").unwrap();
+        }
+        let old_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", &tmp);
+        let p = projects_json();
+        match old_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        assert_eq!(p, tmp.join(".svrnmesh").join("projects.json"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

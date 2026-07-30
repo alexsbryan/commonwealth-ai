@@ -322,8 +322,8 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
     };
 
     // ── load the SCIP graph (mirrors `cmd_capability_map`) ──
-    let db_path = home_dir()
-        .join(".sovereign")
+    let db_path = sovereign_root()
+        
         .join("indexes")
         .join(&corpus_id)
         .join("scip_graph.db");
@@ -357,8 +357,8 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
     };
 
     // ── load the capability artifacts ──
-    let caps_dir = home_dir()
-        .join(".sovereign")
+    let caps_dir = sovereign_root()
+        
         .join("capabilities")
         .join(&corpus_id);
 
@@ -422,7 +422,7 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
     // ── meaning layout: load the cached function embeddings up front so a
     //    missing/stale cache fails fast with a clear hint. ──
     let fn_vecs = if layout == Layout::Meaning {
-        let data_dir = home_dir().join(".sovereign");
+        let data_dir = sovereign_root();
         match load_fn_vecs(&data_dir, &corpus_id) {
             Ok(fv) => Some(fv),
             Err(msg) => {
@@ -768,8 +768,11 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+/// Branded per-user data root (rebrand-aware path SSOT — prefers a
+/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
+/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
+fn sovereign_root() -> PathBuf {
+    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 /// Open an emitted artifact in the OS default application (the browser), so a CLI

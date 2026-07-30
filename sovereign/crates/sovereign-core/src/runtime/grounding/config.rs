@@ -47,7 +47,13 @@ pub(crate) fn grounding_gate_enabled() -> bool {
         .unwrap_or(true)
 }
 
-pub(crate) fn grounding_gate_threshold() -> f64 {
+/// Violation-probability threshold τ — THE shared default for every consumer
+/// of the external grounding-verifier: the production gate (via
+/// `VerifyProfile::tau`) and the chaos bench's `--grounding-verify` lane.
+/// `SOVEREIGN_GV_THRESHOLD` overrides; unset = the bench-calibrated 0.9.
+/// Public so bench code cannot re-derive its own divergent default (the
+/// chaos lane carried a silent 0.5 until 2026-07-30).
+pub fn grounding_gate_threshold() -> f64 {
     std::env::var("SOVEREIGN_GV_THRESHOLD")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -392,7 +398,10 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
             "gate",
             EnvFlag {
                 name: "SOVEREIGN_CITATION_GROUNDING",
-                default: "off",
+                // Default flipped ON 2026-06-24 (attach-mode QA bank: 7x
+                // confab reduction); this entry lagged at "off" until the
+                // 2026-07-30 registry sync.
+                default: "on",
                 purpose: "Active citation-grounding on entity-anchored fact queries: the model must copy a verbatim supporting sentence before answering, grounded by quote-existence (curing A3B context-under-utilisation + the substring verifier's title/paraphrase false-negatives). No findable quote → honest abstention.",
             },
         ),
@@ -450,6 +459,28 @@ mod tests {
     fn tau_defaults_to_calibrated_value() {
         if std::env::var("SOVEREIGN_GV_THRESHOLD").is_err() {
             assert!((GateSurface::KnowledgeQuery.profile().tau - 0.9).abs() < f64::EPSILON);
+        }
+    }
+
+    /// Every flag this table declares must ALSO be declared in the
+    /// workspace env-knob registry (`quality/env-flags.toml`) — the
+    /// env-gate's map and this runtime-facing table must not drift.
+    /// This table stays the runtime SSOT for the gate's knobs; the TOML
+    /// is the workspace-wide census surface.
+    #[test]
+    fn flags_table_is_declared_in_env_registry() {
+        let toml_text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../quality/env-flags.toml"
+        ))
+        .expect("quality/env-flags.toml readable from sovereign-core");
+        for (_, f) in grounding_gate_flags() {
+            assert!(
+                toml_text.contains(&format!("name = \"{}\"", f.name)),
+                "`{}` is in grounding_gate_flags() but not declared in \
+                 quality/env-flags.toml — add a [[flag]] entry",
+                f.name
+            );
         }
     }
 

@@ -22,3 +22,16 @@ allow-expect-in-tests = true
 # budgets.
 too-many-lines-threshold = 200
 cognitive-complexity-threshold = 30
+
+# Path-SSOT ban (center-of-mass P2, 2026-07-30): per-user sovereign paths
+# must come from `sovereign_contracts::rebrand` (svrnmesh_root / data_dir /
+# projects_json / work_atlas_toml / drift_dir) or the
+# `sovereign_cli_shared::dirs` wrappers. A hand-rolled
+# `dirs::home_dir().join(".sovereign")` misses BOTH the svrnmesh rebrand
+# fallback and the SOVEREIGN_DATA_DIR override. The SSOT derivation sites
+# and the few legitimate uses (tilde-expansion of user input) carry
+# `#[allow(clippy::disallowed_methods)]` with a reason. Counts ride the
+# lint-gate ratchet like every other warned lint.
+disallowed-methods = [
+    { path = "dirs::home_dir", reason = "derive per-user sovereign paths via sovereign_contracts::rebrand or sovereign_cli_shared::dirs — hand-rolled ~/.sovereign misses the rebrand fallback and the DATA_DIR override" },
+]

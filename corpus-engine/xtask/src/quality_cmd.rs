@@ -10,7 +10,7 @@
 //! JSON) are deliberately NOT here — they cost a build and run on their own
 //! cadence (see .github/workflows/weekly.yml). This command stays sub-second.
 
-use crate::{arch_gate, boundary_gate, docs_gate, layer_gate, lock_gate};
+use crate::{arch_gate, boundary_gate, docs_gate, env_gate, layer_gate, lock_gate};
 
 pub fn run() -> i32 {
     let no_args: [String; 0] = [];
@@ -20,6 +20,7 @@ pub fn run() -> i32 {
         ("boundary-gate", &boundary_gate::run),
         ("layer-gate", &|| layer_gate::run(&no_args)),
         ("lock-gate", &|| lock_gate::run(&no_args)),
+        ("env-gate", &|| env_gate::run(&no_args)),
     ];
 
     let mut results: Vec<(&str, i32)> = Vec::new();

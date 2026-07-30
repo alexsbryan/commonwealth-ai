@@ -41,3 +41,6 @@ vendor/
 # it caused was found by the new pre-push hook (scripts/pre-push.sh) rather
 # than by CI, which had stopped running on a billing hard-stop.
 target/
+# Deleted 2026-07-28 (F10: dead benchmark producers); SYSTEM_OVERVIEW cites the
+# path HISTORICALLY ("had zero callers ... both dead producers are deleted").
+sovereign-inference/src/benchmark.rs
