@@ -201,6 +201,16 @@ pub struct Journey {
     pub title: String,
     /// Who runs it.
     pub persona: Persona,
+    /// The [`Experience::id`] this journey serves. REQUIRED: a journey that
+    /// serves no named promise is a command enumeration, which is the drift
+    /// this axis exists to stop. Several journeys may serve one experience —
+    /// that is the point, since a promise usually needs more than one
+    /// sequence to be proven (build it, then ask it a question).
+    pub experience: String,
+    /// What this journey needs from the lane running it. Empty means any
+    /// lane can run it. See [`Need`].
+    #[serde(default)]
+    pub needs: Vec<Need>,
     /// User-impact tier, 1 (product is broken without it) to 5 (specialist
     /// loop). Drives live-run ordering and triage severity, mirroring the
     /// desktop journey manifest.
@@ -220,6 +230,121 @@ pub struct Journey {
     /// The ordered steps. Maps the TOML `[[journey.step]]` array.
     #[serde(default, rename = "step")]
     pub steps: Vec<JourneyStep>,
+}
+
+impl Journey {
+    /// Does any step of this journey exercise `capability`, and assert
+    /// something about the output when it does?
+    ///
+    /// The output condition is not decoration. Every code-intelligence tool
+    /// in this repo exits **0** when it finds nothing — `symbols` on an
+    /// unknown name prints "No symbol named X found in any installed code
+    /// corpus" and exits 0; so do `callers`, `callees` and `capability_map`
+    /// (measured 2026-07-29). A step that names a capability and checks only
+    /// its exit code is therefore satisfied by the tool answering NOTHING,
+    /// which is precisely the vacuous-green shape the journey layer exists
+    /// to kill. Naming a capability without asserting output does not count
+    /// as exercising it.
+    ///
+    /// A READ proves itself inline; a MUTATION is proven downstream. `corpus
+    /// install` returns before its ingest lands and cannot assert its own
+    /// effect — the proof is the later `corpus status` that finds the corpus,
+    /// which is what makes a journey a sequence rather than a bag. So a
+    /// mutating step counts as exercised when any LATER step in the same
+    /// journey asserts output. A non-mutating step gets no such credit:
+    /// nothing downstream can prove that `symbols` answered.
+    ///
+    /// Matching: a single-word capability must appear as a whole ARGV token
+    /// (splitting on whitespace and `=`), so `notes` does not satisfy
+    /// `note`, and `--name={symbol}` yields `--name` and `{symbol}`. A
+    /// capability containing a space is matched as a substring, which is how
+    /// a multi-word invocation like `corpus snapshot publish` is declared.
+    pub fn exercises(&self, capability: &str) -> bool {
+        let asserts = |s: &JourneyStep| s.expect.as_ref().is_some_and(|e| e.inspects_output());
+        self.steps.iter().enumerate().any(|(i, s)| {
+            if !step_names(s, capability) {
+                return false;
+            }
+            asserts(s) || (s.mutates && self.steps[i + 1..].iter().any(asserts))
+        })
+    }
+
+    /// Does any lane actually RUN this journey? `skip_live` means no: not the
+    /// mutating sandbox lane, not the read-only capability lane, not CI.
+    ///
+    /// Load-bearing for every honest count in this file. 14 of the 32 journeys
+    /// carry a journey-level `skip_live` (needs a second machine, a paid GPU
+    /// pod, a multi-minute benchmark), and their 62 steps are NEVER EXECUTED
+    /// BY ANYTHING. Whatever those steps declare, no lane can catch a
+    /// regression in them — so counting them alongside the steps that do run
+    /// mixes two different defects and lets the cheap repair (sprinkle
+    /// `exit = 0` on a step nobody runs) satisfy a ratchet aimed at the
+    /// expensive one.
+    pub fn runs_live(&self) -> bool {
+        self.skip_live.is_none()
+    }
+
+    /// Steps of this journey a lane will actually execute, with their indices.
+    /// Empty when the journey itself is `skip_live`, whatever its steps say.
+    pub fn live_steps(&self) -> impl Iterator<Item = (usize, &JourneyStep)> {
+        let runs = self.runs_live();
+        self.steps
+            .iter()
+            .enumerate()
+            .filter(move |(_, s)| runs && s.skip_live.is_none())
+    }
+
+    /// Steps that name `capability` at all, asserted or not. The ratchet's
+    /// error message uses this to distinguish "nobody drives it" from
+    /// "somebody drives it and checks only the exit code" — two different
+    /// repairs, and the second is the one that reads as covered.
+    pub fn mentions(&self, capability: &str) -> bool {
+        self.steps.iter().any(|s| step_names(s, capability))
+    }
+}
+
+impl JourneyStep {
+    /// What a lane could catch if this step went wrong. See [`Evidence`].
+    pub fn evidence(&self) -> Evidence {
+        match &self.expect {
+            Some(e) if e.inspects_output() => Evidence::Output,
+            Some(e) if e.exit.is_some() => Evidence::ExitOnly,
+            _ => Evidence::None,
+        }
+    }
+
+    /// A step the live runner CANNOT FAIL: no expected exit code, no output
+    /// assertion, nothing. It is invoked, and whatever happens is reported as
+    /// a tick.
+    ///
+    /// Not hypothetical, and not harmless. `enrich-atlas` declared its first
+    /// two steps this way; on 2026-07-29 `enrich init --from-corpus` wrote no
+    /// enrichment directory AT ALL and `enrich build --full` followed it, and
+    /// both reported ✓ — the journey then failed on step [2] (`enrich status`,
+    /// which does assert), pointing the reader two steps past the actual
+    /// breakage. An unfalsifiable step does not merely fail to prove its own
+    /// command; it MISATTRIBUTES the failure of the sequence.
+    ///
+    /// Equivalent to `self.evidence() == Evidence::None`, and kept as a named
+    /// predicate because that is the concept the ratchets are about — but note
+    /// that "unfalsifiable" is necessary, not sufficient: a step in a
+    /// `skip_live` journey cannot fail either, whatever it declares. Ask
+    /// [`Journey::live_steps`] which steps a lane actually runs before drawing
+    /// a conclusion from this.
+    pub fn is_unfalsifiable(&self) -> bool {
+        self.evidence() == Evidence::None
+    }
+}
+
+/// Whether a step's `run` names `capability`. See [`Journey::exercises`] for
+/// the rule and why it is token-wise rather than a bare `contains`.
+fn step_names(step: &JourneyStep, capability: &str) -> bool {
+    if capability.contains(char::is_whitespace) {
+        return step.run.contains(capability);
+    }
+    step.run
+        .split(|c: char| c.is_whitespace() || c == '=')
+        .any(|tok| tok == capability)
 }
 
 /// One step of a [`Journey`].
@@ -296,6 +421,84 @@ impl Expect {
     pub fn inspects_output(&self) -> bool {
         self.stdout_contains.is_some() || self.stdout_absent.is_some() || self.stdout_non_empty
     }
+
+    /// Whether this block asserts ANYTHING — output or even an exit code.
+    pub fn asserts_anything(&self) -> bool {
+        self.exit.is_some() || self.inspects_output()
+    }
+}
+
+/// How much a lane could catch if a step's command broke — the axis that
+/// separates a test from a demonstration.
+///
+/// Three classes, not two, because the middle one is where false confidence
+/// actually lives. `Output` catches a wrong answer. `None` catches nothing at
+/// all. `ExitOnly` catches a crash and NOTHING ELSE — and in this repo that is
+/// much weaker than it sounds: every code-intelligence tool exits 0 when it
+/// finds nothing, `sovereign doctor` exits 0 on a sick system by design, and
+/// `code search` printed placeholder stub text and exited 0 for a whole
+/// release. An `exit = 0` gate over that surface is satisfied by an index that
+/// has been wiped.
+///
+/// So `ExitOnly` is the class to watch, not to celebrate: it is the cheapest
+/// way to satisfy a "declare something" ratchet without adding evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evidence {
+    /// No `expect` block, or one that asserts nothing. Cannot fail.
+    None,
+    /// An exit code and nothing else.
+    ExitOnly,
+    /// At least one assertion about what the command actually printed.
+    Output,
+}
+
+/// One row of [`Contract::assertion_census`] — the numbers behind "how much of
+/// this manifest can actually fail?", split by whether a lane runs it.
+#[derive(Debug, Clone, Default)]
+pub struct EvidenceCount {
+    /// Steps that cannot fail: no assertion at all.
+    pub none: usize,
+    /// Steps asserting only an exit code.
+    pub exit_only: usize,
+    /// Steps asserting something about output.
+    pub output: usize,
+}
+
+impl EvidenceCount {
+    /// Total steps in this class.
+    pub fn total(&self) -> usize {
+        self.none + self.exit_only + self.output
+    }
+
+    fn add(&mut self, e: Evidence) {
+        match e {
+            Evidence::None => self.none += 1,
+            Evidence::ExitOnly => self.exit_only += 1,
+            Evidence::Output => self.output += 1,
+        }
+    }
+}
+
+/// The manifest's evidence, partitioned by whether any lane executes it.
+///
+/// The number this exists to stop anyone quoting is "133 steps". A step in a
+/// `skip_live` journey is a written intention; a step with no `expect` block is
+/// an invocation. Neither is a test, and both used to be counted in the same
+/// total as the 42 steps that actually assert an answer.
+#[derive(Debug, Clone, Default)]
+pub struct AssertionCensus {
+    /// Steps some lane runs.
+    pub live: EvidenceCount,
+    /// Steps NO lane runs — journey-level `skip_live`, or a step-level one.
+    pub never_run: EvidenceCount,
+    /// `journey[idx] run` for every LIVE step that asserts nothing. The
+    /// to-do list, in the order a reader would fix it.
+    pub live_unfalsifiable: Vec<String>,
+    /// Live journeys carrying no output assertion anywhere — a sequence that
+    /// runs end to end and can only ever prove that the binary starts.
+    pub live_journeys_without_output: Vec<String>,
+    /// Journeys no lane runs at all, with the manifest's own reason.
+    pub never_run_journeys: Vec<(String, String)>,
 }
 
 /// Who runs a journey.
@@ -312,6 +515,110 @@ pub enum Persona {
     Author,
     /// An AI agent driving the CLI as a tool surface.
     Agent,
+}
+
+// ── Experiences ─────────────────────────────────────────────────────────
+
+/// A documented promise the product makes, and the capabilities that promise
+/// is made of. Primary key is [`Experience::id`]; journeys point at it with
+/// [`Journey::experience`].
+///
+/// WHY THIS AXIS EXISTS. The ratchets one level down are all verb-driven —
+/// "every public verb belongs to a journey" — so the manifest grew to model
+/// COMMANDS, and journeys became vehicles for verb coverage. `code-intel-
+/// lifecycle` is the tell: six steps (`project init|list|status|refresh|
+/// serve|stop`) that prove the index BUILDS and never ask it a question. It
+/// is named for a capability and tests only plumbing.
+///
+/// Measured 2026-07-29: of the 23 tools `.claude/CLAUDE.md` mandates for
+/// every agent session, 18 were named by no journey step at all — including
+/// `symbols`, `callers`, `callees`, `blast` and `code_search`, the five the
+/// instructions say to use INSTEAD of reading files. Nothing was failing;
+/// nothing was watching either. That gap was only findable by
+/// cross-referencing the instructions against the manifest by hand.
+///
+/// [`Experience::capabilities`] is the fix: name what the promise is made
+/// of, and let the ratchet find the hole. [`Experience::gap`] is the other
+/// half — an experience with no journey yet is DECLARED, so "code-intel chat
+/// has no journey" is a visible, tracked, shrinking quantity rather than
+/// something a future audit has to rediscover.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Experience {
+    /// Stable kebab-case id, e.g. `"code-intelligence"`.
+    pub id: String,
+    /// The promise in the user's words: what they get, not what runs.
+    pub title: String,
+    /// Where the promise is made, as a repo-relative path with an optional
+    /// `#anchor` or `:line`. REQUIRED — unlike [`Journey::doc`], because an
+    /// undocumented experience is not a promise, it is an intention.
+    pub doc: String,
+    /// The named capabilities this promise is made of — tool ids, or the
+    /// exact words typed. Each must be exercised by a step of some journey
+    /// serving this experience, in a step that asserts something about
+    /// OUTPUT. See [`Journey::exercises`] for the matching rule.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    /// Set when NO journey serves this experience yet, saying why. The
+    /// ratchet caps how many of these may exist and the cap only ever
+    /// shrinks, so a declared gap is a debt with a name.
+    #[serde(default)]
+    pub gap: Option<String>,
+    /// Free-text note rendered in the experience map.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Something a journey needs from the LANE that runs it, which not every
+/// lane can supply.
+///
+/// Distinct from `skip_live` (a property of the journey: "needs a second
+/// machine, never run it automatically") and from the runner's `--exclude`
+/// (a property of one invocation). This is the property that was previously
+/// hardcoded in `cli-journey-sandbox.sh` as a `SANDBOX_EXCLUDES` array: two
+/// journey ids and one shared prose reason, invisible from the manifest.
+/// That is the same class of defect the experience axis fixes — a fact about
+/// a journey living somewhere nobody cross-references.
+///
+/// Declaring it here lets the two lanes PARTITION the manifest from one
+/// source: the sandbox lane says `--lacks` for what a throwaway HOME cannot
+/// have, and the read-only operator lane runs exactly what the sandbox
+/// skipped. Nothing is dropped by both, and the reason printed is the
+/// manifest's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Need {
+    /// The operator's real `$HOME` — Claude Code transcripts under
+    /// `~/.claude/projects`, an accumulated notes db, a drift report on
+    /// disk. A throwaway sandbox HOME has none of it by construction, so a
+    /// sandbox run of these journeys can only ever report a false failure.
+    OperatorHome,
+    /// A live code index and SCIP call graph over a real repository. Built
+    /// by `project init` in minutes with `rust-analyzer` present — too
+    /// expensive and too fragile to build inside a per-run sandbox, and the
+    /// operator's daemon already has one.
+    IndexedRepo,
+}
+
+impl Need {
+    /// The token used in the manifest and on the runner's `--lacks` flag.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Need::OperatorHome => "operator-home",
+            Need::IndexedRepo => "indexed-repo",
+        }
+    }
+
+    /// What a lane is admitting when it says it lacks this. Printed by the
+    /// runner, so a skipped journey explains itself.
+    pub fn why(&self) -> &'static str {
+        match self {
+            Need::OperatorHome => {
+                "needs the operator's real HOME (Claude transcripts, notes, drift report)"
+            }
+            Need::IndexedRepo => "needs a live code index + SCIP graph over a real repo",
+        }
+    }
 }
 
 /// A verb that belongs to no journey, with the reason and what to do about
@@ -397,6 +704,10 @@ pub struct Contract {
     /// Every promised command. Maps the TOML `[[command]]` array.
     #[serde(default, rename = "command")]
     pub commands: Vec<Command>,
+    /// Every promise the product makes. Maps the TOML `[[experience]]`
+    /// array. Journeys serve these; see [`Experience`].
+    #[serde(default, rename = "experience")]
+    pub experiences: Vec<Experience>,
     /// Every promised journey. Maps the TOML `[[journey]]` array.
     #[serde(default, rename = "journey")]
     pub journeys: Vec<Journey>,
@@ -497,6 +808,78 @@ impl Contract {
             .map(|s| Self::step_verb(s).to_string())
             .filter(|v| !v.is_empty())
             .collect()
+    }
+
+    /// The journeys serving one experience, in manifest order.
+    pub fn journeys_for(&self, experience_id: &str) -> Vec<&Journey> {
+        self.journeys
+            .iter()
+            .filter(|j| j.experience == experience_id)
+            .collect()
+    }
+
+    /// A declared experience by id.
+    pub fn experience(&self, id: &str) -> Option<&Experience> {
+        self.experiences.iter().find(|e| e.id == id)
+    }
+
+    /// Capabilities of `experience` that NO serving journey exercises with an
+    /// output assertion. Empty is the healthy state; a non-empty result is
+    /// the hole. Each entry pairs the capability with whether some step at
+    /// least NAMES it — `(capability, mentioned_but_unasserted)`.
+    pub fn unproven_capabilities<'a>(
+        &self,
+        experience: &'a Experience,
+    ) -> Vec<(&'a str, bool)> {
+        let serving = self.journeys_for(&experience.id);
+        experience
+            .capabilities
+            .iter()
+            .filter(|cap| !serving.iter().any(|j| j.exercises(cap)))
+            .map(|cap| {
+                let mentioned = serving.iter().any(|j| j.mentions(cap));
+                (cap.as_str(), mentioned)
+            })
+            .collect()
+    }
+
+    /// Count what this manifest can actually catch, split by whether a lane
+    /// runs it. One definition, shared by the ratchets, the `svrn contract`
+    /// report and the docs — so the number in the doc cannot drift from the
+    /// number the gate uses.
+    ///
+    /// Walked in manifest order (not tier order): the output is read as a
+    /// to-do list against the file, so it should point at the file's own
+    /// sequence.
+    pub fn assertion_census(&self) -> AssertionCensus {
+        let mut c = AssertionCensus::default();
+        for j in &self.journeys {
+            if let Some(why) = &j.skip_live {
+                c.never_run_journeys
+                    .push((j.id.clone(), why.split_whitespace().collect::<Vec<_>>().join(" ")));
+            }
+            let mut live_output = 0usize;
+            let mut live_any = 0usize;
+            for (i, s) in j.steps.iter().enumerate() {
+                let ev = s.evidence();
+                if j.runs_live() && s.skip_live.is_none() {
+                    c.live.add(ev);
+                    live_any += 1;
+                    if ev == Evidence::Output {
+                        live_output += 1;
+                    }
+                    if ev == Evidence::None {
+                        c.live_unfalsifiable.push(format!("{}[{}] {}", j.id, i, s.run));
+                    }
+                } else {
+                    c.never_run.add(ev);
+                }
+            }
+            if live_any > 0 && live_output == 0 {
+                c.live_journeys_without_output.push(j.id.clone());
+            }
+        }
+        c
     }
 
     /// Journeys the live harness should run, hardest-hitting first: tier
@@ -639,10 +1022,23 @@ binary = "llm"
 path = "corpus"
 binary = "llm"
 
+[[experience]]
+id = "knowledge-corpora"
+title = "Ask questions of a body of documents and get cited answers"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+capabilities = ["corpus list", "corpus install", "chat inspect"]
+
+[[experience]]
+id = "unserved-thing"
+title = "A promise with no journey yet"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+gap = "declared so the fixture covers the gap register"
+
 [[journey]]
 id = "corpus-lifecycle"
 title = "Install a corpus, query it, remove it"
 persona = "end-user"
+experience = "knowledge-corpora"
 tier = 1
 visibility = "public"
 doc = "sovereign/docs/KNOWLEDGE_BASES.md"
@@ -688,6 +1084,184 @@ disposition = "demote"
         assert_eq!(c.stranded[0].verb, "newsworthy");
         assert_eq!(c.stranded[0].disposition, Disposition::Demote);
         assert!(c.stranded[0].fold_into.is_none());
+    }
+
+    #[test]
+    fn experiences_parse_and_journeys_point_at_them() {
+        let c = journey_fixture();
+        assert_eq!(c.experiences.len(), 2);
+        assert_eq!(c.journeys[0].experience, "knowledge-corpora");
+        assert_eq!(c.journeys_for("knowledge-corpora").len(), 1);
+        assert!(c.journeys_for("unserved-thing").is_empty());
+        assert!(c.experience("knowledge-corpora").is_some());
+        assert!(c.experience("no-such-experience").is_none());
+        // `needs` defaults to empty — any lane may run this journey.
+        assert!(c.journeys[0].needs.is_empty());
+    }
+
+    #[test]
+    fn a_read_proves_itself_inline_and_a_mutation_is_proven_downstream() {
+        // The fixture is [corpus list (no expect), corpus install (mutates,
+        // no expect), chat inspect (stdout_non_empty)].
+        //
+        // `corpus list` is a READ that asserts nothing, so it NAMES the
+        // capability without proving it — and that is the whole point: every
+        // code-intel tool in this repo exits 0 when it finds nothing, so an
+        // exit-code-only read is satisfied by a tool that answered nothing.
+        //
+        // `corpus install` asserts nothing either, but it MUTATES and a later
+        // step asserts output, which is exactly how a sequence proves an
+        // effect that the command itself returns before finishing.
+        let c = journey_fixture();
+        let e = c.experience("knowledge-corpora").expect("declared");
+        assert_eq!(
+            c.unproven_capabilities(e),
+            vec![("corpus list", true)],
+            "only the unasserted READ is unproven, and it is mentioned"
+        );
+        let j = &c.journeys[0];
+        assert!(j.mentions("corpus list"));
+        assert!(!j.exercises("corpus list"), "an unasserted read proves nothing");
+        assert!(j.exercises("corpus install"), "proven by the later assertion");
+        assert!(j.exercises("chat inspect"), "proven inline");
+    }
+
+    #[test]
+    fn a_trailing_mutation_with_nothing_after_it_is_unproven() {
+        // The downstream credit is strictly LATER steps. A journey that ends
+        // on a mutation has nobody left to prove it — `mesh leave` is the
+        // real instance: it reverses the federation and no step looks at the
+        // result.
+        let c = Contract::parse(
+            r#"
+[[command]]
+path = "corpus install"
+binary = "llm"
+[[command]]
+path = "corpus remove"
+binary = "llm"
+[[experience]]
+id = "e"
+title = "t"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+capabilities = ["corpus remove"]
+[[journey]]
+id = "j"
+title = "t"
+persona = "end-user"
+experience = "e"
+tier = 1
+[[journey.step]]
+run = "corpus install {corpus}"
+mutates = true
+[journey.step.expect]
+stdout_non_empty = true
+[[journey.step]]
+run = "corpus remove {corpus}"
+mutates = true
+"#,
+        )
+        .expect("parse");
+        let e = c.experience("e").expect("declared");
+        assert_eq!(
+            c.unproven_capabilities(e),
+            vec![("corpus remove", true)],
+            "an earlier assertion cannot prove a later mutation"
+        );
+    }
+
+    #[test]
+    fn capability_matching_is_token_wise_not_substring() {
+        // `notes` must not satisfy a `note` capability, and a flag's value
+        // must be reachable: `--name={symbol}` yields `--name` and
+        // `{symbol}`. Without this, `note` (write) would read as covered by
+        // any journey that merely READS notes.
+        let j = Journey {
+            id: "x".into(),
+            title: "x".into(),
+            persona: Persona::Agent,
+            experience: "e".into(),
+            needs: vec![],
+            tier: 4,
+            visibility: Visibility::Internal,
+            doc: None,
+            skip_live: None,
+            steps: vec![JourneyStep {
+                run: "tools call symbols --name={symbol}".into(),
+                command: None,
+                mutates: false,
+                expect: Some(Expect {
+                    stdout_non_empty: true,
+                    ..Default::default()
+                }),
+                skip_live: None,
+                settle_secs: None,
+                note: None,
+            }],
+        };
+        assert!(j.exercises("symbols"));
+        assert!(j.exercises("{symbol}"));
+        assert!(!j.exercises("symbol"), "no substring match on a token");
+        assert!(!j.exercises("symbolsx"));
+        assert!(j.exercises("tools call symbols"), "multi-word is substring");
+    }
+
+    #[test]
+    fn needs_parse_from_kebab_case() {
+        let c = Contract::parse(
+            r#"
+[[command]]
+path = "tools call"
+binary = "dev"
+[[experience]]
+id = "e"
+title = "t"
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+[[journey]]
+id = "j"
+title = "t"
+persona = "agent"
+experience = "e"
+tier = 3
+needs = ["indexed-repo", "operator-home"]
+[[journey.step]]
+run = "tools call symbols --name=X"
+"#,
+        )
+        .expect("parse");
+        assert_eq!(
+            c.journeys[0].needs,
+            vec![Need::IndexedRepo, Need::OperatorHome]
+        );
+        assert_eq!(Need::IndexedRepo.as_str(), "indexed-repo");
+        assert!(Need::OperatorHome.why().contains("operator's real HOME"));
+    }
+
+    #[test]
+    fn needs_are_delimiter_safe() {
+        // `__journey-plan` emits needs as `token:why` pairs joined by `;`, on a
+        // TAB-separated row, and the shell runner splits on exactly those. A
+        // reason containing the separator silently truncates itself — which is
+        // not hypothetical: the first version joined pairs with `,` and
+        // `operator-home`'s reason ("Claude transcripts, notes, drift report")
+        // printed as "(Claude transcripts" in the live lane.
+        //
+        // The token must also stay free of `:`, since the pair splits on the
+        // first one.
+        for n in [Need::OperatorHome, Need::IndexedRepo] {
+            let why = n.why();
+            assert!(!why.contains(';'), "{:?}: reason contains the pair separator `;`: {why}", n);
+            assert!(!why.contains('\t'), "{:?}: reason contains a TAB: {why}", n);
+            assert!(!why.is_empty(), "{:?}: every need must explain itself", n);
+            let tok = n.as_str();
+            assert!(!tok.contains(':'), "{:?}: token contains `:`", n);
+            assert!(!tok.contains(';'), "{:?}: token contains `;`", n);
+            assert!(
+                tok.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+                "{:?}: token `{tok}` is not kebab-case",
+                n
+            );
+        }
     }
 
     /// Build a bare step for the resolution tests.
@@ -773,16 +1347,19 @@ disposition = "demote"
 id = "b-specialist"
 title = "t"
 persona = "developer"
+experience = "e"
 tier = 5
 [[journey]]
 id = "a-critical"
 title = "t"
 persona = "end-user"
+experience = "e"
 tier = 1
 [[journey]]
 id = "c-multimachine"
 title = "t"
 persona = "operator"
+experience = "e"
 tier = 2
 skip_live = "needs a second machine"
 "#,

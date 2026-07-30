@@ -604,13 +604,38 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
     // the plan-cache hit/miss below. Kept per-device: the sum answers "could the
     // cluster hold this at all", which is not the same question as "can the
     // device this block landed on hold it".
-    let device_vram_bytes: Vec<u64> = devs
+    //
+    // BOTH figures are logged per device, not just the one that wins. The fit
+    // gate reports a single `capacity_mb` with the source string
+    // "ggml_backend_dev_memory (free, else total)", which cannot distinguish
+    // "this device is small" from "this device is momentarily busy" — and those
+    // demand opposite responses. A refusal on 2026-07-29 (worker assigned 12
+    // blocks / 21430 MiB, capacity_mb=20000) was unresolvable from the logs for
+    // exactly that reason: 20000 could have been a 20 GB device or a 51 GB
+    // device with 31 GB transiently held by the outgoing generation.
+    let device_memory: Vec<(u64, u64)> = devs
         .iter()
         .map(|&d| {
             let (mut free, mut total): (usize, usize) = (0, 0);
             unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
-            (if free > 0 { free } else { total }) as u64
+            (free as u64, total as u64)
         })
+        .collect();
+    for (i, (free, total)) in device_memory.iter().enumerate() {
+        const MIB: u64 = 1024 * 1024;
+        tracing::info!(
+            target: "placement",
+            device = i,
+            endpoint = ?assignments.iter().find(|a| a.device_index == i).map(|a| &a.endpoint),
+            free_mb = free / MIB,
+            total_mb = total / MIB,
+            held_by_others_mb = total.saturating_sub(*free) / MIB,
+            "device memory as ggml reports it (plan order: RPC workers first, host last)"
+        );
+    }
+    let device_vram_bytes: Vec<u64> = device_memory
+        .iter()
+        .map(|&(free, total)| if free > 0 { free } else { total })
         .collect();
     let eligible_workers = assignments.len();
 
@@ -651,14 +676,14 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
             cached.clone()
         } else {
             // Weight by advertised free VRAM (host RAM for a CPU-backed worker),
-            // quantized to coarse buckets.
-            let weights: Vec<f32> = devs
+            // quantized to coarse buckets. Derived from the SAME `device_memory`
+            // snapshot the fit gate judges against — re-reading here would let
+            // the split be apportioned from one reading and checked against
+            // another, so a device could be handed a share it is then refused
+            // for, with neither number visible as wrong.
+            let weights: Vec<f32> = device_vram_bytes
                 .iter()
-                .map(|&d| {
-                    let (mut free, mut total): (usize, usize) = (0, 0);
-                    unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
-                    quantize_vram((if free > 0 { free } else { total }) as u64) as f32
-                })
+                .map(|&b| quantize_vram(b) as f32)
                 .collect();
             // Byte-mass-aware split: overlay the model's REAL per-block byte mass
             // so a non-uniform (MoE / hybrid) model apportions by BYTES, not block

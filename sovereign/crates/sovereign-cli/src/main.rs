@@ -33,6 +33,8 @@ mod audit_cmd;
 mod awareness_cmd;
 mod cache_audit_cmd;
 mod charter_cmd;
+#[cfg(feature = "dev-tools")]
+mod contract_cmd;
 mod daemon_bin;
 mod design_cmd;
 mod dev_bin;
@@ -312,6 +314,7 @@ const DEV_VERBS: &[&str] = &[
     "agent-bench",
     "claim",
     "nudge",
+    "contract",
 ];
 
 /// Every top-level verb the dispatcher routes — the complete surface
@@ -335,6 +338,7 @@ const ALL_VERBS: &[&str] = &[
     "chat",
     "claim",
     "code",
+    "contract",
     "corpus",
     "daemon",
     "design",
@@ -426,6 +430,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("agent-bench", "Eight-problem agent-coding battery"),
     ("claim", "Work-atlas scope claims (mesh coordination)"),
     ("nudge", "Dismiss audit nudges"),
+    (
+        "contract",
+        "What the CLI promises, how much is proven, when it last ran",
+    ),
 ];
 
 fn print_usage() {
@@ -734,8 +742,22 @@ async fn async_main() {
     // steps in order:
     //
     //   J <id> <tier> <persona> <visibility> <live|skip:reason> <title>
+    //     <experience> <needs,comma-joined|->
     //   S <id> <idx> <mut|ro> <exit|-> <contains|-> <absent|-> <1|0 non-empty>
     //     <live|skip:reason> <run>
+    //
+    // The two J columns added by the experience axis go AFTER `title`, which
+    // looks backwards next to the S row's "a new column goes before `run`,
+    // never after". The reason is the shell side: `read` gives its LAST
+    // variable the remainder of the line, so a field that may contain
+    // whitespace has to be last — `run` does, and it is. `title` also
+    // contains whitespace but is NOT the runner's last variable (the read
+    // declares enough names for the wider S row), so appending past it is
+    // safe. Appending also keeps every hand-written plan in
+    // scripts/tests/cli-journey-selftest.sh valid: those 18 J rows are the
+    // runner's negative controls, and a layout change that silently shifted
+    // their `title` into `experience` would weaken the one harness that
+    // proves this runner can fail.
     //
     // `-` means "not asserted" so a bash `while IFS=$'\t' read` never sees a
     // collapsed empty field. `run` is last because it is the only field that
@@ -753,14 +775,35 @@ async fn async_main() {
                         .unwrap_or_else(|| "live".into())
                 };
                 for j in journeys {
+                    // `token:why` pairs joined by `;`. The WHY travels with the
+                    // token so the shell runner can explain a skipped journey
+                    // without restating the sentence — one source of truth
+                    // (Need::why), printed by whoever needs it.
+                    //
+                    // `;` and NOT `,`: the reasons are prose and contain commas
+                    // ("Claude transcripts, notes, drift report"), so a
+                    // comma-joined list truncated every reason at its first
+                    // comma when the runner split it. `needs_are_delimiter_safe`
+                    // in cli_contract.rs pins the separator against the text.
+                    let needs = if j.needs.is_empty() {
+                        "-".to_string()
+                    } else {
+                        j.needs
+                            .iter()
+                            .map(|n| format!("{}:{}", n.as_str(), n.why()))
+                            .collect::<Vec<_>>()
+                            .join(";")
+                    };
                     println!(
-                        "J\t{}\t{}\t{:?}\t{:?}\t{}\t{}",
+                        "J\t{}\t{}\t{:?}\t{:?}\t{}\t{}\t{}\t{}",
                         j.id,
                         j.tier,
                         j.persona,
                         j.visibility,
                         live(&j.skip_live),
-                        j.title
+                        j.title,
+                        j.experience,
+                        needs
                     );
                     for (i, s) in j.steps.iter().enumerate() {
                         let e = s.expect.clone().unwrap_or_default();
@@ -879,6 +922,13 @@ async fn async_main() {
             }
             "drift" => {
                 let code = drift_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "contract" => {
+                // The CLI's own quality surface. In-process and dev-gated: it
+                // reads docs/cli-contract.toml, which only a source checkout has.
+                let code = contract_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

@@ -16,6 +16,9 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 corpus-engine-scip = { workspace = true, optional = true }
 dirs = "5"
 serde = { workspace = true }
+# Only for reading the journey nightly's `latest.json` in `cli_contract_report`
+# — a report the CLI must be able to quote without shelling out to jq.
+serde_json = { workspace = true }
 toml = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

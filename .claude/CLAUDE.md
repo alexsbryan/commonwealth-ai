@@ -196,6 +196,7 @@ need the conclusion:
 | "Which crates/files across the workspace do X?" | `Explore` subagent (max 3 concurrent, one message) |
 | "Code intel is down and I need a broad sweep" | `Explore` subagent — keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock gates) |
+| "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |
 
@@ -345,6 +346,8 @@ Scoping flags for iteration, not for the final gate:
 Both scripts write adapter logs (`target/sovereign-test/latest/`, `target/sovereign-lint/latest/`) including the raw cargo output, so triaging a failure never requires re-running cargo.
 
 The two runners are meant to exercise the same `cargo --workspace` surface — when one passes and the other fails, the discrepancy is the bug, not the runner. One known, deliberate exception: lint checks `sovereign-mesh/mesh-sim` and the test run does not, so the scheduler simulator is compiled but never exercised.
+
+**If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
 ### Index freshness
 

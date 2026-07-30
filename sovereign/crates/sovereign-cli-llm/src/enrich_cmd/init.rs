@@ -30,7 +30,6 @@ use super::paths;
 use super::templates;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 use sovereign_cli_shared::prompts::{confirm, stdin_is_tty};
-use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 
 const HELP: Help = Help {
     command: "svrn enrich init",
@@ -327,7 +326,10 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     }
 
     // Probe daemon + resolve defaults for any un-pinned model ids.
-    let base_url = format!("http://localhost:{}", DEFAULT_CLIENT_PORT);
+    // The CONFIGURED client port, not the compiled default: this probe decides
+    // whether init can resolve model ids at all, and against a daemon on a
+    // non-default port it reported "not responding" while the daemon was fine.
+    let base_url = sovereign_core::setup_config::client_daemon_base();
     let daemon_up = probe_daemon(&base_url).await;
     if !daemon_up {
         eprintln!("note: daemon is not responding at {base_url}.");
@@ -549,8 +551,8 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
 
     // Probe daemon + resolve defaults for un-pinned model ids,
     // mirroring the source-file path so downstream extract works
-    // identically.
-    let base_url = format!("http://localhost:{}", DEFAULT_CLIENT_PORT);
+    // identically — including its port resolution.
+    let base_url = sovereign_core::setup_config::client_daemon_base();
     let daemon_up = probe_daemon(&base_url).await;
     let (auto_chat, auto_embed) = if daemon_up {
         resolve_default_models(&base_url).await

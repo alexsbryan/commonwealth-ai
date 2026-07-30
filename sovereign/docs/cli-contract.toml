@@ -446,6 +446,27 @@ binary = "dispatcher"
 feature = "dev-tools"
 alias_of = "notes"
 
+# contract — this manifest, rendered. Dev-gated because it reads
+# docs/cli-contract.toml, which only a source checkout has; the views are
+# positional rather than flags because each is a different report, not a
+# different formatting of one.
+[[command]]
+path = "contract"
+binary = "dispatcher"
+feature = "dev-tools"
+[[command]]
+path = "contract map"
+binary = "dispatcher"
+feature = "dev-tools"
+[[command]]
+path = "contract census"
+binary = "dispatcher"
+feature = "dev-tools"
+[[command]]
+path = "contract nightly"
+binary = "dispatcher"
+feature = "dev-tools"
+
 # drift — bare (spec diff), accept, detect.
 [[command]]
 path = "drift"
@@ -993,6 +1014,217 @@ binary = "llm"
 hidden = true
 
 # ═════════════════════════════════════════════════════════════════════════
+# EXPERIENCES — the promises the product makes, and what each is made of.
+#
+# WHY THIS EXISTS. Every ratchet below the journey layer is verb-driven:
+# "every public verb belongs to a journey." That is a completeness check, and
+# it worked — but it made COMMANDS the unit, so journeys grew into vehicles
+# for verb coverage. `code-intel-lifecycle` is the tell: six steps
+# (project init | list | status | refresh | serve | stop) that prove the index
+# BUILDS and never once ask it a question. It is named for a capability and
+# tests only plumbing.
+#
+# Measured 2026-07-29, against the 23 tools .claude/CLAUDE.md mandates for
+# every agent session: 18 were named by NO journey step — including `symbols`,
+# `callers`, `callees`, `blast` and `code_search`, the five the instructions
+# say to use INSTEAD of reading files, on every node, every session. Nothing
+# was failing. Nothing was watching, either. Finding that took a hand
+# cross-reference of the instructions against this file, which is exactly the
+# kind of audit a manifest is supposed to make unnecessary.
+#
+# So the unit of coverage is the EXPERIENCE: a promise a user would name,
+# citing where it is promised, listing the capabilities it is made of. The
+# ratchet then asks the question the verb ratchet cannot — "is each part of
+# this promise actually exercised by something?" — and a promise with no
+# journey at all becomes a DECLARED gap rather than a discovery.
+#
+# Fields:
+#   id            REQUIRED. stable kebab-case key; journeys point at it.
+#   title         REQUIRED. the promise in the user's words.
+#   doc           REQUIRED. where the promise is made (checked to exist).
+#                 Required here, unlike on a journey: an undocumented
+#                 experience is not a promise, it is an intention.
+#   capabilities  ([]) the named parts of the promise. Each must be exercised
+#                 by a step of some journey serving this experience, in a step
+#                 that asserts OUTPUT — see the rule below.
+#   gap           set when NO journey serves this yet, saying why. Capped and
+#                 shrink-only, like the [[stranded]] ledger.
+#   note          free text, rendered in the experience map.
+#
+# THE CAPABILITY RULE (cli_contract_journeys::every_capability_is_exercised).
+# A read proves itself INLINE; a mutation is proven DOWNSTREAM.
+#   - a non-mutating step counts only if that step asserts output. Nothing
+#     later can prove that `symbols` answered.
+#   - a mutating step counts if any LATER step in the same journey asserts
+#     output. `corpus install` returns before its ingest lands; the proof is
+#     the `corpus status` that finds the corpus afterwards.
+# Exit codes are never enough, and this is not pedantry: EVERY code-
+# intelligence tool in this repo exits 0 when it finds nothing. `symbols` on
+# an unknown name prints "No symbol named X found in any installed code
+# corpus" and exits 0; so do `callers`, `callees` and `capability_map`
+# (measured 2026-07-29). An exit-code-only step is satisfied by a tool that
+# answered nothing at all.
+#
+# THE PATTERN THIS SURFACED, worth naming because it generalises: for most
+# experiences there are two journeys, and only one of them is the experience.
+# The PRODUCE half (project init, drift detect, enrich build) is expensive,
+# mutating, often skip_live — and it is plumbing. The CONSULT half (symbols,
+# drift_posture, enrich query) is cheap, read-only, deterministic — and it is
+# what the user actually came for. Every experience that had only a produce
+# journey was testing that the machine starts, not that it works.
+# ═════════════════════════════════════════════════════════════════════════
+
+[[experience]]
+id = "install-and-run"
+title = "Install it, and get an answer from a model on your own machine"
+doc = "README.md"
+capabilities = ["setup", "chat ask"]
+
+[[experience]]
+id = "daemon-operations"
+title = "Keep the daemon and its watchers healthy, and repair them when not"
+doc = "sovereign/docs/RUNBOOK.md"
+capabilities = ["doctor", "daemon status", "daemon restart", "project register"]
+
+[[experience]]
+id = "knowledge-corpora"
+title = "Turn documents into a corpus and get cited answers from it"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+capabilities = [
+  "corpus install",
+  "corpus status",
+  "corpus remove",
+  "chat inspect",
+  "enrich query",
+]
+
+[[experience]]
+id = "mesh-federation"
+title = "Join two machines into one pool of models and corpora"
+doc = "docs/TWO_NODE_QUICKSTART.md"
+capabilities = ["mesh create", "mesh status", "mesh plan"]
+
+[[experience]]
+id = "tool-interop"
+title = "Reach another tool's MCP surface, and expose yours to it"
+doc = "docs/INTEROP.md"
+capabilities = ["mcp add", "mcp list", "mcp tools"]
+
+[[experience]]
+id = "publish-to-others"
+title = "Publish a recipe, corpus, or mesh app for other people to install"
+doc = "sovereign/docs/MESHAPP_AUTHORING.md"
+capabilities = ["recipe test", "meshapp publish"]
+
+[[experience]]
+id = "code-intelligence"
+title = "Ask an indexed repository about itself and get file:line answers"
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+capabilities = ["project init", "symbols", "callers", "callees", "blast", "code_search"]
+note = """The five read tools are the promise CODE_INTELLIGENCE.md opens with \
+— "exact symbol lookup, compiler-resolved call graphs, and semantic search, \
+every answer pointing at a file and a line". Until code-intel-answer was \
+written (2026-07-29) not one of them was named by any journey; the only \
+code-intelligence journey was the six-step lifecycle, which proves the index \
+builds and never asks it anything. `project refresh` is deliberately NOT \
+listed: nothing in that journey asserts output after it, so listing it would \
+be claiming a proof that does not exist."""
+
+[[experience]]
+id = "code-intel-chat"
+title = "Ask a plain-English question about the code and get a cited answer"
+doc = "sovereign/docs/specs/CODE_INTEL_CHAT.md"
+capabilities = ["chat ask", "enrich build"]
+gap = """No journey covers this. The doc is a SPEC with a build plan, not a \
+sequence the CLI teaches today, and the path it describes (conceptual query → \
+intent-forced enrichment → SCIP bridge → cited answer) needs a resident model \
+and an enriched code atlas, so the journey is neither cheap nor deterministic \
+yet. Declared rather than omitted because this is the flagship developer \
+experience the repo talks about most and covers least: writing it down is what \
+turns "we never tested that" from a discovery into a debt."""
+
+[[experience]]
+id = "spec-to-code"
+title = "Find where the code and the spec it claims to implement disagree"
+doc = "docs/CHECK_CODE_AGAINST_SPEC.md"
+capabilities = ["code facts", "code check-spec"]
+
+[[experience]]
+id = "narrative-drift"
+title = "Find where the docs claim something the code stopped doing"
+doc = "sovereign/docs/DRIFT_DETECTION.md"
+capabilities = ["drift detect", "drift_posture", "drift_findings"]
+
+[[experience]]
+id = "agent-session-protocol"
+title = "An agent boots with the project's real state instead of guessing"
+doc = ".claude/CLAUDE.md"
+capabilities = [
+  "briefing",
+  "recent_changes",
+  "project_context",
+  "arch_posture",
+  "work_in_flight",
+  "notes add",
+  "notes",
+  "claim",
+  "session frames",
+  "cache-audit",
+]
+note = """This is the experience the fleet runs on every session, and it was \
+the least covered: `.claude/CLAUDE.md` mandates 23 tools and the manifest \
+named 5. The capability list here is deliberately the SESSION-START protocol \
+that file teaches, in its order, so the ratchet fails if the instructions grow \
+a step nothing exercises."""
+
+[[experience]]
+id = "autonomous-solve"
+title = "Hand the daemon a coding goal and review the diff it produces"
+doc = "sovereign/docs/SOLVER_FOR_PI_USERS.md"
+capabilities = ["solve", "solve --status"]
+
+[[experience]]
+id = "atos-orchestration"
+title = "Take a repo from charter to a passed phase with agent collaboration"
+doc = "sovereign/docs/ATOS.md"
+capabilities = ["project charter", "atos provision", "atos status"]
+
+[[experience]]
+id = "correctness-loops"
+title = "Prove a quality change is real before claiming it"
+doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
+capabilities = []
+note = """capabilities is EMPTY on purpose, and it is the honest reading: \
+neither serving journey (correctness-gates, gym-fixture-loop) asserts a single \
+thing about output — nine steps, zero `expect` blocks. Both are skip_live, so \
+nothing was ever going to catch that. Listing capabilities here would claim \
+proofs that do not exist; the experience map prints the 0-of-9 instead, which \
+is the number worth looking at."""
+
+[[experience]]
+id = "common-law-governance"
+title = "Surface tensions in a corpus and resolve them into common law"
+doc = "sovereign/docs/CLI_REFERENCE.md"
+capabilities = ["govern tensions", "govern ask"]
+
+[[experience]]
+id = "cli-quality"
+title = "See what the CLI promises, how much of it is proven, and when that was last checked"
+doc = "sovereign/docs/TESTING_SURFACE.md"
+capabilities = ["contract"]
+note = """THE SURFACE THIS FILE IS, made reachable. Every layer of it existed \
+before 2026-07-30 and none of it was findable: the experience map lived inside a \
+cargo test invocation nobody would guess, the lanes are two scripts under \
+scripts/, and the nightly's verdict is a latest.json under ~/.sovereign. This \
+repo's own history says what happens next — the harness this one replaced was \
+written, documented as safe to call in CI, and then called by nothing, its \
+env-var switch appearing nowhere but inside the script that read it.
+
+So `svrn contract` is a promise like any other, and it is journeyed like any \
+other. The self-reference is the point: a quality surface that is not itself \
+covered is asking for an exemption it has not earned."""
+
+# ═════════════════════════════════════════════════════════════════════════
 # JOURNEYS — the sequenced use cases the CLI promises.
 #
 # The [[command]] rows above prove each verb EXISTS. They cannot prove that
@@ -1009,6 +1241,16 @@ hidden = true
 #   id          REQUIRED. stable kebab-case key.
 #   title       REQUIRED. what the person is trying to accomplish.
 #   persona     REQUIRED. end-user | operator | developer | author | agent.
+#   experience  REQUIRED. the [[experience]] id this journey serves. A journey
+#               that serves no named promise is a command enumeration, which
+#               is the drift the experience axis exists to stop.
+#   needs       ([]) what this journey needs from the LANE that runs it:
+#               operator-home | indexed-repo. Distinct from skip_live (a
+#               property of the journey) and --exclude (a property of one
+#               run). The sandbox lane passes `--lacks` for what a throwaway
+#               HOME cannot have and the read-only operator lane runs exactly
+#               what the sandbox skipped, so the two lanes partition this
+#               manifest from one source instead of a hardcoded array.
 #   tier        REQUIRED. 1 (product is broken without it) .. 5 (specialist).
 #               Drives live-run ordering and triage severity.
 #   visibility  (internal) public journeys may not contain dev-tools steps.
@@ -1033,21 +1275,35 @@ hidden = true
 id = "first-run"
 title = "Install, set up, and get a grounded answer"
 persona = "end-user"
+experience = "install-and-run"
 tier = 1
 visibility = "public"
 doc = "README.md"
 [[journey.step]]
 run = "setup --yes"
 mutates = true
-note = "writes config + downloads models into the hermetic HOME"
+note = """writes config + downloads models into the hermetic HOME. Exit code \
+only, and deliberately: the final line is `Wizard complete.` on a fresh HOME but \
+`Already set up. Config at …` when a config exists (setup_cmd/mod.rs:152), and \
+the sandbox lane seeds one — so asserting either string would make this step a \
+test of which lane ran it. The mutation is proven downstream by [2]."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "daemon start"
 mutates = true
-[[journey.step]]
-run = "daemon status"
+note = """exit code only: every confirmation `daemon start` prints goes to STDERR \
+(`✓ daemon ready at …`, lifecycle.rs:581) and stdout assertions read stdout \
+ALONE, on purpose — see the stream note on the runner. That is the right stream \
+for it (narration, not payload), so the proof is [2]."""
 [journey.step.expect]
 exit = 0
-stdout_non_empty = true
+[[journey.step]]
+run = "daemon status"
+note = "the proof of [0] and [1] both: the daemon the setup wrote is answering"
+[journey.step.expect]
+exit = 0
+stdout_contains = "daemon running at"
 [[journey.step]]
 run = "model list"
 note = "`model` is declared subcommand-shaped; `model list` has no row of its own"
@@ -1067,11 +1323,37 @@ note = "README.md:14-24 teaches setup → install-service; this is the only PUBL
 [[journey.step]]
 run = "daemon stop"
 mutates = true
+note = "stderr-only confirmation again (lifecycle.rs:53); the reversal is proven by [7]"
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "daemon status"
+note = """PROVE THE STOP ACTUALLY STOPPED IT — the same shape as \
+corpus-lifecycle's `stdout_absent` closing step, and the reason this journey has \
+seven steps instead of six. `daemon status` exits 1 and prints `✗ daemon not \
+reachable on …` when nothing answers (lifecycle.rs:930), so both halves of the \
+assertion are load-bearing: exit 0 here would mean the daemon is still up. In \
+read-only mode [6] is skipped, which marks the journey degraded and reports this \
+step as unverifiable rather than failing it.
+
+IT EARNED ITS KEEP ON THE FIRST RUN. `exit 0, want 1` — output \
+`✓ daemon running at http://127.0.0.1:19741`. `daemon stop` had delegated to the \
+HOST's systemd and stopped the operator's `sovereign.service`, leaving the \
+sandbox's own daemon serving; the step before it reported ✓ because systemctl \
+exited 0. Three "the daemon keeps dying under heavy lanes" incidents in the \
+previous session were the same thing, read as flakiness. Fixed in \
+service_install.rs `service_manager_is_addressed` (note ad55c138). A stop that \
+stops the wrong daemon is invisible to any gate that does not ask what happened \
+afterwards — which is the entire argument for this step existing."""
+[journey.step.expect]
+exit = 1
+stdout_contains = "not reachable"
 
 [[journey]]
 id = "watcher-repair"
 title = "Repair a project whose index is healthy but unwatched"
 persona = "developer"
+experience = "daemon-operations"
 tier = 3
 doc = ".claude/CLAUDE.md"
 [[journey.step]]
@@ -1108,11 +1390,20 @@ stdout_contains = "{project}"
 id = "daemon-triage"
 title = "Diagnose and recover a sick daemon"
 persona = "operator"
+experience = "daemon-operations"
 tier = 1
 visibility = "public"
 doc = "sovereign/docs/RUNBOOK.md"
 [[journey.step]]
 run = "daemon status"
+note = """the BEFORE reading, and it asserts the same fact as [3] on purpose — a \
+triage journey that cannot tell "was up, restarted, still up" from "was down the \
+whole time" is not triage. Every lane that reaches this journey has already \
+probed the daemon (the runner refuses to run otherwise), so the up-text is the \
+honest expectation rather than a hopeful one."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "daemon running at"
 [[journey.step]]
 run = "doctor"
 note = "exit code reflects system health, not conformance — assert output only"
@@ -1121,15 +1412,29 @@ stdout_non_empty = true
 [[journey.step]]
 run = "daemon restart"
 mutates = true
-[[journey.step]]
-run = "daemon status"
+note = "confirmation is stderr (lifecycle.rs:859); the restart is proven by [3]"
 [journey.step.expect]
 exit = 0
+[[journey.step]]
+run = "daemon status"
+note = """the proof the restart WORKED, which is the whole journey. This \
+asserted `exit = 0` alone until 2026-07-29, so the step that carried the \
+meaning was the weakest in the sequence — and it is why `daemon restart` could \
+not be listed as a capability of this experience: a mutation is proven by a \
+LATER step asserting OUTPUT, and there was none. `stdout_non_empty` narrowed to \
+the actual up-text 2026-07-30 — not because non_empty was passing wrongly (the \
+down-path exits 1, which `exit = 0` already caught) but because it left the exit \
+code carrying the meaning again: the down-path paragraph is exactly as non-empty \
+as the up-path, so the OUTPUT assertion was decorative. Now it names the fact."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "daemon running at"
 
 [[journey]]
 id = "stay-current"
 title = "Check for and install a newer CLI"
 persona = "end-user"
+experience = "install-and-run"
 tier = 3
 visibility = "public"
 doc = "sovereign/docs/CLI_REFERENCE.md"
@@ -1145,16 +1450,26 @@ exit = 0
 id = "corpus-lifecycle"
 title = "Install a knowledge corpus, query it, remove it, prove it is gone"
 persona = "end-user"
+experience = "knowledge-corpora"
 tier = 1
 visibility = "public"
 doc = "sovereign/docs/KNOWLEDGE_BASES.md"
 [[journey.step]]
 run = "corpus list"
+note = """asserts a catalog ROW, not the `Available built-in corpora:` header — \
+the header prints whether or not the catalog behind it has any entries, which is \
+the same vacuous shape as asserting non-empty. `sep` is the smallest permanent \
+entry (inventory.rs); if the catalog is ever made dynamic this is the step that \
+should go red."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "sep"
 [[journey.step]]
 run = "corpus install {corpus}"
 mutates = true
+note = """exit code only: the stdout line is `Install requested:` on a fresh \
+request and `Already in progress:` when one is in flight (inventory.rs:171/177), \
+and both are correct outcomes here. The install is proven by [2]."""
 [journey.step.expect]
 exit = 0
 [[journey.step]]
@@ -1202,6 +1517,7 @@ stdout_absent = "{corpus}"
 id = "folder-to-corpus"
 title = "Turn a folder of documents into a queryable corpus with a workflow"
 persona = "end-user"
+experience = "knowledge-corpora"
 tier = 2
 visibility = "public"
 doc = "docs/WRITE_A_WORKFLOW.md"
@@ -1214,11 +1530,22 @@ stdout_non_empty = true
 [[journey.step]]
 run = "workflow copy notebook {workflow}"
 mutates = true
-note = "same: `workflow copy` has no row of its own"
+note = """same: `workflow copy` has no row of its own. `Created {path}` is \
+unconditional on the success path (workflow_cmd.rs:540), so this one CAN assert \
+its own effect and does."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Created"
 [[journey.step]]
 run = "workflow run {workflow} --folder {folder} --corpus {corpus}"
 mutates = true
-note = "same: `workflow run` has no row of its own"
+note = """same: `workflow run` has no row of its own. Exit code only: stdout \
+carries the per-item output blocks and the `— {workflow} — N ok, M failed` \
+summary is STDERR (workflow_cmd.rs:579), so there is no stable stdout string for \
+a folder whose contents the fixture chooses. The payoff is asserted at [3] — if \
+the ingest did nothing, `chat inspect` has nothing to answer from."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "chat inspect --corpus {corpus} {question}"
 [journey.step.expect]
@@ -1229,14 +1556,55 @@ stdout_non_empty = true
 id = "enrich-atlas"
 title = "Enrich an installed corpus into an atlas and query it"
 persona = "author"
+experience = "knowledge-corpora"
 tier = 3
 doc = "sovereign/docs/CLI_REFERENCE.md"
+# SELF-CONTAINED ON PURPOSE. This journey enriches an INSTALLED corpus, and it
+# used to assume one was already there — which held only because some earlier
+# journey had installed it. `corpus-lifecycle` (tier 1, so it runs first) ends by
+# REMOVING the fixture corpus and proving it is gone, that being its whole point,
+# so by the time this journey ran the index was deliberately absent and
+# `enrich init` exited 1 saying exactly that. A journey is an INDEPENDENT claim
+# about a use case; depending on the order of the manifest is the same defect
+# `watcher-repair` was fixed for when it needed its own repo root.
 [[journey.step]]
-run = "enrich init {corpus} --from-corpus {corpus}"
+run = "corpus install {corpus}"
 mutates = true
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "corpus status"
+note = """the install is asynchronous — `corpus install` POSTs and returns while \
+the ingest runs in a task — so this is both the proof it landed and the barrier \
+`enrich init` needs, since init opens the INDEX and fails outright if it is not \
+there yet. Same settle window and same assertion as corpus-lifecycle[2]."""
+settle_secs = 120
+[journey.step.expect]
+exit = 0
+stdout_contains = "{corpus}"
+[[journey.step]]
+run = "enrich init {corpus} --from-corpus {corpus} --pipeline {pipeline}"
+mutates = true
+note = """`--pipeline` is REQUIRED here, not decoration: init's default is the \
+legacy `literary` pipeline, and `enrich build` refuses a non-atlas pipeline \
+outright ("`build` only supports atlas pipelines"). This journey's title is \
+"enrich into an ATLAS", so a legacy pipeline was the journey contradicting \
+itself — found once step [0] was made falsifiable and the failure stopped \
+landing on `enrich status`. `exit = 0` added 2026-07-29 because this step \
+DECLARED NOTHING and so \
+could not fail. On the sandbox lane it reported ✓ while writing no enrichment \
+directory at all, `enrich build` reported ✓ after it, and the journey then died \
+on step [2] (`enrich status`, the first step that asserts anything) — two steps \
+past the real breakage, reading as "status is broken" when init had never run. \
+An unfalsifiable step does not just fail to prove its own command; it \
+misattributes the failure of the whole sequence."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "enrich build {corpus} --full"
 mutates = true
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "enrich status {corpus}"
 [journey.step.expect]
@@ -1260,6 +1628,7 @@ stdout_non_empty = true
 id = "mesh-federate"
 title = "Federate two nodes and reach a peer's corpus"
 persona = "operator"
+experience = "mesh-federation"
 tier = 2
 visibility = "public"
 doc = "docs/TWO_NODE_QUICKSTART.md"
@@ -1293,6 +1662,7 @@ note = "prove the mutation reverses: the node re-solos"
 id = "mesh-bigger-model"
 title = "Run a model larger than one machine across the mesh"
 persona = "operator"
+experience = "mesh-federation"
 tier = 2
 visibility = "public"
 doc = "docs/RUN_A_BIGGER_MODEL.md"
@@ -1319,12 +1689,17 @@ stdout_non_empty = true
 id = "mcp-interop"
 title = "Wire an external MCP server in and confirm its tools are reachable"
 persona = "developer"
+experience = "tool-interop"
 tier = 2
 doc = "docs/INTEROP.md"
 [[journey.step]]
 run = "mcp add {mcp_name} --url {url}"
 mutates = true
-note = "REAL but UNDECLARED: `mcp add` dispatches (mcp_cmd.rs) but has no [[command]] row"
+note = """REAL but UNDECLARED: `mcp add` dispatches (mcp_cmd.rs) but has no \
+[[command]] row. Exit code only — `Added MCP server '{name}' → {url}` is stderr \
+narration (mcp_cmd.rs:238) — and the registration is proven by [1]."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "mcp list"
 [journey.step.expect]
@@ -1332,8 +1707,15 @@ exit = 0
 stdout_contains = "{mcp_name}"
 [[journey.step]]
 run = "mcp test {mcp_name}"
+note = """asserts a tool ROW, not the `N tools available:` header. The header is \
+the trap: `mcp test` returns 0 for any server that merely CONNECTS \
+(mcp_cmd.rs:108-119), and a server offering nothing prints `0 tools available:` — \
+which satisfies both the header substring and non_empty. The row \
+`  - mcp_{name}_{tool}` is the only output that means a tool was actually \
+advertised. This step asserted exit-code-only until 2026-07-30."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "- mcp_{mcp_name}_"
 [[journey.step]]
 run = "mcp tools {mcp_name}"
 [journey.step.expect]
@@ -1346,12 +1728,18 @@ stdout_non_empty = true
 id = "recipe-author"
 title = "Author a recipe, test it, install it as a corpus, publish it"
 persona = "author"
+experience = "publish-to-others"
 tier = 3
 doc = "sovereign-recipes/GETTING_STARTED.md"
 [[journey.step]]
 run = "recipe validate {recipe}"
+note = """the verdict moved from stderr to STDOUT to make this assertable \
+(recipe_cmd.rs:454, 2026-07-30) — a validator's verdict is payload, not \
+narration, and this read had no other way to prove anything. The failure list \
+stays on stderr, so `✓ Validation passed` on stdout means exactly one thing."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "Validation passed"
 [[journey.step]]
 run = "recipe test {recipe} --sample-size 50"
 [journey.step.expect]
@@ -1360,6 +1748,9 @@ stdout_non_empty = true
 [[journey.step]]
 run = "corpus install {corpus}"
 mutates = true
+note = "exit code only for the reason given in corpus-lifecycle[1]; proven by [3]"
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "corpus status"
 [journey.step.expect]
@@ -1373,6 +1764,7 @@ skip_live = "publishes to the shared catalog"
 id = "meshapp-author"
 title = "Ship a mesh app: recipe to corpus to explorer to registry"
 persona = "author"
+experience = "publish-to-others"
 tier = 4
 doc = "sovereign/docs/MESHAPP_AUTHORING.md"
 skip_live = "publishes to the shared catalog and serves a dev HTTP surface"
@@ -1403,11 +1795,19 @@ stdout_contains = "{app}"
 id = "code-intel-lifecycle"
 title = "Index a repo, serve it, keep it fresh, stop it"
 persona = "developer"
+experience = "code-intelligence"
 tier = 3
 doc = "sovereign/docs/CODE_INTELLIGENCE.md"
 [[journey.step]]
 run = "project init"
 mutates = true
+note = """`Ready. Open Claude Code in this directory.` is the unconditional last \
+line (project_cmd/init/mod.rs:984) — it prints even when the daemon and MCP \
+sub-checks failed, so it proves the wizard REACHED THE END and nothing more. The \
+index itself is asserted by [1]/[2] and, properly, by `code-intel-answer`."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Ready."
 [[journey.step]]
 run = "project list"
 [journey.step.expect]
@@ -1415,24 +1815,120 @@ exit = 0
 stdout_non_empty = true
 [[journey.step]]
 run = "project status"
+note = """asserts the `Watched` row, which .claude/CLAUDE.md:355 names as the one \
+line that distinguishes "index healthy but nothing maintaining it" from a healthy \
+project — the exact failure that cost a session to rediscover by hand. The ✓/✗ \
+state is environment-dependent (watchers are off in this repo by design) so the \
+assertion is on the ROW, not on its mark."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "Watched"
 [[journey.step]]
 run = "project refresh"
 mutates = true
+note = """exit code only: the daemon-nudge path prints `✓ Rebuild nudged for …` \
+to stdout but the local-rebuild fallback narrates on stderr (refresh.rs:99 vs \
+169), and which path runs depends on whether the lane's daemon answered. \
+Asserting the nudge text would make this step a test of the lane."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "serve --background"
 mutates = true
-note = "SOVEREIGN_STOP_SANDBOXED=1 is load-bearing here — see phase3_serve_lifecycle.rs:127"
+note = """SOVEREIGN_STOP_SANDBOXED=1 is load-bearing here — see \
+phase3_serve_lifecycle.rs:127. Exit code only: `MCP server: http://…(pid …)` is \
+stderr (serve_cmd.rs:197). Proven by [6]."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "stop"
 mutates = true
-note = "prove the mutation reverses: pidfile removed, port refuses"
+note = """Exit code only — `stopped MCP server (pid …)` is stderr \
+(stop_cmd.rs:108).
+
+THE REVERSAL IS NOT PROVEN, and this note used to claim it was ("prove the \
+mutation reverses: pidfile removed, port refuses" — asserted by nothing). Naming \
+the gap instead: the observable effect is `.sovereign/server.pid` being removed \
+and the port refusing, and NO read-only verb reports either. `project status`'s \
+`MCP server` row cannot stand in for it — it probes the project's configured port, \
+which in a sandbox lane is not the port `serve --background` took, so the row is \
+the same before and after. And a second `stop` is worse than useless: with no \
+pidfile it FORWARDS TO `daemon stop` (stop_cmd.rs:44-48) and would kill the lane's \
+own daemon.
+
+The product gap is the fix: a `serve --status` (or `project status` reporting the \
+pidfile it can actually see) would make this assertable in one line."""
+[journey.step.expect]
+exit = 0
+
+[[journey]]
+id = "code-intel-answer"
+title = "Ask the index about the code and get file:line answers back"
+persona = "developer"
+experience = "code-intelligence"
+needs = ["indexed-repo"]
+tier = 2
+doc = "sovereign/docs/CODE_INTELLIGENCE.md#the-tools-you-get"
+# THE MISSING CLAIM. `code-intel-lifecycle` proves the index BUILDS; nothing
+# proved it ANSWERS. This journey is the consult half, and it is the cheapest
+# journey in the manifest: no models, no network, no mutation — THIS repo is
+# the fixture and the facts are deterministic.
+#
+# Every step asserts a FACT, never `stdout_non_empty`, because non-empty is
+# exactly what a non-answer looks like here: each of these tools prints a
+# helpful "No symbol named X found…" paragraph and exits 0. Measured
+# 2026-07-29 on all five. An exit-code gate over this journey would be green
+# against an index that had been wiped.
+#
+# The facts are about the CONTRACT MACHINERY on purpose — `ToolRegistry`, and
+# `resolve_step`, the function that binds these very steps to commands. If a
+# refactor moves them, the fixture defaults are one line each to update, and
+# the journey failing is the correct signal that a documented answer changed.
+[[journey.step]]
+run = "tools call symbols --name={symbol}"
+note = """the promise CODE_INTELLIGENCE.md opens with — "every answer pointing \
+at a file and a line". Asserting the FILE is asserting that promise; asserting \
+the line would make every edit above it a false failure."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{symbol_file}"
+[[journey.step]]
+run = "tools call callers --symbol={function}"
+note = """`--symbol`, not `--name`: the call-graph tools take a different \
+parameter than `symbols`, and bare or misnamed args exit 2 with the schema \
+hint rather than answering — which is why the fixture pair moves together."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{caller_file}"
+[[journey.step]]
+run = "tools call callees --symbol={function}"
+[journey.step.expect]
+exit = 0
+stdout_contains = "{callee}"
+[[journey.step]]
+run = "tools call blast --symbol={function}"
+note = """the transitive impact, and the one tool here that answers in JSON — \
+so this step also proves the `--format`-free default is machine-readable, \
+which is what the pre-flight checks in .claude/CLAUDE.md consume."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{caller_file}"
+[[journey.step]]
+run = "tools call code_search --query={code_query}"
+note = """semantic search, so the assertion is a file the query should reach BY \
+MEANING with none of its words in the path. Chosen because it is stable: the \
+same three hits came back across phrasings (measured 2026-07-29). This is the \
+weakest-by-nature assertion in the journey and it is still a real claim — an \
+index that returned nothing, or lexical matches only, fails it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "{code_query_hit}"
 
 [[journey]]
 id = "tool-primitives"
 title = "Discover a code-intelligence tool and call it"
 persona = "agent"
+experience = "code-intelligence"
 tier = 3
 doc = "sovereign/docs/CODE_INTELLIGENCE.md"
 [[journey.step]]
@@ -1459,16 +1955,28 @@ stdout_contains = "{symbol}"
 id = "spec-check"
 title = "Check code against the spec it claims to implement"
 persona = "developer"
+experience = "spec-to-code"
 tier = 4
 doc = "docs/CHECK_CODE_AGAINST_SPEC.md"
 [[journey.step]]
 run = "code facts {repo} --corpus-id {corpus}"
 mutates = true
-note = "REAL but UNDECLARED: `code facts` has no [[command]] row (CLI_REFERENCE omits it)"
+note = """REAL but UNDECLARED: `code facts` has no [[command]] row \
+(CLI_REFERENCE omits it). The summary line is unconditional and on stdout \
+(`… N construction-fields · N string-literals · N function-defs → path`, \
+code_cmd.rs:212), so this mutation can assert its own effect."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "construction-fields"
 [[journey.step]]
 run = "enrich spec-intel {spec} --corpus {corpus}"
 mutates = true
-note = "REAL but UNDECLARED: `enrich spec-intel` has no [[command]] row"
+note = """REAL but UNDECLARED: `enrich spec-intel` has no [[command]] row. Its \
+closing summary is on stdout (spec_intel.rs:433) and names the spec it read, so \
+this step asserts it rather than the per-section chatter above it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "=== spec-intel:"
 [[journey.step]]
 run = "code check-spec --corpus {corpus} --claims {claims}"
 note = "REAL but UNDECLARED: `code check-spec` has no [[command]] row"
@@ -1479,6 +1987,7 @@ stdout_non_empty = true
 id = "drift-cadence"
 title = "Detect narrative-vs-code drift and check the posture is fresh"
 persona = "developer"
+experience = "narrative-drift"
 tier = 4
 doc = "sovereign/docs/DRIFT_DETECTION.md"
 skip_live = "a full drift run indexes a repo and drives an LLM for tens of minutes"
@@ -1491,9 +2000,46 @@ run = "tools call drift_posture"
 stdout_non_empty = true
 
 [[journey]]
+id = "drift-consult"
+title = "Ask what the narrative claims about a symbol before changing it"
+persona = "agent"
+experience = "narrative-drift"
+needs = ["operator-home"]
+tier = 3
+doc = "sovereign/docs/DRIFT_DETECTION.md"
+# The consult half of drift, split out from `drift-cadence` for the same
+# reason code-intel-answer was split from the lifecycle: the cadence journey
+# RUNS a detection (tens of minutes of inference, skip_live, so never actually
+# run), while the thing agents do on every session is READ the result. That
+# half is free and was untested.
+#
+# Both assertions are deliberately structural, and the reason is worth stating
+# rather than hiding: a stronger assertion — "findings mention X" — would go
+# red on any machine whose last drift run is older than the docs, which is the
+# normal state and not a defect. What these steps CAN prove is that the tool
+# located the report and answered from it, which is exactly the failure the
+# .claude/CLAUDE.md reflection triggers describe (`never_run` despite a recent
+# run, meaning the canonical JSON mirror did not land).
+[[journey.step]]
+run = "tools call drift_posture"
+note = "`narrative_paths` appears only when a report was found and parsed"
+[journey.step.expect]
+exit = 0
+stdout_contains = "narrative_paths"
+[[journey.step]]
+run = "tools call drift_findings --query={drift_query}"
+note = """names the report it consulted even when the query has no matches — \
+`status: no_matches` WITH a `report_path` is a real answer; a missing \
+`report_path` means the sidecar was never written."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "report_path"
+
+[[journey]]
 id = "solve-goal"
 title = "Give the daemon a coding goal and review the diff"
 persona = "developer"
+experience = "autonomous-solve"
 tier = 3
 visibility = "public"
 doc = "sovereign/docs/SOLVER_FOR_PI_USERS.md"
@@ -1515,6 +2061,7 @@ mutates = true
 id = "atos-project"
 title = "Take a greenfield repo from charter to a passed phase"
 persona = "developer"
+experience = "atos-orchestration"
 tier = 4
 doc = "sovereign/docs/ATOS.md"
 skip_live = "agent-collaborative; each step drives a long orchestrated session"
@@ -1545,6 +2092,7 @@ stdout_non_empty = true
 id = "atos-feature"
 title = "Drive one feature through provision, milestones, and teardown"
 persona = "developer"
+experience = "atos-orchestration"
 tier = 5
 doc = "sovereign/docs/ATOS.md"
 skip_live = "long orchestrated sessions; teardown reads stdin"
@@ -1570,19 +2118,90 @@ mutates = true
 # ── Arc F — agent hygiene ────────────────────────────────────────────────
 
 [[journey]]
+id = "agent-session-boot"
+title = "Boot a session from the project's real state instead of guessing"
+persona = "agent"
+experience = "agent-session-protocol"
+needs = ["indexed-repo"]
+tier = 2
+doc = ".claude/CLAUDE.md"
+# The session-start protocol .claude/CLAUDE.md mandates, in the order it
+# teaches, as one sequence. Every step is read-only and deterministic, and
+# together they were the largest hole in this manifest: of the 23 tools that
+# file requires, 18 were named by no journey at all.
+#
+# Tier 2 because this is not developer convenience — it is what every agent on
+# every node does before touching anything, and when one of these goes dark the
+# agent does not fail, it silently falls back to reading files by hand. That
+# failure is invisible from inside the session, which is the argument for
+# testing it from outside.
+[[journey.step]]
+run = "tools call briefing"
+note = """step 1 of the protocol, and the boot hook's own payload — `Working \
+set` is the section every consumer keys off."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Working set"
+[[journey.step]]
+run = "tools call recent_changes --hours={hours}"
+note = """"which subsystems are active". The assertion can only be non-empty: \
+this tool's answer is a function of WHEN it runs, and "No code changes in the \
+last N hours" is a legitimate answer on a quiet repo. So it proves the tool \
+responds, not that it found something — the weakest step here, named as such \
+rather than dressed up. Strengthening it needs a fixture repo with a committed \
+change at a known time, which is real work and is not free."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "tools call project_context --query={doc_query}"
+note = """"pull relevant conventions". `relevance` is present only when a \
+result came back — the empty answer is `{"results": [], "hint": …}`, which \
+`stdout_non_empty` would have accepted."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "relevance"
+[[journey.step]]
+run = "tools call arch_posture"
+note = "the boundary-moving pre-flight; `status` is fresh-or-stale, never absent"
+[journey.step.expect]
+exit = 0
+stdout_contains = "status"
+[[journey.step]]
+run = "tools call work_in_flight --scope={scope} --match_mode=symbol"
+note = """"is anyone else on the mesh touching this?" — `claims` is the array \
+the caller reads, and an empty array is a real answer (nobody is), so the key \
+is what proves the query ran."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "claims"
+
+[[journey]]
 id = "session-continuity"
 title = "Hand a session's state to its successor"
 persona = "agent"
+experience = "agent-session-protocol"
+needs = ["operator-home"]
 tier = 4
 doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
 [[journey.step]]
 run = "session list"
-note = "`session` is declared bare; list/frames/distill/grade have no rows"
+note = """`session` is declared bare; list/frames/distill/grade have no rows. \
+Asserts the FIXTURE SESSION, not the table header: the header prints over an \
+empty table, and the whole journey is about that session — if `session list` \
+cannot see the id the next step distills, the sequence is already broken."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "{session_id}"
 [[journey.step]]
 run = "session distill {session_id}"
 mutates = true
+note = """exit code only: a first run ends `frame: valid (all N sections) → path` \
+but a repeat without `--force` short-circuits to `frame: skipped — … is \
+self-reported …` (session_cmd.rs:1997), and both are correct. The frame landing is \
+proven by [2]."""
+[journey.step.expect]
+exit = 0
 [[journey.step]]
 run = "session frames"
 [journey.step.expect]
@@ -1593,6 +2212,7 @@ stdout_non_empty = true
 id = "agent-notes"
 title = "Leave durable decisions and read them back"
 persona = "agent"
+experience = "agent-session-protocol"
 tier = 4
 doc = "sovereign/docs/CLI_REFERENCE.md"
 [[journey.step]]
@@ -1600,7 +2220,16 @@ run = "notes add --kind decision -m {content}"
 mutates = true
 note = """`notes` is declared bare; add/promote/gc have no rows. The shape is \
 `add --kind <k> -m <body>` per `svrn notes --help`; this row previously read \
-`notes add {content} --kind decision`, which exits 2 (`unknown flag`)."""
+`notes add {content} --kind decision`, which exits 2 (`unknown flag`).
+
+`stdout_non_empty` is a REAL assertion here, unusually: the entire stdout of \
+`notes add` is the new note's id and nothing else (notes_cmd.rs:446), so empty \
+stdout means no row was minted. There is no literal to match — which is why this \
+is the one step in the manifest where non_empty is the strongest available \
+assertion rather than the weakest."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
 [[journey.step]]
 run = "notes --query {content}"
 note = """the actual read-back — the journey's whole title. This step was RED \
@@ -1618,32 +2247,57 @@ exit = 0
 stdout_contains = "{content}"
 [[journey.step]]
 run = "reflect"
+note = """asserts the report's own banner: `reflect` renders a fixed-shape summary \
+(counts, improvement signals, open todos) even with zero sessions analysed, so the \
+banner proves it RENDERED — and a read whose only gate is `exit = 0` proves \
+nothing at all here."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "Session Reflection Summary"
 
 [[journey]]
 id = "work-coordination"
 title = "Claim a scope so peer agents do not collide, then release it"
 persona = "agent"
+experience = "agent-session-protocol"
 tier = 4
 doc = "sovereign/docs/WORK_ATLAS.md"
 [[journey.step]]
 run = "claim {scope} --intent {intent}"
 mutates = true
-[[journey.step]]
-run = "claim list"
+note = "`claimed {scope}` is the unconditional stdout header of the text path (claim_cmd.rs:158)"
 [journey.step.expect]
 exit = 0
-stdout_non_empty = true
+stdout_contains = "claimed {scope}"
+[[journey.step]]
+run = "claim list"
+note = "the claim just made must be visible to a peer querying the atlas"
+[journey.step.expect]
+exit = 0
+stdout_contains = "{scope}"
 [[journey.step]]
 run = "claim release {claim_id}"
 mutates = true
-note = "prove the mutation reverses: the claim is gone, not archived (WORK_ATLAS spec §3)"
+note = """prove the mutation reverses: the claim is gone, not archived (WORK_ATLAS \
+spec §3). `released {id}` and `no claim {id} (already released or expired)` BOTH \
+exit 0 (claim_cmd.rs:398/400), so the exit code cannot tell a real release from a \
+no-op — asserting the success text is the only thing that can, and it is why this \
+step is not `exit = 0`.
+
+STILL SKIPPED IN EVERY LANE: {claim_id} is PRODUCED by step [0], and the runner \
+has no primitive for capturing a value out of a step's stdout into a fixture \
+token (the same class of addition as `settle_secs`). Until it does, this step \
+reports `skip … no fixture` and correctly demotes the journey to partial."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "released"
 
 [[journey]]
 id = "context-spend-audit"
 title = "Find where a session's context budget went"
 persona = "agent"
+experience = "agent-session-protocol"
+needs = ["operator-home"]
 tier = 5
 doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
 [[journey.step]]
@@ -1658,6 +2312,7 @@ stdout_non_empty = true
 id = "correctness-gates"
 title = "Run the ordered correctness gates before claiming a win"
 persona = "developer"
+experience = "correctness-loops"
 tier = 5
 doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
 skip_live = "each gate is a multi-minute benchmark against real models"
@@ -1678,6 +2333,7 @@ note = "`voice` is declared bare; its only action is `eval`"
 id = "gym-fixture-loop"
 title = "Add a failing gym fixture, fix it, prove no regressions"
 persona = "developer"
+experience = "correctness-loops"
 tier = 5
 doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
 skip_live = "mock-replay gyms need their fixture banks and a judge model"
@@ -1696,6 +2352,7 @@ run = "search-gym run --replays 5"
 id = "alignment-migrate"
 title = "Migrate the alignment workspace onto the mesh"
 persona = "operator"
+experience = "mesh-federation"
 tier = 5
 doc = "sovereign/docs/PLAN_ALIGNMENT.md"
 skip_live = "ingests the operator's real ~/.claude and notes.db"
@@ -1717,6 +2374,7 @@ stdout_non_empty = true
 id = "git-archaeology"
 title = "Mine commit history for atom provenance and evaluate it"
 persona = "developer"
+experience = "knowledge-corpora"
 tier = 5
 doc = "sovereign/docs/GIT_ARCHAEOLOGY.md"
 skip_live = "walks the full git history of a real code corpus"
@@ -1736,6 +2394,7 @@ stdout_non_empty = true
 id = "governance"
 title = "Surface tensions in a corpus and resolve them into common law"
 persona = "developer"
+experience = "common-law-governance"
 tier = 5
 doc = "sovereign/docs/CLI_REFERENCE.md"
 skip_live = "event-sourced resolution drives long inference over a corpus"
@@ -1761,6 +2420,7 @@ stdout_non_empty = true
 id = "pipeline-pods"
 title = "Drive a durable ingestion pipeline across ephemeral pods"
 persona = "operator"
+experience = "mesh-federation"
 tier = 5
 doc = "sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md"
 skip_live = "provisions paid cloud GPU pods"
@@ -1782,6 +2442,55 @@ stdout_non_empty = true
 run = "pipeline pod down {pod_id}"
 mutates = true
 note = "prove the mutation reverses — an orphaned pod bills until it is torn down"
+
+# ── Arc H — the contract itself ───────────────────────────────────────────
+
+[[journey]]
+id = "contract-audit"
+title = "Ask what the CLI promises and how much of it is actually proven"
+persona = "developer"
+experience = "cli-quality"
+tier = 3
+doc = "sovereign/docs/TESTING_SURFACE.md"
+# THE CHEAPEST JOURNEY IN THE MANIFEST, alongside code-intel-answer: pure file
+# I/O over this very file, no daemon, no models, no network, no mutation. It runs
+# in every lane and costs milliseconds.
+#
+# It asserts FACTS about its own output rather than `stdout_non_empty`, for the
+# reason this whole axis exists — a report that failed to load the manifest would
+# still print its section headers, and non_empty is exactly what a broken render
+# looks like. The strings chosen are the ones that carry meaning: a census ROW
+# (not the banner above it), and the words a promise is counted in.
+[[journey.step]]
+run = "contract census"
+note = """the census row, not the `── what can actually fail ──` banner. A row \
+means the walk over the journeys produced numbers; the banner prints regardless."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "a lane RUNS"
+[[journey.step]]
+run = "contract map"
+note = "the promise-level rollup line, which only prints after every experience is walked"
+[journey.step.expect]
+exit = 0
+stdout_contains = "steps assert output"
+[[journey.step]]
+run = "contract nightly"
+note = """asserts the section, because the CONTENT is legitimately either a \
+verdict or "no report on this host" — and both are correct answers that a \
+developer needs to see. What must never happen is this view printing nothing at \
+all, which is what a missing/renamed report directory used to look like."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "last contact with reality"
+[[journey.step]]
+run = "contract"
+note = """the bare form is the front door, and it must end with the commands that \
+re-derive it — a report that tells you the coverage is 41% and not how to change \
+that is where a quality tool starts dying."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "run it yourself"
 
 # ═════════════════════════════════════════════════════════════════════════
 # STRANDED — verbs that belong to no journey.

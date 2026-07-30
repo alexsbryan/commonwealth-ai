@@ -32,12 +32,30 @@
 #      PRIMARY_GGUF / EMBED_GGUF (default to the small soak models),
 #      READY_BUDGET_SECS (default 180), KEEP_HOME=1 to keep the sandbox.
 #
+# ── what the summary counts ──────────────────────────────────────────────
+# Six buckets, because a journey count is not coverage and the runner's exit
+# code cannot tell these apart on its own:
+#   proved         entered, every declared step ran, nothing failed, and at
+#                  least one step asserted something
+#   partial        entered and ran, but a precondition was skipped
+#   not attempted  never entered — `skip_live` (the author's scope) or a
+#                  declared `needs` this lane `--lacks` (this lane's gap, and
+#                  what cli-journey-nightly.sh runs read-only instead)
+#   unproven       entered, ran, and not one step asserted anything: the
+#                  commands were invoked and nobody looked at the output
+#   vacuous        entered and executed ZERO steps: needs a fixture
+#   failed         a step asserted something untrue
+#
+# Until 2026-07-29 the first bucket absorbed the middle two, so this lane
+# reported `30 ok` for a run where 19 of 32 journeys had executed nothing.
+#
 # ── exit codes ───────────────────────────────────────────────────────────
 #   0  every journey proved something and none failed
 #   1  a journey failed, or the daemon could not be kept alive
 #   2  misuse (unbuilt binaries, missing models, port in use, bad --journey)
-#   4  at least one journey executed ZERO steps. Nothing is broken; nothing
-#      was tested either. See the coverage line for what is missing.
+#   4  at least one journey proved nothing — it executed ZERO steps, or it ran
+#      and asserted nothing. Nothing is broken; nothing was tested either.
+#      See the coverage line for what is missing.
 #
 # ── on the corpus fixture ────────────────────────────────────────────────
 # `{corpus}` defaults to `journey-fixture`: three small markdown documents in
@@ -365,13 +383,27 @@ fi
 # actually provided — a throwaway HOME on a non-default port in a private
 # netns. It is the runner's safety interlock, and the only place in the repo
 # entitled to set it.
-# Journeys that read the OPERATOR's Claude Code transcripts
-# (~/.claude/projects/…). A throwaway HOME has none by construction, so a
-# sandbox run can only ever report a false failure for them. They are not
-# broken and not skip_live — they are fully covered by the read-only lane
-# against the real HOME, which is where they belong. Excluding them here is
-# a statement about this lane, not about the journeys.
-SANDBOX_EXCLUDES=(--exclude session-continuity --exclude context-spend-audit)
+# What THIS LANE cannot supply. Two facts about a throwaway sandbox, stated
+# once:
+#
+#   operator-home  the operator's real HOME — Claude Code transcripts under
+#                  ~/.claude/projects, an accumulated notes db, a drift report
+#                  on disk. A fresh mktemp HOME has none by construction, so a
+#                  sandbox run of those journeys can only report a FALSE
+#                  failure.
+#   indexed-repo   a live code index + SCIP graph. Building one needs
+#                  rust-analyzer and minutes, and a failed SCIP export wipes
+#                  the graph it was replacing — not something to do per run.
+#
+# This used to be `--exclude session-continuity --exclude context-spend-audit`:
+# two journey ids and one shared prose reason, hardcoded here, invisible from
+# the manifest, and needing a hand-edit for every future journey with the same
+# requirement. The journeys now DECLARE `needs` and the runner drops them with
+# the manifest's own reason — so this lane and the read-only operator lane
+# partition the manifest from one source of truth. What the sandbox lacks is
+# exactly what cli-journey-nightly.sh then runs read-only against the real
+# daemon; nothing is dropped by both, which is the property that matters.
+SANDBOX_LACKS=(--lacks operator-home --lacks indexed-repo)
 
 # One journey per runner invocation, with a daemon liveness check between
 # them. A journey is supposed to be an INDEPENDENT claim about a use case;
@@ -393,13 +425,12 @@ run_one() { # $1 = journey id; remaining = passthrough flags
       SOVEREIGN_BIN="$CLI_BIN" \
       SOVEREIGN_DAEMON_URL="http://127.0.0.1:$PORT" \
       SOVEREIGN_JOURNEY_OUT="$SANDBOX_HOME/j-$jid.jsonl" \
-      SOVEREIGN_JOURNEY_EXCLUDE_REASON="reads the operator's ~/.claude transcripts, which a sandbox HOME has none of — covered by the read-only lane" \
       ${JOURNEY_CORPUS:+SOVEREIGN_JOURNEY_CORPUS="$JOURNEY_CORPUS"} \
       ${MCP_URL:+SOVEREIGN_JOURNEY_MCP_NAME="$MCP_NAME"} \
       ${MCP_URL:+SOVEREIGN_JOURNEY_MCP_URL="$MCP_URL"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT="$PROJECT_ID"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT_ROOT="$PROJECT_ROOT"} \
-    "$RUNNER" --mutating "${SANDBOX_EXCLUDES[@]}" --journey "$jid" "$@" \
+    "$RUNNER" --mutating "${SANDBOX_LACKS[@]}" --journey "$jid" "$@" \
     2>&1 | grep -vE '^cli-journey: |^ +steps +[0-9]|^ +coverage |^ +manifest |^$'
   return "${PIPESTATUS[0]}"
 }
@@ -424,8 +455,47 @@ if [ -n "$ONLY_JOURNEY" ]; then
   esac
 fi
 
-PASSED=0; FAILED=0; VACUOUS=0
-declare -a FAILED_IDS=() VACUOUS_IDS=()
+# The verdict the RUNNER recorded for a journey, or `not-attempted` when it
+# never entered it at all.
+#
+# WHY NOT THE EXIT CODE ALONE. The runner exits 0 both for "this journey passed"
+# and for "I dropped this journey whole" (declared `skip_live`, or a `needs` this
+# lane `--lacks`) — and also for `partial`. So counting exit 0 as ok reported
+# `30 ok, 1 vacuous, 1 failed` for a lane where NINETEEN of the 32 journeys ran
+# nothing: 14 skip_live plus 5 this lane cannot supply. The step-coverage line
+# below was honest the whole time (45/133), but "30 ok" is the number a human
+# reads first, and it was the same vacuous-green shape this harness exists to
+# kill, sitting in its own headline.
+#
+# The runner already writes exactly one `kind=journey` row per journey it
+# entered, carrying the verdict it decided. Read that, rather than re-deriving
+# a verdict here from an exit code that cannot express the difference.
+verdict_of() { # jsonl-file
+  local f="$1" v
+  [ -s "$f" ] || { echo "not-attempted"; return 0; }
+  v="$(sed -n 's/.*"kind":"journey".*"verdict":"\([a-z]*\)".*/\1/p' "$f" | tail -1)"
+  echo "${v:-not-attempted}"
+}
+
+# Why a journey was not attempted, so the summary can separate the AUTHOR's
+# stated scope (`skip_live` — "needs a second machine") from this LANE's gap
+# (a declared `needs` a throwaway HOME cannot supply). The second set is what
+# cli-journey-nightly.sh then runs read-only against the operator's daemon, so
+# conflating them would hide the half somebody still owes evidence for.
+#
+# Asked per journey as it is decided, not counted up-front over the whole plan:
+# with `--journey <id>` the plan-wide totals would describe journeys this run
+# never looked at.
+why_unattempted() { # jid
+  case "$(awk -F'\t' -v id="$1" '$1=="J" && $2==id {print $6; exit}' "$PLAN")" in
+    skip:*) echo "skip_live" ;;
+    *)      echo "lacks" ;;
+  esac
+}
+UNATT_SKIPLIVE=0; UNATT_LACKS=0
+
+PASSED=0; FAILED=0; VACUOUS=0; PARTIAL=0; UNATTEMPTED=0; UNPROVEN=0
+declare -a FAILED_IDS=() VACUOUS_IDS=() PARTIAL_IDS=() UNPROVEN_IDS=()
 for jid in "${JOURNEY_IDS[@]}"; do
   # Revive first: the PREVIOUS journey may have legitimately stopped it.
   if ! ensure_daemon; then
@@ -434,13 +504,34 @@ for jid in "${JOURNEY_IDS[@]}"; do
     break
   fi
   run_one "$jid" "$@"; jrc=$?
+  jv="$(verdict_of "$SANDBOX_HOME/j-$jid.jsonl")"
   case "$jrc" in
-    # 4 is the runner's VACUOUS exit: the journey ran, asserted nothing, and
-    # said so. Folding it into either bucket loses the whole point — counting
-    # it as ok is the lie being fixed, counting it as a failure conflates
-    # "this is broken" with "this was never tested".
-    0) PASSED=$((PASSED + 1)) ;;
-    4) VACUOUS=$((VACUOUS + 1)); VACUOUS_IDS+=("$jid") ;;
+    # 4 is the runner's NOTHING-WAS-PROVEN exit, and it covers two distinct
+    # shapes: ∅ vacuous (no step ran at all — a missing fixture) and ⊘ unproven
+    # (steps ran and not one of them asserted anything — a hole in the manifest).
+    # Different owners, different repairs, so read the verdict row rather than
+    # collapsing them. Folding either into `ok` is the lie this harness exists to
+    # kill; folding them into `failed` conflates "this is broken" with "this was
+    # never tested".
+    4) case "$jv" in
+         unproven) UNPROVEN=$((UNPROVEN + 1)); UNPROVEN_IDS+=("$jid") ;;
+         *)        VACUOUS=$((VACUOUS + 1)); VACUOUS_IDS+=("$jid") ;;
+       esac ;;
+    0) case "$jv" in
+         pass)          PASSED=$((PASSED + 1)) ;;
+         partial)       PARTIAL=$((PARTIAL + 1)); PARTIAL_IDS+=("$jid") ;;
+         unproven)      UNPROVEN=$((UNPROVEN + 1)); UNPROVEN_IDS+=("$jid") ;;
+         not-attempted)
+           UNATTEMPTED=$((UNATTEMPTED + 1))
+           if [ "$(why_unattempted "$jid")" = "skip_live" ]; then
+             UNATT_SKIPLIVE=$((UNATT_SKIPLIVE + 1))
+           else
+             UNATT_LACKS=$((UNATT_LACKS + 1))
+           fi ;;
+         # vacuous already exits 4 under --mutating; anything else is new and
+         # should be visible rather than folded into a pass.
+         *)             PARTIAL=$((PARTIAL + 1)); PARTIAL_IDS+=("$jid (unrecognised verdict)") ;;
+       esac ;;
     *) FAILED=$((FAILED + 1)); FAILED_IDS+=("$jid") ;;
   esac
 done
@@ -463,7 +554,15 @@ echo
 MAN_PCT=0
 [ "${MANIFEST_STEPS:-0}" -gt 0 ] && MAN_PCT=$(( COV_RAN * 100 / MANIFEST_STEPS ))
 
-echo "cli-journey-sandbox: $PASSED ok, $VACUOUS vacuous, $FAILED failed (of ${#JOURNEY_IDS[@]} journeys in the manifest)"
+echo "cli-journey-sandbox: $PASSED proved, $PARTIAL partial, $UNATTEMPTED not attempted, $UNPROVEN unproven, $VACUOUS vacuous, $FAILED failed (of ${#JOURNEY_IDS[@]} journeys in the manifest)"
+if [ "$UNATTEMPTED" -gt 0 ]; then
+  # Name WHY, because the two halves have different owners: skip_live is the
+  # author's stated scope, while a lane gap is evidence somebody else has to
+  # produce — and the nightly does, read-only, against the operator's daemon.
+  echo "                     not attempted: $UNATT_SKIPLIVE declared skip_live, $UNATT_LACKS this lane lacks"
+  echo "                     (the lacked set is what cli-journey-nightly.sh runs read-only)"
+fi
+[ "$PARTIAL" -gt 0 ] && printf '  ~ %s (ran, but its sequence was not proven)\n' "${PARTIAL_IDS[@]}"
 echo "                     coverage $COV_RAN/$COV_DECL steps in journeys this lane ENTERED (${COV_PCT}%)"
 # The honest denominator. $COV_DECL counts only journeys the lane attempted;
 # journeys dropped whole by `skip_live` or --exclude contribute to neither
@@ -472,6 +571,13 @@ echo "                     coverage $COV_RAN/$COV_DECL steps in journeys this la
 # move as a ✓ on a journey that executed nothing.
 echo "                     manifest $COV_RAN/$MANIFEST_STEPS steps in the WHOLE manifest (${MAN_PCT}%)"
 [ "$FAILED" -gt 0 ]  && printf '  ✗ %s\n' "${FAILED_IDS[@]}"
+if [ "$UNPROVEN" -gt 0 ]; then
+  printf '  ⊘ %s (ran end to end and asserted NOTHING)\n' "${UNPROVEN_IDS[@]}"
+  echo
+  echo "  A ⊘ journey is the one shape worse than a red: it is a sequence of"
+  echo "  commands nobody checked the output of, reported as a run. Add an"
+  echo "  \`expect\` block to its steps in docs/cli-contract.toml."
+fi
 if [ "$VACUOUS" -gt 0 ]; then
   printf '  ∅ %s (executed nothing — needs a fixture)\n' "${VACUOUS_IDS[@]}"
   echo
@@ -482,7 +588,7 @@ fi
 
 # Same ordering as the runner: a real failure outranks an absence of evidence.
 if [ "$FAILED" -gt 0 ]; then RC=1
-elif [ "$VACUOUS" -gt 0 ]; then RC=4
+elif [ "$VACUOUS" -gt 0 ] || [ "$UNPROVEN" -gt 0 ]; then RC=4
 else RC=0
 fi
 # Keep the sandbox HOME for triage on ANY non-zero verdict, vacuous included —

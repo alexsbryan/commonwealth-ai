@@ -19,7 +19,6 @@ use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
 use super::providers::{parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider};
-use sovereign_cli_shared::urls::{v1_models_url, DEFAULT_CLIENT_PORT};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes
@@ -1092,7 +1091,13 @@ pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<S
         Ok(c) => c,
         Err(_) => return (None, None),
     };
-    let url = v1_models_url(DEFAULT_CLIENT_PORT);
+    // The CONFIGURED client port when the caller supplied no base — the
+    // compiled default reached the wrong daemon (or the operator's) on any
+    // host that moved `client_port`.
+    let url = format!(
+        "{}/v1/models",
+        sovereign_core::setup_config::client_daemon_base()
+    );
     // If caller gave us a non-default base, use their URL.
     let url = if base_url.contains("://") && !base_url.ends_with("/v1/models") {
         format!("{}/v1/models", base_url.trim_end_matches('/'))

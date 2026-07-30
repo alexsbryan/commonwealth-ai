@@ -999,6 +999,37 @@ pub fn internal_daemon_base() -> String {
 pub fn internal_daemon_base_for(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
 }
+
+/// Base URL of the daemon's CLIENT listener (`http://localhost:<client_port>`),
+/// honouring `[daemon] client_port` in `~/.sovereign/config.toml`.
+///
+/// The twin of [`internal_daemon_base`], and it exists for the same reason one
+/// level over: `sovereign-cli-shared::urls` builds these URLs from a port the
+/// CALLER supplies, and callers that had no port to hand passed
+/// `DEFAULT_CLIENT_PORT` — so the v2 enrichment pipeline dispatched every
+/// `/v1/chat/completions` at `localhost:9741` whatever the config said.
+///
+/// The failure mode is worse than "cannot reach the daemon". A sandboxed run on
+/// a normal host does not fail at all — 9741 answers, because that is the
+/// OPERATOR's daemon, so an isolated enrichment silently drives the production
+/// process and its models. It only surfaced as an error because the CLI journey
+/// sandbox runs in a private netns where nothing answers on 9741
+/// (2026-07-29, `enrich-atlas` step 3, found once the journey's unfalsifiable
+/// steps were made falsifiable).
+///
+/// `localhost` rather than `127.0.0.1` to match `urls::v1_url`, which every
+/// existing client-side caller already uses.
+pub fn client_daemon_base() -> String {
+    let port = SetupConfig::load()
+        .map(|cfg| cfg.daemon.client_port)
+        .unwrap_or_else(|_| default_client_port());
+    client_daemon_base_for(port)
+}
+
+/// Pure builder behind [`client_daemon_base`].
+pub fn client_daemon_base_for(port: u16) -> String {
+    format!("http://localhost:{port}")
+}
 fn default_internal_bind() -> String {
     // Historical behaviour: the internal mesh API binds every interface.
     // Operators on multi-homed hosts can pin it to a private NIC.

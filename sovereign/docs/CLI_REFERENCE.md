@@ -574,6 +574,21 @@ Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 M
 
 Register the daemon with the OS service manager — launchd on macOS, systemd on Linux — so it starts at login and stays running across logouts. Run once after `svrn setup`. Lives in the `sovereign-cli-daemon` sibling.
 
+### `svrn contract`
+
+What this CLI promises, how much of it is proven, and when that was last checked against a running system. Reads `docs/cli-contract.toml` — a source checkout only, and `--features dev-tools`.
+
+| Subcommand | Description |
+|---|---|
+| (bare) | Everything below, ending with the exact commands that re-derive it |
+| `map` | The **experiences** — promises the product makes — and the journeys serving each, with how many steps of each assert output |
+| `census` | How many declared steps can actually fail, split into the ones a lane RUNS and the ones nothing ever executes |
+| `nightly` | The last journey-lane verdict on this host and its age, or a loud "no report here" |
+
+The `census` split is the number to read. A step in a `skip_live` journey is a written intention, and a step with no `expect` block is an invocation — neither is a test, and both used to be counted in the same total as the steps that assert an answer. The census the report prints is the same one `cli_contract_journeys` enforces as a gate, so it cannot flatter the manifest.
+
+See [TESTING_SURFACE.md](TESTING_SURFACE.md#the-cli-quality-surface) for the layers behind it and how to run each lane.
+
 ## HTTP endpoints
 
 `localhost:9741` serves both the OpenAI-compatible `/v1/*` API and the MCP JSON-RPC server at `/mcp`. `sovereign-server` exposes additional conversation/task APIs when run standalone:

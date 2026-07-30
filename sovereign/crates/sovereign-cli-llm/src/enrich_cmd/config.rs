@@ -136,11 +136,18 @@ pub struct TocMarkers {
     pub end: String,
 }
 
+/// The daemon this corpus's enrichment dispatches to, when `config.json` does
+/// not pin one.
+///
+/// Resolves `[daemon] client_port` rather than assuming the compiled default.
+/// It used to hardcode `DEFAULT_CLIENT_PORT`, and because this value is what
+/// `enrich init` PERSISTS into config.json, every later phase of the pipeline
+/// inherited it — so an operator who moved `client_port` had `enrich build`
+/// dispatch at :9741 forever, and a sandboxed run on a normal host silently
+/// drove the OPERATOR's daemon instead of its own (2026-07-29, found by the
+/// `enrich-atlas` journey in a netns where nothing answers on 9741).
 fn default_base_url() -> String {
-    format!(
-        "http://localhost:{}",
-        sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT
-    )
+    sovereign_core::setup_config::client_daemon_base()
 }
 
 /// Default section-body floor. Chosen to comfortably clear

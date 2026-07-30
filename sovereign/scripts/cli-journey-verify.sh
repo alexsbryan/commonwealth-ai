@@ -40,6 +40,12 @@
 # ── usage ────────────────────────────────────────────────────────────────
 #   SOVEREIGN_LIVE_JOURNEYS=1 ./scripts/cli-journey-verify.sh
 #   SOVEREIGN_LIVE_JOURNEYS=1 ./scripts/cli-journey-verify.sh --tier 1
+#   # the capability journeys, against a daemon with a real index:
+#   SOVEREIGN_LIVE_JOURNEYS=1 ./scripts/cli-journey-verify.sh \
+#     --journey code-intel-answer
+#   # a lane that cannot supply what some journeys declare they need:
+#   SOVEREIGN_LIVE_JOURNEYS=1 ./scripts/cli-journey-verify.sh \
+#     --lacks indexed-repo --lacks operator-home
 #   SOVEREIGN_LIVE_JOURNEYS=1 SOVEREIGN_JOURNEY_ISOLATED=1 \
 #     HOME=$(mktemp -d) SOVEREIGN_DAEMON_URL=http://127.0.0.1:19741 \
 #     ./scripts/cli-journey-verify.sh --mutating
@@ -53,18 +59,24 @@
 #   0  every journey that ran proved something, and nothing failed
 #   1  a step failed
 #   2  misuse (unbuilt binary, --mutating without isolation, bad flag)
-#   4  VACUOUS — a journey executed zero steps under --mutating. Not a
-#      failure of the code under test; a failure of this run to test it.
-#      Same idea as scripts/sovereign-test.sh exiting 4 on a zero-test run.
+#   4  VACUOUS — under --mutating, a journey executed zero steps, or ran
+#      steps that asserted NOTHING. Not a failure of the code under test; a
+#      failure of this run to test it. Same idea as scripts/sovereign-test.sh
+#      exiting 4 on a zero-test run.
 #
 # ── verdicts ─────────────────────────────────────────────────────────────
 #   ✓ passed    every declared step ran (bar manifest-declared `skip_live`)
+#               and at least one of them asserted something
 #   ~ partial   ran, but a precondition was skipped — sequence not proven
+#   ⊘ unproven  steps RAN and not one of them asserted anything. Evidence of
+#               nothing, same as ∅ — the binary was merely invoked.
 #   ∅ vacuous   NOTHING ran; this journey is evidence of nothing
 #   ✗ failed    a step asserted something untrue
 #
-# Each line carries `ran/declared steps`, and the summary carries the total.
-# A journey count alone hides the difference between 57 steps proven and 28.
+# Each line carries `ran/declared steps` and, when they differ, how many of
+# those steps actually asserted something. A journey count alone hides the
+# difference between 57 steps proven and 28; an `asserted` count alone hides
+# the difference between a step that held and a step that could not fail.
 set -uo pipefail
 
 MAX_TIER=5
@@ -72,6 +84,7 @@ MUTATING=0
 JOURNEY_FILTER=""
 OUT_JSONL="${SOVEREIGN_JOURNEY_OUT:-}"
 declare -a EXCLUDED=()
+declare -a LACKS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -84,6 +97,19 @@ while [ $# -gt 0 ]; do
     # them cannot be judged here"). Excluded journeys are announced, never
     # silently dropped.
     --exclude) EXCLUDED+=("$2"); shift 2 ;;
+    # What this lane CANNOT supply, as a manifest `needs` token
+    # (operator-home | indexed-repo). Every journey declaring a need this
+    # lane lacks is dropped whole, with the MANIFEST's own reason.
+    #
+    # This replaces a hardcoded array of journey ids in
+    # cli-journey-sandbox.sh: a property of the journey ("reads the
+    # operator's ~/.claude") was living in one lane's script, invisible from
+    # the manifest, and it would have had to be re-listed by hand for every
+    # new journey with the same requirement. Now the two lanes PARTITION the
+    # manifest from one declaration — the sandbox lane lacks what a throwaway
+    # HOME cannot have, and the read-only operator lane runs exactly that
+    # remainder.
+    --lacks) LACKS+=("$2"); shift 2 ;;
     --mutating) MUTATING=1; shift ;;
     --out) OUT_JSONL="$2"; shift 2 ;;
     -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
@@ -149,6 +175,24 @@ EXCLUDE_REASON="${SOVEREIGN_JOURNEY_EXCLUDE_REASON:-caller passed --exclude}"
 # Every {token} a journey step can carry. Overridable so a sandbox can point
 # at its own tiny fixtures; the defaults are the smallest real things in the
 # repo. A step whose placeholder has no value is SKIPPED, not guessed.
+
+# The newest Claude Code session id on this host, as the 8-char prefix
+# `session list` prints. Empty on a machine with no transcripts, which is the
+# right answer: `session-continuity` declares `needs = ["operator-home"]` and is
+# dropped whole by any lane that lacks it.
+#
+# Derived rather than left unset because `session list` is now asserted on the
+# session it is supposed to be able to see. With no fixture the step skipped and
+# reported an honest nothing — technically correct, and one fewer executed step
+# on the only lane that CAN run it.
+newest_session_prefix() {
+  local newest
+  newest="$(find "$HOME/.claude/projects" -maxdepth 2 -name '*.jsonl' -printf '%T@ %f\n' \
+            2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)"
+  [ -z "$newest" ] && return 0
+  printf '%s' "${newest%.jsonl}" | cut -c1-8
+}
+
 declare -A FIX=(
   [corpus]="${SOVEREIGN_JOURNEY_CORPUS:-}"
   [question]="${SOVEREIGN_JOURNEY_QUESTION:-what is this corpus about?}"
@@ -171,8 +215,38 @@ declare -A FIX=(
   # (ProjectRegistry::nested_conflict), so the journey needs its own repo.
   [project]="${SOVEREIGN_JOURNEY_PROJECT:-}"
   [project_root]="${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}"
-  [session_id]="${SOVEREIGN_JOURNEY_SESSION:-}"
+  [session_id]="${SOVEREIGN_JOURNEY_SESSION:-$(newest_session_prefix)}"
   [scope]="${SOVEREIGN_JOURNEY_SCOPE:-ToolRegistry}"
+  # ── code-intelligence facts ────────────────────────────────────────────
+  # The `code-intel-answer` journey asserts that the index ANSWERS, so each
+  # of these is a fact that is TRUE OF THIS REPO TODAY, not a shape. They
+  # come in pairs — the thing asked about, and what the answer must contain.
+  #
+  # Deliberately about the CLI-contract machinery itself: {symbol} is the
+  # tool registry, {function} is the resolver that binds these very steps to
+  # commands. If a refactor moves one, the default here is a one-line update
+  # and the journey going red is the correct signal that a documented answer
+  # changed. FILES, never line numbers: `symbols` promises "a file and a
+  # line", but a line moves whenever anything above it is edited, and a
+  # fixture that breaks on every unrelated edit gets deleted rather than
+  # fixed.
+  [symbol_file]="${SOVEREIGN_JOURNEY_SYMBOL_FILE:-registry.rs}"
+  [function]="${SOVEREIGN_JOURNEY_FUNCTION:-resolve_step}"
+  [caller_file]="${SOVEREIGN_JOURNEY_CALLER_FILE:-cli_contract.rs}"
+  [callee]="${SOVEREIGN_JOURNEY_CALLEE:-StepBinding}"
+  # Semantic search: none of the query's words appear in the answer's path,
+  # so a lexical index cannot satisfy it. Stable across phrasings when
+  # measured 2026-07-29.
+  [code_query]="${SOVEREIGN_JOURNEY_CODE_QUERY:-gossip peer selection staleness}"
+  [code_query_hit]="${SOVEREIGN_JOURNEY_CODE_QUERY_HIT:-gossip.rs}"
+  # ── agent session-boot facts ───────────────────────────────────────────
+  [hours]="${SOVEREIGN_JOURNEY_HOURS:-168}"
+  [doc_query]="${SOVEREIGN_JOURNEY_DOC_QUERY:-conventions and architecture}"
+  [drift_query]="${SOVEREIGN_JOURNEY_DRIFT_QUERY:-daemon}"
+  # `enrich build` refuses a legacy (non-atlas) pipeline, and init's default IS
+  # legacy — so the atlas journey has to name one. `literary_atlas` suits the
+  # markdown fixture corpus; `philosophy_atlas` is the other built-in.
+  [pipeline]="${SOVEREIGN_JOURNEY_PIPELINE:-literary_atlas}"
   # Distinctive and single-token so the read-back assertion survives any
   # column truncation in `notes` output.
   [content]="${SOVEREIGN_JOURNEY_CONTENT:-journey-roundtrip-probe}"
@@ -230,7 +304,10 @@ plan_source() {
 }
 
 pass=0; fail=0; skipped=0; degraded=0; jrun=0; jpass=0; jfail=0; jpartial=0
-jvacuous=0
+jvacuous=0; junproven=0
+# Steps that RAN but declare no assertion whatever, so they cannot fail. Kept
+# out of `pass` deliberately — see the reporting site for what that hid.
+unasserted=0
 # Coverage bookkeeping — the answer to "how much of what this manifest CLAIMS
 # to cover did this run actually execute?"
 #
@@ -255,6 +332,7 @@ unattempted_journeys=0; unattempted_steps=0
 cur_uncounted=0
 declare -a FAILURES=()
 declare -a VACUOUS=()
+declare -a UNPROVEN=()
 # Reused for every step's stderr; see the capture site for why the streams
 # are kept apart.
 ERR_FILE="$(mktemp)"
@@ -274,8 +352,15 @@ jsonl() { # id idx status run detail
 # reader can filter without guessing from which keys are present.
 jsonl_journey() { # id verdict ran declared
   [ -z "$OUT_JSONL" ] && return 0
-  printf '{"kind":"journey","journey":"%s","verdict":"%s","steps_ran":%s,"steps_declared":%s}\n' \
-    "$1" "$2" "$3" "$4" >> "$OUT_JSONL"
+  # `experience` rides along so a lane's JSONL can be aggregated BY PROMISE
+  # without re-reading the manifest — the sandbox lane runs one journey per
+  # invocation and cannot see the whole picture from any single run.
+  # `steps_asserted` is the one an aggregator must not have to re-derive:
+  # steps_ran counts INVOCATIONS, and an invocation is not evidence. A journey
+  # row with steps_ran == steps_declared and steps_asserted == 0 is a green
+  # tick over nothing, which is the shape this runner exists to refuse.
+  printf '{"kind":"journey","journey":"%s","experience":"%s","verdict":"%s","steps_ran":%s,"steps_declared":%s,"steps_asserted":%s,"steps_unasserted":%s}\n' \
+    "$1" "${cur_experience:--}" "$2" "$3" "$4" "${cur_asserted:-0}" "${cur_unasserted:-0}" >> "$OUT_JSONL"
 }
 
 # State for the journey currently being walked.
@@ -290,8 +375,13 @@ jsonl_journey() { # id verdict ran declared
 # `cur_ran` is the load-bearing addition: how many steps actually INVOKED the
 # binary. A skip of any kind is not evidence, and a journey made entirely of
 # skips proved nothing whatever its tick said.
+# `cur_asserted` is the second load-bearing count, and it is the one the ✓
+# used to hide: how many of the steps that ran actually CHECKED something. A
+# step with no `expect` block is invoked and whatever happens is fine, so a
+# journey made entirely of those ran end to end and proved nothing at all.
 cur_id=""; cur_broken=0; cur_degraded=0; cur_title=""
 cur_declared=0; cur_ran=0; cur_skipped_declared=0; cur_degraded_why=""
+cur_experience=""; cur_needs=""; cur_asserted=0; cur_unasserted=0
 
 # A missing fixture is the SAME epistemic class as a skipped mutation: the
 # step's precondition never happened, so nothing downstream of it is proven
@@ -333,6 +423,24 @@ finish_journey() {
     VACUOUS+=("$cur_id — $why")
     jsonl_journey "$cur_id" "vacuous" "$cur_ran" "$cur_declared"
 
+  elif [ "$cur_asserted" = "0" ]; then
+    # RAN, AND PROVED NOTHING. Epistemically identical to ∅ one level down: the
+    # steps invoked the binary, none of them checked a thing, so the sequence is
+    # evidence of nothing whatever the exit codes were. This is the verdict the
+    # ✓ used to swallow — `code-intel-lifecycle` reported a green 6/6 while four
+    # of its six steps declared no assertion at all, and `enrich-atlas` ticked an
+    # `enrich init` that had written no enrichment directory.
+    #
+    # Kept DISTINCT from ~ partial. Partial means "there is evidence, and a hole
+    # in it"; this means there is no evidence. Folding the two would let the most
+    # damning verdict in the ladder hide inside the most common one.
+    junproven=$((junproven + 1))
+    local un="$cur_id — ran $cur_ran step(s), none asserted anything"
+    [ -n "$cur_degraded_why" ] && un="$un ($cur_degraded_why)"
+    echo "  ⊘ $cur_id (UNPROVEN — $cov ran, 0 asserted anything)"
+    UNPROVEN+=("$un")
+    jsonl_journey "$cur_id" "unproven" "$cur_ran" "$cur_declared"
+
   elif [ "$cur_degraded" = "1" ]; then
     jpartial=$((jpartial + 1))
     echo "  ~ $cur_id (partial, $cov — sequence not proven; $cur_degraded_why)"
@@ -345,11 +453,15 @@ finish_journey() {
     # supply something, so they do not demote the verdict — but they are named
     # on the line, because a silent 6/7 is how coverage quietly leaks away.
     jpass=$((jpass + 1))
-    if [ "$cur_skipped_declared" -gt 0 ]; then
-      echo "  ✓ $cur_id ($cov; $cur_skipped_declared declared skip_live)"
-    else
-      echo "  ✓ $cur_id ($cov)"
-    fi
+    local extra=""
+    [ "$cur_skipped_declared" -gt 0 ] && extra="; $cur_skipped_declared declared skip_live"
+    # A ✓ MUST NAME ITS OWN WEAK STEPS. The tick is earned by the steps that
+    # asserted; saying so is the difference between "this journey is proven" and
+    # "part of this journey is proven and the rest merely ran". Silence here is
+    # how six green ticks read as six proofs.
+    [ "$cur_unasserted" -gt 0 ] && \
+      extra="$extra; $cur_asserted asserted, $cur_unasserted asserted NOTHING"
+    echo "  ✓ $cur_id ($cov$extra)"
     jsonl_journey "$cur_id" "pass" "$cur_ran" "$cur_declared"
   fi
 }
@@ -362,9 +474,14 @@ while IFS=$'\t' read -r kind f2 f3 f4 f5 f6 f7 f8 f9 f10 f11; do
   J)
     finish_journey
     cur_id="$f2"; tier="$f3"; live="$f6"; cur_title="$f7"
+    # The experience axis. `f8`/`f9` are appended AFTER title deliberately —
+    # see the layout note in main.rs's __journey-plan arm — so the hand-written
+    # plans in scripts/tests/cli-journey-selftest.sh stay valid and simply
+    # report an empty experience and no needs.
+    cur_experience="$f8"; cur_needs="$f9"
     cur_broken=0; cur_degraded=0; cur_skip=0
     cur_declared=0; cur_ran=0; cur_skipped_declared=0; cur_degraded_why=""
-    cur_uncounted=0
+    cur_uncounted=0; cur_asserted=0; cur_unasserted=0
     if [ -n "$JOURNEY_FILTER" ] && [ "$cur_id" != "$JOURNEY_FILTER" ]; then
       cur_skip=1; cur_id=""; continue
     fi
@@ -379,13 +496,41 @@ while IFS=$'\t' read -r kind f2 f3 f4 f5 f6 f7 f8 f9 f10 f11; do
       fi
     done
     [ -z "$cur_id" ] && continue
+    # A need this lane cannot supply. Same epistemic class as --exclude — a
+    # real gap in THIS lane's evidence, so the steps stay in the manifest
+    # denominator — but declared by the MANIFEST rather than by the caller,
+    # and it explains itself with the reason the manifest carries.
+    if [ -n "$cur_needs" ] && [ "$cur_needs" != "-" ] && [ ${#LACKS[@]} -gt 0 ]; then
+      # `;` between pairs, `:` inside one. NOT a comma: the reasons are prose
+      # and contain commas, so a comma split truncated every reason at its
+      # first one — the operator-home journeys printed "(Claude transcripts"
+      # and stopped. Caught by the sandbox lane's own output, 2026-07-29.
+      IFS=';' read -ra need_list <<< "$cur_needs"
+      for need in "${need_list[@]}"; do
+        for l in "${LACKS[@]}"; do
+          if [ "${need%%:*}" = "$l" ]; then
+            echo "  — $cur_id (this lane lacks ${need%%:*}: ${need#*:})"
+            cur_skip=1; cur_id=""; cur_uncounted=1
+            unattempted_journeys=$((unattempted_journeys + 1)); break 2
+          fi
+        done
+      done
+    fi
+    [ -z "$cur_id" ] && continue
     if [ "${live%%:*}" = "skip" ]; then
       echo "  — $f2 (not live: ${live#skip:})"
       cur_skip=1; cur_id=""; cur_uncounted=1
       unattempted_journeys=$((unattempted_journeys + 1)); continue
     fi
     jrun=$((jrun + 1))
-    echo "▸ $f2 — $cur_title"
+    # The experience is on the header line because a journey id alone does not
+    # say which PROMISE this evidence is about — and "which promise is
+    # unproven" is the question the manifest was reorganised to answer.
+    if [ -n "$cur_experience" ] && [ "$cur_experience" != "-" ]; then
+      echo "▸ $f2 [$cur_experience] — $cur_title"
+    else
+      echo "▸ $f2 — $cur_title"
+    fi
     ;;
   S)
     if [ -z "$cur_id" ]; then
@@ -506,8 +651,26 @@ while IFS=$'\t' read -r kind f2 f3 f4 f5 f6 f7 f8 f9 f10 f11; do
       settled_after=$(( $(date +%s) - settle_start ))
     fi
 
-    if [ -z "$why" ]; then
-      pass=$((pass + 1))
+    if [ -z "$why" ] && [ "$want_exit" = "-" ] && [ "$want_has" = "-" ] \
+       && [ "$want_absent" = "-" ] && [ "$want_nonempty" != "1" ]; then
+      # RAN, BUT PROVED NOTHING. The step declares no expected exit code and no
+      # output assertion, so `why` is empty by construction — there was nothing
+      # to be wrong. Printing ✓ here is the vacuous-green move at step scale,
+      # and it is how `enrich-atlas` reported a tick for an `enrich init` that
+      # wrote no enrichment directory at all, then blamed the first step two
+      # positions later that DID assert something.
+      #
+      # It still counts as EXECUTED (it did run, and coverage means executed) —
+      # but never as passed, and the summary names the total. Reaching a lane at
+      # all should be impossible: cli_contract_journeys::live_steps_all_assert_something
+      # is a HARD ZERO over every step a lane runs. This branch is the runtime
+      # backstop for a plan the static gate never saw (a hand-written plan, or a
+      # manifest edited without running the tests).
+      unasserted=$((unasserted + 1)); cur_unasserted=$((cur_unasserted + 1))
+      echo "    · [$idx] $argv — ran, asserted nothing"
+      jsonl "$cur_id" "$idx" "unasserted" "$argv" "step declares no expect block"
+    elif [ -z "$why" ]; then
+      pass=$((pass + 1)); cur_asserted=$((cur_asserted + 1))
       if [ -n "$settled_after" ]; then
         echo "    ✓ [$idx] $argv (settled after ${settled_after}s)"
       else
@@ -543,8 +706,14 @@ pct=0
 [ "$steps_declared" -gt 0 ] && pct=$(( steps_ran * 100 / steps_declared ))
 
 echo
-echo "cli-journey: journeys $jpass passed, $jpartial partial, $jvacuous vacuous, $jfail failed (of $jrun run)"
-echo "             steps   $pass passed, $fail failed, $degraded unverifiable, $skipped skipped"
+echo "cli-journey: journeys $jpass passed, $jpartial partial, $junproven unproven, $jvacuous vacuous, $jfail failed (of $jrun run)"
+echo "             steps   $pass passed, $fail failed, $unasserted unasserted, $degraded unverifiable, $skipped skipped"
+if [ "$unasserted" -gt 0 ]; then
+  # The distinction the ✓ used to hide: these EXECUTED, so they count as
+  # coverage, but they declared nothing and so proved nothing. A run of nothing
+  # but unasserted steps is a run that cannot fail.
+  echo "                     ($unasserted ran with no expect block — they cannot fail; give them at least exit = 0)"
+fi
 # The line the summary was missing. "29 ok, 0 failed" is a statement about
 # journeys; this is the statement about EVIDENCE, and the two can differ by
 # half. Always printed, in every mode — a lane that proves little should say
@@ -583,6 +752,22 @@ if [ "$fail" -gt 0 ]; then
   echo "failed steps:"
   printf '  %s\n' "${FAILURES[@]}"
   exit 1
+fi
+if [ "$junproven" -gt 0 ]; then
+  echo
+  echo "journeys that RAN and proved nothing:"
+  printf '  ⊘ %s\n' "${UNPROVEN[@]}"
+  echo "      Every step invoked the binary and none of them checked a thing."
+  echo "      Give a step an \`expect\` block in docs/cli-contract.toml — the"
+  echo "      static ratchet cli_contract_journeys::live_steps_all_assert_something"
+  echo "      is what normally stops this reaching a lane."
+  # Same gate as ∅ below, same reasoning: in read-only mode a journey whose
+  # asserting steps are all mutating runs its prefix and can legitimately assert
+  # nothing. Under --mutating the caller supplied a sandbox, so this is a hole
+  # in the manifest and worth a non-zero exit.
+  if [ "$MUTATING" = "1" ]; then
+    exit 4
+  fi
 fi
 if [ "$jvacuous" -gt 0 ]; then
   echo

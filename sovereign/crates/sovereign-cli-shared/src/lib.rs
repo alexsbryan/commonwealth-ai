@@ -15,6 +15,8 @@
 //!
 //! CLI plumbing (was `sovereign-cli/src/util/`):
 //! - [`cli_contract`]: loader for the CLI contract manifest (`docs/cli-contract.toml`).
+//! - [`cli_contract_report`]: renders that manifest's quality surface for
+//!   `svrn contract` and for the ratchet tests — one census, one renderer.
 //! - [`help`]: shared `Help` struct + `print` formatter.
 //! - [`deprecation`]: standard deprecation / retired announcements.
 //! - [`prompts`]: interactive confirm / line-read helpers.
@@ -22,6 +24,7 @@
 
 pub mod args;
 pub mod cli_contract;
+pub mod cli_contract_report;
 pub mod deprecation;
 pub mod dirs;
 pub mod help;

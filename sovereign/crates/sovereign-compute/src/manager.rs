@@ -694,6 +694,16 @@ pub struct DynamicChildSlot {
     /// are currently eligible. Takes the endpoints the LIVE handoff pinned, so
     /// the verdict is about the worker set this generation will actually dial.
     gate: Mutex<Option<PinnedSpawnGate>>,
+    /// The handoff the LIVE generation was spawned against; `None` before the
+    /// first respawn and once retired.
+    ///
+    /// Kept so the parent can state the child's placement on `/status`. The
+    /// child performs the load, so the split lives in the child's own
+    /// process-global cell and the parent cannot read it — which is why
+    /// `/status` used to report the mode with an empty split. This is the
+    /// parent's own copy of the cut it warmed and handed over, so reporting from
+    /// it needs no IPC and cannot disagree with what the child was told.
+    live_handoff: Mutex<Option<DistributionHandoff>>,
 }
 
 /// A [`SpawnGate`] that has not yet been bound to a worker set: the daemon
@@ -721,6 +731,7 @@ impl DynamicChildSlot {
             current: Mutex::new(None),
             spawned_at: Mutex::new(None),
             gate: Mutex::new(None),
+            live_handoff: Mutex::new(None),
         })
     }
 
@@ -743,6 +754,18 @@ impl DynamicChildSlot {
     /// exactly this path.
     pub fn model_path(&self) -> &Path {
         &self.spec.model
+    }
+
+    /// Where the live generation's weights actually are: which blocks went to
+    /// which remote worker and how many stayed local. `None` before the first
+    /// respawn and once retired — in both cases there is no child holding a
+    /// split, and a stated placement would be a claim about nothing.
+    pub fn placement(&self) -> Option<sovereign_core::traits::SlotPlacement> {
+        self.live_handoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|h| h.placement())
     }
 
     /// The stable routing handle. Valid across respawns.
@@ -798,12 +821,23 @@ impl DynamicChildSlot {
                 self.spec.handoff_path.display()
             )
         })?;
+        // Remember the cut before spawning, so `/status` can state this
+        // generation's placement from the moment it exists. Recorded from the
+        // handoff we just persisted rather than from the child, which owns the
+        // load but is in another process.
+        let placement = handoff.placement();
+        *self
+            .live_handoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(handoff.clone());
         info!(
             target: "compute_child",
             child = %self.name,
             model = %self.spec.model.display(),
             workers = handoff.endpoints.len(),
             endpoints = ?handoff.endpoints,
+            total_blocks = placement.total_blocks,
+            local_blocks = placement.local_blocks,
             handoff = %self.spec.handoff_path.display(),
             "distributed primary: respawning the child across the warmed worker set"
         );
@@ -897,6 +931,12 @@ impl DynamicChildSlot {
             previous.supervisor.terminate();
         }
         *self.spawned_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        // A retired slot has no placement. Keeping the last one would let
+        // `/status` describe a split that no process is holding.
+        *self
+            .live_handoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
         info!(
             target: "compute_child",
             child = %self.name,
@@ -1207,6 +1247,16 @@ impl InferenceProvider for ComputeRoutedProvider {
         // `/status` would show a node with no primary at all. Say where it
         // actually is — mode `child-distributed` — rather than leave the
         // operator to infer it from the compute_children array.
+        //
+        // The split comes from the handoff this slot spawned its child against
+        // (`DynamicChildSlot::placement`). Until 2026-07-29 it was hardcoded to
+        // `total_blocks: 0, local_blocks: 0, workers: []` on the reasoning that
+        // the parent could not see into the child. True of the child's own
+        // placement cell, but the parent PLANNED and WARMED this cut and still
+        // holds it — so the blank was avoidable, and it was not harmless:
+        // `svrn mesh bench` hashes `placement_digest` from this report, so every
+        // distributed measurement was keyed and rendered as a one-node local
+        // run, unfindable by the `mesh plan` lookup it exists to answer.
         if let Some(d) = &self.distributed_primary {
             let serving = d.provider.is_serving();
             slots.push(ResidentSlot {
@@ -1215,12 +1265,7 @@ impl InferenceProvider for ComputeRoutedProvider {
                 resident: serving,
                 size_bytes: None,
                 transitioning: !serving && d.slot.is_spawned(),
-                placement: Some(sovereign_core::traits::SlotPlacement {
-                    mode: "child-distributed".to_string(),
-                    total_blocks: 0,
-                    local_blocks: 0,
-                    workers: Vec::new(),
-                }),
+                placement: d.slot.placement(),
             });
         }
         slots
@@ -1477,6 +1522,64 @@ mod distributed_slot_tests {
         // serving — the slot stays fail-fast rather than pretending.
         assert!(!slot.provider().is_serving());
         slot.retire("test over");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `/status` must state the child's real split, and only while a child holds
+    /// one. This is the wiring `resident_slots` reads; it used to be hardcoded to
+    /// zeros, which made a two-node run indistinguishable from a local one in
+    /// `svrn mesh bench`'s `placement_digest`. Reverting to a constant here
+    /// fails this test.
+    #[tokio::test]
+    async fn placement_is_stated_only_while_a_child_holds_one() {
+        let dir = scratch("placement");
+        let slot = DynamicChildSlot::new(
+            spec(&dir),
+            PathBuf::from("/nonexistent-binary"),
+            dir.clone(),
+        );
+
+        // Before the first respawn there is no child and therefore no split.
+        assert!(
+            slot.placement().is_none(),
+            "an unspawned slot must not claim a placement"
+        );
+
+        // The live 122B cut: 12 blocks on the peer, 36 + the output head here.
+        slot.respawn_distributed(&DistributionHandoff {
+            endpoints: vec!["192.168.1.2:50052".to_string()],
+            plan: vec![
+                NodeShard {
+                    device_index: 0,
+                    blocks: Some((0, 11)),
+                    holds_output: false,
+                    fraction: 0.2631579,
+                },
+                NodeShard {
+                    device_index: 1,
+                    blocks: Some((12, 47)),
+                    holds_output: true,
+                    fraction: 0.7368421,
+                },
+            ],
+        })
+        .expect("respawn");
+
+        let p = slot.placement().expect("a spawned slot states its split");
+        assert_eq!(p.mode, "child-distributed");
+        assert_eq!(p.total_blocks, 48);
+        assert_eq!(p.local_blocks, 36);
+        assert_eq!(p.workers.len(), 1);
+        assert_eq!(p.workers[0].endpoint, "192.168.1.2:50052");
+        assert_eq!(p.workers[0].blocks, 12);
+
+        // Retiring parks the slot; describing a split no process is holding
+        // would be a claim about nothing.
+        slot.retire("test over");
+        assert!(
+            slot.placement().is_none(),
+            "a retired slot must not keep reporting its last split"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

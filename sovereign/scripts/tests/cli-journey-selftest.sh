@@ -23,6 +23,9 @@
 #      discriminating rather than blanket
 #   9. the summary reports step COVERAGE (ran/declared), because a journey
 #      count cannot distinguish 57 steps proven from 28
+#  10. a journey whose every step asserts NOTHING reports ⊘ unproven, never ✓
+#      — and one asserting step is enough to earn the tick, which the tick then
+#      qualifies with how many of its steps asserted nothing
 #
 # Runs entirely on a stub binary and a stub daemon: no models, no real
 # daemon, no network beyond loopback. Safe in CI (ARCH_PRINCIPLES §12.4).
@@ -101,11 +104,18 @@ check() { # description expected-rc must-contain
 tab() { printf '%b' "${1//|/\\t}"; }   # write plans with | for tabs
 
 # Plan row layout, mirroring `svrn __journey-plan` (sovereign-cli/src/main.rs):
-#   J | id | tier | persona | visibility | live-or-skip:reason | title
+#   J | id | tier | persona | visibility | live-or-skip:reason | title |
+#       experience | needs (comma-joined `token:why`, or `-`)
 #   S | id | idx | ro|mut | exit | stdout_contains | stdout_absent |
 #       non_empty | live-or-skip:reason | settle_secs | run
 # `run` is LAST because it is the only field that may contain whitespace —
 # the runner reads it as the remainder of the line. New columns go before it.
+#
+# The J row's two experience-axis columns are the exception, appended AFTER
+# `title`: `title` is not the runner's last read variable, so nothing shifts,
+# and the plans below stay valid without the trailing columns — which is why
+# most of these controls omit them entirely. Only the --lacks controls declare
+# them.
 
 # ── 1. a working sequence passes ─────────────────────────────────────────
 cat > "$WORK/p1" <<EOF
@@ -337,6 +347,123 @@ if printf '%s' "$OUT" | grep -qF "of settle"; then
 else
   echo "ok:   settle_secs=0 does not enter the settle loop"
 fi
+
+# ── 14. `--lacks` drops a journey by its DECLARED need, and only then ────
+# A lane says what it cannot supply (`--lacks indexed-repo`) and the journeys
+# declaring that need are dropped whole, with the manifest's own reason. The
+# mechanism replaced a hardcoded array of journey ids in
+# cli-journey-sandbox.sh, and it needs both directions pinned for the same
+# reason `settle_secs` did: a drop mechanism that over-fires silently deletes
+# coverage, and one that under-fires produces false failures.
+#
+# 14a. the need matches → not attempted, and it stays in the MANIFEST
+# denominator. Dropping it from both sides of the ratio is what made the old
+# coverage line flatter the lane (control 12).
+cat > "$WORK/p14" <<EOF
+$(tab 'J|plain|1|EndUser|Public|live|no declared needs|exp-a|-')
+$(tab 'S|plain|0|ro|0|-|-|0|live|0|ok yes')
+$(tab 'J|needy|1|Agent|Internal|live|needs a real index|exp-b|indexed-repo:needs an index, a graph, and a repo')
+$(tab 'S|needy|0|ro|0|-|-|0|live|0|ok yes')
+$(tab 'S|needy|1|ro|0|-|-|0|live|0|ok yes')
+EOF
+run_case "$WORK/p14" --mutating --lacks indexed-repo
+check "a lane that lacks a declared need does not attempt the journey" 0 "this lane lacks indexed-repo"
+# The reason is PROSE and contains commas. The first version of the plan format
+# joined `token:why` pairs with a comma, so every reason printed up to its first
+# one and stopped — `operator-home` announced itself as "(Claude transcripts"
+# in the live lane. Asserting the TAIL of a comma-bearing reason is what pins
+# the separator; asserting the head would have passed against the bug.
+check "and the manifest's own reason is what it prints" 0 "needs an index, a graph, and a repo"
+check "the dropped steps stay in the manifest denominator" 0 "manifest 1/3 steps in the WHOLE manifest (33%)"
+if printf '%s' "$OUT" | grep -qE '^  [✓✗~∅⊘] needy'; then
+  echo "FAIL: a lacked journey still produced a verdict"
+  fails=$((fails + 1))
+else
+  echo "ok:   a lacked journey produces no verdict at all"
+fi
+
+# 14b. the SAME plan with the need supplied runs it — the drop is about the
+# lane, not about the journey. Without this control, `--lacks` matching
+# everything (or the needs column being misparsed) would look like a pass.
+run_case "$WORK/p14" --mutating
+check "the same journey runs when the lane supplies its need" 0 "coverage 3/3 declared steps executed (100%)"
+check "and the experience is named on the journey header" 0 "needy [exp-b]"
+# 14c. a DIFFERENT need is not a match — token equality, not substring.
+run_case "$WORK/p14" --mutating --lacks operator-home
+check "an unrelated --lacks token drops nothing" 0 "coverage 3/3 declared steps executed (100%)"
+
+# ── 15. a step that asserts NOTHING never reports a tick ─────────────────
+# 63 of the manifest's 133 steps declare no `expect` block at all: no exit code,
+# no substring. The runner invoked them and printed ✓, because `why` is empty by
+# construction when there is nothing to be wrong about.
+#
+# It is not a cosmetic problem. `enrich-atlas` declared its first two steps that
+# way; on 2026-07-29 `enrich init --from-corpus` wrote no enrichment directory
+# whatsoever, `enrich build --full` ran after it, both showed ✓, and the journey
+# failed on step [2] — the first step that asserted anything — so the report
+# pointed two steps past the breakage and read as "enrich status is broken".
+#
+# Here: a step with every assertion field empty, against a command that FAILS
+# loudly (exit 3). It must still be reported as unasserted rather than passed,
+# and it must not be counted as a pass in the summary.
+cat > "$WORK/p15" <<EOF
+$(tab 'J|noassert|1|EndUser|Public|live|a step that declares nothing')
+$(tab 'S|noassert|0|ro|-|-|-|0|live|0|boom')
+EOF
+run_case "$WORK/p15" --mutating
+check "a step with no expect block is not a pass" 4 "ran, asserted nothing"
+check "and the summary counts it apart from passes" 4 "0 passed, 0 failed, 1 unasserted"
+if printf '%s' "$OUT" | grep -qE '✓ \[0\]'; then
+  echo "FAIL: an unasserted step still printed a ✓"
+  fails=$((fails + 1))
+else
+  echo "ok:   no tick is printed for an unasserted step"
+fi
+# The step still EXECUTED, so it counts as coverage — the distinction is between
+# "ran" and "proved", not between "ran" and "skipped".
+check "an unasserted step still counts as executed" 4 "coverage 1/1 declared steps executed (100%)"
+
+# ── 15b. and the JOURNEY verdict is demoted with it ───────────────────────
+# The half of #15 that was missing until 2026-07-30, and the more dangerous half.
+# The step lines were honest — `· ran, asserted nothing` — while the journey they
+# belong to still printed `✓ noassert (1/1 steps)`, because the verdict was
+# derived from "did every declared step run" and an unasserted step runs fine.
+# `code-intel-lifecycle` shipped exactly that shape: a green ✓ 6/6 over four
+# steps that could not fail. A reader who trusts the summary line (everyone, on
+# a 30-journey lane) sees a proof that does not exist.
+#
+# Note the stub COMMAND here exits 3. The journey is not merely unproven, it is
+# unproven over a command that is loudly broken — and it must still not be
+# reported as a failure, because nothing in the manifest claimed otherwise.
+check "a journey whose steps all assert nothing is UNPROVEN, not passed" 4 "⊘ noassert (UNPROVEN"
+check "and the unproven journey is counted in its own bucket" 4 "1 unproven"
+check "and it names how many steps ran without asserting" 4 "ran 1 step(s), none asserted anything"
+if printf '%s' "$OUT" | grep -qE '^  ✓ noassert'; then
+  echo "FAIL: an all-unasserted journey still printed a ✓"
+  fails=$((fails + 1))
+else
+  echo "ok:   no journey tick is printed when nothing asserted"
+fi
+# Under --mutating this is exit 4, the same as ∅: the caller said it supplied a
+# sandbox, so an absence of evidence is a hole somebody can close. Read-only mode
+# must NOT be painted red for it — a journey whose asserting steps are all
+# mutating legitimately runs only its read-only prefix there.
+run_case "$WORK/p15"
+check "read-only mode reports the same verdict without failing the run" 0 "⊘ noassert (UNPROVEN"
+
+# ── 15c. one real assertion is enough to earn the tick — and it says so ───
+# The discriminating control. Without it, "⊘ on everything" would pass #15b just
+# as well as a working demotion. A journey with one asserting step and one
+# unasserted step is a PASS (something was proven) that must NAME the weak step
+# on its own verdict line, so a ✓ can never again read as "all six proven".
+cat > "$WORK/p15c" <<EOF
+$(tab 'J|mixed|1|EndUser|Public|live|one real assertion, one none')
+$(tab 'S|mixed|0|ro|0|yes|-|0|live|0|ok yes')
+$(tab 'S|mixed|1|ro|-|-|-|0|live|0|boom')
+EOF
+run_case "$WORK/p15c" --mutating
+check "one asserting step earns the journey its tick" 0 "✓ mixed"
+check "and the tick names the steps that asserted nothing" 0 "1 asserted, 1 asserted NOTHING"
 
 # ── 9. the safety refusal actually refuses ───────────────────────────────
 OUT="$(SOVEREIGN_LIVE_JOURNEYS=1 SOVEREIGN_BIN="$STUB" \

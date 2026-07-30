@@ -237,6 +237,27 @@ pub(crate) fn load_provider(
                     .model_id
                     .clone()
                     .unwrap_or_else(|| stem.clone());
+                // The primary-role ALIASES must claim the child too, not just
+                // the shared-model name and the GGUF stem.
+                //
+                // A request naming `commonwealth/primary` is asking for the
+                // primary slot, and on a node with a distributed primary the
+                // child IS that slot. `DistributedPrimaryRoute::claims` matched
+                // only name and stem, so the alias fell through to the
+                // in-process engine — whose primary is deliberately NOT resident
+                // in this mode — and got served by the always-hot `fast` slot
+                // instead. Measured live 2026-07-29 on RuggedFox, same prompt in
+                // the same minute: `commonwealth/primary` returned 11 tokens at
+                // ~111 tok/s (the 0.8B), while the GGUF stem returned 170 tokens
+                // from the 122B. Every client using the advertised alias got the
+                // small model and no error — including `svrn mesh bench`, which
+                // filed the fast slot's rate under the 122B's name.
+                //
+                // Derived from `SLOT_ALIAS_POLICY` rather than spelled out here.
+                // Resolution and mesh advertisement already drifted apart once
+                // (slot_aliases.rs, 2026-05-19); routing is a third view of the
+                // same policy and must not become a third place to forget.
+                let model_ids = distributed_primary_model_ids(&stem);
                 sovereign_compute::manager::DistributedPrimarySpec {
                     handoff_path: config
                         .data
@@ -247,7 +268,7 @@ pub(crate) fn load_provider(
                     model: config.models.primary.clone(),
                     context_size: Some(config.models.effective_context_size()),
                     n_gpu_layers: None,
-                    model_ids: vec![stem],
+                    model_ids,
                 }
             });
             match sovereign_compute::manager::build_compute_layer_with_distributed(
@@ -276,4 +297,72 @@ pub(crate) fn load_provider(
         };
 
     Ok((provider, arc, resolved_embed_family, distributed_primary))
+}
+
+/// Every `model_id` that must route to the distributed-primary child: the GGUF
+/// stem plus every primary-role alias the daemon resolves.
+///
+/// Pure and separate from the assembly above so the set is testable — the defect
+/// this replaces was a *missing member*, which no test of the surrounding
+/// 250-line builder would have caught.
+fn distributed_primary_model_ids(stem: &str) -> Vec<String> {
+    let mut ids = vec![stem.to_string()];
+    for alias in sovereign_mesh::slot_aliases::resolution_alias_keys("primary") {
+        if !ids.contains(&alias) {
+            ids.push(alias);
+        }
+    }
+    ids
+}
+
+#[cfg(test)]
+mod distributed_primary_routing_tests {
+    use super::*;
+
+    /// The literal string `svrn mesh bench` sends (`mesh_bench::PRIMARY_ALIAS`),
+    /// and the one `build_self_manifest` advertises to mesh peers.
+    const BENCH_AND_MESH_ALIAS: &str = "commonwealth/primary";
+
+    #[test]
+    fn the_child_claims_the_advertised_primary_alias() {
+        let ids = distributed_primary_model_ids("Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003");
+
+        assert!(
+            ids.iter().any(|m| m == BENCH_AND_MESH_ALIAS),
+            "a node whose primary is child-distributed advertises `{BENCH_AND_MESH_ALIAS}` \
+             to peers and resolves it locally; if the child does not CLAIM it, the request \
+             falls through to the in-process engine and the fast slot answers with a \
+             different model and no error. Got: {ids:?}"
+        );
+        // The bare form too — OpenAI clients and opencode configs use it.
+        assert!(ids.iter().any(|m| m == "primary"), "got: {ids:?}");
+        // And the concrete id, which is how a peer addresses this exact GGUF.
+        assert!(
+            ids.iter()
+                .any(|m| m == "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003"),
+            "got: {ids:?}"
+        );
+    }
+
+    /// Whatever `SLOT_ALIAS_POLICY` says is resolvable for `primary` must be
+    /// claimable. Adding a synonym there without this passing means that synonym
+    /// silently reaches the wrong model.
+    #[test]
+    fn every_resolvable_primary_alias_is_claimable() {
+        let ids = distributed_primary_model_ids("some-model");
+        for alias in sovereign_mesh::slot_aliases::resolution_alias_keys("primary") {
+            assert!(
+                ids.contains(&alias),
+                "`{alias}` resolves to the primary slot but would not route to the \
+                 distributed child"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stem_that_collides_with_an_alias_is_not_duplicated() {
+        let ids = distributed_primary_model_ids("primary");
+        let count = ids.iter().filter(|m| *m == "primary").count();
+        assert_eq!(count, 1, "got: {ids:?}");
+    }
 }

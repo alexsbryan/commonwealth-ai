@@ -37,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use sovereign_cli_shared::cli_contract::{
-    Contract, Disposition, Feature, Journey, StepBinding, Visibility,
+    Contract, Disposition, Evidence, Feature, Journey, StepBinding, Visibility,
 };
 
 /// The stranded ledger is a debt register. It may SHRINK as verbs are
@@ -405,7 +405,325 @@ fn reversible_mutations_are_reversed() {
     assert!(fails.is_empty(), "{}", fails.join("\n  "));
 }
 
+// ── the experience axis ─────────────────────────────────────────────────
+
+/// Experiences that no journey serves yet. A declared gap is a DEBT with a
+/// name — `code-intel-chat` is the honest instance: the flagship developer
+/// experience the repo talks about most and covers least.
+///
+/// Lower this number when you write the journey. Do not raise it: a new
+/// promise ships with a sequence that proves it, or it is not a promise.
+const MAX_UNSERVED_EXPERIENCES: usize = 1;
+
+#[test]
+fn experiences_are_well_formed_and_cited() {
+    let c = contract();
+    let root = repo_root();
+    assert!(!c.experiences.is_empty(), "manifest declares no experiences");
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut fails = Vec::new();
+    for e in &c.experiences {
+        *seen.entry(e.id.as_str()).or_default() += 1;
+        if e.id.is_empty() || !e.id.chars().all(|ch| ch.is_ascii_lowercase() || ch == '-') {
+            fails.push(format!("experience id `{}` is not kebab-case", e.id));
+        }
+        if e.title.trim().is_empty() {
+            fails.push(format!("experience `{}` has an empty title", e.id));
+        }
+        // REQUIRED, unlike a journey's: an undocumented experience is not a
+        // promise, it is an intention.
+        if !root.join(doc_file(&e.doc)).is_file() {
+            fails.push(format!(
+                "experience `{}` cites `{}`, which does not exist",
+                e.id, e.doc
+            ));
+        }
+    }
+    for (id, n) in seen.iter().filter(|(_, n)| **n > 1) {
+        fails.push(format!("experience id `{id}` declared {n} times"));
+    }
+    assert!(
+        fails.is_empty(),
+        "malformed experiences:\n  {}",
+        fails.join("\n  ")
+    );
+}
+
+#[test]
+fn every_journey_serves_a_declared_experience() {
+    // The other direction of the ratchet below. A journey pointing at an
+    // experience nobody declared is a typo that would silently orphan both.
+    let c = contract();
+    let declared: BTreeSet<&str> = c.experiences.iter().map(|e| e.id.as_str()).collect();
+    let dangling: Vec<String> = c
+        .journeys
+        .iter()
+        .filter(|j| !declared.contains(j.experience.as_str()))
+        .map(|j| format!("{} serves `{}`, which no [[experience]] declares", j.id, j.experience))
+        .collect();
+    assert!(
+        dangling.is_empty(),
+        "journeys pointing at undeclared experiences:\n  {}",
+        dangling.join("\n  ")
+    );
+}
+
+#[test]
+fn an_unserved_experience_is_declared_as_a_gap() {
+    // The check that makes a hole VISIBLE. An experience with no journey must
+    // say so in `gap`; the count is capped and shrink-only. Before this axis,
+    // "CODE_INTEL_CHAT.md has no journey" was findable only by
+    // cross-referencing the docs against this manifest by hand.
+    let c = contract();
+    let mut silent = Vec::new();
+    let mut declared_gaps = Vec::new();
+    for e in &c.experiences {
+        let served = !c.journeys_for(&e.id).is_empty();
+        match (&e.gap, served) {
+            (None, false) => silent.push(format!(
+                "`{}` has no journey and no `gap` — either write the journey \
+                 or say why it is missing",
+                e.id
+            )),
+            (Some(_), false) => declared_gaps.push(e.id.as_str()),
+            (Some(why), true) => silent.push(format!(
+                "`{}` declares a gap (\"{}\") but IS served by {} journey(s) — \
+                 retire the gap",
+                e.id,
+                why.chars().take(40).collect::<String>(),
+                c.journeys_for(&e.id).len()
+            )),
+            (None, true) => {}
+        }
+    }
+    assert!(silent.is_empty(), "experience gaps:\n  {}", silent.join("\n  "));
+    let n = declared_gaps.len();
+    assert!(
+        n <= MAX_UNSERVED_EXPERIENCES,
+        "unserved experiences grew to {n} (cap {MAX_UNSERVED_EXPERIENCES}): \
+         {declared_gaps:?}. A new promise ships with a journey that proves it."
+    );
+    eprintln!("cli_contract_journeys: unserved experiences at {n}/{MAX_UNSERVED_EXPERIENCES} {declared_gaps:?}");
+}
+
+#[test]
+fn every_capability_is_exercised_by_a_serving_journey() {
+    // THE POINT OF THE WHOLE AXIS. A promise is made of capabilities; each
+    // must be driven by a step that asserts OUTPUT (a read inline, a mutation
+    // by a later step). Exit codes cannot carry this: every code-intelligence
+    // tool in this repo exits 0 when it finds nothing, so a step that checks
+    // only status is satisfied by a tool that answered nothing at all.
+    //
+    // Gapped experiences are skipped — they have no journeys by definition,
+    // and their capability list is the spec for the journey somebody owes.
+    let c = contract();
+    let mut fails = Vec::new();
+    for e in c.experiences.iter().filter(|e| e.gap.is_none()) {
+        for (cap, mentioned) in c.unproven_capabilities(e) {
+            // Two different repairs, and the second is the dangerous one —
+            // it already LOOKS covered.
+            if mentioned {
+                fails.push(format!(
+                    "{}: `{cap}` is driven by a step that asserts nothing about \
+                     output — add stdout_contains/stdout_non_empty, or (for a \
+                     mutation) a later step that proves the effect",
+                    e.id
+                ));
+            } else {
+                fails.push(format!(
+                    "{}: `{cap}` is named by NO step of any journey serving it \
+                     — write the step, or drop the capability if it is not part \
+                     of the promise",
+                    e.id
+                ));
+            }
+        }
+    }
+    assert!(
+        fails.is_empty(),
+        "capabilities declared but not exercised:\n  {}",
+        fails.join("\n  ")
+    );
+}
+
+// ── what can actually fail ──────────────────────────────────────────────
+//
+// THE MEASUREMENT THAT MOTIVATED THIS BLOCK (2026-07-29/30). The first count
+// was one number: "63 of 133 steps declare no assertion at all", capped and
+// shrink-only. That number mixed two unrelated defects, and the mix was the
+// problem — it made the cheap repair satisfy a ratchet aimed at the expensive
+// one. Split by whether any lane RUNS the step:
+//
+//   live      73 steps, 19 asserting nothing  ← FALSE GREEN. A lane invokes
+//             these and prints a tick whatever happens.
+//   never-run 62 steps, 44 asserting nothing  ← NOT RUN BY ANYTHING. Whatever
+//             they declare, no lane can catch it. 14 journeys carry a
+//             journey-level `skip_live`: a second machine, a paid GPU pod, a
+//             multi-minute benchmark.
+//
+// Sprinkling `exit = 0` over the 44 would have taken the headline number from
+// 63 to 19 and changed nothing about what this repo can detect. So the live
+// half is a HARD ZERO with no cap to negotiate, and the never-run half is a
+// separate, named debt that shrinks only by making a journey runnable.
+//
+// The rules for the live half, and why they are not the same rule:
+//
+//   * every live step asserts SOMETHING (`live_steps_all_assert_something`)
+//   * every live READ asserts OUTPUT (`live_read_steps_assert_output`) —
+//     because in this repo an exit code is not evidence for a read: `symbols`
+//     on a name that does not exist exits 0, and so does `doctor` on a sick
+//     system, by design.
+//   * a MUTATION may assert only its exit code, since it usually cannot see
+//     its own effect (`corpus install` returns before the ingest lands) — but
+//     its journey must prove the effect downstream, which is
+//     `every_live_journey_asserts_output_somewhere` plus the capability rule.
+
+#[test]
+fn live_steps_all_assert_something() {
+    // HARD ZERO, deliberately not a cap. A step some lane executes and nobody
+    // checks is not a weak test, it is a demonstration reported as a test — and
+    // it misattributes the sequence's failure to the next step that DOES assert
+    // something (`enrich init` wrote no enrichment directory at all, ticked
+    // green, and `enrich status` two steps later took the blame).
+    //
+    // There is no third option by design. Either the step declares what it
+    // expects, or it declares `skip_live = "why"` and joins the never-run debt
+    // below, where it is counted as unproven rather than as coverage.
+    let c = contract();
+    let census = c.assertion_census();
+    assert!(
+        census.live_unfalsifiable.is_empty(),
+        "{} step(s) a lane RUNS declare no assertion whatever — they are invoked \
+         and reported as passing no matter what happens:\n  {}\n\nGive each an \
+         `expect` block (a read: `stdout_contains`/`stdout_non_empty`; a \
+         mutation: at least `exit = 0`, with a later step proving the effect), \
+         or mark the step `skip_live = \"why\"` so it is counted as unproven \
+         instead of as evidence.",
+        census.live_unfalsifiable.len(),
+        census.live_unfalsifiable.join("\n  ")
+    );
+}
+
+#[test]
+fn live_read_steps_assert_output() {
+    // The second layer, and the one that stops this whole axis from being
+    // satisfied by `exit = 0` everywhere. A READ that checks only its status is
+    // satisfied by the command answering NOTHING — measured on this repo's own
+    // tools: `symbols`, `callers`, `callees` and `capability_map` all print a
+    // helpful paragraph and exit 0 for a name that does not exist, and
+    // `code search` shipped a Phase-2 stub that did the same.
+    //
+    // Mutations are exempt: `corpus install` POSTs and returns before its ingest
+    // lands, so it cannot asssert its own effect and the proof is a later step.
+    // That exemption is what `every_live_journey_asserts_output_somewhere` and
+    // `every_capability_is_exercised_by_a_serving_journey` collect on.
+    let c = contract();
+    let weak: Vec<String> = c
+        .journeys
+        .iter()
+        .flat_map(|j| {
+            j.live_steps()
+                .filter(|(_, s)| !s.mutates && s.evidence() != Evidence::Output)
+                .map(move |(i, s)| format!("{}[{}] {}", j.id, i, s.run))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(
+        weak.is_empty(),
+        "{} read-only step(s) a lane RUNS assert no output:\n  {}\n\nAn exit code \
+         is not evidence for a read in this repo — every code-intelligence tool \
+         here exits 0 when it finds nothing. Assert what the command should \
+         actually say (`stdout_contains` for a fact, `stdout_non_empty` only \
+         when the text is genuinely unpredictable), or mark the step `mutates` \
+         if it is really a write.",
+        weak.len(),
+        weak.join("\n  ")
+    );
+}
+
+#[test]
+fn every_live_journey_asserts_output_somewhere() {
+    // The static twin of the runner's ⊘ UNPROVEN verdict, and the check that
+    // makes `code-intel-lifecycle` impossible to write again: six steps
+    // (`project init | list | status | refresh | serve | stop`) that ran end to
+    // end, printed ✓ 6/6, and never once asked the index a question.
+    //
+    // A journey with no output assertion anywhere cannot fail for any reason
+    // except a crash. Whatever its tick says, it proves that the binary starts.
+    let c = contract();
+    let census = c.assertion_census();
+    assert!(
+        census.live_journeys_without_output.is_empty(),
+        "live journey(s) with no output assertion anywhere: {:?}\n\nA sequence \
+         that only checks exit codes proves the binary starts. Add the step that \
+         asks the question the journey is named for — the runner reports this \
+         same shape as ⊘ UNPROVEN at run time.",
+        census.live_journeys_without_output
+    );
+}
+
+/// Steps NO lane executes: a journey-level `skip_live` (needs a second
+/// machine, a paid GPU pod, a multi-minute benchmark against real models) or a
+/// step-level one. They are dispatch-replayed and statically checked, so a
+/// renamed verb still breaks the build — but nothing ever runs them, so no
+/// `expect` block they carry can catch a regression.
+///
+/// 62 of 135 steps when first counted (2026-07-30): 46% of the manifest is a
+/// written intention. That is not automatically wrong — `pipeline-pods`
+/// provisions paid cloud GPUs and should not run nightly — but it must be
+/// COUNTED, because "133 steps" as a coverage claim is off by half.
+///
+/// The cap shrinks by making a journey runnable (usually: move `skip_live` off
+/// the journey and onto the two expensive steps, so its cheap read-only prefix
+/// becomes real evidence). It never grows: a new journey that no lane runs is
+/// a doc comment with a TOML syntax.
+const MAX_NEVER_RUN_STEPS: usize = 62;
+
+#[test]
+fn steps_no_lane_runs_do_not_grow() {
+    let c = contract();
+    let census = c.assertion_census();
+    let n = census.never_run.total();
+    assert!(
+        n <= MAX_NEVER_RUN_STEPS,
+        "steps no lane runs grew to {n} (cap {MAX_NEVER_RUN_STEPS}). A journey \
+         nothing executes cannot detect a regression; it is a written \
+         intention. Either make it runnable (move `skip_live` from the journey \
+         onto the steps that are genuinely expensive, so the read-only prefix \
+         runs) or lower the promise it claims to cover.\n\nnever-run journeys:\n  {}",
+        census
+            .never_run_journeys
+            .iter()
+            .map(|(id, why)| format!("{id} — {why}"))
+            .collect::<Vec<_>>()
+            .join("\n  ")
+    );
+}
+
+#[test]
+fn print_the_assertion_census() {
+    // Not an assertion — the answer to "how much of this manifest can actually
+    // fail?", printed on every run so the ratio is visible rather than
+    // reconstructed. The same census the `svrn contract` verb renders.
+    let c = contract();
+    eprintln!("{}", sovereign_cli_shared::cli_contract_report::render_census(&c));
+}
+
 // ── glassbox summary ────────────────────────────────────────────────────
+
+#[test]
+fn print_the_experience_map() {
+    // Not an assertion — the answer to "what does this product PROMISE, and
+    // how much of each promise is actually proven?" in one place.
+    //
+    // Rendered by `cli_contract_report`, which is also what `svrn contract`
+    // prints. ONE renderer on purpose: this map used to live here as a wall of
+    // `eprintln!`, reachable only by knowing the exact `cargo test … --nocapture`
+    // incantation, and a second copy would have started drifting from the
+    // numbers the ratchets above enforce the moment either was edited.
+    let c = contract();
+    eprintln!("\n{}", sovereign_cli_shared::cli_contract_report::render_experience_map(&c));
+}
 
 #[test]
 fn print_the_journey_map() {

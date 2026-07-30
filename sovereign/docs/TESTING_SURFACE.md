@@ -46,6 +46,32 @@ operator gate, but its *runner* is covered in CI by
 rejects a wrong exit code, a missing substring, and a mutation that did not
 reverse. A harness nobody has seen fail is not evidence.
 
+**On what a journey is FOR (2026-07-29).** The ratchets above are verb-driven —
+"every public verb belongs to a journey" — so for a year the manifest's unit was
+the COMMAND, and journeys grew into vehicles for verb coverage. `code-intel-
+lifecycle` is the tell: six steps (`project init | list | status | refresh |
+serve | stop`) that prove the index *builds* and never once ask it a question.
+Measured against the 23 tools `.claude/CLAUDE.md` mandates for every agent
+session, 18 were named by no journey step at all — including the five the
+instructions say to use *instead of reading files*. Nothing was failing; nothing
+was watching.
+
+So the manifest gained an `[[experience]]` axis: a promise the product makes,
+citing where it is promised, listing the **capabilities** it is made of.
+`every_capability_is_exercised` then asks the question the verb ratchet cannot —
+is each part of this promise driven by a step that asserts *output*? Exit codes
+cannot carry it, because **every** code-intelligence tool in this repo exits 0
+when it finds nothing (`symbols` on an unknown name prints a helpful paragraph
+and exits 0). An experience with no journey at all is *declared* as a gap and
+capped, so `code-intel-chat` is a named debt rather than a future discovery.
+
+The pattern this surfaced generalises: most experiences have a PRODUCE half
+(`project init`, `drift detect`, `enrich build`) that is expensive, mutating and
+often `skip_live` — and it is plumbing — and a CONSULT half (`symbols`,
+`drift_posture`, `enrich query`) that is cheap, read-only and deterministic, and
+*is* what the user came for. Every experience that had only a produce journey was
+testing that the machine starts, not that it works.
+
 **Running the live tier.** Two lanes, both operator gates:
 
 ```bash
@@ -73,15 +99,52 @@ Fixtures that would cost a large download stay UNSET, so their steps report
 `skip … no fixture` in the step log rather than passing silently. Opt in per
 run: `JOURNEY_CORPUS=sep sovereign/scripts/cli-journey-sandbox.sh`.
 
+**The two lanes partition the manifest; neither drops a journey the other also
+drops.** Some journeys need state a throwaway sandbox cannot have — the
+operator's real `HOME` (Claude transcripts, an accumulated notes db, a drift
+report) or a live code index and SCIP graph. They declare it:
+
+```toml
+needs = ["indexed-repo"]   # or "operator-home"
+```
+
+The sandbox lane passes `--lacks operator-home --lacks indexed-repo` and the
+runner drops those journeys whole, printing the manifest's own reason. The
+nightly then derives that same set from the plan and runs it READ-ONLY against
+the operator's daemon, where the state actually is — a lane whose verdict is
+carried separately (`capability_lane` in `latest.json`), and where a daemon that
+is simply down reports `no-daemon`, never a pass. Before this, the exclusion was
+a hardcoded array of two journey ids inside `cli-journey-sandbox.sh`: a property
+of the *journey* living in one lane's script, needing a hand-edit for every
+future journey with the same requirement, and invisible to anyone reading the
+manifest.
+
+The cheapest journey in the manifest is in this set. `code-intel-answer` asserts
+that `symbols`, `callers`, `callees`, `blast` and `code_search` return *true
+facts about this repo* — no models, no network, no mutation, five steps, and this
+repo is its own fixture. Every assertion is a fact rather than
+`stdout_non_empty`, because non-empty is precisely what a non-answer looks like
+here.
+
 **Verdicts, and why a journey count is not coverage.** Both lanes report one
-of four verdicts per journey, each carrying `ran/declared steps`:
+of five verdicts per journey, each carrying `ran/declared steps`:
 
 | | meaning |
 |---|---|
-| `✓` passed | every declared step ran, bar manifest-declared `skip_live` |
+| `✓` passed | every declared step ran (bar manifest-declared `skip_live`) and at least one asserted something. When some steps asserted nothing, the line says so: `✓ id (6/6 steps; 2 asserted, 4 asserted NOTHING)` |
 | `~` partial | ran, but a precondition was skipped — the sequence is not proven |
+| `⊘` unproven | steps **ran and not one of them asserted anything.** The binary was invoked; nobody looked at the output |
 | `∅` vacuous | **nothing ran.** This journey is evidence of nothing |
 | `✗` failed | a step asserted something untrue |
+
+`⊘` was added 2026-07-30 and it closes the last hole in this ladder. The step
+lines had been honest since the day before — a step with no `expect` block prints
+`· ran, asserted nothing` rather than `✓` — while the *journey* they belonged to
+still printed a green tick, because the verdict was derived from "did every
+declared step run" and a step that cannot fail runs perfectly. `code-intel-
+lifecycle` shipped exactly that shape: `✓ 6/6` over four steps that declared
+nothing. A reader who trusts the summary line — everyone, on a 30-journey lane —
+was reading a proof that did not exist.
 
 `∅` exists because the first full sandbox run reported `29 ok, 0 failed` while
 four journeys had executed *zero* steps and only 28 of 57 declared steps had
@@ -151,6 +214,79 @@ step's precondition never happened, so nothing downstream of it is proven. A
 manifest-declared `skip_live` does *not* demote — that is the author's stated
 scope, not this lane failing to supply something — but it is counted and named
 on the verdict line, because a silent 6/7 is how coverage quietly leaks away.
+
+### The CLI quality surface
+
+**One front door: `svrn contract`.** Everything in this section existed before
+2026-07-30 and none of it was findable. The experience map lived inside
+`cargo test -p sovereign-cli --features dev-tools --test cli_contract_journeys
+print_the_experience_map -- --nocapture`, which nobody guesses; the lanes are two
+scripts under `scripts/`; the nightly's verdict is a `latest.json` under
+`~/.sovereign/`. A quality surface that cannot be found dies the same death as one
+that is never run, and this repo has the receipt: the harness this layer replaced
+was written, documented as "safe to call unconditionally in CI", and then called
+by nothing at all.
+
+```bash
+svrn contract           # promises + census + last nightly + how to run each lane
+svrn contract map       # the experiences and the journeys serving each
+svrn contract census    # how much of the manifest can actually fail
+svrn contract nightly   # did anything run on this host, and when
+```
+
+It renders through `sovereign_cli_shared::cli_contract_report`, which is also
+what the cargo test prints — one census, one renderer, so the number a developer
+reads is the number the gate enforces. `svrn contract` is itself a journeyed
+promise (`cli-quality` / `contract-audit`): a quality surface that is not covered
+by the harness it describes is claiming an exemption it has not earned.
+
+**What can actually fail — the number to read.** A step is only evidence if some
+lane runs it *and* somebody checks the result. Splitting the manifest on those two
+questions (2026-07-30):
+
+```
+a lane RUNS    74 steps    57 assert output    17 exit-code only     0 assert NOTHING
+nothing runs   62 steps    15 assert output     3 exit-code only    44 assert NOTHING
+```
+
+The first count was a single number — "63 of 133 steps declare no assertion at
+all", capped and shrink-only — and mixing the two halves was the defect. 19 of
+those 63 were in journeys the lanes actually run: **false green**, a tick printed
+over an unchecked command. The other 44 are in the 14 journeys carrying a
+journey-level `skip_live` (a second machine, a paid GPU pod, a multi-minute
+benchmark), which **no lane executes at all**. Sprinkling `exit = 0` across those
+44 would have moved the headline from 63 to 19 and changed nothing about what this
+repo can detect. So the two halves are now two different gates:
+
+| gate | shape | why |
+|---|---|---|
+| `live_steps_all_assert_something` | **hard zero** | a step a lane runs and nobody checks is a demonstration reported as a test — and it misattributes the sequence's failure to the next step that *does* assert |
+| `live_read_steps_assert_output` | **hard zero** | an exit code is not evidence for a *read* here: every code-intelligence tool exits 0 when it finds nothing, `doctor` exits 0 on a sick system by design, and `code search` shipped a stub that printed placeholder text and exited 0 |
+| `every_live_journey_asserts_output_somewhere` | **hard zero** | the static twin of the `⊘` verdict — a sequence with no output assertion anywhere proves the binary starts |
+| `steps_no_lane_runs_do_not_grow` | cap 62, shrink-only | never-run steps are a *written intention*. Legitimate (`pipeline-pods` provisions paid GPUs) but it must be counted, because "136 steps" as a coverage claim is off by half |
+
+A **mutation** may assert only its exit code, and 17 do: `corpus install` POSTs and
+returns before the ingest lands, `daemon start` prints its confirmation to stderr
+where narration belongs. The rule that keeps that honest is the capability rule —
+a read proves itself inline, a mutation is proven by a *later* step asserting
+output. Every one of the 17 has that later step, and each says which one in its
+`note`.
+
+There is deliberately **no third option** for a live step. Either it declares what
+it expects, or it declares `skip_live = "why"` and joins the never-run debt, where
+it is counted as unproven rather than as coverage. The escape hatch is honest
+bookkeeping, not an exemption.
+
+**Paying down the never-run 62.** The cap shrinks one way: make a journey
+runnable. `skip_live` is applied at *journey* level, so a cheap read-only leading
+step is discarded along with the expensive tail — `correctness-gates[0] corpus
+diag` and `[1] doctor` cost nothing and run nowhere. Moving `skip_live` down onto
+the two or three steps that are genuinely expensive would make those prefixes real
+evidence. What blocked it was harness semantics, and half of that is now settled:
+a journey that runs its prefix and asserts nothing reports `⊘`, not `✓`. The
+remaining question is whether a *mid-sequence* declared skip should demote to
+`~ partial` — it should, on the same reasoning that already applies to a missing
+fixture, since the steps after it depend on an effect that never happened.
 
 **Running it without remembering.** An opt-in guard decays into decoration:
 the predecessor harness was never run once, because running it required

@@ -451,7 +451,18 @@ async fn cmd_validate(args: &[String]) -> i32 {
     match engine.test_recipe(&recipe_path, &options).await {
         Ok(report) => {
             if report.validation.errors.is_empty() {
-                eprintln!("✓ Validation passed");
+                // A VALIDATOR'S VERDICT IS ITS PAYLOAD, so it goes to stdout —
+                // the 17th site of the payload-vs-narration census (note
+                // f5acdf59). `Validating recipe: …` above stays on stderr
+                // (narration) and the failure list below stays on stderr
+                // (diagnostics), which is the same seam `mcp test` uses: the
+                // inventory on stdout, the progress line on stderr.
+                //
+                // Not cosmetic. The `recipe-author` journey's first step is a
+                // READ, and a read whose whole output is on stderr can only ever
+                // be gated on its exit code — which is exactly the class of
+                // assertion this repo has learned not to trust.
+                println!("✓ Validation passed");
                 if !report.validation.warnings.is_empty() {
                     for w in &report.validation.warnings {
                         eprintln!("  ⚠  {w}");

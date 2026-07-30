@@ -28,8 +28,11 @@
 #   2. build the binaries under test, so a green run is about TODAY's code
 #   3. run the runner's own negative controls — a harness that cannot fail
 #      is not evidence, so this gates the lane that follows it
-#   4. run the mutating sandbox lane
-#   5. write a dated report + a machine-readable latest.json, and prune
+#   4. run the READ-ONLY capability lane against the operator's own daemon —
+#      the journeys that declare `needs` the sandbox cannot supply, which
+#      would otherwise be declared and never run
+#   5. run the mutating sandbox lane
+#   6. write a dated report + a machine-readable latest.json, and prune
 #
 # ── usage ────────────────────────────────────────────────────────────────
 #   sovereign/scripts/cli-journey-nightly.sh          # run it now, by hand
@@ -131,6 +134,80 @@ if ! "$HERE/tests/cli-journey-selftest.sh"; then
 fi
 echo
 
+# ── read-only capability lane ────────────────────────────────────────────
+# The complement of the sandbox lane, and the reason the two exist at all.
+#
+# Some journeys declare `needs` in the manifest — the operator's real HOME, or
+# a live code index — and the sandbox lane drops them with `--lacks`, because a
+# throwaway HOME can only produce a false failure for them. If that were the
+# end of it, those journeys would be *declared and never run*: precisely the
+# failure that killed cli-contract-live-verify.sh, restated one level up.
+#
+# So this lane runs exactly what the sandbox lane skipped, READ-ONLY, against
+# the operator's own daemon — where the transcripts, notes, drift report and
+# SCIP graph actually are. Read-only mode is safe to point at a production
+# daemon by the runner's own contract; nothing here mutates.
+#
+# The journey list is DERIVED from the plan (`needs` non-empty, live-eligible),
+# not written out here, so a future journey that declares a need is picked up
+# by both lanes without either script being edited.
+echo "─── read-only capability lane (operator HOME + real index) ───"
+CLI_BIN="${SOVEREIGN_BIN:-$REPO_ROOT/target/debug/sovereign-cli}"
+CAP_DAEMON="${SOVEREIGN_DAEMON_URL:-http://127.0.0.1:9741}"
+CAP_VERDICT="pass"
+mapfile -t CAP_IDS < <(
+  "$CLI_BIN" __journey-plan 2>/dev/null |
+    awk -F'\t' '$1=="J" && $6=="live" && $9!="-" && $9!="" {print $2}'
+)
+if [ "${#CAP_IDS[@]}" = "0" ]; then
+  echo "  (no journey declares a lane need — nothing for this lane to prove)"
+elif ! curl -fsS -m 5 "$CAP_DAEMON/v1/models" >/dev/null 2>&1; then
+  # NOT a failure of the code, and NOT a pass either. The operator's daemon
+  # being down at 3am says nothing about this commit — but reporting it as
+  # green would be the vacuous-green move, so it gets its own verdict and is
+  # named in latest.json.
+  echo "  ⚠ no daemon at $CAP_DAEMON — ${#CAP_IDS[@]} capability journeys UNPROVEN"
+  echo "    (${CAP_IDS[*]})"
+  CAP_VERDICT="no-daemon"
+else
+  CAP_FAILED=()
+  for jid in "${CAP_IDS[@]}"; do
+    # Gate on PIPESTATUS, never on the pipeline's exit code: the filter is the
+    # last command, so `if ! runner | grep` would be asking grep whether the
+    # journey passed. That mistake is how a red lane reads green.
+    # SOVEREIGN_LIVE_STRICT=1 matters here, and it is not belt-and-braces. The
+    # runner's DEFAULT posture on an unreachable daemon is to print "skipped"
+    # and exit 0 — right for a hand-run read-only check, fatal for this lane:
+    # the probe above already established the daemon was up, so if it has gone
+    # away mid-lane every remaining journey would be counted as PASSED for
+    # having run nothing. Observed on this very host, twice: the daemon dies
+    # under a heavy lane and comes back only when restarted by hand.
+    CAP_OUT="$(mktemp)"
+    SOVEREIGN_LIVE_JOURNEYS=1 SOVEREIGN_LIVE_STRICT=1 SOVEREIGN_BIN="$CLI_BIN" \
+      SOVEREIGN_DAEMON_URL="$CAP_DAEMON" \
+      "$HERE/cli-journey-verify.sh" --journey "$jid" > "$CAP_OUT" 2>&1
+    CAP_RC=$?
+    grep -E '^ +[✓✗~?·]|^  [✓✗~∅⊘—]|not reachable' "$CAP_OUT"
+    # ⊘ UNPROVEN IS A FAILURE OF *THIS* LANE, unlike in the runner, which exits 0
+    # for it in read-only mode. That leniency is right there and wrong here: the
+    # runner cannot know whether a journey's asserting steps were all mutating,
+    # but this lane exists for exactly one reason — to produce the evidence the
+    # sandbox lane cannot — and these journeys are read-only by construction. A
+    # ⊘ here means the lane ran and produced nothing, which is the whole failure
+    # it was built to prevent.
+    if [ "$CAP_RC" != "0" ] || grep -q '⊘' "$CAP_OUT"; then
+      CAP_FAILED+=("$jid")
+    fi
+    rm -f "$CAP_OUT"
+  done
+  if [ "${#CAP_FAILED[@]}" -gt 0 ]; then
+    CAP_VERDICT="fail"
+    printf '  ✗ %s\n' "${CAP_FAILED[@]}"
+  fi
+fi
+echo "  capability lane: $CAP_VERDICT (${#CAP_IDS[@]} journeys)"
+echo
+
 echo "─── mutating sandbox lane ───"
 # Capture the lane's output to its OWN file rather than reading it back out of
 # $REPORT below. $REPORT is written by the `tee` in the process substitution
@@ -155,6 +232,18 @@ case "$RC" in
   *) VERDICT="fail" ;;
 esac
 
+# The night's verdict is BOTH lanes. A capability journey failing is a product
+# failure like any other, and letting a green sandbox lane speak for the whole
+# run would hide it — so a failure there outranks a sandbox pass. `no-daemon`
+# does not fail the run (the operator's daemon being down says nothing about
+# this commit) but it is carried into the verdict so the report never claims
+# evidence it does not have.
+if [ "$CAP_VERDICT" = "fail" ] && [ "$RC" = "0" ]; then
+  RC=1; VERDICT="fail"
+elif [ "$CAP_VERDICT" = "no-daemon" ] && [ "$VERDICT" = "pass" ]; then
+  VERDICT="pass-capability-unproven"
+fi
+
 echo "═══ VERDICT: $VERDICT (exit $RC) ═══"
 [ -n "$SUMMARY" ]  && echo "  $SUMMARY"
 [ -n "$COVERAGE" ] && echo "  $COVERAGE"
@@ -163,9 +252,10 @@ if [ "$RC" = "4" ]; then
   echo "  correctness, is what needs work; see the ∅ lines above."
 fi
 
-printf '{"stamp":"%s","commit":"%s","dirty":%s,"verdict":"%s","exit":%s,"summary":"%s","coverage":"%s"}\n' \
+printf '{"stamp":"%s","commit":"%s","dirty":%s,"verdict":"%s","exit":%s,"summary":"%s","coverage":"%s","capability_lane":"%s","capability_journeys":%s}\n' \
   "$STAMP" "$HEAD_SHA" "$([ "$DIRTY" = clean ] && echo false || echo true)" \
   "$VERDICT" "$RC" "${SUMMARY//\"/\\\"}" "${COVERAGE//\"/\\\"}" \
+  "$CAP_VERDICT" "${#CAP_IDS[@]}" \
   > "$REPORT_DIR/latest.json"
 ln -sf "$REPORT" "$REPORT_DIR/latest.log"
 

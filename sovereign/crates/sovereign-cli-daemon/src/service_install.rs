@@ -519,9 +519,58 @@ pub(crate) fn probe_argv(mgr: Manager, name: &str) -> Vec<String> {
     }
 }
 
+/// Is the installed unit the daemon THIS invocation is addressing?
+///
+/// THE INCIDENT (2026-07-30, caught by `first-run[7]` the hour that step was
+/// given an assertion). The journey sandbox lane boots its own daemon under a
+/// throwaway `HOME` on `:19741`. Its `daemon restart` step restarted the
+/// OPERATOR's `sovereign.service`, and its `daemon stop` step then stopped it —
+/// both reporting exit 0 from `systemctl`, both leaving the sandbox's own daemon
+/// untouched. Two lanes' worth of "the daemon keeps dying under heavy lanes" was
+/// this, mistaken for flakiness and hand-restarted three times.
+///
+/// The guard for exactly this existed and was bypassed. `SOVEREIGN_STOP_SANDBOXED`
+/// was added 2026-06-10 after the phase3 test killed a developer's daemon twice,
+/// and it confines the stop chain to its pidfile legs — but it is checked partway
+/// down `stop_daemon`, and the service-manager leg added on 2026-07-29 was placed
+/// ABOVE it, under an "OWNERSHIP FIRST" rationale that is right about ownership
+/// and silent about *whose*. A per-call-site guard is the wrong shape: the
+/// failure mode is a NEW call site that does not know to ask.
+///
+/// So the question is answered once, here, where every delegation path already
+/// passes. Two signals, either sufficient:
+///
+///   * `SOVEREIGN_STOP_SANDBOXED=1` — automation stating it owns an isolated
+///     daemon. Operators should never set it.
+///   * a resolved client port other than the default — the unit serves the
+///     default port, so an invocation addressed elsewhere is not addressing the
+///     unit. This is the automatic half, and it is the half that would have
+///     caught the incident: the journey lane sets no env var, it just runs on
+///     `:19741`.
+///
+/// The asymmetry justifies the bias. Wrongly delegating kills a production
+/// daemon from a sandbox; wrongly declining sends SIGTERM to a pid we own and
+/// leaves the manager's restart policy to notice — which is what every version
+/// before 2026-07-29 did.
+fn service_manager_is_addressed() -> bool {
+    if std::env::var("SOVEREIGN_STOP_SANDBOXED").ok().as_deref() == Some("1") {
+        return false;
+    }
+    use crate::setup_config::{DaemonSection, SetupConfig};
+    let default_port = DaemonSection::default().client_port;
+    let configured = SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(default_port);
+    configured == default_port
+}
+
 /// The service manager currently running the daemon, if any.
 /// `None` means lifecycle is the caller's to own — the detached-child
 /// path in `daemon start` is correct.
+///
+/// Also `None` when this invocation is not addressing the installed unit at all
+/// (see [`service_manager_is_addressed`]) — a sandbox must not drive the
+/// operator's service.
 ///
 /// Both platforms walk [`CANDIDATE_SERVICES`] in order, so a host
 /// still registered under the pre-rebrand name is recognised rather
@@ -531,6 +580,10 @@ pub fn managing_service() -> Option<ManagingService> {
     let mgr = Manager::Launchd;
     #[cfg(target_os = "linux")]
     let mgr = Manager::Systemd;
+
+    if !service_manager_is_addressed() {
+        return None;
+    }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
