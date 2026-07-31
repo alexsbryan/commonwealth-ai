@@ -186,6 +186,25 @@ fn save_node_id(data_dir: &Path, id: &NodeId) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Resolve this node's persistent id with the FULL precedence the
+/// daemon applies on resume: the `node_id` file, then the id baked
+/// into `mesh.json`, then generate-and-persist. Every surface that
+/// stamps records other processes will read (work-atlas claims, mesh
+/// measurements) MUST use this, against the ROOT data dir — calling
+/// `load_or_generate_self_node_id` against some other directory mints
+/// a second identity for the same workstation. That exact bug shipped:
+/// the CLI derived its atlas identity from `<root>/indexes`, so one
+/// machine ran as two nodes and self-filtering misfired (2026-07-31).
+pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
+    match load_node_id(data_dir) {
+        Ok(Some(id)) => id,
+        _ => match load(data_dir) {
+            Ok(Some(persisted)) => persisted.self_node_id,
+            _ => load_or_generate_self_node_id(data_dir),
+        },
+    }
+}
+
 /// Load-or-generate wrapper with graceful fallback. First boot
 /// writes the file; subsequent boots return the persisted ID.
 /// On I/O error writing the generated ID, returns the fresh ID

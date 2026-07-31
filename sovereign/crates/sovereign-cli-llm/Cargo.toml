@@ -41,7 +41,7 @@ sovereign-work-atlas = { workspace = true }
 sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-meshapp = { workspace = true }
-sovereign-cli-shared = { workspace = true, features = ["scip"] }
+sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 bytes = { workspace = true }

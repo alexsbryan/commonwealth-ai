@@ -30,13 +30,7 @@ use sovereign_mesh::EmbeddedDaemon;
 /// work-atlas store id and the engine's `self_node_id` so a partition-of-self
 /// lookup matches the daemon's own id.
 pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
-    match sovereign_mesh::persist::load_node_id(data_dir) {
-        Ok(Some(id)) => id,
-        _ => match sovereign_mesh::persist::load(data_dir) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            _ => sovereign_mesh::persist::load_or_generate_self_node_id(data_dir),
-        },
-    }
+    sovereign_mesh::persist::resolve_self_node_id(data_dir)
 }
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model is

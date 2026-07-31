@@ -104,6 +104,7 @@ pub fn overlaps_for_working_set(
                 scope,
                 ScopeMatch::File,
                 caller_token,
+                false,
             ) else {
                 continue;
             };

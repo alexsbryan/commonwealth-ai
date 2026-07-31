@@ -14,6 +14,9 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 
 [dependencies]
 corpus-engine-scip = { workspace = true, optional = true }
+# Only for `mcp_client` (feature-gated) — the daemon-first path for
+# the work-atlas coordination tools.
+reqwest = { workspace = true, optional = true }
 dirs = "5"
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
@@ -32,6 +35,10 @@ default = []
 # Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
 # Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
 scip = ["dep:corpus-engine-scip"]
+# Enables `sovereign_cli_shared::mcp_client` (daemon-first tool calls
+# for the work-atlas coordination surface). Gated so binaries that
+# never proxy skip the reqwest compile cost.
+mcp-client = ["dep:reqwest"]
 
 [lints]
 workspace = true

@@ -51,11 +51,18 @@ pub struct InFlight {
 /// this node's id); pass `None` for callers with no registered agent
 /// session (e.g. the CLI brief) — same semantics the tool uses when
 /// `ToolContext.agent_session_token` is absent.
+///
+/// `include_self` disables the own-session exclusion entirely. It
+/// exists because the exclusion makes "show me MY live claims" (the
+/// `claim list` surface, and debugging "why can't I see my claim")
+/// inexpressible: proxied CLI callers all share one identity, so
+/// without this flag their claims are invisible to themselves.
 pub fn collect_in_flight(
     store: &WorkAtlasStore,
     scope: &str,
     match_mode: ScopeMatch,
     caller_token: Option<&str>,
+    include_self: bool,
 ) -> std::result::Result<InFlight, String> {
     let now = now_secs();
     let claims = store
@@ -66,13 +73,19 @@ pub fn collect_in_flight(
         .map_err(|e| e.to_string())?;
 
     let caller_node = store.node_id();
-    let self_session_ids: std::collections::HashSet<uuid::Uuid> = store
-        .scan_sessions()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter(|s| s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token)
-        .map(|s| s.session_id)
-        .collect();
+    let self_session_ids: std::collections::HashSet<uuid::Uuid> = if include_self {
+        std::collections::HashSet::new()
+    } else {
+        store
+            .scan_sessions()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|s| {
+                s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token
+            })
+            .map(|s| s.session_id)
+            .collect()
+    };
 
     let mut filtered_claims: Vec<Value> = Vec::with_capacity(claims.len());
     for c in claims {
@@ -168,6 +181,11 @@ impl Tool for WorkInFlightTool {
                         "enum": ["symbol", "file"],
                         "default": "symbol",
                         "description": "How to match `scope` against claims. `symbol` = exact symbol id; `file` = path equality or prefix."
+                    },
+                    "include_self": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Also return the caller's own sessions' records. Default false (coordination view: peers only). Set true to audit ALL live signals, e.g. listing your own claims."
                     }
                 },
                 "required": ["scope"]
@@ -295,11 +313,16 @@ impl Tool for WorkInFlightTool {
             }
         };
 
+        let include_self = params
+            .get("include_self")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let in_flight = collect_in_flight(
             &self.store,
             scope,
             match_mode,
             ctx.agent_session_token.as_deref(),
+            include_self,
         )
         .map_err(|message| Error::Tool {
             tool_id: "work_in_flight".into(),

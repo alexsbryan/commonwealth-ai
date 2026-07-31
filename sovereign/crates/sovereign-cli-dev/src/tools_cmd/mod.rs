@@ -300,6 +300,41 @@ async fn cmd_call(args: &[String]) -> i32 {
     }
     let params_value = Value::Object(params);
 
+    // Coordination tools are only CORRECT against the daemon's
+    // work-atlas store — the one peers, gossip, and CodeWatcher
+    // observations share. The in-process registry below writes a
+    // repo-local mesh.db nobody else reads (a claim declared there is
+    // invisible to every other process — root-caused 2026-07-31), so
+    // these three go daemon-first and fall back local only when no
+    // daemon answers, loudly.
+    const DAEMON_AUTHORITATIVE: &[&str] = &["declare_scope", "release_scope", "work_in_flight"];
+    if DAEMON_AUTHORITATIVE.contains(&id.as_str()) {
+        use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+        match daemon_tool_call(&id, params_value.clone()).await {
+            Ok(payload) => {
+                match serde_json::to_string_pretty(&payload) {
+                    Ok(s) => println!("{s}"),
+                    Err(_) => println!("{payload}"),
+                }
+                return 0;
+            }
+            Err(DaemonCallError::Tool(msg)) => {
+                // The daemon answered and the call failed — do NOT
+                // retry against the local store; that would "succeed"
+                // somewhere nobody reads.
+                eprintln!("tools call {id}: {msg}");
+                return 1;
+            }
+            Err(DaemonCallError::Unreachable(e)) => {
+                eprintln!(
+                    "warning: daemon unreachable ({e}) — {id} falling back to the repo-local \
+                     store. Records written here are NOT visible to the daemon, MCP peers, or \
+                     the mesh; re-declare once the daemon is back if coordination matters."
+                );
+            }
+        }
+    }
+
     let env = match registry::open_tools_registry().await {
         Ok(e) => e,
         Err(e) => {

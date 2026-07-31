@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn claim` — CLI surface for the work atlas.
 //!
-//! In-process MeshStore access so the CLI shows the same view the
-//! daemon does. No MCP round-trip — the daemon and CLI share
-//! `.sovereign/mesh.db`. Output is human-readable by default;
-//! `--format json` mirrors `svrn tools` for scripting.
+//! DAEMON-FIRST: the daemon's work-atlas store is the one peers,
+//! gossip, and CodeWatcher observations share, so every subcommand
+//! calls the daemon's MCP tools when it answers. The in-process
+//! repo-local `.sovereign/mesh.db` is a FALLBACK for daemon-down
+//! operation only, and says so loudly — a claim written there is
+//! invisible to every other process. (The previous header claimed the
+//! daemon and CLI share that file; they never did — the daemon's
+//! store is in-memory. Root-caused 2026-07-31.)
+//!
+//! Output is human-readable by default; `--format json` mirrors
+//! `svrn tools` for scripting.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -12,10 +19,41 @@ use std::sync::Arc;
 use commonwealth_state::MeshStore;
 use uuid::Uuid;
 
+use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 use sovereign_work_atlas::{
     model::{AgentKind, Privacy},
     resolve_repo_id, ClaimRecord, ScopeMatch, SessionIdentity, WorkAtlasConfig, WorkAtlasStore,
 };
+
+/// Outcome of the daemon-first attempt for one subcommand.
+enum DaemonFirst {
+    /// The daemon answered; here is the tool's JSON payload.
+    Payload(serde_json::Value),
+    /// No daemon — caller proceeds against the repo-local store.
+    Fallback,
+    /// The daemon answered and REJECTED the call. Do not fall back:
+    /// retrying a rejected write against a store nobody reads would
+    /// manufacture a success.
+    Fail(i32),
+}
+
+async fn daemon_first(tool: &str, args: serde_json::Value) -> DaemonFirst {
+    match daemon_tool_call(tool, args).await {
+        Ok(v) => DaemonFirst::Payload(v),
+        Err(DaemonCallError::Tool(msg)) => {
+            eprintln!("claim: daemon rejected {tool}: {msg}");
+            DaemonFirst::Fail(1)
+        }
+        Err(DaemonCallError::Unreachable(_)) => {
+            eprintln!(
+                "warning: daemon unreachable — using the repo-local store. Records here are \
+                 NOT visible to the daemon, MCP peers, or the mesh; re-declare once the \
+                 daemon is back if coordination matters."
+            );
+            DaemonFirst::Fallback
+        }
+    }
+}
 
 pub async fn run(args: &[String]) -> i32 {
     let Some((sub, rest)) = args.split_first() else {
@@ -97,6 +135,30 @@ async fn run_declare(scope: &str, rest: &[String]) -> i32 {
     if intent_s.trim().is_empty() {
         eprintln!("claim: intent must not be empty");
         return 2;
+    }
+
+    let mut args = serde_json::json!({ "symbols": [scope], "intent": intent_s });
+    if let Some(ttl) = ttl_seconds {
+        args["ttl_seconds"] = ttl.into();
+    }
+    match daemon_first("declare_scope", args).await {
+        DaemonFirst::Payload(p) => {
+            if format_json {
+                println!("{}", serde_json::to_string_pretty(&p).unwrap_or_default());
+            } else {
+                let claim_id = p["claim_id"].as_str().unwrap_or("?");
+                println!(
+                    "claimed {scope}\n  id:       {}\n  intent:   {}\n  expires:  {}\n  release with: sovereign claim release {}",
+                    claim_id,
+                    p["intent"].as_str().unwrap_or(&intent_s),
+                    p["ttl_expires_at"].as_u64().unwrap_or(0),
+                    claim_id,
+                );
+            }
+            return 0;
+        }
+        DaemonFirst::Fail(code) => return code,
+        DaemonFirst::Fallback => {}
     }
 
     let ctx = match open_atlas() {
@@ -193,6 +255,42 @@ async fn run_check(rest: &[String]) -> i32 {
         return 2;
     };
 
+    match daemon_first(
+        "work_in_flight",
+        serde_json::json!({ "scope": scope, "match_mode": "symbol", "include_self": true }),
+    )
+    .await
+    {
+        DaemonFirst::Payload(p) => {
+            let claims = p["claims"].as_array().cloned().unwrap_or_default();
+            if format_json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &serde_json::json!({ "scope": scope, "live": claims })
+                    )
+                    .unwrap_or_default()
+                );
+            } else if claims.is_empty() {
+                println!("no live claims on {scope}");
+            } else {
+                let now = now_secs();
+                println!("live claims on {scope}:");
+                for c in &claims {
+                    println!(
+                        "  {}  intent: {}  expires-in: {}s",
+                        c["claim_id"].as_str().unwrap_or("?"),
+                        c["intent"].as_str().unwrap_or("?"),
+                        c["ttl_expires_at"].as_u64().unwrap_or(0).saturating_sub(now),
+                    );
+                }
+            }
+            return 0;
+        }
+        DaemonFirst::Fail(code) => return code,
+        DaemonFirst::Fallback => {}
+    }
+
     let ctx = match open_atlas() {
         Ok(c) => c,
         Err(code) => return code,
@@ -274,12 +372,58 @@ async fn run_list(rest: &[String]) -> i32 {
             }
         }
     }
+    match daemon_first(
+        "work_in_flight",
+        serde_json::json!({ "scope": "", "match_mode": "file", "include_self": true }),
+    )
+    .await
+    {
+        DaemonFirst::Payload(p) => {
+            let now = now_secs();
+            let my_node = sovereign_mesh::persist::resolve_self_node_id(
+                &sovereign_cli_shared::dirs::sovereign_root(),
+            )
+            .to_string();
+            let claims: Vec<serde_json::Value> = p["claims"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|c| !mine || c["node_id"].as_str() == Some(my_node.as_str()))
+                .collect();
+            if format_json {
+                println!("{}", serde_json::to_string_pretty(&claims).unwrap_or_default());
+            } else if claims.is_empty() {
+                println!("no live claims{}", if mine { " (yours)" } else { "" });
+            } else {
+                for c in &claims {
+                    let target = c["scopes"][0].as_str().unwrap_or("<no-scope>");
+                    println!(
+                        "{}  {}  intent: {}  expires-in: {}s  node: {}",
+                        c["claim_id"].as_str().unwrap_or("?"),
+                        target,
+                        c["intent"].as_str().unwrap_or("?"),
+                        c["ttl_expires_at"].as_u64().unwrap_or(0).saturating_sub(now),
+                        c["node_id"].as_str().unwrap_or("?"),
+                    );
+                }
+            }
+            return 0;
+        }
+        DaemonFirst::Fail(code) => return code,
+        DaemonFirst::Fallback => {}
+    }
+
     let ctx = match open_atlas() {
         Ok(c) => c,
         Err(code) => return code,
     };
     let now = now_secs();
-    let me_token = format!("cli:{}", ctx.store.node_id());
+    // "Mine" = this workstation's node. The old token-string match
+    // (`cli:<node>`) missed sessions created by any other surface
+    // (tools-path sessions carry no token), which made `--mine`
+    // return empty against your own live claims.
+    let me_node = ctx.store.node_id();
 
     let mut rows: Vec<(ClaimRecord, Option<String>)> = Vec::new();
     for privacy in [Privacy::Public, Privacy::Private] {
@@ -298,8 +442,7 @@ async fn run_list(rest: &[String]) -> i32 {
             if mine {
                 let is_mine = session
                     .as_ref()
-                    .and_then(|s| s.agent_session_token.as_deref())
-                    .map(|t| t == me_token)
+                    .map(|s| s.node_id == me_node)
                     .unwrap_or(false);
                 if !is_mine {
                     continue;
@@ -378,6 +521,32 @@ async fn run_release(rest: &[String]) -> i32 {
             return 2;
         }
     };
+
+    match daemon_first(
+        "release_scope",
+        serde_json::json!({ "claim_id": claim_id.to_string() }),
+    )
+    .await
+    {
+        DaemonFirst::Payload(p) => {
+            let released = p["released"].as_bool().unwrap_or(true);
+            if format_json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({ "released": released }))
+                        .unwrap_or_default()
+                );
+            } else if released {
+                println!("released {claim_id}");
+            } else {
+                println!("no claim {claim_id} (already released or expired)");
+            }
+            return 0;
+        }
+        DaemonFirst::Fail(code) => return code,
+        DaemonFirst::Fallback => {}
+    }
+
     let ctx = match open_atlas() {
         Ok(c) => c,
         Err(code) => return code,
@@ -437,10 +606,13 @@ fn open_atlas() -> Result<CliCtx, i32> {
             return Err(1);
         }
     };
-    let data_dir = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("indexes"))
-        .unwrap_or_else(|| sovereign_dir.clone());
-    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    // Identity from the ROOT data dir with the daemon's precedence
+    // (node_id file → mesh.json → generate). The previous hardcoded
+    // `~/.sovereign/indexes` minted a SECOND node id for this
+    // workstation (2026-07-31).
+    let node_id = sovereign_mesh::persist::resolve_self_node_id(
+        &sovereign_cli_shared::dirs::sovereign_root(),
+    );
     let store = Arc::new(WorkAtlasStore::new(Arc::new(mesh), node_id));
 
     let cfg_path = sovereign_contracts::rebrand::work_atlas_toml();

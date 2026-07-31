@@ -28,6 +28,8 @@ pub mod cli_contract_report;
 pub mod deprecation;
 pub mod dirs;
 pub mod help;
+#[cfg(feature = "mcp-client")]
+pub mod mcp_client;
 pub mod prompts;
 pub mod repo;
 #[cfg(feature = "scip")]
