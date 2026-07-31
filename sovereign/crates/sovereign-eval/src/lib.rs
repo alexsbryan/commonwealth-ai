@@ -25,6 +25,7 @@ pub mod disposition_score;
 pub mod disposition_taxonomy;
 pub mod entity_resolution_bench;
 pub mod entity_resolution_score;
+pub mod faithfulness;
 pub mod finalize;
 pub mod flywheel;
 pub mod governance_bench;
