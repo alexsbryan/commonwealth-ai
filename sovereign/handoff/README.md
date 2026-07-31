@@ -15,6 +15,9 @@ system. Handoff is for people *seeing* it.
 - [`ENRICHMENT_CANARY_DEMO.md`](ENRICHMENT_CANARY_DEMO.md) — quality
   regressions can no longer ship silently: break the resolver, watch
   the build red in three minutes (2026-07-31).
+- [`FAITHFULNESS_LANE_DEMO.md`](FAITHFULNESS_LANE_DEMO.md) — the
+  knowledge tier audits its own summaries: per-corpus
+  unsupported-claim rate, gated in CI (2026-07-31).
 
 ## When to add a file here
 

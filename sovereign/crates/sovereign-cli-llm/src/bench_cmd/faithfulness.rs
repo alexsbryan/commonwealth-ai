@@ -42,7 +42,16 @@ use sovereign_cli_shared::help::{self, Help, HelpSection};
 const PROVIDER_CTX: u32 = 8192;
 /// Production parity: the gate checks at most 12 chunks per claim
 /// (judge.rs `cap`), and stops early once support is decisive
-/// (judge.rs early-exit, mirrored by SP3's probe).
+/// (judge.rs early-exit, mirrored by SP3's probe). Parity requires the
+/// cap to operate over claim-RELEVANCE order, not document order — in
+/// production the claim-searched hits go first (judge.rs Phase 3) and
+/// the snapshot chunks behind them are retrieval-ranked. A doc-order
+/// prefix judges big member windows against front matter: measured on
+/// chaos-secret-agent 2026-07-31, the cap bound on 46/66 claims and a
+/// 224-chunk window was judged entirely against Gutenberg boilerplate
+/// (capped rate 0.739 vs uncapped 0.450). So each claim's member
+/// window is cosine-ranked (resident embed model) before the cap;
+/// embedding failure falls back to doc order, counted and warned.
 const CHUNK_CAP: usize = 12;
 const EARLY_EXIT_SUPPORT: f64 = 0.95;
 const SUPPORTED_TAU: f64 = 0.5;
@@ -50,6 +59,21 @@ const SUPPORTED_TAU: f64 = 0.5;
 /// summarization instruction itself (SP3 register; also emitted as the
 /// row's `question` unless the Stream B ack picks a different shape).
 const NODE_QUESTION: &str = "Summarize the passages.";
+
+fn cosine(a: &[f32], b: &[f32]) -> f64 {
+    let n = a.len().min(b.len());
+    let (mut dot, mut na, mut nb) = (0f64, 0f64, 0f64);
+    for i in 0..n {
+        let (x, y) = (a[i] as f64, b[i] as f64);
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na == 0.0 || nb == 0.0 {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
 
 const HELP: Help = Help {
     command: "svrn bench faithfulness",
@@ -271,9 +295,26 @@ async fn run(rest: &[String]) -> i32 {
         todo.truncate(cap);
         eprintln!("--limit {cap}: smoke run — artifact is NOT baseline-worthy");
     }
+    // Rows must carry the CONCRETE judge stem, never a slot alias — an
+    // alias re-points silently (P0.1's dead-model bug was exactly that)
+    // and the gate's mixed-judge guard plus LaneBaseline attribution both
+    // key on the stem. Resolution failure is a hard stop: an artifact
+    // whose judge is unknown cannot be compared to anything.
+    let judge_stem = match super::model_resolve::resolve_model_attribution(&base_url, &model).await
+    {
+        Some(attr) => attr.file_stem,
+        None if model.chars().any(|c| c.is_ascii_digit()) => model.clone(),
+        None => {
+            eprintln!(
+                "error: could not resolve judge alias `{model}` against {base_url} — \
+                 refusing to write rows with an alias as judge_model"
+            );
+            return 1;
+        }
+    };
     eprintln!(
         "faithfulness: corpus={corpus_id} nodes={} (of {} total, {} sentinel-filtered) \
-         sampling={sampling_label} judge={model}",
+         sampling={sampling_label} judge={judge_stem}",
         todo.len(),
         nodes.len(),
         nodes.len() - work.len(),
@@ -317,17 +358,41 @@ async fn run(rest: &[String]) -> i32 {
     let mut n_no_claim = 0usize;
     let mut n_extract_fail = 0usize;
     let mut n_judge_fail = 0usize;
+    let mut n_rank_fallback = 0usize;
+    // Member-chunk embeddings for claim-conditioned ranking (see
+    // CHUNK_CAP). Windows overlap across levels, so cache per run,
+    // keyed by chunk id.
+    let mut chunk_emb: BTreeMap<u64, Vec<f32>> = BTreeMap::new();
 
     for (done, w) in todo.iter().enumerate() {
-        let member_texts: Vec<String> = w
+        // (id, text) pairs so ranking keeps ids and texts aligned — and
+        // so the row's evidence_chunk_ids lists exactly the chunks whose
+        // texts ride in evidence_chunks (ids with no text are dropped
+        // from both, where they previously leaked into the id list).
+        let members: Vec<(u64, String)> = w
             .chunk_ids
             .iter()
-            .filter_map(|id| texts.get(id).cloned())
+            .filter_map(|id| texts.get(id).map(|t| (*id, t.clone())))
             .collect();
-        if member_texts.is_empty() {
+        if members.is_empty() {
             continue;
         }
-        let member_ids: Vec<String> = w.chunk_ids.iter().map(u64::to_string).collect();
+        let member_texts: Vec<String> = members.iter().map(|(_, t)| t.clone()).collect();
+        let member_ids: Vec<String> = members.iter().map(|(id, _)| id.to_string()).collect();
+
+        let missing: Vec<usize> = (0..members.len())
+            .filter(|i| !chunk_emb.contains_key(&members[*i].0))
+            .collect();
+        if !missing.is_empty() {
+            let batch: Vec<String> = missing.iter().map(|i| members[*i].1.clone()).collect();
+            if let Ok(vecs) = provider.embed_batch(&batch).await {
+                if vecs.len() == missing.len() {
+                    for (i, v) in missing.into_iter().zip(vecs) {
+                        chunk_emb.insert(members[i].0, v);
+                    }
+                }
+            }
+        }
 
         let claims = match extract_claim_list(
             &provider,
@@ -350,9 +415,31 @@ async fn run(rest: &[String]) -> i32 {
         };
 
         for (ci, claim) in claims.iter().enumerate() {
+            // Rank this claim's member window by cosine before the cap
+            // (production parity — see CHUNK_CAP). Members without an
+            // embedding sink to the end in doc order (stable sort).
+            let ranked: Vec<&str> = match provider.embed_query(claim).await {
+                Ok(cv) if !cv.is_empty() => {
+                    let scores: Vec<f64> = members
+                        .iter()
+                        .map(|(id, _)| chunk_emb.get(id).map_or(f64::MIN, |e| cosine(&cv, e)))
+                        .collect();
+                    let mut idx: Vec<usize> = (0..members.len()).collect();
+                    idx.sort_by(|a, b| {
+                        scores[*b]
+                            .partial_cmp(&scores[*a])
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    idx.into_iter().map(|i| members[i].1.as_str()).collect()
+                }
+                _ => {
+                    n_rank_fallback += 1;
+                    members.iter().map(|(_, t)| t.as_str()).collect()
+                }
+            };
             let mut max_support = 0.0f64;
             let mut checked = 0usize;
-            for passage in member_texts.iter().take(CHUNK_CAP) {
+            for passage in ranked.into_iter().take(CHUNK_CAP) {
                 match claim_chunk_support(&provider, passage, claim, ShardingPrivacy::LocalOnly)
                     .await
                 {
@@ -386,7 +473,7 @@ async fn run(rest: &[String]) -> i32 {
                 verdict: if supported { "supported" } else { "unsupported" },
                 max_support: (max_support * 1000.0).round() / 1000.0,
                 chunks_checked: checked,
-                judge_model: &model,
+                judge_model: &judge_stem,
                 node_id: &w.node_id,
                 level: w.level,
                 sampling: &sampling_label,
@@ -409,7 +496,7 @@ async fn run(rest: &[String]) -> i32 {
                 corpus_id: corpus_id.clone(),
                 node_id: w.node_id.clone(),
                 level: w.level as u32,
-                judge_model: model.clone(),
+                judge_model: judge_stem.clone(),
             });
         }
         if (done + 1) % 25 == 0 {
@@ -423,6 +510,13 @@ async fn run(rest: &[String]) -> i32 {
     }
 
     // Glassbox summary — same numbers the gate twin will compute.
+    if n_rank_fallback > 0 {
+        eprintln!(
+            "warning: {n_rank_fallback} claim(s) judged in document order (embedding ranking \
+             unavailable) — big member windows under-report support at cap {CHUNK_CAP}; the \
+             rate is not comparable to a ranked-run baseline."
+        );
+    }
     let failures = n_extract_fail + n_judge_fail;
     if failures > 0 {
         eprintln!(

@@ -1,0 +1,19 @@
+{
+  "lane": "faithfulness",
+  "captured_at": "2026-07-31T20:02:50.083527+00:00",
+  "corpus": "chaos-secret-agent",
+  "model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+  "model_attribution": {
+    "file_stem": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+    "quant": "IQ4_NL"
+  },
+  "artifact_mtime": 1785528151,
+  "note": "19 nodes · 66 claims · judge Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+  "metrics": {
+    "unsupported_rate": {
+      "value": 0.48484848484848486,
+      "direction": "lower_is_better",
+      "tolerance": 0.03
+    }
+  }
+}
