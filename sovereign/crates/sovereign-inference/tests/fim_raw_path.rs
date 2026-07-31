@@ -75,6 +75,7 @@ async fn raw_fim_round_trip_and_lcp_second_request() {
         temperature: Some(0.0),
         max_prefix_chars: None,
         max_suffix_chars: None,
+        next_edit_format: None,
     };
     engine
         .install_fim_slot(&section, &gguf)

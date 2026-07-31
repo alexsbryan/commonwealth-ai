@@ -126,6 +126,13 @@ pub struct FimCompletionRequest {
     pub stop: Vec<String>,
     /// Opt-in glassbox: terminal frame carries `sovereign_debug`.
     pub debug: bool,
+    /// Pre-assembled raw prompt (daemon-internal, never on the wire).
+    /// When set, the adapter skips prefix/suffix clamping and FIM
+    /// assembly, tokenizes this string verbatim (`PromptShape::Raw`),
+    /// and disables structural stop-craft — stop strings and EOG
+    /// only. The next-edit model lane uses this for completion-style
+    /// edit models (Zeta 2.x, Sweep) whose prompts it builds itself.
+    pub raw_prompt: Option<String>,
 }
 
 /// A started FIM stream plus the static metadata the route needs for
@@ -157,6 +164,9 @@ pub struct FimSlotStatus {
     pub fim_style: String,
     /// True when served from the shared fast slot (lean mode).
     pub aliased_to_fast: bool,
+    /// Next-edit prompt/parse contract (`"region_instruct"` /
+    /// `"zeta2"` / `"sweep"`) from `[models.fim].next_edit_format`.
+    pub next_edit_format: String,
 }
 
 /// In-process inference service that fulfils chat-completions

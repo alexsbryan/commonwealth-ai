@@ -72,7 +72,7 @@ does not need a model for the deterministic half.
 
 ## Going deeper
 
-New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
+New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [GROUND_YOUR_AGENT.md](./docs/GROUND_YOUR_AGENT.md) then gives that agent the session protocol — memory, coordination, handoff; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.
 
 ## Contributing
 

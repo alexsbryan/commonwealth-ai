@@ -23,6 +23,10 @@ pub enum FimStyle {
     Mellum,
     /// StarCoder2 family: `<fim_prefix>` / `<fim_suffix>` / `<fim_middle>`.
     StarCoder2,
+    /// ByteDance Seed-Coder family (Zeta 2.x is a Seed-Coder-8B
+    /// fine-tune): `<[fim-prefix]>` / `<[fim-suffix]>` / `<[fim-middle]>`,
+    /// SPM ordering in Zeta's next-edit prompt.
+    SeedCoder,
 }
 
 impl FimStyle {
@@ -32,6 +36,38 @@ impl FimStyle {
             FimStyle::QwenCoder => "qwen_coder",
             FimStyle::Mellum => "mellum",
             FimStyle::StarCoder2 => "starcoder2",
+            FimStyle::SeedCoder => "seed_coder",
+        }
+    }
+}
+
+/// Which prompt/parse contract the next-edit model lane speaks to the
+/// FIM slot's model (`NEXT_EDIT.md` §Bakeoff). Explicit config
+/// (`[models.fim].next_edit_format`), never sniffed from the model id
+/// — a wrong guess would silently feed a model a register it was
+/// never trained on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NextEditFormat {
+    /// Marker-bracketed region + instruct prose over the chat
+    /// template (the Mellum2-Instruct v1 lane).
+    #[default]
+    RegionInstruct,
+    /// Zeta 2.x raw SPM prompt: `<[fim-suffix]>` / `<[fim-prefix]>` /
+    /// numbered `<|marker_N|>` editable region / `<[fim-middle]>`.
+    Zeta2,
+    /// Sweep next-edit raw prompt: `<|file_sep|>` sections with
+    /// `.diff` original/updated blocks; completes `updated/{path}`.
+    Sweep,
+}
+
+impl NextEditFormat {
+    /// Stable wire/debug string.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            NextEditFormat::RegionInstruct => "region_instruct",
+            NextEditFormat::Zeta2 => "zeta2",
+            NextEditFormat::Sweep => "sweep",
         }
     }
 }
@@ -62,4 +98,8 @@ pub struct FimSlotInfo {
     /// True when serving from the shared fast slot (alias mode);
     /// false when a dedicated pinned extra slot was loaded.
     pub aliased_to_fast: bool,
+    /// Next-edit prompt/parse contract for this slot's model
+    /// (`[models.fim].next_edit_format`; default `region_instruct`).
+    #[serde(default)]
+    pub next_edit_format: NextEditFormat,
 }

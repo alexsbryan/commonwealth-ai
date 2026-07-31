@@ -81,6 +81,7 @@ pub async fn completions(
             .map(StopParam::into_vec)
             .unwrap_or_default(),
         debug: debug_wanted,
+        raw_prompt: None,
     };
 
     let start = match service.fim_completion_stream(request).await {
@@ -346,6 +347,7 @@ mod tests {
                 model_id: "qwen-coder-1.5b".into(),
                 fim_style: "qwen_coder".into(),
                 aliased_to_fast: false,
+                next_edit_format: "region_instruct".into(),
             })
         }
     }

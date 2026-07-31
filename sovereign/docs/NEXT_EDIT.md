@@ -313,9 +313,10 @@ dropped, timings_ms:{inference}}`. `skipped`
 (`rule_fired`/`gate`/`casing_deferred`) says why the gate never
 consulted; `dropped`
 (`unavailable`/`busy`/`timeout`/`truncated`/`error`/`region_empty`/
-`region_too_large`/`region_has_markers`/`invalid`/`noop`) says why a
-consult produced no edits — a dropped model prediction is reported
-as dropped, never repaired. The daemon logs one line per prediction
+`region_too_large`/`region_has_markers`/`invalid`/`noop`/
+`inconsistent`/`already_applied`) says why a consult produced no
+edits — a dropped model prediction is reported as dropped, never
+repaired. The last two are the V0 content verifier (§9b). The daemon logs one line per prediction
 under the `next_edit` tracing target (path, history size, support,
 sites, proposed, silent-reason, engine, model state, elapsed), which
 is in the daemon's default tracing allowlist and pinned by the
@@ -396,6 +397,56 @@ corruption — a wire field is a bigger contract change than the
 residual justifies. **Trailing prose with no fence** is undetectable
 in general; it is bounded by the shrink/growth caps and measured at
 0/30 by the bank.
+
+## 9b. V0 content verifier (2026-07-31)
+
+The structural guards bound how *much* the model may change; none of
+them bound what the change *says* — the 2026-07-31 adopt bakeoff
+measured that gap directly (Sweep 1.5B fired well-formed,
+guard-passing, content-wrong edits on 10/10 model-negative cases).
+But the gate only consults when the exemplars agree on a
+transformation, and for the identical-core shapes that transformation
+fixes the correct content. `next_edit_model::verify_pattern` holds
+every hunk to it, deterministically, before edits reach the wire:
+a hunk must advance the pattern (add the exemplars' `after` — for
+`param_insert`, the shared prefix; tails vary per site and are not
+judged), must not move against it (re-introducing removed content, or
+failing to delete on a deletion-shaped pattern), must not re-apply it
+where the hunk's own lines already carry it, and must not stack two
+copies with only whitespace between (one site doubled, never two
+sites). Hunks are checked over their full-line spans because
+char-trimming moves the evidence of a re-application into the
+surrounding line; multi-line content is matched as trimmed line
+sequences so indentation drift cannot hide a duplicate. Any bad hunk
+drops the whole prediction (`inconsistent` / `already_applied`) — the
+same posture as the guards. The checks are derived from the gate's
+shape definitions only, never from eval-bank content, and both stages
+share one `exemplar_pair` so they cannot disagree about which edits
+form the pattern.
+
+**Falsification verdict (2026-07-31, three iterations — each fix
+shape-derived, then re-controlled).** The pre-registered protocol:
+Mellum2 must hold its run-4 verdict under V0 (no correct fire eaten),
+and Sweep 1.5B's 25% wrong-fire rate must fall to the ≤5% gate.
+The control leg caught two precision bugs, both fixed at the shape
+level: a line-fragment exemplar (an `after` starting mid-line, e.g.
+`",\n    \"retries\": 3"`) was invisible to line-wise matching —
+fixed by whitespace-normalized content matching; and a completion
+format's trailing-newline artifact sank whole predictions — fixed by
+exempting whitespace-only hunks, with the corollary that an
+all-whitespace prediction is a **noop**, not an edit. That corollary
+rewrote the bakeoff's diagnosis: Sweep's "10 content-wrong edits" on
+the model-negative traps were formatted echoes (a bare trailing
+newline) shipped as edits — the model was correctly declining all
+along and the wire wasn't. Final numbers: **Mellum2 control 29/30 ·
+0 wrong · p95 1807 ms** — the one drop (`sf06`, `already_applied`)
+reproduced 3/3 fresh samples as a genuinely corrupted rewrite
+(`sock_ FD`, `,- scratch`) that the bank's count-ruler scores
+*correct*; a ruler blind spot V0 closes, kept as a drop, not a bug.
+**Sweep 1.5B + V0 passes all five gates: GM3 0/24 fires wrong (from
+25%) · GM4 22/30 unchanged (nothing correct eaten) · p95 1112 ms
+(~0.6× Mellum).** Mellum2 remains the default; Sweep is now a viable
+verified low-latency lane, pending dogfood receipts.
 
 ## 10. Verification surface
 

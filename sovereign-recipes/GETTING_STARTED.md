@@ -21,9 +21,9 @@ you from an idea to a queryable corpus.
 
 ## 0. Prerequisites
 
-- A working `svrn` CLI (`svrn --version`). If `svrn` isn't on your
-  PATH, see the repo root README for the symlink one-liner.
-- The Sovereign daemon running for the embed/index steps: `svrn daemon start`.
+- A working `svrn` CLI (`svrn --version`) and, for the embed/index
+  steps, a running daemon — [start the daemon](../docs/START_THE_DAEMON.md)
+  covers both.
 - Your data source: a URL to a dump, a HuggingFace dataset, a local folder, or a
   REST API.
 

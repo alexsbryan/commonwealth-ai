@@ -39,15 +39,21 @@ svrn project init
 
 `project`, `code`, and `tools` ship only in a dev build, not the prebuilt install below. Flags and multi-project setup: [code intelligence](docs/CODE_INTELLIGENCE.md) and the [development guide](docs/DEVELOPMENT.md).
 
-## cmnwlth
+## Models
 
-Setup leaves you on a private mesh of one. To bring in company, promote it and share the key:
+Setup picks models that fit your hardware; you're never stuck with them. `svrn model` sees and changes what the daemon loads — no config editing, no restart, changes apply live:
 
 ```sh
-svrn mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
+svrn model list                      # the slots (primary / fast / embed / code) and what's loaded
+svrn model set primary <file.gguf>   # swap the main responder, live
+svrn model context 16384             # set the context window, or `auto`
 ```
 
-A friend runs `svrn mesh join <key>`, and your machines answer as one endpoint — enough to run a model neither of you could alone, or to share a knowledge base. No central server; nothing leaves the group. [Run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md) walks it through.
+A `<file>` is an absolute path or a bare filename resolved against `~/.svrnmesh/models`. The full slot surface (`unset`, named extras) is in the [command reference](docs/CLI_REFERENCE.md#svrn-model).
+
+## cmnwlth
+
+Setup leaves you on a private mesh of one. To bring in company, share its key — read it with `svrn mesh status` — and a friend runs `svrn mesh join <key>`. Your machines answer as one endpoint: enough to run a model neither of you could alone, or to share a knowledge base. No central server; nothing leaves the group. [Join a mesh](../docs/JOIN_A_MESH.md) is the mechanics; [run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md) is the payoff.
 
 ## Install
 
@@ -58,19 +64,14 @@ curl -fsSL https://svrnme.sh/install.sh | sh
 svrn setup
 ```
 
-That drops the `sovereign` CLI into `~/.local/bin`. You'll want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models.
+That drops the CLI into `~/.local/bin`. You'll want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models. Building from source instead, or setting up unusual hardware: [start the daemon](../docs/START_THE_DAEMON.md) has the full recipe.
 
-### Or build from source
-
-Needs a Rust toolchain and CMake. On macOS: `xcode-select --install`, then `export SDKROOT="$(xcrun --show-sdk-path)"` (bindgen needs the system headers). On Linux: `sudo apt install cmake build-essential protobuf-compiler`.
+### Staying current
 
 ```sh
-cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
-ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/svrn
-svrn setup
+svrn update --check     # is there a newer release?
+svrn update             # install it, in place, checksum-verified
 ```
-
-AMD Strix Halo or a cloud-GPU peer take a little more — see the [toolbox](docs/TOOLBOX_SETUP.md) and [cloud-peer](docs/CLOUD_PEER_DEPLOY.md) guides.
 
 ## Where to go next
 

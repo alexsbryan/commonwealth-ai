@@ -37,7 +37,7 @@ const HELP: Help = Help {
             ),
             (
                 "harvest",
-                "Walk an installed corpus's chunks in evidence windows, run each window through the production claim extraction, and write the Stream B harvest artifact (claims.json: HarvestFile schema v1 — claims + sealed windows inline, optional --entities/--distractors side tables). The artifact is the substrate the i2_adversarial generator corrupts.",
+                "Walk an installed corpus's chunks in evidence windows, run each window through the production claim extraction, and write the Stream B harvest artifact (claims.json: HarvestFile schema v1 — claims + sealed windows inline, optional --entities/--distractors side tables). The artifact is the substrate the i2_adversarial generator corrupts. On a many-document corpus use --stride to spread the sample: chunk ids are document-ordered, so a bare --limit draws only from the first few documents.",
             ),
             (
                 "export",
@@ -198,6 +198,7 @@ async fn harvest(rest: &[String]) -> i32 {
     let mut max_claims: usize = 8;
     let mut window: usize = 2;
     let mut limit: usize = 0;
+    let mut stride: usize = 1;
     let mut entities: Option<PathBuf> = None;
     let mut distractors: Option<PathBuf> = None;
 
@@ -241,10 +242,22 @@ async fn harvest(rest: &[String]) -> i32 {
                     return 2;
                 }
             },
+            "--stride" => match val!("--stride").parse::<usize>() {
+                Ok(n) if n > 0 => stride = n,
+                _ => {
+                    eprintln!("error: --stride must be a positive integer");
+                    return 2;
+                }
+            },
             "--entities" => entities = Some(PathBuf::from(val!("--entities"))),
             "--distractors" => distractors = Some(PathBuf::from(val!("--distractors"))),
             "--help" | "-h" => {
-                eprintln!("usage: svrn bench verifier harvest --corpus <id> [--out claims.json] [--model <stem>] [--base-url <url>] [--max-claims N] [--window CHUNKS] [--limit WINDOWS] [--entities <clusters.json>] [--distractors <docs.json>]");
+                eprintln!("usage: svrn bench verifier harvest --corpus <id> [--out claims.json] [--model <stem>] [--base-url <url>] [--max-claims N] [--window CHUNKS] [--limit WINDOWS] [--stride N] [--entities <clusters.json>] [--distractors <docs.json>]");
+                eprintln!("  --stride N   take every Nth window instead of consecutive ones. Chunk ids are");
+                eprintln!("               document-ordered, so on a many-document corpus (e.g. sep, 187k chunks");
+                eprintln!("               across 1,770 articles) a bare --limit samples only the first few");
+                eprintln!("               documents. Combine: --stride 115 --limit 815 spreads 815 windows");
+                eprintln!("               across the whole corpus.");
                 return 0;
             }
             other => {
@@ -292,12 +305,32 @@ async fn harvest(rest: &[String]) -> i32 {
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&v1, None, &model, PROVIDER_CTX));
 
+    let total_windows = rows.len().div_ceil(window);
+    if stride > 1 {
+        let selected = total_windows
+            .div_ceil(stride)
+            .min(if limit > 0 { limit } else { usize::MAX });
+        eprintln!(
+            "[harvest] {total_windows} windows available; taking every {stride}th \
+             (~{selected} windows) — an even spread beats the first N, which on a \
+             multi-document corpus all come from the same few documents"
+        );
+    }
     let mut items: Vec<adv::HarvestItem> = Vec::new();
     let mut failed_windows = 0usize;
+    let mut taken = 0usize;
     for (wi, win) in rows.chunks(window).enumerate() {
-        if limit > 0 && wi >= limit {
+        // `--stride` selects; `--limit` caps what was selected. Chunk ids are
+        // document-ordered, so a bare `--limit N` walks the first N windows and
+        // samples only the alphabetically-first documents — fine for a smoke,
+        // wrong for training substrate.
+        if wi % stride != 0 {
+            continue;
+        }
+        if limit > 0 && taken >= limit {
             break;
         }
+        taken += 1;
         let title = win
             .iter()
             .find_map(|r| r.title.clone())

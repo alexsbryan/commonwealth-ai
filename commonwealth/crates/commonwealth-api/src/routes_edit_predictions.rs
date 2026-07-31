@@ -24,10 +24,12 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
 
+use futures::StreamExt;
+
 use crate::next_edit::{self, HistoryUnit};
 use crate::next_edit_model::{self, Consult};
-use crate::openai_types::{ChatCompletionRequest, ErrorResponse};
-use crate::state::AppState;
+use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
+use crate::state::{AppState, FimCompletionRequest};
 
 /// Caps: a request past these is malformed, not merely large — the
 /// first-party client enforces the same limits before sending.
@@ -267,11 +269,24 @@ async fn model_lane(
         dbg["dropped"] = "region_empty".into();
         return (None, dbg);
     }
-    // A region that already contains the markers would make the
-    // prompt ambiguous about where the editable span ends, and every
-    // faithful echo would then fail parsing — the lane would look
-    // silently broken on that one file forever. Decline out loud.
-    if region.contains("editable_region") {
+    // A region that already contains the active format's markers
+    // would make the prompt ambiguous about where the editable span
+    // ends, and every faithful echo would then fail parsing — the
+    // lane would look silently broken on that one file forever.
+    // Decline out loud. Which strings poison the prompt depends on
+    // the format the slot speaks.
+    let format = fim.next_edit_format.clone();
+    dbg["format"] = format.clone().into();
+    let poisoned = match format.as_str() {
+        "zeta2" => {
+            region.contains("<|marker_")
+                || region.contains("<[fim-")
+                || region.contains(next_edit_model::ZETA_CURSOR)
+        }
+        "sweep" => region.contains(next_edit_model::SWEEP_FILE_SEP),
+        _ => region.contains("editable_region"),
+    };
+    if poisoned {
         dbg["dropped"] = "region_has_markers".into();
         return (None, dbg);
     }
@@ -279,27 +294,7 @@ async fn model_lane(
     dbg["region"] = serde_json::json!({ "start": bounds[0], "end": bounds[1] });
     dbg["needle_hit"] = needle_hit.into();
 
-    let prompt = next_edit_model::build_prompt(
-        history,
-        region,
-        wire.path.as_deref(),
-        wire.language.as_deref(),
-        reason,
-    );
     let max_tokens = ((region.len() / 3) + 160).clamp(64, 1024) as u32;
-    let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
-        "model": fim.model_id,
-        "messages": [{ "role": "user", "content": prompt }],
-        "temperature": 0.1,
-        "max_tokens": max_tokens,
-    })) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(target: "next_edit", error = %e, "model lane request build failed");
-            dbg["dropped"] = "error".into();
-            return (None, dbg);
-        }
-    };
 
     let t0 = std::time::Instant::now();
     // The permit rides INTO the task, not just this scope. Abandoning
@@ -313,11 +308,109 @@ async fn model_lane(
     // anything precisely when the slot is most contended. Holding it
     // until the inference genuinely returns makes the next consult
     // report an honest `busy` instead.
-    let task = tokio::spawn(async move {
-        let out = service.chat_completion(req).await;
-        drop(permit);
-        out
-    });
+    //
+    // Both branches resolve to `Result<(content, finish_reason), _>`
+    // so the outcome handling below is format-agnostic.
+    let task = match format.as_str() {
+        // Completion-style edit models: the lane builds the model's
+        // own raw prompt and rides the FIM slot's verbatim path — a
+        // chat template would wrap the special tokens in a user turn
+        // and the fine-tune would never see its trained shape.
+        "zeta2" | "sweep" => {
+            let raw = if format == "zeta2" {
+                next_edit_model::build_prompt_zeta2(
+                    history,
+                    &wire.text,
+                    rs,
+                    re,
+                    cursor,
+                    wire.path.as_deref(),
+                )
+            } else {
+                next_edit_model::build_prompt_sweep(history, region, wire.path.as_deref())
+            };
+            // `</s>` is Sweep's documented terminator; zeta2's
+            // `<|marker_2|>` is already a SeedCoder family stop.
+            let stop = if format == "sweep" {
+                vec!["</s>".to_string()]
+            } else {
+                Vec::new()
+            };
+            let freq = FimCompletionRequest {
+                prefix: String::new(),
+                suffix: String::new(),
+                path: wire.path.clone(),
+                language: wire.language.clone(),
+                max_tokens: Some(max_tokens as usize),
+                temperature: Some(0.0),
+                stop,
+                debug: false,
+                raw_prompt: Some(raw),
+            };
+            tokio::spawn(async move {
+                let out = match service.fim_completion_stream(freq).await {
+                    Ok(start) => {
+                        let mut stream = start.stream;
+                        let mut content = String::new();
+                        let mut result = None;
+                        while let Some(frame) = stream.next().await {
+                            match frame {
+                                StreamFrame::Token(t) => content.push_str(&t),
+                                StreamFrame::Finish { reason, .. } => {
+                                    result = Some(Ok((
+                                        std::mem::take(&mut content),
+                                        Some(reason.as_openai_str().to_string()),
+                                    )));
+                                }
+                                StreamFrame::Error(e) => {
+                                    result = Some(Err(e));
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        // A closed channel without a terminal frame is
+                        // a cancelled decode, not a completion.
+                        result.unwrap_or_else(|| Err("stream ended without finish".to_string()))
+                    }
+                    Err(e) => Err(e),
+                };
+                drop(permit);
+                out
+            })
+        }
+        _ => {
+            let prompt = next_edit_model::build_prompt(
+                history,
+                region,
+                wire.path.as_deref(),
+                wire.language.as_deref(),
+                reason,
+            );
+            let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
+                "model": fim.model_id,
+                "messages": [{ "role": "user", "content": prompt }],
+                "temperature": 0.1,
+                "max_tokens": max_tokens,
+            })) {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(target: "next_edit", error = %e, "model lane request build failed");
+                    dbg["dropped"] = "error".into();
+                    return (None, dbg);
+                }
+            };
+            tokio::spawn(async move {
+                let out = service.chat_completion(req).await.map(|resp| {
+                    let choice = resp.choices.into_iter().next();
+                    let finish = choice.as_ref().and_then(|c| c.finish_reason.clone());
+                    (choice.map(|c| c.message.content).unwrap_or_default(), finish)
+                });
+                drop(permit);
+                out
+            })
+        }
+    };
     let outcome = tokio::time::timeout(Duration::from_millis(MODEL_TIMEOUT_MS), task).await;
     dbg["timings_ms"] = serde_json::json!({ "inference": t0.elapsed().as_millis() as u64 });
     let content = match outcome {
@@ -335,21 +428,31 @@ async fn model_lane(
             dbg["dropped"] = "error".into();
             return (None, dbg);
         }
-        Ok(Ok(Ok(resp))) => {
-            let choice = resp.choices.into_iter().next();
+        Ok(Ok(Ok((content, finish)))) => {
             // A completion that hit the token ceiling is a region cut
             // off mid-rewrite. Diffed against the whole region it
             // reads as "delete everything after here" — the tail of
             // the region is missing, not unchanged.
-            if choice.as_ref().and_then(|c| c.finish_reason.as_deref()) == Some("length") {
+            if finish.as_deref() == Some("length") {
                 dbg["dropped"] = "truncated".into();
                 return (None, dbg);
             }
-            choice.map(|c| c.message.content).unwrap_or_default()
+            // Cancelled/errored decodes carry partial content; a
+            // partial rewrite is the same mass-deletion hazard.
+            if matches!(finish.as_deref(), Some("cancelled") | Some("error")) {
+                dbg["dropped"] = "error".into();
+                return (None, dbg);
+            }
+            content
         }
     };
 
-    let rewritten = match next_edit_model::parse_rewrite(&content, region) {
+    let parsed = match format.as_str() {
+        "zeta2" => next_edit_model::parse_rewrite_zeta2(&content, region),
+        "sweep" => next_edit_model::parse_rewrite_sweep(&content, region),
+        _ => next_edit_model::parse_rewrite(&content, region),
+    };
+    let rewritten = match parsed {
         Ok(s) => s,
         Err(why) => {
             dbg["dropped"] = why.into();
@@ -360,6 +463,26 @@ async fn model_lane(
     if region_edits.is_empty() {
         dbg["dropped"] = "noop".into();
         return (None, dbg);
+    }
+    // V0 content verifier: the structural guards above bound how much
+    // changed; this holds WHAT changed to the exemplar transformation
+    // the gate consulted over. The pair cannot be absent here — the
+    // gate already required it — but a defensive miss just skips
+    // verification rather than inventing a drop.
+    if let Some((a, b)) = next_edit_model::exemplar_pair(history) {
+        if let Err((why, idx)) =
+            next_edit_model::verify_pattern(reason, a, b, region, &region_edits)
+        {
+            let e = &region_edits[idx];
+            dbg["dropped"] = why.into();
+            dbg["verify_hunk"] = serde_json::json!({
+                "start": e.start,
+                "end": e.end,
+                "old": region[e.start..e.end].chars().take(120).collect::<String>(),
+                "new": e.new_text.chars().take(120).collect::<String>(),
+            });
+            return (None, dbg);
+        }
     }
     let edits = region_edits
         .into_iter()
@@ -452,6 +575,7 @@ mod tests {
                 model_id: "mellum-test".into(),
                 fim_style: "mellum".into(),
                 aliased_to_fast: false,
+                next_edit_format: "region_instruct".into(),
             })
         }
     }
@@ -580,6 +704,24 @@ mod tests {
         assert_eq!(m["reason"], "fanout_insert");
         assert_eq!(m["model_id"], "mellum-test");
         assert!(m.get("dropped").is_none());
+    }
+
+    #[tokio::test]
+    async fn model_lane_drops_a_reapplied_pattern_as_already_applied() {
+        // Structurally flawless rewrite, wrong in content: the "model"
+        // stacks the insertion onto a site that already carries it and
+        // leaves the fresh site alone. The completion-trap shape — V0
+        // must catch it at the content level, not the structure level.
+        let rewrite = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
+                       \tbackup := dial(backupHost, altPort, timeoutMS, timeoutMS)\n\
+                       \tmirror := dial(mirrorHost, 9090)\n";
+        let (status, body) = post_to(model_router(rewrite), fanout_request(FANOUT_TEXT)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["engine"], "rule", "verifier drop falls back to rule-lane silence");
+        assert!(body["edits"].as_array().unwrap().is_empty());
+        let m = &body["sovereign_debug"]["model"];
+        assert_eq!(m["consulted"], true);
+        assert_eq!(m["dropped"], "already_applied");
     }
 
     #[tokio::test]
@@ -756,6 +898,7 @@ mod tests {
                     model_id: "mellum-test".into(),
                     fim_style: "mellum".into(),
                     aliased_to_fast: false,
+                    next_edit_format: "region_instruct".into(),
                 })
             }
         }

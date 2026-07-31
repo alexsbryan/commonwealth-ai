@@ -123,6 +123,15 @@ pub fn render_experience_map(contract: &Contract) -> String {
             s.push_str(&format!("    {}\n", journey_line(j)));
         }
     }
+    if !contract.dependencies.is_empty() {
+        s.push_str("\n── what journeys stand on ──\n");
+        for d in &contract.dependencies {
+            s.push_str(&format!(
+                "{:<18} {:<40} verify: {:<16} doc: {}\n",
+                d.id, d.title, d.verify, d.doc
+            ));
+        }
+    }
     s.push_str(&format!(
         "\n{} experiences, {} journeys, {asserts_total}/{steps_total} steps assert output\n",
         contract.experiences.len(),

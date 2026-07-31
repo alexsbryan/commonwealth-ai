@@ -17,63 +17,17 @@ At the end you'll have:
 
 ## Before you start
 
-- Two machines on the same network, or both on one tailnet
-  (Tailscale/Headscale). Between them: **TCP 9742** (mesh internal API —
-  gossip and knowledge fan-out) and, on a shared LAN, **UDP 5353**
-  (mDNS discovery). The client API (`:9741`) stays loopback unless you
-  deliberately expose it.
-- On each machine: install and run `svrn setup` (downloads a
-  primary + fast + embedding model for your hardware). The machine that
-  *asks* does the synthesis, so it needs a real primary model (~2.5 GB
-  at the CPU-only floor); the machine that only *hosts* knowledge works
-  with the embedding model and its corpus.
-- One thing worth knowing up front: the first daemon boot after `setup`
-  quietly creates a **solo mesh** on that machine. That's why step 2
-  reads the existing mesh rather than creating one — `svrn mesh
-  create` on an already-set-up machine errors with "a mesh already
-  exists" (the fix is `rotate`, not `create`).
+- Each machine [set up and running the daemon](./START_THE_DAEMON.md).
+  One asymmetry worth knowing: the machine that *asks* does the
+  synthesis, so it needs a real primary model (~2.5 GB at the CPU-only
+  floor); the machine that only *hosts* knowledge works with the
+  embedding model and its corpus.
+- Both machines [joined into one mesh](./JOIN_A_MESH.md) — that page has
+  the ports, the join key, the relay form for networks where mDNS can't
+  see across, and what "a mesh already exists" means. Come back when
+  `svrn mesh status` on either machine shows `[2/2 online]`.
 
-## 1 — Bring up both daemons
-
-On each machine:
-
-```sh
-svrn daemon start
-svrn mesh status     # each machine shows its own solo mesh [1/1 online]
-```
-
-## 2 — Read the invite on node A
-
-```sh
-svrn mesh status     # prints the join key: cwth-XXXX-XXXX-XXXX
-# want a fresh key (e.g. the old one leaked)? svrn mesh rotate
-```
-
-## 3 — Join from node B
-
-Same LAN (mDNS finds A automatically):
-
-```sh
-svrn mesh join cwth-XXXX-XXXX-XXXX
-```
-
-Across networks, or on WiFi with client isolation, mDNS can't see A —
-hand the join an explicit relay to A's internal port instead:
-
-```sh
-svrn mesh join "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=<node-A-ip>:9742"
-```
-
-Then on either machine:
-
-```sh
-svrn mesh status     # wait for [2/2 online]
-```
-
-Connectivity details and firewall troubleshooting live in
-[`commonwealth/docs/getting-started.md`](../commonwealth/docs/getting-started.md).
-
-## 4 — Give A knowledge that B doesn't have
+## 1 — Give A knowledge that B doesn't have
 
 On node A:
 
@@ -101,7 +55,7 @@ mechanics — `svrn corpus list` shows the catalog; the `gutenberg`
 catalog plus one `gutenberg-<id>` work is the fastest public-domain
 alternative.)
 
-## 5 — Ask from node B
+## 2 — Ask from node B
 
 On node B, which hosts nothing:
 
@@ -151,47 +105,12 @@ the founder — is pinned by the integration suite
 the queryable-but-never-copied split by
 `tests/local_only_corpus_locality.rs` and `tests/storage_snapshot_e2e.rs`.
 
-## Appendix: two daemons on ONE machine
-
-Possible, with two caveats the two-machine path doesn't have. Each
-daemon needs its own config (distinct ports and data dir):
-
-```toml
-# node-b.toml
-[daemon]
-client_port = 9743
-internal_port = 9744
-client_bind = "127.0.0.1"
-[data]
-dir = "/tmp/svrn-node-b"
-```
-
-and because the `svrn mesh join` CLI talks to the daemon on
-`:9741`, the second daemon joins via its own client port directly:
-
-```sh
-svrn daemon run --config node-b.toml &
-curl -s -X POST http://127.0.0.1:9743/v1/mesh/join \
-  -H 'content-type: application/json' \
-  -d '{"key_or_url": "sovereign://join/cwth-XXXX-XXXX-XXXX?relay=127.0.0.1:9742", "node_name": "node-b"}'
-```
-
-Second caveat: there is no mDNS-off switch yet, so two bare daemons on
-one machine will also discover any real mesh on your LAN. The
-multi-process soak harness (`scripts/mesh-soak.sh`) solves this with a
-rootless network namespace on Linux; treat the one-machine form as a
-dev convenience, not the demo.
+Only one machine to hand? The same flow works with
+[two daemons on one machine](./JOIN_A_MESH.md#appendix-two-daemons-on-one-machine).
 
 ## Troubleshooting
 
-- **"A mesh already exists"** on `mesh create` — expected after
-  `setup`; read the key with `svrn mesh status` or mint a new one
-  with `svrn mesh rotate`.
-- **Join hangs on shared WiFi** — client isolation is blocking mDNS;
-  use the explicit `?relay=<ip>:9742` join form.
-- **macOS firewall prompt** for the daemon listening on `0.0.0.0:9742` —
-  allow it; that's the mesh internal port (see
-  [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md) for exactly what listens
-  where and why).
 - **503 on a query** — a peer left mid-plan; plans rebalance within
   ~5–15 seconds, retry.
+- Mesh or connectivity problems — [join a mesh](./JOIN_A_MESH.md#when-it-breaks)
+  owns those.

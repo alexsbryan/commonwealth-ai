@@ -108,6 +108,21 @@ resident; generate first, then train). Recipe:
 
 Claim-yield arithmetic from the first batch: ~7 claims/window ⇒ secret agent
 alone ≈ 875 claims ≈ 2.6k cases. 20–40k pairs therefore needs the taxonomy
-over MORE substrate (both corpora + entity/distractor tables raise
-cases/claim toward 10) and/or additional public bank corpora — plan the
-Halo run against that arithmetic, not against `--n`.
+over MORE substrate and/or additional public bank corpora — plan the Halo
+run against that arithmetic, not against `--n`.
+
+> **CORRECTION (2026-07-31, volume run).** The parenthetical that stood here
+> — "entity/distractor tables raise cases/claim toward 10" — is **wrong**.
+> The side tables feed only `entity_swap` and `distractor_absorption`, both
+> ungrounded, and `generate_cases` alternates labels (`adversarial.rs:455`)
+> so the ungrounded side is capped by the grounded side: **total ≈ 2 ×
+> grounded**, measured exactly on both chaos corpora. Side tables raise
+> taxonomy COVERAGE, never volume. The lever is substrate that clears the
+> grounded gate. See `M2_STREAM_B_VOLUME.md` §2 and note `1eb7ec59`.
+>
+> Two sourcing claims in step 2 above are also wrong and were corrected in
+> the volume run: entities come from the corpus **atlas** (`atlas/atoms.json`
+> Entity atoms), not `named-clusters.json` (thematic, no surface forms); and
+> distractors should come from a **same-genre** document, not the meridian
+> postmortem — cross-genre distractors are easy negatives that teach
+> vocabulary rather than support. `M2_STREAM_B_VOLUME.md` §4–§5.

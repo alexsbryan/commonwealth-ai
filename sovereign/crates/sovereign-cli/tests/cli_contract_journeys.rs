@@ -37,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use sovereign_cli_shared::cli_contract::{
-    Contract, Disposition, Evidence, Feature, Journey, StepBinding, Visibility,
+    Contract, Disposition, Evidence, Feature, Journey, Need, StepBinding, Visibility,
 };
 
 /// The stranded ledger is a debt register. It may SHRINK as verbs are
@@ -542,6 +542,124 @@ fn every_capability_is_exercised_by_a_serving_journey() {
     assert!(
         fails.is_empty(),
         "capabilities declared but not exercised:\n  {}",
+        fails.join("\n  ")
+    );
+}
+
+// ── the dependency axis ─────────────────────────────────────────────────
+//
+// Journeys share prerequisites — a running daemon, a joined mesh, an
+// installed corpus, an indexed repo. Measured 2026-07-31, before this axis
+// existed: mesh create/join was re-explained in 15 docs, daemon setup in 10,
+// corpus install in 13, repo indexing in 8 — every journey doc re-taught its
+// prerequisites inline because no canonical module existed to link. A
+// [[dependency]] names each shared prerequisite ONCE, with the one doc that
+// gets a user there and the read-only command that proves the state exists.
+
+#[test]
+fn dependencies_are_well_formed_and_cited() {
+    let c = contract();
+    let root = repo_root();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut fails = Vec::new();
+    for d in &c.dependencies {
+        *seen.entry(d.id.as_str()).or_default() += 1;
+        if d.id.is_empty() || !d.id.chars().all(|ch| ch.is_ascii_lowercase() || ch == '-') {
+            fails.push(format!("dependency id `{}` is not kebab-case", d.id));
+        }
+        if d.title.trim().is_empty() {
+            fails.push(format!("dependency `{}` has an empty title", d.id));
+        }
+        if d.verify.trim().is_empty() {
+            fails.push(format!(
+                "dependency `{}` declares no `verify` — without the read that \
+                 proves the state exists, \"do I have this?\" has no answer",
+                d.id
+            ));
+        }
+        if !root.join(doc_file(&d.doc)).is_file() {
+            fails.push(format!(
+                "dependency `{}` cites `{}`, which does not exist",
+                d.id, d.doc
+            ));
+        }
+    }
+    for (id, n) in seen.iter().filter(|(_, n)| **n > 1) {
+        fails.push(format!("dependency id `{id}` declared {n} times"));
+    }
+    assert!(
+        fails.is_empty(),
+        "malformed dependencies:\n  {}",
+        fails.join("\n  ")
+    );
+}
+
+#[test]
+fn every_lane_need_has_a_dependency_module() {
+    // `needs` is the lane-partition vocabulary (the sandbox says `--lacks`
+    // for what a throwaway HOME cannot supply). Each Need must ALSO be a
+    // declared [[dependency]], so a skipped journey always has a doc
+    // explaining the state it assumed — a lane exclusion with no doc is
+    // "this doesn't run here" with no path to making it run anywhere.
+    let c = contract();
+    let declared: BTreeSet<&str> = c.dependencies.iter().map(|d| d.id.as_str()).collect();
+    let missing: Vec<&str> = [Need::OperatorHome, Need::IndexedRepo]
+        .iter()
+        .map(|n| n.as_str())
+        .filter(|id| !declared.contains(id))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "lane needs with no [[dependency]] module: {missing:?} — declare one \
+         (id, title, doc, verify) so the excluded journeys' assumption has a \
+         canonical doc"
+    );
+}
+
+#[test]
+fn served_journeys_are_documented_outside_the_monoliths() {
+    // The doc-honesty gate. A journey's `doc` is where a user is TAUGHT the
+    // sequence; three targets fail that promise by construction:
+    //
+    //   - CLI_REFERENCE.md — the flat per-verb dictionary. Pointing a journey
+    //     there says "no doc of its own; go look the verbs up".
+    //   - .claude/CLAUDE.md — this repo's internal agent instructions. Not a
+    //     doc an end user ever finds, and not written for them.
+    //   - specs/ — a design proposal. It documents an intention, not a
+    //     sequence the CLI keeps today.
+    //
+    // When first measured (2026-07-31) TEN citations pointed at these:
+    // governance, stay-current, enrich-atlas, agent-notes → CLI_REFERENCE;
+    // watcher-repair, agent-session-boot + the agent-session-protocol
+    // experience → CLAUDE.md; session-continuity, context-spend-audit →
+    // specs/. This is a HARD ZERO, not a cap: a gapped experience (no
+    // journey yet) may cite its spec — that debt is already counted by
+    // MAX_UNSERVED_EXPERIENCES — but a SERVED promise teaches from a real
+    // user doc, or the doc is the missing half of the feature.
+    let monolith = |cite: &str| -> bool {
+        let f = doc_file(cite);
+        f.ends_with("CLI_REFERENCE.md") || f == ".claude/CLAUDE.md" || f.contains("/specs/")
+    };
+    let c = contract();
+    let mut fails = Vec::new();
+    for e in c.experiences.iter().filter(|e| e.gap.is_none()) {
+        if monolith(&e.doc) {
+            fails.push(format!("experience `{}` → `{}`", e.id, e.doc));
+        }
+    }
+    for j in &c.journeys {
+        if let Some(d) = &j.doc {
+            if monolith(d) {
+                fails.push(format!("journey `{}` → `{}`", j.id, d));
+            }
+        }
+    }
+    assert!(
+        fails.is_empty(),
+        "{} citation(s) point at a monolith (the reference, the internal \
+         agent file, or a spec) instead of a doc that teaches the journey — \
+         write the user doc (or a section of an existing one) and repoint:\n  {}",
+        fails.len(),
         fails.join("\n  ")
     );
 }

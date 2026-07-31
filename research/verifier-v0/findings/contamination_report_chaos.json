@@ -1,0 +1,32 @@
+{
+  "training_stream": "stream_b",
+  "inputs": [
+    "/home/alexbryan/dev/commonwealth-ai/research/verifier-v0/data/stream_b/all/cases_chaos.jsonl"
+  ],
+  "training_rows": 2380,
+  "ngram": 13,
+  "test_sets": {
+    "LLM-AggreFact": "test.parquet (29,320 rows)",
+    "FaithBench": "15 release batches"
+  },
+  "unique_test_docs": 8405,
+  "canary_hits": 0,
+  "colliding_training_rows": {
+    "LLM-AggreFact": 0,
+    "FaithBench": 0
+  },
+  "per_group": {
+    "chaos-saltgrass": {
+      "rows": 207,
+      "doc_collisions": 0,
+      "claim_collisions": 0
+    },
+    "chaos-secret-agent": {
+      "rows": 2173,
+      "doc_collisions": 0,
+      "claim_collisions": 0
+    }
+  },
+  "collision_examples": [],
+  "verdict": "CLEAN"
+}

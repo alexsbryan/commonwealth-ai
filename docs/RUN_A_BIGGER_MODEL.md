@@ -41,22 +41,10 @@ has, on one box.
 
 **1. Put the machines on one mesh.**
 
-On the host, create an invite:
-
-```bash
-svrn mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
-                             # (says "a mesh already exists"? setup founded a
-                             #  solo mesh — read its key with `svrn mesh
-                             #  status`, or `svrn mesh rotate` for a new one)
-```
-
-On each other machine, join with it:
-
-```bash
-svrn mesh join cwth-a1b2-c3d4-e5f6
-```
-
-`svrn mesh status` now lists them all.
+[Join a mesh](./JOIN_A_MESH.md) is the walk: read the host's join key with
+`svrn mesh status`, run `svrn mesh join <key>` on each other machine, and
+come back when `svrn mesh status` lists them all. (It also covers the
+"a mesh already exists" message and networks where discovery needs a relay.)
 
 **2. Start the lending machine as a worker.**
 
@@ -127,11 +115,8 @@ on what's left, and the worker folded back in once it's been steadily reachable
 again. A worker that keeps flapping is benched for a cooldown rather than trusted
 straight back in.
 
-For a setup you'd rather not watch, run the daemon as a service:
-
-```bash
-svrn install-service
-```
+For a setup you'd rather not watch, run the daemon as a service —
+`svrn install-service` ([keeping it running](./START_THE_DAEMON.md#keep-it-running)).
 
 A worker crashing in the middle of an answer can take the host process down with
 it — an upstream limitation we don't paper over. Under a service the host restarts

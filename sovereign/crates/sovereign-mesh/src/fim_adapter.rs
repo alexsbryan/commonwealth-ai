@@ -28,7 +28,7 @@ use commonwealth_api::state::{FimCompletionRequest, FimSlotStatus, FimStreamStar
 use futures::StreamExt;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
-use sovereign_inference::fim::{decide_mode, Feed, FimStopTracker, StopOutcome};
+use sovereign_inference::fim::{decide_mode, Feed, FimMode, FimStopTracker, StopOutcome};
 
 use crate::inference_adapter::{translate_finish_reason, translate_stream_usage};
 
@@ -70,6 +70,7 @@ pub(crate) fn fim_status(provider: &Arc<dyn InferenceProvider>) -> Option<FimSlo
         model_id: info.model_id,
         fim_style: info.fim_style.as_str().to_string(),
         aliased_to_fast: info.aliased_to_fast,
+        next_edit_format: info.next_edit_format.as_str().to_string(),
     })
 }
 
@@ -145,51 +146,65 @@ pub(crate) async fn fim_completion_stream(
         .fim_slot_info()
         .ok_or_else(|| FIM_NOT_CONFIGURED.to_string())?;
 
-    // Interop: some clients (JetBrains AI Assistant's "prompt schema"
-    // flow) assemble the FIM string CLIENT-side and send it whole.
-    // Detect a pre-assembled prompt BEFORE clamping (a tail-clamp
-    // would decapitate the opening marker) — pass it through
-    // verbatim; the client owns its structure, clamps and all.
-    let family_prefix_marker = sovereign_inference::fim::markers_for(info.fim_style).prefix;
-    let pre_assembled = request.prefix.starts_with(family_prefix_marker);
-    let (prefix, suffix) = if pre_assembled {
+    // Daemon-internal raw prompt (next-edit model lane): the caller
+    // built the whole prompt for a completion-style edit model and
+    // owns its contract — no clamping, no FIM assembly, and Verbatim
+    // mode so no structural stop rule can truncate a region rewrite.
+    let (fim_prompt, prompt_chars, mode, probe_suffix) = if let Some(raw) = &request.raw_prompt {
         tracing::info!(
             target: "fim",
-            prompt_chars = request.prefix.len(),
-            "fim: pre-assembled prompt from client — passing through verbatim"
+            prompt_chars = raw.len(),
+            "fim: raw prompt from internal caller — verbatim, stop-strings only"
         );
-        (request.prefix.as_str(), "")
+        (raw.clone(), raw.len(), FimMode::Verbatim, "")
     } else {
-        (
-            tail_chars(&request.prefix, info.max_prefix_chars),
-            head_chars(&request.suffix, info.max_suffix_chars),
-        )
-    };
-    let prompt_chars = prefix.len() + suffix.len();
-    let fim_prompt = if pre_assembled {
-        prefix.to_string()
-    } else {
-        sovereign_inference::fim::build_fim_prompt(info.fim_style, prefix, suffix)
-    };
-    // Single vs multi-line is decided HERE, not by the model (§3.3):
-    // the text immediately before the cursor tells us which shape
-    // the completion should take. For a pre-assembled prompt the
-    // cursor context is the code BETWEEN the prefix and suffix
-    // markers — decide from that, and feed the embedded suffix code
-    // to the tracker's duplication probe.
-    let (mode, probe_suffix) = if pre_assembled {
-        let markers = sovereign_inference::fim::markers_for(info.fim_style);
-        let body = prefix.strip_prefix(family_prefix_marker).unwrap_or(prefix);
-        let mut parts = body.split(markers.suffix);
-        let code_before = parts.next().unwrap_or(body);
-        let after_suffix_marker = parts.next().unwrap_or("");
-        let embedded_suffix = after_suffix_marker
-            .split(markers.middle)
-            .next()
-            .unwrap_or("");
-        (decide_mode(code_before), embedded_suffix)
-    } else {
-        (decide_mode(prefix), suffix)
+        // Interop: some clients (JetBrains AI Assistant's "prompt schema"
+        // flow) assemble the FIM string CLIENT-side and send it whole.
+        // Detect a pre-assembled prompt BEFORE clamping (a tail-clamp
+        // would decapitate the opening marker) — pass it through
+        // verbatim; the client owns its structure, clamps and all.
+        let family_prefix_marker = sovereign_inference::fim::markers_for(info.fim_style).prefix;
+        let pre_assembled = request.prefix.starts_with(family_prefix_marker);
+        let (prefix, suffix) = if pre_assembled {
+            tracing::info!(
+                target: "fim",
+                prompt_chars = request.prefix.len(),
+                "fim: pre-assembled prompt from client — passing through verbatim"
+            );
+            (request.prefix.as_str(), "")
+        } else {
+            (
+                tail_chars(&request.prefix, info.max_prefix_chars),
+                head_chars(&request.suffix, info.max_suffix_chars),
+            )
+        };
+        let prompt_chars = prefix.len() + suffix.len();
+        let fim_prompt = if pre_assembled {
+            prefix.to_string()
+        } else {
+            sovereign_inference::fim::build_fim_prompt(info.fim_style, prefix, suffix)
+        };
+        // Single vs multi-line is decided HERE, not by the model (§3.3):
+        // the text immediately before the cursor tells us which shape
+        // the completion should take. For a pre-assembled prompt the
+        // cursor context is the code BETWEEN the prefix and suffix
+        // markers — decide from that, and feed the embedded suffix code
+        // to the tracker's duplication probe.
+        let (mode, probe_suffix) = if pre_assembled {
+            let markers = sovereign_inference::fim::markers_for(info.fim_style);
+            let body = prefix.strip_prefix(family_prefix_marker).unwrap_or(prefix);
+            let mut parts = body.split(markers.suffix);
+            let code_before = parts.next().unwrap_or(body);
+            let after_suffix_marker = parts.next().unwrap_or("");
+            let embedded_suffix = after_suffix_marker
+                .split(markers.middle)
+                .next()
+                .unwrap_or("");
+            (decide_mode(code_before), embedded_suffix)
+        } else {
+            (decide_mode(prefix), suffix)
+        };
+        (fim_prompt, prompt_chars, mode, probe_suffix)
     };
 
     let max_tokens = request.max_tokens.unwrap_or(info.max_tokens);
@@ -381,6 +396,7 @@ mod tests {
                 max_prefix_chars: 40, // deliberately tiny: exercises tail-clamp
                 max_suffix_chars: 8,  // and head-clamp
                 aliased_to_fast: false,
+                next_edit_format: Default::default(),
             })
         }
     }
@@ -395,6 +411,7 @@ mod tests {
             temperature: None,
             stop: vec![],
             debug: false,
+            raw_prompt: None,
         }
     }
 
@@ -487,6 +504,7 @@ mod tests {
             temperature: None,
             stop: vec![],
             debug: false,
+            raw_prompt: None,
         };
         let start = fim_completion_stream(&provider, req)
             .await

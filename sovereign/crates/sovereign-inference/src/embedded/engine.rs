@@ -1370,6 +1370,7 @@ impl EmbeddedLlamaCpp {
                         max_prefix_chars: 0,
                         max_suffix_chars: 0,
                         aliased_to_fast: true,
+                        next_edit_format: section.effective_next_edit_format(),
                     };
                     sampling(&mut info);
                     tracing::info!(
@@ -1427,6 +1428,7 @@ impl EmbeddedLlamaCpp {
                     max_prefix_chars: 0,
                     max_suffix_chars: 0,
                     aliased_to_fast: false,
+                    next_edit_format: section.effective_next_edit_format(),
                 };
                 sampling(&mut info);
                 tracing::info!(

@@ -1,0 +1,27 @@
+{
+  "training_stream": "stream_b",
+  "inputs": [
+    "research/verifier-v0/data/stream_b/sep/stream_b.jsonl"
+  ],
+  "training_rows": 19451,
+  "ngram": 13,
+  "test_sets": {
+    "LLM-AggreFact": "test.parquet (29,320 rows)",
+    "FaithBench": "15 release batches"
+  },
+  "unique_test_docs": 8405,
+  "canary_hits": 0,
+  "colliding_training_rows": {
+    "LLM-AggreFact": 0,
+    "FaithBench": 0
+  },
+  "per_group": {
+    "sep": {
+      "rows": 19451,
+      "doc_collisions": 0,
+      "claim_collisions": 0
+    }
+  },
+  "collision_examples": [],
+  "verdict": "CLEAN"
+}

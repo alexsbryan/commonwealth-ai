@@ -95,6 +95,21 @@ pub const FIM_MARKER_TABLE: &[FimMarkers] = &[
         also_requires: &["<|end_of_text|>"],
         stop_strings: &["<|end_of_text|>", "<file_sep>", "<fim_pad>"],
     },
+    // Seed-Coder (Zeta 2.x base): bracket-style spellings, unique
+    // across the table so no discriminator token is needed. Verified
+    // against zeta-2.1 GGUF vocab 2026-07-31 (`<[begin▁of▁sentence]>`
+    // / `<[end▁of▁sentence]>` are the BOS/EOS spellings).
+    FimMarkers {
+        style: FimStyle::SeedCoder,
+        prefix: "<[fim-prefix]>",
+        suffix: "<[fim-suffix]>",
+        middle: "<[fim-middle]>",
+        also_requires: &[],
+        // `<|marker_2|>` is Zeta's editable-region close — plain text,
+        // not a vocab special, but the only Seed-Coder model this
+        // daemon serves is Zeta and its completions terminate there.
+        stop_strings: &["<[end\u{2581}of\u{2581}sentence]>", "<|marker_2|>"],
+    },
 ];
 
 /// Look up the marker row for a detected style.
@@ -191,6 +206,12 @@ pub enum FimMode {
     /// Complete a block body — stop on net-depth close, a blank
     /// line, or the max-lines budget.
     Multi,
+    /// No structural stop-craft at all — stop strings (family +
+    /// client extras) and EOG only. The next-edit region-rewrite
+    /// lane uses this: a 24-line region legitimately contains blank
+    /// lines, closes brackets it never opened, and blows the 8-line
+    /// budget, so every structural rule is a false stop there.
+    Verbatim,
 }
 
 impl FimMode {
@@ -199,6 +220,7 @@ impl FimMode {
         match self {
             FimMode::Single => "single",
             FimMode::Multi => "multi",
+            FimMode::Verbatim => "verbatim",
         }
     }
 }
@@ -397,8 +419,12 @@ impl FimStopTracker {
         }
 
         // Rules 3/4: structural walk over newly-arrived bytes.
-        if let Some((pos, rule, emit)) = self.structural_scan() {
-            consider(pos, rule, emit);
+        // Verbatim mode has no structural rules — the scan would fire
+        // BlankLine/MaxLines even without a Single/Multi match.
+        if self.mode != FimMode::Verbatim {
+            if let Some((pos, rule, emit)) = self.structural_scan() {
+                consider(pos, rule, emit);
+            }
         }
 
         if let Some((_, rule, emit)) = best {
@@ -513,9 +539,41 @@ mod tests {
 
     #[test]
     fn every_style_has_marker_row() {
-        for style in [FimStyle::QwenCoder, FimStyle::Mellum, FimStyle::StarCoder2] {
+        for style in [
+            FimStyle::QwenCoder,
+            FimStyle::Mellum,
+            FimStyle::StarCoder2,
+            FimStyle::SeedCoder,
+        ] {
             let m = markers_for(style);
             assert!(m.stop_strings.len() >= 2, "{:?} needs stop strings", style);
+        }
+    }
+
+    #[test]
+    fn seed_coder_row_uses_bracket_spellings() {
+        let m = markers_for(FimStyle::SeedCoder);
+        assert_eq!(m.prefix, "<[fim-prefix]>");
+        assert_eq!(m.suffix, "<[fim-suffix]>");
+        assert_eq!(m.middle, "<[fim-middle]>");
+        assert_eq!(m.stop_strings[0], "<[end▁of▁sentence]>");
+    }
+
+    #[test]
+    fn verbatim_mode_ignores_structural_stops_keeps_stop_strings() {
+        let mut t =
+            FimStopTracker::new_with_extra(FimStyle::QwenCoder, vec![], FimMode::Verbatim, "");
+        // Blank lines, a net-negative closer, and more newlines than
+        // the Multi budget: none of it stops a Verbatim stream.
+        let body = "}\n\n\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\n";
+        match t.feed(body) {
+            Feed::Emit(_) => {}
+            f => panic!("verbatim stream stopped structurally: {f:?}"),
+        }
+        // Family stop strings still terminate it.
+        match t.feed("tail<|endoftext|>") {
+            Feed::Stop { outcome, .. } => assert_eq!(outcome.rule, StopRule::StopString),
+            f => panic!("stop string ignored: {f:?}"),
         }
     }
 

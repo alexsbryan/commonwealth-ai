@@ -7,6 +7,16 @@ When developing features you have a high amount of empathy for the end user and 
 Within this project you consult with SYSTEM_OVERVIEW.md to understand the system at a glance and you keep it up to date when you make what feel like major changes to any of the systems in this project. You use ARCH_PRINCIPLES.md as your compass for evaluating technical design tradeoffs and approaches for implementation.
 
 
+## Reporting to the operator — tech lead briefing a product lead
+
+Everything you report — turn summaries, findings, session wrap-ups, notes — is input to a product decision. Write it the way a tech lead briefs a product lead:
+
+- **Bottom line up front.** First sentence states the outcome or the recommendation; detail follows for whoever wants it. Never open with process narration, and never build a report as a hedge-chain ("this, but that, then this, so that…"). State the conclusion once and qualify your confidence once ("verified by tests" / "inferred, untested") — not in every sentence.
+- **Magnitude, or it's a lead — not a finding.** A gap without quantified impact is not reportable as a result. "The retry path lacks backoff" is a lead; "the retry path lacks backoff — every mesh-join under load hits it, ~40s stall" is a finding. If you can't quantify it, say what measurement would, and get that number before proposing the work.
+- **End-user impact is the lens.** Every feature report answers: what does a user do or experience differently now? If the honest answer is "nothing observable", say exactly that — it's a signal to stop, not something to reframe as progress.
+- **No unquantified gap-filling.** Finding gaps and filling them because they're findable is the failure mode this section exists to stop. Proposing work requires an impact estimate first: who hits this, how often, how bad. Complexity that doesn't move a named metric gets reverted, not defended.
+
+
 ## Code Intelligence (MCP, with CLI fallback)
 
 A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MCP transport exposes **38 tools** — 32 canonical plus 6 deprecated aliases (see below). That covers code intelligence (`symbols`, `callers`, `callees`, `blast`, `code_search`, `facts`, `capability_map`, `arch_report`, `arch_posture`), notes (`note`, `notes`, `retire_note`, `briefing`, `session_state`), coordination (`work_in_flight`, `declare_scope`, `release_scope`), drift (`drift_findings`, `drift_posture`, `atos_verify`), build feedback (`lint_status`, `get_lint_output`, `build`), and `solve`.
@@ -32,7 +42,7 @@ Don't trust this paragraph over the wire: `tools/list` is the authoritative answ
 
 So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --bins --features sovereign-cli/dev-tools`).
 
-**`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `dev-toolbox` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
+**`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
 When the MCP server is running (the common case), prefer the MCP path — it's faster and native to Claude Code. The same tools are also exposed as a CLI:
 
@@ -321,14 +331,21 @@ The bar for reflecting on drift tools is *lower* than for code-intelligence tool
 
 **The watchers are OFF here, deliberately, and that is fine.** `.sovereign/sovereign.toml` declares `[watchers] enabled = false` (disabled 2026-05-31: the parallel cargo fan OOM'd the daemon under a resident big model). So `lint_status`/`test_status` have nothing to report, `doctor` reports the opt-out as **Passed**, and none of this needs investigating. Do not open a session by diagnosing the watcher, and do not restore the runner config unless you actually intend to run watchers.
 
-**The gate is the two scripts. Run them inside the toolbox.**
+**The gate is the two scripts. On the Halo they must run inside the `sovereign-vulkan` toolbox.**
 
 ```bash
+# from the Fedora HOST — prefix:
 toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
 toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
+
+# from INSIDE the toolbox (the common case — sessions usually start there):
+./scripts/sovereign-lint.sh --human --full
+./scripts/sovereign-test.sh --human
 ```
 
-On the Fedora HOST these cannot work — `llama-cpp-sys-4`'s build script has no clang and dies on `stdbool.h`. The lint script now reports that as a build failure and names the toolbox; before 2026-07-28 it printed `pass: 1 fail: 0` and exited 101 at the same time (note 73bb9404).
+**Check which side you are on before you type either form — the boot hook already told you.** `session-boot.sh` emits a `_build posture:_` line naming the container, because getting this wrong wastes a session either way: from the host, native builds die (`llama-cpp-sys-4`'s build script has no clang and fails on `stdbool.h`); from inside, the `toolbox run` prefix fails with a bare `flatpak-spawn(1) not found` that reads like a broken install rather than "you are already there". If you ever need to confirm by hand it is one read, not a `podman`/`toolbox list` hunt (neither is available inside): `cat /run/.containerenv` names the container, and its absence means host. Everything else — `cargo`, `sovereign daemon stop|start`, the scripts — follows the same rule as the two above.
+
+The lint script reports the host build failure as a build failure and names the toolbox; before 2026-07-28 it printed `pass: 1 fail: 0` and exited 101 at the same time (note 73bb9404).
 
 **DO NOT run `cargo build`, `cargo check`, `cargo test`, or `cargo clippy` via Bash** when a watcher IS running in some other workspace — direct calls contend with it for the Cargo file lock and you idle doing nothing. With watchers off (the case here) bare cargo is safe, but prefer the scripts: they resolve the repo's real feature contract and carry guards bare cargo has no equivalent of (below).
 
@@ -352,7 +369,7 @@ Both exit non-zero on failure and both write a raw cargo log for triage, so a fa
 
 ### Definition of done — every feature push
 
-Before declaring a feature complete, **both must exit 0**, run inside the toolbox:
+Before declaring a feature complete, **both must exit 0**, run in the `sovereign-vulkan` toolbox (drop the prefix if the boot hook says you are already inside it — see "Compilation and test feedback"):
 
 ```bash
 toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full

@@ -494,20 +494,11 @@ prompts:
 ./target/release/sovereign-cli setup
 ```
 
-Setup writes `~/.sovereign/config.toml` with your chosen
-model paths. You can also hand-edit that file:
-
-```toml
-[models]
-primary = "/home/youruser/.sovereign/models/Qwen3.5-9B.Q5_K_M.gguf"
-fast    = "/home/youruser/.sovereign/models/Qwen3-1.7B-Q8_0.gguf"
-embed   = "/home/youruser/.sovereign/models/qwen-embedding-0.6b.gguf"
-
-[daemon]
-client_port   = 9741
-internal_port = 9742
-autostart     = true
-```
+Setup writes `~/.sovereign/config.toml` with your chosen model paths;
+change them later with `svrn model set` (no restart —
+[models](../README.md#models)). Ports, data dir, and the rest of the
+first-run knobs are the generic story, covered in
+[start the daemon](../../docs/START_THE_DAEMON.md#first-run).
 
 ---
 
@@ -531,22 +522,18 @@ you're done with the GPU side:
 curl -sf http://localhost:9741/v1/models | jq .
 ```
 
-Once the foreground run looks healthy, install as a systemd user
-service. The project already ships a unit template at
-[`contrib/systemd/sovereign.service`](../contrib/systemd/sovereign.service)
-and `service_install.rs` has a Linux path — but it has not been
-exercised on hardware yet. The intended install flow is:
+Once the foreground run looks healthy, register it as a service so it
+survives crashes and logouts:
 
 ```bash
-./target/release/sovereign-cli daemon install  # writes ~/.config/systemd/user/sovereign.service
-systemctl --user daemon-reload
-systemctl --user enable --now sovereign
+./target/release/sovereign-cli install-service
 journalctl --user -u sovereign -f              # tail the live log
 ```
 
-If any of those steps break, please file a note at
-`~/.sovereign/notes/` describing what failed — the Linux install
-path is first-pass and I expect rough edges.
+(That's the same `svrn install-service` every other doc names —
+[keeping it running](../../docs/START_THE_DAEMON.md#keep-it-running).
+The Linux service path is younger than the macOS one; if a step breaks,
+please file a note describing what failed.)
 
 ---
 

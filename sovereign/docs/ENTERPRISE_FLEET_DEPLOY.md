@@ -18,6 +18,10 @@ no public relay.
 
 ## Forming the fleet without mDNS
 
+(The interactive form of everything in this section — invites, joins,
+relays — is [join a mesh](../../docs/JOIN_A_MESH.md); this page is the
+config-driven fleet path.)
+
 By default the daemon advertises and browses `_commonwealth._tcp` over mDNS
 multicast for zero-config LAN discovery. Cloud VPCs silently drop multicast, and
 some hardened network namespaces won't even let the multicast socket bind (which

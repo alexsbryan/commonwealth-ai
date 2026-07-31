@@ -216,16 +216,19 @@ Diagnose setup and daemon health across Sovereign / Commonwealth / OmO layers.
 
 Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
 
-### `svrn reflect` (alias: `svrn notes`)
+### `svrn notes` (alias: `svrn reflect`)
 
-Review session reflections and retire ones that are no longer relevant. The canonical name is now `notes`; `reflect` still works.
+Durable working notes, plus the session-reflection view. The canonical name is `notes`; `reflect` still works and forwards here. Bare `svrn notes` renders the 30-day reflection *summary*; `svrn notes list` is the notes themselves — the same `NoteStore::read_notes` query the MCP `notes` tool runs, so the CLI and an agent cannot disagree about what is stored. The workflow these serve: [ground your agent — durable notes](../../docs/GROUND_YOUR_AGENT.md#durable-notes).
 
-| Flag | Description |
+| Form | Description |
 |---|---|
-| `--since <Nd\|Nh>` | Period to analyse (default: 30d) |
-| `--tool <name>` | Filter signals to one tool |
-| `--raw` | Print full reflection prose |
-| `--todos` | List open todo notes only |
+| `notes` | 30-day reflection summary; filters `--since <Nd\|Nh>`, `--tool <name>`, `--raw`, `--todos` |
+| `notes add --kind <k> -m "..."` | Append a note (decision / invariant / todo / attempt); stdout is the new note's id |
+| `notes list [--query <s>]` | List / search the notes; `--query` alone implies `list`; `--id <id>` reads one (8-char short ids work) |
+| `notes promote <id> --to <s>` | Promote a note's scope |
+| `notes rationalize` | Consolidation-candidate report (no writes); `--distill` previews LLM verdicts; `--apply --yes` writes |
+| `notes gc [--days 30]` | TTL sweep of expired telemetry (the daemon runs this daily) |
+| `notes migrate-from <path>` | Merge a stray local `notes.db` into `~/.sovereign/notes.db` |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
 ### `svrn cache-audit`
@@ -251,7 +254,9 @@ Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` sh
 | `--dir <path>` | Explicit transcript directory (overrides `--project`) |
 | `--no-llm` | Stop after the spine (also the daemon-down fallback) |
 | `--model <id>` | Chat model for synthesis (default `primary`) |
-| `--max-tokens <n>` | Synthesis output budget (default 3000) |
+| `--max-tokens <n>` | Synthesis output budget (default 700) |
+
+Beyond `list` and `distill`: `session frames` prints the index of live session frames (one pointer line each — what the boot hook injects), `session frames <id>` dereferences one whole, `session attach <id>` re-points the current terminal at that lineage, `session lineage` shows predecessor chains, and `session grade <id>` grades a frame against `quality/session-frame.golden.md` (exit 0 pass / 1 fail). The workflow they serve: [ground your agent — session continuity](../../docs/GROUND_YOUR_AGENT.md#session-continuity).
 | `--stdout` | Print the frame as well as writing it |
 
 ### `svrn recipe`
@@ -525,11 +530,13 @@ Common-law governance over a corpus — an event-sourced oplog of tensions and r
 
 | Subcommand | Description |
 |---|---|
-| `seed` | Seed the governance oplog from a corpus's atlas atoms |
-| `tensions` | Surface candidate tensions (conflicting rules / positions) |
-| `resolve` | Record a resolution that supersedes or reconciles rules |
-| `accept` | Accept a resolution into the active rule set |
-| `ask "<question>"` | Grounded Q&A over the active rule set (dead/superseded law excluded) |
+| `seed <corpus>` | Assert every rule-shaped claim in the corpus's atlas as a governed rule (idempotent baseline) |
+| `tensions <corpus> [--format json]` | List open tensions, ranked, with both rule texts and a copy-pasteable resolve command |
+| `resolve <corpus> <tension-id> --keep <rule-id> [--rationale <s>]` | Pick a winner; the other rule is superseded — still history, no longer law |
+| `accept <corpus> <tension-id> --rationale <s>` | Record the tension as known-and-tolerated; both rules stay in force |
+| `ask <corpus> "<question>"` | Grounded, cite-or-abstain Q&A over current law (superseded rules' evidence excluded) |
+
+The journey — what these are for and in what order: [govern a corpus](./GOVERN_A_CORPUS.md).
 
 ### `svrn atos`
 
@@ -573,6 +580,10 @@ Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 M
 ### `svrn install-service`
 
 Register the daemon with the OS service manager — launchd on macOS, systemd on Linux — so it starts at login and stays running across logouts. Run once after `svrn setup`. Lives in the `sovereign-cli-daemon` sibling.
+
+### `svrn update`
+
+Check for and install a newer CLI release. Bare `svrn update` resolves the newest release on the public shelf, verifies its checksum through the same installer as `curl … | sh`, and replaces the running binary in place; `svrn update --check` only reports. Unix only (needs `sh` + `curl`).
 
 ### `svrn contract`
 

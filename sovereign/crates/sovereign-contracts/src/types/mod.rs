@@ -125,7 +125,7 @@ pub use completion::{
     SamplingMode, StreamFrame, StreamUsage, ToolSchema,
 };
 mod fim;
-pub use fim::{FimSlotInfo, FimStyle};
+pub use fim::{FimSlotInfo, FimStyle, NextEditFormat};
 mod routing;
 pub use routing::{
     compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,

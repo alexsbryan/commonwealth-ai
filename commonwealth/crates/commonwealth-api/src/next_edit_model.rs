@@ -232,19 +232,31 @@ fn ctx_needle(a: &HistoryUnit, b: &HistoryUnit) -> Option<String> {
 
 // ---- the consult gate -------------------------------------------------
 
+/// The two most recent content-bearing units in the history window —
+/// the exemplars every consult shape is defined over, `(most recent,
+/// second most recent)`. Shared by [`should_consult`] (which decides
+/// FROM them) and [`verify_pattern`] (which holds the model's output
+/// TO them), so the two stages can never disagree about which edits
+/// form the pattern.
+pub fn exemplar_pair(history: &[HistoryUnit]) -> Option<(&HistoryUnit, &HistoryUnit)> {
+    let window_start = history.len().saturating_sub(HISTORY_WINDOW);
+    let cores: Vec<&HistoryUnit> =
+        history[window_start..].iter().filter(|u| u.before != u.after).collect();
+    if cores.len() < 2 {
+        return None;
+    }
+    Some((cores[cores.len() - 1], cores[cores.len() - 2]))
+}
+
 /// Decide whether the model lane may be consulted. `p` is the rule
 /// lane's outcome on the same request; a fired rule lane always wins.
 pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Consult {
     if !p.edits.is_empty() {
         return Consult::No { skipped: "rule_fired" };
     }
-    let window_start = history.len().saturating_sub(HISTORY_WINDOW);
-    let cores: Vec<&HistoryUnit> =
-        history[window_start..].iter().filter(|u| u.before != u.after).collect();
-    if cores.len() < 2 {
+    let Some((a, b)) = exemplar_pair(history) else {
         return Consult::No { skipped: "gate" };
-    }
-    let (a, b) = (cores[cores.len() - 1], cores[cores.len() - 2]);
+    };
     let (ra, rb) = (expand_rule(a), expand_rule(b));
 
     // 1. Casing variant: a real, exhausted literal rule whose rename
@@ -376,6 +388,61 @@ pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize,
 pub const REGION_START_MARKER: &str = "<|editable_region_start|>";
 pub const REGION_END_MARKER: &str = "<|editable_region_end|>";
 
+// ---- bakeoff formats: zeta2 / sweep raw prompts -----------------------
+//
+// Completion-style edit models speak their fine-tune's own contract,
+// not ours. Each format below reproduces the model's published prompt
+// shape exactly (Zeta 2.1 model card; Sweep's run_model.py) and rides
+// the FIM slot's raw path (`FimCompletionRequest.raw_prompt`,
+// `FimMode::Verbatim`). Format selection is explicit config
+// (`[models.fim].next_edit_format`) — see NEXT_EDIT.md.
+
+/// Zeta 2.x editable-region open marker (plain text in its vocab).
+pub const ZETA_MARKER_1: &str = "<|marker_1|>";
+/// Zeta 2.x editable-region close marker.
+pub const ZETA_MARKER_2: &str = "<|marker_2|>";
+/// Zeta 2.x cursor position marker, inserted inside the region.
+pub const ZETA_CURSOR: &str = "<|user_cursor|>";
+const ZETA_FIM_PREFIX: &str = "<[fim-prefix]>";
+const ZETA_FIM_SUFFIX: &str = "<[fim-suffix]>";
+const ZETA_FIM_MIDDLE: &str = "<[fim-middle]>";
+/// Sweep's section separator (a Qwen2.5-Coder special token).
+pub const SWEEP_FILE_SEP: &str = "<|file_sep|>";
+/// File-context windows around the region in raw prompts, in bytes.
+/// Same role as the FIM slot's prefix/suffix clamps: bound the
+/// prefill an adversarial file can buy.
+const RAW_PREFIX_WINDOW: usize = 4096;
+const RAW_SUFFIX_WINDOW: usize = 2048;
+
+/// Keep the TAIL of `s` beyond `max` bytes (char-boundary safe).
+fn tail_bytes(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        s
+    } else {
+        &s[s.ceil_char_boundary(s.len() - max)..]
+    }
+}
+
+/// Keep the HEAD of `s` up to `max` bytes (char-boundary safe).
+fn head_bytes(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        s
+    } else {
+        &s[..s.floor_char_boundary(max)]
+    }
+}
+
+/// The edit-history units every prompt format shows: the same window
+/// the consult gate judged (`should_consult`) — showing a model units
+/// the gate never looked at would let it generalize from a pattern
+/// nothing authorized — trimmed to the newest [`MAX_PROMPT_UNITS`]
+/// real edits.
+fn shown_units(history: &[HistoryUnit]) -> Vec<&HistoryUnit> {
+    let window = &history[history.len().saturating_sub(HISTORY_WINDOW)..];
+    let cores: Vec<&HistoryUnit> = window.iter().filter(|u| u.before != u.after).collect();
+    cores[cores.len().saturating_sub(MAX_PROMPT_UNITS)..].to_vec()
+}
+
 /// Zeta-shaped instruct prompt: edit history as diff snippets + the
 /// marker-bracketed region, output = the rewritten region. `reason` is
 /// the consult-gate verdict — casing consults carry an extra
@@ -395,12 +462,7 @@ pub fn build_prompt(
         "You are the next-edit engine of a code editor. \
          The developer just made these edits, oldest first:\n",
     );
-    // Same window the gate judged (`should_consult`) — showing the
-    // model units the gate never looked at would let it generalize
-    // from a pattern nothing authorized.
-    let window = &history[history.len().saturating_sub(HISTORY_WINDOW)..];
-    let cores: Vec<&HistoryUnit> = window.iter().filter(|u| u.before != u.after).collect();
-    let shown = &cores[cores.len().saturating_sub(MAX_PROMPT_UNITS)..];
+    let shown = shown_units(history);
     for (i, u) in shown.iter().enumerate() {
         p.push_str(&format!(
             "\nEdit {}:\n-{}{}{}\n+{}{}{}\n",
@@ -440,6 +502,125 @@ pub fn build_prompt(
          unchanged.\n\n{REGION_START_MARKER}\n{region}{REGION_END_MARKER}\n",
     ));
     p
+}
+
+/// Zeta 2.x raw prompt (model card, SPM ordering): suffix section,
+/// then prefix section carrying the edit history as unified-diff
+/// snippets and the target file's code before the region, then the
+/// marker-bracketed editable region with the cursor marker, then the
+/// generation marker. `rs..re` is the region's byte range in `text`;
+/// `cursor` a byte offset (marker inserted only when it falls inside
+/// the region — a needle-anchored region away from the cursor has no
+/// honest cursor position to mark).
+pub fn build_prompt_zeta2(
+    history: &[HistoryUnit],
+    text: &str,
+    rs: usize,
+    re: usize,
+    cursor: usize,
+    path: Option<&str>,
+) -> String {
+    let region = &text[rs..re];
+    let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
+    let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
+    let path = path.unwrap_or("untitled");
+    let mut p =
+        String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 512);
+    p.push_str(ZETA_FIM_SUFFIX);
+    p.push('\n');
+    p.push_str(suffix_win);
+    if !suffix_win.is_empty() && !suffix_win.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(ZETA_FIM_PREFIX);
+    p.push_str("<filename>edit_history\n");
+    for u in shown_units(history) {
+        p.push_str(&format!("--- a/{path}\n+++ b/{path}\n"));
+        let old = format!("{}{}{}", u.left, u.before, u.right);
+        let new = format!("{}{}{}", u.left, u.after, u.right);
+        for l in old.lines() {
+            p.push('-');
+            p.push_str(l);
+            p.push('\n');
+        }
+        for l in new.lines() {
+            p.push('+');
+            p.push_str(l);
+            p.push('\n');
+        }
+    }
+    p.push_str(&format!("\n<filename>{path}\n"));
+    p.push_str(prefix_win);
+    if !prefix_win.is_empty() && !prefix_win.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(ZETA_MARKER_1);
+    p.push('\n');
+    if cursor >= rs && cursor <= re {
+        p.push_str(&region[..cursor - rs]);
+        p.push_str(ZETA_CURSOR);
+        p.push_str(&region[cursor - rs..]);
+    } else {
+        p.push_str(region);
+    }
+    if !region.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(ZETA_MARKER_2);
+    p.push('\n');
+    p.push_str(ZETA_FIM_MIDDLE);
+    p
+}
+
+/// Sweep raw prompt (run_model.py): `<|file_sep|>` sections — one
+/// `.diff` original/updated block per history unit, then the region
+/// before the most recent edit (`original/`), the region as it stands
+/// (`current/`), and the `updated/` header the model completes.
+/// Sections joined by `\n`, matching the reference builder exactly.
+pub fn build_prompt_sweep(history: &[HistoryUnit], region: &str, path: Option<&str>) -> String {
+    let path = path.unwrap_or("untitled");
+    let shown = shown_units(history);
+    let mut parts: Vec<String> = Vec::new();
+    for u in &shown {
+        parts.push(format!("{SWEEP_FILE_SEP}{path}.diff"));
+        parts.push("original:".to_string());
+        parts.push(format!("{}{}{}", u.left, u.before, u.right));
+        parts.push("updated:".to_string());
+        parts.push(format!("{}{}{}", u.left, u.after, u.right));
+    }
+    // Sweep's training format encodes momentum as original→current:
+    // `current/` includes the most recent edit, `original/` predates
+    // it. Reconstruct that when the edit's site lies inside the
+    // region; when it doesn't (region away from the edit), the two
+    // sections are honestly identical.
+    let original = shown
+        .last()
+        .and_then(|u| unapply_in_region(region, u))
+        .unwrap_or_else(|| region.to_string());
+    parts.push(format!("{SWEEP_FILE_SEP}original/{path}"));
+    parts.push(original);
+    parts.push(format!("{SWEEP_FILE_SEP}current/{path}"));
+    parts.push(region.to_string());
+    parts.push(format!("{SWEEP_FILE_SEP}updated/{path}"));
+    parts.join("\n")
+}
+
+/// Reverse one history unit inside the region: find its post-edit
+/// text (`left+after+right`) and restore the pre-edit text at that
+/// one site. `None` when the site isn't in the region (or the unit
+/// carries no change), so the caller falls back to the region itself.
+fn unapply_in_region(region: &str, u: &HistoryUnit) -> Option<String> {
+    let cur = format!("{}{}{}", u.left, u.after, u.right);
+    let old = format!("{}{}{}", u.left, u.before, u.right);
+    if cur.is_empty() || cur == old {
+        return None;
+    }
+    let i = region.find(&cur)?;
+    let mut out = String::with_capacity(region.len() + old.len());
+    out.push_str(&region[..i]);
+    out.push_str(&old);
+    out.push_str(&region[i + cur.len()..]);
+    Some(out)
 }
 
 // ---- output parsing ---------------------------------------------------
@@ -486,6 +667,16 @@ pub fn parse_rewrite(raw: &str, region: &str) -> Result<String, &'static str> {
     if s.contains("editable_region") {
         return Err("invalid");
     }
+    validate_rewrite(s, region)
+}
+
+/// Format-agnostic rewrite validation — the guards every prompt
+/// format shares, applied after the format-specific unwrap. The
+/// region is the authority for line endings and trailing newline;
+/// growth/shrink/line-delta bounds are the same bars the §6 bank
+/// gates were pre-registered against, so a format adapter can never
+/// quietly relax them.
+fn validate_rewrite(mut s: String, region: &str) -> Result<String, &'static str> {
     // Line endings: a CRLF region against an LF rewrite makes every
     // line differ, so the line-LCS collapses to one hunk spanning the
     // whole region — the model gets free rein over code it never
@@ -522,6 +713,65 @@ pub fn parse_rewrite(raw: &str, region: &str) -> Result<String, &'static str> {
         return Err("noop");
     }
     Ok(s)
+}
+
+/// Parse a Zeta 2.x completion: `<|marker_1|>\n{rewrite}\n<|marker_2|>`,
+/// where the closing marker may be absent because the stop tracker
+/// consumed it. The cursor marker is OUR injection, and its echo is
+/// documented model behavior — stripping exactly one occurrence is
+/// format unwrapping, not repair; a second occurrence is invention
+/// and drops the output whole.
+pub fn parse_rewrite_zeta2(raw: &str, region: &str) -> Result<String, &'static str> {
+    let Some(idx) = raw.find(ZETA_MARKER_1) else {
+        return Err("invalid");
+    };
+    // Anything but whitespace before the opening marker is prose —
+    // a chat reply, not a region.
+    if !raw[..idx].trim().is_empty() {
+        return Err("invalid");
+    }
+    let after = &raw[idx + ZETA_MARKER_1.len()..];
+    let after = after.strip_prefix('\n').unwrap_or(after);
+    let mut content = match after.find(ZETA_MARKER_2) {
+        Some(j) => {
+            // Between the rewrite and the closing marker sits the
+            // newline we placed there in the prompt; past the marker,
+            // anything but whitespace is trailing prose.
+            if !after[j + ZETA_MARKER_2.len()..].trim().is_empty() {
+                return Err("invalid");
+            }
+            after[..j].strip_suffix('\n').unwrap_or(&after[..j]).to_string()
+        }
+        None => after.to_string(),
+    };
+    if let Some(i) = content.find(ZETA_CURSOR) {
+        content.replace_range(i..i + ZETA_CURSOR.len(), "");
+    }
+    if content.contains(ZETA_CURSOR)
+        || content.contains(ZETA_MARKER_1)
+        || content.contains(ZETA_MARKER_2)
+        || content.contains("<[fim-")
+    {
+        return Err("invalid");
+    }
+    validate_rewrite(content, region)
+}
+
+/// Parse a Sweep completion: the rewritten window, terminated by
+/// `<|file_sep|>` or `</s>` when the stop tracker didn't already
+/// consume them. The completion begins on the line after the
+/// `updated/{path}` header, so exactly one leading newline is part of
+/// the format, not the rewrite.
+pub fn parse_rewrite_sweep(raw: &str, region: &str) -> Result<String, &'static str> {
+    let mut s = raw;
+    if let Some(i) = s.find(SWEEP_FILE_SEP) {
+        s = &s[..i];
+    }
+    if let Some(i) = s.find("</s>") {
+        s = &s[..i];
+    }
+    let s = s.strip_prefix('\n').unwrap_or(s);
+    validate_rewrite(s.to_string(), region)
 }
 
 // ---- region diff ------------------------------------------------------
@@ -605,6 +855,153 @@ fn trim_hunk(orig: &str, old_start: usize, old_end: usize, new_text: String) -> 
         end: old_end - s,
         new_text: new_text[p..new_text.len() - s].to_string(),
     }
+}
+
+// ---- V0 content verifier ----------------------------------------------
+//
+// The structural guards bound HOW MUCH the model may change; nothing
+// above bounds WHAT the change says. But the gate only consults when
+// the exemplars agree on a transformation, and for the identical-core
+// shapes that transformation fixes the correct content: remove the
+// exemplars' `before`, add their `after` (for `param_insert`, the
+// shared prefix of the two `after`s — the tails vary per site and are
+// deliberately not judged here). Every check below is a predicate the
+// gate's own shape definitions imply, so the verifier generalizes
+// exactly as far as the gate does — it knows nothing any bank case
+// taught it.
+
+/// What the exemplar transformation adds, in a countable form: the
+/// content with every whitespace run collapsed to one space. Both
+/// the pattern and the text are normalized the same way before
+/// substring counting, so neither indentation drift at a new site
+/// nor the line-fragment shape of an exemplar (an `after` like
+/// `",\n    \"retries\": 3"` STARTS mid-line — its leading comma
+/// belongs to the previous line in situ, so no line-wise matcher can
+/// ever see it) can hide content the pattern names.
+struct Pat {
+    norm: String,
+}
+
+fn norm_ws(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn pat_of(s: &str) -> Option<Pat> {
+    let norm = norm_ws(s);
+    (!norm.is_empty()).then_some(Pat { norm })
+}
+
+fn count_pat(hay: &str, p: &Pat) -> usize {
+    norm_ws(hay).match_indices(p.norm.as_str()).count()
+}
+
+/// Two occurrences with nothing but whitespace between them are one
+/// site doubled, never two sites — the exemplars came from distinct
+/// contexts by the gate's definition. In normalized space that means
+/// consecutive matches separated by at most one space.
+fn adjacent_dup(hay: &str, p: &Pat) -> bool {
+    let h = norm_ws(hay);
+    let pos: Vec<usize> = h.match_indices(p.norm.as_str()).map(|(i, _)| i).collect();
+    pos.windows(2).any(|w| h[w[0] + p.norm.len()..w[1]].trim().is_empty())
+}
+
+/// Full-line span of a hunk within the region (`pad` adds one line of
+/// context each side). The hunk offsets are char-trimmed, so the
+/// evidence of a re-application lives in the surrounding line, not in
+/// the hunk bytes themselves.
+fn line_span(region: &str, start: usize, end: usize, pad: bool) -> (usize, usize) {
+    let mut s = region[..start].rfind('\n').map_or(0, |i| i + 1);
+    let mut e = region[end..].find('\n').map_or(region.len(), |i| end + i + 1);
+    if pad {
+        if s > 0 {
+            s = region[..s - 1].rfind('\n').map_or(0, |i| i + 1);
+        }
+        if e < region.len() {
+            e = region[e..].find('\n').map_or(region.len(), |i| e + i + 1);
+        }
+    }
+    (s, e)
+}
+
+/// Hold the model's hunks to the transformation the exemplars agree
+/// on. `Err` is the wire-visible `dropped` reason plus the index of
+/// the offending hunk (glassbox: the route echoes that hunk back in
+/// `sovereign_debug` so a drop is diagnosable from the response
+/// alone): `inconsistent` (a hunk does not advance the pattern, or
+/// moves against it) or `already_applied` (a hunk re-applies it where
+/// it already holds, or stacks it at one site). Any bad hunk drops
+/// the whole prediction — no suggestion beats a wrong one.
+pub fn verify_pattern(
+    reason: &str,
+    a: &HistoryUnit,
+    b: &HistoryUnit,
+    region: &str,
+    edits: &[RegionEdit],
+) -> Result<(), (&'static str, usize)> {
+    let (add, remove) = match reason {
+        "param_insert" => {
+            let n = common_prefix_len(&a.after, &b.after);
+            let prefix: String = a.after.chars().take(n).collect();
+            (pat_of(&prefix), pat_of(&a.before))
+        }
+        _ => (pat_of(&a.after), pat_of(&a.before)),
+    };
+    // Only identical-content shapes can prove a re-application: a
+    // `param_insert` neighborhood may legitimately already carry the
+    // shared prefix (an earlier site's differing tail).
+    let identical_content = reason != "param_insert";
+
+    let mut content_hunks = 0usize;
+    for (i, e) in edits.iter().enumerate() {
+        // A hunk that touches no content is outside the pattern's
+        // jurisdiction: the shape predicates constrain WHAT the edit
+        // says, and a whitespace-only reflow (e.g. a completion
+        // format's trailing-newline artifact) says nothing. A hunk
+        // that DELETES content into whitespace is still judged.
+        if e.new_text.trim().is_empty() && region[e.start..e.end].trim().is_empty() {
+            continue;
+        }
+        content_hunks += 1;
+        let (os, oe) = line_span(region, e.start, e.end, false);
+        let old_own = &region[os..oe];
+        let new_own = format!("{}{}{}", &region[os..e.start], e.new_text, &region[e.end..oe]);
+        if let Some(p) = &add {
+            let oo = count_pat(old_own, p);
+            let no = count_pat(&new_own, p);
+            if no <= oo {
+                return Err(("inconsistent", i));
+            }
+            if identical_content && oo >= 1 {
+                return Err(("already_applied", i));
+            }
+            let (ps, pe) = line_span(region, e.start, e.end, true);
+            let padded_old = &region[ps..pe];
+            let padded_new =
+                format!("{}{}{}", &region[ps..e.start], e.new_text, &region[e.end..pe]);
+            if adjacent_dup(&padded_new, p) && !adjacent_dup(padded_old, p) {
+                return Err(("already_applied", i));
+            }
+        }
+        if let Some(r) = &remove {
+            let or = count_pat(old_own, r);
+            let nr = count_pat(&new_own, r);
+            if nr > or {
+                return Err(("inconsistent", i));
+            }
+            if add.is_none() && nr >= or {
+                return Err(("inconsistent", i));
+            }
+        }
+    }
+    if content_hunks == 0 {
+        // Every hunk was whitespace: a formatted echo, not an edit.
+        // The gate consulted for a content pattern and the model
+        // proposed no content — that is the completion-trap answer
+        // ("nothing left to do"), and it must land as silence, not as
+        // a whitespace edit the user is asked to accept.
+        return Err(("noop", 0));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -902,5 +1299,351 @@ mod tests {
         assert_eq!(ins[0].new_text, "bb\n");
         // Identical inputs → no edits.
         assert!(diff_region("aa\n", "aa\n").is_empty());
+    }
+
+    // ---- bakeoff formats: zeta2 -------------------------------------
+
+    #[test]
+    fn zeta2_prompt_is_spm_with_cursor_and_history() {
+        let h = vec![
+            unit("get", "fetch", "a.", "(1);"),
+            unit("get", "fetch", "b.", "(2);"),
+        ];
+        let text = "before\nAAA\nBBB\nafter\n";
+        // region = bytes 7..15 ("AAA\nBBB\n"), cursor inside at 8.
+        let p = build_prompt_zeta2(&h, text, 7, 15, 8, Some("t.rs"));
+        let at = |m: &str| p.find(m).unwrap();
+        assert!(at(ZETA_FIM_SUFFIX) < at(ZETA_FIM_PREFIX));
+        assert!(at(ZETA_FIM_PREFIX) < at("<filename>edit_history"));
+        assert!(at("<filename>edit_history") < at("<filename>t.rs"));
+        assert!(p.ends_with(ZETA_FIM_MIDDLE));
+        assert!(p.contains("-a.get(1);\n"));
+        assert!(p.contains("+a.fetch(1);\n"));
+        let (m1, m2, cur) = (at(ZETA_MARKER_1), at(ZETA_MARKER_2), at(ZETA_CURSOR));
+        assert!(m1 < cur && cur < m2);
+    }
+
+    #[test]
+    fn zeta2_prompt_omits_cursor_outside_region() {
+        let h = vec![unit("x", "y", "", "")];
+        let text = "before\nAAA\nBBB\nafter\n";
+        let p = build_prompt_zeta2(&h, text, 7, 15, 2, Some("t.rs"));
+        assert!(!p.contains(ZETA_CURSOR));
+        assert!(p.contains(ZETA_MARKER_1) && p.contains(ZETA_MARKER_2));
+    }
+
+    #[test]
+    fn zeta2_parse_happy_path_and_stop_eaten_closing_marker() {
+        let region = "AAA\nBBB\n";
+        let full = "<|marker_1|>\nAAA\nCCC\n<|marker_2|>";
+        assert_eq!(parse_rewrite_zeta2(full, region).unwrap(), "AAA\nCCC\n");
+        // The stop tracker consumed the closing marker: still valid.
+        let eaten = "<|marker_1|>\nAAA\nCCC\n";
+        assert_eq!(parse_rewrite_zeta2(eaten, region).unwrap(), "AAA\nCCC\n");
+    }
+
+    #[test]
+    fn zeta2_parse_rejects_prose_and_missing_markers() {
+        let region = "AAA\nBBB\n";
+        assert_eq!(
+            parse_rewrite_zeta2("Sure! <|marker_1|>\nAAA\nBB2\n<|marker_2|>", region),
+            Err("invalid")
+        );
+        assert_eq!(
+            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBB2\n<|marker_2|>trailing prose", region),
+            Err("invalid")
+        );
+        assert_eq!(parse_rewrite_zeta2("no markers at all", region), Err("invalid"));
+    }
+
+    #[test]
+    fn zeta2_parse_unwraps_one_cursor_echo_rejects_two() {
+        let region = "AAA\nBBB\n";
+        let one = format!("<|marker_1|>\nA{ZETA_CURSOR}AA\nBB2\n<|marker_2|>");
+        assert_eq!(parse_rewrite_zeta2(&one, region).unwrap(), "AAA\nBB2\n");
+        let two = format!("<|marker_1|>\nA{ZETA_CURSOR}A{ZETA_CURSOR}A\nBB2\n<|marker_2|>");
+        assert_eq!(parse_rewrite_zeta2(&two, region), Err("invalid"));
+    }
+
+    #[test]
+    fn zeta2_parse_rides_shared_guards() {
+        let region = "AAA\nBBB\n";
+        assert_eq!(
+            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBBB\n<|marker_2|>", region),
+            Err("noop")
+        );
+        let bomb = format!("<|marker_1|>\n{}\n<|marker_2|>", "X".repeat(9000));
+        assert_eq!(parse_rewrite_zeta2(&bomb, region), Err("invalid"));
+    }
+
+    // ---- bakeoff formats: sweep -------------------------------------
+
+    #[test]
+    fn sweep_prompt_sections_in_order_with_unapplied_original() {
+        let h = vec![
+            unit("get", "fetch", "a.", "(1);"),
+            unit("get", "fetch", "b.", "(2);"),
+        ];
+        let region = "a.fetch(1);\nb.fetch(2);\nc.get(3);\n";
+        let p = build_prompt_sweep(&h, region, Some("t.rs"));
+        let at = |m: &str| p.find(m).unwrap();
+        let (d, o, c, u) = (
+            at("<|file_sep|>t.rs.diff"),
+            at("<|file_sep|>original/t.rs"),
+            at("<|file_sep|>current/t.rs"),
+            at("<|file_sep|>updated/t.rs"),
+        );
+        assert!(d < o && o < c && c < u);
+        assert!(p.ends_with("<|file_sep|>updated/t.rs"));
+        assert!(p.contains("original:\na.get(1);\nupdated:\na.fetch(1);"));
+        // original/ section shows the LAST unit un-applied at its site,
+        // while the earlier fan-out site keeps its current state.
+        let orig_section = &p[o..c];
+        assert!(orig_section.contains("b.get(2);"));
+        assert!(orig_section.contains("a.fetch(1);"));
+    }
+
+    #[test]
+    fn sweep_original_falls_back_when_edit_site_outside_region() {
+        let h = vec![unit("get", "fetch", "z.", "(9);")];
+        let region = "a.other(1);\n";
+        let p = build_prompt_sweep(&h, region, None);
+        let at = |m: &str| p.find(m).unwrap();
+        let (o, c, u) = (
+            at("<|file_sep|>original/untitled"),
+            at("<|file_sep|>current/untitled"),
+            at("<|file_sep|>updated/untitled"),
+        );
+        assert_eq!(
+            p[o..c].replace("original/", ""),
+            p[c..u].replace("current/", "")
+        );
+    }
+
+    #[test]
+    fn sweep_parse_cuts_terminators_and_strips_format_newline() {
+        let region = "AAA\nBBB\n";
+        assert_eq!(
+            parse_rewrite_sweep("\nAAA\nCCC\n<|file_sep|>next/t.rs", region).unwrap(),
+            "AAA\nCCC\n"
+        );
+        assert_eq!(parse_rewrite_sweep("\nAAA\nCCC\n</s>", region).unwrap(), "AAA\nCCC\n");
+        assert_eq!(parse_rewrite_sweep("\nAAA\nBBB\n", region), Err("noop"));
+        assert_eq!(parse_rewrite_sweep("", region), Err("invalid"));
+    }
+
+    // ---- V0 content verifier ------------------------------------------
+    //
+    // Every fixture here is derived from a gate shape's definition,
+    // not from any eval-bank case: the checks must hold for arbitrary
+    // instances of the shape or the verifier is overfit.
+
+    fn fanout_exemplars() -> (HistoryUnit, HistoryUnit) {
+        (
+            unit("", ", timeoutMS", "\tconn := dial(primaryHost, 8080", ")"),
+            unit("", ", timeoutMS", "\tbackup := dial(backupHost, altPort", ")"),
+        )
+    }
+
+    #[test]
+    fn verify_fresh_site_passes_even_beside_a_done_neighbor() {
+        // The done site sits on the ADJACENT line: the padded span sees
+        // it, and the verifier must still recognize a fresh application
+        // — dropping this would eat every correct fire in dense code.
+        let (a, b) = fanout_exemplars();
+        let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
+                      \tmirror := dial(mirrorHost, 9090)\n";
+        let at = region.find("9090)").unwrap() + 4;
+        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
+        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+    }
+
+    #[test]
+    fn verify_reapplying_at_a_done_site_drops() {
+        // The hunk's own line already carries the insertion; adding it
+        // again is the completion-trap failure, whatever the file.
+        let (a, b) = fanout_exemplars();
+        let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n";
+        let at = region.find(")\n").unwrap();
+        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Err(("already_applied", 0))
+        );
+    }
+
+    #[test]
+    fn verify_stacking_in_one_hunk_drops() {
+        // Two copies with only whitespace between are one site doubled
+        // — the exemplars came from distinct contexts by definition.
+        let (a, b) = fanout_exemplars();
+        let region = "\tmirror := dial(mirrorHost, 9090)\n";
+        let at = region.find(')').unwrap();
+        let edits =
+            vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS, timeoutMS".into() }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Err(("already_applied", 0))
+        );
+    }
+
+    #[test]
+    fn verify_hunk_that_ignores_the_pattern_drops() {
+        // A rewrite that renames instead of applying the exemplar
+        // transformation is not what the gate consulted for.
+        let (a, b) = fanout_exemplars();
+        let region = "\tmirror := dial(mirrorHost, 9090)\n";
+        let s = region.find("dial").unwrap();
+        let edits = vec![RegionEdit { start: s, end: s + 4, new_text: "connect".into() }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Err(("inconsistent", 0))
+        );
+    }
+
+    #[test]
+    fn verify_multiline_insertion_fresh_vs_done() {
+        let a = unit("", "\n        retries: 3,", "        max: 10,", "\n    }");
+        let b = unit("", "\n        retries: 3,", "        cap: 4,", "\n    }");
+        // Fresh literal: insertion passes despite indentation drift.
+        let fresh = "    cfg := Config{\n        max: 10,\n    }\n";
+        let at = fresh.find("\n    }").unwrap();
+        let ins = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: "\n        retries: 3,".into(),
+        }];
+        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        // Done literal: the identical trimmed line is right above the
+        // insertion point — stacked, drop.
+        let done = "    cfg := Config{\n        retries: 3,\n    }\n";
+        let at = done.find("\n    }").unwrap();
+        let ins = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: "\n        retries: 3,".into(),
+        }];
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, done, &ins),
+            Err(("already_applied", 0))
+        );
+    }
+
+    #[test]
+    fn verify_whitespace_only_hunk_is_exempt_content_deletion_is_not() {
+        // A trailing-newline artifact beside a correct application
+        // must not sink the prediction (completion formats append
+        // one; observed live with Sweep 2026-07-31)…
+        let (a, b) = fanout_exemplars();
+        let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
+                      \tmirror := dial(mirrorHost, 9090)\n";
+        let at = region.find("9090)").unwrap() + 4;
+        let end = region.len();
+        let edits = vec![
+            RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() },
+            RegionEdit { start: end, end, new_text: "\n".into() },
+        ];
+        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+        // …but a hunk that deletes content into whitespace is judged,
+        // and fails: it does not advance the pattern.
+        let s = region.find("mirror").unwrap();
+        let gut = vec![RegionEdit {
+            start: s,
+            end: s + "mirror := dial(mirrorHost, 9090)".len(),
+            new_text: " ".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &gut),
+            Err(("inconsistent", 0))
+        );
+        // …and a prediction that is ONLY whitespace is a formatted
+        // echo — the completion-trap answer — and must land as noop,
+        // never as an accepted-able edit (observed live: Sweep answers
+        // exhausted fan-outs with a bare trailing newline).
+        let echo = vec![RegionEdit { start: end, end, new_text: "\n".into() }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &echo),
+            Err(("noop", 0))
+        );
+    }
+
+    #[test]
+    fn verify_line_fragment_exemplar_matches_in_situ() {
+        // JSON-ish insertion whose exemplar STARTS mid-line: the
+        // leading comma attaches to the previous line in situ, so a
+        // line-wise matcher can never see the pattern — regression
+        // for exactly that false `inconsistent` (control run
+        // 2026-07-31). Whitespace-normalized matching must both PASS
+        // the fresh site and still CATCH the done site.
+        let a = unit("", ",\n    \"retries\": 3", "    \"timeout\": 30", "\n}");
+        let b = unit("", ",\n    \"retries\": 3", "    \"cap\": 4", "\n}");
+        let fresh = "{\n    \"timeout\": 30\n}\n";
+        let at = fresh.find("30").unwrap() + 2;
+        let ins = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ",\n    \"retries\": 3".into(),
+        }];
+        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        let done = "{\n    \"timeout\": 30,\n    \"retries\": 3\n}\n";
+        let at = done.find('3').unwrap();
+        let at = done[at..].find("3\n").unwrap() + at + 1;
+        let ins = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ",\n    \"retries\": 3".into(),
+        }];
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, done, &ins),
+            Err(("already_applied", 0))
+        );
+    }
+
+    #[test]
+    fn verify_deletion_fanout_must_delete() {
+        let a = unit(", legacyFlag", "", "\tstart(alpha", ")");
+        let b = unit(", legacyFlag", "", "\tstart(beta", ")");
+        let region = "\tstart(gamma, legacyFlag)\n";
+        let s = region.find(", legacyFlag").unwrap();
+        // Deleting the flag is the pattern.
+        let del = vec![RegionEdit { start: s, end: s + ", legacyFlag".len(), new_text: "".into() }];
+        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &del), Ok(()));
+        // Rewriting the line while KEEPING the flag is not.
+        let keep = vec![RegionEdit {
+            start: s,
+            end: s + ", legacyFlag".len(),
+            new_text: ", legacyFlag /* soon */".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &keep),
+            Err(("inconsistent", 0))
+        );
+    }
+
+    #[test]
+    fn verify_param_insert_allows_varying_tails() {
+        // Tails vary per site by definition; a neighboring earlier site
+        // carrying the shared prefix must not read as re-application.
+        let a = unit(".unwrap()", ".expect(\"cfg missing\")", "    let c = load(p)", ";");
+        let b = unit(".unwrap()", ".expect(\"env missing\")", "    let e = read()", ";");
+        let region = "    let c = load(p).expect(\"cfg missing\");\n    let t = parse(s).unwrap();\n";
+        let s = region.rfind(".unwrap()").unwrap();
+        let edits = vec![RegionEdit {
+            start: s,
+            end: s + ".unwrap()".len(),
+            new_text: ".expect(\"tz missing\")".into(),
+        }];
+        assert_eq!(verify_pattern("param_insert", &a, &b, region, &edits), Ok(()));
+        // But a hunk that never brings the shared prefix is not the
+        // pattern.
+        let off = vec![RegionEdit {
+            start: s,
+            end: s + ".unwrap()".len(),
+            new_text: ".ok()".into(),
+        }];
+        assert_eq!(
+            verify_pattern("param_insert", &a, &b, region, &off),
+            Err(("inconsistent", 0))
+        );
     }
 }

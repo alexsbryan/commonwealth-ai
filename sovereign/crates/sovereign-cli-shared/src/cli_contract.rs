@@ -621,6 +621,46 @@ impl Need {
     }
 }
 
+/// A shared prerequisite journeys stand on — a STATE of the machine a
+/// journey assumes rather than builds: a running daemon, a joined mesh, an
+/// installed corpus, an indexed repo. Maps the TOML `[[dependency]]` array.
+///
+/// This is the docs-side twin of [`Need`]. `Need` is the LANE vocabulary
+/// (what a test environment cannot supply); a `Dependency` is the USER
+/// vocabulary: what a person must already have before a journey doc applies
+/// to them, and the ONE canonical doc that gets them there. Before this
+/// axis existed (measured 2026-07-31) there was no canonical doc for any of
+/// them, so every journey doc re-taught its prerequisites inline — mesh
+/// create/join was re-explained in 15 docs, daemon setup in 10, corpus
+/// install in 13, repo indexing in 8. A journey doc should open with links
+/// to its dependencies' docs, not a fresh retelling.
+///
+/// Every [`Need`] variant must have a `Dependency` row with
+/// `id == Need::as_str()`, so a lane exclusion always has a doc explaining
+/// the state the excluded journeys assumed. Enforced in
+/// `cli_contract_journeys`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dependency {
+    /// Stable kebab-case id, e.g. `"joined-mesh"`. Named for the STATE the
+    /// user has (joined-mesh), not the action that got them there.
+    pub id: String,
+    /// The prerequisite in the user's words, e.g. "A joined mesh".
+    pub title: String,
+    /// The one canonical doc that gets a user this state — the module that
+    /// journey docs link instead of re-explaining. Repo-relative path,
+    /// optional `#anchor`.
+    pub doc: String,
+    /// The read-only command that proves the state exists, per the
+    /// capability rule (a read proves itself inline): `mesh status`,
+    /// `doctor`, `corpus status`. Rendered in the experience map so "do I
+    /// have this?" is always one command away.
+    pub verify: String,
+    /// Free-text note rendered alongside.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
 /// A verb that belongs to no journey, with the reason and what to do about
 /// it. The ratchet forbids this ledger growing — a new verb must either
 /// join a journey or be added here deliberately.
@@ -711,6 +751,10 @@ pub struct Contract {
     /// Every promised journey. Maps the TOML `[[journey]]` array.
     #[serde(default, rename = "journey")]
     pub journeys: Vec<Journey>,
+    /// Shared prerequisites journeys stand on. Maps the TOML
+    /// `[[dependency]]` array. See [`Dependency`].
+    #[serde(default, rename = "dependency")]
+    pub dependencies: Vec<Dependency>,
     /// Verbs deliberately in no journey. Maps the TOML `[[stranded]]` array.
     #[serde(default, rename = "stranded")]
     pub stranded: Vec<Stranded>,
@@ -1235,6 +1279,24 @@ run = "tools call symbols --name=X"
         );
         assert_eq!(Need::IndexedRepo.as_str(), "indexed-repo");
         assert!(Need::OperatorHome.why().contains("operator's real HOME"));
+    }
+
+    #[test]
+    fn dependencies_parse() {
+        let c = Contract::parse(
+            r#"
+[[dependency]]
+id = "joined-mesh"
+title = "A joined mesh"
+doc = "docs/JOIN_A_MESH.md"
+verify = "mesh status"
+"#,
+        )
+        .expect("parse");
+        assert_eq!(c.dependencies.len(), 1);
+        assert_eq!(c.dependencies[0].id, "joined-mesh");
+        assert_eq!(c.dependencies[0].verify, "mesh status");
+        assert!(c.dependencies[0].note.is_none());
     }
 
     #[test]

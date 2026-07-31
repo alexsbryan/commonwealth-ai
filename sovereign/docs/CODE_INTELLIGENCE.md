@@ -58,6 +58,8 @@ sovereign project watch status     # watcher health and graph age
 
 If `symbols` reports "no symbol named X" for something you know exists, the index for that project is usually missing or stale. `sovereign project status` shows its state, and `refresh` or a re-index fixes it.
 
+One failure looks healthy from every other angle: the index and graph exist on disk, but the project fell out of the daemon's registry — so *nothing is watching it* and it quietly goes stale. `sovereign project list` showing nothing (or `sovereign doctor` reporting "NO projects registered") is that state, and the repair is one command per project: `sovereign project register --corpus-id <id>` — `doctor` prints the exact line.
+
 ## The lower-level command
 
 `sovereign project init` is the full setup. When you want only the symbol index — no call graph, no harness config, no registration — `sovereign code index <path>` is the primitive:

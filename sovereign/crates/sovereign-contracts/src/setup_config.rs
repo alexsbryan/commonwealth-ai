@@ -486,6 +486,12 @@ pub struct FimSection {
     /// this many chars. Default 2000.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_suffix_chars: Option<usize>,
+    /// Prompt/parse contract the next-edit model lane uses with this
+    /// slot's model (`"region_instruct"` default, `"zeta2"`,
+    /// `"sweep"`). Explicit because the contract is a property of the
+    /// fine-tune, not the tokenizer family — it cannot be probed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_edit_format: Option<crate::types::NextEditFormat>,
 }
 
 impl FimSection {
@@ -504,6 +510,10 @@ impl FimSection {
     /// Effective suffix clamp (head kept).
     pub fn effective_max_suffix_chars(&self) -> usize {
         self.max_suffix_chars.unwrap_or(2000)
+    }
+    /// Effective next-edit prompt/parse contract.
+    pub fn effective_next_edit_format(&self) -> crate::types::NextEditFormat {
+        self.next_edit_format.unwrap_or_default()
     }
 }
 

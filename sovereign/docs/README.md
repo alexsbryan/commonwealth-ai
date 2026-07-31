@@ -4,13 +4,28 @@ Two kinds of docs live here: docs for **using Sovereign**, and docs for **workin
 
 ## Using Sovereign
 
+Task guides, one journey each:
+
+- [`KNOWLEDGE_BASES.md`](KNOWLEDGE_BASES.md) — the corpora you can install, and how search uses them
+- [`ENRICH_A_CORPUS.md`](ENRICH_A_CORPUS.md) — enrich an installed corpus into a queryable atlas
+- [`GOVERN_A_CORPUS.md`](GOVERN_A_CORPUS.md) — surface tensions in a corpus, resolve them into common law
+- [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — index your codebase: symbols, call graphs, search, and the tools your AI harness gets
+- [`../../docs/GROUND_YOUR_AGENT.md`](../../docs/GROUND_YOUR_AGENT.md) — the agent session protocol: boot informed, durable notes, coordination, continuity
+- [`GETTING_STARTED.md`](GETTING_STARTED.md) — the desktop app's first run: sample corpus, then a corpus from your own documents
+- Mesh journeys live at repo level: [two-node quickstart](../../docs/TWO_NODE_QUICKSTART.md), [run a bigger model](../../docs/RUN_A_BIGGER_MODEL.md)
+
+Shared prerequisites — one canonical doc each, which the guides above link instead of re-explaining:
+
+- [`../../docs/START_THE_DAEMON.md`](../../docs/START_THE_DAEMON.md) — install, first run, verify (`svrn doctor`), keep it running
+- [`../../docs/JOIN_A_MESH.md`](../../docs/JOIN_A_MESH.md) — from separate daemons to `[N/N online]`
+
+Reference and when things break:
+
+- [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every command and flag
 - [`FAQ.md`](FAQ.md) — common questions: offline mode, models, ports, the mesh
 - [`HAVING_TROUBLE.md`](HAVING_TROUBLE.md) — **for people using the desktop app**: the in-app health check, how to send a report, no terminal
 - [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — the same failures for whoever maintains the install; symptom-to-fix pairs, run `sovereign doctor` first
-- [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every command and flag
-- [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — index your codebase: symbols, call graphs, search, and the tools your AI harness gets
 - [`FEATURES.md`](FEATURES.md) — what the assistant does beyond the basics
-- [`KNOWLEDGE_BASES.md`](KNOWLEDGE_BASES.md) — the corpora you can install, and how search uses them
 
 Running it on particular hardware or in the cloud:
 

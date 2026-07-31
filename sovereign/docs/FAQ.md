@@ -27,7 +27,7 @@ Then restart the daemon — the [troubleshooting guide](TROUBLESHOOTING.md#want-
 
 ## Can I run more than one instance on a machine?
 
-Not by default — the daemon is a single per-user service. You can run a second by giving it different ports (`client_port` / `internal_port` in config.toml) and a separate `--data-dir`, but most people want just the one.
+Not by default — the daemon is a single per-user service. You can run a second by giving it its own ports and data dir — [two daemons on one machine](../../docs/JOIN_A_MESH.md#appendix-two-daemons-on-one-machine) has the working config — but most people want just the one.
 
 ## What's the difference between Commonwealth and Sovereign?
 
@@ -39,7 +39,7 @@ Sovereign is the assistant you use: chat, knowledge bases, code intelligence, sk
 - Config — `~/.sovereign/config.toml`
 - Logs — `~/.sovereign/logs/daemon.log`
 - Code and knowledge indexes — `~/.sovereign/indexes/<corpus>/` (downloaded shards land in `_downloads/` and index into the same place)
-- Mesh state — `mesh.json`, in your data directory (`~/.sovereign/` by default, on both macOS and Linux). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
+- Mesh state — `mesh.json`, in your data directory (`~/.svrnmesh/`; `~/.sovereign` is the legacy name for the same place). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
 
 ## How do I set a web search API key?
 

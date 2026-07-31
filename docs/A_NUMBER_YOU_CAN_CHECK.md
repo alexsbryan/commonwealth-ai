@@ -75,7 +75,9 @@ machine](./RUN_A_BIGGER_MODEL.md); condensed:
 curl -fsSL https://svrnme.sh/install.sh | sh
 
 # host
-svrn mesh create                                  # prints a join key
+svrn mesh create                                  # prints a join key; "already
+                                                  # exists"? svrn mesh status
+                                                  # reads it — see JOIN_A_MESH.md
 
 # worker
 svrn mesh join <key>

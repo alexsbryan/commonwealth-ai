@@ -172,6 +172,42 @@ except Exception:
     emit(f"_brain: daemon not reachable on :{PORT} — code intel is dark; "
          f"start it: `sovereign daemon start`; `sovereign doctor` diagnoses_\n")
 
+# ── Tier 0b: build posture — which side of the toolbox am I on? ─────────
+#
+# On the Halo, native builds only work inside the `sovereign-vulkan` toolbox
+# (llama-cpp-sys-4's build script finds no clang on the Fedora host and dies on
+# stdbool.h). CLAUDE.md therefore prefixes the gate commands with
+# `toolbox run -c sovereign-vulkan` — which is correct from the host and WRONG
+# from inside, where nested toolbox calls fail with a bare
+# "flatpak-spawn(1) not found" that reads like a broken install.
+#
+# Agents were rediscovering this by hand every session (`podman ps` → not
+# found; `toolbox list` → cryptic failure). It is not a judgement call: podman
+# writes /run/.containerenv with the container's name. So state it, once, as
+# fact. Costs ~150B of the brief's budget and removes a recurring several-
+# thousand-token detour. Machines with no toolbox (the M2 Max lane) say nothing.
+try:
+    if os.path.isfile("/run/.containerenv"):
+        with open("/run/.containerenv") as f:
+            env = f.read()
+        m = re.search(r'^name="([^"]*)"', env, re.M)
+        cname = m.group(1) if m else ""
+        if cname:
+            emit(f"_build posture: you are INSIDE the `{cname}` toolbox — run "
+                 f"`./scripts/sovereign-lint.sh` / `sovereign daemon …` / cargo "
+                 f"DIRECTLY. Do NOT prefix with `toolbox run -c {cname}`; nested "
+                 f"toolbox calls fail here (`flatpak-spawn(1) not found`)._\n")
+        else:
+            emit("_build posture: inside an unnamed container — native builds "
+                 "unverified here._\n")
+    elif os.path.isfile("/usr/bin/toolbox"):
+        emit("_build posture: you are on the HOST. Native builds FAIL here "
+             "(llama-cpp-sys-4 finds no clang, dies on stdbool.h) — prefix "
+             "builds, tests and daemon control with "
+             "`toolbox run -c sovereign-vulkan …`._\n")
+except OSError:
+    pass
+
 # ── Tier 2: the session handoff ─────────────────────────────────────────
 #
 # PHASE 2 (2026-07-26) stopped injecting the newest frame here, because under

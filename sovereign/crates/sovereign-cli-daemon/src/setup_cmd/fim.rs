@@ -445,6 +445,7 @@ fn write_config(plan: &Plan) -> Result<(), String> {
         temperature: None,
         max_prefix_chars: None,
         max_suffix_chars: None,
+        next_edit_format: None,
     };
 
     let mut cfg = match SetupConfig::load() {

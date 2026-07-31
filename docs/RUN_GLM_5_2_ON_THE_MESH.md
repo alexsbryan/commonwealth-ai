@@ -65,19 +65,9 @@ first one and the rest come along automatically. In `~/.sovereign/config.toml`:
 primary = "/home/you/.sovereign/models/GLM-5.2/UD-Q4_K_S/GLM-5.2-UD-Q4_K_S-00001-of-00010.gguf"
 ```
 
-**3. Put everyone on one mesh.** On the host:
-
-```bash
-svrn mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
-```
-
-On every other machine:
-
-```bash
-svrn mesh join cwth-a1b2-c3d4-e5f6
-```
-
-`svrn mesh status` should list them all.
+**3. Put everyone on one mesh.** [Join a mesh](./JOIN_A_MESH.md) is the
+walk: read the host's join key with `svrn mesh status`, `svrn mesh join
+<key>` on every other machine, until `svrn mesh status` lists them all.
 
 **4. Start each lending machine as a worker.**
 
@@ -139,11 +129,8 @@ again for a while.
 One thing worth saying plainly to the people you recruit: if a machine crashes in
 the *middle* of an answer, it can briefly take the host down with it. The host
 comes right back and the group re-forms on its own — but only if it's running as a
-service, so set that up on the host:
-
-```bash
-svrn install-service
-```
+service, so set that up on the host: `svrn install-service`
+([keeping it running](./START_THE_DAEMON.md#keep-it-running)).
 
 That's the difference between a machine rebooting being a non-event and being a
 phone call.

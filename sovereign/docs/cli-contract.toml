@@ -1082,6 +1082,80 @@ hidden = true
 # journey was testing that the machine starts, not that it works.
 # ═════════════════════════════════════════════════════════════════════════
 
+# ═════════════════════════════════════════════════════════════════════════
+# DEPENDENCIES — the shared prerequisites journeys stand on.
+#
+# A dependency is a STATE of the machine a journey assumes rather than
+# builds: a running daemon, a joined mesh, an installed corpus. Each row
+# names the ONE canonical doc that gets a user there — the module a journey
+# doc links instead of re-explaining its prerequisites inline. Measured
+# 2026-07-31, before this axis existed: mesh create/join was re-explained in
+# 15 docs, daemon setup in 10, corpus install in 13, repo indexing in 8.
+#
+# `verify` is the read-only command that proves the state exists, per the
+# capability rule above: a read proves itself inline, so "do I have this?"
+# is always one command away. Rendered by `svrn contract map`.
+#
+# `operator-home` and `indexed-repo` double as the lane-partition vocabulary
+# (`needs` on a journey, `--lacks` on the runners); every Need variant must
+# have a row here so a lane exclusion always carries a doc explaining the
+# state the excluded journeys assumed
+# (cli_contract_journeys::every_lane_need_has_a_dependency_module).
+#
+# Fields: id, title, doc (checked to exist), verify (non-empty), note.
+# ═════════════════════════════════════════════════════════════════════════
+
+[[dependency]]
+id = "running-daemon"
+title = "A running daemon"
+doc = "docs/START_THE_DAEMON.md"
+verify = "doctor"
+
+[[dependency]]
+id = "resident-model"
+title = "A model loaded that fits your hardware"
+doc = "sovereign/README.md#models"
+verify = "model list"
+
+[[dependency]]
+id = "installed-corpus"
+title = "An installed knowledge corpus"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+verify = "corpus status"
+
+[[dependency]]
+id = "joined-mesh"
+title = "A joined mesh"
+doc = "docs/JOIN_A_MESH.md"
+verify = "mesh status"
+note = """`setup` quietly founds a solo mesh, so `mesh status` prints a key \
+even on one machine — joining is adding machines to a mesh you already have, \
+not creating something new."""
+
+[[dependency]]
+id = "indexed-repo"
+title = "An indexed repository"
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+verify = "project status"
+note = """Also a lane need: too expensive and fragile to build inside a \
+per-run sandbox (needs rust-analyzer + minutes), so sandbox lanes say \
+--lacks indexed-repo and the operator lane runs those journeys read-only."""
+
+[[dependency]]
+id = "enriched-atlas"
+title = "An enriched atlas over a corpus"
+doc = "sovereign/docs/ENRICH_A_CORPUS.md"
+verify = "enrich status"
+
+[[dependency]]
+id = "operator-home"
+title = "Your accumulated agent state"
+doc = "docs/GROUND_YOUR_AGENT.md#where-your-agents-state-lives"
+verify = "notes"
+note = """Also a lane need: a throwaway sandbox HOME has no transcripts, \
+notes db, or drift report by construction, so a sandbox run of these \
+journeys can only report a false failure."""
+
 [[experience]]
 id = "install-and-run"
 title = "Install it, and get an answer from a model on your own machine"
@@ -1166,7 +1240,7 @@ capabilities = ["drift detect", "drift_posture", "drift_findings"]
 [[experience]]
 id = "agent-session-protocol"
 title = "An agent boots with the project's real state instead of guessing"
-doc = ".claude/CLAUDE.md"
+doc = "docs/GROUND_YOUR_AGENT.md"
 capabilities = [
   "briefing",
   "recent_changes",
@@ -1212,7 +1286,7 @@ is the number worth looking at."""
 [[experience]]
 id = "common-law-governance"
 title = "Surface tensions in a corpus and resolve them into common law"
-doc = "sovereign/docs/CLI_REFERENCE.md"
+doc = "sovereign/docs/GOVERN_A_CORPUS.md"
 capabilities = ["govern tensions", "govern ask"]
 
 [[experience]]
@@ -1363,7 +1437,7 @@ title = "Repair a project whose index is healthy but unwatched"
 persona = "developer"
 experience = "daemon-operations"
 tier = 3
-doc = ".claude/CLAUDE.md"
+doc = "sovereign/docs/CODE_INTELLIGENCE.md#staying-fresh"
 [[journey.step]]
 run = "status"
 note = "the flat alias of `project status`; the `Watched` line is what distinguishes this failure from a healthy index"
@@ -1445,7 +1519,7 @@ persona = "end-user"
 experience = "install-and-run"
 tier = 3
 visibility = "public"
-doc = "sovereign/docs/CLI_REFERENCE.md"
+doc = "sovereign/README.md#staying-current"
 skip_live = "the install half rewrites the binary under test"
 [[journey.step]]
 run = "update --check"
@@ -1566,7 +1640,7 @@ title = "Enrich an installed corpus into an atlas and query it"
 persona = "author"
 experience = "knowledge-corpora"
 tier = 3
-doc = "sovereign/docs/CLI_REFERENCE.md"
+doc = "sovereign/docs/ENRICH_A_CORPUS.md"
 # SELF-CONTAINED ON PURPOSE. This journey enriches an INSTALLED corpus, and it
 # used to assume one was already there — which held only because some earlier
 # journey had installed it. `corpus-lifecycle` (tier 1, so it runs first) ends by
@@ -2141,7 +2215,7 @@ persona = "agent"
 experience = "agent-session-protocol"
 needs = ["indexed-repo"]
 tier = 2
-doc = ".claude/CLAUDE.md"
+doc = "docs/GROUND_YOUR_AGENT.md#boot-informed"
 # The session-start protocol .claude/CLAUDE.md mandates, in the order it
 # teaches, as one sequence. Every step is read-only and deterministic, and
 # together they were the largest hole in this manifest: of the 23 tools that
@@ -2200,7 +2274,7 @@ persona = "agent"
 experience = "agent-session-protocol"
 needs = ["operator-home"]
 tier = 4
-doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
+doc = "docs/GROUND_YOUR_AGENT.md#session-continuity"
 [[journey.step]]
 run = "session list"
 note = """`session` is declared bare; list/frames/distill/grade have no rows. \
@@ -2231,7 +2305,7 @@ title = "Leave durable decisions and read them back"
 persona = "agent"
 experience = "agent-session-protocol"
 tier = 4
-doc = "sovereign/docs/CLI_REFERENCE.md"
+doc = "docs/GROUND_YOUR_AGENT.md#durable-notes"
 [[journey.step]]
 run = "notes add --kind decision -m {content}"
 mutates = true
@@ -2316,7 +2390,7 @@ persona = "agent"
 experience = "agent-session-protocol"
 needs = ["operator-home"]
 tier = 5
-doc = "sovereign/docs/specs/SESSION_CONTINUITY.md"
+doc = "docs/GROUND_YOUR_AGENT.md#context-spend"
 [[journey.step]]
 run = "cache-audit --sort ratio"
 [journey.step.expect]
@@ -2413,7 +2487,7 @@ title = "Surface tensions in a corpus and resolve them into common law"
 persona = "developer"
 experience = "common-law-governance"
 tier = 5
-doc = "sovereign/docs/CLI_REFERENCE.md"
+doc = "sovereign/docs/GOVERN_A_CORPUS.md"
 skip_live = "event-sourced resolution drives long inference over a corpus"
 [[journey.step]]
 run = "govern seed {corpus}"

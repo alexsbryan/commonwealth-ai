@@ -121,7 +121,7 @@ If `project status` shows the index but `/mcp/stats` returns nothing, the daemon
 sovereign mesh rotate
 ```
 
-This generates a new plaintext key, updates the persisted hash, and prints the share URL. Existing members stay connected — only future joins need the new key.
+This generates a new plaintext key, updates the persisted hash, and prints the share URL. Existing members stay connected — only future joins need the new key. If joiners refuse a freshly rotated key, rotate in the daemon directly: `curl -s -X POST http://localhost:9741/v1/mesh/rotate` (the CLI and daemon can disagree about the mesh state dir — known issue, 2026-07). The invite/join/port mechanics themselves live in [join a mesh](../../docs/JOIN_A_MESH.md).
 
 ### Friend's `mesh join` hangs
 
