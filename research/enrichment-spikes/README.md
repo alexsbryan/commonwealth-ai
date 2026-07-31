@@ -1,5 +1,10 @@
 # Enrichment spike bundle — SP1–SP6 + D1 sweep + P5 probes
 
+**CLOSED 2026-07-31 (SP1–SP6 + D1).** All six spikes answered; frozen roll-up with the
+consolidated verdict table lives at `sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`.
+P5 probes (G8–G10) were not run — they remain optional Wave 4 evidence, re-plannable
+after T2. Memos below stay as working copies; harnesses are committed and re-runnable.
+
 Executable initiative for the ENRICHMENT_ROADMAP_SIZING.md §1 spike table plus the D1
 dead-code/doc-truth sweep and the P5 evidence probes. Design doc (file:line-grounded,
 design-reviewed): `~/.claude/plans/let-s-plan-out-our-melodic-tome.md`. Scope confirmed

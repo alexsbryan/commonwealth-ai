@@ -160,7 +160,7 @@ Risk: fluency/synthesis quality of extractive briefs for the
 "summarize X" UX (SVD-RAG's own caveat: less fluent, ~1.8x longer) —
 mitigated by P1.2 keeping abstractive where it verifies.
 
-**P1.2 — Verifier-gated abstractive lift. `M (3-5d) · Med`**
+**P1.2 — Verifier-gated abstractive lift. `M (3-5d) · Med (SP3 answered 2026-07-31: primary-tier judging default — 1.3x fast-tier cost, decisive verdicts; judge-now ≤ ~1.5k nodes, 10-15% stratified sampling above)`**
 Design: post-`summarize_one_cluster` hook: decompose summary → verify
 claims against member texts (P0.3's scorer, same interface; judge until
 verifier-v0 ships, then swap) → persist on pass; on fail, retry once
@@ -217,7 +217,7 @@ policy reuse; incremental cost `M (3-5d)` when scheduled.
 
 ### P2 — Extraction economics
 
-**P2.1 — GLiNER2 generation. `L (8-15d) · Low→Med (SP1 gates)`**
+**P2.1 — GLiNER2 generation. `L (8-15d) · Low→Med (SP1 answered 2026-07-30: bare-ort rc.9 runs GLiNER2 2.8x v1 — runtime risk retired; tuple-linked relations PARTIAL, pairing is post-hoc design or stays LLM-judged)`**
 Design (assuming SP1's ONNX path lands): new backend module in
 `sovereign-gliner` driving bare `ort` (dropping the fragile
 gline-rs/orp chain is itself a win), schema-driven API
@@ -275,7 +275,7 @@ CSR (`code_walk.rs:1551-1557` documents the drop sites) (`M 3-4d`).
 (e) `verify-v2` upgraded from count-equality to sampled edge-set
 equality so (d)'s class of drift is detectable (`S-M 1-2d`).
 
-**P2.4 — Structural contextual embedding. `M (3-5d) · Med` + machine**
+**P2.4 — Structural contextual embedding. `M (3-5d) · Med` + machine (SP6 answered 2026-07-31: the late-chunking follow-on variant is DEFERRED — recall parity at 1.4-2.9x embed cost + 7-24 GB RSS; this non-late scope stands)**
 Design: an embed-text assembler at the chunk-embed stage — stored text
 stays clean; the *embedded* string is `[doc: …] [section: …]
 [entities: …]\n<chunk>` built from artifacts we already have. Because
@@ -319,7 +319,7 @@ filter over candidate triples (their ablation: +1.7). Adoption gate:
 the P0.4/P3.1 recall lanes — this is the honest re-litigation of
 `TIERED_RETRIEVAL.md:334-374`, and "no" remains an acceptable answer.
 
-**P3.3 — Reranker stage. `M (2-4d) · Med (SP4 gates)`**
+**P3.3 — Reranker stage. `M (2-4d) · Med (SP4 answered 2026-07-30: 22.7 ms/pair misses the <20 ms bar — A/B-only at a ~470 ms/query top-20 budget; official Qwen3-Reranker GGUF adopted, title-mode prerank free at 2.6 ms/pair)`**
 Qwen3-Reranker as an optional final stage on the hybrid path behind
 SP4's latency verdict: new optional slot role, budget-capped candidate
 set (top-20 → rerank → top-5), A/B'd on notes_tiered.
@@ -507,7 +507,10 @@ knobs), not as one block:
 ≈ 34-63 days (7-13 weeks).**
 Exit gates: the canary proves the lane can fail; faithfulness rate
 reported per corpus; chaos double-gate (competence ≥ 0.71 AND honesty
-≥ 0.82) met with enrichment ON; all six spike answers written down.
+≥ 0.82) met with enrichment ON; all six spike answers written down
+(spike-bundle portion satisfied 2026-07-31 — roll-up at
+`sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`; SP2 kill-point
+did not fire).
 Ratchet at exit: dead code deleted (ConvTieredProvider, debouncer v1
 waste, stats stub), docs truth-restored; store/knob counts unchanged —
 this tranche buys the demolition permit.

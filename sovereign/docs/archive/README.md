@@ -47,3 +47,8 @@ Querying past experiments: `sovereign notes --query <topic>`.
   risk register that drove the D-full migration (shipped
   2026-05-22). `json_constraint.rs` deleted; single grammar
   engine.
+- [`ENRICHMENT_SPIKES_2026_07.md`](ENRICHMENT_SPIKES_2026_07.md)
+  — six enrichment de-risking spikes + D1 sweep (closed
+  2026-07-31). SP2 parity → T1 kill-point disarmed; P2.1/P2.2
+  fundable; P2.4 late-chunking deferred; P3.3 A/B-only; SP3 sets
+  P1.2 judge defaults.
