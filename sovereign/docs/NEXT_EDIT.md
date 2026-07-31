@@ -1,7 +1,12 @@
 # Next-Edit Prediction — Design Spec
 
-Status: **BOTH LANES IMPLEMENTED — P1 rule lane + P2 model lane,
-2026-07-30**. The daemon route (`POST /v1/edit_predictions`), the
+Status: **BOTH LANES IMPLEMENTED AND HARDENED — P1 rule lane + P2
+model lane, 2026-07-30**. An adversarial pass (§9a) then went at all
+three surfaces with `text`, `history`, and the model's own output
+treated as hostile; every HIGH/MED finding was fixed with a named
+regression test, and both banks re-ran green with the bars untouched.
+User-facing walkthrough:
+[`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../../docs/NEXT_EDIT_IN_YOUR_EDITOR.md). The daemon route (`POST /v1/edit_predictions`), the
 pure induction pipeline, and the extension provider are built and
 tested; both exploration spikes (§5) were retired into the real
 build the same day, after the operator validated accept/jump feel
@@ -108,7 +113,12 @@ IDE client stays a thin capture-and-render shell.
   offsets locally as accepts land (`src/editQueue.ts`) and
   revalidates each site's old text against the live document before
   applying. Caps: text ≤ 512 KiB, ≤ 32 history units, ≤ 2 KiB per
-  unit field — beyond them is a 400 with the fix in the message.
+  unit field (**bytes** — the client must measure the same way, §9a);
+  beyond them is a 400 naming the offending field. A route-scoped
+  2 MiB body limit refuses what could never satisfy those caps before
+  serde allocates it, and the route carries the standard
+  `admission()` gate because the model lane drives inference (local
+  requests are always admitted).
   Silence is a 200 with empty `edits`, never an error. The model
   lane (v2) will branch behind this same response shape and inherit
   the drop-invalid-output posture: no suggestion beats a wrong one.
@@ -302,13 +312,90 @@ skipped, needle, needle_hit, region:{start,end}, model_id, slot,
 dropped, timings_ms:{inference}}`. `skipped`
 (`rule_fired`/`gate`/`casing_deferred`) says why the gate never
 consulted; `dropped`
-(`unavailable`/`busy`/`timeout`/`error`/`invalid`/`noop`) says why a
+(`unavailable`/`busy`/`timeout`/`truncated`/`error`/`region_empty`/
+`region_too_large`/`region_has_markers`/`invalid`/`noop`) says why a
 consult produced no edits — a dropped model prediction is reported
 as dropped, never repaired. The daemon logs one line per prediction
 under the `next_edit` tracing target (path, history size, support,
 sites, proposed, silent-reason, engine, model state, elapsed), which
 is in the daemon's default tracing allowlist and pinned by the
 allowlist test in `sovereign-cli-daemon/src/lib.rs`.
+
+## 9a. Hardening pass (2026-07-30)
+
+Before productionizing, three adversarial reviews ran against the
+route, the pure pipelines, and the extension, treating `text`,
+`history`, **and the model's own output** as attacker-controlled (a
+malicious repo's content reaches the prompt, so a model that echoes
+it back is an attack path). Every HIGH/MED finding was fixed rather
+than waived, each with a regression test named for the failure. The
+banks re-ran green afterwards with the bars untouched (run 4 = run 3
+exactly), so none of this cost quality.
+
+The findings worth carrying forward, because each encodes a rule
+that is easy to re-break:
+
+- **A timeout cancels nothing.** Engine dispatch goes through
+  `spawn_blocking`, and dropping a `JoinHandle` *detaches* — the
+  generation keeps running and keeps the slot's context lock. The
+  one-in-flight permit therefore rides **into** the spawned task, so
+  it outlives the handler's 15 s budget; releasing it on timeout
+  would have meant every timed-out consult left a live generation
+  behind while the next request sailed through `try_acquire`.
+- **The rule lane had the worst bug, and it needed no opt-in.**
+  `already_applied` re-derived `find`'s positions inside `replace` at
+  every site, so a self-similar rule over a large file was quadratic:
+  a crafted 512 KiB request measured **23 s** of blocking CPU on one
+  tokio worker. Alignments are now computed once per rule, degenerate
+  rules are declined, and the site scan is bounded.
+- **Guards relative to the region bound nothing when the region is
+  unbounded.** `REGION_LINES` caps lines, not bytes, so one minified
+  line made the region the whole file. Region is now capped in bytes
+  (`MAX_REGION_BYTES`), an over-budget window is declined by name, and
+  blank or marker-bearing regions are refused — a blank region makes
+  every returned byte pure invention with nothing to measure it
+  against.
+- **Shrink needs two bounds.** The growth cap was one-sided: a
+  truncated completion is *smaller* than the region, and diffed whole
+  it reads as "delete the rest". Bounded absolutely (a big region cut
+  short) and proportionally (a small region gutted in place, whose
+  line delta is zero), plus `finish_reason == "length"` is dropped.
+- **Repairing suspicious output manufactures wrong edits.** The old
+  marker-stripping repair would silently delete a real file line that
+  happened to *be* a marker, and rewrote every line ending on the way
+  through. Markers now drop the output whole. Fences must wrap the
+  entire reply and close on the *first* fence, so chat-shaped answers
+  ("Sure! Here you go… I also removed the dead code") can't splice
+  commentary into the file.
+- **CRLF was a silent whole-region rewrite.** A CRLF region against an
+  LF reply makes every line differ, collapsing the line-LCS into one
+  hunk spanning the region — the model got free rein over code it
+  never claimed to touch, and a faithful echo stopped registering as
+  a noop. Line endings are normalized to the region's before diffing.
+- **Two rulers on one contract kill the lane silently.** The client
+  capped unit fields in UTF-16 *chars* while the daemon caps them in
+  UTF-8 *bytes*, and a fixed-offset context slice could split a
+  surrogate pair into a lone surrogate that `serde_json` rejects.
+  Either one 400s the **whole request**, and because the offending
+  unit stays in the history window it poisoned every later prediction
+  until it aged out — behind a green status bar, since 4xx was
+  swallowed. The contract now lives in one pure module
+  (`packages/vscode-sovereign/src/wireLimits.ts`), and a 4xx clears
+  history and says so once.
+- Route posture: the endpoint now carries the same `admission()` gate
+  as every other inference route (it drives a model, so a paused peer
+  must not reach it; local requests are always admitted), plus a
+  route-scoped body cap so the documented limits are a contract check
+  rather than the only defence.
+
+Two residual risks are accepted deliberately, not overlooked. **No
+version token on the wire**: the first-party client already
+revalidates each site's old text against the live document before
+applying, so a stale prediction degrades to a no-apply rather than
+corruption — a wire field is a bigger contract change than the
+residual justifies. **Trailing prose with no fence** is undetectable
+in general; it is bounded by the shrink/growth caps and measured at
+0/30 by the bank.
 
 ## 10. Verification surface
 

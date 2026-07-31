@@ -18,6 +18,16 @@ use crate::next_edit::{expand_rule, find_guarded_sites, GuardedRule, HistoryUnit
 
 /// Total lines in the rewrite region handed to the model.
 pub const REGION_LINES: usize = 24;
+/// Byte ceiling on that same region. Lines bound it for ordinary
+/// source; bytes bound it for files that are mostly one line (a
+/// minified bundle is a single 512 KiB line, and `text` is capped at
+/// 512 KiB, so without this the "24-line" region is the whole file
+/// and the prompt is ~1 MiB of prefill on the shared slot).
+pub const MAX_REGION_BYTES: usize = 8 * 1024;
+/// Per-side context fed to the needle's longest-common-substring
+/// search. The needle is a short anchor (`MIN_NEEDLE` is 3), so the
+/// quadratic DP never needs the full 2 KiB-per-field the wire allows.
+const MAX_NEEDLE_CTX: usize = 192;
 /// Two per-site-varying replacements must share this many prefix chars.
 const MIN_PARAM_PREFIX: usize = 4;
 /// A shorter needle is noise, not an anchor.
@@ -26,6 +36,12 @@ const MIN_NEEDLE: usize = 3;
 const MAX_PROMPT_UNITS: usize = 4;
 /// A rewrite growing the region beyond this is a runaway, not an edit.
 const MAX_GROWTH_BYTES: usize = 2048;
+/// …and so is one that shrinks it by more than this. The growth cap
+/// alone is one-sided: a truncated or lazy completion is *smaller*
+/// than the region, and without this a single accepted hunk could
+/// delete almost the whole region (measured 2026-07-30: 480 KiB
+/// deleted from a 24-line region whose line count was unchanged).
+const MAX_SHRINK_BYTES: usize = 2048;
 /// A rewrite adding/removing more lines than this is a runaway.
 const MAX_LINE_DELTA: usize = 16;
 
@@ -154,15 +170,19 @@ fn common_prefix_len(a: &str, b: &str) -> usize {
     a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
 }
 
-/// Longest common substring (chars). Inputs are short unit strings.
+/// Longest common substring (chars). Callers MUST bound the inputs:
+/// this is an O(n·m) DP on a request-path thread with no `.await` in
+/// it, and the wire allows 2 KiB per unit field.
 fn lcsubstr(a: &str, b: &str) -> String {
     let ac: Vec<char> = a.chars().collect();
     let bc: Vec<char> = b.chars().collect();
     let mut best_len = 0usize;
     let mut best_end = 0usize;
+    // Two rolling rows, reused — not one allocation per row.
     let mut prev = vec![0usize; bc.len() + 1];
+    let mut cur = vec![0usize; bc.len() + 1];
     for i in 1..=ac.len() {
-        let mut cur = vec![0usize; bc.len() + 1];
+        cur.fill(0);
         for j in 1..=bc.len() {
             if ac[i - 1] == bc[j - 1] {
                 cur[j] = prev[j - 1] + 1;
@@ -172,15 +192,41 @@ fn lcsubstr(a: &str, b: &str) -> String {
                 }
             }
         }
-        prev = cur;
+        std::mem::swap(&mut prev, &mut cur);
     }
     ac[best_end - best_len..best_end].iter().collect()
 }
 
+/// Last `n` chars of `s` (char-boundary safe).
+fn tail(s: &str, n: usize) -> &str {
+    match s.char_indices().nth_back(n.saturating_sub(1)) {
+        Some((i, _)) if s.chars().count() > n => &s[i..],
+        _ => s,
+    }
+}
+
+/// First `n` chars of `s` (char-boundary safe).
+fn head(s: &str, n: usize) -> &str {
+    match s.char_indices().nth(n) {
+        Some((i, _)) => &s[..i],
+        None => s,
+    }
+}
+
+/// The needle anchors a region; it is drawn from the text immediately
+/// around each edit, so only the nearest [`MAX_NEEDLE_CTX`] chars per
+/// side can contribute. Bounding here keeps [`lcsubstr`] off the
+/// wire's full 6 KiB-per-unit worst case.
 fn ctx_needle(a: &HistoryUnit, b: &HistoryUnit) -> Option<String> {
-    let sa = format!("{}{}{}", a.left, a.before, a.right);
-    let sb = format!("{}{}{}", b.left, b.before, b.right);
-    let s = lcsubstr(&sa, &sb).trim().to_string();
+    let near = |u: &HistoryUnit| {
+        format!(
+            "{}{}{}",
+            tail(&u.left, MAX_NEEDLE_CTX),
+            head(&u.before, MAX_NEEDLE_CTX),
+            head(&u.right, MAX_NEEDLE_CTX)
+        )
+    };
+    let s = lcsubstr(&near(a), &near(b)).trim().to_string();
     (s.chars().count() >= MIN_NEEDLE).then_some(s)
 }
 
@@ -287,7 +333,42 @@ pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize,
         .min(line_count.saturating_sub(REGION_LINES));
     let start = starts[first.min(starts.len() - 1)];
     let end = starts.get(first + REGION_LINES).copied().unwrap_or(text.len());
-    (start, end, hit)
+    if end - start <= MAX_REGION_BYTES {
+        return (start, end, hit);
+    }
+    // Over the byte budget: rebuild the window by growing outward from
+    // the target line while both budgets hold. Ordinary source never
+    // reaches this branch (24 lines is far under 8 KiB), so region
+    // selection is unchanged for every real file. When even the target
+    // line alone exceeds the budget the region stays that one line and
+    // the route declines it (`region_too_large`) rather than prefilling
+    // a megabyte nobody can read.
+    let line_end = |l: usize| starts.get(l + 1).copied().unwrap_or(text.len());
+    let (mut lo, mut hi) = (target_line, target_line);
+    let mut used = line_end(target_line) - starts[target_line];
+    loop {
+        let mut grew = false;
+        if lo > 0 && hi - lo + 1 < REGION_LINES {
+            let add = starts[lo] - starts[lo - 1];
+            if used + add <= MAX_REGION_BYTES {
+                lo -= 1;
+                used += add;
+                grew = true;
+            }
+        }
+        if hi + 1 < line_count && hi - lo + 1 < REGION_LINES {
+            let add = line_end(hi + 1) - starts[hi + 1];
+            if used + add <= MAX_REGION_BYTES {
+                hi += 1;
+                used += add;
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    (starts[lo], line_end(hi), hit)
 }
 
 // ---- prompt -----------------------------------------------------------
@@ -314,7 +395,11 @@ pub fn build_prompt(
         "You are the next-edit engine of a code editor. \
          The developer just made these edits, oldest first:\n",
     );
-    let cores: Vec<&HistoryUnit> = history.iter().filter(|u| u.before != u.after).collect();
+    // Same window the gate judged (`should_consult`) — showing the
+    // model units the gate never looked at would let it generalize
+    // from a pattern nothing authorized.
+    let window = &history[history.len().saturating_sub(HISTORY_WINDOW)..];
+    let cores: Vec<&HistoryUnit> = window.iter().filter(|u| u.before != u.after).collect();
     let shown = &cores[cores.len().saturating_sub(MAX_PROMPT_UNITS)..];
     for (i, u) in shown.iter().enumerate() {
         p.push_str(&format!(
@@ -373,37 +458,60 @@ pub fn parse_rewrite(raw: &str, region: &str) -> Result<String, &'static str> {
         };
     }
     let mut s = out.trim_start_matches('\n').to_string();
-    // One wrapping code fence, with or without a language tag.
+    // One wrapping code fence, with or without a language tag — and
+    // nothing else. Prose outside the fence, or a second fenced block
+    // with commentary between, is a chat reply rather than a region;
+    // repairing it would splice the commentary into the user's file.
+    // Closing on the FIRST fence, not the last, is what stops that.
     let t = s.trim();
     if t.starts_with("```") {
         let inner = t.trim_start_matches("```");
         let body = inner.split_once('\n').map(|(_, b)| b).unwrap_or("");
-        s = match body.rfind("```") {
-            Some(i) => body[..i].to_string(),
-            None => return Err("invalid"),
+        let Some(i) = body.find("```") else {
+            return Err("invalid");
         };
+        if !body[i + 3..].trim().is_empty() {
+            return Err("invalid");
+        }
+        s = body[..i].to_string();
+    } else if t.contains("```") {
+        return Err("invalid");
     }
-    // Echoed markers: strip marker-only lines; any other echo is malformed.
-    if s.contains(REGION_START_MARKER) || s.contains(REGION_END_MARKER) {
-        s = s
-            .lines()
-            .filter(|l| {
-                let lt = l.trim();
-                lt != REGION_START_MARKER && lt != REGION_END_MARKER
-            })
-            .map(|l| format!("{l}\n"))
-            .collect();
-    }
+    // Echoed markers are malformed, whole stop. An earlier version
+    // stripped marker-only lines and rebuilt the output from
+    // `lines()`, which silently deleted any real file line that
+    // happened to BE a marker and rewrote every line ending on the
+    // way through — repairing suspicious output into a confident
+    // wrong edit, which is exactly the trade this lane refuses.
     if s.contains("editable_region") {
         return Err("invalid");
     }
+    // Line endings: a CRLF region against an LF rewrite makes every
+    // line differ, so the line-LCS collapses to one hunk spanning the
+    // whole region — the model gets free rein over code it never
+    // meant to touch, and a faithful echo stops registering as a noop.
+    if region.contains("\r\n") {
+        s = s.replace("\r\n", "\n").replace('\n', "\r\n");
+    }
+    // Trailing newline, both directions: the region is the authority.
     if region.ends_with('\n') && !s.ends_with('\n') {
         s.push('\n');
+    } else if !region.ends_with('\n') && s.ends_with('\n') {
+        s.truncate(s.trim_end_matches('\n').trim_end_matches('\r').len());
     }
     if s.trim().is_empty() {
         return Err("invalid");
     }
     if s.len() > region.len() + MAX_GROWTH_BYTES {
+        return Err("invalid");
+    }
+    // Shrink is bounded two ways because one bound is not enough: the
+    // absolute cap catches a big region truncated mid-rewrite, and the
+    // proportional one catches a small region gutted in place (20
+    // lines of code replaced by 20 lines of `//` loses far less than
+    // 2 KiB, and its line delta is zero). Continuing an edit pattern
+    // never halves the region.
+    if s.len() + MAX_SHRINK_BYTES < region.len() || s.len() * 2 < region.len() {
         return Err("invalid");
     }
     let delta = (s.lines().count() as i64 - region.lines().count() as i64).unsigned_abs() as usize;
@@ -644,14 +752,59 @@ mod tests {
     }
 
     #[test]
+    fn region_respects_the_byte_budget_on_long_lines() {
+        // Ordinary source is untouched by the budget: still 24 lines.
+        let ordinary: String = (0..60).map(|i| format!("let x{i} = {i};\n")).collect();
+        let (s, e, _) = select_region(&ordinary, 0, None);
+        assert_eq!(ordinary[s..e].lines().count(), REGION_LINES);
+
+        // Long lines: fewer lines, but always within the budget.
+        let long: String = (0..60).map(|i| format!("{}// {i}\n", "x".repeat(900))).collect();
+        let (s, e, _) = select_region(&long, long.len() / 2, None);
+        assert!(e - s <= MAX_REGION_BYTES, "region {} bytes", e - s);
+        assert!(e > s, "still returns a usable window");
+        assert!(long.is_char_boundary(s) && long.is_char_boundary(e));
+
+        // The pathological file — one 200 KiB line, no newline at all.
+        // The window cannot shrink below one line, so it comes back
+        // over budget and the ROUTE declines it (`region_too_large`);
+        // silently prefilling it is the failure this guards.
+        let minified = "a".repeat(200 * 1024);
+        let (s, e, _) = select_region(&minified, 0, None);
+        assert!(e - s > MAX_REGION_BYTES, "route must see it as too large");
+    }
+
+    #[test]
+    fn needle_context_is_bounded_but_still_anchors() {
+        // 2 KiB per field is legal on the wire; the needle search must
+        // not be handed all of it (quadratic DP on a request thread).
+        let pad = "z".repeat(2000);
+        let a = unit("", ", tmo", &format!("{pad}dial(a, x"), ")");
+        let b = unit("", ", tmo", &format!("{pad}dial(b, y"), ")");
+        let n = ctx_needle(&a, &b).expect("still finds an anchor");
+        assert!(n.chars().count() >= MIN_NEEDLE);
+        assert!(n.len() <= MAX_NEEDLE_CTX * 3);
+
+        // Truncation is char-boundary safe on multi-byte context.
+        let emoji = "💡".repeat(300);
+        let c = unit("", "!", &emoji, &emoji);
+        assert!(ctx_needle(&c, &c.clone()).is_some());
+        assert_eq!(head("héllo", 2), "hé");
+        assert_eq!(tail("héllo", 2), "lo");
+        assert_eq!(head("hi", 9), "hi");
+        assert_eq!(tail("hi", 9), "hi");
+    }
+
+    #[test]
     fn parse_rewrite_normalizes_and_drops() {
         let region = "a\nb\nc\n";
         assert_eq!(parse_rewrite("a\nB\nc\n", region).unwrap(), "a\nB\nc\n");
         // Wrapping fence + language tag.
         assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
-        // Echoed markers stripped.
+        // Echoed markers are dropped, not repaired — see
+        // `echoed_markers_are_dropped_never_repaired` for why.
         let echoed = format!("{REGION_START_MARKER}\na\nB\nc\n{REGION_END_MARKER}\n");
-        assert_eq!(parse_rewrite(&echoed, region).unwrap(), "a\nB\nc\n");
+        assert_eq!(parse_rewrite(&echoed, region), Err("invalid"));
         // Think-block preamble stripped.
         assert_eq!(
             parse_rewrite("<think>hmm</think>\na\nB\nc\n", region).unwrap(),
@@ -663,6 +816,72 @@ mod tests {
         let runaway = "x\n".repeat(REGION_LINES + MAX_LINE_DELTA + 2);
         assert_eq!(parse_rewrite(&runaway, region), Err("invalid"));
         assert_eq!(parse_rewrite("", region), Err("invalid"));
+    }
+
+    /// Every one of these was a way to turn a suspicious completion
+    /// into a confident wrong edit. The posture is drop-whole: no
+    /// suggestion beats a wrong one.
+    #[test]
+    fn parse_rewrite_refuses_chat_shaped_output() {
+        let region = "a\nb\nc\n";
+        // Prose before the fence — the fence check used to only look
+        // at position 0, so this sailed through unwrapped and spliced
+        // the prose into the file.
+        assert_eq!(parse_rewrite("Sure! Here you go:\n```\na\nB\nc\n```", region), Err("invalid"));
+        // Two fenced blocks with commentary between: closing on the
+        // LAST fence used to swallow the commentary as file content.
+        assert_eq!(
+            parse_rewrite("```\na\nB\n```\nI also removed the dead code.\n```\nc\n```", region),
+            Err("invalid")
+        );
+        // Trailing commentary after a well-formed fence.
+        assert_eq!(parse_rewrite("```\na\nB\nc\n```\nHope that helps!", region), Err("invalid"));
+        // A well-formed single fence still parses.
+        assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
+    }
+
+    /// A file line that IS a marker used to be deleted by the
+    /// marker-stripping repair — a wrong edit manufactured out of a
+    /// faithful echo.
+    #[test]
+    fn echoed_markers_are_dropped_never_repaired() {
+        let region = format!("let x = 1;\n{REGION_END_MARKER}\n");
+        assert_eq!(parse_rewrite(&region, &region), Err("invalid"));
+        let echoed = format!("{REGION_START_MARKER}\na\nB\nc\n{REGION_END_MARKER}\n");
+        assert_eq!(parse_rewrite(&echoed, "a\nb\nc\n"), Err("invalid"));
+    }
+
+    /// CRLF region + LF rewrite made every line differ, collapsing the
+    /// line-LCS into one hunk over the whole region: the model got
+    /// free rein over code it never claimed to touch, and a byte-
+    /// faithful echo stopped registering as a noop.
+    #[test]
+    fn crlf_regions_survive_an_lf_rewrite() {
+        let region = "one\r\ntwo\r\nthree\r\n";
+        let out = parse_rewrite("one\r\nTWO\r\nthree\r\n", region).unwrap();
+        assert_eq!(diff_region(region, &out).len(), 1, "one hunk, not a whole-region flip");
+
+        let from_lf = parse_rewrite("one\ntwo\nthree\n", region);
+        assert_eq!(from_lf, Err("noop"), "a faithful echo in LF is still a noop");
+        let changed = parse_rewrite("one\nTWO\nthree\n", region).unwrap();
+        assert!(changed.contains("\r\n") && !changed.contains("\n\n"));
+        let edits = diff_region(region, &changed);
+        assert_eq!(edits.len(), 1);
+        assert_eq!(&region[edits[0].start..edits[0].end], "two");
+    }
+
+    #[test]
+    fn parse_rewrite_bounds_shrink_as_well_as_growth() {
+        let region: String = (0..20).map(|i| format!("line {i} with some real content\n")).collect();
+        // A truncated or lazy completion deletes the rest of the
+        // region; the growth cap alone never saw this.
+        assert_eq!(parse_rewrite("line 0 with some real content\n", &region), Err("invalid"));
+        // A same-line-count gutting: line delta 0, bytes gone.
+        let gutted: String = (0..20).map(|_| "//\n".to_string()).collect();
+        assert_eq!(parse_rewrite(&gutted, &region), Err("invalid"));
+        // Trailing newline is honoured in both directions.
+        assert_eq!(parse_rewrite("a\nB\nc\n", "a\nb\nc").unwrap(), "a\nB\nc");
+        assert_eq!(parse_rewrite("a\nB\nc", "a\nb\nc\n").unwrap(), "a\nB\nc\n");
     }
 
     #[test]

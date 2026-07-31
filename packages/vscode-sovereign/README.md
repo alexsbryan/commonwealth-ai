@@ -146,16 +146,40 @@ Make the same small edit twice — say, two `console.log` lines turned
 into `console.debug` — pause, and the extension proposes the
 remaining occurrences as a tab-through queue: the old text struck
 through, the replacement as ghost text, **Tab** to accept and jump
-to the next site, **Esc** to dismiss (which also stops that rule
+to the next site, **Esc** to dismiss (which also stops that pattern
 from re-nagging this session). If the next site is off-screen you
 get a one-line hint at your cursor instead of a viewport jump; the
 first Tab takes you there.
 
-This is deterministic — the daemon induces a literal rewrite rule
-from your last few edits (`POST /v1/edit_predictions`, no model
-involved, works even without a `[models.fim]` slot) and only speaks
-past a confidence threshold: two supporting edits for a specific
-pattern, three for a short one. Design + policy:
+Two engines sit behind that one Tab key, and the debug payload always
+names which one answered:
+
+- **Rule engine** — the daemon induces a literal rewrite rule from
+  your last few edits and finds the remaining sites by string search.
+  Deterministic, ~6 ms, incapable of inventing anything, and it works
+  with **no model at all** (no `[models.fim]` slot needed). It speaks
+  only past a confidence threshold: two supporting edits for a
+  specific pattern, three for a short one.
+- **Model engine** — for patterns no single literal rule describes:
+  the same argument added to differently-shaped call sites, a
+  replacement that varies per site (`.unwrap()` → `.expect("…")` with
+  a different message each time), the same field added to several
+  struct literals. It is consulted only when the rule engine has
+  declined *and* your last two edits match one of those recognized
+  shapes, it never overrides a rule-engine answer, and it never
+  queues for the slot — a busy model means the consult is dropped,
+  not delayed. Needs `[models.fim]` resident; silently inert without
+  it (and says `unavailable` when asked).
+
+A model answer that fails validation is **dropped whole, never
+repaired** — no suggestion beats a wrong one. Cross-casing renames
+(`getUserData` edited, `get_user_data` still present) are detected but
+deliberately **not offered**: the model measured as destructive on
+exactly that shape, so it is withheld pending a deterministic engine.
+
+Full walkthrough, including how to read the reasoning behind any
+suggestion or silence: [Next edit in your
+editor](../../docs/NEXT_EDIT_IN_YOUR_EDITOR.md). Design + policy:
 `sovereign/docs/NEXT_EDIT.md`.
 
 ## Seeing what's going on (glassbox)
@@ -183,6 +207,7 @@ This is the part no other completion product gives you:
 | `sovereign-fim.disabledLanguages` | `["markdown", "plaintext"]` | no-ghost zones |
 | `sovereign-fim.nextEdit.enable` | `true` | repeated-edit suggestions (Tab queue) |
 | `sovereign-fim.nextEdit.settleMs` | `600` | idle time before the daemon is consulted |
+| `sovereign-fim.nextEdit.modelLane` | `true` | the model engine for next-edit; `false` keeps the deterministic rule engine only |
 
 ## Troubleshooting ladder
 

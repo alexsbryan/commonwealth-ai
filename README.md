@@ -53,6 +53,23 @@ svrn mesh join <key>    # on each machine you're pooling in
 
 [Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks it through. Pooling **knowledge** instead of compute works the same way — the [two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a cited answer from a corpus that never leaves the other. (Already ran `svrn setup`? You quietly founded a solo mesh — read its key with `svrn mesh status`.)
 
+## Code completion that explains itself
+
+Ghost-text completion and repeated-edit suggestions, served by your own
+daemon to VS Code, Cursor, or Windsurf. Make the same small edit twice,
+pause, and the rest of the sites arrive as a queue you walk with Tab —
+including the ones off-screen.
+
+```sh
+svrn setup --fim        # model + daemon config + editor extension, after showing you the plan
+```
+
+The part a cloud completion can't do: ask it why. Every suggestion —
+and every *silence* — carries the reasoning that produced it, down to
+which engine answered and which threshold held. [Next edit in your
+editor](./docs/NEXT_EDIT_IN_YOUR_EDITOR.md) is the walkthrough, and it
+does not need a model for the deterministic half.
+
 ## Going deeper
 
 New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.

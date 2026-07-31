@@ -1,7 +1,7 @@
 {
   "name": "sovereign-fim",
-  "displayName": "svrn fim \u2014 inline completion",
-  "description": "Ghost-text code completion served by your local svrn daemon \u2014 no cloud, no account, full glassbox.",
+  "displayName": "svrn fim — inline completion",
+  "description": "Ghost-text code completion served by your local svrn daemon — no cloud, no account, full glassbox.",
   "version": "0.1.0",
   "publisher": "sovereign",
   "license": "AGPL-3.0-or-later",
@@ -43,12 +43,12 @@
       {
         "key": "tab",
         "command": "sovereign-fim.nextEdit.accept",
-        "when": "sovereignFim.nextEditVisible && editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible"
+        "when": "sovereignFim.nextEditVisible && editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !editorHasSelection && !editorTabMovesFocus"
       },
       {
         "key": "escape",
         "command": "sovereign-fim.nextEdit.dismiss",
-        "when": "sovereignFim.nextEditVisible && editorTextFocus"
+        "when": "sovereignFim.nextEditVisible && editorTextFocus && !suggestWidgetVisible && !inSnippetMode && !findWidgetVisible && !parameterHintsVisible && !renameInputVisible"
       }
     ],
     "menus": {

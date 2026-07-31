@@ -60,11 +60,24 @@ pub fn client_router(state: AppState) -> Router {
         // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
         // like the rest of :9741 — the extension talks to its own daemon.
         .route("/v1/completions", post(routes_completions::completions))
-        // Next-edit rule lane (NEXT_EDIT.md §3). Pure string work —
-        // no inference service, no admission gate needed.
+        // Next-edit prediction, both lanes (NEXT_EDIT.md §3). The rule
+        // lane is pure string work, but the model lane consults the
+        // resident FIM slot, so this endpoint carries the same
+        // admission gate as every other inference route — a peer must
+        // not drive local inference through it while the operator has
+        // contribution paused. Local requests (no `X-Node-Id`) are
+        // always admitted, so the editor path is untouched. The tighter
+        // body limit overrides the router-wide 8 MB frontdoor: the
+        // handler's documented caps (512 KiB text, 32 units) are a
+        // contract check, and the transport should refuse a body that
+        // could never satisfy them before serde allocates it.
         .route(
             "/v1/edit_predictions",
-            post(routes_edit_predictions::edit_predictions),
+            post(routes_edit_predictions::edit_predictions)
+                .layer(axum::extract::DefaultBodyLimit::max(
+                    routes_edit_predictions::MAX_BODY_BYTES,
+                ))
+                .layer(admission()),
         )
         .route("/v1/embeddings", post(routes_inference::embeddings))
         .route("/v1/models", get(routes_inference::list_models))

@@ -181,6 +181,15 @@ export interface EditPredictionResult {
   wallMs: number;
 }
 
+/** Hard ceiling on one prediction round-trip. Keystrokes abort in
+ *  flight, but an idle user typing nothing more would otherwise leave
+ *  a request against a wedged daemon pending forever — and a reply
+ *  arriving minutes later still passes the caller's document-version
+ *  check and surfaces a proposal out of nowhere. Comfortably above the
+ *  daemon's own 15s model-lane budget, so a real slow consult still
+ *  lands. */
+const PREDICT_TIMEOUT_MS = 20_000;
+
 /** POST /v1/edit_predictions — plain JSON in/out, no streaming; an
  *  empty `edits` array is the healthy "nothing to suggest" case. */
 export async function predictEdits(
@@ -189,6 +198,27 @@ export async function predictEdits(
   signal: AbortSignal,
 ): Promise<EditPredictionResult> {
   const started = Date.now();
+  // Caller's signal OR our deadline. Built by hand rather than with
+  // AbortSignal.any so this works on every VS Code runtime we support.
+  const deadline = new AbortController();
+  const onAbort = () => deadline.abort();
+  signal.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => deadline.abort(), PREDICT_TIMEOUT_MS);
+  try {
+    return await predictEditsOnce(endpoint, req, deadline.signal, signal, started);
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function predictEditsOnce(
+  endpoint: string,
+  req: EditPredictionRequest,
+  signal: AbortSignal,
+  caller: AbortSignal,
+  started: number,
+): Promise<EditPredictionResult> {
   let resp: Response;
   try {
     resp = await fetch(`${endpoint}/v1/edit_predictions`, {
@@ -198,6 +228,14 @@ export async function predictEdits(
       signal,
     });
   } catch (e) {
+    // Our deadline, not the caller's abort: the daemon is wedged
+    // rather than superseded. Report it as a daemon fault so it is
+    // never mistaken for "the user kept typing".
+    if ((e as Error).name === "AbortError" && !caller.aborted) {
+      throw new DaemonError(
+        `daemon at ${endpoint} did not answer within ${PREDICT_TIMEOUT_MS}ms`,
+      );
+    }
     if ((e as Error).name === "AbortError") throw e;
     throw new DaemonError(
       `daemon unreachable at ${endpoint} — is 'sovereign daemon run' up? (${(e as Error).message})`,

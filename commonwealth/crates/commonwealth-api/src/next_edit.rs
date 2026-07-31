@@ -161,26 +161,57 @@ pub fn should_fire(rule: &GuardedRule, support: usize, remaining_sites: usize) -
     }
 }
 
+/// Ceiling on an induced rule's `find`/`replace`. Rules come from
+/// coalesced keystroke bursts plus a bounded context expansion, so a
+/// real one is tens of bytes; the wire's 2 KiB-per-field allowance is
+/// slack for the *unit*, not a licence for the rule derived from it.
+const MAX_RULE_BYTES: usize = 512;
+/// A replacement that contains its own target more than this many
+/// times is not an edit pattern, it is a pathological input: each
+/// occurrence is an alignment that must be probed at every site.
+const MAX_ALIGNMENTS: usize = 8;
+/// Ceiling on matches examined while scanning for sites. The queue
+/// itself is capped at [`MAX_EDITS`] (256), so a file with more
+/// occurrences than this is already past the point where more
+/// scanning changes what the user sees.
+const MAX_SITE_SCAN: usize = 4096;
+
+/// Offsets at which `find` sits inside `replace` — the alignments an
+/// occurrence of `find` could occupy within an already-applied
+/// `replace`. `None` means the rule is degenerate (too many
+/// alignments to probe); callers decline it rather than pay
+/// occurrences × sites of comparison.
+fn alignments(find: &str, replace: &str) -> Option<Vec<usize>> {
+    if find == replace || !replace.contains(find) {
+        return Some(Vec::new());
+    }
+    let mut out = Vec::new();
+    let mut start = 0;
+    while let Some(f) = replace[start..].find(find).map(|i| start + i) {
+        if out.len() == MAX_ALIGNMENTS {
+            return None;
+        }
+        out.push(f);
+        start = f + 1;
+    }
+    Some(out)
+}
+
 /// True when the occurrence of `find` at `o` sits inside an existing
-/// instance of `replace`, aligned on `find`'s position within it —
-/// i.e. the user already made this edit here. Only possible for
+/// instance of `replace`, at one of the precomputed `aligns` — i.e.
+/// the user already made this edit here. Only possible for
 /// insertion-shaped rules (`replace` contains `find`): those leave
 /// `find` matching at every already-edited site, and re-proposing one
 /// would stack the insertion (`await fetch(` → `await await fetch(`).
-fn already_applied(text: &str, o: usize, find: &str, replace: &str) -> bool {
-    if find == replace || !replace.contains(find) {
-        return false;
-    }
-    let mut start = 0;
-    while let Some(f) = replace[start..].find(find).map(|i| start + i) {
-        if let Some(b) = o.checked_sub(f) {
-            if text.get(b..b + replace.len()) == Some(replace) {
-                return true;
-            }
-        }
-        start = f + 1;
-    }
-    false
+///
+/// The alignments are computed once per rule, never once per site:
+/// doing it per site made this quadratic in the rule's self-similarity
+/// and turned a single request into 23 s of blocking CPU on a crafted
+/// input (measured 2026-07-30 at 512 KiB of text).
+fn already_applied(text: &str, o: usize, aligns: &[usize], replace: &str) -> bool {
+    aligns
+        .iter()
+        .any(|&f| o.checked_sub(f).is_some_and(|b| text.get(b..b + replace.len()) == Some(replace)))
 }
 
 /// Non-overlapping byte offsets of the rule's `find` in `text`,
@@ -189,17 +220,25 @@ fn already_applied(text: &str, o: usize, find: &str, replace: &str) -> bool {
 /// applied to are excluded (see [`already_applied`]).
 pub fn find_guarded_sites(text: &str, rule: &GuardedRule, from: usize) -> Vec<usize> {
     let find = rule.find.as_str();
-    if find.is_empty() {
+    if find.is_empty() || find.len() > MAX_RULE_BYTES || rule.replace.len() > MAX_RULE_BYTES {
         return Vec::new();
     }
+    let Some(aligns) = alignments(find, &rule.replace) else {
+        return Vec::new();
+    };
     let mut all = Vec::new();
     let mut at = 0;
+    let mut examined = 0usize;
     while let Some(rel) = text[at..].find(find) {
+        examined += 1;
+        if examined > MAX_SITE_SCAN {
+            break;
+        }
         let o = at + rel;
         let left_ok = !rule.guard_left || !text[..o].chars().next_back().is_some_and(is_word_char);
         let right_ok = !rule.guard_right
             || !text[o + find.len()..].chars().next().is_some_and(is_word_char);
-        if left_ok && right_ok && !already_applied(text, o, find, &rule.replace) {
+        if left_ok && right_ok && !already_applied(text, o, &aligns, &rule.replace) {
             all.push(o);
         }
         at = o + find.len();
@@ -393,6 +432,35 @@ mod tests {
         // Deletion-shaped rules (find contains replace) are unaffected.
         let d = expand_rule(&unit(".unwrap()", "", "res", ";")).unwrap();
         assert_eq!(find_guarded_sites("res;\nres.unwrap();\n", &d, 0), vec![5]);
+    }
+
+    /// The already-applied probe used to re-derive `find`'s positions
+    /// inside `replace` at EVERY site, so a self-similar rule over a
+    /// large file was quadratic: a crafted 512 KiB request measured
+    /// 23 s of blocking CPU on one tokio worker, needing no model lane
+    /// and no opt-in to reach. Rules this shape are declined, and the
+    /// site scan is bounded regardless.
+    #[test]
+    fn pathological_rules_cannot_wedge_the_scan() {
+        let text = "(".repeat(512 * 1024);
+        let degenerate = bare_rule("(", &format!("{}{}", "(".repeat(2047), ")"));
+        let t0 = std::time::Instant::now();
+        assert!(
+            find_guarded_sites(&text, &degenerate, 0).is_empty(),
+            "a replacement containing its own target 2047 times is not an edit pattern"
+        );
+        // Same file, a rule that is merely common rather than
+        // degenerate: bounded work, still a usable queue.
+        let common = bare_rule("(", "(x");
+        let sites = find_guarded_sites(&text, &common, 0);
+        assert!(!sites.is_empty() && sites.len() <= MAX_SITE_SCAN);
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(2),
+            "bounded work, not seconds of blocking CPU (took {:?})",
+            t0.elapsed()
+        );
+        // An oversized induced rule is refused outright.
+        assert!(find_guarded_sites("abc", &bare_rule(&"a".repeat(600), "b"), 0).is_empty());
     }
 
     #[test]

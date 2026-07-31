@@ -23,15 +23,19 @@ import {
 import { readConfig } from "./config";
 import { buildQueue, QueuedEdit, shiftAfterApply } from "./editQueue";
 import { RawChange, UnitCoalescer, unitsFromMultiChange } from "./editUnits";
+import {
+  MAX_HISTORY,
+  MAX_TEXT_BYTES,
+  bytes,
+  sliceWhole,
+  unitFitsWire,
+} from "./wireLimits";
 
 const CONTEXT_KEY = "sovereignFim.nextEditVisible";
 /** Untouched context captured per side of a unit at close — enough
  *  for the daemon's expansion (its MAX_CTX is 40 chars). */
 const UNIT_CTX_CHARS = 48;
-/** Mirror the daemon's request caps; an over-cap request would 400. */
-const MAX_TEXT_BYTES = 512 * 1024;
-const MAX_HISTORY = 32;
-const MAX_UNIT_CHARS = 2048;
+
 
 interface Session {
   editor: vscode.TextEditor;
@@ -52,6 +56,7 @@ export class NextEditController implements vscode.Disposable {
   private readonly suppressed = new Set<string>();
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private applyingEdit = false;
+  private warnedBadRequest = false;
   private inflight: AbortController | null = null;
   private readonly oldTextDeco: vscode.TextEditorDecorationType;
   private readonly hintDeco: vscode.TextEditorDecorationType;
@@ -98,6 +103,17 @@ export class NextEditController implements vscode.Disposable {
 
     if (this.applyingEdit) return; // our own accept — snapshot only
 
+    // Undo/redo is not a pattern the user is establishing — it is one
+    // they are retracting. Recording it would feed the induction the
+    // mirror image of the edit it just learned from (and undoing an
+    // accepted suggestion would teach it to propose the reverse), so
+    // the snapshot stays current but history does not grow.
+    if (e.reason !== undefined) {
+      this.coalescer.reset();
+      this.clearSurface();
+      return;
+    }
+
     if (raws.length === 1) {
       this.recordUnit(this.coalescer.feed(raws[0], pre), pre);
     } else {
@@ -120,18 +136,15 @@ export class NextEditController implements vscode.Disposable {
     docAtClose: string,
   ): void {
     if (!unit) return;
-    if (unit.before.length > MAX_UNIT_CHARS || unit.after.length > MAX_UNIT_CHARS) {
-      return; // a paste, not an edit unit — the daemon would refuse it
+    const after = unit.start + unit.after.length;
+    const left = sliceWhole(docAtClose, Math.max(0, unit.start - UNIT_CTX_CHARS), unit.start);
+    const right = sliceWhole(docAtClose, after, after + UNIT_CTX_CHARS);
+    // A unit the daemon would refuse is worse than no unit: the 400 is
+    // per-REQUEST, so keeping it would kill every later prediction too.
+    if (!unitFitsWire(unit.before, unit.after, left, right)) {
+      return;
     }
-    this.units.push({
-      before: unit.before,
-      after: unit.after,
-      left: docAtClose.slice(Math.max(0, unit.start - UNIT_CTX_CHARS), unit.start),
-      right: docAtClose.slice(
-        unit.start + unit.after.length,
-        unit.start + unit.after.length + UNIT_CTX_CHARS,
-      ),
-    });
+    this.units.push({ before: unit.before, after: unit.after, left, right });
     if (this.units.length > MAX_HISTORY) {
       this.units.splice(0, this.units.length - MAX_HISTORY);
     }
@@ -147,11 +160,15 @@ export class NextEditController implements vscode.Disposable {
     if (!cfg.get<boolean>("nextEdit.enable", true)) return;
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.toString() !== this.tracked.uri) return;
+    // Honour the same opt-out FIM uses: a language the operator has
+    // excluded from ghost text should not get tab-through edits either.
+    const off = cfg.get<string[]>("disabledLanguages", []);
+    if (off.includes(editor.document.languageId)) return;
     if (this.units.length < 2) return; // support needs two edits; save the roundtrip
 
     const doc = editor.document;
     const text = doc.getText();
-    if (Buffer.byteLength(text, "utf8") > MAX_TEXT_BYTES) return;
+    if (bytes(text) > MAX_TEXT_BYTES) return;
 
     this.inflight?.abort();
     const ctrl = new AbortController();
@@ -174,20 +191,41 @@ export class NextEditController implements vscode.Disposable {
       );
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
-      // Unreachable daemon must never nag on the typing path; the FIM
-      // status bar already tells the story.
+      // An unreachable daemon must never nag on the typing path — the
+      // FIM status bar already tells that story. A 4xx is the opposite
+      // case: the daemon is up and healthy-looking while it refuses
+      // everything we send, which means WE built a bad request. Left
+      // silent, the lane dies invisibly behind a green status bar.
+      // History is the only state that can carry a request-shaped
+      // fault forward, so drop it and say so, once.
+      const status = e instanceof DaemonError ? e.status : undefined;
+      if (status !== undefined && status >= 400 && status < 500) {
+        this.units = [];
+        this.coalescer.reset();
+        if (!this.warnedBadRequest) {
+          this.warnedBadRequest = true;
+          console.error("next-edit: daemon refused the request, edit history cleared:", e);
+          vscode.window.setStatusBarMessage(
+            "svrn fim: next-edit history reset (daemon refused a request)",
+            4000,
+          );
+        }
+        return;
+      }
       if (!(e instanceof DaemonError)) console.error("next-edit:", e);
       return;
     }
     if (ctrl.signal.aborted || doc.version !== version) return;
     if (result.edits.length === 0) return;
-    // Model proposals have no rule_key; suppress per detected pattern
-    // (needle) so Esc quiets that pattern, not the whole lane.
+    // Model proposals have no rule_key; suppress per detected SHAPE
+    // (the gate's reason) rather than per needle. The needle is the
+    // longest common substring of the last two edits' surroundings, so
+    // it is near-unique per proposal — keying on it means Esc suppresses
+    // something that will never be asked again, and the user keeps
+    // dismissing the same category forever.
     const ruleKey =
       result.debug?.rule_key ??
-      (result.engine === "model"
-        ? `model:${result.debug?.model?.needle ?? result.debug?.model?.reason ?? ""}`
-        : "");
+      (result.engine === "model" ? `model:${result.debug?.model?.reason ?? "pattern"}` : "");
     if (this.suppressed.has(ruleKey)) return;
 
     const queue = buildQueue(text, result.edits);
@@ -352,3 +390,4 @@ function trunc(s: string | null | undefined): string {
   const v = s ?? "?";
   return v.length > 18 ? `${v.slice(0, 17)}…` : v;
 }
+
