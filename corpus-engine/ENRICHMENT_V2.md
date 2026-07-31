@@ -1,9 +1,11 @@
-# Enrichment Atlas v2.2 — Plan of Record
+# Enrichment Atlas v2.3 — Plan of Record
 
 _Living document. Last substantive update: 2026-05-27 after the
 architecture-over-Enron substrate push (added `Asset` atom variant,
 `EdgeType::Attaches`, `Entity.provenance` field; SCHEMA_VERSION
-2.0 → 2.1 → 2.2)._
+2.0 → 2.1 → 2.2). Since then `AtomsFile::SCHEMA_VERSION` has moved to
+`2.3` (added `Entity.attributes` for the deterministic `tabular_atoms`
+extractor) — see `atoms.rs:1066-1086` for the full version history._
 
 This doc tracks the stage-by-stage rollout of the v2 enrichment pipeline.
 It is authoritative for the **status of each landing** and the
@@ -19,15 +21,18 @@ sync with this file; this file is the durable one.
 ## Where the atlas lives in the stack
 
 The enrichment pipeline is a v2 layer on top of `corpus-engine`'s
-document store. It produces a typed-graph atlas — eight atom types
+document store. It produces a typed-graph atlas — eleven atom types
 (Entity, State, Relation, Event, Claim, Question, Configuration,
-**Asset**) plus eight edge types (Involves, Transition, Causes,
-Grounds, Tension, Composes, Configures, **Attaches**) plus the
-cross-corpus + Gap-B typed-extension families — that supports queries
-beyond claim-and-question retrieval: trajectories, relational
-dynamics, event sequences, configurational readings, **binary-
-attachment traversal** (Asset atoms point at the content-addressed
-store under `<corpus>/assets/`).
+ArgumentReconstruction, Position, Opposition, **Asset**; see
+`AtomEnvelope` at `atoms.rs:987`) plus fourteen edge types: seven
+intra-corpus (Involves, Transition, Causes, Grounds, Tension,
+Composes, Configures), three cross-corpus (Grounding, Framing,
+Provenance), and four Gap-B/AD-2 typed-extension edges (EvidenceFor,
+Concedes, OpposesIn, **Attaches**; see `EdgeType` at `edges.rs:45`) —
+that supports queries beyond claim-and-question retrieval:
+trajectories, relational dynamics, event sequences, configurational
+readings, **binary-attachment traversal** (Asset atoms point at the
+content-addressed store under `<corpus>/assets/`).
 
 The Phase 4 multi-origin reconciliation primitive
 (`corpus-engine/src/enrichment/reconciliation/`) operates on
@@ -81,57 +86,38 @@ from 21 % to 0 %.
 | **Phase C Step 9 — Schema validation + cross-corpus review** | The spec §12 audit protocol ships as a computed-on-demand observability surface. New `corpus-engine/src/enrichment/atlas/schema_validation.rs` (~900 LOC) defines `SchemaValidationReport` across 8 dimensions — extraction coverage, enrichment-depth distribution, confidence histogram, atom-type utilisation, orphan analysis, discourse-act distribution, cross-corpus connectivity, deterministic gap counts. Each dimension emits both value (numbers + histograms) and **stable gap signatures** (`coverage:zero:X`, `utilisation:under:X`, `confidence:low_fraction_over_20pct`, `orphans:fraction_over_30pct`, `discourse:dominance:X`, `cross_corpus:bridge_coverage_under_5pct`, `gaps:ungrounded_claim_over_50pct`, `gaps:transition_without_trigger_over_80pct`). `compare_across_corpora` aggregates signatures from N reports: signatures present in ≥ 2 corpora land in `convergent_gaps` as **schema-revision candidates** with targeted recommendations per signature; signatures present in exactly one corpus land in `idiosyncratic_gaps` as **prompt-tuning candidates**. New CLIs `sovereign enrich schema-report <corpus> [--json]` (single-corpus table + writes `atlas/schema_validation.json`) and `sovereign enrich schema-review <a> <b> ...` (cross-corpus convergence surface). 11 new analyzer tests + 8 new CLI parse_args tests. Smoke on `brothers_karamazov` surfaced 3 live gap signatures: `coverage:zero:Configuration` (Phase 8 not re-run after last resolve), `utilisation:under:Configuration` (same cause), and `gaps:transition_without_trigger_over_80pct` — 6/6 transitions lack trigger events, a real systematic finding that Phase 3b never links Events to Transitions and is a schema-revision candidate the moment a second corpus shows the same pattern. | `atlas/schema_validation.rs` (new), `atlas/mod.rs` (re-exports), `sovereign-cli/src/enrich_cmd/schema_review.rs` (new CLI — both schema-report + schema-review drivers) |
 | **End-to-end SEP validation — Process Philosophy article** | Validated the philosophy domain path end-to-end on a real SEP article. Sliced 80 lance-indexed chunks for `plato.stanford.edu/entries/process-philosophy/` into a single source file, ran the full pipeline on a 5-section subset: init → seed (2 seed entities) → extract (5/5 first-pass, 17 questions) → cluster-atlas (4 clusters across claim/event facets) → name-atlas-clusters (LLM labels: "Process philosophy argues reality's primary units are dynamic organizations", "Traditional Western metaphysics prioritizing static substances over dynamic processes", etc) → atlas-resolve `--phase all` (12 entities, 8 events, 8 states, 5 relations, 22 claims, 14 questions, 59 edges, 6 trajectories) → atlas-tensions → atlas-gaps (16 gaps) → atlas-configuration (**3 Phase 8 configurations: "Parmenidean static bias as dialectical hinge" conf 0.85, "Exhaustive ontology grid: static vs dynamic" conf 0.78, "Methodological tool-critique trajectory" conf 0.72** — all three match the structural patterns the philosophy Phase 8 prompt explicitly names) → schema-report (flagged `confidence:low_fraction_over_20pct` + `gaps:transition_without_trigger_over_80pct`). **Cross-corpus schema-review across `brothers_karamazov` + `process_philosophy` surfaced one convergent gap:** `gaps:transition_without_trigger_over_80pct` present in both corpora → **schema revision candidate** with the recommendation "Phase 3b should treat trigger_event as required or the schema should drop the field." **`atlas-cross-corpus bk × process_philosophy`** returned 0 bridges with full glass-box rejection output — genuinely disjoint entity vocabularies, correctly detected. The entire v2 enrichment stack + the philosophy domain generalisation + the §12.5 cross-corpus convergence protocol all work end-to-end on real data. | `/tmp/sep_process_philosophy.txt` (extracted source), `~/.sovereign/enrichment/process_philosophy/`, `~/.sovereign/indexes/process_philosophy/atlas/` |
 
-### ❌ Next up — Landing 5: Drift-variant merging + LLM tension classifier
+### ✅ Landing 5 residuals — drift-variant merging + LLM tension classifier shipped; sketch→atom mapping still open
 
 Landing 4 cracked the connectivity problem for attribution and
-relations, but left two residuals worth closing:
+relations, leaving three residuals; two of the three have since
+shipped:
 
-1. **Drift-variant merging in Phase 3a.** entity-0002 (Fyodor
-   Pavlovich) and entity-0007 (Fyodor Kárazóv drift) stayed
-   separate after Phase 3a, creating duplicate Fyodor-Adelaida
-   relations (0001 vs 0011). Rule 3 needs a path that fires on
-   shared first-token + high description cosine + single shared
-   long-token. Currently requires 2 shared long-tokens which
-   excludes this case. The fix is ~15 lines in `resolution.rs`
-   + one targeted test; the atlas then has one Fyodor atom
-   instead of a canonical + ghost.
-2. **LLM tension classifier** (carried from the Landing 3/4 plan).
-   Consume `atlas/tension_candidates.json`, classify each pair
-   via a pipeline-specific Phase 6 prompt (claim-vs-claim,
-   claim-vs-state, relation-contrast variants), emit real
-   `Tension` edges on `atlas/edges.json` with `sub_question` and
-   `confidence`. The current candidate count is thin (1 pair on
-   the 5-chapter subset) so a preliminary test should probably
-   run a full-corpus extract first to populate the candidate
-   pool.
+1. **Drift-variant merging in Phase 3a — shipped.** See the Landing 5
+   row above (Phase 3a Rule 3.5 + classifier fold/token fallback):
+   entity-0007 (Fyodor Kárazóv drift) now merges into entity-0002
+   (Fyodor Pavlovich) as an alias.
+2. **LLM tension classifier — shipped.** `atlas/analysis/tension_classifier.rs`
+   ("Phase 6 LLM Tension classifier") consumes
+   `TensionCandidate` entries from `tensions.rs` and promotes
+   genuine pairs to `Edge { edge_type: Tension, provenance:
+   LlmPairwise }`, driven by `sovereign-cli-llm`'s
+   `enrich_cmd/atlas_tensions_classify.rs` CLI.
 3. **Plumb the sketch → atom mapping through Phase 3b** so
    intra-cluster candidates (claim pairs inside a Phase 2
-   cluster) join the candidate pool. Carried over.
-
-| File | Change |
-|---|---|
-| `resolution.rs::find_merge_target` | New case: if Rule 3's shared-token count is 1 AND first_token_matches AND description cosine ≥ 0.92, fire a merge. Single-long-token guard stays (Ivan vs Ilya). |
-| `pipelines/literary_atlas.rs` + assets | `phase6_{claim_vs_claim,claim_vs_state,relation_contrast}.md`. |
-| `corpus-engine/src/enrichment/pipeline/trait_def.rs` | `compose_phase6_atlas` + `parse_phase6_atlas` methods on the Pipeline trait (with defaults). |
-| `corpus-engine/src/enrichment/atlas/analysis/tensions.rs` | New `classify_candidates_with_llm(...)` returning `Vec<Edge>` with `edge_type: Tension, provenance: LlmPairwise`. |
-| `sovereign-cli/src/enrich_cmd/atlas_tensions.rs` | `--classify` flag; writes edges into `atlas/edges.json` via a read-merge-write pattern. |
-| `resolution.rs::resolve_step_3b` | Expose a `sketch_to_atom` mapping in `Step3bOutput` so the intra-cluster signal can traverse from Phase 2 SketchRefs to Claim atom ids. |
-
-Tests: `phase_3a_merges_drift_variant_via_single_long_token_and_high_cosine`,
-`classify_candidates_emits_tension_edge_for_opposed_claims`,
-`classify_candidates_refuses_to_emit_when_pair_agrees`,
-`sketch_to_atom_mapping_roundtrips_through_step_3b`.
+   cluster) join the candidate pool. No `sketch_to_atom` symbol
+   found in the codebase as of this pass — still carried over,
+   unverified whether superseded by other machinery.
 
 ### ✅ Phase A Step 5 — shipped with Landing 5 numbering above.
 
-### ❌ Then — Phase A Step 6 (traversal + brief assembler)
+### ✅ Phase A Step 6 — shipped above (traversal engine + brief assembler MVP)
 
-Closes the loop: query classifier, brief assembler that calibrates
-language on `enrichment_depth`, `sovereign enrich query` dispatch,
-20-question diagnostic battery, `validate-atlas` scorer. Manifest
-pass writes `atlas/manifest.json`. Performance targets: single-corpus
-< 60 ms, cross-corpus < 120 ms on M2 Max (exclusive of LLM
-inference).
+See the "Phase A Step 6" row in the Shipped table above:
+`atlas_traversal/{mod,classifier,engine,brief}.rs` +
+`sovereign enrich atlas-query`. The manifest pass (`atlas/manifest.json`)
+and the 20-question `validate-atlas` diagnostic battery from the
+original plan are not confirmed shipped in this pass — not re-verified
+here.
 
 ### ❌ Deferred — Phase 3b′ LLM atom interpretation
 
@@ -140,18 +126,18 @@ when we flip `enrichment_depth = Extracted → Interpreted` for atoms
 whose deterministic resolution is ambiguous. Needed for Phase 5, not
 for shipping a usable atlas.
 
-### ❌ Phase C — Generalisation
+### ✅ Phase C — Generalisation — shipped above (Steps 7, 8, 9)
 
-- **Step 7 — Philosophy domain (SEP):** new `philosophy_atlas`
-  pipeline + prompt set. `runs_configuration_phase() == true`. Test
-  corpus: one SEP article ("Compatibilism"). Acceptance: the same
-  runner handles philosophy with no domain branches.
-- **Step 8 — Cross-corpus edges:** three detectors (Grounding,
-  Framing, Provenance) collapsed in one file initially. Retroactive
-  match via `atlas/pending_citations.json` when a new corpus lands.
-- **Step 9 — Schema review:** run §12 validation across enriched
-  corpora; propose schema revisions only where ≥ 2 corpora show the
-  same gap.
+- **Step 7 — Philosophy domain (SEP):** shipped as `philosophy_atlas`
+  (see the Shipped table row above); validated end-to-end on a real
+  SEP article ("Process Philosophy"), not just "Compatibilism" as
+  originally planned.
+- **Step 8 — Cross-corpus edges:** shipped as `atlas/cross_corpus.rs`
+  (Grounding detector only — Framing and Provenance detectors are not
+  confirmed shipped in this pass). Retroactive match via
+  `atlas/pending_citations.json` not re-verified here.
+- **Step 9 — Schema review:** shipped as `atlas/schema_validation.rs`
+  + `sovereign enrich schema-review`.
 
 ---
 

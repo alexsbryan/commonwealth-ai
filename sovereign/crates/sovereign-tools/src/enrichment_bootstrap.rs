@@ -40,7 +40,8 @@ use crate::local_corpus::watched::enrich::TieredDeps;
 /// holds inside [`TieredDeps`]. `None` when the store can't be opened —
 /// tiered enrichment then degrades to dispatch-plan-only / legacy fallback.
 ///
-/// `FolderTieredProvider` (not `ConvTieredProvider`) is deliberate: its
+/// `FolderTieredProvider` is the sole provider (the conversation-only
+/// `ConvTieredProvider` was deleted 2026-07-30, zero construction sites): its
 /// `finalize_corpus` override runs the vault-wide synthesis pass needed for
 /// `vault_themes`, and its `enrich_conversation` accepts an arbitrary
 /// `conv_uuid` so it serves both conv corpora (chat-uuid grouping) and

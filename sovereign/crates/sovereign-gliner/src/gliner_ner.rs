@@ -16,8 +16,10 @@
 //! Architecture:
 //! - `gline-rs` (Apache-2.0, v1.x) wraps `ort` for ONNX inference.
 //! - Model + tokenizer files load from `~/.sovereign/models/gliner/`
-//!   on first instantiation. Default: `gliner_small-v2.1` (~150MB,
-//!   ~10k tok/s CPU). Operator can drop in a larger model and point
+//!   on first instantiation. Default: `gliner_small-v2.1` (591MB on
+//!   disk, measured 2026-07-30 — the ~150MB figure previously here was
+//!   wrong; SP1 measured ~424 words/s on SEP doc chunks in-process).
+//!   Operator can drop in a larger model and point
 //!   `SOVEREIGN_GLINER_MODEL_DIR` at it.
 //! - Threshold default `0.6` (validation showed 0.5 admitted noise
 //!   on common nouns; 0.6 keeps long-tail names like

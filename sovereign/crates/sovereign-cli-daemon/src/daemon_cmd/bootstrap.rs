@@ -213,10 +213,10 @@ pub(super) fn build_corpus_engine(
         // shared builder (same `FolderTieredProvider` the desktop's embedded
         // daemon wires) so both stay in lockstep. Failing to open the store
         // is non-fatal: the tiered runner falls back to dispatch-plan-only
-        // mode when no provider is injected. `FolderTieredProvider` (not
-        // `ConvTieredProvider`) is deliberate — its `finalize_corpus`
-        // override runs the vault-wide synthesis pass needed for
-        // `vault_themes`; see the builder's docs.
+        // mode when no provider is injected. `FolderTieredProvider` is the
+        // sole provider — its `finalize_corpus` override runs the
+        // vault-wide synthesis pass needed for `vault_themes`; see the
+        // builder's docs.
         let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
             data_dir,
             Arc::clone(&provider),

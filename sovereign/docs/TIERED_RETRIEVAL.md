@@ -120,34 +120,50 @@ Existing `inference.embed_batch` loop in `document_asset.rs::ingest`
 
 ### T2 — lean entity extraction + action atoms
 
-`build_skeleton` (refactored 2026-05-22 in `document_asset.rs`):
+`build_skeleton` (`document_asset.rs`):
 
 1. Splits chunks into batches of 4
 2. Dispatches per-batch entity extraction via
    `futures::stream::iter(...).buffered(T2_BATCH_CONCURRENCY)`
    (default 6)
-3. Each batch calls Speed::Slow LLM with a `lark_grammar`-enforced
-   lean schema: exactly N newline-separated lines of comma-
-   separated capitalised entity names
-4. Merges results sequentially into `entity_mentions`,
+3. **NER fast path first** (`document_asset.rs:1814-1831`): if a
+   `dyn EntityExtractor` was injected via `.with_entity_extractor()`
+   (backed by the same `LazyGlinerExtractor`/GLiNER model as the
+   conversation path — see below), each batch's passage runs through
+   it off the executor (`spawn_blocking`, CPU-bound ONNX) for
+   zero-LLM-token extraction. An empty result is untrusted — a
+   not-yet-warm extractor also returns empty — so it falls through to
+   the LLM path below rather than silently emptying the window.
+4. **LLM fallback** (`document_asset.rs:1858-1893`, only when no
+   extractor is configured or it returned nothing): calls the
+   inference engine via `Workload::EnrichBulk` (Fast-class routing —
+   changed from `ExtractDurable` 2026-07-24 for real fan-out
+   concurrency; **not** `Speed::Slow`) with a `lark_grammar`-enforced
+   lean schema: one comma-separated line of capitalised entity names
+   per batch.
+5. Merges results sequentially into `entity_mentions`,
    `entity_kinds`, `sections`, `structural_moments`
-5. Ranks `main_entities` by `presence_rate`
-6. Calls `extract_action_atoms` for the top entities (6 Fast-slot
+6. Ranks `main_entities` by `presence_rate`
+7. Calls `extract_action_atoms` for the top entities (6 Fast-slot
    calls)
-7. Returns a *partial* `DocumentSkeleton` with `overview` and
+8. Returns a *partial* `DocumentSkeleton` with `overview` and
    `segments` empty — those are T3's responsibility
 
-> **Dual-layer entity extraction on the conversation path (added
-> 2026-05-26).** The LLM + `lark_grammar` extraction above is the
-> *document-asset* T2. For **conversations**, a second source layers on:
-> a real GLiNER ONNX model (`gline-rs`, `gliner_small-v2.1`, feature
-> `gliner-ner`, module `sovereign-tools/src/gliner_ner.rs`) runs per-chunk
-> NER, and `sovereign-core/src/conv_entity_graph.rs::from_layered` merges
+> **GLiNER now runs on both the document and conversation paths.**
+> Originally conversation-only (added 2026-05-26), GLiNER's
+> `LazyGlinerExtractor` (`gline-rs`, `gliner_small-v2.1`, feature
+> `gliner-ner`, module `sovereign-tools/src/gliner_ner.rs`) is now also
+> wired into the document-asset T2 above as the primary NER path (step
+> 3), with the LLM `lark_grammar` extraction demoted to a fallback for
+> windows where GLiNER whiffs or isn't loaded
+> (`document_asset.rs:1814-1893`). On the **conversation** path GLiNER
+> still runs per-chunk, and
+> `sovereign-core/src/conv_entity_graph.rs::from_layered` merges
 > RAPTOR's cluster-summary `primary_entities` with the GLiNER per-chunk
 > mentions into one entity graph (orthogonal signals: cluster-scale
 > distinctiveness + raw NER). The hybrid retrieval scorer
 > (`0.6·cosine + 0.4·jaccard`, MMR, `topic_context`) in
-> `runtime/retrieval.rs` is **default-on** since this landing. See
+> `runtime/retrieval/history.rs` is **default-on** since this landing. See
 > [`../../corpus-engine/ENRICHMENT.md`](../../corpus-engine/ENRICHMENT.md)
 > for how this fits the three-system picture.
 

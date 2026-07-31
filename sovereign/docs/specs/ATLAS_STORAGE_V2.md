@@ -379,7 +379,13 @@ async on their own graphs), the actual Stage-1 touch points outside
 `atlas_context.rs` are:
 
 - `runtime/retrieval.rs` — **5 sites**: `atoms_of_kind` ×3 (`:801/:910/:1247`),
-  `atom(pid)` ×1 (`:923`), the `atlas_navigate(...)` call (`:1841`).
+  `atom(pid)` ×1 (`:923`), the `atlas_navigate(...)` call (`:1841`). _(Stale
+  as a current pointer: `runtime/retrieval.rs` was later split into the
+  `runtime/retrieval/` directory, `atoms_of_kind`/`atom` now live on
+  `AtlasGraph` in `atlas_context.rs:211/199`, and the sync `atlas_navigate`
+  was itself deleted in Phase B — replaced by `atlas_navigate_ann`
+  (`atlas_context.rs:996`), called from `runtime/retrieval/atlas_grounding.rs`.
+  Kept here as the historical record of the Stage-1 sweep.)_
 - `sovereign-tools/atlas_context_manager.rs` — **3 metric reads** (`:417/:418/
   :945`); `atom_count`/`edge_count` can stay **sync** (cached at graph-open), so
   these need not go async at all.
@@ -449,7 +455,8 @@ gated after Stage 1, but scope it as the larger of the two.
 - v1 store to evolve: `corpus-engine/.../atlas/archive.rs`
   (`build_and_write_archive` → `build_and_write_store`),
   `sovereign-core/src/atlas_context.rs` (reader),
-  `runtime/retrieval.rs` (consumers).
+  `runtime/retrieval/atlas_grounding.rs` (consumers; `runtime/retrieval.rs`
+  was later split into the `runtime/retrieval/` directory).
 - Federation: `corpus-engine/src/meta_atlas/{builder.rs,index.rs,bridge/}`,
   `cross_corpus.rs`.
 - Distribution: `corpus-engine/src/snapshot.rs` (`SnapshotManifest`,

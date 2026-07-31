@@ -329,7 +329,7 @@ max_tokens_budget, completion_tokens}`; the SettingsPanel
 
 The slot trims its own decode; the chat layer trims its own prompt.
 Two arms gate `maybe_compact_dropped_history`
-(`sovereign-core/src/runtime/retrieval.rs`):
+(`sovereign-core/src/runtime/retrieval/history.rs:106`):
 
 - **Turn-count arm** — `CONV_HISTORY_TURNS = 8`. Fires when ≥ 2
   messages would otherwise be dropped. Default everyday path.

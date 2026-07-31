@@ -757,7 +757,7 @@ impl Runtime {
     /// prompt-assembly path surfaces per-conv briefings + signposts
     /// alongside the raw chunk block. The daemon wires this with the
     /// same `Arc<SqliteStateStore>` it hands to the
-    /// `ConvTieredProvider` writer — one store, two views.
+    /// `FolderTieredProvider` writer — one store, two views.
     pub fn with_conv_tiered_reader(
         mut self,
         reader: Arc<dyn crate::conv_tiered::ConvTieredReader>,

@@ -99,7 +99,10 @@ impl FieldModelEngine {
 
         let start_phase = checkpoint.next_phase();
         if start_phase == EnrichmentPhase::Complete {
-            return self.compute_stats(index).await;
+            // No per-table stats are computed anywhere (the old
+            // `compute_stats` was a zeros stub) — completion returns the
+            // same default the skeleton records.
+            return Ok(FieldModelStats::default());
         }
 
         if checkpoint.interrupted {
@@ -328,7 +331,10 @@ impl FieldModelEngine {
         };
 
         // ── Finalize ──────────────────────────────────────────────────
-        let stats = self.compute_stats(index).await?;
+        // `field_stats` in the skeleton has always been zeros (the old
+        // `compute_stats` stub never queried anything) — keep the shape,
+        // state the truth.
+        let stats = FieldModelStats::default();
 
         // Write JSON skeleton if the domain requests it.
         if let SkeletonStorage::JsonAndLance = self.domain.skeleton_storage() {
@@ -770,11 +776,6 @@ impl FieldModelEngine {
             labeled_count: total,
         });
         Ok(clusters)
-    }
-
-    async fn compute_stats(&self, _index: &CorpusIndex) -> Result<FieldModelStats> {
-        // TODO: Query tables for actual counts.
-        Ok(FieldModelStats::default())
     }
 
     fn write_json_skeleton(

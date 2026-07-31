@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Smoke test: load jina-reranker-v3-Q6_K.gguf via StandaloneReranker,
-//! score a handful of (query, doc) pairs, print the scores. Run via:
+//! Smoke test: load a reranker GGUF via StandaloneReranker, score a
+//! handful of (query, doc) pairs, print the scores. Run via:
 //!
 //!     cargo run --release -p sovereign-inference --example rerank_smoke \
-//!         -- /home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf
+//!         -- sovereign/models/qwen3-reranker-0.6b-q8_0.gguf
+//!
+//! Default model is the official Qwen3-Reranker (YesNoLogit protocol —
+//! the working family; the public jina-v3 GGUF drops its scoring head,
+//! see rerank_slot.rs protocol notes).
 //!
 //! Expectation: docs clearly relevant to the query score higher than
 //! clearly irrelevant ones. Absolute magnitude is model-specific
@@ -18,7 +22,7 @@ use std::env;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let path = args.get(1).cloned().unwrap_or_else(|| {
-        "/home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf".to_string()
+        "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string()
     });
     eprintln!("loading reranker: {path}");
     let reranker =

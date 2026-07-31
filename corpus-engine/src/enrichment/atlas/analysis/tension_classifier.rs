@@ -29,10 +29,11 @@
 //! - **Schema-stable.** [`Phase6Classification`] mirrors the JSON
 //!   the model emits exactly; serde-derived for round-trip with the
 //!   model and with cache files. The schema is grammar-constrained
-//!   via [`phase6_classifier_response_schema`] but the daemon's
-//!   sampler is a known no-op (see
-//!   `sovereign-inference/embedded.rs:3140`), so the parser does
-//!   the actual enforcement.
+//!   via [`phase6_classifier_response_schema`], enforced at sampling
+//!   time by the llguidance engine (sovereign-inference
+//!   `embedded/sampler.rs` — the 2026-05-22 migration; the old
+//!   in-house sampler no-op is gone). The parser stays as the
+//!   defence-in-depth layer.
 
 use serde::{Deserialize, Serialize};
 

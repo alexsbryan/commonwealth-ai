@@ -7,8 +7,10 @@
 //! 1. **K-means** clusters the chunk embeddings into ~50 leaf groups
 //!    (target avg ~20 chunks per cluster, k = max(2, n/20)).
 //! 2. For each leaf cluster:
-//!    - Pick 3-5 verbatim **quote spans** from member chunks (sentences
-//!      with highest cosine similarity to the cluster centroid).
+//!    - Pick 3-5 verbatim **quote spans** from member chunks (V1
+//!      heuristic: longest sentence per chunk above a length floor,
+//!      deduped — NOT cosine-to-centroid; see
+//!      `extract_quote_spans_for_cluster`).
 //!    - One Slow-slot LLM call produces a paraphrase **summary** and a
 //!      list of `primary_entities`. Grammar forbids `"` in the summary
 //!      so the hallucination-detector contract holds downstream.
@@ -966,9 +968,10 @@ fn parse_cluster_summary(text: &str) -> Option<ParsedSummary> {
     })
 }
 
-/// Pick the highest-cosine-to-centroid sentences from the member
-/// chunks as verbatim quote spans. These become the node's
-/// hallucination-safe quotable surface.
+/// Pick verbatim quote spans from the member chunks — the node's
+/// hallucination-safe quotable surface. V1 is a longest-sentence
+/// heuristic (embeddings/centroid params are reserved for a future
+/// cosine re-rank, hence the underscore names).
 fn extract_quote_spans_for_cluster(
     member_chunks: &[&ChunkInput],
     _member_embeddings: &[&Vec<f32>],

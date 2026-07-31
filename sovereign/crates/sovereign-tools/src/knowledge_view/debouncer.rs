@@ -239,6 +239,15 @@ async fn run_enrichment(
     views: &Arc<RwLock<HashMap<String, ViewEntry>>>,
     view_id: &str,
 ) {
+    // Atlas-typed views (Conversational) are enriched by the v2 atlas
+    // pipeline; running `FieldModelEngine` for them burns an LLM pass
+    // whose skeleton output nothing reads (the read side keys off
+    // `atlas/atoms.json` — same predicate as `manager.rs`).
+    if view_id == ViewKind::Conversational.id() {
+        tracing::debug!(view_id, "skipping v1 field-model pass for atlas-typed view");
+        return;
+    }
+
     let (recipe, lock) = {
         let guard = views.read().await;
         match guard.get(view_id) {

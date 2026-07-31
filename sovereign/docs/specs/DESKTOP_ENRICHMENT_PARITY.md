@@ -76,7 +76,9 @@ load-bearing paths fired locally (`atom_enum_overview count=16`,
   ambient step can't call `format_landscape`. Putting the renderer beside its
   type at the lowest layer is the correct fix (the tools `format_landscape`
   predates it; converging it is a noted follow-up). The shared step
-  `Runtime::splice_ambient_field_digests` (in `runtime/retrieval.rs`) runs in
+  `Runtime::splice_ambient_field_digests` (in
+  `runtime/retrieval/turn_prepass.rs:106`, moved here by the
+  `runtime/retrieval.rs` module split) runs in
   BOTH `turn.rs` and `streaming.rs` after `splice_landscape_digests`, scoped to
   `enabled_corpora`. **Not harness-gated**: it's shared core, so bench and
   desktop gain it identically — there's no seam to diverge, so Phase 0 correctly

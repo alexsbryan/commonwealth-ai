@@ -167,28 +167,34 @@ serves attached docs, conversations, and vaults.
 `gliner_small-v2.1` (~150 MB) from `~/.sovereign/models/gliner/`; module
 `sovereign-tools/src/gliner_ner.rs`.
 
-**Scope today:** GLiNER runs per-chunk NER on the **conversation** path,
-*layered on top of* RAPTOR's cluster-summary `primary_entities`
+**Scope today:** GLiNER runs on **both** the conversation and
+document-asset paths. On the **conversation** path it runs per-chunk
+NER *layered on top of* RAPTOR's cluster-summary `primary_entities`
 (`sovereign-core/src/conv_entity_graph.rs::from_layered` merges the two
 orthogonal signals — RAPTOR captures cluster-scale distinctiveness,
-GLiNER captures raw per-chunk NER). The **document-asset** T2 still uses
-the `Speed::Slow` LLM + `lark_grammar` extraction in
-`document_asset.rs::build_skeleton` — GLiNER has not (yet) replaced it
-there.
+GLiNER captures raw per-chunk NER). On the **document-asset** T2,
+`document_asset.rs::build_skeleton` now tries the same
+`LazyGlinerExtractor` first, off the executor, for zero-LLM-token
+extraction (`document_asset.rs:1814-1831`); only when the extractor is
+absent or returns nothing does it fall back to a `lark_grammar`-enforced
+LLM call routed via `Workload::EnrichBulk` (Fast-class, not
+`Speed::Slow`) (`document_asset.rs:1858-1893`).
 
 ### Entity-aware hybrid retrieval scorer (conversation history)
 
-In `sovereign-core/src/runtime/retrieval.rs`:
+In `sovereign-core/src/runtime/retrieval/history.rs` (moved here by the
+`runtime/retrieval.rs` module split):
 `0.6·cosine + 0.4·jaccard(entity-overlap)` (`HYBRID_COSINE_WEIGHT` /
-`HYBRID_JACCARD_WEIGHT`), then **MMR** (λ = 0.5) for diversity, with
-`topic_context` query enrichment (`context.rs::update_topic_context`, a
-Fast-slot classifier appends `[topic:…][domain:…]` before embedding).
+`HYBRID_JACCARD_WEIGHT`, `history.rs:602-603`), then **MMR** (λ = 0.5)
+for diversity, with `topic_context` query enrichment
+(`context.rs::update_topic_context`, a Fast-slot classifier appends
+`[topic:…][domain:…]` before embedding).
 
 **Default-ON since 2026-05-26** (the `marathon_graceful` spike outcome):
-`maybe_retrieve_relevant_history` runs unless
+`maybe_retrieve_relevant_history` (`history.rs:431`) runs unless
 `SOVEREIGN_HISTORY_RETRIEVAL=0` is set to disable it for A/B compares
-(`retrieval.rs:2942-2944`). When GLiNER isn't loaded it falls back to
-pure cosine. _(Note: the function's own docstring at `retrieval.rs:2929`
+(`history.rs:444`). When GLiNER isn't loaded it falls back to pure
+cosine. _(Note: the function's own docstring at `history.rs:423`
 still says "gated on =1 for the spike phase" — that line is stale; the
 code below it is the truth.)_
 
@@ -355,10 +361,12 @@ it was enriched:
    RAPTOR + GLiNER corpora are **conversation, attached-doc, and
    Obsidian / folder-watch**.
 
-2. **GLiNER is currently conversation-scoped.** It is a real ONNX model
-   (above), but it augments the **conversation** entity graph today; the
-   attached-document T2 still extracts entities with a grammar-constrained
-   LLM call. Don't assume "tiered ⇒ GLiNER everywhere" yet.
+2. **GLiNER now runs on both paths.** It is a real ONNX model (above);
+   it augments the **conversation** entity graph, and it is also the
+   primary NER path for the attached-document T2
+   (`document_asset.rs::build_skeleton`), with the grammar-constrained
+   LLM call demoted to a fallback for windows where GLiNER isn't loaded
+   or returns nothing (`document_asset.rs:1814-1893`).
 
 ---
 

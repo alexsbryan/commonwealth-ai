@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Conversation tiered-retrieval provider — the concrete impl of
+//! Folder/conversation tiered-retrieval provider — home of
+//! `FolderTieredProvider`, the sole concrete impl of
 //! `corpus_engine::enrichment::tiered::TieredEnrichmentProvider` that
-//! the daemon injects into `CorpusEngine` at startup.
+//! reaches production (constructed only in
+//! `enrichment_bootstrap::build_folder_tiered_provider`, injected by
+//! both runners), plus the shared node-building helpers
+//! (`synthesize_tiny_node`, `raptor_node_to_row`, `persist_state`).
 //!
 //! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md`.
 //!
@@ -14,31 +18,16 @@
 //! - corpus-engine therefore owns only the trait + the dispatch
 //!   loop; sovereign-tools owns the heavy work + persistence.
 //!
-//! ## v0 scope (this session)
+//! Bucket shape: Tiny (<8 chunks) synthesizes a single
+//! `ConvRaptorNodeRow` from the title + mean(chunk_embeddings) with no
+//! LLM call; every other bucket builds real RAPTOR trees and persists
+//! via `save_conv_raptor_nodes`, with a `conv_skeletons` row stamped
+//! `Ready`/`Failed` per conversation.
 //!
-//! - **Tiny bucket (<8 chunks)**: synthesize a single
-//!   `ConvRaptorNodeRow` from `chunk.title` (the conversation title
-//!   from the claude.ai export) + mean(chunk_embeddings). No LLM
-//!   call. Spec opt-2.
-//! - **Non-Tiny buckets (Small/Medium/Large/LongTail)**: call
-//!   `build_raptor_atlas` with `Speed::Slow` (Phase A default), convert
-//!   each `RaptorNode` to `ConvRaptorNodeRow`, persist via
-//!   `save_conv_raptor_nodes`.
-//! - **State machine**: write a `conv_skeletons` row stamped `Ready`
-//!   when the per-conv pass succeeds, `Failed` if anything errored.
-//!
-//! ## Deferred to next session
-//!
-//! - Opt-1 (Fast slot routing for ≤30-chunk convs) — needs an
-//!   InferenceProvider wrapper that rewrites `preferred_speed`.
-//! - T2 entity graph via `extract_action_atoms` + `entity_graph::build`.
-//! - T3 motif extraction + classification.
-//! - T3 TextTiling segments.
-//!
-//! Today's landing gives operators a working baseline: re-run the
-//! conv-anthropic install and the `conv_raptor_nodes` table fills up
-//! with real per-conversation trees (Slow on every bucket — slower
-//! than the optimized budget, but it works end-to-end).
+//! A conversation-specific `ConvTieredProvider` used to live here too;
+//! it was deleted 2026-07-30 (zero construction sites — the folder
+//! provider serves both corpus shapes by calling `enrich_conversation`
+//! with `conv_uuid = corpus_id`).
 
 use std::sync::Arc;
 
@@ -60,121 +49,7 @@ use sovereign_store::sqlite::{
 };
 use uuid::Uuid;
 
-use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
-
-/// Concrete provider wiring the corpus-engine dispatch trait to the
-/// real RAPTOR builder + SQLite persistence.
-///
-/// ## Folder-corpus reuse convention
-///
-/// Watched-folder corpora reuse this provider's persistence shape
-/// (`conv_raptor_nodes` / `conv_motifs` / `conv_skeletons`) by calling
-/// `enrich_conversation` with `conv_uuid = corpus_id`. The bucket
-/// classification (`ConvBucket::classify(chunks.len())`) handles
-/// folder size variability — a 5-file folder takes the Tiny synthetic
-/// path; a 5000-chunk vault takes the LongTail RAPTOR path. The
-/// `FolderTieredProvider` sibling below wraps this with the folder
-/// runner from `corpus-engine::enrichment::tiered::run_folder_tiered_enrichment`.
-pub struct ConvTieredProvider {
-    store: Arc<SqliteStateStore>,
-    inference: Arc<dyn InferenceProvider>,
-}
-
-impl ConvTieredProvider {
-    pub fn new(store: Arc<SqliteStateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { store, inference }
-    }
-
-    pub fn into_handle(self) -> Arc<dyn TieredEnrichmentProvider> {
-        Arc::new(self)
-    }
-}
-
-#[async_trait]
-impl TieredEnrichmentProvider for ConvTieredProvider {
-    async fn enrich_conversation(
-        &self,
-        corpus_id: &str,
-        conv_uuid: &str,
-        chunks: Vec<EnrichmentChunkRow>,
-        embeddings: Vec<Vec<f32>>,
-        bucket: ConvBucket,
-    ) -> Result<()> {
-        let chunk_count = chunks.len();
-        let updated_at = Utc::now().timestamp();
-        let title = conv_title_from_chunks(&chunks);
-
-        let result: std::result::Result<Vec<ConvRaptorNodeRow>, Error> = match bucket {
-            ConvBucket::Tiny => Ok(synthesize_tiny_node(
-                corpus_id,
-                conv_uuid,
-                &title,
-                &chunks,
-                &embeddings,
-                updated_at,
-            )),
-            ConvBucket::Small | ConvBucket::Medium | ConvBucket::Large | ConvBucket::LongTail => {
-                build_raptor_rows(
-                    corpus_id,
-                    conv_uuid,
-                    &chunks,
-                    &embeddings,
-                    self.inference.clone(),
-                    updated_at,
-                )
-                .await
-            }
-        };
-
-        match result {
-            Ok(nodes) => {
-                if let Err(e) = self
-                    .store
-                    .save_conv_raptor_nodes(corpus_id, conv_uuid, &nodes)
-                    .await
-                {
-                    persist_state(
-                        &self.store,
-                        corpus_id,
-                        conv_uuid,
-                        ConvTieredState::Failed,
-                        chunk_count,
-                        Some(title.clone()),
-                        updated_at,
-                    )
-                    .await;
-                    return Err(Error::Database(format!(
-                        "conv_tiered: save_conv_raptor_nodes({corpus_id}, {conv_uuid}): {e}"
-                    )));
-                }
-                persist_state(
-                    &self.store,
-                    corpus_id,
-                    conv_uuid,
-                    ConvTieredState::Ready,
-                    chunk_count,
-                    Some(title),
-                    updated_at,
-                )
-                .await;
-                Ok(())
-            }
-            Err(e) => {
-                persist_state(
-                    &self.store,
-                    corpus_id,
-                    conv_uuid,
-                    ConvTieredState::Failed,
-                    chunk_count,
-                    Some(title),
-                    updated_at,
-                )
-                .await;
-                Err(e)
-            }
-        }
-    }
-}
+use crate::raptor_atlas::ChunkInput;
 
 async fn persist_state(
     store: &SqliteStateStore,
@@ -189,6 +64,10 @@ async fn persist_state(
         corpus_id: corpus_id.to_string(),
         conv_uuid: conv_uuid.to_string(),
         state: state.as_str().to_string(),
+        // `skeleton_json` / `segments_json` are VESTIGIAL: this is the sole
+        // production writer and it has always written `None` (columns exist
+        // in migrations.rs `conv_skeletons`). Kept pending the D3 schema
+        // decision — dropping columns isn't worth a migration before then.
         skeleton_json: None,
         overview,
         segments_json: None,
@@ -258,52 +137,6 @@ fn synthesize_tiny_node(
         created_at: updated_at,
     };
     vec![row]
-}
-
-/// Non-Tiny path: call the corpus-agnostic `build_raptor_atlas` then
-/// convert each `RaptorNode` to the conv-scoped `ConvRaptorNodeRow`
-/// shape.
-///
-/// Note on `ChunkInput.chunk_id` (u32) vs Lance row `id` (u64): the
-/// builder uses `chunk_id` as a position handle internally and to
-/// index into `embeddings`. For conv corpora this is the Lance row
-/// id, which historically fits in u32 well under the 4G ceiling.
-/// On the day a single conv corpus crosses that line, we'll need to
-/// widen ChunkInput; not load-bearing today.
-async fn build_raptor_rows(
-    corpus_id: &str,
-    conv_uuid: &str,
-    chunks: &[EnrichmentChunkRow],
-    embeddings: &[Vec<f32>],
-    inference: Arc<dyn InferenceProvider>,
-    updated_at: i64,
-) -> std::result::Result<Vec<ConvRaptorNodeRow>, Error> {
-    let raptor_chunks: Vec<ChunkInput> = chunks
-        .iter()
-        .map(|c| ChunkInput {
-            chunk_id: c.id as u32,
-            content: c.content.clone(),
-        })
-        .collect();
-
-    let nodes = build_raptor_atlas(
-        &inference,
-        &raptor_chunks,
-        embeddings,
-        DocumentTypeTag::Unknown,
-    )
-    .await
-    .map_err(|e| {
-        Error::Database(format!(
-            "conv_tiered: build_raptor_atlas({corpus_id}, {conv_uuid}): {e}"
-        ))
-    })?;
-
-    let mut rows = Vec::with_capacity(nodes.len());
-    for node in nodes {
-        rows.push(raptor_node_to_row(node, corpus_id, conv_uuid, updated_at)?);
-    }
-    Ok(rows)
 }
 
 fn raptor_node_to_row(
@@ -397,11 +230,12 @@ fn mean_vector(vectors: &[Vec<f32>]) -> Vec<f32> {
 
 use sovereign_core::conv_tiered::ConvMotifRow;
 
-/// Concrete tiered provider for watched-folder corpora. Persists into
-/// the same SQLite tables as `ConvTieredProvider` (conv_raptor_nodes /
-/// conv_motifs / conv_skeletons) under `conv_uuid = corpus_id`, plus
-/// builds + saves the TF-IDF motif index that conversation provider
-/// skips (folder briefings surface motifs as recurring-vocabulary
+/// Concrete tiered provider for watched-folder AND conversation
+/// corpora. Persists into the conv-tiered SQLite tables
+/// (conv_raptor_nodes / conv_motifs / conv_skeletons) under
+/// `conv_uuid = corpus_id` for folders (chat uuid for convs), plus
+/// builds + saves the TF-IDF motif index that conversation corpora
+/// skip (folder briefings surface motifs as recurring-vocabulary
 /// anchors per `TIERED_RETRIEVAL.md`).
 pub struct FolderTieredProvider {
     store: Arc<SqliteStateStore>,

@@ -40,14 +40,14 @@ This is `O(N_nodes · 1024)` per query, **no index**. Measured cost (SEP, 11k no
 
 | thing | location | shape |
 |---|---|---|
-| the scan to replace | `sovereign/crates/sovereign-core/src/runtime/retrieval.rs:1796` (`apply_raptor_grounding`) | reads `self.conv_tiered_reader.list_corpus_raptor_nodes(corpus_id, min_level)`, cosines each, sorts, top-M, dedupe-by-`conv_uuid` (opt-in `SOVEREIGN_RAPTOR_DEDUPE`) |
+| the scan to replace | `sovereign/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:99` (`apply_raptor_grounding`; moved here by the `runtime/retrieval.rs` module split) | reads `self.conv_tiered_reader.list_corpus_raptor_nodes(corpus_id, min_level)`, cosines each, sorts, top-M, dedupe-by-`conv_uuid` (opt-in `SOVEREIGN_RAPTOR_DEDUPE`) |
 | SQLite source of truth | `conv_raptor_nodes` table, `sovereign/crates/sovereign-store/src/migrations.rs:569` | cols: `node_id` PK, `corpus_id`, `conv_uuid`, `level`, `summary` TEXT, `summary_embedding` BLOB (LE f32), `centroid_embedding`, `…`. Index `idx_conv_raptor_nodes_conv_level (corpus_id, conv_uuid, level)` |
 | row struct | `ConvRaptorNodeRow`, `sovereign/crates/sovereign-core/src/conv_tiered.rs:53` | `summary_embedding: Vec<f32>` (1024-dim, Qwen3-Embedding-0.6B) |
 | BLOB codec | `encode_f32_vec` / `decode_f32_vec`, `sovereign/crates/sovereign-store/src/sqlite.rs` | LE f32 bytes |
 | build/insert path | `build_raptor_rows`, `sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs:519`; persisted via `save_conv_raptor_nodes` (`sqlite.rs:2766`) called at `conv_tiered_provider.rs:379` | **hook point for index build is right after this save / as a post-ingest batch pass** |
 | **reuse: leaf ANN search** | `CorpusIndex::search`, `corpus-engine/src/index/search.rs:98` | `table.query().nearest_to(q_emb).nprobes(50).limit(k)`; **flat-scan fallback for <10k rows** at `:112` |
 | **reuse: ANN index build** | `build_vector_index_with_progress`, `corpus-engine/src/index/create.rs:57` | `table.create_index(&["embedding"], Index::IvfPq(IvfPqIndexBuilder::default().num_partitions(p).distance_type(Cosine))).replace(true)` |
-| precedent: same problem, unsolved | `apply_atlas_grounding`, `retrieval.rs:1498` | also brute-force in-memory cosine over `AtlasContext.entries` (`atlas_context.rs:34`), loaded per-corpus at startup by `AtlasContextManager` (`sovereign-tools/src/atlas_context_manager.rs`), disk-cached `atlas/atoms.embeddings.bin`. **See [decision 2](#decisions).** |
+| precedent: same problem, unsolved | `apply_atlas_grounding`, `retrieval/atlas_grounding.rs:75` | also brute-force in-memory cosine over `AtlasContext.entries` (`atlas_context.rs:34`), loaded per-corpus at startup by `AtlasContextManager` (`sovereign-tools/src/atlas_context_manager.rs`), disk-cached `atlas/atoms.embeddings.bin`. **See [decision 2](#decisions).** |
 
 **No HNSW/FAISS/Annoy anywhere in the workspace** — LanceDB IVF is the only vector-index tool, and it's already proven for leaf chunks. Reuse it; do not add a dependency.
 
@@ -174,6 +174,6 @@ Per house practice (E2E tests prove correctness):
 ## References
 
 - Late-injection + default-on commit: `feat(retrieval): late RAPTOR injection, on by default` (2026-06-08).
-- Throughput finding + the brute-force-scan caveat: doc-comment at `apply_raptor_grounding` (`retrieval.rs:1779`).
+- Throughput finding + the brute-force-scan caveat: doc-comment at `apply_raptor_grounding` (`retrieval/raptor_grounding.rs:99`).
 - Leaf-chunk ANN reference impl: `corpus-engine/src/index/search.rs:98`, `create.rs:57`.
-- Atlas precedent (same unsolved scan): `apply_atlas_grounding` `retrieval.rs:1498`, `atlas_context.rs:34`.
+- Atlas precedent (same unsolved scan): `apply_atlas_grounding` `retrieval/atlas_grounding.rs:75`, `atlas_context.rs:34`.

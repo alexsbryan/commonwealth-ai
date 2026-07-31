@@ -474,8 +474,10 @@ pub struct RaptorNode {
     /// Embedding of `summary` — used to match user queries against
     /// nodes at this level.
     pub summary_embedding: Vec<f32>,
-    /// GMM centroid in the *input* embedding space (chunk embeddings
-    /// for level 0; child summary embeddings for level > 0).
+    /// Cluster centroid in the *input* embedding space (chunk
+    /// embeddings for level 0; child summary embeddings for level > 0).
+    /// The builder uses hard k-means (`raptor_atlas.rs` k-means loop),
+    /// not GMM — RAPTOR-paper terminology, our implementation differs.
     /// Persisted so incremental updates can re-score new members
     /// without re-clustering the whole document.
     pub centroid_embedding: Vec<f32>,

@@ -103,7 +103,9 @@ synthesis sites — **not** the Jakobson/action handlers.
 
 **1. `SimpleQuery` collapses into `Answer × low`; retrieval-skip becomes an Effort property.**
 `SimpleQuery` is not a no-retrieval branch today — it retrieves and escalates to Slow when it
-finds chunks (retrieval.rs:3692). It conflates *trivial chitchat* (phatic) with *low-effort
+finds chunks (per-intent head in `runtime/retrieval_pipeline.rs`, ~line 845 — `runtime/retrieval.rs`
+was split into `retrieval_pipeline.rs` + the `runtime/retrieval/` directory; exact escalation line
+not re-verified in this pass). It conflates *trivial chitchat* (phatic) with *low-effort
 factual lookup*. Resolution: map it to `Answer × low`. The "skip retrieval" optimization moves
 to the **Effort** signal (effort:trivial → skip retrieval, fast slot, conversational tone), not
 a separate operation — keeping the Operation axis clean. A dedicated **Phatic** communicative-

@@ -620,3 +620,25 @@ check.
 | `/tmp/sep_atlasw{0.0,0.3,0.5,1.0}_k{50,200,500}.json` | atlas_weight × k grid |
 | `/tmp/wiki_baseline.json` | baseline |
 | `/tmp/wiki_FINAL.json` | per_article=1, alpha=0.7 |
+
+---
+
+## Addendum 2026-07-30 (SP4 spike — file-map drift + protocol supersession)
+
+Written during the enrichment spike bundle (research/enrichment-spikes/findings/SP4_rerank.md);
+the body above stays verbatim per archive convention. Two classes of drift:
+
+**File map.** `sovereign-inference/src/embedded.rs` was split into
+`embedded/{rerank_slot,embed_slot,engine,sampler,…}.rs` (PR5b) — the rerank slot now lives at
+`embedded/rerank_slot.rs`. Trait surfaces moved `sovereign-core::traits` →
+`sovereign-contracts::traits`. The CLI crate split means the bench verbs live in
+`sovereign-cli-llm`.
+
+**Protocol supersession.** The jina-v3 score-token protocol this experiment validated was
+flagged BROKEN in-code on 2026-07-09 (rerank_slot.rs protocol notes: the public jina-v3 GGUF
+conversion drops the scoring/projection head, so the score-token read is tied-embedding noise).
+The working family is `RerankProtocol::YesNoLogit` (Qwen3-Reranker + fine-tunes). SP4
+measurement (2026-07-30, M2 Max, release): official `ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF`
+— sanity separation +17.8 logits; 22.7 ms/pair batched over 100 real ~200-token sep chunks
+(46.2 sequential); short titles 2.57 ms/pair batched. Beats this doc's jina prior
+(~34–40 ms/pair) by ~1.7–2×. Verdict + P3.3 consequences: see the SP4 memo.

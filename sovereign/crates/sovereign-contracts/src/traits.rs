@@ -507,8 +507,10 @@ pub trait InferenceProvider: Send + Sync {
     /// Default returns `Err(Error::NotImplemented)` so providers
     /// without a reranker (remote API, mesh peer, stubs) satisfy the
     /// trait without lying about capability. `EmbeddedLlamaCpp`
-    /// overrides this when a `[rerank]` slot is configured in
-    /// `models.toml`. The `CorpusIndex::search_with_rerank` path
+    /// overrides this when a rerank slot is configured — env-var only
+    /// (`SOVEREIGN_RERANK_MODEL_PATH` + `SOVEREIGN_RERANK_*`); there is
+    /// no `[rerank]` models.toml section.
+    /// The `CorpusIndex::search_with_rerank` path
     /// catches the error and falls back to the un-reranked fusion
     /// result — enabling rerank is purely additive.
     ///

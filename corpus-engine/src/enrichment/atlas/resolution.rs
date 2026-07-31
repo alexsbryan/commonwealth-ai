@@ -230,12 +230,12 @@ fn synthesize_entities_from_unresolved_event_participants(
                     //      Person atoms).
                     // Most participants are people; the rare misclass
                     // (a place misfiled as person) is preferable to
-                    // both failure modes above. Daemon's
-                    // grammar-constrained sampler is a known no-op
-                    // (sovereign-inference embedded.rs:3140), so
-                    // upstream schema enforcement won't fix this —
-                    // the synthesis default is the only place to
-                    // commit a type.
+                    // both failure modes above. Schema enforcement
+                    // (llguidance, since 2026-05-22) constrains the
+                    // model's OUTPUT shape but cannot decide a type
+                    // for an entity the model never emitted — the
+                    // synthesis default here is still the only place
+                    // to commit a type.
                     entity_type: EntityType::Person,
                     first_appearance: ChunkRef::new(
                         section.section_id.clone(),
