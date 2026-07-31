@@ -368,12 +368,35 @@ budget semantics, MatchTrace-style hop logging. Full scope (concept
 communities + atom CSR + claim write-back via `apply_atom_delta` +
 verifier gating) is a 4-8 week program that should be re-planned after
 P1/P2 land, since three of its four substrates arrive there.
+**Probe ANSWERED 2026-07-31 (G8, report-only):** descent LOSES to
+one-shot cosine top-K at equal evidence budget (facts-in-answer 31/140
+vs 39/140; the gap is evidence assembly, 2.07 vs 3.57 mean
+facts-in-evidence) at 2-3 LLM calls vs 1 — routing itself worked, so
+the loss is granularity, not navigation. The navigator re-plan must
+drop descent-as-answerer at current corpus scale; surviving rationale
+is cross-article synthesis or much larger corpora. Load-bearing side
+finding: `--group-by-article` RAPTOR output is a FOREST (42 parentless
+tops) — see the D3 note below.
+(`research/enrichment-spikes/findings/P51_tree_descent.md`; roll-up in
+`sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`.)
 **P5.2 — Visual assets. `XL — not sized for commitment.`**
 Fund spikes only: pdfium page-raster + ColModernVBERT ONNX single-page
 score (`M 2-3d`), multi-vector MaxSim storage prototype on the
 sibling-table pattern (`M 1-2d`). Full integration re-planned after
 spikes. Per roadmap §4.0 this is the one honest store-adding workstream
 — which is why it stays a gated bet outside the funded core.
+**Both probes ANSWERED 2026-07-31 (G9/G10, report-only).** P5.2a:
+page-score separation is REAL (top-1 0.625, MRR 0.790, +0.55 margin on
+16 SEP pages; 1.15 s/page MPS fp32) but ONNX export is a NO as-shipped
+(upstream mask-hygiene ops kill both TorchScript and dynamo; ort rc.9
+never reached) — the re-plan must price torch/Python residency vs an
+upstream export patch (S-M) against the demonstrated quality. P5.2b:
+Lance sibling-table multivector VIABLE on the pinned 0.27.2 — 10.5 GB
+f32 / ≈2.6 GB int8 at the 188k-chunk pilot (int8 inside the recorded
+3-6 GB band); brute-force exact ~2 s/query at scale; IVF-PQ recall is
+`refine_factor`-tunable, not a wall.
+(`research/enrichment-spikes/findings/P52A_colmodernvbert.md`,
+`.../P52B_maxsim.md`.)
 
 ### D-track — the deletions and consolidations (the point of the program)
 
@@ -418,6 +441,12 @@ freshness gate + brute-force fallback special case, and the dedicated
 converter vs lazy rebuild-on-next-enrich. Risks: write-amplification at
 conversation scale (per-conv trees × thousands — scale check against
 the 1.5M-placeholder precedent is step one); briefing latency parity.
+_Design note from P5.1 (2026-07-31): `--group-by-article` RAPTOR
+output is a FOREST — 42 parentless tops on the sep tree, invisible to
+today's fetch-all-then-filter consumers. D3's `Composes` edge model
+must either assert single-rootedness at build time or model the forest
+honestly (parentless tops are first-class roots); any consumer that
+walks parent links inherits the same obligation._
 
 **D4 — System-1 retirement into the graph. `L (10-15d) · Med-Low · T2 start, T3 finish`**
 Gated on the KnowledgeView parity goldens P0 authors (+`M 2-3d` inside
@@ -489,7 +518,7 @@ a judge-based interim, so this program never blocks on that one.
 | P2 (P2.2 sidecar removed) | 28-48 | Med (SP1/SP5 gate 2 items) | re-embeds, tree rebuilds |
 | P3 (P3.3 persistence cancelled) | 15-27 | Med | heavy bench nights |
 | P4 | 13-21 | Med-High | light |
-| P5 probes only | 7-10 | Med | moderate |
+| P5 probes only | 7-10 — **DONE 2026-07-31 (~2d actual)** | Med (answered) | moderate |
 | **D-track: D1 sweep** | 1-3 | High | none |
 | **D-track: D3 summary-store unification** | 8-14 | Med | tree re-emits |
 | **D-track: D4 System-1 retirement** | 10-15 | Med-Low | digest re-builds |
@@ -505,6 +534,9 @@ knobs), not as one block:
 
 **Tranche 1 — "Trust" (commit now): spikes + P0 core + P1 + P2.5 + D1
 ≈ 34-63 days (7-13 weeks).**
+_Status 2026-07-31: spikes DONE (~5d), D1 DONE (`a564c93f`), P5 probes
+DONE in T1 slack. Remaining T1 scope = P0 core + P1 + P2.5 ≈ 28-52d;
+execution plan: `~/.claude/plans/t1-remainder-trust.md`._
 Exit gates: the canary proves the lane can fail; faithfulness rate
 reported per corpus; chaos double-gate (competence ≥ 0.71 AND honesty
 ≥ 0.82) met with enrichment ON; all six spike answers written down
@@ -546,6 +578,12 @@ paragraph is now the literally true description of the system.
 after T2.** The navigator's full scope is *re-sized after D3/D4*, since
 it inherits one graph + one traversal API instead of three structures —
 the bet gets cheaper because the subtraction happened first.
+_Probe portion DONE 2026-07-31 (G8-G10 answered; verdicts in the §2 P5
+entries and the archive roll-up). Net for the eventual re-plan: storage
+de-risked, page-embedding quality real but torch-resident until an
+upstream export patch, descent-as-answerer dead at current scale.
+Nothing downstream commits on them — evidence on the shelf, as
+designed._
 
 ## 5. What this exercise changed vs. the roadmap
 
