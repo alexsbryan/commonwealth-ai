@@ -386,6 +386,8 @@ mod tests {
             primary_entities_json: serde_json::to_string(primaries).unwrap(),
             cluster_coherence: 0.9,
             created_at: 0,
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 

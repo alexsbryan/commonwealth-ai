@@ -18,6 +18,10 @@ system. Handoff is for people *seeing* it.
 - [`FAITHFULNESS_LANE_DEMO.md`](FAITHFULNESS_LANE_DEMO.md) — the
   knowledge tier audits its own summaries: per-corpus
   unsupported-claim rate, gated in CI (2026-07-31).
+- [`VERSION_STAMPED_TREES_DEMO.md`](VERSION_STAMPED_TREES_DEMO.md) —
+  the knowledge tier knows who wrote it: per-node prompt/model
+  provenance, `--refresh-stale` rebuilds only what's outdated
+  (2026-07-31).
 
 ## When to add a file here
 

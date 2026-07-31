@@ -503,6 +503,18 @@ pub struct RaptorNode {
     pub cluster_coherence: f32,
     /// When the node was built (UTC).
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Version of the summarization prompt + grammar that produced
+    /// `summary` (`raptor_atlas::RAPTOR_PROMPT_VERSION` at build
+    /// time). Empty = built before stamping (T1 P1.3) — treated as
+    /// stale by `enrich raptor --refresh-stale`. Named as it will be
+    /// named in `AtomEnvelope::Summary` attributes when D3 lands.
+    #[serde(default)]
+    pub prompt_version: String,
+    /// Concrete stem of the model that wrote `summary` (the
+    /// response's served-model attribution — never a slot alias).
+    /// Empty = built before stamping. D3-forward name, as above.
+    #[serde(default)]
+    pub summarizer_model: String,
 }
 
 /// A verbatim span from a source chunk — safe to quote without

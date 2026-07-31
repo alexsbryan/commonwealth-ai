@@ -135,6 +135,11 @@ fn synthesize_tiny_node(
         primary_entities_json: entities_json,
         cluster_coherence: 1.0,
         created_at: updated_at,
+        // Synthetic title row, no LLM summary — empty stamps mean
+        // "not an LLM summarization output", and --refresh-stale
+        // ignores them (it keys on summary-bearing rows).
+        prompt_version: String::new(),
+        summarizer_model: String::new(),
     };
     vec![row]
 }
@@ -181,6 +186,8 @@ fn raptor_node_to_row(
         primary_entities_json: entities_json,
         cluster_coherence: node.cluster_coherence as f64,
         created_at,
+        prompt_version: node.prompt_version,
+        summarizer_model: node.summarizer_model,
     })
 }
 
@@ -380,6 +387,7 @@ impl FolderTieredProvider {
         let input_hash = crate::raptor_checkpoint::RaptorCheckpointHandle::compute_input_hash(
             &chunk_ids,
             embedding_dim,
+            crate::raptor_atlas::RAPTOR_PROMPT_VERSION,
         );
         let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
             &index_dir, conv_uuid, input_hash,

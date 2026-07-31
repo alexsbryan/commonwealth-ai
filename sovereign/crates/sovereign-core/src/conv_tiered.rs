@@ -84,6 +84,12 @@ pub struct ConvRaptorNodeRow {
     pub primary_entities_json: String,
     pub cluster_coherence: f64,
     pub created_at: i64,
+    /// Summarization prompt+grammar version that produced `summary`.
+    /// Empty = pre-stamping row (T1 P1.3) — stale by definition.
+    pub prompt_version: String,
+    /// Concrete stem of the model that wrote `summary`. Empty =
+    /// pre-stamping row, or a non-LLM synthetic row (note titles).
+    pub summarizer_model: String,
 }
 
 /// One row from `conv_motifs` — TF-IDF distinctive term per conv.

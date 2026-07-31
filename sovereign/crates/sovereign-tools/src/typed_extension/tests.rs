@@ -210,6 +210,8 @@ fn make_leaf(corpus_id: &str, conv_uuid: &str, node_id: &str, summary: &str) -> 
         primary_entities_json: r#"["PBM","Spread Pricing"]"#.into(),
         cluster_coherence: 0.9,
         created_at: 1_700_000_000,
+        prompt_version: String::new(),
+        summarizer_model: String::new(),
     }
 }
 
@@ -401,6 +403,8 @@ async fn atoms_carry_primary_source_citations_when_quote_spans_present() {
         primary_entities_json: r#"["PBM","Spread Pricing"]"#.into(),
         cluster_coherence: 0.9,
         created_at: 1_700_000_000,
+        prompt_version: String::new(),
+        summarizer_model: String::new(),
     };
     store
         .save_conv_raptor_nodes(corpus_id, conv_uuid, &[leaf])

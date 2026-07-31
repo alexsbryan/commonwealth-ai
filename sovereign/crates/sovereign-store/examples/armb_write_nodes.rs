@@ -73,6 +73,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             primary_entities_json: r.primary_entities_json,
             cluster_coherence: r.cluster_coherence,
             created_at: r.created_at,
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         });
     }
 

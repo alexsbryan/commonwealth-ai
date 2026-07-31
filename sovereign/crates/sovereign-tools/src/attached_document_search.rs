@@ -849,6 +849,8 @@ mod tests {
             primary_entities: vec![],
             cluster_coherence: 1.0,
             created_at: Utc::now(),
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 

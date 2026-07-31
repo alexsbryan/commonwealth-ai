@@ -297,8 +297,9 @@ impl SqliteStateStore {
                      summary_embedding, centroid_embedding,
                      children_node_ids, direct_member_chunk_ids,
                      evidence_chunk_ids, quote_spans, primary_entities,
-                     cluster_coherence, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                     cluster_coherence, created_at,
+                     prompt_version, summarizer_model)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 rusqlite::params![
                     node.node_id,
                     node.corpus_id,
@@ -314,6 +315,8 @@ impl SqliteStateStore {
                     node.primary_entities_json,
                     node.cluster_coherence,
                     node.created_at,
+                    node.prompt_version,
+                    node.summarizer_model,
                 ],
             )
             .map_err(map_db)?;
@@ -376,7 +379,8 @@ impl SqliteStateStore {
                         summary_embedding, centroid_embedding,
                         children_node_ids, direct_member_chunk_ids,
                         evidence_chunk_ids, quote_spans, primary_entities,
-                        cluster_coherence, created_at
+                        cluster_coherence, created_at,
+                        prompt_version, summarizer_model
                  FROM conv_raptor_nodes
                  WHERE corpus_id = ?1 AND conv_uuid = ?2
                  ORDER BY level DESC, node_id ASC",
@@ -399,6 +403,8 @@ impl SqliteStateStore {
                     primary_entities_json: r.get(11)?,
                     cluster_coherence: r.get(12)?,
                     created_at: r.get(13)?,
+                    prompt_version: r.get(14)?,
+                    summarizer_model: r.get(15)?,
                 })
             })
             .map_err(map_db)?;
@@ -427,7 +433,8 @@ impl SqliteStateStore {
                         summary_embedding, centroid_embedding,
                         children_node_ids, direct_member_chunk_ids,
                         evidence_chunk_ids, quote_spans, primary_entities,
-                        cluster_coherence, created_at
+                        cluster_coherence, created_at,
+                        prompt_version, summarizer_model
                  FROM conv_raptor_nodes
                  WHERE corpus_id = ?1 AND level >= ?2
                  ORDER BY level DESC, conv_uuid ASC, node_id ASC",
@@ -450,6 +457,8 @@ impl SqliteStateStore {
                     primary_entities_json: r.get(11)?,
                     cluster_coherence: r.get(12)?,
                     created_at: r.get(13)?,
+                    prompt_version: r.get(14)?,
+                    summarizer_model: r.get(15)?,
                 })
             })
             .map_err(map_db)?;

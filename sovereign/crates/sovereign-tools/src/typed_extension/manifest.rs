@@ -141,6 +141,8 @@ mod tests {
             primary_entities_json: "[]".into(),
             cluster_coherence: 0.9,
             created_at: 0,
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 

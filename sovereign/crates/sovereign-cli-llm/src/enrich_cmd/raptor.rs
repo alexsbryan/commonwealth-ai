@@ -78,6 +78,13 @@ struct RaptorArgs {
     strip_furniture: bool,
     inspect_furniture: bool,
     force: bool,
+    /// Rebuild ONLY documents whose stored trees are stale — any
+    /// summary-bearing node with a `prompt_version` other than the
+    /// current `RAPTOR_PROMPT_VERSION`, or a `summarizer_model`
+    /// other than the stem the configured chat model resolves to
+    /// (pre-stamping rows have both empty → stale by definition).
+    /// Fresh documents are skipped; missing ones are built (T1 P1.3).
+    refresh_stale: bool,
     /// Restrict the build to a curated set of articles (one slug/title per
     /// line). Overrides the default smallest-first selection — used to pilot
     /// RAPTOR on representative multi-section articles instead of stubs.
@@ -343,6 +350,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         sovereign_core::models_manifest::DEFAULT_MANIFEST
             .embed_query_instruction(&parsed.embed_model),
     ));
+    let probe_inference = Arc::clone(&inference);
 
     let store = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
@@ -366,11 +374,61 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         parsed.daemon_base, parsed.chat_model, parsed.embed_model
     );
 
+    // --refresh-stale compares stored per-node stamps against the
+    // CURRENT build config: the prompt version const and the model
+    // that would serve a summary call RIGHT NOW. The build stamps each
+    // node with `resp.model_id` — the routing decision actually made
+    // per call (SLOT_POLICY routes the Workload::EnrichBulk summary
+    // fan-out to the fast lane, not the pinned chat slot). So the
+    // expected value must come from the same probe: one tiny EnrichBulk
+    // completion through the same provider. Resolving the chat-model
+    // alias via /v1/models instead compares attribution against
+    // aspiration — observed live 2026-07-31: the alias table said the
+    // 35B, EnrichBulk served the resident 4B, and every run reported
+    // stale and rebuilt forever. A failed probe is a hard stop, not a
+    // guess: with no truthful expected value the comparison is
+    // meaningless.
+    let expected_stem: Option<String> = if parsed.refresh_stale {
+        let mut probe = sovereign_core::types::CompletionRequest::for_workload(
+            sovereign_core::slot_policy::Workload::EnrichBulk,
+            "Reply with the single word: ok".to_string(),
+        )
+        .with_output_budget(8);
+        probe.think_budget = Some(0);
+        match probe_inference.complete(&probe).await {
+            Ok(r) if !r.model_id.is_empty() => Some(r.model_id),
+            Ok(_) => {
+                eprintln!(
+                    "error: --refresh-stale probe completion against {} returned an empty model_id — staleness comparison would be meaningless",
+                    parsed.daemon_base
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!(
+                    "error: --refresh-stale probe completion against {} failed: {e} — staleness comparison would be meaningless",
+                    parsed.daemon_base
+                );
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(stem) = &expected_stem {
+        println!(
+            "  refresh-stale: current prompt {} · summarizer {stem}",
+            sovereign_tools::raptor_atlas::RAPTOR_PROMPT_VERSION
+        );
+    }
+
     let run_start = Instant::now();
     let mut built = 0usize;
     let mut failed = 0usize;
     let mut skipped = 0usize;
     let mut resumed = 0usize;
+    let mut fresh = 0usize;
+    let mut stale_rebuilt = 0usize;
     let mut empty = 0usize;
     let mut nodes_total = 0usize;
 
@@ -385,14 +443,62 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             let existing = verify_store
                 .list_conv_raptor_nodes(&parsed.corpus_id, &doc_id)
                 .await
-                .map(|n| n.len())
-                .unwrap_or(0);
-            if existing > 0 {
-                if resumed == 0 {
-                    println!("  (resuming — skipping documents already built; --force to rebuild)");
+                .unwrap_or_default();
+            if !existing.is_empty() {
+                if let Some(stem) = &expected_stem {
+                    // --refresh-stale: rebuild exactly the documents
+                    // whose stored stamps disagree with the current
+                    // build config. Synthetic rows (empty summary
+                    // stamps AND no LLM provenance possible — the
+                    // note-title rows) are level-0 singletons the
+                    // builder never wrote; every builder-written node
+                    // carries stamps from now on, and pre-stamping
+                    // rows (both fields empty) are stale by
+                    // definition — that is the point.
+                    let current_pv = sovereign_tools::raptor_atlas::RAPTOR_PROMPT_VERSION;
+                    let stale_reason = existing.iter().find_map(|r| {
+                        if r.prompt_version != current_pv {
+                            Some(format!(
+                                "prompt {} != {current_pv}",
+                                if r.prompt_version.is_empty() {
+                                    "<unstamped>"
+                                } else {
+                                    &r.prompt_version
+                                }
+                            ))
+                        } else if &r.summarizer_model != stem {
+                            Some(format!(
+                                "summarizer {} != {stem}",
+                                if r.summarizer_model.is_empty() {
+                                    "<unstamped>"
+                                } else {
+                                    &r.summarizer_model
+                                }
+                            ))
+                        } else {
+                            None
+                        }
+                    });
+                    match stale_reason {
+                        Some(reason) => {
+                            println!("  stale: {doc_id} — {reason}; rebuilding");
+                            stale_rebuilt += 1;
+                            // fall through to the build below
+                        }
+                        None => {
+                            fresh += 1;
+                            continue;
+                        }
+                    }
+                } else {
+                    if resumed == 0 {
+                        println!(
+                            "  (resuming — skipping documents already built; --force to rebuild)"
+                        );
+                    }
+                    resumed += 1;
+                    continue;
                 }
-                resumed += 1;
-                continue;
             }
         }
         let rows = if let Some(sections) = &article_sections {
@@ -522,6 +628,10 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     if resumed > 0 {
         println!("  documents resumed (already built): {resumed}");
     }
+    if parsed.refresh_stale {
+        println!("  documents fresh (stamps match, skipped): {fresh}");
+        println!("  documents stale (rebuilt): {stale_rebuilt}");
+    }
     if skipped > 0 {
         println!("  documents skipped (all furniture): {skipped}");
     }
@@ -602,6 +712,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
     let mut strip_furniture = false;
     let mut inspect_furniture = false;
     let mut force = false;
+    let mut refresh_stale = false;
     let mut titles_file: Option<String> = None;
     let mut group_by_article = false;
     let mut daemon_base = "http://localhost:9741".to_string();
@@ -632,6 +743,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
                 strip_furniture = true;
             }
             "--force" => force = true,
+            "--refresh-stale" => refresh_stale = true,
             "--daemon" => {
                 i += 1;
                 daemon_base = args.get(i).ok_or("--daemon needs a value")?.clone();
@@ -671,6 +783,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
         strip_furniture,
         inspect_furniture,
         force,
+        refresh_stale,
         titles_file,
         group_by_article,
         daemon_base,
@@ -749,6 +862,7 @@ fn print_usage() {
     eprintln!("  --inspect-furniture Show which chunks --strip-furniture would drop, then exit. Implies --strip-furniture.");
     eprintln!("  --dry-run           Print the dispatch plan and exit (no inference, no writes).");
     eprintln!("  --force             Rebuild every document, even ones already built (default: resume/skip them).");
+    eprintln!("  --refresh-stale     Rebuild only documents whose stored trees carry an outdated prompt_version or summarizer_model stamp (pre-stamping trees count as stale).");
     eprintln!("  --daemon <url>      Daemon base URL (default: http://localhost:9741).");
     eprintln!("  --chat-model <id>   Summarizer model id/alias (default: primary).");
     eprintln!("  --embed-model <id>  Embedding model id/alias for summary nodes (default: embed).");

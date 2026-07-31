@@ -117,6 +117,16 @@ const SUMMARIZE_BUFFER: usize = 8;
 /// the centroid, so what survives is the cluster's core, not a prefix.
 const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 
+/// Version stamp for the summarization prompt + grammar (T1 P1.3).
+/// BUMP THIS whenever the summary prompt text, the lark grammar, or
+/// the doc-type cue wording changes — it is folded into the RAPTOR
+/// checkpoint's `input_hash` (a stale checkpoint must not resurrect
+/// summaries written by an older prompt) and stamped on every node
+/// as `prompt_version`, which is what `enrich raptor --refresh-stale`
+/// compares to find outdated trees. Date-suffixed so two bumps in one
+/// initiative stay distinguishable.
+pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-07-31.1";
+
 /// Hard cap on quote spans per node — keeps briefing budget bounded
 /// even for very tight clusters where many sentences match the
 /// centroid.
@@ -938,6 +948,8 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
         primary_entities: parsed.primary_entities,
         cluster_coherence: input.cluster_coherence,
         created_at: chrono::Utc::now(),
+        prompt_version: RAPTOR_PROMPT_VERSION.to_string(),
+        summarizer_model: resp.model_id,
     })
 }
 

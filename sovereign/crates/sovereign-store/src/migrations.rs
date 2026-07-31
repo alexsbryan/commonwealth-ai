@@ -425,7 +425,10 @@ pub fn run_raptor_atlas_migration(conn: &Connection) -> rusqlite::Result<()> {
             quote_spans             TEXT    NOT NULL,    -- JSON array of QuoteSpan
             primary_entities        TEXT    NOT NULL,    -- JSON array of name strings
             cluster_coherence       REAL    NOT NULL,
-            created_at              INTEGER NOT NULL
+            created_at              INTEGER NOT NULL,
+            -- Build-config provenance (T1 P1.3). '' = pre-stamping row.
+            prompt_version          TEXT    NOT NULL DEFAULT '',
+            summarizer_model        TEXT    NOT NULL DEFAULT ''
         );
 
         CREATE INDEX IF NOT EXISTS idx_raptor_nodes_asset_level
@@ -443,7 +446,17 @@ pub fn run_raptor_atlas_migration(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_asset_motifs_distinctive
             ON asset_motifs(asset_id, is_distinctive DESC, tf_idf_score DESC);
         ",
-    )
+    )?;
+    // Additive build-config provenance columns (T1 P1.3) — mirrors
+    // conv_raptor_nodes so attached-doc trees don't silently drop
+    // the stamps the builder now writes.
+    let _ = conn.execute_batch(
+        "ALTER TABLE raptor_nodes ADD COLUMN prompt_version TEXT NOT NULL DEFAULT ''",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE raptor_nodes ADD COLUMN summarizer_model TEXT NOT NULL DEFAULT ''",
+    );
+    Ok(())
 }
 
 /// Add vector index readiness tracking to corpus_state.
@@ -742,7 +755,11 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
             quote_spans             TEXT    NOT NULL,    -- JSON array of QuoteSpan
             primary_entities        TEXT    NOT NULL,    -- JSON array of name strings
             cluster_coherence       REAL    NOT NULL,
-            created_at              INTEGER NOT NULL
+            created_at              INTEGER NOT NULL,
+            -- Build-config provenance (T1 P1.3). '' = pre-stamping
+            -- row (stale by definition) or non-LLM synthetic row.
+            prompt_version          TEXT    NOT NULL DEFAULT '',
+            summarizer_model        TEXT    NOT NULL DEFAULT ''
         );
 
         CREATE INDEX IF NOT EXISTS idx_conv_raptor_nodes_conv_level
@@ -794,7 +811,18 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
             PRIMARY KEY (corpus_id, conv_uuid)
         );
         ",
-    )
+    )?;
+    // Additive column migration for dbs created before T1 P1.3 —
+    // same best-effort ALTER pattern as `run_column_migrations`
+    // (SQLite has no ADD COLUMN IF NOT EXISTS; the error on re-run
+    // is expected and ignored).
+    let _ = conn.execute_batch(
+        "ALTER TABLE conv_raptor_nodes ADD COLUMN prompt_version TEXT NOT NULL DEFAULT ''",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE conv_raptor_nodes ADD COLUMN summarizer_model TEXT NOT NULL DEFAULT ''",
+    );
+    Ok(())
 }
 
 /// Vault-wide synthesis RAPTOR (spec

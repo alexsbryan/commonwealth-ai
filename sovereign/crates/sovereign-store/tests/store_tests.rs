@@ -756,6 +756,8 @@ fn make_raptor_node(id: &str, level: u8, children: Vec<String>, members: Vec<u32
         primary_entities: vec!["Winnie".to_string(), "Stevie".to_string()],
         cluster_coherence: 0.85,
         created_at: chrono::Utc::now(),
+        prompt_version: String::new(),
+        summarizer_model: String::new(),
     }
 }
 
@@ -1257,6 +1259,8 @@ async fn corpus_raptor_version_returns_scoped_max_created_at() {
             primary_entities_json: "[]".to_string(),
             cluster_coherence: 1.0,
             created_at: created,
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     };
 

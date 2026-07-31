@@ -705,6 +705,8 @@ mod tests {
             primary_entities_json: ents_json,
             cluster_coherence: coherence,
             created_at: 0,
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 

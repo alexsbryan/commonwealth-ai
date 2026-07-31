@@ -32,8 +32,9 @@
 //! ## Invariants
 //!
 //! - `input_hash` is over the sorted `(chunk_id, embedding-byte-count)`
-//!   pairs handed to `build_raptor_atlas`. Mismatch on resume →
-//!   checkpoint discarded + fresh build (chunks changed under us).
+//!   pairs handed to `build_raptor_atlas` PLUS the summarization
+//!   prompt version (T1 P1.3). Mismatch on resume → checkpoint
+//!   discarded + fresh build (chunks or prompt changed under us).
 //! - `clustering.json` is written atomically before any LLM call at
 //!   that level. Once on disk, the cluster→member mapping is frozen
 //!   for the lifetime of the build.
@@ -141,7 +142,19 @@ impl RaptorCheckpointHandle {
     /// `chunk_id` makes the order-independent — kmeans is order-
     /// sensitive but we persist its output, so the input set's
     /// identity (not order) is what gates checkpoint validity.
-    pub fn compute_input_hash(chunks: &[u32], embedding_dim: usize) -> String {
+    ///
+    /// `prompt_version` (T1 P1.3) is part of the build's identity: a
+    /// checkpoint written under an older summarization prompt must
+    /// not resurrect its cached cluster summaries into a new-prompt
+    /// build. The summarizer MODEL is deliberately NOT hashed — it is
+    /// not knowable pre-flight (routing decides per call), so model
+    /// drift is stamped per-node (`summarizer_model`) and caught by
+    /// `enrich raptor --refresh-stale` instead.
+    pub fn compute_input_hash(
+        chunks: &[u32],
+        embedding_dim: usize,
+        prompt_version: &str,
+    ) -> String {
         let mut sorted = chunks.to_vec();
         sorted.sort_unstable();
         let mut hasher = blake3::Hasher::new();
@@ -149,6 +162,7 @@ impl RaptorCheckpointHandle {
             hasher.update(&id.to_le_bytes());
         }
         hasher.update(&(embedding_dim as u32).to_le_bytes());
+        hasher.update(prompt_version.as_bytes());
         hasher.finalize().to_hex().to_string()
     }
 
@@ -409,20 +423,32 @@ mod tests {
             primary_entities: Vec::new(),
             cluster_coherence: 0.8,
             created_at: chrono::Utc::now(),
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 
     #[test]
     fn input_hash_is_order_independent() {
-        let h1 = RaptorCheckpointHandle::compute_input_hash(&[3, 1, 2], 1024);
-        let h2 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024);
+        let h1 = RaptorCheckpointHandle::compute_input_hash(&[3, 1, 2], 1024, "pv1");
+        let h2 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024, "pv1");
         assert_eq!(h1, h2);
     }
 
     #[test]
     fn input_hash_changes_on_member_change() {
-        let h1 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024);
-        let h2 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 4], 1024);
+        let h1 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024, "pv1");
+        let h2 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 4], 1024, "pv1");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn input_hash_changes_on_prompt_version_change() {
+        // T1 P1.3: a prompt bump must invalidate the checkpoint —
+        // otherwise a resume resurrects old-prompt cluster summaries
+        // into a build that claims the new prompt version.
+        let h1 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024, "pv1");
+        let h2 = RaptorCheckpointHandle::compute_input_hash(&[1, 2, 3], 1024, "pv2");
         assert_ne!(h1, h2);
     }
 

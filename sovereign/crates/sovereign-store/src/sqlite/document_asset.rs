@@ -177,8 +177,9 @@ impl DocumentAssetStore for SqliteStateStore {
                   summary_embedding, centroid_embedding,
                   children_node_ids, direct_member_chunk_ids,
                   evidence_chunk_ids, quote_spans, primary_entities,
-                  cluster_coherence, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                  cluster_coherence, created_at,
+                  prompt_version, summarizer_model)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 rusqlite::params![
                     node.node_id,
                     asset_id,
@@ -193,6 +194,8 @@ impl DocumentAssetStore for SqliteStateStore {
                     entities,
                     node.cluster_coherence as f64,
                     node.created_at.timestamp(),
+                    node.prompt_version,
+                    node.summarizer_model,
                 ],
             )
             .map_err(map_db)?;
@@ -207,7 +210,8 @@ impl DocumentAssetStore for SqliteStateStore {
             .prepare(
                 "SELECT node_id, level, summary, summary_embedding, centroid_embedding,
                         children_node_ids, direct_member_chunk_ids, evidence_chunk_ids,
-                        quote_spans, primary_entities, cluster_coherence, created_at
+                        quote_spans, primary_entities, cluster_coherence, created_at,
+                        prompt_version, summarizer_model
                  FROM raptor_nodes
                  WHERE asset_id = ?1
                  ORDER BY level ASC, node_id ASC",
@@ -231,7 +235,8 @@ impl DocumentAssetStore for SqliteStateStore {
             .prepare(
                 "SELECT node_id, level, summary, summary_embedding, centroid_embedding,
                         children_node_ids, direct_member_chunk_ids, evidence_chunk_ids,
-                        quote_spans, primary_entities, cluster_coherence, created_at
+                        quote_spans, primary_entities, cluster_coherence, created_at,
+                        prompt_version, summarizer_model
                  FROM raptor_nodes
                  WHERE node_id = ?1",
             )
@@ -324,6 +329,8 @@ fn row_to_raptor_node(row: &rusqlite::Row) -> Result<RaptorNode> {
     let entities_json: String = row.get(9).map_err(map_db)?;
     let cluster_coherence: f64 = row.get(10).map_err(map_db)?;
     let created_at_unix: i64 = row.get(11).map_err(map_db)?;
+    let prompt_version: String = row.get(12).map_err(map_db)?;
+    let summarizer_model: String = row.get(13).map_err(map_db)?;
 
     let children_node_ids: Vec<String> = serde_json::from_str(&children_json)
         .map_err(|e| Error::Storage(format!("raptor_nodes.children_node_ids: {e}")))?;
@@ -355,6 +362,8 @@ fn row_to_raptor_node(row: &rusqlite::Row) -> Result<RaptorNode> {
         primary_entities,
         cluster_coherence: cluster_coherence as f32,
         created_at,
+        prompt_version,
+        summarizer_model,
     })
 }
 

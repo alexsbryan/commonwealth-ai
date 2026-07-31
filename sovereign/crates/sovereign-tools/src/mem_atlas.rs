@@ -254,6 +254,8 @@ mod tests {
             primary_entities: vec!["A".into()],
             cluster_coherence: 0.9,
             created_at: chrono::Utc::now(),
+            prompt_version: String::new(),
+            summarizer_model: String::new(),
         }
     }
 
