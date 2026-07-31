@@ -48,7 +48,7 @@ of what else is funded.
 | SP3 | Judge throughput for the faithfulness lane: what does scoring one corpus's summaries cost? | Run `extract_claim_list`-style decomposition + judge over one vault's RAPTOR nodes with the resident model; extrapolate | $/corpus in minutes known; decision: judge-now vs wait-for-verifier per corpus size | S (0.5-1d) — **ANSWERED 2026-07-31: fast 4B 7.2 s/node (73 min/608-node corpus, ~22 h sep-scale); primary 35B only 1.3x cost (prefill-bound + MoE) and a decisively better judge (max_support p50 0.99 vs 0.68, 2x claims/node)** — primary-tier judging by default; judge-now ≤ ~1.5k nodes, sample 10-15% above; Stream B seeds landed at `sovereign/bench/faithfulness/` (`research/enrichment-spikes/findings/SP3_judge_throughput.md`) |
 | SP4 | Does llama.cpp's rerank path work with Qwen3-Reranker GGUF on our slot infrastructure? | Load reranker in a spare slot; score 100 (query, chunk) pairs; latency per pair | < 20 ms/pair on M2 Max or a documented "no" | S-M (1-2d) — **ANSWERED 2026-07-30: bar missed at 22.7 ms/pair batched, protocol WORKS** (YesNoLogit already merged; `research/enrichment-spikes/findings/SP4_rerank.md`). P3.3 re-scoped to A/B-only |
 | SP5 | Rust crates for noun-phrase extraction + Leiden/Louvain communities — adopt or write? | Survey + 200-line prototype over one wikipedia shard | Concept graph for 10k chunks in < 5 min CPU, communities that eyeball-cohere | M (1-2d) — **ANSWERED 2026-07-31: G5 PASS, 5.2 s wall (57x headroom), 17/20 communities cohere** (adopt `leiden-rs` for communities, write the NP/co-occurrence layer; `research/enrichment-spikes/findings/SP5_concept_graph.md`). P2.2 Med→High, entity-co-occurrence fallback not needed |
-| SP6 | Late chunking feasibility on the 0.6B embedder: can the embed slot batch 8k-32k-token windows at acceptable memory? | Embed 20 long docs via long-window + post-pool vs status quo; compare notes_tiered-style recall on a small golden | Memory ceiling + recall delta known | S-M (1-2d) |
+| SP6 | Late chunking feasibility on the 0.6B embedder: can the embed slot batch 8k-32k-token windows at acceptable memory? | Embed 20 long docs via long-window + post-pool vs status quo; compare notes_tiered-style recall on a small golden | Memory ceiling + recall delta known | S-M (1-2d) — **ANSWERED 2026-07-31: binding WORKS on vendored 0.4.2 (0.2.x null-buffer failure gone); peak RSS 7.1/12.8/24.4 GB at W=8k/16k/32k; recall parity — hit@5/@10 = 1.000 all arms (article-level golden saturates), MRR 0.953→ up to 1.000 (1-2 of 17 queries), at 1.4-2.9x embed wall-clock** — P2.4 late-chunking follow-on DEFERRED, re-open on a chunk-granularity golden (`research/enrichment-spikes/findings/SP6_late_chunking.md`) |
 
 Spike outputs feed §4's go/no-go points. Total: **5-8 engineer-days.**
 
@@ -285,8 +285,10 @@ compatibility discipline as `EmbedModelInfo` — augmented and
 non-augmented corpora must not be confused, and mesh peers inherit the
 stamp). A/B on notes_tiered failure classes + one QA bank before any
 default flip; existing corpora migrate only by explicit re-embed.
-Late chunking is the follow-on behind SP6, separately funded
-(`M-L`), not counted here.
+Late chunking was the follow-on behind SP6, separately funded
+(`M-L`), not counted here — SP6 (answered 2026-07-31) recommends
+DEFER: recall parity at k ≥ 5, 1.4-2.9x embed cost, 7-24 GB peak RSS
+(`research/enrichment-spikes/findings/SP6_late_chunking.md`).
 
 **P2.5 — Retire measured waste + hygiene table. `S-M bundle (1-2d) · High`**
 The ten §6 roadmap items plus the debouncer type-check
