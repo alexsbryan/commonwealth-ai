@@ -44,7 +44,7 @@ of what else is funded.
 | # | Question | Method | Exit criterion | Size |
 |---|---|---|---|---|
 | SP1 | Can GLiNER2 run in our Rust/ONNX stack? `gline-rs` is v1-only and its own Cargo.toml calls the `orp → ort =2.0.0-rc.9` pin fragile (`sovereign-gliner/Cargo.toml:5,34-37`) | Export `fastino/gliner2-base-v1` to ONNX; drive it with bare `ort` (no gline-rs); measure tok/s + RSS on M2 Max CPU | Entities + one relation schema extracted from 50 real chunks at ≥ v1 throughput | M (1-2d) |
-| SP2 | Does extractive summarization hold retrieval parity on OUR banks? (SVD-RAG evidence stops at 205 chunks) | Offline: rebuild 3 corpora's trees with centroid-cosine sentence selection (no code integration — a script over existing `conv_raptor_nodes` members); run `bench/sep/summarize*` + book-report | Within the summarize banks' historical variance of the abstractive baseline | M (1-2d) + machine |
+| SP2 | Does extractive summarization hold retrieval parity on OUR banks? (SVD-RAG evidence stops at 205 chunks) | Offline: rebuild 3 corpora's trees with centroid-cosine sentence selection (no code integration — a script over existing `conv_raptor_nodes` members); run `bench/sep/summarize*` + book-report | Within the summarize banks' historical variance of the abstractive baseline | M (1-2d) + machine — **ANSWERED 2026-07-31: PARITY, zero delta** (\|B−A′\| = 0.0000 fact+source, both sep banks, equal-coverage 271-node trees; band ≤0.025/≤0.0167 unused; `research/enrichment-spikes/findings/SP2_extractive.md`). Doc-corpus premise Low→High. Scope note: sep only — secondary corpora deferred report-only, book-report dropped pre-run (attaches fresh per run) |
 | SP3 | Judge throughput for the faithfulness lane: what does scoring one corpus's summaries cost? | Run `extract_claim_list`-style decomposition + judge over one vault's RAPTOR nodes with the resident model; extrapolate | $/corpus in minutes known; decision: judge-now vs wait-for-verifier per corpus size | S (0.5-1d) |
 | SP4 | Does llama.cpp's rerank path work with Qwen3-Reranker GGUF on our slot infrastructure? | Load reranker in a spare slot; score 100 (query, chunk) pairs; latency per pair | < 20 ms/pair on M2 Max or a documented "no" | S-M (1-2d) |
 | SP5 | Rust crates for noun-phrase extraction + Leiden/Louvain communities — adopt or write? | Survey + 200-line prototype over one wikipedia shard | Concept graph for 10k chunks in < 5 min CPU, communities that eyeball-cohere | M (1-2d) |
@@ -98,9 +98,11 @@ orchestrator in `bench_cmd/`. Pipeline per corpus: read
 reusing the production splitter (`extract_claim_list`,
 `runtime/grounding/judge.rs:375` — currently `pub(super)`; promote to
 `pub(crate)` + re-export or lift the shared core into `sovereign-eval`)
-→ per-claim supported/unsupported verdict via the bench judge seam
-(`sovereign-eval/src/judge.rs`) now, verifier-v0 when shipped (same
-interface: claim + evidence → verdict) → per-corpus unsupported-claim
+→ per-claim supported/unsupported verdict via the production
+forced-choice seam (`forced_choice_ab`, `runtime/grounding/judge.rs:326`
+— NOT `sovereign-eval/src/judge.rs`, which is a 5-axis code-review
+rubric scorer, miscited here before the 2026-07-30 grounding pass) now,
+verifier-v0 when shipped (same interface: claim + evidence → verdict) → per-corpus unsupported-claim
 rate, TRACKED lane + hard `bench gate` twin. Every scored tuple
 `(member_chunks, claim, verdict)` is appended to a JSONL corpus — the
 verifier's Stream B training feed, for free.
@@ -141,7 +143,7 @@ signal (that finding is itself the deliverable).
 
 ### P1 — Faithful by construction
 
-**P1.1 — Extractive floor for RAPTOR nodes. `M (3-5d) · Med (SP2 gates)`**
+**P1.1 — Extractive floor for RAPTOR nodes. `M (3-5d) · High (SP2 answered 2026-07-31: parity, zero delta — gate retired)`**
 Design: `SummaryMode { Extractive, Abstractive }` on the builder config
 (`raptor_atlas.rs`); extractive path selects member sentences by
 cosine-to-centroid using existing chunk embeddings + a cheap
@@ -238,8 +240,9 @@ churn (the rc-pin problem transfers).
 **P2.2 — Concept-graph free tier. `L (10-15d) · Med (SP5 gates)`**
 Design: `corpus-engine/src/enrichment/concept_graph.rs` — noun-phrase
 extraction (SP5's crate or heuristic), co-occurrence edges with
-window + df pruning (the TF-IDF motif code in `document_asset.rs:2725`
-region is the in-house precedent for the term-statistics half),
+window + df pruning (the TF-IDF motif code — `extract_motif_candidates`,
+`sovereign-tools/src/document_asset.rs:2574` region, NOT corpus-engine —
+is the in-house precedent for the term-statistics half),
 Leiden/Louvain communities. **Storage: no new store** (subtraction
 mandate) — concepts persist as Entity atoms with a statistical
 provenance variant, co-occurrence as provenance-tagged edges in the

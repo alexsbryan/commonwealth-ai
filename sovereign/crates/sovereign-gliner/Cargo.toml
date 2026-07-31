@@ -41,3 +41,12 @@ orp = { version = "0.9" }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = { workspace = true }
+# SP1 spike probe (examples/gliner2_probe.rs): drive a GLiNER2 ONNX export
+# on the SAME pinned rc.9 the production stack links (orp's exact pin —
+# see sovereign-tools/Cargo.toml PaddleOCR block for the full rationale).
+# `ndarray` for tensor I/O; versions unify with the existing lockfile
+# (tokenizers 0.21.x already resolved via gline-rs).
+ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
+ndarray = "0.16"
+tokenizers = "0.21"
+regex = { workspace = true }
