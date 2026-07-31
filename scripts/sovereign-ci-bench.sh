@@ -357,6 +357,46 @@ if [[ -f "$CHAOS_BANK" ]]; then
       --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
 fi
 
+# ── Lane 5c: faithfulness — RAPTOR summary claims vs member texts (T1 P0.3) ──
+# Same TRACKED-run + HARD-gate pattern as chaos. The run judges every node
+# summary's claims against the node's own member chunks (production
+# extract/support registers); the gate fails ONLY on unsupported-claim-rate
+# regression vs sovereign/bench/faithfulness/baselines/<corpus>/.
+#
+# Default corpus = the chaos corpus: recipe-installed
+# (scripts/setup-chaos-corpus.sh), byte-identical on every box, and already a
+# dependency of this script — NEVER default to a personal / machine-local
+# corpus here, its baseline id would be meaningless off this machine.
+# Override with FAITHFULNESS_CORPUS for local extras (e.g. a private vault).
+#
+# Availability gate: the lane needs the corpus's RAPTOR tier, built once per
+# box with `svrn enrich raptor --corpus <id>` (cached in the state db
+# thereafter). Probe the tier directly — an index-presence check alone would
+# HARD-fail freshly-provisioned boxes on the gate twin's missing artifact.
+FAITHFULNESS_CORPUS="${FAITHFULNESS_CORPUS:-$CHAOS_CORPUS}"
+faith_nodes=0
+if command -v sqlite3 >/dev/null 2>&1; then
+  for db in "$HOME/.svrnmesh/svrnmesh.db" "$HOME/.svrnmesh/sovereign.db" \
+            "$HOME/.sovereign/svrnmesh.db" "$HOME/.sovereign/sovereign.db"; do
+    [[ -f "$db" ]] || continue
+    faith_nodes=$(sqlite3 "$db" \
+      "SELECT COUNT(*) FROM conv_raptor_nodes WHERE corpus_id='$FAITHFULNESS_CORPUS';" \
+      2>/dev/null || echo 0)
+    [[ "$faith_nodes" -gt 0 ]] && break
+  done
+fi
+if [[ "$faith_nodes" -gt 0 ]]; then
+  run_lane "faithfulness:$FAITHFULNESS_CORPUS" TRACKED \
+    "$BIN" bench faithfulness run --corpus "$FAITHFULNESS_CORPUS" \
+      --out "$REPORT_DIR/faithfulness-$FAITHFULNESS_CORPUS.jsonl"
+  run_lane "faithfulness-gate:$FAITHFULNESS_CORPUS" HARD \
+    "$BIN" bench gate faithfulness \
+      --report "$REPORT_DIR/faithfulness-$FAITHFULNESS_CORPUS.jsonl" \
+      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+else
+  echo "[skip] faithfulness: no RAPTOR tier for '$FAITHFULNESS_CORPUS' — build once with: svrn enrich raptor --corpus $FAITHFULNESS_CORPUS"
+fi
+
 # ── Lane 5b: FR-9 governance — detector (Lane A) + Q&A (Lane B) ──
 # Same TRACKED-run + HARD-gate pattern as chaos. Skipped when the enriched
 # maple-house corpus isn't present (set up via scripts/setup-governance-corpus.sh)

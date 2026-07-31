@@ -3435,14 +3435,20 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     // — `primary_pool` slots all point at the same file as the
     // primary slot, and there's no point advertising it three
     // times. See `commonwealth-api::routes_internal::model_files`.
-    let mut servable: Vec<std::path::PathBuf> = Vec::new();
-    let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
-    for (_, path) in &slots {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        if seen.insert(canon.clone()) {
-            servable.push(canon);
-        }
-    }
+    //
+    // A slot path that names one shard of a SPLIT GGUF is expanded to the
+    // whole shard set. Config names only `…-00001-of-0000N.gguf`, so without
+    // this the host advertises (and `serve_model_file` will serve) shard 1
+    // alone and 404s the rest — which strands any worker that does not
+    // already hold every shard on disk. Both warm paths die there: the
+    // default whole-GGUF fetch on `NotAdvertised`, the byte-range fetch on
+    // "range GET failed on all sources". The failure is never-wedge safe
+    // (warm falls back to local-only), so it presents not as an error but as
+    // a big model mysteriously refusing to distribute. Found 2026-07-31
+    // sizing a 5-shard 155 GB DeepSeek-V4-Flash split; every earlier
+    // acceptance masked it by having all shards on every node.
+    let paths: Vec<std::path::PathBuf> = slots.iter().map(|(_, p)| p.to_path_buf()).collect();
+    let servable = servable_model_files(&paths);
     if !servable.is_empty() {
         info!(
             files = servable.len(),
@@ -3450,6 +3456,36 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
         );
         app_state.install_servable_model_files(servable);
     }
+}
+
+/// The set of files peers may fetch, derived from the configured slot paths:
+/// every shard of a split GGUF, canonicalized, deduped, in slot order.
+///
+/// Split expansion is the load-bearing part. Config names one shard
+/// (`…-00001-of-0000N.gguf`); `shard_files` turns that into the whole set when
+/// — and only when — every sibling is actually on disk, so we never advertise
+/// a file we cannot serve. Dedup matters because `primary_pool` slots all
+/// point at the same GGUF.
+fn servable_model_files(slot_paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+    for path in slot_paths {
+        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let shards = sovereign_inference::embedded::shard_files(&canon);
+        if shards.len() > 1 {
+            info!(
+                shards = shards.len(),
+                model = %canon.display(),
+                "split GGUF: advertising all shards for peer fetch"
+            );
+        }
+        for shard in shards {
+            if seen.insert(shard.clone()) {
+                out.push(shard);
+            }
+        }
+    }
+    out
 }
 
 /// A peer's inference service, as seen by the local
@@ -3773,6 +3809,50 @@ mod tests {
         assert_eq!(s.endpoint, "10.0.0.9:50052");
         assert!(s.is_direct());
         assert_eq!(s.direct_misses, 0);
+    }
+
+    /// The regression this file's split-expansion comment describes: a slot
+    /// configured at shard 1 of a split GGUF must make ALL shards servable.
+    /// Advertising only shard 1 404s the rest, which strands any worker that
+    /// doesn't already hold the whole model — and because warm failure is
+    /// never-wedge safe, it surfaces as "the big model won't distribute"
+    /// rather than as an error.
+    #[test]
+    fn servable_files_expand_a_split_gguf_to_every_shard() {
+        let dir = tempfile::tempdir().unwrap();
+        let mk = |name: &str| {
+            let p = dir.path().join(name);
+            std::fs::write(&p, b"x").unwrap();
+            p
+        };
+        let s1 = mk("big-00001-of-00003.gguf");
+        let s2 = mk("big-00002-of-00003.gguf");
+        let s3 = mk("big-00003-of-00003.gguf");
+        let solo = mk("embed.gguf");
+
+        // Config names shard 1 only; all three must become servable.
+        let got = servable_model_files(&[s1.clone(), solo.clone()]);
+        let canon = |p: &std::path::PathBuf| p.canonicalize().unwrap();
+        assert_eq!(
+            got,
+            vec![canon(&s1), canon(&s2), canon(&s3), canon(&solo)],
+            "split slot must advertise every shard, in order, then the solo slot"
+        );
+
+        // Dedup: primary_pool points several slots at the same GGUF.
+        let got = servable_model_files(&[s1.clone(), s1.clone(), solo.clone()]);
+        assert_eq!(got.len(), 4, "same model twice must not be advertised twice");
+    }
+
+    /// Never advertise what we cannot serve: with a sibling absent,
+    /// `shard_files` refuses to guess, so we fall back to the named file.
+    #[test]
+    fn servable_files_do_not_guess_missing_shards() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t-00001-of-00002.gguf");
+        std::fs::write(&p, b"x").unwrap();
+        let got = servable_model_files(&[p.clone()]);
+        assert_eq!(got, vec![p.canonicalize().unwrap()]);
     }
 
     #[test]

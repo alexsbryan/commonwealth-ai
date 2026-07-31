@@ -56,25 +56,14 @@ pub(crate) fn total_model_bytes(model_path: &Path) -> u64 {
     let Some(dir) = model_path.parent() else {
         return single;
     };
-    // Parse `<stem>-<idx>-of-<count>.gguf`.
-    let parsed = name.rfind("-of-").and_then(|of| {
-        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
-        let before = name.get(..of)?; // "<stem>-<idx>"
-        let dash = before.rfind('-')?;
-        let idx = before.get(dash + 1..)?;
-        idx.parse::<u32>().ok()?; // validate numeric
-        Some((before.get(..dash)?.to_string(), count, idx.len()))
-    });
-    let Some((stem, count, width)) = parsed else {
+    // One parser for the `<stem>-<idx>-of-<count>.gguf` convention, shared with
+    // `shard_files` and the mesh's fetch side — see `split_shard_names`.
+    let Some(names) = super::rpc_warm_cache::split_shard_names(name) else {
         return single;
     };
-    if count <= 1 {
-        return single;
-    }
     let mut total = 0u64;
-    for i in 1..=count {
-        let shard = dir.join(format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"));
-        match std::fs::metadata(&shard) {
+    for shard_name in names {
+        match std::fs::metadata(dir.join(shard_name)) {
             Ok(m) => total += m.len(),
             Err(_) => return single, // a shard missing → don't guess
         }

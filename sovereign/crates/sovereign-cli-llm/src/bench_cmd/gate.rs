@@ -50,6 +50,7 @@ const HELP: Help = Help {
             ("governance", "Gate the FR-9 detector report on {precision, recall, f1} (Lane A: tension detection)."),
             ("governance-qa", "Gate the FR-9 QA chaos JSONL on {competence, honesty (RL-2), hallucination_rate (RL-1), dead_law_rate (RL-3)} (Lane B)."),
             ("proxy-qa", "Gate the Proxy Voting QA chaos JSONL on {competence (RL-2: both sides cited), honesty + hallucination_rate (RL-1: no confabulated opposition)} (AC-4/AC-5)."),
+            ("faithfulness", "Gate the faithfulness JSONL (bench faithfulness run) on the per-corpus unsupported-claim rate; baseline id = the artifact's corpus (or --id)."),
         ]),
         HelpSection::Notes(
             "The lane's own absolute verdict (e.g. chaos NO-GO) stays advisory; this gate fails ONLY on regression vs the committed baseline at <bench-root>/<group>/baselines/<id>/latest.json. First-run (no baseline) passes — capture one with --update-baseline.",
@@ -145,8 +146,11 @@ pub fn cmd_gate(args: &[String]) -> i32 {
             governance_qa_summary(&report).map(|b| ("governance", "maple_house_qa", b))
         }
         "proxy-qa" | "proxy" => proxy_qa_summary(&report).map(|b| ("proxy", "exxon_qa", b)),
+        // Empty default_id sentinel: the bench id is per-corpus, taken from
+        // the artifact itself (or --id) after the match.
+        "faithfulness" | "faith" => faithfulness_summary(&report).map(|b| ("faithfulness", "", b)),
         other => {
-            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn | governance | governance-qa | proxy-qa)");
+            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn | governance | governance-qa | proxy-qa | faithfulness)");
             return 2;
         }
     };
@@ -172,7 +176,20 @@ pub fn cmd_gate(args: &[String]) -> i32 {
     // (--update-baseline) or is diffed against one.
     current.fingerprint(&report, prompt_version);
 
-    let id = id_override.as_deref().unwrap_or(default_id);
+    let id = match id_override.as_deref() {
+        Some(id) => id,
+        // Per-corpus lanes (empty default_id sentinel) take the bench id
+        // from the artifact — a wrong default here would silently diff
+        // against another corpus's baseline.
+        None if default_id.is_empty() => match current.corpus.as_deref() {
+            Some(c) => c,
+            None => {
+                eprintln!("error: this lane needs --id <corpus> (artifact carried no corpus)");
+                return 2;
+            }
+        },
+        None => default_id,
+    };
     let dir = baseline_dir(&bench_root, group, id);
 
     if update_baseline {
@@ -262,6 +279,68 @@ pub fn cmd_gate(args: &[String]) -> i32 {
 }
 
 // ── Artifact readers ────────────────────────────────────────────────────────
+
+/// faithfulness: headline = the per-corpus unsupported-claim rate over the
+/// lane's judged rows (LowerIsBetter). Guards: zero rows is never a pass;
+/// mixed judge tiers taint the rate (the absolute rate moves ~4 points
+/// between the fast and primary judges on the same corpus — SP3, pinned in
+/// sovereign-eval's seed-file test); one artifact = one corpus (gate each
+/// corpus against its own baseline). Upper-level rate (summaries of
+/// summaries — the compounding-fabrication signal) is added only when there
+/// are enough upper-level claims for the rate to mean anything.
+fn faithfulness_summary(report: &Path) -> Result<LaneBaseline, String> {
+    use sovereign_eval::faithfulness::{score, ClaimRecord};
+    let rows: Vec<ClaimRecord> = read_jsonl(report)?;
+    if rows.is_empty() {
+        return Err(format!(
+            "{}: zero judged claims — nothing verified is not a pass",
+            report.display()
+        ));
+    }
+    let reports = score(&rows);
+    if reports.len() != 1 {
+        return Err(format!(
+            "{}: {} corpora in one artifact — run and gate per corpus",
+            report.display(),
+            reports.len()
+        ));
+    }
+    let rep = &reports[0];
+    if rep.judge_models.len() > 1 {
+        return Err(format!(
+            "{}: mixed judge tiers {:?} — rate not comparable across runs",
+            report.display(),
+            rep.judge_models
+        ));
+    }
+    let mut b = LaneBaseline::new("faithfulness", now_rfc3339());
+    b.corpus = Some(rep.corpus_id.clone());
+    b.attribute(rep.judge_models.first().map(String::as_str));
+    b.note = Some(format!(
+        "{} nodes · {} claims · judge {}",
+        rep.n_nodes,
+        rep.n_claims,
+        rep.judge_models.first().map(String::as_str).unwrap_or("?")
+    ));
+    // Provisional tolerance pending a spread measurement (re-run variance of
+    // the same judge on the same corpus); --regression-threshold overrides.
+    let mut b = b.with(
+        "unsupported_rate",
+        LaneMetric::lower_is_better(rep.unsupported_rate, 0.03),
+    );
+    let (upper_n, upper_u) = rep
+        .per_level
+        .iter()
+        .filter(|l| l.level >= 1)
+        .fold((0usize, 0usize), |(n, u), l| (n + l.n_claims, u + l.n_unsupported));
+    if upper_n >= 20 {
+        b = b.with(
+            "unsupported_rate_upper_levels",
+            LaneMetric::lower_is_better(upper_u as f64 / upper_n as f64, 0.06),
+        );
+    }
+    Ok(b)
+}
 
 fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, String> {
     let text =

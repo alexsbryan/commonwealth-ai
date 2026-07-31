@@ -33,6 +33,7 @@ mod mesh_cmd;
 mod mesh_soak;
 mod mesh_travel;
 mod meshapp_cmd;
+mod remote_gguf;
 mod meshapp_registry;
 mod meta_atlas_cmd;
 mod mobile_cmd;

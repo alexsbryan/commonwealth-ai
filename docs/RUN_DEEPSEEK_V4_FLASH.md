@@ -1,40 +1,166 @@
 # Run DeepSeek-V4-Flash on the mesh
 
-> **PARKED (2026-07-09) — preserved as an honest record, not an active plan.** This
-> chased a hard way to run one specific model; the real goal (heterogeneous
-> distributed inference) never depended on it. Jump to **Verdict & durable learnings**
-> at the end for the why and what's reusable.
+> **UNPARKED (2026-07-31).** Parked 2026-07-09 for two stated reasons. Both have
+> since expired — see *Why this came back*. The active plan is this page's top
+> half; everything from **Stage 0 — does the arch execute on our backends?**
+> onward is the 2026-07-09 record, kept because its architecture thinking
+> outlived its premises, and superseded where it disagrees with what follows.
 
-This is the [Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md) path,
-made concrete for DeepSeek-V4-Flash across two boxes: a **Strix Halo (128 GB,
-Vulkan)** as host and **BeefyMac (64 GB, Metal)** as worker.
-
-Unlike GLM-5.2, this is not yet a hand-it-to-your-pool runbook — it's a **bring-up
-in progress**. DeepSeek-V4-Flash is a new architecture whose llama.cpp support
-lives on a work-in-progress branch, written CUDA/Metal-first, and it is *not* in
-our binding: we vendor the `llama-cpp-4` binding at `vendor/llama-cpp-4`, but
-llama.cpp itself ships inside `llama-cpp-sys-4 0.3.1`, which we pull unmodified from
-crates.io — and that bundles llama.cpp `94a220cd6` (GLM-5 era, no DeepSeek-V4). So
-we **cannot** run it through `sovereign daemon` on day one. Stages 0–2 route around
-this entirely by using standalone WIP llama.cpp binaries; only Stage 3 confronts the
-binding. This page is the staged plan that gets us there, and the log we keep as we
-go. Each stage retires one risk before we spend on the next.
+This is the [Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md) path
+made concrete: **DeepSeek-V4-Flash-0731 across a Strix Halo (RuggedFox, 124 GB
+Vulkan) as host and an M2 Max (BeefyMac, 51 GB Metal) as worker.**
 
 ## Status
 
-_Last updated: 2026-07-09 —_ **PARKED.**
+_Last updated: 2026-07-31 —_ **ACTIVE. Stage 0 step 1 passed; download not started.**
 
-**This exploration is parked** — not because it can't work, but because it's off-axis
-for the real goal. DeepSeek-V4-Flash was chosen as a convenient-sized, capable model;
-the actual objective is **demonstrating distributed inference across heterogeneous
-hardware** (Strix Halo + BeefyMac). Our *existing* ggml-RPC path already does that
-(Strix-Vulkan host ↔ Mac-Metal worker, validated at 4B), and a **Qwen-122B split over
-that same path** demonstrates it at scale with far less risk and zero bleeding edge.
-See "Verdict & durable learnings" at the end.
+## Why this came back
 
-Everything below is preserved as an honest, runnable record in case we ever want
-DeepSeek-V4-Flash for its own sake. Sunk cost was small: a ~15 GB partial download
-(cut, unused) and the design thinking — which survives as reusable architecture.
+**Reason 1 — "llama.cpp support is a WIP branch, not in our binding." Gone.**
+`llama-cpp-sys-4` moved `0.3.1` → **`0.4.2`**, which `Cargo.lock` already pins. That
+tree carries first-class `deepseek4`: a dedicated `llama_model_deepseek4`
+(`llama-model.cpp:185`), a raised graph-node budget (`llama-context.cpp:2310`), and
+Hadamard rotation tensors for the lightning indexers (`llama-kv-cache.cpp:326`).
+MXFP4 kernels exist on **Vulkan, Metal, and CPU** — every backend this split needs.
+No fork, no sidecar, no WIP branch. It is simply in the binding we already ship.
+
+**Reason 2 — "at q2 (~81 GB) it fits the Strix solo, so it never exercises a
+split." Inverted.** There is no q2. unsloth publishes exactly two files, and the
+measurement says why: **94.9% of the model (147.2 of 155.1 GB) is QAT-MXFP4
+experts** that cannot be quantized further. The two quants differ only in the
+non-expert 5%, which is why they sit 6.8 GB apart:
+
+| Quant | Size | Verdict |
+|---|---|---|
+| `UD-Q4_K_XL` | 155.1 GB | **chosen** |
+| `UD-Q8_K_XL` | 161.9 GB | leaves BeefyMac 2.4 GB slack — rejected |
+
+Neither box can hold either file. No smaller quant is coming. The objection that
+parked this — "it won't exercise a split" — is now the reason to run it: this is the
+cleanest possible demonstration of the thing the mesh exists to do.
+
+## The fit — measured before downloading
+
+`svrn mesh plan` grew an `hf:` form (see [Getting the model](#getting-the-model)),
+so the whole sizing below cost **22 MB of HTTP range reads and one command** against
+a 155 GB model:
+
+```bash
+svrn mesh plan hf:unsloth/DeepSeek-V4-Flash-0731-GGUF/UD-Q4_K_XL --devices 51,124 --headroom 1.08
+```
+
+```
+Model:  43 blocks · 144.4 GiB weights (output head 0.5 · token_embd 0.5 on host RAM)
+Blocks: 3.33–3.35 GiB (mean 3.33) · 1.01× spread → UNIFORM mass
+MoE:    137.1 GiB routed experts (95% — COLD, top-k only) · 6.9 GiB hot skeleton (5%)
+
+  dev  role    VRAM       blocks     n   weight     need       fit
+    0  worker   51.0 GB  0-12      13    43.3 GB    46.8 GB  ok  +4.2 GB
+*   1  host    124.0 GB  13-42     30   100.6 GB   108.6 GB  ok  +15.4 GB
+
+Aggregate gate: pooled 175.0 GB >= model×1.08 (156.0 GB) → PASS
+Nodes:          2 holding blocks → 1 network hop per token
+```
+
+Three things follow.
+
+**The stock headroom will refuse this load.** Binding headroom is **1.096** at
+BeefyMac's current 51 GB; the default is 1.2. That is not a fault — it is the gate
+doing its job on a model at 88.6% of pooled memory. Set `[shared_model] headroom`
+to **1.08** deliberately, or raise the Mac's ceiling (below) and use 1.15.
+
+**Per-block mass is uniform — 1.01× spread.** Compare the 122B's 1.23×, which is
+what motivated the byte-mass split in the first place. Every block here is
+interchangeable, so heterogeneous VRAM is trivially safe and the cut is tunable by
+plain block count.
+
+**MLA makes context cheap.** One KV head, `k=v=512`, 43 layers: **2.89 GB at 32k**,
+11.5 GB at 128k, 92 GB at 1M. So 32k is comfortable, 128k would need a third node,
+and the advertised 1M window is not reachable on this hardware.
+
+### The highest-leverage knob: BeefyMac's wired limit
+
+`iogpu.wired_limit_mb` is `0` (default), so Metal reports 51 GB — and BeefyMac is
+the binding constraint, so every GB there is worth more than a GB on the Strix:
+
+| BeefyMac ceiling | binding headroom | BeefyMac slack | RuggedFox slack |
+|---|---|---|---|
+| 51 GB (today) | 1.096 | 4.5 GB | 15.5 GB |
+| **56 GB** | **1.167** | 8.2 GB | 17.7 GB |
+
+One `sysctl` buys more margin than anything else available. Do it first.
+
+## The execution plan
+
+Hardware is confirmed: RuggedFox has **124 GB allocated on Vulkan** and **>1 TB
+free disk**, so the capacity risks that would normally gate a 155 GB download are
+already retired. What remains is plumbing, then the download, then the run.
+
+### Stage 0 — prove the plumbing at 4 GB, not 155 GB
+
+No download. This stage exists to protect the download.
+
+1. **Plan from the remote.** ✅ **PASSED 2026-07-31.** The production planner —
+   `plan_shards_weighted` plus the same `shard_fits` decider the live load runs —
+   reproduced the hand-computed split exactly (blocks 0-12 / 13-42). Headers cost
+   22 MB, 0.014% of the model.
+2. **Prove a worker can be warmed from a host-only split model.** Synthesize a
+   3-shard GGUF from Qwen3.5-4B with `llama-gguf-split`, place it **only on
+   RuggedFox**, force a distributed load, and confirm BeefyMac warms its shard.
+   This is the end-to-end test of the multi-shard serving fix (below). **If this
+   fails, the DeepSeek run cannot work** — and we learn it for 4 GB.
+
+> **The fix Stage 0.2 tests.** Until 2026-07-31 the host advertised **only shard
+> 1** of a split model: `register_local_model_slots` built the servable allowlist
+> straight from the configured slot paths, with no sibling expansion, so
+> `serve_model_file` 404'd shards 2..N. Both warm paths died there — the default
+> whole-GGUF fetch on `NotAdvertised`, the byte-range fetch on "range GET failed on
+> all sources" — and because warm failure is never-wedge safe, it presented not as
+> an error but as a large model mysteriously refusing to distribute. Every earlier
+> acceptance masked it by having all shards already on every node. Fixed via
+> `servable_model_files` (`sovereign-mesh/src/daemon.rs`); the three copies of the
+> shard-name parser were also collapsed into one `split_shard_names`
+> (`rpc_warm_cache.rs`), since readers disagreeing about what "the whole model"
+> means is the bug class. See note `31f00cd1`.
+
+### Stage 1 — download
+
+155 GB to RuggedFox, only once Stage 0 is green.
+
+### Stage 2 — bring up
+
+- `[shared_model] headroom` = **1.08** (or 1.15 after the wired-limit bump).
+- `ctx` = **32768** — KV 2.89 GB, and it matches the 122B baseline so the numbers
+  are comparable.
+- Host RuggedFox, worker BeefyMac, per [RUN_A_BIGGER_MODEL](./RUN_A_BIGGER_MODEL.md).
+- **Same build on both nodes.** ggml-RPC is wire-version sensitive; a mismatched
+  worker can crash the host mid-answer.
+- Run the host under `svrn install-service`. The two uncatchable upstream abort
+  faces (`ggml-rpc.cpp:379` teardown, `:491` graph-compute) mean the supervisor
+  *is* the robustness story, not a nicety.
+- Re-run `svrn mesh plan <file> --from-mesh` against the real file first, to
+  confirm the header-only plan told the truth.
+
+### Stage 3 — measure
+
+`svrn mesh bench`, median of 3, filed to `~/.sovereign/mesh-measurements.json` and
+published to the mesh like the 122B run.
+
+**Falsifiable prediction: 8–12 tok/s.** The 122B-A10B split measured 9.73 tok/s at
+77.4 ms ITL; the network hop is a per-token *constant* (+25.7 ms, confirmed
+independently at 4B and 122B); this model is 2.3× the weights but only 1.3× the
+active params, and decode is bound by active params. If it lands in that band the
+thesis holds: **model size is a memory problem, not a speed problem.** The main
+uncertainty is expert-gather cost — 6-of-256 routing is far sparser than the 122B's,
+and scattered reads cost more than the arithmetic suggests.
+
+### Known non-goals
+
+- **MTP will not help.** The model ships a speculative-decoding module, but the
+  distributed child falls back to single-token and pays extra RPC round-trips
+  (note `634c9130`).
+- **1M context is out of reach** — 92 GB of KV.
+- **Abort if** Stage 0.2 fails cross-machine.
 
 ## The model
 
@@ -110,21 +236,53 @@ comparable, not a projection.
 
 ## Getting the model
 
-Already in flight (resumable — re-run the identical command after any drop):
+**Plan before you download.** `svrn mesh plan` accepts
+`hf:<owner>/<repo>[/<variant>]` and answers the fit question without the weights:
 
 ```bash
-hf download unsloth/DeepSeek-V4-Flash-GGUF \
-  --include "UD-IQ3_XXS/*" \
-  --local-dir sovereign/models/DeepSeek-V4-Flash-GGUF
+svrn mesh plan hf:unsloth/DeepSeek-V4-Flash-0731-GGUF/UD-Q4_K_XL --from-mesh
 ```
 
-Lands as four shards under `.../DeepSeek-V4-Flash-GGUF/UD-IQ3_XXS/`. **To load a
-split GGUF, point at shard `00001` only** — llama.cpp reads the split metadata and
-pulls `00002`–`00004` from the same directory. Don't merge them, don't list them:
+It works because the planner never needed the weights. `parse_gguf` and
+`gguf_block_count` are strictly sequential — magic, KV block, tensor-info table,
+stop — and tensor byte-mass comes from dims + ggml type via `ggml_row_size`, never
+from file length. So a file truncated just past its tensor table parses identically
+to the whole thing. The command range-GETs a few MB of each shard into a temp dir
+under the shards' real names (so `shard_files` still sees one model) and hands the
+existing planner a path: no parser changes, no second GGUF implementation.
+Reconstructed total for this model was 155.09 GB against an actual 155.10 GB.
+Omit the variant and it lists what the repo publishes rather than guessing — picking
+a quant is picking how much of your memory to spend. See
+`sovereign-cli-llm/src/remote_gguf.rs`.
+
+Then the download itself:
+
+```bash
+hf download unsloth/DeepSeek-V4-Flash-0731-GGUF \
+  --include "UD-Q4_K_XL/*" \
+  --local-dir sovereign/models/DeepSeek-V4-Flash-0731-GGUF
+```
+
+Lands as five shards. **To load a split GGUF, point at shard `00001` only** —
+llama.cpp reads the split metadata and pulls the rest from the same directory.
+Don't merge them, don't list them:
 
 ```
-.../UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf
+.../UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00001-of-00005.gguf
 ```
+
+Note the host must *serve* all five to a worker that lacks them — the fix described
+under Stage 0.2 above. Shard 1 here is metadata-only (5.3 MB, zero tensors), which
+is exactly the shape that made `total_model_bytes` a real deadlock before it learned
+to sum siblings.
+
+---
+
+> **Everything below is the 2026-07-09 record.** Its two premises — the binding wall
+> and the small-quant escape — have both expired (see *Why this came back*). The
+> staged plan below routes around a WIP llama.cpp branch and an external engine we
+> no longer need; the **Durable learnings** and **Reference** sections remain
+> accurate and are why this page was kept rather than deleted.
 
 ## Stage 0 — does the arch execute on our backends?
 
@@ -336,6 +494,16 @@ is pinned inside the vulkan toolbox and can't manage sibling toolboxes or reboot
 
 ## Verdict & durable learnings (2026-07-09)
 
+> **Superseded in its verdict, kept for its learnings (2026-07-31).** The two
+> load-bearing claims below — that llama.cpp support lives on a WIP branch, and
+> that "at q2 (~81 GB) the model fits the Strix solo — so it never even exercises
+> a split" — are both false as of the 0731 release. The *learnings* that follow
+> are unaffected and still worth reading, particularly #2 (request-level vs
+> tensor-level distribution never compose) and #3 (ggml-RPC is the heterogeneous
+> asset). Learning #1's external-provider architecture is no longer needed **for
+> this model** — it merged to llama.cpp master, which is precisely the "Route A"
+> escape that learning predicted.
+
 **Why this is parked.** The goal was always *demonstrating distributed inference
 across heterogeneous hardware* (Strix Halo + BeefyMac). DeepSeek-V4-Flash was picked
 only because it looked like a convenient size. Following it led off-axis: its
@@ -441,3 +609,24 @@ good *fast local provider* — just decoupled from the distribution goal.
   ggml-RPC path. Preserved the durable learnings — chiefly the external-provider
   architecture — in the Verdict section. Sunk cost: ~15 GB partial download (cut) +
   design thinking (kept).
+- **2026-07-31** — **Unparked.** unsloth published `DeepSeek-V4-Flash-0731-GGUF` in
+  exactly two quants (155.1 / 161.9 GB), and `llama-cpp-sys-4` had meanwhile moved
+  to `0.4.2` with first-class `deepseek4` + MXFP4 on Vulkan/Metal/CPU. Both park
+  premises dead: the binding wall is gone, and with no small quant the model
+  *cannot* fit either box — it is now the flagship RUN_A_BIGGER_MODEL case rather
+  than a counter-example. Measured the model's shape from 22 MB of HTTP range reads
+  over the five shard headers: 43 blocks, 3.5788 GB each, 1.01× spread, 94.9%
+  MXFP4, MLA KV 2.89 GB @32k; reconstruction 155.09 vs actual 155.10 GB.
+- **2026-07-31** — Found and fixed the multi-shard serving break: the host
+  advertised only shard 1, stranding any worker that didn't already hold the whole
+  model. `servable_model_files` (`sovereign-mesh/src/daemon.rs`) now expands slot
+  paths to the full shard set, and the three copies of the shard-name parser
+  collapsed into one `split_shard_names`. Tests added for both, plus the
+  never-guess case. Note `31f00cd1`.
+- **2026-07-31** — `svrn mesh plan` gained the `hf:` form
+  (`sovereign-cli-llm/src/remote_gguf.rs`). **Stage 0 step 1 PASSED**: the
+  production planner reproduced the hand-computed split exactly (worker blk 0-12
+  / 43.3 GiB, host blk 13-42 / 100.6 GiB, pooled PASS at headroom 1.08). Binding
+  headroom is 1.096, so the stock 1.2 would refuse this load — set it deliberately.
+  Next: Stage 0 step 2 (host-only split GGUF warms a worker, at 4 GB), then the
+  155 GB download.

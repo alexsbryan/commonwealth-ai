@@ -36,6 +36,7 @@ mod desktop_bridge;
 mod discover;
 mod enron;
 mod flywheel;
+mod faithfulness;
 mod gate;
 mod governance;
 mod lane_baseline;
@@ -120,6 +121,10 @@ const HELP: Help = Help {
                 "verifier",
                 "Verifier-v0 offline seams (VERIFIER_V0.md): extract-claims runs ONE (question, answer) pair through the production gate's claim-list extraction; Stream B harness verbs land here.",
             ),
+            (
+                "faithfulness",
+                "T1 P0.3: judge every RAPTOR node summary's claims against its member-chunk texts (production extract/support registers) — per-corpus unsupported-claim rate, JSONL rows for the gate twin (`bench gate faithfulness`).",
+            ),
         ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741. The model under \
@@ -164,6 +169,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
+        "faithfulness" => faithfulness::cmd_faithfulness(&args[1..]).await,
         "verifier" => verifier::cmd_verifier(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");

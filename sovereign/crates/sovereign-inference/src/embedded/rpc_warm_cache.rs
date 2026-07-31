@@ -309,12 +309,50 @@ fn hash_tensor_at(
     Ok(hash.finish())
 }
 
+/// Every sibling file name of a split GGUF (`<stem>-<idx>-of-<count>.gguf`),
+/// including `file_name` itself, in shard order — `None` when the name is not
+/// a split (or declares a single shard).
+///
+/// Pure name arithmetic, no I/O. This is the ONE definition of "what files does
+/// this model name denote"; `shard_files`, `total_model_bytes`, and the mesh's
+/// worker-side fetch all delegate here. It used to be copy-pasted in three
+/// places, which is exactly the kind of drift that produced the 2026-07-19
+/// empty-warm deadlock — the readers disagreeing about what "the whole model"
+/// means is the bug class, so there is deliberately only one parser.
+///
+/// Detection is by naming convention, matching what `llama-gguf-split` emits.
+/// We deliberately do NOT read `split.count` from the GGUF header: the callers
+/// that need this (advertising files, summing bytes) must answer before opening
+/// any file, and a header read would make the cheap path expensive.
+pub fn split_shard_names(file_name: &str) -> Option<Vec<String>> {
+    let of = file_name.rfind("-of-")?;
+    let count: u32 = file_name
+        .get(of + 4..)?
+        .strip_suffix(".gguf")?
+        .parse()
+        .ok()?;
+    let before = file_name.get(..of)?; // "<stem>-<idx>"
+    let dash = before.rfind('-')?;
+    let idx = before.get(dash + 1..)?;
+    idx.parse::<u32>().ok()?; // validate numeric
+    let width = idx.len();
+    let stem = before.get(..dash)?;
+    if count <= 1 {
+        return None;
+    }
+    Some(
+        (1..=count)
+            .map(|i| format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"))
+            .collect(),
+    )
+}
+
 /// All files holding this model's tensor data: `[path]` for a single-file
 /// model, or every `-NNNNN-of-NNNNN.gguf` sibling (in shard order) for a
 /// split. Split shards are each standalone GGUFs with their own header +
 /// tensor-info + data section, so every downstream reader parses them
 /// per-file. Returns `[path]` (never guesses) when any sibling is missing.
-pub(crate) fn shard_files(model_path: &Path) -> Vec<std::path::PathBuf> {
+pub fn shard_files(model_path: &Path) -> Vec<std::path::PathBuf> {
     let single = vec![model_path.to_path_buf()];
     let Some(name) = model_path.file_name().and_then(|n| n.to_str()) else {
         return single;
@@ -322,24 +360,12 @@ pub(crate) fn shard_files(model_path: &Path) -> Vec<std::path::PathBuf> {
     let Some(dir) = model_path.parent() else {
         return single;
     };
-    // Parse `<stem>-<idx>-of-<count>.gguf` (same shape total_model_bytes uses).
-    let parsed = name.rfind("-of-").and_then(|of| {
-        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
-        let before = name.get(..of)?;
-        let dash = before.rfind('-')?;
-        let idx = before.get(dash + 1..)?;
-        idx.parse::<u32>().ok()?;
-        Some((before.get(..dash)?.to_string(), count, idx.len()))
-    });
-    let Some((stem, count, width)) = parsed else {
+    let Some(names) = split_shard_names(name) else {
         return single;
     };
-    if count <= 1 {
-        return single;
-    }
-    let mut files = Vec::with_capacity(count as usize);
-    for i in 1..=count {
-        let shard = dir.join(format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"));
+    let mut files = Vec::with_capacity(names.len());
+    for shard_name in names {
+        let shard = dir.join(shard_name);
         if !shard.is_file() {
             return single; // a shard missing → don't guess
         }
@@ -1076,6 +1102,41 @@ pub fn gguf_block_count(path: &Path) -> std::io::Result<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one shard-name parser. `shard_files`, `total_model_bytes`, and the
+    /// mesh's `split_sibling_names` all route through this, so a disagreement
+    /// about what "the whole model" means is no longer expressible.
+    #[test]
+    fn split_shard_names_is_the_single_parser() {
+        // A split expands to every sibling, in order, preserving zero-pad width.
+        assert_eq!(
+            split_shard_names("m-00001-of-00003.gguf").unwrap(),
+            vec![
+                "m-00001-of-00003.gguf",
+                "m-00002-of-00003.gguf",
+                "m-00003-of-00003.gguf"
+            ]
+        );
+        // Any shard of the set names the same set — the worker is handed shard
+        // 2's name by the manifest and must still resolve the whole model.
+        assert_eq!(
+            split_shard_names("m-00002-of-00003.gguf").unwrap(),
+            split_shard_names("m-00001-of-00003.gguf").unwrap()
+        );
+        // Real unsloth shape: dashes in the stem must not confuse the parser.
+        let ds4 = split_shard_names("DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00001-of-00005.gguf")
+            .expect("5-way split");
+        assert_eq!(ds4.len(), 5);
+        assert_eq!(
+            ds4[4],
+            "DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00005-of-00005.gguf"
+        );
+        // Not a split: plain name, a 1-of-1 "split", and non-numeric junk.
+        assert!(split_shard_names("model.gguf").is_none());
+        assert!(split_shard_names("m-00001-of-00001.gguf").is_none());
+        assert!(split_shard_names("m-abc-of-00003.gguf").is_none());
+        assert!(split_shard_names("m-00001-of-xyz.gguf").is_none());
+    }
 
     #[test]
     fn shard_files_enumerates_siblings_and_never_guesses() {

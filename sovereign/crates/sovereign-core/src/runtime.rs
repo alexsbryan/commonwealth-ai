@@ -157,6 +157,10 @@ pub use grounding::grounding_gate_threshold;
 // EXACT production register (same prompt, parser, claim budget) instead of
 // re-implementing it in a script (VERIFIER_V0.md §3 Stream B).
 pub use grounding::extract_claim_list;
+
+/// Per-chunk support probe in the gate's exact register — the bench
+/// faithfulness lane's verdict primitive (see grounding/mod.rs docs).
+pub use grounding::claim_chunk_support;
 // The deterministic value-presence site checker — public so the Stream B
 // export re-validates every constructed corruption with the PRODUCTION
 // implementation (the flywheel generates against a pinned port of this fn;

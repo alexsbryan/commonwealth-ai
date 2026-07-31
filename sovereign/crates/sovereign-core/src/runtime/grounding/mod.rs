@@ -106,6 +106,21 @@ pub async fn extract_claim_list(
     judge::extract_claim_list(inference, question, answer, max_claims, posture).await
 }
 
+/// The gate's per-chunk support primitive, exported for the same reason as
+/// [`extract_claim_list`]: the bench faithfulness lane (T1 P0.3) judges
+/// RAPTOR-summary claims against member-chunk texts, and it must do so in
+/// the exact register the runtime gate uses — passage cap, prompt, and
+/// forced-choice normalization included — or lane rates stop predicting
+/// gate behavior. Returns support in [0,1]; `None` = judge failure.
+pub async fn claim_chunk_support(
+    inference: &Arc<dyn InferenceProvider>,
+    passage: &str,
+    claim: &str,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<f64> {
+    judge::claim_chunk_support(inference, passage, claim, posture).await
+}
+
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
 /// spawned stream tasks that hold no `&Runtime`).

@@ -671,7 +671,9 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
 /// Picking one on the operator's behalf hid a real cut mismatch for weeks.
 async fn cmd_plan(args: &[String]) -> i32 {
     use sovereign_inference::embedded as inf;
-    let mut model: Option<PathBuf> = None;
+    // Kept as the raw spec, not a PathBuf: it may be `hf:<owner>/<repo>/<variant>`,
+    // which `remote_gguf::resolve` turns into header-only stand-ins below.
+    let mut model_spec: Option<String> = None;
     let mut devices_gb: Vec<f64> = Vec::new();
     let mut host_idx: Option<usize> = None;
     // Default headroom mirrors the daemon's OWN resolution order exactly, so a
@@ -755,7 +757,9 @@ async fn cmd_plan(args: &[String]) -> i32 {
                 sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
                 return 0;
             }
-            s if model.is_none() && !s.starts_with('-') => model = Some(PathBuf::from(s)),
+            s if model_spec.is_none() && !s.starts_with('-') => {
+                model_spec = Some(s.to_string())
+            }
             other => {
                 eprintln!("Unknown arg: {other}");
                 return 2;
@@ -763,7 +767,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
         }
         i += 1;
     }
-    let Some(model) = model else {
+    let Some(model_spec) = model_spec else {
         sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
         return 2;
     };
@@ -811,6 +815,53 @@ async fn cmd_plan(args: &[String]) -> i32 {
             "device VRAM must be > 0 (a member may advertise 0 GB — pass --devices manually)"
         );
         return 2;
+    }
+
+    // Resolve the spec to something with a readable header. A filesystem path
+    // passes through untouched; `hf:…` is fetched header-only so an operator
+    // can size a 155 GB model before spending the download on it.
+    let resolved = match crate::remote_gguf::resolve(&model_spec).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let model = resolved.path.clone();
+
+    // Say what was actually read. A split model whose siblings are missing
+    // resolves to shard 1 alone and would otherwise plan a ~Nx-too-small
+    // model in confident silence — the one way this command can lie.
+    if !resolved.headers_only {
+        let named_split = model
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(sovereign_inference::embedded::split_shard_names)
+            .map(|v| v.len());
+        match named_split {
+            Some(want) if resolved.shards < want => {
+                eprintln!(
+                    "  WARNING: {} names a {want}-shard split but only {} shard(s) are on disk.\n           Planning the shard(s) present — this UNDERSTATES the model by ~{:.1}x.\n           Fetch the missing siblings before trusting this verdict.\n",
+                    model.display(),
+                    resolved.shards,
+                    want as f64 / resolved.shards.max(1) as f64
+                );
+            }
+            Some(want) => eprintln!(
+                "  model: {want} shards, {:.1} GB\n",
+                resolved.total_bytes as f64 / 1e9
+            ),
+            None => {}
+        }
+    } else {
+        // Name the basis. A header-only plan has exact tensor mass — the byte
+        // counts come from dims + ggml type, not from any file length — but it
+        // has not fetched a single weight, so it can say the model WOULD fit
+        // and cannot say the download will succeed.
+        eprintln!(
+            "  basis: GGUF headers only, {} — tensor mass exact, no weights fetched\n",
+            resolved.label
+        );
     }
 
     let n_layer = match inf::gguf_block_count(&model) {
@@ -2331,7 +2382,7 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
     summary: "Dry-run a model's tensor split across a mesh — per-device fit, offline, no load.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn mesh plan <model.gguf> (--from-mesh | --devices <gb,..>) [--host <idx>] [--headroom <f>] [--json]",
+            "svrn mesh plan <model.gguf | hf:owner/repo[/variant]> (--from-mesh | --devices <gb,..>) [--host <idx>] [--headroom <f>] [--json]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             (
@@ -2366,12 +2417,29 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
              memory as the loader reads it — whether a load started this second would succeed.\n\
              They differ whenever anything is loaded, and a large gap means 'busy', not 'too\n\
              small'. The exit code follows POSSIBLE: a device being momentarily busy does not\n\
-             make the plan wrong. Read the SAFE NOW line for what would happen right now.",
+             make the plan wrong. Read the SAFE NOW line for what would happen right now.\n\
+             \n\
+             The model can be a path or `hf:<owner>/<repo>[/<variant>]`, which plans a model you\n\
+             have NOT downloaded. Only the GGUF headers are fetched — a few MB by HTTP range —\n\
+             because the planner needs the block count and tensor table, never the weights: a\n\
+             155 GB five-shard model sizes for ~17 MB. Name the quant directory as <variant>;\n\
+             omit it and the command lists what the repo publishes rather than guessing, since\n\
+             choosing a quant is choosing how much of your memory to spend. A header-only plan\n\
+             is honest about tensor mass but has fetched no weights, so it cannot tell you the\n\
+             download will succeed — only whether it would fit if it did.",
         ),
         sovereign_cli_shared::help::HelpSection::Examples(&[
             (
                 "svrn mesh plan GLM-5.2.gguf --from-mesh",
                 "Plan across your actual running mesh (reads each node's advertised VRAM)",
+            ),
+            (
+                "svrn mesh plan hf:unsloth/DeepSeek-V4-Flash-0731-GGUF/UD-Q4_K_XL --from-mesh",
+                "Will this 155 GB model fit my mesh? Answered before downloading it",
+            ),
+            (
+                "svrn mesh plan hf:unsloth/DeepSeek-V4-Flash-0731-GGUF --devices 51,124",
+                "No variant named: lists the quants the repo publishes, then pick one",
             ),
             (
                 "svrn mesh plan Qwen3.5-122B.gguf --devices 64,32,32",

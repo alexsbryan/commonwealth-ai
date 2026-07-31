@@ -319,19 +319,7 @@ pub(crate) async fn verify_grounding(
     let mut max_support: f64 = 0.0;
     let mut checked = 0usize;
     for (is_extra, c) in judged.into_iter().take(cap) {
-        let passage: String = c.chars().take(2_400).collect();
-        let prompt = format!(
-            "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
-             CLAIM: {claim}\n\n\
-             Does the passage state or clearly imply this claim? Paraphrase counts; \
-             the passage merely mentioning the people or things involved, without \
-             establishing the claimed connection between them, does NOT count.\n\n\
-             Answer with exactly one letter — A = the passage supports the claim, \
-             B = it does not."
-        );
-        if let Some((a, b)) = forced_choice_ab(inference, &prompt, None, posture).await {
-            let denom = a + b;
-            let support = if denom > 0.0 { a / denom } else { 0.0 };
+        if let Some(support) = claim_chunk_support(inference, c, &claim, posture).await {
             let effective = if is_extra && support < CLAIM_RESCUE_FLOOR {
                 0.0
             } else {
@@ -367,6 +355,33 @@ pub(crate) async fn verify_grounding(
         claim: Some(claim),
         claim_evidence: extra,
     })
+}
+
+/// One per-chunk support probe — the exact register `verify_grounding`'s
+/// per-claim loop runs (passage cap 2,400 chars, forced-choice A/B,
+/// support = p(A)/(p(A)+p(B))). Shared with the bench faithfulness lane
+/// via the `grounding::claim_chunk_support` wrapper so the two registers
+/// can never drift — same contract as `extract_claim_list`'s wrapper.
+/// `None` = judge failure (caller decides fail-open vs retry).
+pub(super) async fn claim_chunk_support(
+    inference: &Arc<dyn InferenceProvider>,
+    passage: &str,
+    claim: &str,
+    posture: ShardingPrivacy,
+) -> Option<f64> {
+    let passage: String = passage.chars().take(2_400).collect();
+    let prompt = format!(
+        "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
+         CLAIM: {claim}\n\n\
+         Does the passage state or clearly imply this claim? Paraphrase counts; \
+         the passage merely mentioning the people or things involved, without \
+         establishing the claimed connection between them, does NOT count.\n\n\
+         Answer with exactly one letter — A = the passage supports the claim, \
+         B = it does not."
+    );
+    let (a, b) = forced_choice_ab(inference, &prompt, None, posture).await?;
+    let denom = a + b;
+    Some(if denom > 0.0 { a / denom } else { 0.0 })
 }
 
 /// Extract up to 4 specific, checkable factual claims from a

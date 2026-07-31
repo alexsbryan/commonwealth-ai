@@ -105,23 +105,14 @@ fn raw_warm_fallback_allowed(worker_ip: &str) -> bool {
 
 /// All sibling file names of a split GGUF (`<stem>-<idx>-of-<count>.gguf`),
 /// including `name` itself, in shard order; `[name]` for a non-split name.
-/// Pure name arithmetic — mirrors `sovereign-inference`'s shard enumeration
-/// so host and worker agree on what "the whole model" means.
+///
+/// Delegates to `sovereign-inference`'s `split_shard_names` — host and worker
+/// MUST agree on what "the whole model" means, and a second copy of the parser
+/// is a standing invitation to disagree. This wrapper only adds the
+/// non-split fallback the fetch path wants.
 fn split_sibling_names(name: &str) -> Vec<String> {
-    let parsed = name.rfind("-of-").and_then(|of| {
-        let count: u32 = name.get(of + 4..)?.strip_suffix(".gguf")?.parse().ok()?;
-        let before = name.get(..of)?;
-        let dash = before.rfind('-')?;
-        let idx = before.get(dash + 1..)?;
-        idx.parse::<u32>().ok()?;
-        Some((before.get(..dash)?.to_string(), count, idx.len()))
-    });
-    match parsed {
-        Some((stem, count, width)) if count > 1 => (1..=count)
-            .map(|i| format!("{stem}-{i:0width$}-of-{count:0width$}.gguf"))
-            .collect(),
-        _ => vec![name.to_string()],
-    }
+    sovereign_inference::embedded::split_shard_names(name)
+        .unwrap_or_else(|| vec![name.to_string()])
 }
 
 /// Render an error plus its `source()` chain — reqwest's top-level Display is just
