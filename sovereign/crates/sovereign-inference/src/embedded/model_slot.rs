@@ -1559,9 +1559,7 @@ impl ModelSlot {
                     // every 2-3s for hours, no surfacing to the
                     // operator. Add it to the set so the slot
                     // quarantines on the first failure instead.
-                    let is_prefill_error = msg.contains("MTP prefill decode failed")
-                        || msg.contains("MTP prefill batch add failed")
-                        || msg.contains("MTP process(prefill) failed");
+                    let is_prefill_error = mtp_error_is_prefill(&msg);
                     let quarantine_disabled = std::env::var("SOVEREIGN_MTP_QUARANTINE_DISABLE")
                         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                         .unwrap_or(false);
@@ -2557,6 +2555,43 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
+        Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, None, None)
+    }
+
+    /// Streaming twin of [`Self::generate_sync_mtp`] — the same loop,
+    /// with each accepted piece forwarded to `sink` as it lands and a
+    /// terminal `Finish { reason, usage }` frame on typed sinks. The
+    /// gate + quarantine wrapper is [`Self::generate_stream_dispatch`].
+    fn generate_stream_sync_mtp(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        quirks: &ModelQuirks,
+        sink: &StreamSink<'_>,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<()> {
+        Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, Some(sink), cancel)
+            .map(|_| ())
+    }
+
+    /// One MTP loop for both delivery modes. `sink: None` is the
+    /// classic accumulate-then-return arm (`generate_sync` dispatch);
+    /// `Some` streams every accepted piece — first sampled token,
+    /// jump-forward forced runs, accepted drafts, and bonus tokens —
+    /// the moment it is committed, so a streamed MTP turn has real
+    /// TTFT/ITL instead of a buffered blob. Receiver-drop stops the
+    /// loop without a terminal frame (the consumer is gone); `cancel`
+    /// mirrors `stream_generate_loop`'s token check per iteration.
+    fn generate_sync_mtp_impl(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        quirks: &ModelQuirks,
+        sink: Option<&StreamSink<'_>>,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<(String, usize, usize)> {
         // **Rebuild the MTP session at the request boundary.** The
         // session that ModelSlot::load constructed is reused across
         // every request; KV cache clear (below) resets the contexts'
@@ -2816,8 +2851,18 @@ impl ModelSlot {
 
         let mut output = String::new();
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+        // Streaming bookkeeping. `finish_reason` defaults to Length —
+        // the `while` condition exiting means max_tokens was hit; every
+        // break overwrites it with the specific reason (same idiom as
+        // stream_generate_loop). `receiver_gone` latches a failed send:
+        // stop decoding, and never send a terminal frame afterwards.
+        let mut receiver_gone = false;
+        let mut finish_reason = FinishReason::Length;
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
+            if let Some(s) = sink {
+                receiver_gone = !s.send_piece(&piece);
+            }
         }
 
         let mut n_generated: usize = 1;
@@ -2850,8 +2895,17 @@ impl ModelSlot {
         let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
         let started_at = Instant::now();
 
-        while n_generated < max_tokens {
+        while !receiver_gone && n_generated < max_tokens {
             if model.is_eog_token(last_token) {
+                finish_reason = FinishReason::Stop;
+                break;
+            }
+            if cancel.is_some_and(|t| t.is_cancelled()) {
+                tracing::warn!(
+                    tokens_emitted = n_generated,
+                    "mtp:cancelled via CancellationToken"
+                );
+                finish_reason = FinishReason::Cancelled;
                 break;
             }
             if Instant::now() > deadline {
@@ -2934,6 +2988,12 @@ impl ModelSlot {
                     jump_fwd_bytes_n += piece.len();
                     forced_run.push(ftok);
                     n_generated += 1;
+                    if let Some(s) = sink {
+                        if !s.send_piece(&piece) {
+                            receiver_gone = true;
+                            break;
+                        }
+                    }
                     if n_generated >= max_tokens {
                         break;
                     }
@@ -2945,6 +3005,11 @@ impl ModelSlot {
                         jump_fwd_max = forced_run.len();
                     }
                 }
+            }
+            // Consumer dropped mid-forced-run: skip the forced verify
+            // round (its only purpose is to keep generating) and exit.
+            if receiver_gone {
+                break;
             }
 
             // Forced-only verify round. No drafts; only commits the
@@ -3005,6 +3070,9 @@ impl ModelSlot {
                         .token_to_piece(next_token, &mut decoder, true, None)
                         .unwrap_or_default();
                     output.push_str(&piece);
+                    if let Some(s) = sink {
+                        receiver_gone = !s.send_piece(&piece);
+                    }
                 }
                 n_generated += 1;
                 last_token = next_token;
@@ -3017,6 +3085,7 @@ impl ModelSlot {
                     break;
                 }
                 if model.is_eog_token(last_token) {
+                    finish_reason = FinishReason::Stop;
                     break;
                 }
                 continue;
@@ -3129,12 +3198,21 @@ impl ModelSlot {
                     .unwrap_or_default();
                 output.push_str(&piece);
                 n_generated += 1;
+                if let Some(s) = sink {
+                    if !s.send_piece(&piece) {
+                        receiver_gone = true;
+                        break;
+                    }
+                }
                 if model.is_eog_token(tok) {
                     hit_eos = true;
                     break;
                 }
             }
-            if hit_eos || n_generated >= max_tokens {
+            if hit_eos {
+                finish_reason = FinishReason::Stop;
+            }
+            if receiver_gone || hit_eos || n_generated >= max_tokens {
                 break;
             }
             let piece = model
@@ -3142,6 +3220,12 @@ impl ModelSlot {
                 .unwrap_or_default();
             output.push_str(&piece);
             n_generated += 1;
+            if let Some(s) = sink {
+                if !s.send_piece(&piece) {
+                    receiver_gone = true;
+                    break;
+                }
+            }
             last_token = next_token;
             n_past = new_n_past;
         }
@@ -3194,8 +3278,23 @@ impl ModelSlot {
             jump_fwd_max,
             jump_fwd_bytes_n,
             jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
+            streamed = sink.is_some(),
+            receiver_gone,
             "mtp: end-of-generation"
         );
+
+        if let Some(s) = sink {
+            if !receiver_gone {
+                s.send_finish(
+                    finish_reason,
+                    StreamUsage {
+                        prompt_tokens: tokens.len() as u32,
+                        completion_tokens: n_generated as u32,
+                        total_tokens: (tokens.len() + n_generated) as u32,
+                    },
+                );
+            }
+        }
 
         Ok((output, tokens.len(), n_generated))
     }
@@ -3836,6 +3935,130 @@ impl ModelSlot {
             max_tokens,
             clear_kv_at_end: false,
         })
+    }
+
+    /// Streaming front door — the stream twin of [`Self::generate_sync`]'s
+    /// MTP dispatch. Routes an eligible request (speculative slot, no
+    /// tools, no forced-choice sentinel, `SOVEREIGN_MTP_DISABLE` unset)
+    /// through the speculative loop with per-accepted-piece emission;
+    /// everything else takes the single-token stream loop for `sink`'s
+    /// channel type.
+    ///
+    /// Quarantine mirrors `generate_sync`: on the prefill-error set
+    /// (`gates::mtp_error_is_prefill`) the slot demotes to SingleToken
+    /// and the request re-runs on the single-token stream. That
+    /// fall-through is wire-safe ONLY because every quarantining error
+    /// fires before the first frame is emitted — the predicate's doc
+    /// comment pins that invariant. All other errors propagate; the
+    /// engine call site turns them into a terminal `Error` frame.
+    ///
+    /// Until 2026-07-31 the streaming entries called
+    /// `generate_stream_sync*` directly, so a streamed request could
+    /// never ride MTP — every streamed benchmark of an MTP model was
+    /// silently measuring single-token decode (note cd938d47).
+    pub(crate) fn generate_stream_dispatch(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        sink: StreamSink<'_>,
+        quirks: &ModelQuirks,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<()> {
+        if mtp_dispatch_eligible(request, slot_ctx.is_speculative(), |k| {
+            std::env::var(k).ok()
+        }) {
+            match Self::generate_stream_sync_mtp(
+                model, model_id, slot_ctx, request, quirks, &sink, cancel,
+            ) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let msg = e.to_string();
+                    let quarantine_disabled = std::env::var("SOVEREIGN_MTP_QUARANTINE_DISABLE")
+                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
+                    if mtp_error_is_prefill(&msg) && !quarantine_disabled {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = %msg,
+                            "MTP prefill failed on the streaming path — quarantining MTP \
+                             on this slot and falling through to single-token streaming. \
+                             Restart the daemon to re-enable; set \
+                             SOVEREIGN_MTP_QUARANTINE_DISABLE=1 to surface the error \
+                             instead."
+                        );
+                        slot_ctx.demote_to_single_token(model_id)?;
+                        // Fall through — zero frames emitted (the
+                        // quarantine set is prefill-only), so the
+                        // single-token rerun starts a clean stream.
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        match sink {
+            StreamSink::Typed(tx) => Self::generate_stream_sync_with_finish(
+                model,
+                model_id,
+                slot_ctx.ctx_mut(),
+                request,
+                tx,
+                quirks,
+                cancel,
+            ),
+            StreamSink::Legacy(tx) => Self::generate_stream_sync(
+                model,
+                model_id,
+                slot_ctx.ctx_mut(),
+                request,
+                tx,
+                quirks,
+                cancel,
+            ),
+        }
+    }
+}
+
+/// Channel adapter over the two streaming surfaces, so the MTP loop is
+/// written once against both. The legacy `Result<String>` channel has
+/// no terminal-frame vocabulary (consumers treat channel-close as
+/// end-of-stream), so `send_finish` is a typed-only concern.
+pub(crate) enum StreamSink<'a> {
+    /// `StreamFrame` channel — the `complete_stream_with_finish` path.
+    Typed(&'a tokio::sync::mpsc::Sender<StreamFrame>),
+    /// Legacy `Result<String>` channel — the `complete_stream` path.
+    Legacy(&'a tokio::sync::mpsc::Sender<Result<String>>),
+}
+
+impl StreamSink<'_> {
+    /// Forward one decoded piece. Returns false when the receiver is
+    /// gone (consumer dropped the stream) — the generation loop must
+    /// stop decoding and must NOT send a terminal frame afterwards.
+    /// Empty pieces are skipped: the incremental UTF-8 decoder yields
+    /// "" mid-codepoint, and both client-side parsers drop empty
+    /// deltas anyway.
+    fn send_piece(&self, piece: &str) -> bool {
+        if piece.is_empty() {
+            return true;
+        }
+        match self {
+            Self::Typed(tx) => tx
+                .blocking_send(StreamFrame::Token(piece.to_string()))
+                .is_ok(),
+            Self::Legacy(tx) => tx.blocking_send(Ok(piece.to_string())).is_ok(),
+        }
+    }
+
+    /// Terminal frame with the real finish reason + usage. No-op on
+    /// the legacy channel.
+    fn send_finish(&self, reason: FinishReason, usage: StreamUsage) {
+        if let Self::Typed(tx) = self {
+            let _ = tx.blocking_send(StreamFrame::Finish {
+                reason,
+                usage: Some(usage),
+            });
+        }
     }
 }
 

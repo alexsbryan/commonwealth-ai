@@ -245,6 +245,26 @@ pub(crate) fn mtp_dispatch_eligible(
         && forced_choice_candidates(request).is_none()
 }
 
+/// Classify an MTP-path error as "draft side broken on this slot,
+/// single-token decode still works" — the set that quarantines the
+/// slot (demote to SingleToken) and retries the request on the
+/// non-MTP path. Shared by the sync and streaming dispatchers so the
+/// two can't drift.
+///
+/// INVARIANT the streaming dispatcher depends on: every error in this
+/// set fires BEFORE the first token is emitted (prefill decode,
+/// prefill batch add, process(prefill) — all precede the first
+/// sample). The streamed fallback re-runs the request from scratch on
+/// the single-token path, which is only wire-safe when zero frames
+/// have been sent. Do NOT add a post-emission error site to this set
+/// without teaching `generate_stream_dispatch` to refuse the
+/// fall-through once emission has started.
+pub(crate) fn mtp_error_is_prefill(msg: &str) -> bool {
+    msg.contains("MTP prefill decode failed")
+        || msg.contains("MTP prefill batch add failed")
+        || msg.contains("MTP process(prefill) failed")
+}
+
 /// Longest-common-prefix result for the prefix cache: `raw` is the
 /// honest LCP (logged for diagnostics), `effective` is what the KV
 /// keep actually uses after the capability gate.
@@ -683,6 +703,33 @@ mod tests {
             true,
             env(&[("SOVEREIGN_MTP_DISABLE", "true")])
         ));
+    }
+
+    #[test]
+    fn mtp_prefill_errors_quarantine_and_nothing_else_does() {
+        // The quarantine set — all three fire BEFORE the first token
+        // is emitted, which is what makes the streaming dispatcher's
+        // fall-through to single-token wire-safe (see the predicate's
+        // doc comment before extending this list).
+        for msg in [
+            "Inference error: MTP prefill decode failed: Decode Error -3: unknown",
+            "MTP prefill batch add failed: batch full",
+            "MTP process(prefill) failed: SomeFfiError",
+        ] {
+            assert!(mtp_error_is_prefill(msg), "{msg:?} must quarantine");
+        }
+        // Post-emission / non-prefill MTP errors must NOT quarantine:
+        // frames may already be on the wire, so the dispatchers
+        // propagate these instead of re-running the request.
+        for msg in [
+            "MTP verify decode failed: Decode Error 1: NoKvCacheSlot",
+            "MTP draft phase failed: SomeFfiError",
+            "MTP begin failed: SomeFfiError",
+            "MTP session rebuild failed: SomeFfiError",
+            "Prompt too long: 32000 tokens already meets or exceeds the context window",
+        ] {
+            assert!(!mtp_error_is_prefill(msg), "{msg:?} must NOT quarantine");
+        }
     }
 
     // ── compute_lcp ──────────────────────────────────────────────

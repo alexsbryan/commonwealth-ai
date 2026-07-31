@@ -44,7 +44,7 @@ svrn workflow run my-pipeline.toml
 
 Some models won't fit on one computer. Pool a second, or a few, that you or people you trust already own — the layers spread across them and you talk to it as if it were local. Three 64 GB machines can hold a model no one of them could.
 
-We publish one measured number for this, not a benchmark of our best day: a 122B model split across an AMD mini-PC and a Mac on a home LAN decodes at **8.4 tok/s** (median of 4 runs). [A number you can check](./docs/A_NUMBER_YOU_CAN_CHECK.md) has the exact hardware, the commands, and — the actual point — how to get the honest number for *your* machines before you commit to anything.
+We publish one measured number for this, not a benchmark of our best day: a 122B model split across an AMD mini-PC and a Mac on a home LAN decodes at **8.5 tok/s** (median of 5 runs). [A number you can check](./docs/A_NUMBER_YOU_CAN_CHECK.md) has the exact hardware, the commands, and — the actual point — how to get the honest number for *your* machines before you commit to anything.
 
 ```sh
 svrn mesh create        # on the host, prints a key like cwth-a1b2-c3d4-e5f6

@@ -2923,12 +2923,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 slot.last_used
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_sync(
+                if let Err(e) = ModelSlot::generate_stream_dispatch(
                     &slot.model,
                     &slot.model_id,
-                    ctx_lock.ctx_mut(),
+                    &mut ctx_lock,
                     &request,
-                    &tx,
+                    StreamSink::Legacy(&tx),
                     &quirks,
                     None,
                 ) {
@@ -3036,12 +3036,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
-                if let Err(e) = ModelSlot::generate_stream_sync(
+                if let Err(e) = ModelSlot::generate_stream_dispatch(
                     &slot.model,
                     &slot.model_id,
-                    ctx_lock.ctx_mut(),
+                    &mut ctx_lock,
                     &request,
-                    &tx,
+                    StreamSink::Legacy(&tx),
                     &quirks,
                     None,
                 ) {
@@ -3069,12 +3069,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_sync(
+                if let Err(e) = ModelSlot::generate_stream_dispatch(
                     &slot.model,
                     &slot.model_id,
-                    ctx_lock.ctx_mut(),
+                    &mut ctx_lock,
                     &request,
-                    &tx,
+                    StreamSink::Legacy(&tx),
                     &quirks,
                     None,
                 ) {
@@ -3174,12 +3174,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         None,
                     )
                 } else {
-                    ModelSlot::generate_stream_sync_with_finish(
+                    ModelSlot::generate_stream_dispatch(
                         &slot.model,
                         &slot.model_id,
-                        ctx_lock.ctx_mut(),
+                        &mut ctx_lock,
                         &request,
-                        &tx,
+                        StreamSink::Typed(&tx),
                         &quirks,
                         None,
                     )
@@ -3287,12 +3287,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
-                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
+                if let Err(e) = ModelSlot::generate_stream_dispatch(
                     &slot.model,
                     &slot.model_id,
-                    ctx_lock.ctx_mut(),
+                    &mut ctx_lock,
                     &request,
-                    &tx,
+                    StreamSink::Typed(&tx),
                     &quirks,
                     None,
                 ) {
@@ -3336,12 +3336,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         None,
                     )
                 } else {
-                    ModelSlot::generate_stream_sync_with_finish(
+                    ModelSlot::generate_stream_dispatch(
                         &slot.model,
                         &slot.model_id,
-                        ctx_lock.ctx_mut(),
+                        &mut ctx_lock,
                         &request,
-                        &tx,
+                        StreamSink::Typed(&tx),
                         &quirks,
                         None,
                     )

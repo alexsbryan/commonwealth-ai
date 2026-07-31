@@ -68,6 +68,16 @@ the dispatcher routes schema/no-tools requests through
 `generate_sync_mtp` (speculative decoding via the MTP head). Wiring
 jump-forward into the MTP loop is tracked.
 
+Streaming rides the same MTP dispatch since 2026-07-31:
+`generate_stream_dispatch` fronts both streaming channels (typed
+`StreamFrame` and legacy `Result<String>`, via `StreamSink`) and
+routes eligible requests through the speculative loop with
+per-accepted-piece emission — same gate, same prefill-error
+quarantine as the sync path. Before that, streamed requests could
+only ever single-token decode, so every streamed benchmark of an
+MTP model silently measured the non-MTP path (measured cost: 44.3
+vs 38.1 tok/s on Qwen3.5-4B-MTP, Strix Halo Vulkan).
+
 Telemetry: per-request `inference: end-of-generation` carries
 `jump_fwd_n` / `jump_fwd_runs` / `jump_fwd_bytes_n` so throughput
 decomposes by path.

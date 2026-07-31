@@ -13,16 +13,16 @@ mini-PC and a Mac on one flat home LAN — no special interconnect:
 
 | | measured |
 |---|---|
-| Decode | **8.4 tok/s** — median of 4 runs, observed 7.8–11.1 |
-| Time to first token | 2.5 s |
-| Inter-token latency (p50) | 93 ms |
+| Decode | **8.5 tok/s** — median of 5 runs, observed 7.7–11.1 |
+| Time to first token | 2.7 s |
+| Inter-token latency (p50) | 87 ms |
 | Context length | 32,768 |
 | Split | 36 layers + output head on the host · 12 layers on the worker |
 
 What that feels like: tokens arrive a little faster than most people read.
 
 The headline is the **median run**, and every companion figure comes from that
-same run — we don't stitch a best-of composite. One of the four runs came in
+same run — we don't stitch a best-of composite. One of the five runs came in
 30% above the band, coherently faster on every metric at once; we couldn't
 attribute it, so it widens the observed range and does not set the headline.
 Your number should land near the median.
@@ -39,6 +39,31 @@ this model alone — 86 GB of weights against 64 GB of memory — and never hold
 the file on disk: at load it is handed its 12-layer slice over the mesh, keeps
 it resident, and after that only a few kilobytes of state cross the wire per
 answer.
+
+## What the split costs
+
+The host in this pair can, with everything else cleared out of the way, hold
+the whole model by itself. So we measured that too — same command, same
+model, same context length — and publish the difference instead of hiding it:
+
+| | split (2 nodes) | fully resident (host alone) |
+|---|---|---|
+| Decode | 8.5 tok/s | **19.3 tok/s** |
+| Inter-token latency (p50) | 87 ms | 52 ms |
+| Time to first token | 2.7 s | 0.5 s |
+| Prefill | 11 tok/s | 58 tok/s |
+
+The solo column is a single run of three steady trials (19.33–19.38 tok/s);
+the split column is the median-of-5 story above. Every decoded token crosses
+the LAN exactly once in the split, and that hop is most of the gap: on the
+same engine build, measured back to back the same day, the split ran 9.7
+tok/s against 19.3 solo — about 26 ms of network added to every token.
+
+Splitting is not a speedup. It is the price of running a model your machines
+cannot hold one-at-a-time — the worker here (64 GB) has no solo column at
+any price. When the mass *does* fit one node, `svrn mesh plan` says so
+("mass alone fits 1 node — 0 hops") instead of assuming the mesh is the
+answer, and this table is what that advice is worth.
 
 ## Reproduce it
 
