@@ -292,6 +292,8 @@ Use `note` to leave durable context for future sessions. **Do not wait until the
 - **`todo`** — when you identify follow-up work that won't be done in this session
 - **`attempt`** — when an approach was tried and failed, so future-you doesn't repeat it
 
+**Shipping anything default-off or dark additionally requires a row in `sovereign/DEFAULTS_LEDGER.md` — in the same commit.** The row names the falsifiable flip condition, which plan item settles it, and a review-by date. Flipping or rejecting a default moves its row (Graduated/Rejected), never deletes it. If you touch an area whose ledger row is past its review-by date, raise it to the operator: flip it, kill it, or re-date it with a reason — "still waiting" without a named blocker is not a valid state. This exists because proven-but-dark capabilities were withering: the flip condition lived only in a session summary nobody re-read (operator directive 2026-07-31).
+
 ### Session reflection — at task end
 
 Use `session_reflection` when a significant task is complete. This improves the system over time.

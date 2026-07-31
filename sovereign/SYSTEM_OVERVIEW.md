@@ -14,6 +14,10 @@ you change a subsystem, update its entry in the same PR. It states
 what IS; how the system came to be this shape — the reversals,
 decompositions, and archaeology — lives in
 [`HISTORY.md`](./HISTORY.md), linked from the entries it explains.
+Capabilities that exist but ship default-off or dark are tracked in
+[`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) — each with the
+falsifiable condition that flips it and a review-by date; shipping
+dark without a ledger row is a contract violation.
 
 ---
 
