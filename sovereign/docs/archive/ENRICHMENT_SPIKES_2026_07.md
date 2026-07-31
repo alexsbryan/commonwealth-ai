@@ -1,10 +1,14 @@
-# Enrichment de-risking spikes — SP1–SP6 + D1 (2026-07-30 → 2026-07-31)
+# Enrichment de-risking spikes — SP1–SP6 + D1 + P5 probes (2026-07-30 → 2026-07-31)
 
 **Status: CLOSED 2026-07-31.** All six spikes from
 `corpus-engine/ENRICHMENT_ROADMAP_SIZING.md` §1 answered against the
 pre-registered gate table (frozen in
 `research/enrichment-spikes/README.md` before any run), plus the D1
-dead-code/doc-truth sweep (commit `a564c93f`). Full workspace gates
+dead-code/doc-truth sweep (commit `a564c93f`). The three optional
+Wave-4 P5 probes (gates G8–G10, report-only) were subsequently funded
+and answered the same day (commits `9176c920`, `54b7b3ee`,
+`a6c9bfdc`); their memos are appended below and their rows added to
+the verdict table. Full workspace gates
 green at close: lint `--full` 0 errors, tests 8,827 pass / 0 fail.
 Total spend ≈ 5 engineer-days against the §1 estimate of 5–8.
 
@@ -29,6 +33,9 @@ verbatim (headings demoted one level). Design doc:
 | SP5 | NP extraction + Leiden in Rust — adopt or write? | **PASS with 57× headroom** — 5.2 s wall for 10k chunks (gate < 300 s), 17/20 communities cohere | P2.2 `L (10-15d)`, confidence Med→High. **Adopt `leiden-rs`** (vendor/pin-audit caveat), **write** the ~250-line NP/co-occurrence layer; entity-co-occurrence-only fallback dead |
 | SP6 | Late chunking on the 0.6B embedder — memory + recall? | Binding **works** on vendored llama-cpp-4 0.4.2 (0.2.x null-buffer gone); peak RSS 7.1/12.8/24.4 GB at W=8k/16k/32k; recall hit@5/@10 = 1.000 all arms (article-level golden saturates), MRR 0.953→1.000 at 1.4–2.9× embed cost | **P2.4 late-chunking follow-on DEFERRED** — zero measurable gain at k≥5 doesn't pay for memory + embed-time + offsets plumbing. Re-open: chunk-granularity golden, or the cheaper contextual embed-text sibling A/Bs positive with headroom. P2.4's non-late scope stands `M (3-5d) · Med` |
 | D1 | Dead-code + doc-truth sweep | Landed on main (`a564c93f`): ConvTieredProvider deleted, debouncer v1 pass gated for atlas views, FieldModelStats stub deleted, ~18 doc-lies fixed, GLiNER comments corrected against SP1 measurements | Ratchet: dead code deleted, docs truth-restored, store/knob counts unchanged — T1's "demolition permit" bought |
+| P5.1 (G8) | LLM tree-descent answerer vs one-shot top-K at equal evidence budget? | **Descent LOSES** — facts-in-answer 31/140 vs 39/140, evidence assembly is the gap (mean facts-in-evidence 2.07 vs 3.57) at 2–3 LLM calls vs 1; routing itself worked (15/15 picks parse, on-topic). Side finding: `--group-by-article` RAPTOR output is a **forest** (42 parentless tops), invisible to fetch-all-then-filter consumers | P5 re-plan: descent-as-answerer not the payoff at 4.5k-chunk scale; revisit only at much larger corpora or cross-article synthesis. Any descent consumer must root at parentless nodes |
+| P5.2a (G9) | ColModernVBERT page-score separation + ONNX exportability? | **Separation real** — top-1 0.625, MRR 0.790, +0.55 margin on 16 SEP pages, 1.15 s/page MPS fp32; misses are semantic neighbors. **ONNX export NO as-shipped** (TorchScript `aten::__ior_`, dynamo `aten._is_all_true` — upstream mask hygiene; ort rc.9 never reached) | P5 re-plan must price torch/Python residency vs an upstream export patch (S-M) against demonstrated quality |
+| P5.2b (G10) | MaxSim multi-vector Lance sibling-table viable at recorded sizing? | **YES** — native multivector on pinned lancedb 0.27.2; 10.5 GB f32 / ≈2.6 GB int8 at 188k chunks (in the 3–6 GB band int8); brute-force exact ~2 s/query at scale; IVF-PQ approximates MaxSim poorly at defaults but is `refine_factor`-tunable (0.61–0.66 overlap at rf=10, ~64 ms/query at 60k) | Storage mechanism de-risked for P5; interactive-latency path needs the refine knob or a coarse-then-exact rerank |
 
 ## What this decides — next workstreams
 
@@ -54,10 +61,13 @@ money is committed (sizing doc §1). Outcome, in tranche terms (§4):
    A/B-only at a known latency budget (SP4) — its "build a Qwen3
    protocol branch" line item stays cancelled; jina/harrier retired
    as working defaults.
-4. **Wave 4 (P5.1/P5.2a/P5.2b probes, gates G8–G10) remains
-   optional** — report-only evidence for re-planning full P5 after
-   T2, runnable in T1/T3 slack (§4 Tranche 4). Nothing downstream
-   commits on them.
+4. **Wave 4 (P5.1/P5.2a/P5.2b probes, gates G8–G10) RAN** — funded
+   in T1 slack and answered 2026-07-31. Net for the eventual P5
+   re-plan: storage is de-risked (P5.2b), page-embedding quality is
+   real but deployment is torch-resident until an upstream export
+   patch lands (P5.2a), and LLM tree-descent is not the answering
+   strategy at current corpus scale (P5.1). Nothing downstream
+   commits on them — they are evidence on the shelf.
 
 ## Cross-cutting operational findings (surfaced by the spikes, kept as notes)
 
@@ -831,3 +841,326 @@ re-runnable against any future golden in minutes.
 
 SP6 row in `ENRICHMENT_ROADMAP_SIZING.md` §1 updated; P2.4 stays `M (3-5d) ·
 Med` for its non-late-chunking scope.
+
+---
+
+# The three P5 probe memos, verbatim
+
+## P5.1 — Budgeted tree-descent answerer vs one-shot top-K (G8)
+
+**VERDICT: G8 answered (report-only). At an equal ~3,000-token evidence budget
+on the 14-question summarize banks, LLM tree-descent does NOT beat one-shot
+cosine top-K: overall facts-in-answer 31/140 (0.221) descent vs 39/140 (0.279)
+one-shot, and the gap starts upstream in evidence assembly — descent's leaf
+pools carry a mean 2.07 expected facts vs 3.57 for cosine top-K. Descent wins
+narrowly on the main `summarize` bank (19/80 = 0.238 vs 16/80 = 0.200) and
+loses decisively on `summarize_obscure` (12/60 = 0.200 vs 23/60 = 0.383),
+at 2–3 LLM calls and ~19.1 s/question vs 1 call and ~15.6 s. Routing itself
+worked: hop logs show the model picking the on-topic subtree tops (e.g. both
+idealism nodes for `summary_idealism`), so the loss is granularity, not
+navigation — one subtree's leaves are a worse evidence pool than corpus-wide
+chunk cosine at the same budget. Two findings with value beyond the score:
+(1) the `--group-by-article` RAPTOR output is a FOREST (42 parentless tops:
+2 level-2 + 40 article-level-1), invisible to production because both
+consumers fetch-all-then-filter — any future descent consumer must start from
+parentless nodes, not max-level; (2) `preferred_speed: Slow` requests fail
+outright when the 35B primary is not resident, and the first run's harness
+swallowed all 56 such failures via `unwrap_or_default()` — scores were
+vacuously zero and hop "descents" were pure first-2 fallback.**
+
+Measured 2026-07-31, M2 Max, daemon on :9741, chat = Qwen3.6-35B-A3B-UD-MTP-
+IQ4_NL (temperature 0, thinking off), embeddings = qwen-embedding-0.6b.
+Harness `sovereign/crates/sovereign-inference/examples/p51_descent.rs` +
+`research/enrichment-spikes/scripts/p51_dump.py` (both committed). Raw logs:
+`runs/p51/{hops.jsonl,results.jsonl,run.log}`.
+
+### Question (gate G8)
+
+Nothing in production walks `children_node_ids` — both consumers fetch-all-
+then-filter. If a consumer DID descend the RAPTOR tree top-down with an LLM
+pick-next-children call per hop under a relevance-call budget
+(LazyGraphRAG-style), answering from reached leaves' member chunks, does it
+beat one-shot cosine top-K at the SAME evidence-token budget? Report-only:
+score delta + complete hop logs; evidence for re-planning P5 after T2.
+
+### Method (exact commands)
+
+```
+.venv/bin/python scripts/p51_dump.py --db ~/.svrnmesh/sovereign.db \
+  --chunks ~/.svrnmesh/indexes/sep/chunks.lance --corpus sep \
+  --banks sovereign/bench/sep/summarize.toml sovereign/bench/sep/summarize_obscure.toml \
+  --out-dir data
+cargo build -p sovereign-inference --example p51_descent
+./target/debug/examples/p51_descent research/enrichment-spikes/data \
+  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL research/enrichment-spikes/runs/p51
+```
+
+Tree = the SP2-checkpoint-rebuilt 271-node scoped sep tree (224 level-0 /
+45 level-1 / 2 level-2 over the 14 bank articles, 4,488 chunks). Both arms
+answer with the same model + prompt at the same ~3,000-token evidence budget;
+descent additionally spends pick calls (budget 8, observed 1–2/question, 15
+total) —
+frontier of subtree summaries shown, model picks 2, repeat until leaves.
+Score = substring match of the bank's `expected_facts` (10/question) against
+answer and against assembled evidence, both logged per row.
+
+### Results
+
+| Bank | Arm | Facts in answer | Mean facts in evidence | LLM calls/q | Wall/q |
+|---|---|---|---|---|---|
+| summarize (n=8) | descent | 19/80 = 0.238 | 1.75 | 2 | ~19.4 s |
+| summarize (n=8) | oneshot | 16/80 = 0.200 | 2.75 | 1 | ~15.8 s |
+| summarize_obscure (n=6) | descent | 12/60 = 0.200 | 2.50 | 2–3 | ~18.7 s |
+| summarize_obscure (n=6) | oneshot | 23/60 = 0.383 | 4.67 | 1 | ~15.4 s |
+
+- **Evidence assembly is where descent loses.** Per-question
+  `facts_in_evidence` ≤ oneshot on 11/14 questions. Committing the whole
+  budget to 2 picked subtrees means one mis-pick (or one article whose facts
+  are spread across sibling subtrees) forfeits facts that corpus-wide cosine
+  scoops up. `summary_recursive_functions` is the sharpest case: descent
+  reached the deep level-2 cluster (3 calls) yet landed 0/10 facts in
+  evidence vs oneshot's 5.
+- **Answer extraction roughly tracks evidence** (mean in_answer ≈ in_ev −1
+  both arms); a couple of rows answer facts not in evidence (model prior
+  leakage, e.g. `summary_game_theory` descent 1/0) — substring scoring noise,
+  same for both arms.
+- **Hop logs are complete and picks are real**: 15 pick calls total (13
+  questions resolve in one hop — article top straight to leaves;
+  recursive-functions takes 2 through its level-2 cluster), zero failed or
+  unparseable replies; picks vary by question ("16, 28"-style).
+
+### Findings beyond the score
+
+1. **The tree is a forest.** `enrich raptor --group-by-article` yields
+   per-article subtrees; level 2 formed over only one cluster (recursive
+   functions). 42 of 271 nodes are parentless (2 level-2 + 40 level-1).
+   The probe's first version started descent from `level == max_level` and
+   could reach only 5/45 level-1 subtrees — every question except
+   recursive-functions was structurally unanswerable, and nothing in
+   production would ever notice because both consumers fetch-all-then-filter.
+   Fix: start from parentless non-leaf nodes (`p51_descent.rs`), frontier cap
+   48 so all 42 tops fit one pick call (~4.4k-token prefill, fine at 35B).
+   Any future descent-shaped consumer (or tree-quality lint) must do the
+   same, or assert single-rootedness at build time.
+2. **Silent inference failure made the first run vacuously zero.** With the
+   35B primary not resident, every `complete()` (pick AND answer, 56 calls)
+   failed; `unwrap_or_default()` hid it, so results looked like "descent ran,
+   facts 0/140" and hop logs showed empty replies with fallback picks.
+   Harness now eprintlns every failed call and flushes JSONL per line. The
+   same tiny request succeeds via direct `/v1/chat/completions` curl once the
+   model auto-loads — worth knowing for any Speed::Slow batch client.
+
+### Consequence for P5 re-planning
+
+Tree-descent as an ANSWERING strategy is not the P5 payoff at this corpus
+scale — one-shot cosine over 4.5k chunks is cheaper and better, and it will
+take a much larger corpus (where top-K cosine dilutes) or a hierarchical-
+navigation-specific task (cross-article synthesis at level 1+) for descent to
+pay. The forest finding is load-bearing for any P5 design that assumes "the
+RAPTOR tree" is one tree. Hop logs in `runs/p51/hops.jsonl` are the complete
+per-hop record if a future re-plan wants to re-score picks against labels.
+
+---
+
+## P5.2a — ColModernVBERT page-score separation + ONNX feasibility (G9)
+
+**VERDICT: G9 answered (report-only). (1) Separation: real — top-1 0.625,
+MRR 0.790, mean margin +0.55 on a 16-page / 16-query fixture of dense
+SEP-article pages at 150 DPI, OCR-free; every miss is a semantically adjacent
+page, not noise. Embed cost 1.15 s/page on MPS (259M params, 1,149 vectors ×
+128d per page). (2) ONNX export: NOT feasible as-shipped — TorchScript
+exporter dies on `aten::__ior_` (in-place mask OR), dynamo exporter dies on
+`aten._is_all_true` (no ONNX decomposition); both are mask-hygiene ops in the
+upstream ModernVBERT modeling code, so the fix is an upstream patch, not an
+ort question. The pinned ort rc.9 was never reached.**
+
+Measured 2026-07-31, M2 Max (MPS float32). Scripts committed:
+`scripts/p52a_fixture.py`, `scripts/p52a_score.py`, `scripts/p52a_onnx.py`.
+Artifacts: `runs/p52a/scores.json`, `runs/p52a/onnx/verdict.json` +
+tracebacks. Fixture: `data/p52a/` (gitignored; regenerated by the fixture
+script deterministically).
+
+### Question (gate G9)
+
+ColModernVBERT page-score separation on a small scanned-PDF fixture +
+ONNX-export feasibility on the pinned `ort` rc.9. Report-only: NDCG-ish
+separation + rc.9 verdict.
+
+### Method (exact commands)
+
+```
+.venv/bin/python scripts/p52a_fixture.py \
+  --questions ~/dev/commonwealth-ai/sovereign/bench/sep/questions.toml \
+  --parquet ~/.svrnmesh/indexes/_downloads/sep.parquet \
+  --out-dir data/p52a --pages 16
+.venv/bin/python scripts/p52a_score.py --fixture data/p52a --out runs/p52a/scores.json
+.venv/bin/python scripts/p52a_onnx.py --fixture data/p52a --out runs/p52a/onnx
+```
+
+- **Fixture:** 16 one-page renders (reportlab, Times 9pt, ~3.2k chars/page)
+  of the opening of 16 distinct SEP articles — each the primary
+  `expected_sources` of a different sep-bench question, so each page's query
+  is a REAL human-authored essay prompt with the label by construction.
+  Rasterized at 150 DPI via pypdfium2 — the same PDFium engine the
+  production `PdfiumRasterizer` (local_corpus/ocr/rasterize.rs) binds; the
+  Rust path needs the Tauri-bundled dylib at runtime, so the probe used the
+  Python binding for the identical raster output.
+- **Model:** `ModernVBERT/colmodernvbert` (HF): a 30 MB LoRA adapter over
+  `ModernVBERT/colmodernvbert-base`; loads via `colpali_engine`
+  (`ColModernVBert` + `ColModernVBertProcessor`), 259M params total.
+  Scoring = processor MaxSim over 128-d late-interaction vectors.
+
+### Numbers
+
+| Metric | Value |
+|---|---|
+| model load | 4.5 s |
+| page embed (MPS, fp32) | **1.15 s/page** (1,149 vectors × 128d) |
+| query embed | 36 ms/query (~23 vectors) |
+| top-1 accuracy (16-way) | **0.625** |
+| MRR | **0.790** |
+| margin target − best-other, mean / min | **+0.549** / −1.179 |
+
+Miss anatomy (all 6 misses are semantic neighbors, mostly rank 2):
+`content-narrow` ↔ `content-externalism` swap with each other; the broad
+`epistemology` question lands on other epistemology-adjacent pages (rank 7,
+the one bad miss); `knowledge-analysis`, `consciousness`, `hume` all rank 2.
+`incompatibilism-arguments` is a hub attractor (top-1 for 3 foreign
+queries). Clean pages win with margins up to +3.1
+(`liberty-positive-negative`, `goedel-incompleteness`).
+
+### ONNX / ort rc.9 verdict
+
+- TorchScript exporter (opset 17): **fails** — `UnsupportedOperatorError:
+  aten::__ior_` (in-place bitwise OR, attention-mask assembly in the
+  modeling code).
+- Dynamo exporter (torch 2.11 + onnxscript): **fails** —
+  `DispatchError: no ONNX function for aten._is_all_true` (a mask sanity
+  guard; no decomposition registered).
+- Both blockers are small mask-hygiene patterns in the upstream
+  `modeling_colmodernvbert.py` / ModernVBERT source — patchable (replace
+  in-place OR with out-of-place; drop or gate the all-true assert), but
+  that is upstream-fork work, not configuration. Until then there is no
+  ONNX artifact, so the SP1 bare-ort path (which handled GLiNER2 fine on
+  rc.9) never gets to run. **rc.9 is not the blocker; the export is.**
+
+### Consequences (evidence for post-T2 P5 re-planning; no commitment)
+
+- Visual page-scoring works on our real content shape (dense typeset
+  philosophy text) with a 259M model at ~1 s/page — a scanned-PDF ingest
+  triage stage (route pages to OCR vs skip; rank pages for a query) is
+  plausible on quality grounds.
+- The deployment story is the gap: no ONNX → Python/torch residency (a new
+  runtime in the stack, against the net-simplification ratchet) or an
+  upstream export patch (S-M of fork work) — either is a real cost P5's
+  re-plan must price against the demonstrated 0.625/0.790 quality.
+- 1.15 s/page (MPS fp32) puts a 300-page PDF at ~6 min single-stream —
+  batch-ingest viable, interactive no.
+
+Exit criterion (separation + rc.9 verdict recorded): **met**.
+
+---
+
+## P5.2b — Multi-vector MaxSim Lance sibling-table prototype (G10)
+
+**VERDICT: G10 answered (report-only). The pinned lancedb 0.27.2 / lance 4.0
+holds a ColBERT-shape multivector column natively and scores MaxSim correctly
+(planted-row rank 1 at every scale). Storage at the design shape measures
+56.1 KB/row f32 → 10.5 GB f32 / ≈2.6 GB int8 at the 188k-chunk SEP pilot —
+consistent with RETRIEVAL_REDESIGN.md:261-266's 3–6 GB sizing. Exact
+brute-force MaxSim scales linearly (~2.0 s/query at 188k — offline/bench
+viable, not interactive); IVF-PQ works end-to-end but approximates MaxSim
+poorly at defaults (top-10 overlap 0.12–0.23 vs brute-force,
+nprobes-INSENSITIVE) and is rescued only by `refine_factor` (0.61–0.66 at
+rf=10, ~64 ms/query at 60k). No production plumbing was needed beyond the
+documented sibling-table pattern.**
+
+Measured 2026-07-31, M2 Max, release build (timing is the measurand — the SP4
+exception; `[profile.dev] debug=0` compiles lance unoptimized). Harness:
+`corpus-engine/examples/maxsim_probe.rs` (committed). Raw logs:
+`runs/p52b/probe-{20k,20k-clustered,20k-rf,60k}.log`.
+
+### Question (gate G10)
+
+Copy the sibling-table pattern (`raptor_index.rs` precedent:
+`<corpus>/raptor_summaries.lance` + meta sidecar, invisible to
+`installed_indexes()`, brute-force under 30k rows); is LanceDB native
+multivector/MaxSim a viable storage mechanism, at what storage + query cost,
+vs the recorded ~3–6 GB / 188k chunks sizing?
+
+### Method (exact commands)
+
+```
+cargo build --release -p corpus-engine --features treesitter --example maxsim_probe
+./target/release/examples/maxsim_probe research/enrichment-spikes/runs/p52b 20000 128 20 10
+./target/release/examples/maxsim_probe research/enrichment-spikes/runs/p52b 60000 128 20 10
+```
+
+Synthetic vectors at the documented design shape — 128d f32, 60–160 token
+vectors/row (mean ~110 ≈ 200-token chunk after 50% pooling), 32-token
+queries. Rows draw token vectors around 256 topic centroids (weight 0.7) —
+uniform random vectors are pathological for IVF (all centroids equidistant)
+and were measured first by mistake: overlap 0.01 (see honesty note below).
+Row 0 is planted to contain query 0's exact vectors, verifying ranking
+semantics. Column type `List<FixedSizeList<Float32, 128>>`; query via
+`.nearest_to(v0)` + `.add_query_vector(v_i)` per token
+(lancedb `table/query.rs` concatenates into the multivector plan).
+
+### Numbers
+
+| Metric | 20k rows | 60k rows | 188k (extrapolated) |
+|---|---|---|---|
+| write | 2.4 s (8.4k rows/s) | 6.5 s (9.3k rows/s) | ~21 s |
+| disk (f32) | 1.12 GB | 3.37 GB | **10.5 GB** (int8 ≈ **2.6 GB**) |
+| brute-force MaxSim, mean/query | 237 ms | 645 ms | ~2.0 s |
+| IVF-PQ build | 3.3 s | 9.1 s | ~30 s |
+| indexed query (default nprobes) | 18.5 ms | 31.7 ms | ~100 ms |
+| indexed query (nprobes=64, rf=10) | 34.4 ms | 63.5 ms | ~200 ms |
+| top-10 overlap vs brute-force (default) | 0.23 | 0.12 | — |
+| top-10 overlap (nprobes=64, no rf) | 0.23 | 0.12 | — |
+| top-10 overlap (nprobes=64, **rf=10**) | **0.66** | **0.61** | — |
+
+Planted-row check: rank 1 with distance −31.0 (= −Σ max-cos over 32 exact
+query tokens) at both scales, indexed and flat — MaxSim semantics are native
+and correct. Disk ratio vs raw f32 payload: 1.00 (no format overhead at this
+shape).
+
+### Interpretation
+
+- **Storage: viable, and the recorded sizing is confirmed.** The int8 path
+  (2.6 GB at pilot scale) is the design point; f32 was what was measured —
+  int8/f16 encoding on a multivector column is untested here and is the
+  first thing productionization must verify.
+- **Exact MaxSim is an offline/bench tool at pilot scale, not interactive.**
+  Linear scan cost ~10.6 µs/row-pair-set; the raptor_index stance
+  ("brute-force under 30k rows") transfers: a ≤30k-chunk corpus gets exact
+  MaxSim in ≲350 ms.
+- **IVF-PQ recall is the open risk, and it is knob-shaped, not wall-shaped.**
+  Overlap being nprobes-insensitive but refine_factor-sensitive localizes
+  the loss to PQ quantization of token vectors (XTR-style partial scoring),
+  not partition misses. rf=10 buys 0.6 overlap at ~3.5x the indexed latency
+  — still 10x faster than flat at 60k.
+- **Honesty note:** overlap numbers are on SYNTHETIC clustered vectors.
+  Real-embedding recall (per RETRIEVAL_REDESIGN option (c):
+  answerai-colbert-small / GTE-ModernColBERT vectors) must be re-measured
+  before any adoption decision; the first uniform-random run scored overlap
+  0.01 — vector distribution dominates this measurement, so treat 0.6 as
+  "tunable, order-of-magnitude", not a recall promise.
+
+### Consequences (evidence for post-T2 P5/P3 re-planning; no commitment)
+
+- The storage layer for late-interaction rerank (RETRIEVAL_REDESIGN (c)) is
+  a solved problem on the pinned stack — sibling table + native multivector
+  column, zero new dependencies, ~200-line writer.
+- The retrieval-quality question is now the ONLY question: real token
+  vectors + refine_factor sweep + int8 encoding, all of which the committed
+  harness can measure in minutes once an encoder produces vectors (SP6's
+  token-level embedding path is one candidate producer; a dedicated ColBERT
+  encoder is the design-intent one).
+- Interactive use at 188k-chunk scale requires the index; budget ~200
+  ms/query at rf=10 — comparable to SP4's full-chunk rerank budget (~470 ms
+  top-20), so a MaxSim stage does not obviously beat the cross-encoder on
+  latency; it competes on candidate breadth (whole-corpus vs top-20).
+
+Exit criterion (report-only storage + query numbers vs the recorded sizing):
+**met**.

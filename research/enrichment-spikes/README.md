@@ -1,9 +1,13 @@
 # Enrichment spike bundle — SP1–SP6 + D1 sweep + P5 probes
 
-**CLOSED 2026-07-31 (SP1–SP6 + D1).** All six spikes answered; frozen roll-up with the
-consolidated verdict table lives at `sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`.
-P5 probes (G8–G10) were not run — they remain optional Wave 4 evidence, re-plannable
-after T2. Memos below stay as working copies; harnesses are committed and re-runnable.
+**CLOSED 2026-07-31 (SP1–SP6 + D1 + P5 probes).** All six spikes AND the three Wave-4
+P5 probes (G8–G10, funded in T1 slack) answered; frozen roll-up with the consolidated
+verdict table lives at `sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`. P5
+headlines: descent loses to one-shot at equal budget + the RAPTOR output is a forest
+(P5.1); page-score separation real, ONNX export blocked upstream (P5.2a); MaxSim
+sibling-table viable, IVF-PQ recall is knob-shaped (P5.2b). sep restored byte-identical
+from `backup/` per the §"Backups" procedure (2026-07-31). Memos below stay as working
+copies; harnesses are committed and re-runnable.
 
 Executable initiative for the ENRICHMENT_ROADMAP_SIZING.md §1 spike table plus the D1
 dead-code/doc-truth sweep and the P5 evidence probes. Design doc (file:line-grounded,
