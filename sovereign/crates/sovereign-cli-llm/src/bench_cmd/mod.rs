@@ -54,6 +54,7 @@ mod routing_replay;
 mod scaffold;
 mod scaffolding_param;
 mod uap;
+mod verifier;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -115,6 +116,10 @@ const HELP: Help = Help {
                 "uap",
                 "Disposition-classification bench over the uap-blue-book corpus (accuracy / macro-F1 / confusion matrix).",
             ),
+            (
+                "verifier",
+                "Verifier-v0 offline seams (VERIFIER_V0.md): extract-claims runs ONE (question, answer) pair through the production gate's claim-list extraction; Stream B harness verbs land here.",
+            ),
         ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741. The model under \
@@ -159,6 +164,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
+        "verifier" => verifier::cmd_verifier(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");
             eprintln!();

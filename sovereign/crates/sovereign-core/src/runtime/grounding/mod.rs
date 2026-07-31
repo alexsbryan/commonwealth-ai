@@ -51,7 +51,7 @@ mod value_presence;
 // chaos scorer consumes it to MEASURE `blatant_confab_rate`. Re-exported up to
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
-pub use value_presence::{assess_asserted_value, AssertedValue};
+pub use value_presence::{assess_asserted_value, value_present_in_chunks, AssertedValue};
 
 // The supporting-specifics half of groundedness: `value_presence` checks the
 // answer's top-line VALUE, this strips `[Source: …]` citations whose title is
@@ -88,10 +88,23 @@ use std::sync::Arc;
 use crate::traits::InferenceProvider;
 use crate::types::CompletionRequest;
 
-use judge::{
-    claim_violation_joint, extract_claim_list, scan_unsupported_specifics,
-    unwrap_unverified_excerpts,
-};
+use judge::{claim_violation_joint, scan_unsupported_specifics, unwrap_unverified_excerpts};
+
+/// The gate's claim-extraction primitive, exported for callers OUTSIDE the
+/// gate (`svrn bench verifier extract-claims`, the Stream B corruption
+/// harness). Delegates to the same `judge::extract_claim_list` the longform
+/// gate runs, so offline-extracted claims are in the exact register the
+/// verifier sees at runtime — re-implementing the prompt in a script is the
+/// drift this seam exists to prevent (VERIFIER_V0.md §3 Stream B).
+pub async fn extract_claim_list(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    answer: &str,
+    max_claims: usize,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<Vec<String>> {
+    judge::extract_claim_list(inference, question, answer, max_claims, posture).await
+}
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in

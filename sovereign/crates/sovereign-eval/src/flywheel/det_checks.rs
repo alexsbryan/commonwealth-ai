@@ -41,6 +41,47 @@ pub fn gold_match(answer: &str, keywords: &[String]) -> bool {
     })
 }
 
+/// Port of the production value-presence primitive — the corruption-site
+/// check for constructed Stream B cases (VERIFIER_V0.md §3: "each corruption
+/// is mechanically checkable at the known corruption site").
+///
+/// SOURCE OF TRUTH: `sovereign-core/src/runtime/grounding/value_presence.rs`
+/// (`value_present_in_chunks`). Replicated byte-for-byte in logic because the
+/// flywheel is deliberately pure (serde + std + rand; no sovereign-core), and
+/// the Stream B export path re-validates every case against the REAL
+/// production checker where sovereign-core is available — this port gates
+/// generation, the original gates export. Keep the two in sync; the parity
+/// tests below pin the behaviours corruption-site checking depends on.
+pub fn value_present(value: &str, chunks: &[String]) -> bool {
+    const STOP: &[&str] = &[
+        "mr", "mrs", "miss", "ms", "the", "of", "a", "an", "and", "sir", "dr", "comrade", "chief",
+        "inspector", "lady", "lord", "saint", "st",
+    ];
+    let hay: String = chunks
+        .join(" ")
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    // A multi-word value that appears VERBATIM (a contiguous phrase) in the
+    // evidence is grounded by definition. Gated on ≥2 words so a bare
+    // honorific cannot self-ground (see the source-of-truth rationale).
+    let nval: String = value
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if nval.split(' ').filter(|w| !w.is_empty()).count() >= 2 && hay.contains(&nval) {
+        return true;
+    }
+    let sig: Vec<String> = value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 2 && !STOP.contains(&w.to_lowercase().as_str()))
+        .map(|w| w.to_lowercase())
+        .collect();
+    !sig.is_empty() && sig.iter().all(|w| hay.contains(w.as_str()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +152,44 @@ mod tests {
         // A keyword with no `|` matches exactly as before — backward-compatible.
         assert!(gold_match("the Verloc shop", &["verloc".to_string()]));
         assert!(!gold_match("the shop", &["verloc".to_string()]));
+    }
+
+    // ---- value_present parity pins (vs sovereign-core value_present_in_chunks) ----
+
+    fn ev(s: &str) -> Vec<String> {
+        vec![s.to_string()]
+    }
+
+    #[test]
+    fn value_present_multiword_verbatim_phrase_grounds() {
+        // The ≥2-word verbatim path: a contiguous phrase in the evidence is
+        // grounded by definition, even when every word is individually stoppy.
+        assert!(value_present(
+            "Chief Inspector",
+            &ev("Chief Inspector Heat arrived")
+        ));
+    }
+
+    #[test]
+    fn value_present_bare_honorific_cannot_self_ground() {
+        assert!(!value_present("Mr", &ev("Mr Verloc kept a shop")));
+    }
+
+    #[test]
+    fn value_present_and_matches_significant_words() {
+        let e = ev("the lock sluice had been opened at half past eleven");
+        assert!(value_present("sluice opened at eleven", &e));
+        assert!(
+            !value_present("sluice opened at nine", &e),
+            "one absent significant word fails the AND"
+        );
+    }
+
+    #[test]
+    fn value_present_garbled_form_is_absent() {
+        // The OCR-garble site check: the garbled surface must NOT ground.
+        let e = ev("the lock sluice had been opened");
+        assert!(value_present("lock", &e));
+        assert!(!value_present("1ock", &e));
     }
 }

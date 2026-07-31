@@ -63,7 +63,7 @@ impl Default for CorpusGenerator {
 /// accurate …") embeds near the MetalingualQuery / ComplexTask exemplars and
 /// misroutes to the tool-planning path (it even triggered a web search) — the
 /// probe never reaches the grounded register it is meant to test.
-fn claim_query(content: &str) -> String {
+pub(crate) fn claim_query(content: &str) -> String {
     let c = content.trim().trim_end_matches(['.', '!', '?']).trim();
     // Lowercase the leading char for natural "Is it true that <claim>?" phrasing.
     let body = {
@@ -178,7 +178,7 @@ impl Generator for CorpusGenerator {
 /// witness — most-distinctive (longest) first, lowercased, stopword- and
 /// length-filtered. Deterministic. Kept small so a correct grounded answer is
 /// recognized without demanding verbatim quotation.
-fn salient_terms(text: &str, k: usize) -> Vec<String> {
+pub(crate) fn salient_terms(text: &str, k: usize) -> Vec<String> {
     let mut cands: Vec<String> = Vec::new();
     for w in text.split(|c: char| !c.is_alphanumeric()) {
         let w = w.trim().to_lowercase();

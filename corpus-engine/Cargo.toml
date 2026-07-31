@@ -214,6 +214,12 @@ treesitter = [
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# SP5 spike probe (examples/concept_graph_probe.rs): Leiden community
+# detection over a concept co-occurrence graph. Survey pick 2026-07-31
+# (research/enrichment-spikes/findings/SP5_concept_graph.md): core has no
+# petgraph coupling (its optional adapter wants petgraph 0.8; we pin 0.6),
+# tiny dep tree (rand, rustc-hash, thiserror), MIT/Apache-2.0.
+leiden-rs = "0.8"
 # In-process HTTP fake for the http_api acquirer e2e tests. Pinned
 # at 0.6 (current stable as of 2026-04). Used only in tests.
 wiremock = "0.6"

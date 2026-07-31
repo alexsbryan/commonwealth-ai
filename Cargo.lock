@@ -2346,6 +2346,7 @@ dependencies = [
  "lance-index",
  "lance-table",
  "lancedb",
+ "leiden-rs",
  "mailparse",
  "memmap2",
  "notify",
@@ -5153,6 +5154,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "gryf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b7b97943bfac66f9929ca713fcdaae3967dc43f5d41b36deba9d552ae0495f7"
+dependencies = [
+ "bitvec",
+ "fixedbitset 0.5.7",
+ "gryf-derive",
+ "indexmap 2.14.0",
+ "rustc-hash",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gryf-derive"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "625d1f603d5d294d9ea5c1e48ee1484e1bd47cd57c2d8884785c085bca415212"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7225,6 +7251,20 @@ name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
+
+[[package]]
+name = "leiden-rs"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7bbf4703fdbd25078c1842083c8f4e5551ed118a9d00342e309fee0bea46d42"
+dependencies = [
+ "clap",
+ "gryf",
+ "rand 0.9.4",
+ "rayon",
+ "rustc-hash",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "lettre"

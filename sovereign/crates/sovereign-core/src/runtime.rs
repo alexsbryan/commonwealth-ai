@@ -152,6 +152,16 @@ pub use grounding::{answer_declines, released_pure_decline};
 // bench-calibrated 0.9) — public so the chaos bench gates against the SAME
 // default the production gate uses instead of re-deriving its own.
 pub use grounding::grounding_gate_threshold;
+// The gate's claim-extraction primitive — public so the Stream B corruption
+// harness and `svrn bench verifier extract-claims` produce claims in the
+// EXACT production register (same prompt, parser, claim budget) instead of
+// re-implementing it in a script (VERIFIER_V0.md §3 Stream B).
+pub use grounding::extract_claim_list;
+// The deterministic value-presence site checker — public so the Stream B
+// export re-validates every constructed corruption with the PRODUCTION
+// implementation (the flywheel generates against a pinned port of this fn;
+// export is where the genuine article gets the final word).
+pub use grounding::value_present_in_chunks;
 mod formatters;
 mod handlers;
 mod intent_helpers;

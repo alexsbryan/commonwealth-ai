@@ -57,7 +57,10 @@ pub trait Generator {
 
 /// The registered generators. Adding a signal source is one line here.
 pub fn registry() -> Vec<Box<dyn Generator>> {
-    vec![Box::new(generators::corpus::CorpusGenerator::default())]
+    vec![
+        Box::new(generators::corpus::CorpusGenerator::default()),
+        Box::new(generators::adversarial::AdversarialGenerator),
+    ]
 }
 
 /// Resolve a generator by id.
@@ -78,6 +81,7 @@ mod tests {
     fn registry_ids_unique_and_resolvable() {
         let ids = generator_ids();
         assert!(ids.contains(&"i1_corpus"));
+        assert!(ids.contains(&"i2_adversarial"));
         let mut seen = std::collections::HashSet::new();
         for id in &ids {
             assert!(seen.insert(*id), "duplicate generator id {id}");
