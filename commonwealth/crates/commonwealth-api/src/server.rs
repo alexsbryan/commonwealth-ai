@@ -9,6 +9,7 @@ use tracing::info;
 use crate::routes_app_internal;
 use crate::routes_apps;
 use crate::routes_completions;
+use crate::routes_edit_predictions;
 use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
@@ -59,6 +60,12 @@ pub fn client_router(state: AppState) -> Router {
         // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
         // like the rest of :9741 — the extension talks to its own daemon.
         .route("/v1/completions", post(routes_completions::completions))
+        // Next-edit rule lane (NEXT_EDIT.md §3). Pure string work —
+        // no inference service, no admission gate needed.
+        .route(
+            "/v1/edit_predictions",
+            post(routes_edit_predictions::edit_predictions),
+        )
         .route("/v1/embeddings", post(routes_inference::embeddings))
         .route("/v1/models", get(routes_inference::list_models))
         // Knowledge search endpoint.

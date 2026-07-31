@@ -65,6 +65,8 @@ const GOV_DISPLAY_NAME = "Maple House (E2E)";
 export const GOV_FIXTURE_INFO = path.join(RESULTS, "real-gov-fixture.json");
 const BRIDGE = "http://127.0.0.1:9745";
 const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
+const DAEMON_LOG = path.join(RESULTS, "real-daemon.log");
+const DAEMON_PID_FILE = path.join(RESULTS, "real-daemon.pid");
 
 // Managed-daemon mode is the DEFAULT for the whole real suite: the harness
 // starts its OWN fixture-scoped daemon on the test-profile HOME, so the daemon's
@@ -729,8 +731,18 @@ function bakeProfile(): void {
 
   // Tilde-relative model paths in any daemon-side config resolve under
   // the scratch HOME — keep them valid via a symlink to the real dir.
+  //
+  // `.svrnmesh` is the canonical data-dir name post-rename; a normal
+  // install keeps `~/.sovereign` as a compat symlink to it. Mirror that
+  // shape here, or the CLI's one-shot legacy migration MOVES the baked
+  // `.sovereign` to `.svrnmesh` at daemon boot and every `.sovereign`
+  // path this file asserts against (assertCorpusPromoted, the atlas
+  // overlay) silently points at a dir the daemon no longer writes
+  // (hit live 2026-07-30: promotion assert failed on a promoted corpus).
+  const sovReal = path.join(HOME, ".svrnmesh");
+  fs.mkdirSync(sovReal, { recursive: true });
   const sovDir = path.join(HOME, ".sovereign");
-  fs.mkdirSync(sovDir, { recursive: true });
+  if (!fs.existsSync(sovDir)) fs.symlinkSync(".svrnmesh", sovDir);
   const modelsLink = path.join(sovDir, "models");
   if (!fs.existsSync(modelsLink)) {
     fs.symlinkSync(path.join(REPO_ROOT, "sovereign/models"), modelsLink);
@@ -869,12 +881,18 @@ function bakeProfile(): void {
   for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
 }
 
-/** Start the harness-owned daemon (HOME = test profile) and wait until it serves
- *  `/v1/models`. `daemon start` blocks until the daemon reports ready, but we
- *  re-probe the client port so a mis-started daemon fails here, loudly, rather
- *  than as a confusing mid-journey inference error. Stopped in global-teardown. */
+/** Start the harness-owned daemon (HOME = test profile) and wait until it
+ *  serves `/v1/models`. Spawned as our OWN detached `daemon run` child —
+ *  never `daemon start`: with a launchd/systemd service registered, `start`
+ *  delegates to the service manager, whose unit carries the OPERATOR's
+ *  HOME. The "managed" daemon is then the production daemon, and the
+ *  fixture ingest lands in the real data dir (hit live 2026-07-30:
+ *  "E2E Fixture Corpus" ingested into ~/.svrnmesh/indexes). `daemon run`
+ *  is foreground + env-faithful; global-teardown kills the PID. */
 async function startManagedDaemon(): Promise<void> {
-  console.log("[real-setup] managed-daemon: starting fixture-scoped daemon (HOME=test profile)…");
+  console.log(
+    "[real-setup] managed-daemon: spawning fixture-scoped `daemon run` (HOME=test profile)…",
+  );
   const env = {
     ...process.env,
     HOME,
@@ -882,17 +900,23 @@ async function startManagedDaemon(): Promise<void> {
     XDG_DATA_HOME: path.join(HOME, ".local/share"),
     XDG_CACHE_HOME: path.join(HOME, ".cache"),
   };
-  execSync(`${JSON.stringify(DAEMON_BIN)} daemon start`, {
+  const dlog = fs.openSync(DAEMON_LOG, "w");
+  const child = spawn(DAEMON_BIN, ["daemon", "run"], {
     env,
-    stdio: "inherit",
-    timeout: 5 * 60 * 1000,
+    stdio: ["ignore", dlog, dlog],
+    detached: true,
   });
-  const deadline = Date.now() + 60_000;
+  child.unref();
+  if (!child.pid) throw new Error("managed-daemon: failed to spawn `daemon run`");
+  fs.writeFileSync(DAEMON_PID_FILE, String(child.pid));
+  const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
       const r = await fetchJson("http://127.0.0.1:9741/v1/models");
       if (Array.isArray((r as { data?: unknown }).data)) {
-        console.log("[real-setup] managed-daemon: ready on :9741");
+        console.log(
+          `[real-setup] managed-daemon: ready on :9741 (pid=${child.pid}, log=${DAEMON_LOG})`,
+        );
         return;
       }
     } catch {
@@ -900,7 +924,7 @@ async function startManagedDaemon(): Promise<void> {
     }
     await new Promise((res) => setTimeout(res, 1000));
   }
-  throw new Error("managed-daemon: not serving /v1/models on :9741 within 60s of `daemon start`");
+  throw new Error(`managed-daemon: not serving /v1/models on :9741 within 120s — see ${DAEMON_LOG}`);
 }
 
 export default async function globalSetup(): Promise<void> {

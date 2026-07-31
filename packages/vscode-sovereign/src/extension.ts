@@ -6,7 +6,7 @@
 import * as vscode from "vscode";
 import { readConfig } from "./config";
 import { FimDebugLog } from "./debug";
-import { NextEditSpike } from "./nextEditSpike";
+import { NextEditController } from "./nextEdit";
 import { FimProvider } from "./provider";
 import { FimStatusBar } from "./statusbar";
 
@@ -14,14 +14,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const log = new FimDebugLog();
   const statusBar = new FimStatusBar(() => readConfig().endpoint);
   const provider = new FimProvider(log, statusBar);
-  // Throwaway render spike (NEXT_EDIT.md §5) — inert until its
-  // command is run; delete when the real next-edit provider lands.
-  const spike = new NextEditSpike();
+  // Next-edit rule lane (NEXT_EDIT.md): ambient watcher, daemon-side
+  // policy via POST /v1/edit_predictions.
+  const nextEdit = new NextEditController();
 
   context.subscriptions.push(
     log,
     statusBar,
-    spike,
+    nextEdit,
     vscode.languages.registerInlineCompletionItemProvider(
       { pattern: "**" },
       provider,
@@ -32,14 +32,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("sovereign-fim.diagnose", () => {
       void log.diagnose(readConfig().endpoint);
     }),
-    vscode.commands.registerCommand("sovereign-fim.spike.nextEdit", () => {
-      spike.start();
+    vscode.commands.registerCommand("sovereign-fim.nextEdit.accept", () => {
+      void nextEdit.accept();
     }),
-    vscode.commands.registerCommand("sovereign-fim.spike.acceptNextEdit", () => {
-      void spike.accept();
-    }),
-    vscode.commands.registerCommand("sovereign-fim.spike.dismissNextEdit", () => {
-      spike.dismiss();
+    vscode.commands.registerCommand("sovereign-fim.nextEdit.dismiss", () => {
+      nextEdit.dismiss();
     }),
   );
 

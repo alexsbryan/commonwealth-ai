@@ -140,6 +140,24 @@ Open a code file, start a function, pause a beat. Ghost text appears;
 
 ---
 
+## Next edit (repeated-edit suggestions)
+
+Make the same small edit twice — say, two `console.log` lines turned
+into `console.debug` — pause, and the extension proposes the
+remaining occurrences as a tab-through queue: the old text struck
+through, the replacement as ghost text, **Tab** to accept and jump
+to the next site, **Esc** to dismiss (which also stops that rule
+from re-nagging this session). If the next site is off-screen you
+get a one-line hint at your cursor instead of a viewport jump; the
+first Tab takes you there.
+
+This is deterministic — the daemon induces a literal rewrite rule
+from your last few edits (`POST /v1/edit_predictions`, no model
+involved, works even without a `[models.fim]` slot) and only speaks
+past a confidence threshold: two supporting edits for a specific
+pattern, three for a short one. Design + policy:
+`sovereign/docs/NEXT_EDIT.md`.
+
 ## Seeing what's going on (glassbox)
 
 This is the part no other completion product gives you:
@@ -163,6 +181,8 @@ This is the part no other completion product gives you:
 | `sovereign-fim.maxPrefixLines` | `60` | context lines before cursor |
 | `sovereign-fim.maxSuffixLines` | `20` | context lines after cursor |
 | `sovereign-fim.disabledLanguages` | `["markdown", "plaintext"]` | no-ghost zones |
+| `sovereign-fim.nextEdit.enable` | `true` | repeated-edit suggestions (Tab queue) |
+| `sovereign-fim.nextEdit.settleMs` | `600` | idle time before the daemon is consulted |
 
 ## Troubleshooting ladder
 

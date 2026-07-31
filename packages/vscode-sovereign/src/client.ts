@@ -128,6 +128,104 @@ export async function completeFim(
   return { text, finishReason, debug, wallMs: Date.now() - started };
 }
 
+// ---- next-edit rule lane (NEXT_EDIT.md §3) ---------------------------
+
+export interface HistoryUnitWire {
+  before: string;
+  after: string;
+  left: string;
+  right: string;
+}
+
+export interface EditPredictionRequest {
+  history: HistoryUnitWire[];
+  text: string;
+  /** UTF-16 code units into `text` — JS string offsets verbatim. */
+  cursor: number;
+  path?: string;
+  language?: string;
+  /** Opt into the model lane (P2) — off until its eval bank gates green. */
+  model_lane?: boolean;
+}
+
+export interface EditPredictionEdit {
+  start: number;
+  end: number;
+  new_text: string;
+}
+
+export interface EditPredictionDebug {
+  rule_find?: string | null;
+  rule_replace?: string | null;
+  rule_key?: string | null;
+  support?: number;
+  sites?: number;
+  edits_capped?: boolean;
+  reason_silent?: string | null;
+  timings_ms?: { total?: number };
+  /** Model-lane glassbox (present when the request opted in). */
+  model?: {
+    consulted?: boolean;
+    reason?: string | null;
+    skipped?: string | null;
+    needle?: string | null;
+    dropped?: string | null;
+    model_id?: string | null;
+  } | null;
+}
+
+export interface EditPredictionResult {
+  edits: EditPredictionEdit[];
+  engine: string;
+  debug: EditPredictionDebug | null;
+  wallMs: number;
+}
+
+/** POST /v1/edit_predictions — plain JSON in/out, no streaming; an
+ *  empty `edits` array is the healthy "nothing to suggest" case. */
+export async function predictEdits(
+  endpoint: string,
+  req: EditPredictionRequest,
+  signal: AbortSignal,
+): Promise<EditPredictionResult> {
+  const started = Date.now();
+  let resp: Response;
+  try {
+    resp = await fetch(`${endpoint}/v1/edit_predictions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...req, debug: true }),
+      signal,
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
+    throw new DaemonError(
+      `daemon unreachable at ${endpoint} — is 'sovereign daemon run' up? (${(e as Error).message})`,
+    );
+  }
+  if (!resp.ok) {
+    let detail = "";
+    try {
+      const j = (await resp.json()) as { error?: { message?: string } };
+      detail = j?.error?.message ?? "";
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new DaemonError(detail || `daemon returned HTTP ${resp.status}`, resp.status);
+  }
+  const body = (await resp.json()) as {
+    engine?: string;
+    edits?: EditPredictionEdit[];
+    sovereign_debug?: EditPredictionDebug;
+  };
+  return {
+    edits: body.edits ?? [],
+    engine: body.engine ?? "rule",
+    debug: body.sovereign_debug ?? null,
+    wallMs: Date.now() - started,
+  };
+}
+
 export interface FimStatus {
   slot: string;
   model_id: string;

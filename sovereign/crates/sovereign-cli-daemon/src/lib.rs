@@ -73,7 +73,8 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      mesh.decision=info,\
      compute_child=info,\
      sovereign_compute=info,\
-     fim=info";
+     fim=info,\
+     next_edit=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -265,6 +266,10 @@ mod tests {
             // alias-mode decisions, per-request stop outcomes — the
             // "why did my ghost text do that" surface.
             "fim",
+            // Next-edit rule lane (NEXT_EDIT.md §9): per-settle
+            // fired/silent decisions with support/sites/reason — the
+            // "why did/didn't it suggest" surface.
+            "next_edit",
             "synth.lifecycle",
             "synth.truncation",
             "synth.continue",

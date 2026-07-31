@@ -1,8 +1,8 @@
-// Edit-unit coalescing for the next-edit spike (NEXT_EDIT.md §5).
-// THROWAWAY with the spike, but written as the shape the real
-// EditHistoryTracker will take: keystroke-level document changes are
-// coalesced into semantic "edit units" — one contiguous burst of
-// typing/deleting becomes one {before, after} replacement.
+// Edit-unit coalescing for next-edit prediction (NEXT_EDIT.md §3):
+// keystroke-level document changes are coalesced into semantic
+// "edit units" — one contiguous burst of typing/deleting becomes one
+// {before, after} replacement, the capture half of the history the
+// daemon's rule induction consumes.
 //
 // Pure: the controller owns the vscode listeners and the document
 // snapshot; this module only does the coordinate arithmetic. The

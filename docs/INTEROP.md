@@ -112,6 +112,15 @@ the fill-in-the-middle route: it takes `prefix`/`suffix` (or
 `[models.fim]` slot is configured. Pointing a legacy completions client
 at it will not do what that client expects.
 
+**`POST /v1/edit_predictions` is Sovereign-native, not an OpenAI
+shape.** The next-edit rule lane (`sovereign/docs/NEXT_EDIT.md`):
+send recent edit units + the document, get back a queue of
+`{start, end, new_text}` replacements — offsets in UTF-16 code
+units. An empty `edits` array is a healthy 200, not an error, and
+with `debug: true` the response says which confidence gate held. No
+model is involved (pure rule induction), so it works even with no
+`[models.fim]` slot configured.
+
 ## 2. Ollama-native clients
 
 Open WebUI's Ollama mode, IDE plugins, Raycast, Enchanted — anything

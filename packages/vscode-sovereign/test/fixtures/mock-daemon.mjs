@@ -10,6 +10,23 @@ export function startMockDaemon() {
     mode: "happy", // happy | slow | error503 | noFim
     lastRequestBody: null,
     aborted: false,
+    lastEditPredictionBody: null,
+    // Canned /v1/edit_predictions response; tests overwrite as needed.
+    editPrediction: {
+      object: "edit_prediction",
+      engine: "rule",
+      edits: [{ start: 5, end: 17, new_text: "console.debug(" }],
+      sovereign_debug: {
+        rule_find: "console.log(",
+        rule_replace: "console.debug(",
+        rule_key: '["console.log(","console.debug("]',
+        support: 2,
+        sites: 1,
+        edits_capped: false,
+        reason_silent: null,
+        timings_ms: { total: 1 },
+      },
+    },
   };
 
   const server = http.createServer((req, res) => {
@@ -30,6 +47,23 @@ export function startMockDaemon() {
                 },
         }),
       );
+      return;
+    }
+    if (req.url === "/v1/edit_predictions" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        state.lastEditPredictionBody = JSON.parse(body);
+        if (state.mode === "error400") {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({ error: { message: "`text` is too large; caps the search space" } }),
+          );
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(state.editPrediction));
+      });
       return;
     }
     if (req.url === "/v1/completions" && req.method === "POST") {

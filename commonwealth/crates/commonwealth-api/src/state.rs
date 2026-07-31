@@ -604,6 +604,11 @@ pub struct AppStateInner {
     /// Commonwealth daemon — that path routes via the orchestrator
     /// to spawned `llama-server` processes instead.
     pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
+    /// One-in-flight budget for the next-edit model lane
+    /// (`sovereign/docs/NEXT_EDIT.md` §4): a consult that finds the
+    /// slot busy is dropped immediately (`dropped: "busy"`), never
+    /// queued — ghost text and chat always win the slot.
+    pub next_edit_model_slot: tokio::sync::Semaphore,
     /// Worker-side auto-warm hook for distributed inference. Installed by the
     /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
     /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
@@ -1170,6 +1175,7 @@ impl AppState {
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
+                next_edit_model_slot: tokio::sync::Semaphore::new(1),
                 rpc_shard_warmer: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
                 grant_store: Arc::new(EphemeralGrantStore::new()),

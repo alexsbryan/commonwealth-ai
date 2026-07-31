@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { completeFim, probeStatus } from "../src/client";
+import { completeFim, predictEdits, probeStatus } from "../src/client";
 import { startMockDaemon, type MockDaemon } from "./fixtures/mock-daemon.mjs";
 
 let mock: MockDaemon;
@@ -85,5 +85,43 @@ describe("probeStatus", () => {
   it("reports daemonUp=false on connection failure", async () => {
     const s = await probeStatus("http://127.0.0.1:1", 500);
     expect(s.daemonUp).toBe(false);
+  });
+});
+
+describe("predictEdits", () => {
+  it("posts history + text and parses edits with the debug block", async () => {
+    mock.state.mode = "happy";
+    const ctrl = new AbortController();
+    const r = await predictEdits(
+      mock.endpoint,
+      {
+        history: [{ before: "log", after: "debug", left: "console.", right: "(1);" }],
+        text: "abc; console.log(2);",
+        cursor: 4,
+        path: "t.ts",
+        language: "typescript",
+      },
+      ctrl.signal,
+    );
+    expect(r.engine).toBe("rule");
+    expect(r.edits).toEqual([{ start: 5, end: 17, new_text: "console.debug(" }]);
+    expect(r.debug?.rule_key).toBe('["console.log(","console.debug("]');
+    expect(r.debug?.support).toBe(2);
+    // Debug always requested; history rode along verbatim.
+    expect(mock.state.lastEditPredictionBody?.debug).toBe(true);
+    expect(mock.state.lastEditPredictionBody?.history?.[0]?.before).toBe("log");
+    expect(mock.state.lastEditPredictionBody?.cursor).toBe(4);
+  });
+
+  it("surfaces the daemon's actionable 400 as DaemonError", async () => {
+    mock.state.mode = "error400";
+    const ctrl = new AbortController();
+    await expect(
+      predictEdits(mock.endpoint, { history: [], text: "x", cursor: 0 }, ctrl.signal),
+    ).rejects.toMatchObject({
+      name: "DaemonError",
+      message: expect.stringContaining("caps the search space"),
+    });
+    mock.state.mode = "happy";
   });
 });

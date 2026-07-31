@@ -3,25 +3,14 @@
 // SIGTERM first (clean daemon-child + store shutdown), SIGKILL after a
 // 10s grace. The scratch profile is left on disk for inspection — the
 // next run's setup wipes it (unless SOVEREIGN_REAL_KEEP_PROFILE=1).
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
-const REPO_ROOT = path.resolve(CRATE_ROOT, "../../..");
 const PID_FILE = path.join(CRATE_ROOT, "test-artifacts/real-app.pid");
-// Same override as global-setup's PROFILE (demo mode owns `demo-profile`).
-// Only read on the managed-daemon stop below, which attach/demo mode skips —
-// but keeping the two in lockstep avoids a future stop against the wrong HOME.
-const HOME = path.join(
-  CRATE_ROOT,
-  "test-artifacts",
-  process.env.SOVEREIGN_REAL_PROFILE_DIR ?? "real-profile",
-  "home",
-);
-const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
+const DAEMON_PID_FILE = path.join(CRATE_ROOT, "test-artifacts/real-daemon.pid");
 
 function alive(pid: number): boolean {
   try {
@@ -33,25 +22,34 @@ function alive(pid: number): boolean {
 }
 
 export default async function globalTeardown(): Promise<void> {
-  // Stop the harness-owned daemon first (it holds the shared index dir open).
-  // Managed mode is the default (global-setup.ts); attach mode (the opt-out)
-  // never started a daemon, so there's nothing to stop.
-  const managed = process.env.SOVEREIGN_REAL_ALLOW_ATTACH !== "1";
-  if (managed) {
-    try {
-      execSync(`${JSON.stringify(DAEMON_BIN)} daemon stop`, {
-        env: {
-          ...process.env,
-          HOME,
-          XDG_CONFIG_HOME: path.join(HOME, ".config"),
-          XDG_DATA_HOME: path.join(HOME, ".local/share"),
-          XDG_CACHE_HOME: path.join(HOME, ".cache"),
-        },
-        stdio: "inherit",
-        timeout: 30_000,
-      });
-    } catch {
-      console.warn("[real-teardown] managed-daemon: `daemon stop` failed (may already be down)");
+  // Stop the harness-owned daemon first (it holds the shared index dir
+  // open). By PID, never `daemon stop`: with a launchd/systemd service
+  // registered that command delegates to the service manager and stops
+  // the OPERATOR's daemon, not ours — the same trap that made `daemon
+  // start` drive the production daemon on 2026-07-30 (global-setup's
+  // startManagedDaemon spawns `daemon run` and banks the PID for this).
+  // Attach mode (the opt-out) never started a daemon; no PID file, no-op.
+  if (fs.existsSync(DAEMON_PID_FILE)) {
+    const dpid = Number(fs.readFileSync(DAEMON_PID_FILE, "utf8").trim());
+    fs.rmSync(DAEMON_PID_FILE, { force: true });
+    if (Number.isFinite(dpid) && dpid > 1 && alive(dpid)) {
+      try {
+        process.kill(dpid, "SIGTERM");
+      } catch {
+        /* already gone */
+      }
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline && alive(dpid)) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (alive(dpid)) {
+        console.warn(`[real-teardown] managed daemon pid ${dpid} ignored SIGTERM — SIGKILL`);
+        try {
+          process.kill(dpid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
     }
   }
 
