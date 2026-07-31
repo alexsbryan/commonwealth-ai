@@ -488,12 +488,13 @@ fn print_summary(outcomes: &[BenchOutcome]) {
             BenchStatus::Regressed => "regressed",
             BenchStatus::Improved => "improved",
             BenchStatus::FirstRun => "first-run",
+            BenchStatus::MissingBaseline => "no-baseline",
             BenchStatus::Stale => "stale",
         };
         *counts.entry(tag).or_insert(0) += 1;
     }
     println!();
-    let s = ["green", "improved", "regressed", "first-run", "stale"]
+    let s = ["green", "improved", "regressed", "first-run", "no-baseline", "stale"]
         .iter()
         .map(|tag| format!("{} {tag}", counts.get(tag).copied().unwrap_or(0)))
         .collect::<Vec<_>>()
@@ -547,6 +548,7 @@ fn status_glyph(s: BenchStatus) -> &'static str {
         BenchStatus::Regressed => "⚠",
         BenchStatus::Improved => "↑",
         BenchStatus::FirstRun => "·",
+        BenchStatus::MissingBaseline => "∅",
         BenchStatus::Stale => "⊘",
     }
 }

@@ -27,7 +27,8 @@ use serde::{Deserialize, Serialize};
 
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
-use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter};
+use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
+use crate::enrich_cmd::eval_median::AggregatedReport;
 use crate::eval_cmd::runner::EvalRun;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -158,8 +159,15 @@ pub enum BenchStatus {
     /// regressions).
     Improved,
     /// Ran but no baseline existed; current run was just written as
-    /// the new baseline.
+    /// the new baseline. Only reachable on lanes where
+    /// `BenchSurface::baseline_required()` is false, or under an
+    /// explicit `--update-baseline` seed.
     FirstRun,
+    /// Ran but no baseline existed on a lane that requires one
+    /// (enrichment). RED — the pre-P0.1 `FirstRun` auto-green let a
+    /// deleted/never-seeded baseline pass the HARD gate silently.
+    /// Seed deliberately with `--update-baseline`.
+    MissingBaseline,
     /// Couldn't run — corpus missing, subprocess failed, etc.
     Stale,
 }
@@ -365,13 +373,14 @@ pub async fn cmd_all(args: &[String]) -> i32 {
 }
 
 async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
+    let mut bench = bench.clone();
     // Rebuild pathway. Only enrichment lane has rebuild semantics —
     // retrieval-lane corpora are owned by the daemon's installed
     // indexes, not by `bench all`. Calling --rebuild against a
     // retrieval bench warn-logs and continues to score against the
     // existing index.
     if opts.rebuild && bench.surface == BenchSurface::Enrichment {
-        if let Err(e) = rebuild_corpus(bench).await {
+        if let Err(e) = rebuild_corpus(&bench).await {
             return BenchOutcome {
                 id: bench.id.clone(),
                 group: bench.group.clone(),
@@ -386,6 +395,13 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 note: Some(format!("rebuild failed: {e}")),
             };
         }
+        // corpus_state was probed at DISCOVERY, before the rebuild ran.
+        // A rebuild that just (re)wrote the atlas invalidates it —
+        // without this re-probe, a corpus discovered as IndexedNoAtlas
+        // scores as Stale even though `enrich build` succeeded, and the
+        // weekly rebuild tier can never gate (found by the P0.1 canary
+        // control run, 2026-07-31).
+        bench.corpus_state = super::discover::inspect_corpus_state(&bench.corpus_id);
     } else if opts.rebuild {
         eprintln!(
             "warn: --rebuild has no effect on retrieval-lane bench {}/{} \
@@ -407,17 +423,17 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             levers: bench.levers.clone(),
             baseline_captured: None,
             baseline_age_days: None,
-            note: Some(stale_hint(bench)),
+            note: Some(stale_hint(&bench)),
         };
     }
 
     match bench.surface {
-        BenchSurface::Enrichment => run_enrichment(bench, opts).await,
+        BenchSurface::Enrichment => run_enrichment(&bench, opts).await,
         BenchSurface::RetrievalJudge => {
             if opts.routing_only {
-                run_routing_only(bench, opts).await
+                run_routing_only(&bench, opts).await
             } else {
-                run_retrieval(bench, opts).await
+                run_retrieval(&bench, opts).await
             }
         }
     }
@@ -647,7 +663,14 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         None
     });
 
-    if opts.update_baseline || baseline.is_none() {
+    // Seeding policy: an explicit --update-baseline always writes.
+    // A MISSING baseline auto-seeds only on lanes that don't require
+    // one — on a baseline_required lane, silently writing it would
+    // turn the red into a one-run-delayed auto-green, which is the
+    // exact failure mode `baseline_required` exists to close.
+    let baseline_required = bench.surface.baseline_required();
+    let mut note = None;
+    if opts.update_baseline || (baseline.is_none() && !baseline_required) {
         if let Err(e) = write_dated_and_update_latest(&opts.bench_root, bench, &current) {
             eprintln!(
                 "warn: writing baseline for {}/{} failed: {e}",
@@ -657,8 +680,18 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     }
 
     let status = match &baseline {
+        None if baseline_required && !opts.update_baseline => {
+            note = Some(format!(
+                "no baseline for {}/{} — this lane requires one; seed deliberately with --update-baseline",
+                bench.group, bench.id
+            ));
+            BenchStatus::MissingBaseline
+        }
         None => BenchStatus::FirstRun,
-        Some(prev) => classify_enrichment(prev, &current, opts.regression_threshold),
+        Some(prev) => {
+            let spreads = read_eval_median_spreads(&opts.bench_root, bench);
+            classify_enrichment(prev, &current, opts.regression_threshold, &spreads)
+        }
     };
 
     let mut outcome = BenchOutcome {
@@ -672,7 +705,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         levers: bench.levers.clone(),
         baseline_captured: None,
         baseline_age_days: None,
-        note: None,
+        note,
     };
     stamp_baseline_age(&mut outcome, &opts.bench_root, bench);
     outcome
@@ -844,31 +877,106 @@ fn outcome_subprocess_fail(bench: &DiscoveredBench, msg: String) -> BenchOutcome
 /// Classify an enrichment bench's run against its baseline. Walks
 /// every catalog-aligned axis present in either side, sums up axis
 /// F1 deltas vs the threshold, returns the worst-case status.
-fn classify_enrichment(prev: &EvalReport, cur: &EvalReport, threshold: f32) -> BenchStatus {
+/// One F1 per scored axis, across BOTH storage generations: the twelve
+/// legacy named `PhaseScore` fields and the catalog-driven
+/// `axis_scores` map. The five v2 named fields (`mechanism_atoms` …)
+/// mirror `axis_scores` entries byte-for-byte, so only the map side is
+/// read for them — including the named copies would double-count.
+/// Silent axes (`f1() == None`: nothing expected, nothing emitted)
+/// stay out of the set; an axis present on one side only diffs
+/// against 0.0.
+fn axis_f1s(report: &EvalReport) -> std::collections::BTreeMap<String, f32> {
+    let legacy: [(&str, Option<&PhaseScore>); 12] = [
+        ("positions", report.positions.as_ref()),
+        ("person_atoms", report.person_atoms.as_ref()),
+        ("concept_atoms", report.concept_atoms.as_ref()),
+        ("work_atoms", report.work_atoms.as_ref()),
+        ("event_atoms", report.event_atoms.as_ref()),
+        ("state_atoms", report.state_atoms.as_ref()),
+        ("relation_atoms", report.relation_atoms.as_ref()),
+        ("question_atoms", report.question_atoms.as_ref()),
+        ("claim_atoms", report.claim_atoms.as_ref()),
+        ("fault_lines", report.fault_lines.as_ref()),
+        ("open_questions", report.open_questions.as_ref()),
+        ("configurations", report.configurations.as_ref()),
+    ];
+    let mut out = std::collections::BTreeMap::new();
+    for (name, score) in legacy {
+        if let Some(f1) = score.and_then(|s| s.f1()) {
+            out.insert(name.to_string(), f1);
+        }
+    }
+    for (key, score) in &report.axis_scores {
+        if let Some(f1) = score.f1() {
+            out.insert(key.clone(), f1);
+        }
+    }
+    out
+}
+
+/// Filename of the eval-median sidecar, next to the bench's
+/// `latest.json`. Produce it with
+/// `svrn enrich eval-median <corpus> <golden> --runs N --report
+/// <baseline-dir>/eval-median.json`. When present, each axis's
+/// MEASURED run-to-run spread raises that axis's regression threshold
+/// above the flat default — the threshold becomes
+/// `max(--regression-threshold, spread)` per axis, so a delta inside
+/// the pipeline's own noise band never reds the lane.
+const EVAL_MEDIAN_SIDECAR: &str = "eval-median.json";
+
+fn read_eval_median_spreads(
+    bench_root: &Path,
+    bench: &DiscoveredBench,
+) -> std::collections::BTreeMap<String, f32> {
+    let path =
+        super::baselines::baseline_dir_for(bench_root, bench).join(EVAL_MEDIAN_SIDECAR);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Default::default();
+    };
+    match serde_json::from_str::<AggregatedReport>(&text) {
+        Ok(report) => {
+            let spreads = report.spreads();
+            eprintln!(
+                "[bench] {}/{}: eval-median sidecar → spread-derived thresholds for {} axes",
+                bench.group,
+                bench.id,
+                spreads.len()
+            );
+            spreads
+        }
+        Err(e) => {
+            eprintln!(
+                "warn: eval-median sidecar {} unreadable ({e}) — using flat threshold",
+                path.display()
+            );
+            Default::default()
+        }
+    }
+}
+
+fn classify_enrichment(
+    prev: &EvalReport,
+    cur: &EvalReport,
+    threshold: f32,
+    spreads: &std::collections::BTreeMap<String, f32>,
+) -> BenchStatus {
+    let prev_f1s = axis_f1s(prev);
+    let cur_f1s = axis_f1s(cur);
     let mut regressed = false;
     let mut improved = false;
-    let axes: Vec<&String> = cur
-        .axis_scores
-        .keys()
-        .chain(prev.axis_scores.keys())
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect();
+    let axes: std::collections::BTreeSet<&String> =
+        prev_f1s.keys().chain(cur_f1s.keys()).collect();
     for axis in axes {
-        let cur_f1 = cur
-            .axis_scores
-            .get(axis)
-            .and_then(|s| s.f1())
-            .unwrap_or(0.0);
-        let prev_f1 = prev
-            .axis_scores
-            .get(axis)
-            .and_then(|s| s.f1())
-            .unwrap_or(0.0);
+        let cur_f1 = cur_f1s.get(axis).copied().unwrap_or(0.0);
+        let prev_f1 = prev_f1s.get(axis).copied().unwrap_or(0.0);
+        let axis_threshold = spreads
+            .get(axis.as_str())
+            .copied()
+            .map_or(threshold, |s| threshold.max(s));
         let delta = cur_f1 - prev_f1;
-        if delta < -threshold {
+        if delta < -axis_threshold {
             regressed = true;
-        } else if delta > threshold {
+        } else if delta > axis_threshold {
             improved = true;
         }
     }
@@ -980,9 +1088,12 @@ fn persist_report(path: &Path, outcomes: &[BenchOutcome]) -> std::io::Result<()>
 }
 
 fn exit_code_from(outcomes: &[BenchOutcome]) -> i32 {
-    let any_red = outcomes
-        .iter()
-        .any(|o| matches!(o.status, BenchStatus::Regressed | BenchStatus::Stale));
+    let any_red = outcomes.iter().any(|o| {
+        matches!(
+            o.status,
+            BenchStatus::Regressed | BenchStatus::Stale | BenchStatus::MissingBaseline
+        )
+    });
     if any_red {
         1
     } else {
@@ -1116,6 +1227,124 @@ mod tests {
     fn parse_args_rejects_unknown_flag() {
         let err = parse_args(&["--nope".into()]).unwrap_err();
         assert!(err.contains("unknown flag"));
+    }
+
+    fn outcome_with(status: BenchStatus) -> BenchOutcome {
+        BenchOutcome {
+            id: "t".into(),
+            group: "g".into(),
+            corpus_id: "c".into(),
+            surface: "enrichment".into(),
+            status,
+            enrichment: None,
+            retrieval: None,
+            levers: vec![],
+            baseline_captured: None,
+            baseline_age_days: None,
+            note: None,
+        }
+    }
+
+    /// The pre-P0.1 auto-green: a missing baseline on the enrichment
+    /// lane must fail the run, while an explicit first-run seed and
+    /// green outcomes still pass.
+    #[test]
+    fn missing_baseline_reds_the_exit_code() {
+        assert_eq!(
+            exit_code_from(&[outcome_with(BenchStatus::MissingBaseline)]),
+            1
+        );
+        assert_eq!(exit_code_from(&[outcome_with(BenchStatus::FirstRun)]), 0);
+        assert_eq!(exit_code_from(&[outcome_with(BenchStatus::Green)]), 0);
+    }
+
+    #[test]
+    fn baseline_required_is_enrichment_only() {
+        assert!(BenchSurface::Enrichment.baseline_required());
+        assert!(!BenchSurface::RetrievalJudge.baseline_required());
+    }
+
+    fn phase(expected: usize, matched: usize) -> PhaseScore {
+        PhaseScore {
+            expected,
+            matched,
+            ..Default::default()
+        }
+    }
+
+    /// The pre-P0.1 blind spot: a regression in a legacy named-field
+    /// axis (here `person_atoms`) must red the lane even though it
+    /// never appears in `axis_scores`.
+    #[test]
+    fn classify_reds_on_legacy_named_field_regression() {
+        let mut prev = EvalReport::default();
+        prev.person_atoms = Some(phase(10, 10)); // f1 = 1.0
+        let mut cur = EvalReport::default();
+        cur.person_atoms = Some(phase(10, 5)); // f1 ≈ 0.67
+        assert!(matches!(
+            classify_enrichment(&prev, &cur, 0.005, &Default::default()),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// An axis's measured eval-median spread raises its threshold: a
+    /// delta inside the pipeline's own run-to-run noise band is Green,
+    /// while other axes keep the flat threshold.
+    #[test]
+    fn classify_respects_spread_derived_threshold() {
+        let mut prev = EvalReport::default();
+        prev.person_atoms = Some(phase(10, 10)); // f1 = 1.0
+        let mut cur = EvalReport::default();
+        cur.person_atoms = Some(phase(10, 5)); // f1 ≈ 0.67, delta ≈ -0.33
+        let mut spreads = std::collections::BTreeMap::new();
+        spreads.insert("person_atoms".to_string(), 0.40_f32);
+        assert!(matches!(
+            classify_enrichment(&prev, &cur, 0.005, &spreads),
+            BenchStatus::Green
+        ));
+        spreads.insert("person_atoms".to_string(), 0.10_f32);
+        assert!(matches!(
+            classify_enrichment(&prev, &cur, 0.005, &spreads),
+            BenchStatus::Regressed
+        ));
+    }
+
+    #[test]
+    fn classify_still_diffs_axis_scores() {
+        let mut prev = EvalReport::default();
+        prev.axis_scores.insert("mechanism".into(), phase(8, 8));
+        let mut cur = EvalReport::default();
+        cur.axis_scores.insert("mechanism".into(), phase(8, 2));
+        assert!(matches!(
+            classify_enrichment(&prev, &cur, 0.005, &Default::default()),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// A legacy axis that vanishes entirely from the current run
+    /// (scored before, silent now) diffs against 0.0 — that is a
+    /// regression, not a skip.
+    #[test]
+    fn classify_reds_when_legacy_axis_vanishes() {
+        let mut prev = EvalReport::default();
+        prev.claim_atoms = Some(phase(6, 6));
+        let cur = EvalReport::default();
+        assert!(matches!(
+            classify_enrichment(&prev, &cur, 0.005, &Default::default()),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// The five v2 named fields mirror `axis_scores`; only the map
+    /// side is read, so a mirrored axis contributes exactly one entry.
+    #[test]
+    fn axis_f1s_reads_mirrored_axes_from_map_only() {
+        let mut report = EvalReport::default();
+        report.mechanism_atoms = Some(phase(4, 4));
+        report.axis_scores.insert("mechanism".into(), phase(4, 4));
+        let f1s = axis_f1s(&report);
+        assert_eq!(f1s.len(), 1);
+        assert!(f1s.contains_key("mechanism"));
     }
 
     #[test]

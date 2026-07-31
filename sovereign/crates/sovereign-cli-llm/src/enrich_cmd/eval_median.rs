@@ -39,7 +39,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
@@ -285,8 +285,8 @@ fn parse_args(args: &[String]) -> Result<ParsedMedian, String> {
 
 // ── Aggregation ────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default, Serialize)]
-struct PhaseSummary {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct PhaseSummary {
     /// Per-run F1 in `[0.0, 1.0]`. `None` for runs where the phase
     /// produced no scoreable artefacts. Length always equals
     /// `runs.len()`.
@@ -304,8 +304,8 @@ struct PhaseSummary {
     notes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-struct AggregatedReport {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct AggregatedReport {
     corpus_id: String,
     golden_path: String,
     runs: usize,
@@ -324,6 +324,48 @@ struct AggregatedReport {
     /// Per-run aggregate F1 across all scoreable phases (mirrors
     /// what `enrich eval` prints at the bottom).
     aggregate_f1s: Vec<Option<f32>>,
+}
+
+impl PhaseSummary {
+    /// Run-to-run F1 spread (max − min, fraction units) across the
+    /// runs where this phase scored. `None` with fewer than two scored
+    /// runs — one data point has no spread.
+    pub(crate) fn spread(&self) -> Option<f32> {
+        let scored: Vec<f32> = self.f1s.iter().flatten().copied().collect();
+        if scored.len() < 2 {
+            return None;
+        }
+        let min = scored.iter().copied().fold(f32::INFINITY, f32::min);
+        let max = scored.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        Some(max - min)
+    }
+}
+
+impl AggregatedReport {
+    /// Per-axis run-to-run spread — the measured noise floor `bench
+    /// all` folds into its regression threshold (P0.1: an axis whose
+    /// baseline delta sits inside its own spread is noise, not
+    /// regression). Keys match `EvalReport`'s legacy named axes.
+    pub(crate) fn spreads(&self) -> std::collections::BTreeMap<String, f32> {
+        let named: [(&str, &PhaseSummary); 12] = [
+            ("positions", &self.positions),
+            ("person_atoms", &self.person_atoms),
+            ("concept_atoms", &self.concept_atoms),
+            ("work_atoms", &self.work_atoms),
+            ("event_atoms", &self.event_atoms),
+            ("state_atoms", &self.state_atoms),
+            ("relation_atoms", &self.relation_atoms),
+            ("question_atoms", &self.question_atoms),
+            ("claim_atoms", &self.claim_atoms),
+            ("fault_lines", &self.fault_lines),
+            ("open_questions", &self.open_questions),
+            ("configurations", &self.configurations),
+        ];
+        named
+            .into_iter()
+            .filter_map(|(name, s)| s.spread().map(|sp| (name.to_string(), sp)))
+            .collect()
+    }
 }
 
 fn aggregate(runs: &[EvalReport]) -> AggregatedReport {

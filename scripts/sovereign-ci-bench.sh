@@ -34,6 +34,8 @@
 # Usage:
 #   scripts/sovereign-ci-bench.sh [--bin <path>] [--budget-secs N]
 #                                 [--update-baseline] [--report <dir>] [--quick]
+#                                 [--rebuild]   (weekly tier: re-extract
+#                                                enrichment atlases pre-score)
 #
 # Requires a healthy daemon (chat + embed slots). Build the CLI first:
 #   cargo build -p sovereign-cli-llm --bin sovereign-cli-llm
@@ -56,6 +58,17 @@ BUDGET_SECS=14400         # 4h ceiling
 HARD_RESERVE_SECS="${HARD_RESERVE_SECS:-1800}"
 REPORT_DIR="target/ci-bench"
 UPDATE_BASELINE=""
+# --rebuild: the WEEKLY tier (P0.1). Re-extracts each enrichment corpus's
+# atlas (`bench all --rebuild`) before scoring, so the HARD enrichment lane
+# diffs a FRESH extraction against baseline instead of re-reading a static
+# atoms.json forever. Without a periodic rebuild the lane can only ever red
+# on golden/scorer edits — extraction regressions (prompt, resolver, model)
+# are invisible. Costs tens of minutes per corpus and needs the daemon's
+# primary slot; run it weekly (cadence partner of the Monday quality lanes
+# in .github/workflows/weekly.yml, but on a workstation with a live daemon
+# — GH runners have no models). Enrichment lanes only; retrieval indexes
+# are daemon-owned and unaffected.
+REBUILD=""
 QUICK=""                  # --quick: smaller-n slices for a fast local pre-push (~15m)
 # Lean-tier synth sample: under --quick, each synth bank is down-sampled to this
 # many questions (stratified by category). 5 covers SEP's 6 archetypes at ~1/7th
@@ -162,6 +175,7 @@ while [[ $# -gt 0 ]]; do
     --budget-secs) BUDGET_SECS="$2"; shift 2 ;;
     --report) REPORT_DIR="$2"; shift 2 ;;
     --update-baseline) UPDATE_BASELINE="--update-baseline"; shift ;;
+    --rebuild) REBUILD="--rebuild"; shift ;;
     --quick) QUICK="1"; shift ;;
     --no-synth) NO_SYNTH="1"; shift ;;
     -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
@@ -273,7 +287,7 @@ echo "================================================================"
 # corpus at a time so a single un-indexed corpus can't void the whole lane.
 for c in "${ENRICHMENT_CORPORA[@]}"; do
   run_lane "enrichment:$c" HARD \
-    "$BIN" bench all --bench-root "$BENCH_ROOT" --filter "$c" $UPDATE_BASELINE \
+    "$BIN" bench all --bench-root "$BENCH_ROOT" --filter "$c" $UPDATE_BASELINE $REBUILD \
       --report "$REPORT_DIR/enrichment-$c.json"
 done
 for c in "${RETRIEVAL_CORPORA[@]}"; do

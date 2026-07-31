@@ -38,7 +38,7 @@ const HELP: Help = Help {
     summary: "Baseline-relative CI gate for the absolute-verdict lanes (chaos-monkey, mechanism-fidelity, multiturn).",
     sections: &[
         HelpSection::Usage(
-            "svrn bench gate <lane> --report <artifact> [--bench-root <dir>] [--id <baseline-id>] [--update-baseline] [--regression-threshold <f>]",
+            "svrn bench gate <lane> --report <artifact> [--bench-root <dir>] [--id <baseline-id>] [--update-baseline] [--regression-threshold <f>] [--prompt-version <v>]",
         ),
         HelpSection::Subcommands(&[
             ("chaos-monkey", "Gate the chaos JSONL on {competence, honesty, hallucination_rate} (+ distractor-evasion / citation-fidelity when the bank has v2 questions)."),
@@ -71,6 +71,7 @@ pub fn cmd_gate(args: &[String]) -> i32 {
     let mut id_override: Option<String> = None;
     let mut update_baseline = false;
     let mut threshold: Option<f64> = None;
+    let mut prompt_version: Option<String> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -90,6 +91,7 @@ pub fn cmd_gate(args: &[String]) -> i32 {
             "--report" => report = Some(PathBuf::from(val!("--report"))),
             "--bench-root" => bench_root = PathBuf::from(val!("--bench-root")),
             "--id" => id_override = Some(val!("--id")),
+            "--prompt-version" => prompt_version = Some(val!("--prompt-version")),
             "--update-baseline" => update_baseline = true,
             "--regression-threshold" => {
                 threshold = Some(match val!("--regression-threshold").parse() {
@@ -165,6 +167,11 @@ pub fn cmd_gate(args: &[String]) -> i32 {
         }
     }
 
+    // Capture fingerprints (P0.1): artifact mtime + stated prompt
+    // version, on the current summary whether it becomes the baseline
+    // (--update-baseline) or is diffed against one.
+    current.fingerprint(&report, prompt_version);
+
     let id = id_override.as_deref().unwrap_or(default_id);
     let dir = baseline_dir(&bench_root, group, id);
 
@@ -218,6 +225,27 @@ pub fn cmd_gate(args: &[String]) -> i32 {
                         == Some("1");
                 } else {
                     eprintln!("[gate] baseline for {lane} captured {captured} ({age_days}d old)");
+                }
+            }
+        }
+        // Fingerprint advisories: a mtime match means the "current"
+        // artifact IS the baseline's artifact — the lane never re-ran,
+        // so a green here says nothing new. A prompt-version mismatch
+        // means deltas are not attributable to code alone. Both are
+        // operator information, never an exit-code change.
+        if let Some(p) = prev.as_ref() {
+            if p.artifact_mtime.is_some() && p.artifact_mtime == current.artifact_mtime {
+                eprintln!(
+                    "[gate] ⚠ {lane}: artifact unchanged since baseline capture (mtime match) — \
+                     score is static; re-run the lane before trusting this verdict"
+                );
+            }
+            if let (Some(pv), Some(cv)) = (&p.prompt_version, &current.prompt_version) {
+                if pv != cv {
+                    eprintln!(
+                        "[gate] ⚠ {lane}: prompt version changed since baseline capture ({pv} → {cv}) — \
+                         deltas are not attributable to code alone"
+                    );
                 }
             }
         }

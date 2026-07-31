@@ -36,6 +36,18 @@ pub enum BenchSurface {
 }
 
 impl BenchSurface {
+    /// Whether a missing baseline is a lane failure
+    /// (`BenchStatus::MissingBaseline`, red) rather than a
+    /// `FirstRun` auto-seed. The enrichment HARD lane requires one:
+    /// its scores are deterministic diffs against a committed
+    /// artifact, so "no baseline" means the gate is not gating.
+    /// Retrieval keeps first-run seeding — its baselines are
+    /// mode-suffixed (`-synth`, `-routing`, …) and legitimately start
+    /// empty per mode.
+    pub fn baseline_required(self) -> bool {
+        matches!(self, BenchSurface::Enrichment)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             BenchSurface::Enrichment => "enrichment",

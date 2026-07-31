@@ -105,6 +105,19 @@ pub struct LaneBaseline {
     /// time — the report rollup buckets those as "unattributed".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_attribution: Option<sovereign_core::models_manifest::ModelAttribution>,
+    /// Prompt-contract version active at capture (e.g. the enrichment
+    /// pipeline's `prompt_version`), caller-stated via
+    /// `--prompt-version`. `None` when the lane has no prompt contract
+    /// or the caller didn't state one — absence is itself legible in
+    /// the baseline JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_version: Option<String>,
+    /// Unix mtime (seconds) of the report artifact this baseline was
+    /// summarized from — the static-artifact tell (P0.1): a later
+    /// capture or gate run whose artifact carries the SAME mtime is
+    /// re-reading old evidence, not judging a new run of the lane.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_mtime: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub metrics: BTreeMap<String, LaneMetric>,
@@ -118,9 +131,24 @@ impl LaneBaseline {
             corpus: None,
             model: None,
             model_attribution: None,
+            prompt_version: None,
+            artifact_mtime: None,
             note: None,
             metrics: BTreeMap::new(),
         }
+    }
+
+    /// Stamp the capture fingerprints: the report artifact's mtime
+    /// (from the filesystem, best-effort — a failed stat leaves `None`,
+    /// which the JSON shows as an unstamped capture) and the
+    /// caller-stated prompt version.
+    pub fn fingerprint(&mut self, artifact: &std::path::Path, prompt_version: Option<String>) {
+        self.artifact_mtime = std::fs::metadata(artifact)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
+        self.prompt_version = prompt_version;
     }
 
     /// Attribute this baseline to the concrete model that produced it,
@@ -370,6 +398,33 @@ mod tests {
                 LaneMetric::lower_is_better(0.64, 0.10),
             )
             .with("control_delta", LaneMetric::near_zero(0.0, 0.05))
+    }
+
+    #[test]
+    fn fingerprint_stamps_artifact_mtime_and_prompt_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let artifact = dir.path().join("report.jsonl");
+        std::fs::write(&artifact, "{}\n").unwrap();
+        let mut b = base();
+        b.fingerprint(&artifact, Some("1.0.0".into()));
+        assert!(b.artifact_mtime.is_some());
+        assert_eq!(b.prompt_version.as_deref(), Some("1.0.0"));
+
+        // A missing artifact leaves the stamp None — visibly unstamped,
+        // never a panic.
+        let mut missing = base();
+        missing.fingerprint(&dir.path().join("absent.jsonl"), None);
+        assert!(missing.artifact_mtime.is_none());
+    }
+
+    /// Legacy baselines (captured before the fingerprint fields
+    /// existed) must still deserialize — the fields default to None.
+    #[test]
+    fn legacy_baseline_json_without_fingerprints_deserializes() {
+        let json = r#"{"lane":"chaos-monkey","captured_at":"2026-01-01T00:00:00Z","metrics":{}}"#;
+        let b: LaneBaseline = serde_json::from_str(json).unwrap();
+        assert!(b.prompt_version.is_none());
+        assert!(b.artifact_mtime.is_none());
     }
 
     #[test]
