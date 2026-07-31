@@ -22,6 +22,10 @@ system. Handoff is for people *seeing* it.
   the knowledge tier knows who wrote it: per-node prompt/model
   provenance, `--refresh-stale` rebuilds only what's outdated
   (2026-07-31).
+- [`EXTRACTIVE_FLOOR_DEMO.md`](EXTRACTIVE_FLOOR_DEMO.md) — summaries
+  that cannot make things up: verbatim-sentence trees on demand, and
+  failed summary calls fall back to extractive instead of thinning
+  the tree (2026-07-31).
 
 ## When to add a file here
 

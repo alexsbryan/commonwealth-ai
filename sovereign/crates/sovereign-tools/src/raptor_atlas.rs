@@ -127,6 +127,46 @@ const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 /// initiative stay distinguishable.
 pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-07-31.1";
 
+/// How a node's summary text is produced (T1 P1.1).
+///
+/// `Extractive` selects verbatim member sentences by cosine to the
+/// cluster centroid — no LLM prose, so the summary cannot assert
+/// anything the source doesn't. SP2 measured retrieval parity with
+/// abstractive summaries at equal coverage (|B−A′| = 0.0000 on both
+/// sep banks, 2026-07). `Abstractive` is the existing LLM path; in
+/// that mode a cluster whose summary call fails (LLM error or parse
+/// failure) falls back to extractive instead of thinning the tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SummaryMode {
+    #[default]
+    Abstractive,
+    Extractive,
+}
+
+/// Version stamp for the extractive selection algorithm — the
+/// extractive analogue of [`RAPTOR_PROMPT_VERSION`]. BUMP on any
+/// change to sentence splitting, ranking, or the length target.
+/// Stamped as `prompt_version` on extractive nodes and folded into
+/// the checkpoint `input_hash` by extractive-mode callers.
+pub const EXTRACTIVE_ALGO_VERSION: &str = "rex-2026-07-31.1";
+
+/// `summarizer_model` stamp for extractive nodes: no model wrote
+/// prose, so the stamp names the mechanism instead of a model stem.
+/// `enrich raptor --refresh-stale` compares against this when the
+/// corpus builds in extractive mode.
+pub const EXTRACTIVE_SUMMARIZER: &str = "extractive";
+
+/// Target summary length for extractive selection, in chars.
+/// Sentences are taken in rank order until total length first
+/// reaches this (stop-at-≥ overshoot) — matches SP2 Arm B's target
+/// (abstractive avg 420 chars → extractive avg 520).
+const EXTRACTIVE_TARGET_CHARS: usize = 480;
+
+/// Minimum sentence length (chars) eligible for extractive
+/// selection — same floor SP2 Arm B used, and the same instinct as
+/// [`MIN_QUOTE_SPAN_CHARS`]: short fragments don't summarize.
+const MIN_EXTRACT_SENTENCE_CHARS: usize = 40;
+
 /// Hard cap on quote spans per node — keeps briefing budget bounded
 /// even for very tight clusters where many sentences match the
 /// centroid.
@@ -147,6 +187,35 @@ pub async fn build_raptor_atlas(
 ) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_with_checkpoint(inference, chunks, embeddings, doc_type, None, None, None)
         .await
+}
+
+/// Variant with an explicit [`SummaryMode`]. The other entry points
+/// default to `Abstractive` (with per-cluster extractive fallback on
+/// summary failure); this is the seam callers use to build a fully
+/// extractive tree — no LLM calls at all, summaries are verbatim
+/// member sentences ranked by centroid cosine.
+pub async fn build_raptor_atlas_with_mode(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    correction_hint: Option<&str>,
+    mode: SummaryMode,
+) -> Result<Vec<RaptorNode>> {
+    build_raptor_atlas_impl(
+        inference,
+        chunks,
+        embeddings,
+        doc_type,
+        checkpoint,
+        progress,
+        correction_hint,
+        LEAF_TARGET_CLUSTER_SIZE,
+        mode,
+    )
+    .await
 }
 
 /// Variant with a caller-chosen leaf-cluster target size. The default
@@ -173,6 +242,7 @@ pub async fn build_raptor_atlas_with_leaf_target(
         None,
         None,
         leaf_target.max(2),
+        SummaryMode::Abstractive,
     )
     .await
 }
@@ -226,6 +296,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
         progress,
         correction_hint,
         LEAF_TARGET_CLUSTER_SIZE,
+        SummaryMode::Abstractive,
     )
     .await
 }
@@ -242,6 +313,7 @@ async fn build_raptor_atlas_impl(
     // (rides on each `ClusterSummarizationInput`).
     correction_hint: Option<&str>,
     leaf_target: usize,
+    mode: SummaryMode,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.len() != embeddings.len() {
         return Err(sovereign_core::error::Error::Storage(format!(
@@ -403,6 +475,11 @@ async fn build_raptor_atlas_impl(
                     chunks,
                     embeddings,
                 ),
+                member_full_texts: inp
+                    .member_indices
+                    .iter()
+                    .filter_map(|&i| chunks.get(i).map(|c| c.content.clone()))
+                    .collect(),
                 direct_member_chunk_ids: inp
                     .member_indices
                     .iter()
@@ -490,6 +567,7 @@ async fn build_raptor_atlas_impl(
         inference,
         to_summarize,
         doc_type.clone(),
+        mode,
         checkpoint,
         progress,
         already_cached,
@@ -585,6 +663,10 @@ async fn build_raptor_atlas_impl(
             next_inputs.push(ClusterSummarizationInput {
                 level: current_level,
                 member_descriptors,
+                member_full_texts: member_indices
+                    .iter()
+                    .map(|&i| current_layer[i].summary.clone())
+                    .collect(),
                 direct_member_chunk_ids: Vec::new(),
                 evidence_chunk_ids,
                 children_node_ids: children_ids,
@@ -596,7 +678,7 @@ async fn build_raptor_atlas_impl(
         }
 
         let next_layer =
-            summarize_clusters_buffered(inference, next_inputs, doc_type.clone()).await;
+            summarize_clusters_buffered(inference, next_inputs, doc_type.clone(), mode).await;
         if next_layer.is_empty() {
             // All summarization failed at this level. Treat the
             // existing layer as the root layer (no parent gets built).
@@ -668,6 +750,7 @@ async fn summarize_clusters_buffered_with_checkpoint(
     inference: &Arc<dyn InferenceProvider>,
     inputs: Vec<(usize, ClusterSummarizationInput)>,
     doc_type: DocumentTypeTag,
+    mode: SummaryMode,
     checkpoint: Option<&RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn EnrichmentProgressSink>>,
     already_cached: usize,
@@ -680,7 +763,7 @@ async fn summarize_clusters_buffered_with_checkpoint(
             let inf = Arc::clone(&inference);
             let dt = doc_type.clone();
             async move {
-                let node = summarize_one_cluster(&inf, input, dt).await;
+                let node = summarize_one_cluster(&inf, input, dt, mode).await;
                 (cluster_idx, node)
             }
         })
@@ -762,6 +845,13 @@ struct ClusterSummarizationInput {
     /// For intermediate levels: child summaries (this is the RAPTOR
     /// recursion).
     member_descriptors: Vec<String>,
+    /// FULL member texts, in member order — the extractive selection
+    /// surface. For leaves: whole chunk contents (descriptors are
+    /// 280-char previews, useless for sentence selection). For
+    /// intermediate levels: child summaries verbatim — under
+    /// extractive mode those are themselves source sentences, so
+    /// every level's summary stays verbatim source text.
+    member_full_texts: Vec<String>,
     direct_member_chunk_ids: Vec<u32>,
     evidence_chunk_ids: Vec<u32>,
     children_node_ids: Vec<String>,
@@ -785,6 +875,7 @@ async fn summarize_clusters_buffered(
     inference: &Arc<dyn InferenceProvider>,
     inputs: Vec<ClusterSummarizationInput>,
     doc_type: DocumentTypeTag,
+    mode: SummaryMode,
 ) -> Vec<RaptorNode> {
     let doc_type = doc_type.clone();
     let inference = Arc::clone(inference);
@@ -792,7 +883,7 @@ async fn summarize_clusters_buffered(
         .map(|input| {
             let inf = Arc::clone(&inference);
             let dt = doc_type.clone();
-            async move { summarize_one_cluster(&inf, input, dt).await }
+            async move { summarize_one_cluster(&inf, input, dt, mode).await }
         })
         .buffered(SUMMARIZE_BUFFER)
         .collect()
@@ -809,7 +900,11 @@ async fn summarize_one_cluster(
     inference: &Arc<dyn InferenceProvider>,
     input: ClusterSummarizationInput,
     doc_type: DocumentTypeTag,
+    mode: SummaryMode,
 ) -> Option<RaptorNode> {
+    if mode == SummaryMode::Extractive {
+        return extract_one_cluster(inference, input).await;
+    }
     let body = input
         .member_descriptors
         .iter()
@@ -899,15 +994,21 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
     // neutrality (bundle is None); P5 confirms.
     req.think_budget = Some(0);
 
+    // Dropped-summary failure modes fall back to extractive instead
+    // of thinning the tree (T1 P1.1): a cluster that loses its LLM
+    // summary used to vanish from the atlas entirely — silently
+    // shrinking retrieval coverage. A verbatim extractive summary is
+    // strictly better than no node. The embed-failure path below
+    // still drops: extraction needs the same embedder.
     let resp = match inference.complete(&req).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
                 level = input.level,
                 error = %e,
-                "raptor_atlas: summary LLM call failed; dropping cluster"
+                "raptor_atlas: summary LLM call failed; falling back to extractive"
             );
-            return None;
+            return extract_one_cluster(inference, input).await;
         }
     };
 
@@ -916,9 +1017,9 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
         None => {
             tracing::warn!(
                 level = input.level,
-                "raptor_atlas: summary parse failed; dropping cluster"
+                "raptor_atlas: summary parse failed; falling back to extractive"
             );
-            return None;
+            return extract_one_cluster(inference, input).await;
         }
     };
 
@@ -950,6 +1051,154 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
         created_at: chrono::Utc::now(),
         prompt_version: RAPTOR_PROMPT_VERSION.to_string(),
         summarizer_model: resp.model_id,
+    })
+}
+
+/// Split text into sentences, KEEPING the terminator on each — the
+/// selected sentences are re-joined verbatim, so punctuation must
+/// survive the round-trip (the quote-span splitter drops it, which
+/// is fine there because spans are matched, not re-emitted).
+fn split_sentences(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    for (i, ch) in text.char_indices() {
+        if matches!(ch, '.' | '!' | '?') {
+            let end = i + ch.len_utf8();
+            let s = text[start..end].trim();
+            if !s.is_empty() {
+                out.push(s.to_string());
+            }
+            start = end;
+        }
+    }
+    let tail = text[start..].trim();
+    if !tail.is_empty() {
+        out.push(tail.to_string());
+    }
+    out
+}
+
+/// Rank sentences by cosine to the centroid and select in rank order
+/// until total length first reaches `target_chars` (stop-at-≥
+/// overshoot), then return the selected indices in SOURCE order so
+/// the joined summary reads in document order, not rank order.
+/// Pure — the embedding calls stay in the async caller.
+fn select_extractive_sentences(
+    sentence_lens: &[usize],
+    sentence_embeddings: &[Vec<f32>],
+    centroid: &[f32],
+    target_chars: usize,
+) -> Vec<usize> {
+    let mut ranked: Vec<(usize, f32)> = sentence_embeddings
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (i, cosine_sim(e, centroid)))
+        .collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut selected: Vec<usize> = Vec::new();
+    let mut total = 0usize;
+    for (i, _) in ranked {
+        total += sentence_lens[i];
+        selected.push(i);
+        if total >= target_chars {
+            break;
+        }
+    }
+    selected.sort_unstable();
+    selected
+}
+
+/// Extractive summarization for one cluster (T1 P1.1, SP2 Arm B
+/// productionized): sentence-split the FULL member texts, embed each
+/// sentence, rank by cosine to the cluster's centroid, take top
+/// sentences to the length target, restore source order. No LLM
+/// prose — the summary is verbatim source sentences, so it cannot
+/// claim what the source doesn't. Stamped `prompt_version =
+/// EXTRACTIVE_ALGO_VERSION`, `summarizer_model = "extractive"` so
+/// `--refresh-stale` can tell these nodes from abstractive ones.
+///
+/// `primary_entities` is left empty: there is no LLM parse to name
+/// them, and the field only feeds title hints on intermediate-level
+/// prompts (absent hint degrades to the plain child summary).
+async fn extract_one_cluster(
+    inference: &Arc<dyn InferenceProvider>,
+    input: ClusterSummarizationInput,
+) -> Option<RaptorNode> {
+    let sentences: Vec<String> = input
+        .member_full_texts
+        .iter()
+        .flat_map(|t| split_sentences(t))
+        .filter(|s| s.len() >= MIN_EXTRACT_SENTENCE_CHARS)
+        .collect();
+    if sentences.is_empty() {
+        tracing::warn!(
+            level = input.level,
+            "raptor_atlas: extractive — no sentence >= {MIN_EXTRACT_SENTENCE_CHARS} chars; dropping cluster"
+        );
+        return None;
+    }
+
+    let sentence_embeddings = match inference.embed_batch(&sentences).await {
+        Ok(e) if e.len() == sentences.len() => e,
+        Ok(e) => {
+            tracing::warn!(
+                level = input.level,
+                expected = sentences.len(),
+                got = e.len(),
+                "raptor_atlas: extractive — embed_batch length mismatch; dropping cluster"
+            );
+            return None;
+        }
+        Err(e) => {
+            tracing::warn!(
+                level = input.level,
+                error = %e,
+                "raptor_atlas: extractive — sentence embed failed; dropping cluster"
+            );
+            return None;
+        }
+    };
+
+    let lens: Vec<usize> = sentences.iter().map(|s| s.len()).collect();
+    let selected = select_extractive_sentences(
+        &lens,
+        &sentence_embeddings,
+        &input.centroid_embedding,
+        EXTRACTIVE_TARGET_CHARS,
+    );
+    let summary = selected
+        .iter()
+        .map(|&i| sentences[i].as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let summary_embedding = match inference.embed(&summary).await {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(
+                level = input.level,
+                error = %e,
+                "raptor_atlas: extractive — summary embed failed; dropping cluster"
+            );
+            return None;
+        }
+    };
+
+    Some(RaptorNode {
+        node_id: uuid::Uuid::new_v4().to_string(),
+        level: input.level,
+        summary,
+        summary_embedding,
+        centroid_embedding: input.centroid_embedding,
+        children_node_ids: input.children_node_ids,
+        direct_member_chunk_ids: input.direct_member_chunk_ids,
+        evidence_chunk_ids: input.evidence_chunk_ids,
+        quote_spans: input.quote_spans,
+        primary_entities: Vec::new(),
+        cluster_coherence: input.cluster_coherence,
+        created_at: chrono::Utc::now(),
+        prompt_version: EXTRACTIVE_ALGO_VERSION.to_string(),
+        summarizer_model: EXTRACTIVE_SUMMARIZER.to_string(),
     })
 }
 
@@ -1214,6 +1463,162 @@ mod tests {
             }
         }
         out
+    }
+
+    use async_trait::async_trait;
+    use std::pin::Pin;
+
+    #[test]
+    fn split_sentences_keeps_terminators_and_order() {
+        let text = "First sentence here. Second one follows! Third asks a question? trailing fragment";
+        let got = split_sentences(text);
+        assert_eq!(
+            got,
+            vec![
+                "First sentence here.",
+                "Second one follows!",
+                "Third asks a question?",
+                "trailing fragment"
+            ]
+        );
+    }
+
+    #[test]
+    fn extractive_selection_stops_at_target_and_restores_source_order() {
+        // Three sentences; centroid points at [1,0]. Rank order is
+        // 0 (1.0), 2 (0.9), 1 (0.0). Target forces two picks — the
+        // result must be source order {0, 2}, not rank order.
+        let lens = vec![50usize, 50, 50];
+        let embs = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.9, 0.1]];
+        let centroid = vec![1.0, 0.0];
+        let selected = select_extractive_sentences(&lens, &embs, &centroid, 100);
+        assert_eq!(selected, vec![0, 2]);
+        // A target below one sentence still takes the top-ranked one.
+        let selected = select_extractive_sentences(&lens, &embs, &centroid, 10);
+        assert_eq!(selected, vec![0]);
+    }
+
+    /// Deterministic 2-dim embedding shared by the summarize-path
+    /// mocks: sentences mentioning "anchor" align with the test
+    /// centroid [1,0]; everything else is orthogonal.
+    fn direction_embed(text: &str) -> Vec<f32> {
+        if text.contains("anchor") {
+            vec![1.0, 0.0]
+        } else {
+            vec![0.0, 1.0]
+        }
+    }
+
+    fn mock_caps() -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 8192,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+
+    /// LLM path errors (the daemon-down case); embeds work.
+    struct FailingLlmEmbedOk;
+
+    #[async_trait]
+    impl InferenceProvider for FailingLlmEmbedOk {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(sovereign_core::error::Error::Storage("llm down".into()))
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
+            unreachable!("summarize path does not stream")
+        }
+        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+            Ok(direction_embed(text))
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            mock_caps()
+        }
+    }
+
+    /// Any LLM call is a test failure; embeds work. Proves the
+    /// extractive mode is LLM-free.
+    struct PanicLlmEmbedOk;
+
+    #[async_trait]
+    impl InferenceProvider for PanicLlmEmbedOk {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            panic!("extractive mode must not call the LLM")
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
+            panic!("extractive mode must not stream")
+        }
+        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+            Ok(direction_embed(text))
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            mock_caps()
+        }
+    }
+
+    fn extractive_test_input() -> ClusterSummarizationInput {
+        let anchor =
+            "The anchor sentence describes the central theme of this cluster in detail."
+                .to_string();
+        let aside =
+            "An unrelated aside wanders far away from the cluster topic entirely today."
+                .to_string();
+        ClusterSummarizationInput {
+            level: 0,
+            member_descriptors: vec![anchor.clone(), aside.clone()],
+            member_full_texts: vec![anchor, aside],
+            direct_member_chunk_ids: vec![1, 2],
+            evidence_chunk_ids: vec![1, 2],
+            children_node_ids: Vec::new(),
+            quote_spans: Vec::new(),
+            centroid_embedding: vec![1.0, 0.0],
+            cluster_coherence: 0.9,
+            correction_hint: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn abstractive_llm_failure_falls_back_to_extractive() {
+        let inference: Arc<dyn InferenceProvider> = Arc::new(FailingLlmEmbedOk);
+        let node = summarize_one_cluster(
+            &inference,
+            extractive_test_input(),
+            DocumentTypeTag::Narrative,
+            SummaryMode::Abstractive,
+        )
+        .await
+        .expect("LLM failure must fall back to an extractive node, not thin the tree");
+        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
+        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
+        assert!(
+            node.summary.contains("anchor sentence"),
+            "summary should carry the centroid-aligned source sentence verbatim, got: {}",
+            node.summary
+        );
+    }
+
+    #[tokio::test]
+    async fn extractive_mode_is_llm_free_and_stamps_provenance() {
+        let inference: Arc<dyn InferenceProvider> = Arc::new(PanicLlmEmbedOk);
+        let node = summarize_one_cluster(
+            &inference,
+            extractive_test_input(),
+            DocumentTypeTag::Narrative,
+            SummaryMode::Extractive,
+        )
+        .await
+        .expect("extractive mode should produce a node");
+        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
+        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
+        assert!(node.primary_entities.is_empty());
+        assert_eq!(node.direct_member_chunk_ids, vec![1, 2]);
     }
 
     #[test]

@@ -85,6 +85,10 @@ struct RaptorArgs {
     /// (pre-stamping rows have both empty → stale by definition).
     /// Fresh documents are skipped; missing ones are built (T1 P1.3).
     refresh_stale: bool,
+    /// How summaries are produced (T1 P1.1): `abstractive` (default,
+    /// LLM prose with per-cluster extractive fallback on failure) or
+    /// `extractive` (LLM-free verbatim sentence selection).
+    summary_mode: sovereign_tools::raptor_atlas::SummaryMode,
     /// Restrict the build to a curated set of articles (one slug/title per
     /// line). Overrides the default smallest-first selection — used to pilot
     /// RAPTOR on representative multi-section articles instead of stubs.
@@ -272,6 +276,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     println!("  documents:  {total_docs}");
     println!("  chunks:     {total_chunks}");
     println!("  doc-type:   {}", parsed.doc_type.label());
+    println!("  summaries:  {:?}", parsed.summary_mode);
     println!(
         "  furniture:  {}",
         if parsed.strip_furniture {
@@ -367,6 +372,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let provider = FolderTieredProvider::new(store, inference)
         .with_index_dir_resolver(resolver)
         .with_doc_type(parsed.doc_type.clone())
+        .with_summary_mode(parsed.summary_mode)
         .into_handle();
 
     println!(
@@ -388,38 +394,54 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // stale and rebuilt forever. A failed probe is a hard stop, not a
     // guess: with no truthful expected value the comparison is
     // meaningless.
-    let expected_stem: Option<String> = if parsed.refresh_stale {
-        let mut probe = sovereign_core::types::CompletionRequest::for_workload(
-            sovereign_core::slot_policy::Workload::EnrichBulk,
-            "Reply with the single word: ok".to_string(),
-        )
-        .with_output_budget(8);
-        probe.think_budget = Some(0);
-        match probe_inference.complete(&probe).await {
-            Ok(r) if !r.model_id.is_empty() => Some(r.model_id),
-            Ok(_) => {
-                eprintln!(
-                    "error: --refresh-stale probe completion against {} returned an empty model_id — staleness comparison would be meaningless",
-                    parsed.daemon_base
-                );
-                return 1;
-            }
-            Err(e) => {
-                eprintln!(
-                    "error: --refresh-stale probe completion against {} failed: {e} — staleness comparison would be meaningless",
-                    parsed.daemon_base
-                );
-                return 1;
+    // Expected stamps are `(prompt_version, summarizer_model)` and
+    // depend on the build mode: extractive trees are stamped with the
+    // algo version + "extractive" (no probe needed — no LLM serves
+    // them); abstractive trees need the probe above. Note a partially
+    // fallen-back abstractive tree (some clusters stamped extractive
+    // because their LLM call failed at build time) reads as stale
+    // here — deliberately: refreshing it retries the abstractive
+    // summaries the tree was supposed to have.
+    let expected: Option<(String, String)> = if parsed.refresh_stale {
+        match parsed.summary_mode {
+            sovereign_tools::raptor_atlas::SummaryMode::Extractive => Some((
+                sovereign_tools::raptor_atlas::EXTRACTIVE_ALGO_VERSION.to_string(),
+                sovereign_tools::raptor_atlas::EXTRACTIVE_SUMMARIZER.to_string(),
+            )),
+            sovereign_tools::raptor_atlas::SummaryMode::Abstractive => {
+                let mut probe = sovereign_core::types::CompletionRequest::for_workload(
+                    sovereign_core::slot_policy::Workload::EnrichBulk,
+                    "Reply with the single word: ok".to_string(),
+                )
+                .with_output_budget(8);
+                probe.think_budget = Some(0);
+                match probe_inference.complete(&probe).await {
+                    Ok(r) if !r.model_id.is_empty() => Some((
+                        sovereign_tools::raptor_atlas::RAPTOR_PROMPT_VERSION.to_string(),
+                        r.model_id,
+                    )),
+                    Ok(_) => {
+                        eprintln!(
+                            "error: --refresh-stale probe completion against {} returned an empty model_id — staleness comparison would be meaningless",
+                            parsed.daemon_base
+                        );
+                        return 1;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "error: --refresh-stale probe completion against {} failed: {e} — staleness comparison would be meaningless",
+                            parsed.daemon_base
+                        );
+                        return 1;
+                    }
+                }
             }
         }
     } else {
         None
     };
-    if let Some(stem) = &expected_stem {
-        println!(
-            "  refresh-stale: current prompt {} · summarizer {stem}",
-            sovereign_tools::raptor_atlas::RAPTOR_PROMPT_VERSION
-        );
+    if let Some((pv, stem)) = &expected {
+        println!("  refresh-stale: current prompt {pv} · summarizer {stem}");
     }
 
     let run_start = Instant::now();
@@ -445,7 +467,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 .await
                 .unwrap_or_default();
             if !existing.is_empty() {
-                if let Some(stem) = &expected_stem {
+                if let Some((current_pv, stem)) = &expected {
                     // --refresh-stale: rebuild exactly the documents
                     // whose stored stamps disagree with the current
                     // build config. Synthetic rows (empty summary
@@ -455,9 +477,8 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                     // carries stamps from now on, and pre-stamping
                     // rows (both fields empty) are stale by
                     // definition — that is the point.
-                    let current_pv = sovereign_tools::raptor_atlas::RAPTOR_PROMPT_VERSION;
                     let stale_reason = existing.iter().find_map(|r| {
-                        if r.prompt_version != current_pv {
+                        if &r.prompt_version != current_pv {
                             Some(format!(
                                 "prompt {} != {current_pv}",
                                 if r.prompt_version.is_empty() {
@@ -718,6 +739,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
     let mut daemon_base = "http://localhost:9741".to_string();
     let mut chat_model = "primary".to_string();
     let mut embed_model = "embed".to_string();
+    let mut summary_mode = sovereign_tools::raptor_atlas::SummaryMode::Abstractive;
 
     let mut i = 0;
     while i < args.len() {
@@ -761,6 +783,19 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
                 titles_file = Some(args.get(i).ok_or("--titles-file needs a path")?.clone());
             }
             "--group-by-article" => group_by_article = true,
+            "--summary-mode" => {
+                i += 1;
+                let v = args.get(i).ok_or("--summary-mode needs a value")?;
+                summary_mode = match v.to_ascii_lowercase().as_str() {
+                    "abstractive" => sovereign_tools::raptor_atlas::SummaryMode::Abstractive,
+                    "extractive" => sovereign_tools::raptor_atlas::SummaryMode::Extractive,
+                    other => {
+                        return Err(format!(
+                            "unknown --summary-mode '{other}' (abstractive|extractive)"
+                        ))
+                    }
+                };
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -789,6 +824,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
         daemon_base,
         chat_model,
         embed_model,
+        summary_mode,
     })
 }
 
@@ -863,6 +899,7 @@ fn print_usage() {
     eprintln!("  --dry-run           Print the dispatch plan and exit (no inference, no writes).");
     eprintln!("  --force             Rebuild every document, even ones already built (default: resume/skip them).");
     eprintln!("  --refresh-stale     Rebuild only documents whose stored trees carry an outdated prompt_version or summarizer_model stamp (pre-stamping trees count as stale).");
+    eprintln!("  --summary-mode <m>  abstractive (default: LLM prose, extractive fallback on failure) | extractive (LLM-free verbatim sentence selection, T1 P1.1)");
     eprintln!("  --daemon <url>      Daemon base URL (default: http://localhost:9741).");
     eprintln!("  --chat-model <id>   Summarizer model id/alias (default: primary).");
     eprintln!("  --embed-model <id>  Embedding model id/alias for summary nodes (default: embed).");

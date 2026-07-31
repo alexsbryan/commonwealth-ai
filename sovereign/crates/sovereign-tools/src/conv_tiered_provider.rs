@@ -260,6 +260,12 @@ pub struct FolderTieredProvider {
     /// e.g. `Argument` for SEP philosophy essays so summaries come out
     /// claim-level. Threaded into `build_folder_artifacts`.
     doc_type: DocumentTypeTag,
+    /// How node summaries are produced (T1 P1.1). Defaults to
+    /// `Abstractive` (LLM prose with per-cluster extractive fallback
+    /// on failure); `Extractive` builds the whole tree from verbatim
+    /// centroid-ranked member sentences, LLM-free. Threaded into
+    /// `build_folder_artifacts`.
+    summary_mode: crate::raptor_atlas::SummaryMode,
 }
 
 /// Indirection so the provider can locate the per-corpus index dir
@@ -293,6 +299,7 @@ impl FolderTieredProvider {
             inference,
             index_dir_resolver: None,
             doc_type: DocumentTypeTag::Unknown,
+            summary_mode: crate::raptor_atlas::SummaryMode::Abstractive,
         }
     }
 
@@ -311,6 +318,15 @@ impl FolderTieredProvider {
     /// section-level ones.
     pub fn with_doc_type(mut self, doc_type: DocumentTypeTag) -> Self {
         self.doc_type = doc_type;
+        self
+    }
+
+    /// Override how summaries are produced (default
+    /// [`SummaryMode::Abstractive`](crate::raptor_atlas::SummaryMode)).
+    /// `Extractive` builds LLM-free trees of verbatim source
+    /// sentences — the T1 P1.1 floor.
+    pub fn with_summary_mode(mut self, mode: crate::raptor_atlas::SummaryMode) -> Self {
+        self.summary_mode = mode;
         self
     }
 
@@ -384,10 +400,22 @@ impl FolderTieredProvider {
         };
         let chunk_ids: Vec<u32> = chunks.iter().map(|c| c.id as u32).collect();
         let embedding_dim = embeddings.first().map(|e| e.len()).unwrap_or(0);
+        // The version folded into the hash is mode-dependent: an
+        // abstractive checkpoint must not resurrect into an
+        // extractive build (or vice versa) — switching modes is a
+        // summary change exactly like a prompt bump.
+        let version_for_hash = match self.summary_mode {
+            crate::raptor_atlas::SummaryMode::Abstractive => {
+                crate::raptor_atlas::RAPTOR_PROMPT_VERSION
+            }
+            crate::raptor_atlas::SummaryMode::Extractive => {
+                crate::raptor_atlas::EXTRACTIVE_ALGO_VERSION
+            }
+        };
         let input_hash = crate::raptor_checkpoint::RaptorCheckpointHandle::compute_input_hash(
             &chunk_ids,
             embedding_dim,
-            crate::raptor_atlas::RAPTOR_PROMPT_VERSION,
+            version_for_hash,
         );
         let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
             &index_dir, conv_uuid, input_hash,
@@ -869,6 +897,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         &embeddings,
                         self.inference.clone(),
                         self.doc_type.clone(),
+                        self.summary_mode,
                         updated_at,
                         checkpoint_ref,
                         progress_ref,
@@ -1204,6 +1233,7 @@ async fn build_folder_artifacts(
     embeddings: &[Vec<f32>],
     inference: Arc<dyn InferenceProvider>,
     doc_type: DocumentTypeTag,
+    summary_mode: crate::raptor_atlas::SummaryMode,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
@@ -1225,6 +1255,7 @@ async fn build_folder_artifacts(
         checkpoint,
         progress,
         correction_hint,
+        summary_mode,
     )
     .await
     .map_err(|e| {

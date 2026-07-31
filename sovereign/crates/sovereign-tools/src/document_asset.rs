@@ -2366,8 +2366,17 @@ pub(crate) async fn build_atlas_artifacts(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
 ) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
-    build_atlas_artifacts_with_checkpoint(inference, chunks, embeddings, doc_type, None, None, None)
-        .await
+    build_atlas_artifacts_with_checkpoint(
+        inference,
+        chunks,
+        embeddings,
+        doc_type,
+        None,
+        None,
+        None,
+        crate::raptor_atlas::SummaryMode::Abstractive,
+    )
+    .await
 }
 
 /// Checkpoint-aware variant. Most callers should reach this directly
@@ -2383,6 +2392,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     // User-authored summary correction, threaded to the RAPTOR
     // summarization prompt (the "flag a wrong summary" revision loop).
     correction_hint: Option<&str>,
+    summary_mode: crate::raptor_atlas::SummaryMode,
 ) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
     if chunks.is_empty() {
         return Ok((Vec::new(), Vec::new()));
@@ -2391,7 +2401,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     // RAPTOR tree — the long sub-phase. Errors propagate so callers
     // can transition state to Failed.
     let t_tree = std::time::Instant::now();
-    let nodes = crate::raptor_atlas::build_raptor_atlas_with_checkpoint(
+    let nodes = crate::raptor_atlas::build_raptor_atlas_with_mode(
         inference,
         chunks,
         embeddings,
@@ -2399,6 +2409,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
         checkpoint,
         progress,
         correction_hint,
+        summary_mode,
     )
     .await
     .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
