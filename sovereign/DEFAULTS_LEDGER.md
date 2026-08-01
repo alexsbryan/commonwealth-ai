@@ -30,22 +30,6 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (default 0.0)
-- **Shipped:** 2026-05-22 (note `54869b19`), byte-identical baseline
-  at weight 0.0, opt-in only. Spec:
-  `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md`.
-- **Proof so far:** pattern descends from the SEP rerank atlas_weight
-  blend (sources 40→65 of 66); the blend itself never measured.
-- **Flip condition:** T1 P0.4 ablation lane (`bench enrichment-ablate`)
-  shows the blend moves a bank metric; the lane's knob matrix names
-  this flag explicitly.
-- **Settled by:** T1 P0.4 (plan step 6). If P0.4 reports the banks
-  cannot separate it, move this row to Rejected — that verdict routes
-  to P3.1 golden authoring (T2).
-- **Review by:** 2026-08-14.
-- **Registry gap:** closed 2026-07-31 — declared in
-  `quality/env-flags.toml` (with `SOVEREIGN_DOC_CLUSTER_POOL`) as part
-  of the P0.4 lane landing.
 
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
@@ -70,6 +54,24 @@ store (ids cited per row).
 - **Review by:** 2026-09-01.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
+- **Verdict:** 2026-07-31, per this row's own settling condition — the
+  T1 P0.4 knob matrix (`bench enrichment-ablate`, 3 sep banks × 3
+  reps, artifact `sovereign/bench/ablation/2026-07-31-sep-knob-matrix.json`)
+  reports the banks CANNOT separate it: Δ = 0.0000 on every bank,
+  zero rep spread. In fact NO knob separated — even
+  `SOVEREIGN_RAPTOR_GROUNDING=0` moved only −0.0125 on summarize,
+  under the 0.02 floor. Dark since 2026-05-22; settled in one night
+  once the lane existed.
+- **Honest scope note:** the sep banks do not exercise the
+  attached-document search path the blend lives in — this is "the
+  current banks can't see it", not "the blend does nothing". Both
+  readings route the same way:
+- **Re-open only if:** P3.1 golden authoring (T2) produces a bank that
+  exercises attached-doc retrieval with cluster-structured answers —
+  the same routing as the demand-plan rejection. Registered in
+  `quality/env-flags.toml` either way.
 
 ### Demand-plan fan-out — `SOVEREIGN_DEMAND_PLAN_FANOUT` (off)
 - **Verdict:** 2026-07-19 A/B — net-neutral answer quality at 2–3x

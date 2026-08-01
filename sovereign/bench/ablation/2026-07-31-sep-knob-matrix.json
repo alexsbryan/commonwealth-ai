@@ -1,0 +1,397 @@
+{
+  "generated_by": "svrn bench enrichment-ablate",
+  "reps": 3,
+  "limit": 30,
+  "atlas": null,
+  "results": {
+    "questions": {
+      "baseline": {
+        "reps": [
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-baseline-r1.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-baseline-r2.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-baseline-r3.json"
+          }
+        ],
+        "mean_fact": 0.945011341904762,
+        "min_fact": 0.945011341904762,
+        "max_fact": 0.945011341904762,
+        "mean_source": 0.8817460380952381
+      },
+      "conv_ppr_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-conv_ppr_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-conv_ppr_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-conv_ppr_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.945011341904762,
+        "min_fact": 0.945011341904762,
+        "max_fact": 0.945011341904762,
+        "mean_source": 0.8817460380952381
+      },
+      "doc_cluster_on": {
+        "reps": [
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-doc_cluster_on-r1.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-doc_cluster_on-r2.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-doc_cluster_on-r3.json"
+          }
+        ],
+        "mean_fact": 0.945011341904762,
+        "min_fact": 0.945011341904762,
+        "max_fact": 0.945011341904762,
+        "mean_source": 0.8817460380952381
+      },
+      "raptor_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-raptor_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-raptor_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.945011341904762,
+            "source_ratio": 0.8817460380952381,
+            "questions": 21,
+            "output_path": "target/ci-bench/enrichment-ablate-full/questions-raptor_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.945011341904762,
+        "min_fact": 0.945011341904762,
+        "max_fact": 0.945011341904762,
+        "mean_source": 0.8817460380952381
+      }
+    },
+    "summarize": {
+      "baseline": {
+        "reps": [
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-baseline-r1.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-baseline-r2.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-baseline-r3.json"
+          }
+        ],
+        "mean_fact": 0.625,
+        "min_fact": 0.625,
+        "max_fact": 0.625,
+        "mean_source": 1.0
+      },
+      "conv_ppr_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-conv_ppr_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-conv_ppr_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-conv_ppr_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.625,
+        "min_fact": 0.625,
+        "max_fact": 0.625,
+        "mean_source": 1.0
+      },
+      "doc_cluster_on": {
+        "reps": [
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-doc_cluster_on-r1.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-doc_cluster_on-r2.json"
+          },
+          {
+            "fact_ratio": 0.625,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-doc_cluster_on-r3.json"
+          }
+        ],
+        "mean_fact": 0.625,
+        "min_fact": 0.625,
+        "max_fact": 0.625,
+        "mean_source": 1.0
+      },
+      "raptor_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.6124999999999999,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-raptor_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.6124999999999999,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-raptor_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.6124999999999999,
+            "source_ratio": 1.0,
+            "questions": 8,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize-raptor_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.6124999999999999,
+        "min_fact": 0.6124999999999999,
+        "max_fact": 0.6124999999999999,
+        "mean_source": 1.0
+      }
+    },
+    "summarize_obscure": {
+      "baseline": {
+        "reps": [
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-baseline-r1.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-baseline-r2.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-baseline-r3.json"
+          }
+        ],
+        "mean_fact": 0.7833333333333333,
+        "min_fact": 0.7833333333333333,
+        "max_fact": 0.7833333333333333,
+        "mean_source": 1.0
+      },
+      "conv_ppr_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-conv_ppr_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-conv_ppr_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-conv_ppr_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.7833333333333333,
+        "min_fact": 0.7833333333333333,
+        "max_fact": 0.7833333333333333,
+        "mean_source": 1.0
+      },
+      "doc_cluster_on": {
+        "reps": [
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-doc_cluster_on-r1.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-doc_cluster_on-r2.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-doc_cluster_on-r3.json"
+          }
+        ],
+        "mean_fact": 0.7833333333333333,
+        "min_fact": 0.7833333333333333,
+        "max_fact": 0.7833333333333333,
+        "mean_source": 1.0
+      },
+      "raptor_off": {
+        "reps": [
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-raptor_off-r1.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-raptor_off-r2.json"
+          },
+          {
+            "fact_ratio": 0.7833333333333333,
+            "source_ratio": 1.0,
+            "questions": 6,
+            "output_path": "target/ci-bench/enrichment-ablate-full/summarize_obscure-raptor_off-r3.json"
+          }
+        ],
+        "mean_fact": 0.7833333333333333,
+        "min_fact": 0.7833333333333333,
+        "max_fact": 0.7833333333333333,
+        "mean_source": 1.0
+      }
+    }
+  },
+  "verdicts": {
+    "questions": [
+      {
+        "arm": "conv_ppr_off",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "doc_cluster_on",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "raptor_off",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      }
+    ],
+    "summarize": [
+      {
+        "arm": "conv_ppr_off",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "doc_cluster_on",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "raptor_off",
+        "delta_vs_baseline": -0.012500000000000067,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      }
+    ],
+    "summarize_obscure": [
+      {
+        "arm": "conv_ppr_off",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "doc_cluster_on",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      },
+      {
+        "arm": "raptor_off",
+        "delta_vs_baseline": 0.0,
+        "baseline_spread": 0.0,
+        "arm_spread": 0.0,
+        "separable": false
+      }
+    ]
+  }
+}
