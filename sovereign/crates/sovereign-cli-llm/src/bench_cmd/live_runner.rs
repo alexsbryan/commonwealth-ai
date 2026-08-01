@@ -746,7 +746,10 @@ pub async fn verify_grounding(
 }
 
 /// One forced-choice A/B logprob pass. Returns `(p_A, p_B)`.
-async fn forced_choice_ab(
+/// `pub(crate)`: the P0.2 adjudicator (`bench enrichment-adjudicate`)
+/// reuses this exact register so its verdicts share the runner's
+/// forced-choice normalization.
+pub(crate) async fn forced_choice_ab(
     judge: &dyn InferenceProvider,
     model: &str,
     prompt: &str,

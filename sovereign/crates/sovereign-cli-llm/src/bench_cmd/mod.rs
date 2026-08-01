@@ -24,6 +24,8 @@
 //! systemd unit) and folding it into the bench would couple this
 //! tool to those concerns. Keep it dumb: measure what's loaded.
 
+mod ablate;
+mod adjudicate;
 mod all;
 mod atlas;
 // Crate-visible: `router fit` records its calibration snapshots under
@@ -125,6 +127,14 @@ const HELP: Help = Help {
                 "faithfulness",
                 "T1 P0.3: judge every RAPTOR node summary's claims against its member-chunk texts (production extract/support registers) — per-corpus unsupported-claim rate, JSONL rows for the gate twin (`bench gate faithfulness`).",
             ),
+            (
+                "enrichment-adjudicate",
+                "T1 P0.2: sample unmatched (zero-credit) extraction atoms from an eval golden, judge junk vs legitimate, report per-axis junk rate + projected junk volume.",
+            ),
+            (
+                "enrichment-ablate",
+                "T1 P0.4: run a bank through the production retrieval pipeline under the declared knob matrix (raptor grounding / conv PPR / doc cluster / atlas), one joined table with per-knob SEPARABLE verdicts.",
+            ),
         ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741. The model under \
@@ -170,6 +180,8 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
         "faithfulness" => faithfulness::cmd_faithfulness(&args[1..]).await,
+        "enrichment-adjudicate" => adjudicate::cmd_adjudicate(&args[1..]).await,
+        "enrichment-ablate" => ablate::cmd_ablate(&args[1..]).await,
         "verifier" => verifier::cmd_verifier(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");

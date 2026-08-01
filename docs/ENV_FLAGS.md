@@ -48,6 +48,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_CITATION_BROAD` | on | shipped | Run quote-first citation grounding on ALL gated factual answers, not just entity-anchored ones (entity_anchored alone tripped 0 times on the chaos stream). =0 to A/B off. |
 | `SOVEREIGN_CITATION_GROUNDING` | on | shipped | Quote-first citation grounding on entity-anchored fact queries: the model copies a verbatim supporting sentence before answering (7x confab reduction, 2026-06-24). =0 to A/B off. |
 | `SOVEREIGN_GATE_EXCLUDE_RAPTOR` | on | guard | Exclude RAPTOR summary chunks from the gate's evidence view (a summary is not verbatim source). =0 includes them. |
+| `SOVEREIGN_GATE_SUMMARY_EVIDENCE` | on | shipped | P1.4 provenance-aware evidence: RAPTOR summary chunks stay in gate evidence marked Summary-class; factual claims still verify against Leaf text only, thematic/structural claims may use summaries. =0 restores the Fix B wholesale exclusion. |
 | `SOVEREIGN_GROUNDING_GATE` | on | shipped | Global on/off for the hold→verify→retry→abstain gate on answer-producing surfaces (the Grounded-Everywhere contract). =0/false disables (naked benches, latency debugging). |
 | `SOVEREIGN_GROUNDING_GATE_<SURFACE>` | unset | shipped | Per-surface override (=1 force on, =0 force off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE, PROXY_ARGUMENT}. Read dynamically (never appears in the census). |
 | `SOVEREIGN_GV_THRESHOLD` | 0.9 | shipped | Violation-probability threshold τ for the external grounding verifier — ONE default for the production gate and the chaos bench (grounding_gate_threshold(); bench override: --gv-threshold). |
@@ -142,6 +143,8 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_DECOMP_DECAY` | 1.0 | experiment | Score decay applied to fanned-out sub-query hits (<1 = augment, never displace). |
 | `SOVEREIGN_DEMAND_PLAN` | off | experiment | One fast-slot structured-output call plans the turn's demands (sub_queries, entities, stance contrast); feeds the epistemic demand set. |
 | `SOVEREIGN_DEMAND_PLAN_FANOUT` | off | experiment | Fan the demand plan's sub_queries out into corpus search. Off after the 2026-07-19 A/B (2-3x slower for flat recall). |
+| `SOVEREIGN_DOC_CLUSTER_POOL` | 16 | experiment | Cosine candidate pool width the doc cluster blend re-ranks over; only read when SOVEREIGN_DOC_CLUSTER_WEIGHT > 0. |
+| `SOVEREIGN_DOC_CLUSTER_WEIGHT` | off | experiment | Attached-doc cluster-score blend weight in [0,1] (CLUSTER_SCORE_BLEND.md). 0 = byte-identical baseline; 0.25 = spec starting point. Settled by `bench enrichment-ablate` (T1 P0.4, DEFAULTS_LEDGER row). |
 | `SOVEREIGN_EPISTEMIC_STATE` | on | shipped | Post-pipeline per-turn epistemic ledger assembled into message metadata (pure collation, no model calls). =0 disables. |
 | `SOVEREIGN_FORENSIC` | off | experiment | Debug hatch: =1 enables audit_pipeline_stage composition snapshots between retrieval steps. |
 | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | off | experiment | Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). Wikipedia-specific, never promoted. |

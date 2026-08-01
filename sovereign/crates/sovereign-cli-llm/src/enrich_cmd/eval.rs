@@ -39,8 +39,8 @@ use std::path::{Path, PathBuf};
 use corpus_engine::enrichment::atlas::analysis::configuration::ConfigurationsOutput;
 use corpus_engine::enrichment::atlas::analysis::gaps::{Gap, GapKind, GapsOutput};
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Event, Opposition, Position, Question,
-    Relation, State,
+    AtomEnvelope, AtomId, AtomsFile, ChunkRef, Configuration, Entity, Event, Opposition, Position,
+    Question, Relation, State,
 };
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AtomKind, GatingField, TypedAxis};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
@@ -232,7 +232,7 @@ fn parse_args(args: &[String]) -> Result<ParsedEval, String> {
 // ── Golden-set TOML schema ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
-struct GoldenSet {
+pub(crate) struct GoldenSet {
     #[allow(dead_code)]
     #[serde(default)]
     meta: GoldenMeta,
@@ -316,7 +316,7 @@ struct GoldenSet {
 }
 
 impl GoldenSet {
-    fn load(path: &Path) -> Result<Self, String> {
+    pub(crate) fn load(path: &Path) -> Result<Self, String> {
         let raw =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         toml::from_str::<Self>(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
@@ -606,7 +606,7 @@ struct ExpectedConfiguration {
 // ── Atlas snapshot ─────────────────────────────────────────────────
 
 #[derive(Debug)]
-struct AtlasSnapshot {
+pub(crate) struct AtlasSnapshot {
     skeleton: Option<FieldSkeleton>,
     atoms: Option<AtomsFile>,
     edges: Option<EdgesFile>,
@@ -615,7 +615,7 @@ struct AtlasSnapshot {
 }
 
 impl AtlasSnapshot {
-    fn load(atlas_dir: &Path, skeleton_path: &Path) -> Result<Self, String> {
+    pub(crate) fn load(atlas_dir: &Path, skeleton_path: &Path) -> Result<Self, String> {
         let skeleton = if skeleton_path.exists() {
             let raw = std::fs::read_to_string(skeleton_path)
                 .map_err(|e| format!("read {}: {e}", skeleton_path.display()))?;
@@ -963,6 +963,22 @@ pub(crate) struct PhaseScore {
     pub misses: Vec<String>,
     pub forbidden_hits: Vec<String>,
     pub notes: Vec<String>,
+    /// Total candidate artefacts the scorer saw for this axis — the
+    /// extraction VOLUME. `#[serde(default)]` keeps pre-P0.2 baselines
+    /// deserializable (they read as 0 candidates → rate `None`).
+    #[serde(default)]
+    pub candidates: usize,
+    /// Candidates explained by NO expected entry and NO forbidden
+    /// entry: extraction volume that earns zero credit and, before
+    /// P0.2, carried zero cost. The adjudication sampler
+    /// (`bench enrichment-adjudicate`) prices how much of it is junk.
+    #[serde(default)]
+    pub unmatched_count: usize,
+    /// Up to [`UNMATCHED_SAMPLE_CAP`] labels of unmatched candidates,
+    /// for the human report. The full set is recomputed on demand by
+    /// the adjudicator; this is a preview, not the record.
+    #[serde(default)]
+    pub unmatched_samples: Vec<String>,
 }
 
 impl PhaseScore {
@@ -1003,6 +1019,53 @@ impl PhaseScore {
             return Some(0.0);
         }
         Some(2.0 * p * r / (p + r))
+    }
+
+    /// Fraction of the axis's candidate pool no golden entry explains.
+    /// `None` when the pool is empty (nothing extracted ≠ over-
+    /// extraction). Deliberately NOT folded into precision: the :30
+    /// forbidden-only FP contract stays for baseline compat; this is
+    /// the parallel volume signal.
+    pub(crate) fn unmatched_rate(&self) -> Option<f32> {
+        if self.candidates == 0 {
+            return None;
+        }
+        Some(self.unmatched_count as f32 / self.candidates as f32)
+    }
+}
+
+/// Cap on unmatched sample labels serialized per axis. Keeps report
+/// JSON (and the lane baselines that embed it) bounded on corpora
+/// where extraction volume dwarfs the golden.
+const UNMATCHED_SAMPLE_CAP: usize = 10;
+
+/// Char-boundary-safe label truncation for unmatched samples.
+fn truncate_label(s: &str) -> String {
+    const MAX: usize = 80;
+    if s.chars().count() <= MAX {
+        return s.to_string();
+    }
+    let cut: String = s.chars().take(MAX).collect();
+    format!("{cut}…")
+}
+
+/// Candidate-centric second pass: count candidates no golden entry
+/// (expected OR forbidden) explains. Runs after the expected-centric
+/// loops so it never perturbs the existing match/miss/FP accounting.
+fn tally_unmatched<T>(
+    s: &mut PhaseScore,
+    candidates: &[T],
+    label: impl Fn(&T) -> String,
+    explained: impl Fn(&T) -> bool,
+) {
+    s.candidates = candidates.len();
+    for c in candidates {
+        if !explained(c) {
+            s.unmatched_count += 1;
+            if s.unmatched_samples.len() < UNMATCHED_SAMPLE_CAP {
+                s.unmatched_samples.push(truncate_label(&label(c)));
+            }
+        }
     }
 }
 
@@ -1495,6 +1558,18 @@ fn score_axis(axis: &TypedAxis, golden: &GoldenSet, snap: &AtlasSnapshot) -> Opt
         }
     }
 
+    tally_unmatched(
+        &mut s,
+        &candidates,
+        |c| c.primary_text().to_string(),
+        |c| {
+            expected.iter().any(|exp| matches_axis(axis, c, exp))
+                || forbidden
+                    .iter()
+                    .any(|f| matches_any(c.primary_text(), f.name_contains_any))
+        },
+    );
+
     Some(s)
 }
 
@@ -1638,19 +1713,7 @@ fn score_positions(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
     };
 
     for ep in &golden.expected_positions {
-        let hit = positions.iter().find(|p| {
-            let name_ok = matches_any(&p.name, &ep.name_contains_any);
-            let status_ok = match &ep.epistemic_status {
-                None => true,
-                Some(want) => p.status.eq_ignore_ascii_case(want),
-            };
-            let prop_ok = if ep.proponents_any.is_empty() {
-                true
-            } else {
-                any_match_in_list(&p.proponents, &ep.proponents_any, |x| !x.is_empty())
-            };
-            name_ok && status_ok && prop_ok
-        });
+        let hit = positions.iter().find(|p| position_matches(p, ep));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -1668,7 +1731,36 @@ fn score_positions(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
                 .push(fp.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &positions,
+        |p| p.name.clone(),
+        |p| {
+            golden
+                .expected_positions
+                .iter()
+                .any(|ep| position_matches(p, ep))
+                || golden
+                    .forbidden_positions
+                    .iter()
+                    .any(|fp| matches_any(&p.name, &fp.name_contains_any))
+        },
+    );
     s
+}
+
+fn position_matches(p: &SkeletonPosition, ep: &ExpectedPosition) -> bool {
+    let name_ok = matches_any(&p.name, &ep.name_contains_any);
+    let status_ok = match &ep.epistemic_status {
+        None => true,
+        Some(want) => p.status.eq_ignore_ascii_case(want),
+    };
+    let prop_ok = if ep.proponents_any.is_empty() {
+        true
+    } else {
+        any_match_in_list(&p.proponents, &ep.proponents_any, |x| !x.is_empty())
+    };
+    name_ok && status_ok && prop_ok
 }
 
 fn score_entity_atoms(
@@ -1681,30 +1773,7 @@ fn score_entity_atoms(
     s.expected = expected.len();
     s.forbidden_total = forbidden.len();
 
-    // Expected matches accept the requested type OR an `Other`
-    // variant (the catch-all for type strings the schema doesn't
-    // name — most commonly "unspecified" or "unknown"). The model
-    // frequently hedges typing on borderline cases (e.g. emitting
-    // "Mangan's sister" or "the narrator" with entity_type:
-    // unspecified rather than Person). Penalising hedges as zero
-    // recall conflates "model couldn't classify the type" with
-    // "model didn't surface the entity at all". The first is a
-    // quality concern; the second is a hard miss. Treating Other(_)
-    // as a fallback recovers recall on the hard miss; the
-    // `description_keywords_any` note still flags lower-quality hits.
-    let typed: Vec<&Entity> = snap.entities_of_type(kind);
-    let untyped: Vec<&Entity> = snap
-        .all_entities()
-        .into_iter()
-        .filter(|e| {
-            matches!(e.entity_type, EntityType::Other(_)) && !typed.iter().any(|t| t.id == e.id)
-        })
-        .collect();
-    let entities: Vec<&Entity> = typed
-        .iter()
-        .copied()
-        .chain(untyped.iter().copied())
-        .collect();
+    let entities: Vec<&Entity> = entity_pool(snap, kind);
     if snap.atoms.is_none() {
         s.notes
             .push("atoms.json not present — skipping entity scoring".to_string());
@@ -1771,7 +1840,55 @@ fn score_entity_atoms(
                 .push(fb.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    // Unmatched accounting runs over the same typed-plus-hedge pool the
+    // matcher saw. The `Other(_)` hedge bucket is shared by the three
+    // entity axes (person/concept/work), so an unexplained hedge atom
+    // counts against each axis that could have claimed it — disclosed
+    // here rather than hidden, because the hedge bucket is where
+    // over-extraction most often lands.
+    tally_unmatched(
+        &mut s,
+        &entities,
+        |e| e.canonical_name.clone(),
+        |e| entity_explained(e, expected, forbidden),
+    );
     s
+}
+
+/// The candidate pool an entity axis scores over. Expected matches
+/// accept the requested type OR an `Other` variant (the catch-all for
+/// type strings the schema doesn't name — most commonly "unspecified"
+/// or "unknown"). The model frequently hedges typing on borderline
+/// cases (e.g. emitting "Mangan's sister" or "the narrator" with
+/// entity_type: unspecified rather than Person). Penalising hedges as
+/// zero recall conflates "model couldn't classify the type" with
+/// "model didn't surface the entity at all". The first is a quality
+/// concern; the second is a hard miss. Treating Other(_) as a
+/// fallback recovers recall on the hard miss; the
+/// `description_keywords_any` note still flags lower-quality hits.
+fn entity_pool(snap: &AtlasSnapshot, kind: EntityType) -> Vec<&Entity> {
+    let typed: Vec<&Entity> = snap.entities_of_type(kind);
+    let untyped: Vec<&Entity> = snap
+        .all_entities()
+        .into_iter()
+        .filter(|e| {
+            matches!(e.entity_type, EntityType::Other(_)) && !typed.iter().any(|t| t.id == e.id)
+        })
+        .collect();
+    typed.into_iter().chain(untyped).collect()
+}
+
+/// A candidate entity is "explained" when any expected entry's
+/// load-bearing name check hits it, or a forbidden entry names it.
+/// Mirrors the match policy above: name is the signal, description is
+/// informational.
+fn entity_explained(e: &Entity, expected: &[ExpectedAtom], forbidden: &[ForbiddenName]) -> bool {
+    expected
+        .iter()
+        .any(|ee| matches_any(&e.canonical_name, &ee.canonical_name_contains_any))
+        || forbidden
+            .iter()
+            .any(|fb| matches_any(&e.canonical_name, &fb.name_contains_any))
 }
 
 fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
@@ -1786,19 +1903,7 @@ fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
     }
 
     for ee in &golden.expected_event_atoms {
-        let hit = events.iter().find(|e| {
-            let desc_ok = matches_any(&e.description, &ee.description_contains_any);
-            let part_ok = if ee.participants_any.is_empty() {
-                true
-            } else {
-                e.participants.iter().any(|pid| {
-                    snap.entity_match_strings_by_id(pid)
-                        .iter()
-                        .any(|n| matches_any(n, &ee.participants_any))
-                })
-            };
-            desc_ok && part_ok
-        });
+        let hit = events.iter().find(|e| event_matches(e, ee, snap));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -1820,7 +1925,38 @@ fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
                 .push(fb.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &events,
+        |e| e.description.clone(),
+        |e| event_explained(e, golden, snap),
+    );
     s
+}
+
+fn event_matches(e: &Event, ee: &ExpectedEvent, snap: &AtlasSnapshot) -> bool {
+    let desc_ok = matches_any(&e.description, &ee.description_contains_any);
+    let part_ok = if ee.participants_any.is_empty() {
+        true
+    } else {
+        e.participants.iter().any(|pid| {
+            snap.entity_match_strings_by_id(pid)
+                .iter()
+                .any(|n| matches_any(n, &ee.participants_any))
+        })
+    };
+    desc_ok && part_ok
+}
+
+fn event_explained(e: &Event, golden: &GoldenSet, snap: &AtlasSnapshot) -> bool {
+    golden
+        .expected_event_atoms
+        .iter()
+        .any(|ee| event_matches(e, ee, snap))
+        || golden
+            .forbidden_event_atoms
+            .iter()
+            .any(|fb| matches_any(&e.description, &fb.name_contains_any))
 }
 
 fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
@@ -1833,14 +1969,7 @@ fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         return s;
     }
     for es in &golden.expected_state_atoms {
-        let hit = states.iter().find(|st| {
-            let entity_ok = snap
-                .entity_match_strings_by_id(&st.entity_id)
-                .iter()
-                .any(|n| matches_any(n, &es.entity_name_contains_any));
-            let label_ok = matches_any(&st.label, &es.label_contains_any);
-            entity_ok && label_ok
-        });
+        let hit = states.iter().find(|st| state_matches(st, es, snap));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -1855,7 +1984,34 @@ fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             s.misses.push(format!("{ent}: {lab}"));
         }
     }
+    tally_unmatched(
+        &mut s,
+        &states,
+        |st| {
+            let ent = snap
+                .entity_match_strings_by_id(&st.entity_id)
+                .first()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| st.entity_id.as_str().to_string());
+            format!("{ent}: {}", st.label)
+        },
+        |st| {
+            golden
+                .expected_state_atoms
+                .iter()
+                .any(|es| state_matches(st, es, snap))
+        },
+    );
     s
+}
+
+fn state_matches(st: &State, es: &ExpectedState, snap: &AtlasSnapshot) -> bool {
+    let entity_ok = snap
+        .entity_match_strings_by_id(&st.entity_id)
+        .iter()
+        .any(|n| matches_any(n, &es.entity_name_contains_any));
+    let label_ok = matches_any(&st.label, &es.label_contains_any);
+    entity_ok && label_ok
 }
 
 fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
@@ -1869,55 +2025,8 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
         return s;
     }
 
-    // Per-participant name set (canonical + aliases). A relation
-    // pair-match accepts a hit on any of an entity's known names so a
-    // golden listing "Alyosha" credits a relation involving entity
-    // "Alexey Fyodorovich Karamazov".
-    let participant_name_sets = |r: &Relation| -> Vec<Vec<String>> {
-        r.participants
-            .iter()
-            .map(|pid| {
-                snap.entity_match_strings_by_id(pid)
-                    .into_iter()
-                    .map(str::to_string)
-                    .collect()
-            })
-            .collect()
-    };
-
     for er in &golden.expected_relation_atoms {
-        let hit = relations.iter().find(|r| {
-            let name_sets = participant_name_sets(r);
-            let any_match = |needles: &[String]| -> bool {
-                name_sets
-                    .iter()
-                    .any(|names| names.iter().any(|n| matches_any(n, needles)))
-            };
-            // Two-side check requires the matches to come from
-            // *different* participants. Same-participant double-hit
-            // (one entity's name happens to fall in both keyword
-            // sets) would otherwise spuriously satisfy a pair check.
-            let pair_ok = if er.participants_b_any.is_empty() {
-                any_match(&er.participants_a_any)
-            } else {
-                name_sets.iter().enumerate().any(|(i, names_i)| {
-                    let a_here = names_i
-                        .iter()
-                        .any(|n| matches_any(n, &er.participants_a_any));
-                    if !a_here {
-                        return false;
-                    }
-                    name_sets.iter().enumerate().any(|(j, names_j)| {
-                        i != j
-                            && names_j
-                                .iter()
-                                .any(|n| matches_any(n, &er.participants_b_any))
-                    })
-                })
-            };
-            let label_ok = matches_any(&r.label, &er.label_contains_any);
-            pair_ok && label_ok
-        });
+        let hit = relations.iter().find(|r| relation_matches(r, er, snap));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -1931,19 +2040,94 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
         }
     }
     for fb in &golden.forbidden_relation_atoms {
-        if relations.iter().any(|r| {
-            let label_hit = matches_any(&r.label, &fb.name_contains_any);
-            let name_hit = participant_name_sets(r)
-                .iter()
-                .any(|names| names.iter().any(|n| matches_any(n, &fb.name_contains_any)));
-            label_hit || name_hit
-        }) {
+        if relations
+            .iter()
+            .any(|r| relation_forbidden_hit(r, fb, snap))
+        {
             s.forbidden_hit += 1;
             s.forbidden_hits
                 .push(fb.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &relations,
+        |r| {
+            let names: Vec<String> = relation_name_sets(r, snap)
+                .iter()
+                .map(|ns| ns.first().cloned().unwrap_or_default())
+                .collect();
+            format!("{} [{}]", r.label, names.join(" ↔ "))
+        },
+        |r| {
+            golden
+                .expected_relation_atoms
+                .iter()
+                .any(|er| relation_matches(r, er, snap))
+                || golden
+                    .forbidden_relation_atoms
+                    .iter()
+                    .any(|fb| relation_forbidden_hit(r, fb, snap))
+        },
+    );
     s
+}
+
+/// Per-participant name set (canonical + aliases). A relation
+/// pair-match accepts a hit on any of an entity's known names so a
+/// golden listing "Alyosha" credits a relation involving entity
+/// "Alexey Fyodorovich Karamazov".
+fn relation_name_sets(r: &Relation, snap: &AtlasSnapshot) -> Vec<Vec<String>> {
+    r.participants
+        .iter()
+        .map(|pid| {
+            snap.entity_match_strings_by_id(pid)
+                .into_iter()
+                .map(str::to_string)
+                .collect()
+        })
+        .collect()
+}
+
+fn relation_matches(r: &Relation, er: &ExpectedRelation, snap: &AtlasSnapshot) -> bool {
+    let name_sets = relation_name_sets(r, snap);
+    let any_match = |needles: &[String]| -> bool {
+        name_sets
+            .iter()
+            .any(|names| names.iter().any(|n| matches_any(n, needles)))
+    };
+    // Two-side check requires the matches to come from
+    // *different* participants. Same-participant double-hit
+    // (one entity's name happens to fall in both keyword
+    // sets) would otherwise spuriously satisfy a pair check.
+    let pair_ok = if er.participants_b_any.is_empty() {
+        any_match(&er.participants_a_any)
+    } else {
+        name_sets.iter().enumerate().any(|(i, names_i)| {
+            let a_here = names_i
+                .iter()
+                .any(|n| matches_any(n, &er.participants_a_any));
+            if !a_here {
+                return false;
+            }
+            name_sets.iter().enumerate().any(|(j, names_j)| {
+                i != j
+                    && names_j
+                        .iter()
+                        .any(|n| matches_any(n, &er.participants_b_any))
+            })
+        })
+    };
+    let label_ok = matches_any(&r.label, &er.label_contains_any);
+    pair_ok && label_ok
+}
+
+fn relation_forbidden_hit(r: &Relation, fb: &ForbiddenName, snap: &AtlasSnapshot) -> bool {
+    let label_hit = matches_any(&r.label, &fb.name_contains_any);
+    let name_hit = relation_name_sets(r, snap)
+        .iter()
+        .any(|names| names.iter().any(|n| matches_any(n, &fb.name_contains_any)));
+    label_hit || name_hit
 }
 
 fn score_question_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
@@ -1956,29 +2140,7 @@ fn score_question_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
         return s;
     }
     for eq in &golden.expected_question_atoms {
-        let hit = questions.iter().find(|q| {
-            let content_ok = matches_any(&q.content, &eq.content_contains_any);
-            let status_ok = if eq.status_any.is_empty() {
-                true
-            } else {
-                let q_status = match &q.resolution_status {
-                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved {
-                        ..
-                    } => "resolved",
-                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Contested {
-                        ..
-                    } => "contested",
-                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Open => "open",
-                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Dissolved => {
-                        "dissolved"
-                    }
-                };
-                eq.status_any
-                    .iter()
-                    .any(|s| s.eq_ignore_ascii_case(q_status))
-            };
-            content_ok && status_ok
-        });
+        let hit = questions.iter().find(|q| question_matches(q, eq));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -1986,7 +2148,38 @@ fn score_question_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                 .push(eq.content_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &questions,
+        |q| q.content.clone(),
+        |q| {
+            golden
+                .expected_question_atoms
+                .iter()
+                .any(|eq| question_matches(q, eq))
+        },
+    );
     s
+}
+
+fn question_matches(q: &Question, eq: &ExpectedQuestion) -> bool {
+    let content_ok = matches_any(&q.content, &eq.content_contains_any);
+    let status_ok = if eq.status_any.is_empty() {
+        true
+    } else {
+        let q_status = match &q.resolution_status {
+            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved { .. } => "resolved",
+            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Contested { .. } => {
+                "contested"
+            }
+            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Open => "open",
+            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Dissolved => "dissolved",
+        };
+        eq.status_any
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case(q_status))
+    };
+    content_ok && status_ok
 }
 
 fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
@@ -1999,21 +2192,7 @@ fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         return s;
     }
     for ec in &golden.expected_claim_atoms {
-        let hit = claims.iter().find(|c| {
-            let content_ok = matches_any(&c.content, &ec.content_contains_any);
-            let prop_ok = if ec.attributed_proponent_contains_any.is_empty() {
-                true
-            } else {
-                match &c.attributed_to {
-                    None => false,
-                    Some(id) => snap
-                        .entity_match_strings_by_id(id)
-                        .iter()
-                        .any(|n| matches_any(n, &ec.attributed_proponent_contains_any)),
-                }
-            };
-            content_ok && prop_ok
-        });
+        let hit = claims.iter().find(|c| claim_matches(c, ec, snap));
         if hit.is_some() {
             s.matched += 1;
         } else {
@@ -2021,7 +2200,38 @@ fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
                 .push(ec.content_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &claims,
+        |c| c.content.clone(),
+        |c| {
+            golden
+                .expected_claim_atoms
+                .iter()
+                .any(|ec| claim_matches(c, ec, snap))
+        },
+    );
     s
+}
+
+fn claim_matches(
+    c: &corpus_engine::enrichment::atlas::atoms::Claim,
+    ec: &ExpectedClaim,
+    snap: &AtlasSnapshot,
+) -> bool {
+    let content_ok = matches_any(&c.content, &ec.content_contains_any);
+    let prop_ok = if ec.attributed_proponent_contains_any.is_empty() {
+        true
+    } else {
+        match &c.attributed_to {
+            None => false,
+            Some(id) => snap
+                .entity_match_strings_by_id(id)
+                .iter()
+                .any(|n| matches_any(n, &ec.attributed_proponent_contains_any)),
+        }
+    };
+    content_ok && prop_ok
 }
 
 fn score_discourse_acts(golden: &GoldenSet, snap: &AtlasSnapshot) -> DiscourseActReport {
@@ -2218,6 +2428,27 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             s.forbidden_hits.push(format!("{pa} vs {pb}"));
         }
     }
+    let pair_explained = |a: &str, b: &str| -> bool {
+        let expected_hit = golden.expected_fault_lines.iter().any(|ef| {
+            (matches_any_with_morphology(a, &ef.position_a_contains_any)
+                && matches_any_with_morphology(b, &ef.position_b_contains_any))
+                || (matches_any_with_morphology(a, &ef.position_b_contains_any)
+                    && matches_any_with_morphology(b, &ef.position_a_contains_any))
+        });
+        let forbidden_hit = golden.forbidden_fault_lines.iter().any(|fb| {
+            (matches_any_with_morphology(a, &fb.position_a_contains_any)
+                && matches_any_with_morphology(b, &fb.position_b_contains_any))
+                || (matches_any_with_morphology(a, &fb.position_b_contains_any)
+                    && matches_any_with_morphology(b, &fb.position_a_contains_any))
+        });
+        expected_hit || forbidden_hit
+    };
+    tally_unmatched(
+        &mut s,
+        &tension_edges,
+        |e| format!("{} ↔ {}", lookup_name(&e.source), lookup_name(&e.target)),
+        |e| pair_explained(&lookup_name(&e.source), &lookup_name(&e.target)),
+    );
     s
 }
 
@@ -2272,6 +2503,25 @@ fn score_open_questions(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                 .push(eq.content_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    // Candidate pool for volume accounting is the union of both
+    // storage layers the matcher accepts (gap entries + Open-status
+    // Question atoms), flattened to their display texts.
+    let candidate_texts: Vec<String> = open_qs
+        .iter()
+        .map(|g| g.description.clone())
+        .chain(open_question_atoms.iter().map(|q| q.content.clone()))
+        .collect();
+    tally_unmatched(
+        &mut s,
+        &candidate_texts,
+        |t| t.clone(),
+        |t| {
+            golden
+                .expected_open_questions
+                .iter()
+                .any(|eq| matches_any(t, &eq.content_contains_any))
+        },
+    );
     s
 }
 
@@ -2317,6 +2567,20 @@ fn score_configurations(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                 .push(fb.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
+    tally_unmatched(
+        &mut s,
+        &all,
+        |c| c.label.clone(),
+        |c| {
+            golden.expected_configurations.iter().any(|ec| {
+                matches_any(&c.label, &ec.label_contains_any)
+                    && matches_any(&c.description, &ec.description_keywords_any)
+            }) || golden
+                .forbidden_configurations
+                .iter()
+                .any(|fb| matches_any(&c.label, &fb.name_contains_any))
+        },
+    );
     s
 }
 
@@ -2336,13 +2600,28 @@ fn print_phase_row(label: &str, score: Option<&PhaseScore>) {
     let p = fmt_pct(s.precision());
     let r = fmt_pct(s.recall());
     let f = fmt_pct(s.f1());
+    let u = fmt_pct(s.unmatched_rate());
     println!(
-        "  {label:<22}  {matched:>3}/{exp:<3}    P {p}   R {r}   F1 {f}    FP {fp}/{ft}",
+        "  {label:<22}  {matched:>3}/{exp:<3}    P {p}   R {r}   F1 {f}    FP {fp}/{ft}    U {un}/{cand} {u}",
         matched = s.matched,
         exp = s.expected,
         fp = s.forbidden_hit,
         ft = s.forbidden_total,
+        un = s.unmatched_count,
+        cand = s.candidates,
     );
+    if !s.unmatched_samples.is_empty() {
+        let preview: Vec<String> = s.unmatched_samples.iter().take(4).cloned().collect();
+        let suffix = if s.unmatched_count > preview.len() {
+            format!(" (+{} more)", s.unmatched_count - preview.len())
+        } else {
+            String::new()
+        };
+        println!(
+            "                          unmatched: {}{suffix}",
+            preview.join(", ")
+        );
+    }
     for note in &s.notes {
         println!("                          note: {note}");
     }
@@ -2442,9 +2721,444 @@ fn write_json_report(path: &Path, report: &EvalReport) -> std::io::Result<()> {
     std::fs::write(path, json)
 }
 
+// ── P0.2 adjudication surface ──────────────────────────────────────
+//
+// The volume counters above say HOW MUCH extraction goes unexplained;
+// `bench enrichment-adjudicate` prices WHETHER it is junk. It needs
+// the actual unmatched atoms (labels, descriptions, chunk evidence),
+// not the capped sample strings — recomputed here with the exact
+// predicates the scorers use, so the two surfaces cannot disagree.
+
+/// One unmatched atom, carrying enough context for a judge verdict.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct UnmatchedAtom {
+    /// Axis that considered the atom (most specific pool wins when an
+    /// atom is a candidate in several — typed axes before generic).
+    pub axis: String,
+    /// Atom envelope kind (`Entity` / `Event` / `State` / ...).
+    pub kind: String,
+    pub label: String,
+    /// Secondary text (description / framing); empty when the family
+    /// has none.
+    pub detail: String,
+    pub evidence_chunk_ids: Vec<String>,
+    pub evidence_previews: Vec<String>,
+}
+
+/// Resolve golden + atlas snapshot for a corpus the same way
+/// `score_corpus` does — shared by `enrich eval` and the adjudicator.
+pub(crate) fn load_golden_and_snapshot(
+    corpus_id: &str,
+    golden_path: &Path,
+) -> Result<(GoldenSet, AtlasSnapshot), String> {
+    EnrichConfig::require(corpus_id).map_err(|e| e.to_string())?;
+    let golden = GoldenSet::load(golden_path)?;
+    let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
+    let skeleton_path = paths::index_root(corpus_id).join("field_skeleton.json");
+    let snapshot = AtlasSnapshot::load(&atlas_dir, &skeleton_path)?;
+    Ok((golden, snapshot))
+}
+
+fn chunkref_evidence(refs: &[ChunkRef]) -> (Vec<String>, Vec<String>) {
+    let ids = refs.iter().map(|c| c.chunk_id.clone()).collect();
+    let previews = refs
+        .iter()
+        .filter_map(|c| c.passage_preview.clone())
+        .collect();
+    (ids, previews)
+}
+
+fn axis_candidate_id(c: &AxisCandidate<'_>) -> String {
+    match c {
+        AxisCandidate::Entity(e) => e.id.as_str().to_string(),
+        AxisCandidate::Claim(cl) => cl.id.as_str().to_string(),
+        AxisCandidate::Position(p) => p.id.as_str().to_string(),
+        AxisCandidate::Opposition(o) => o.id.as_str().to_string(),
+    }
+}
+
+/// All atoms that (a) belong to at least one pool the golden scores
+/// and (b) are explained by NO expected or forbidden entry in ANY
+/// pool that considered them. "Explained anywhere = not junk-suspect"
+/// is deliberate: adjudication prices junk, not per-axis bookkeeping,
+/// so an atom the generic claim axis credits is excluded even when a
+/// typed axis it also belongs to did not match it. Pool gating
+/// mirrors `score()`: events/states/relations only when the golden
+/// surfaces them; entity/question/claim/configuration always; typed
+/// axes only when their golden axis is non-empty. Skeleton positions
+/// and tension edges are not atoms and are out of scope here.
+pub(crate) fn collect_unmatched_atoms(
+    golden: &GoldenSet,
+    snap: &AtlasSnapshot,
+) -> Vec<UnmatchedAtom> {
+    use std::collections::HashSet;
+
+    let entity_axes = |g: &GoldenSet| {
+        [
+            (
+                "person",
+                EntityType::Person,
+                g.expected_person_atoms.clone(),
+                g.forbidden_person_atoms.clone(),
+            ),
+            (
+                "concept",
+                EntityType::Concept,
+                g.expected_concept_atoms.clone(),
+                g.forbidden_concept_atoms.clone(),
+            ),
+            (
+                "work",
+                EntityType::Work,
+                g.expected_work_atoms.clone(),
+                g.forbidden_work_atoms.clone(),
+            ),
+        ]
+    };
+
+    // Pass 1 — the global explained set, across every pool score()
+    // would compute.
+    let mut explained: HashSet<String> = HashSet::new();
+    for (_, kind, expected, forbidden) in entity_axes(golden) {
+        for e in entity_pool(snap, kind) {
+            if entity_explained(e, &expected, &forbidden) {
+                explained.insert(e.id.as_str().to_string());
+            }
+        }
+    }
+    if !golden.expected_event_atoms.is_empty() || !golden.forbidden_event_atoms.is_empty() {
+        for e in snap.events() {
+            if event_explained(e, golden, snap) {
+                explained.insert(e.id.as_str().to_string());
+            }
+        }
+    }
+    if !golden.expected_state_atoms.is_empty() {
+        for st in snap.states() {
+            if golden
+                .expected_state_atoms
+                .iter()
+                .any(|es| state_matches(st, es, snap))
+            {
+                explained.insert(st.id.as_str().to_string());
+            }
+        }
+    }
+    if !golden.expected_relation_atoms.is_empty() || !golden.forbidden_relation_atoms.is_empty() {
+        for r in snap.relations() {
+            let ok = golden
+                .expected_relation_atoms
+                .iter()
+                .any(|er| relation_matches(r, er, snap))
+                || golden
+                    .forbidden_relation_atoms
+                    .iter()
+                    .any(|fb| relation_forbidden_hit(r, fb, snap));
+            if ok {
+                explained.insert(r.id.as_str().to_string());
+            }
+        }
+    }
+    for q in snap.questions() {
+        if golden
+            .expected_question_atoms
+            .iter()
+            .any(|eq| question_matches(q, eq))
+        {
+            explained.insert(q.id.as_str().to_string());
+        }
+    }
+    for c in snap.claims() {
+        if golden
+            .expected_claim_atoms
+            .iter()
+            .any(|ec| claim_matches(c, ec, snap))
+        {
+            explained.insert(c.id.as_str().to_string());
+        }
+    }
+    {
+        let inline = snap.configurations_inline();
+        let dedicated: Vec<&Configuration> = match &snap.configurations {
+            Some(o) => o.configurations.iter().collect(),
+            None => Vec::new(),
+        };
+        for c in inline.iter().copied().chain(dedicated) {
+            let ok = golden.expected_configurations.iter().any(|ec| {
+                matches_any(&c.label, &ec.label_contains_any)
+                    && matches_any(&c.description, &ec.description_keywords_any)
+            }) || golden
+                .forbidden_configurations
+                .iter()
+                .any(|fb| matches_any(&c.label, &fb.name_contains_any));
+            if ok {
+                explained.insert(c.id.as_str().to_string());
+            }
+        }
+    }
+    for axis in all_axes() {
+        let (expected, forbidden) = axis_expectations(axis, golden);
+        if expected.is_empty() && forbidden.is_empty() {
+            continue;
+        }
+        for c in collect_axis_atoms(axis, snap) {
+            let ok = expected.iter().any(|exp| matches_axis(axis, &c, exp))
+                || forbidden
+                    .iter()
+                    .any(|f| matches_any(c.primary_text(), f.name_contains_any));
+            if ok {
+                explained.insert(axis_candidate_id(&c));
+            }
+        }
+    }
+
+    // Pass 2 — emit every considered-but-unexplained atom once, most
+    // specific axis first.
+    let mut out: Vec<UnmatchedAtom> = Vec::new();
+    let mut emitted: HashSet<String> = HashSet::new();
+    let mut push = |id: String, atom: UnmatchedAtom, out: &mut Vec<UnmatchedAtom>| {
+        if !explained.contains(&id) && emitted.insert(id) {
+            out.push(atom);
+        }
+    };
+
+    for axis in all_axes() {
+        let (expected, forbidden) = axis_expectations(axis, golden);
+        if expected.is_empty() && forbidden.is_empty() {
+            continue;
+        }
+        for c in collect_axis_atoms(axis, snap) {
+            let id = axis_candidate_id(&c);
+            let atom = match c {
+                AxisCandidate::Entity(e) => UnmatchedAtom {
+                    axis: axis.key.to_string(),
+                    kind: "Entity".into(),
+                    label: e.canonical_name.clone(),
+                    detail: e.description.clone(),
+                    evidence_chunk_ids: vec![e.first_appearance.chunk_id.clone()],
+                    evidence_previews: e
+                        .first_appearance
+                        .passage_preview
+                        .clone()
+                        .into_iter()
+                        .collect(),
+                },
+                AxisCandidate::Claim(cl) => {
+                    let (ids, previews) = chunkref_evidence(&cl.evidence);
+                    UnmatchedAtom {
+                        axis: axis.key.to_string(),
+                        kind: "Claim".into(),
+                        label: cl.content.clone(),
+                        detail: cl.claim_kind.clone().unwrap_or_default(),
+                        evidence_chunk_ids: ids,
+                        evidence_previews: previews,
+                    }
+                }
+                AxisCandidate::Position(p) => UnmatchedAtom {
+                    axis: axis.key.to_string(),
+                    kind: "Position".into(),
+                    label: p.canonical_name.clone(),
+                    detail: p.content.clone(),
+                    evidence_chunk_ids: vec![p.first_appearance.chunk_id.clone()],
+                    evidence_previews: p
+                        .first_appearance
+                        .passage_preview
+                        .clone()
+                        .into_iter()
+                        .collect(),
+                },
+                AxisCandidate::Opposition(o) => UnmatchedAtom {
+                    axis: axis.key.to_string(),
+                    kind: "Opposition".into(),
+                    label: format!("{} vs {}", o.left_label, o.right_label),
+                    detail: o.axis.clone(),
+                    evidence_chunk_ids: vec![o.first_appearance.chunk_id.clone()],
+                    evidence_previews: o
+                        .first_appearance
+                        .passage_preview
+                        .clone()
+                        .into_iter()
+                        .collect(),
+                },
+            };
+            push(id, atom, &mut out);
+        }
+    }
+
+    for (axis_name, kind, _expected, _forbidden) in entity_axes(golden) {
+        for e in entity_pool(snap, kind) {
+            let atom = UnmatchedAtom {
+                axis: axis_name.to_string(),
+                kind: "Entity".into(),
+                label: e.canonical_name.clone(),
+                detail: e.description.clone(),
+                evidence_chunk_ids: vec![e.first_appearance.chunk_id.clone()],
+                evidence_previews: e
+                    .first_appearance
+                    .passage_preview
+                    .clone()
+                    .into_iter()
+                    .collect(),
+            };
+            push(e.id.as_str().to_string(), atom, &mut out);
+        }
+    }
+    if !golden.expected_event_atoms.is_empty() || !golden.forbidden_event_atoms.is_empty() {
+        for e in snap.events() {
+            let (ids, previews) = chunkref_evidence(&e.evidence);
+            let atom = UnmatchedAtom {
+                axis: "event".into(),
+                kind: "Event".into(),
+                label: e.description.clone(),
+                detail: String::new(),
+                evidence_chunk_ids: ids,
+                evidence_previews: previews,
+            };
+            push(e.id.as_str().to_string(), atom, &mut out);
+        }
+    }
+    if !golden.expected_state_atoms.is_empty() {
+        for st in snap.states() {
+            let (ids, previews) = chunkref_evidence(&st.evidence);
+            let ent = snap
+                .entity_match_strings_by_id(&st.entity_id)
+                .first()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| st.entity_id.as_str().to_string());
+            let atom = UnmatchedAtom {
+                axis: "state".into(),
+                kind: "State".into(),
+                label: format!("{ent}: {}", st.label),
+                detail: String::new(),
+                evidence_chunk_ids: ids,
+                evidence_previews: previews,
+            };
+            push(st.id.as_str().to_string(), atom, &mut out);
+        }
+    }
+    if !golden.expected_relation_atoms.is_empty() || !golden.forbidden_relation_atoms.is_empty() {
+        for r in snap.relations() {
+            let (ids, previews) = chunkref_evidence(&r.evidence);
+            let names: Vec<String> = relation_name_sets(r, snap)
+                .iter()
+                .map(|ns| ns.first().cloned().unwrap_or_default())
+                .collect();
+            let atom = UnmatchedAtom {
+                axis: "relation".into(),
+                kind: "Relation".into(),
+                label: format!("{} [{}]", r.label, names.join(" ↔ ")),
+                detail: String::new(),
+                evidence_chunk_ids: ids,
+                evidence_previews: previews,
+            };
+            push(r.id.as_str().to_string(), atom, &mut out);
+        }
+    }
+    for q in snap.questions() {
+        let (ids, previews) = chunkref_evidence(&q.raised_at);
+        let atom = UnmatchedAtom {
+            axis: "question".into(),
+            kind: "Question".into(),
+            label: q.content.clone(),
+            detail: String::new(),
+            evidence_chunk_ids: ids,
+            evidence_previews: previews,
+        };
+        push(q.id.as_str().to_string(), atom, &mut out);
+    }
+    for c in snap.claims() {
+        let (ids, previews) = chunkref_evidence(&c.evidence);
+        let atom = UnmatchedAtom {
+            axis: "claim".into(),
+            kind: "Claim".into(),
+            label: c.content.clone(),
+            detail: c.claim_kind.clone().unwrap_or_default(),
+            evidence_chunk_ids: ids,
+            evidence_previews: previews,
+        };
+        push(c.id.as_str().to_string(), atom, &mut out);
+    }
+    {
+        let inline = snap.configurations_inline();
+        let dedicated: Vec<&Configuration> = match &snap.configurations {
+            Some(o) => o.configurations.iter().collect(),
+            None => Vec::new(),
+        };
+        for c in inline.iter().copied().chain(dedicated) {
+            let (ids, previews) = chunkref_evidence(&c.evidence);
+            let atom = UnmatchedAtom {
+                axis: "configuration".into(),
+                kind: "Configuration".into(),
+                label: c.label.clone(),
+                detail: c.description.clone(),
+                evidence_chunk_ids: ids,
+                evidence_previews: previews,
+            };
+            push(c.id.as_str().to_string(), atom, &mut out);
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unmatched_rate_is_none_on_empty_pool_and_fraction_otherwise() {
+        let empty = PhaseScore::default();
+        assert_eq!(empty.unmatched_rate(), None);
+
+        let s = PhaseScore {
+            candidates: 8,
+            unmatched_count: 2,
+            ..PhaseScore::default()
+        };
+        assert_eq!(s.unmatched_rate(), Some(0.25));
+    }
+
+    #[test]
+    fn tally_unmatched_counts_and_caps_samples() {
+        let mut s = PhaseScore::default();
+        let candidates: Vec<String> = (0..30).map(|i| format!("atom-{i}")).collect();
+        // "explained" = even indices; 15 odd candidates go unmatched.
+        tally_unmatched(
+            &mut s,
+            &candidates,
+            |c| c.clone(),
+            |c| {
+                let n: usize = c.trim_start_matches("atom-").parse().unwrap();
+                n % 2 == 0
+            },
+        );
+        assert_eq!(s.candidates, 30);
+        assert_eq!(s.unmatched_count, 15);
+        assert_eq!(s.unmatched_samples.len(), UNMATCHED_SAMPLE_CAP);
+        assert_eq!(s.unmatched_samples[0], "atom-1");
+    }
+
+    #[test]
+    fn tally_unmatched_serde_roundtrip_defaults_for_old_baselines() {
+        // Pre-P0.2 baseline JSON has none of the volume fields — it
+        // must still deserialize, reading as "no volume signal".
+        let old = r#"{"expected":3,"matched":2,"forbidden_total":1,"forbidden_hit":0,
+                      "misses":["x"],"forbidden_hits":[],"notes":[]}"#;
+        let s: PhaseScore = serde_json::from_str(old).unwrap();
+        assert_eq!(s.candidates, 0);
+        assert_eq!(s.unmatched_count, 0);
+        assert_eq!(s.unmatched_rate(), None);
+    }
+
+    #[test]
+    fn truncate_label_is_char_boundary_safe() {
+        let short = "plain label";
+        assert_eq!(truncate_label(short), short);
+        let long: String = "é".repeat(200);
+        let t = truncate_label(&long);
+        assert!(t.chars().count() <= 81); // 80 + ellipsis
+        assert!(t.ends_with('…'));
+    }
 
     #[test]
     fn matches_any_is_case_insensitive_substring() {
