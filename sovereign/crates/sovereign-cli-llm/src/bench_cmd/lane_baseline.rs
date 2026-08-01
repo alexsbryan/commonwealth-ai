@@ -23,6 +23,12 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Exit code for "this baseline is not a valid comparison target for this
+/// run" — distinct from `1` (a real regression) so a CI runner, and a human,
+/// can tell "the pipeline got worse" from "you compared two different models".
+/// Non-zero on purpose: an incomparable gate has verified nothing.
+pub const EXIT_INCOMPARABLE: i32 = 3;
+
 /// A slot alias, not a concrete model — the historical placeholder a
 /// baseline recorded before resolution existed. We refuse to attribute
 /// a baseline to one of these: an alias is not a model.
@@ -207,6 +213,16 @@ pub struct LaneDiff {
     /// Metrics present in the baseline but absent from the current run
     /// (schema drift / a metric stopped being emitted). Reported, not gated.
     pub missing: Vec<String>,
+    /// `Some((baseline_stem, current_stem))` when BOTH sides carry a
+    /// concrete model attribution and the stems differ — the diff is not
+    /// a pipeline comparison at all, it is a model comparison. Reported
+    /// as *incomparable*, never as a regression (see [`diff`]).
+    pub model_mismatch: Option<(String, String)>,
+    /// The baseline carries no concrete model attribution (a legacy
+    /// alias capture like `model: "primary"`, or none at all) while the
+    /// current run does. The comparison proceeds — we cannot prove it is
+    /// wrong — but it cannot be proven *right* either, so it is flagged.
+    pub baseline_unattributed: bool,
 }
 
 impl LaneDiff {
@@ -270,14 +286,42 @@ fn classify(prev: f64, cur: &LaneMetric) -> Movement {
 /// Compare a `current` run against an optional `baseline`. The **current**
 /// metric is authoritative for direction + tolerance (it reflects the present
 /// adapter's intent), so editing a tolerance takes effect immediately.
+///
+/// **Model comparability (2026-08-01).** A metric delta is only evidence about
+/// the *pipeline* if both sides ran the same generator. On 2026-07-31 a chaos
+/// run on `Qwen3.6-35B-A3B` was diffed against a baseline captured on
+/// `gemma-4-E4B` and the 0.094 competence gap was reported — and acted on — as
+/// a pipeline regression. It was the model. The same 32-probe bank scores
+/// 0.5625–0.594 across the Qwen family and 0.6875 on gemma, so the lane was
+/// measuring model choice with a pipeline yardstick.
+///
+/// So: when both sides carry a **concrete** attribution (`attribute` refuses
+/// slot aliases, so `model_attribution.is_some()` is the honest predicate) and
+/// the stems differ, the result is `model_mismatch` — incomparable, not
+/// regressed. When only the current side is attributed, the comparison still
+/// runs but is flagged `baseline_unattributed`: it cannot be shown wrong, and
+/// it cannot be shown right either.
 pub fn diff(baseline: Option<&LaneBaseline>, current: &LaneBaseline) -> LaneDiff {
     let Some(prev) = baseline else {
         return LaneDiff {
             first_run: true,
-            deltas: Vec::new(),
-            missing: Vec::new(),
+            ..Default::default()
         };
     };
+    let stem = |b: &LaneBaseline| -> Option<String> {
+        b.model_attribution
+            .as_ref()
+            .map(|a| a.file_stem.clone())
+            .filter(|s| !s.is_empty())
+    };
+    let (prev_stem, cur_stem) = (stem(prev), stem(current));
+    let model_mismatch = match (&prev_stem, &cur_stem) {
+        (Some(p), Some(c)) if p != c => Some((p.clone(), c.clone())),
+        _ => None,
+    };
+    // Only meaningful once the current run knows its own model: a lane that
+    // attributes neither side is uniformly blind, not asymmetrically so.
+    let baseline_unattributed = prev_stem.is_none() && cur_stem.is_some();
     let mut deltas = Vec::new();
     for (name, cur) in &current.metrics {
         // A metric with no baseline counterpart is new — report it as an
@@ -307,6 +351,8 @@ pub fn diff(baseline: Option<&LaneBaseline>, current: &LaneBaseline) -> LaneDiff
         first_run: false,
         deltas,
         missing,
+        model_mismatch,
+        baseline_unattributed,
     }
 }
 
@@ -340,6 +386,26 @@ pub fn render_and_exit_code(diff: &LaneDiff, lane: &str) -> i32 {
         println!("  no baseline yet — first-run. Capture one with --update-baseline.");
         println!("  0 regressed (first-run)");
         return 0;
+    }
+    // Comparability is decided BEFORE any delta is shown: printing a table of
+    // "regressions" that are really a model swap is how a model choice got
+    // acted on as a pipeline regression (2026-07-31). Fail loudly instead.
+    if let Some((base_model, cur_model)) = &diff.model_mismatch {
+        println!("  baseline model : {base_model}");
+        println!("  current  model : {cur_model}");
+        println!(
+            "  INCOMPARABLE ✗ — this baseline was captured on a different model, so any \n\
+             \x20 delta measures the MODEL, not the pipeline. Capture a baseline for this \n\
+             \x20 model (--update-baseline) or select one explicitly (--id <baseline>)."
+        );
+        println!("  0 regressed (incomparable)");
+        return EXIT_INCOMPARABLE;
+    }
+    if diff.baseline_unattributed {
+        println!(
+            "  ⚠ baseline records no concrete model (legacy alias capture) — this diff \
+             cannot be shown wrong, nor right. Re-capture with --update-baseline."
+        );
     }
     println!(
         "  {:<28} {:>10} {:>10} {:>9} {:>8}  dir  status",
@@ -514,6 +580,77 @@ mod tests {
         let cur = LaneBaseline::new("chaos", "now")
             .with("honesty", LaneMetric::higher_is_better(f64::NAN, 0.10));
         assert_eq!(diff(Some(&prev), &cur).n_regressed(), 1);
+    }
+
+    /// Build a baseline attributed to a concrete GGUF stem.
+    fn on_model(when: &str, stem: &str, competence: f64) -> LaneBaseline {
+        let mut b = LaneBaseline::new("chaos-monkey", when);
+        b.attribute(Some(stem));
+        b.with("competence", LaneMetric::higher_is_better(competence, 0.15))
+    }
+
+    /// The 2026-07-31 failure, pinned. A run on Qwen3.6-35B diffed against a
+    /// baseline captured on gemma-4-E4B is a MODEL comparison; reporting its
+    /// 0.094 gap as a pipeline regression is what routed a night of work at
+    /// the wrong subsystem. Incomparable, and non-zero so CI cannot read it
+    /// as a pass.
+    #[test]
+    fn different_models_are_incomparable_not_regressed() {
+        let prev = on_model("2026-07-16", "gemma-4-E4B-it-Q6_K", 0.6875);
+        let cur = on_model("2026-07-31", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.59375);
+        let d = diff(Some(&prev), &cur);
+        assert_eq!(
+            d.model_mismatch,
+            Some((
+                "gemma-4-E4B-it-Q6_K".to_string(),
+                "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL".to_string()
+            ))
+        );
+        assert_eq!(render_and_exit_code(&d, "chaos-monkey"), EXIT_INCOMPARABLE);
+        assert_ne!(EXIT_INCOMPARABLE, 1, "must be distinct from a regression");
+    }
+
+    /// Same model on both sides → an ordinary comparison, and a drop inside
+    /// the declared tolerance is noise, not a regression. (0.6875 → 0.59375 is
+    /// Δ 0.094 against tol 0.15 — the lane never called this a regression;
+    /// only the cross-model diff made it look like one.)
+    #[test]
+    fn same_model_compares_normally_and_honours_tolerance() {
+        let prev = on_model("2026-07-16", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.6875);
+        let cur = on_model("2026-07-31", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.59375);
+        let d = diff(Some(&prev), &cur);
+        assert!(d.model_mismatch.is_none());
+        assert!(!d.baseline_unattributed);
+        assert_eq!(d.n_regressed(), 0, "Δ0.094 is inside the 0.15 tolerance");
+        assert_eq!(render_and_exit_code(&d, "chaos-monkey"), 0);
+    }
+
+    /// A legacy alias capture (`model: "primary"`) leaves the baseline
+    /// unattributed. We cannot prove the diff wrong — so it still runs — but
+    /// it is flagged rather than presented as a clean comparison.
+    #[test]
+    fn unattributed_baseline_is_flagged_but_still_compares() {
+        let mut prev = LaneBaseline::new("chaos-monkey", "2026-07-16");
+        prev.attribute(Some("primary")); // refused → stays unattributed
+        let prev = prev.with("competence", LaneMetric::higher_is_better(0.6875, 0.15));
+        let cur = on_model("2026-07-31", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.59375);
+        let d = diff(Some(&prev), &cur);
+        assert!(d.baseline_unattributed);
+        assert!(d.model_mismatch.is_none(), "cannot mismatch what has no model");
+        assert_eq!(render_and_exit_code(&d, "chaos-monkey"), 0);
+    }
+
+    /// A lane that attributes neither side is uniformly blind, not
+    /// asymmetrically so — flagging it would be noise on every run.
+    #[test]
+    fn both_unattributed_is_not_flagged() {
+        let prev = base();
+        let cur = LaneBaseline::new("chaos", "now")
+            .with("competence", LaneMetric::higher_is_better(0.57, 0.10))
+            .with("honesty", LaneMetric::higher_is_better(0.36, 0.10));
+        let d = diff(Some(&prev), &cur);
+        assert!(!d.baseline_unattributed);
+        assert!(d.model_mismatch.is_none());
     }
 
     #[test]

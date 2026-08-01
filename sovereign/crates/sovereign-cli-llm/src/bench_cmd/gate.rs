@@ -607,10 +607,18 @@ fn mechanism_summary(report: &Path) -> Result<LaneBaseline, String> {
     models.dedup();
 
     let mut b = LaneBaseline::new("mechanism-fidelity", now_rfc3339());
-    b.model = Some(models.join(","));
+    // Attribute through `attribute()` — assigning `b.model` directly (as this
+    // did until 2026-08-01) routes around the slot-alias guard, which is how
+    // this lane's baseline came to record `model: "primary"`. A multi-model
+    // pool is genuinely not attributable to one stem, so it stays unattributed
+    // and the pool is named in the note instead.
+    if let [only] = models.as_slice() {
+        b.attribute(Some(only.as_str()));
+    }
     b.note = Some(format!(
-        "pool={} · control Δ̄ over {} stripped-P1 rows · P1 collapse over {} full-P1 rows",
+        "pool={} · models={} · control Δ̄ over {} stripped-P1 rows · P1 collapse over {} full-P1 rows",
         rows.first().map(|r| r.pool.as_str()).unwrap_or("?"),
+        models.join(","),
         control_p1.len(),
         p1_collapse.len(),
     ));
@@ -782,7 +790,10 @@ fn agent_coding_summary(report: &Path) -> Result<LaneBaseline, String> {
     let max = get_f64(&v, "max_total").filter(|m| *m > 0.0).unwrap_or(1.0);
     let frac = grand / max;
     let mut b = LaneBaseline::new("agent-coding", now_rfc3339());
-    b.model = v.get("model").and_then(|m| m.as_str()).map(str::to_string);
+    // Through `attribute()`, not a direct assignment: the gym report writes a
+    // slot alias here (`commonwealth/primary`), and assigning it directly is
+    // what put an alias in this lane's committed baseline.
+    b.attribute(v.get("model").and_then(|m| m.as_str()));
     b.note = Some(format!("grand_total {grand:.0}/{max:.0}"));
     Ok(b.with("score_fraction", LaneMetric::higher_is_better(frac, 0.12)))
 }

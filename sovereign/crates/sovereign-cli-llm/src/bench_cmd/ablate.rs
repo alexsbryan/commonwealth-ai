@@ -10,7 +10,6 @@
 //! | baseline        | shipped defaults (env force-cleared for isolation)  |
 //! | raptor_off      | `SOVEREIGN_RAPTOR_GROUNDING=0`                      |
 //! | conv_ppr_off    | `SOVEREIGN_CONV_PPR_WEIGHT=0`                       |
-//! | doc_cluster_on  | `SOVEREIGN_DOC_CLUSTER_WEIGHT=0.25` (spec default)  |
 //! | with_atlas      | `--with-atlas <ids>` (only when `--atlas` given)    |
 //!
 //! Every rep is a SUBPROCESS so the knob env vars are read fresh by the
@@ -40,7 +39,6 @@ const SEPARATION_FLOOR: f64 = 0.02;
 const MATRIX_ENV: &[&str] = &[
     "SOVEREIGN_RAPTOR_GROUNDING",
     "SOVEREIGN_CONV_PPR_WEIGHT",
-    "SOVEREIGN_DOC_CLUSTER_WEIGHT",
 ];
 
 const HELP: Help = Help {
@@ -238,11 +236,6 @@ async fn run(rest: &[String]) -> i32 {
         ArmSpec {
             name: "conv_ppr_off",
             env: vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())],
-            extra_args: vec![],
-        },
-        ArmSpec {
-            name: "doc_cluster_on",
-            env: vec![("SOVEREIGN_DOC_CLUSTER_WEIGHT", "0.25".into())],
             extra_args: vec![],
         },
     ];

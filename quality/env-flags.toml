@@ -300,19 +300,12 @@ default = "on"
 status = "shipped"
 purpose = "P1.4 provenance-aware evidence: RAPTOR summary chunks stay in gate evidence marked Summary-class; factual claims still verify against Leaf text only, thematic/structural claims may use summaries. =0 restores the Fix B wholesale exclusion."
 
-[[flag]]
-name = "SOVEREIGN_DOC_CLUSTER_WEIGHT"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Attached-doc cluster-score blend weight in [0,1] (CLUSTER_SCORE_BLEND.md). 0 = byte-identical baseline; 0.25 = spec starting point. Settled by `bench enrichment-ablate` (T1 P0.4, DEFAULTS_LEDGER row)."
-
-[[flag]]
-name = "SOVEREIGN_DOC_CLUSTER_POOL"
-cluster = "retrieval"
-default = "16"
-status = "experiment"
-purpose = "Cosine candidate pool width the doc cluster blend re-ranks over; only read when SOVEREIGN_DOC_CLUSTER_WEIGHT > 0."
+# SOVEREIGN_DOC_CLUSTER_WEIGHT / SOVEREIGN_DOC_CLUSTER_POOL — DELETED
+# 2026-08-01. Rejected 2026-07-31 by the T1 P0.4 ablation matrix (Δ=0.0000
+# on every sep bank, every rep) per their own DEFAULTS_LEDGER row, then
+# removed with the code they gated. Knob count on the enrichment paths:
+# 12 → 10, the first movement on the ENRICHMENT_ROADMAP.md:348 ratchet.
+# Re-open condition lives in the ledger row, not here.
 
 [[flag]]
 name = "SOVEREIGN_HISTORY_RETRIEVAL"

@@ -70,8 +70,18 @@ store (ids cited per row).
   readings route the same way:
 - **Re-open only if:** P3.1 golden authoring (T2) produces a bank that
   exercises attached-doc retrieval with cluster-structured answers —
-  the same routing as the demand-plan rejection. Registered in
-  `quality/env-flags.toml` either way.
+  the same routing as the demand-plan rejection.
+- **CODE DELETED 2026-08-01.** Both env vars, the blend branch in
+  `attached_document_search.rs`, and the now-unreachable
+  `blend_by_cluster_score` / `min_max_normalize` helpers with their 10
+  tests are gone; the registry entries in `quality/env-flags.toml` are
+  replaced by a tombstone pointing here. A Rejected verdict that leaves
+  the code running is the withering pattern this ledger exists to stop —
+  the verdict and the deletion belong in the same week, not the same
+  hypothetical future tranche. Enrichment knob count **12 → 10**, the
+  first movement on the `ENRICHMENT_ROADMAP.md:348` complexity ratchet.
+  Recovery for the re-open case: `git show <this commit>^` — the
+  rationale survives in `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md`.
 
 ### Demand-plan fan-out — `SOVEREIGN_DEMAND_PLAN_FANOUT` (off)
 - **Verdict:** 2026-07-19 A/B — net-neutral answer quality at 2–3x
