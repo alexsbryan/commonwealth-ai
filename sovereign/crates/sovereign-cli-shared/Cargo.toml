@@ -17,7 +17,7 @@ corpus-engine-scip = { workspace = true, optional = true }
 # Only for `mcp_client` (feature-gated) — the daemon-first path for
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
-dirs = "5"
+dirs = "6"
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
 sovereign-contracts = { workspace = true }

@@ -29,7 +29,7 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 regex = { workspace = true }
 # Resolves `~/.sovereign/models/gliner/…` in `gliner_ner::models_root`.
-dirs = "5"
+dirs = "6"
 # Pure-Rust GLiNER inference (the crate is imported as `gliner`; the package
 # is `gline-rs`). Uses `ort` under the hood — orp pins it to =2.0.0-rc.9.
 # Non-optional here: this crate exists precisely to carry that stack.
@@ -47,6 +47,6 @@ anyhow = { workspace = true }
 # `ndarray` for tensor I/O; versions unify with the existing lockfile
 # (tokenizers 0.21.x already resolved via gline-rs).
 ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
-ndarray = "0.16"
-tokenizers = "0.21"
+ndarray = "0.17"
+tokenizers = "0.23"
 regex = { workspace = true }
