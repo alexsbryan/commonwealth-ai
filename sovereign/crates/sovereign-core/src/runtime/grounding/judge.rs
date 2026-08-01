@@ -626,6 +626,47 @@ pub(super) fn unwrap_unverified_excerpts(s: &str) -> String {
 /// information — it cannot launder a false world-claim — so exempting the
 /// SHAPE is safe. Same family as the offline judge's decline-shape
 /// override (calibration gate) and the `[Source:]` scan-jurisdiction rule.
+/// T1 P1.4 claim-class decision. FACTUAL/SPECIFIC claims must be
+/// supported by Leaf-class evidence; THEMATIC/STRUCTURAL claims (about
+/// the text's themes, structure, or discourse rather than in-world
+/// specifics) may additionally rest on Summary-class evidence.
+///
+/// Two layers, in order:
+/// 1. Structural specificity — digits or quotations in the claim →
+///    factual, deterministically. These are features of the claim's
+///    FORM, reliable regardless of vocabulary.
+/// 2. Semantic class — the centroid-of-embeddings classifier
+///    (`claim_class_classifier`, same shape as the current-info and
+///    scope routers). No marker lists: a substring heuristic here
+///    would be the keyword-classifier failure the routers already
+///    replaced twice, and this decision gates honesty.
+///
+/// DEFAULT-FACTUAL everywhere: low signal, thin margin, classifier
+/// unavailable, embed failure — all keep the conservative bar.
+pub(super) async fn claim_is_factual_specific(
+    inference: &Arc<dyn InferenceProvider>,
+    claim: &str,
+) -> bool {
+    if claim_has_structural_specificity(claim) {
+        return true;
+    }
+    match crate::claim_class_classifier::shared_claim_classifier(inference).await {
+        Some(classifier) => matches!(
+            classifier.classify(claim, inference).await,
+            crate::claim_class_classifier::ClaimClass::Factual
+        ),
+        None => true,
+    }
+}
+
+/// Layer-1 structural check: numbers, years, quantities, or quoted
+/// spans make a claim factual/specific regardless of phrasing.
+pub(super) fn claim_has_structural_specificity(claim: &str) -> bool {
+    let has_digit = claim.chars().any(|c| c.is_ascii_digit());
+    let has_quote = claim.contains('"') || claim.contains('\u{201c}') || claim.contains('\u{201d}');
+    has_digit || has_quote
+}
+
 pub(super) fn is_self_referential_decline(text: &str) -> bool {
     let t = normalize_meta(text);
     if !meta_subject(&t) {
@@ -1188,6 +1229,24 @@ fn parse_batched_verdicts(text: &str, n: usize) -> Vec<Option<bool>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structural_specificity_fires_on_numbers_and_quotes_only() {
+        // Numbers and quotations are form-level specificity — factual
+        // regardless of vocabulary. (Semantic class for everything else
+        // is the embed classifier's job — see claim_class_classifier
+        // tests; no vocabulary assertions here by design.)
+        assert!(claim_has_structural_specificity(
+            "The text discusses the 1894 Greenwich bombing."
+        ));
+        assert!(claim_has_structural_specificity(
+            "The section argues that \"esse est percipi\" grounds idealism."
+        ));
+        assert!(!claim_has_structural_specificity(
+            "The text explores the theme of betrayal within the family."
+        ));
+        assert!(!claim_has_structural_specificity("Verloc runs a shop."));
+    }
 
     #[test]
     fn batched_verdicts_align_by_number_and_fallback_on_gaps() {

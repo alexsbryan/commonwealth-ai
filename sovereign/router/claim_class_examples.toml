@@ -1,0 +1,52 @@
+# Claim-class exemplars for the P1.4 provenance-aware evidence gate
+# (claim_class_classifier.rs). Two classes:
+#
+#   [factual]  — in-world specifics: who did what, names, places,
+#                events, attributions of concrete acts. These claims
+#                must be verified against Leaf (source-text) evidence;
+#                a derived RAPTOR summary can never be their
+#                source-of-truth.
+#   [thematic] — claims ABOUT the text/discourse: themes, structure,
+#                tone, positions argued, relationships between ideas.
+#                Summary-class evidence may support these — compressing
+#                exactly this is what summaries are for.
+#
+# Shape-diverse and deliberately small, like the sibling router
+# exemplar sets. The classifier defaults FACTUAL on low signal or a
+# thin margin — the conservative direction (a wrongly-factual thematic
+# claim just needs leaf support, honesty unaffected; a wrongly-thematic
+# factual claim would let a summary vouch for a fact, the failure P1.4
+# exists to prevent). Structural overrides (digits, quotations) fire
+# before embedding and are not represented here.
+
+[factual]
+examples = [
+    "Winnie Verloc's former lover worked as a butcher's assistant.",
+    "The bomb exploded in the park before reaching the observatory.",
+    "Alyosha is the youngest of the three brothers.",
+    "Verloc met Mr Vladimir at the embassy on Wednesday morning.",
+    "The narrator lives on North Richmond Street.",
+    "The author was born in Poland and wrote in English.",
+    "Stevie carried the bomb across the park.",
+    "The shop sells stationery and shady wares.",
+    "Hume denied that causation is directly observable.",
+    "The company reported record revenue in the fourth quarter.",
+    "The professor keeps explosives in his coat.",
+    "Mrs Neale cleans the Verloc household.",
+]
+
+[thematic]
+examples = [
+    "The text explores the theme of betrayal within the family.",
+    "The novel is structured around a slow revelation of complicity.",
+    "The author argues that free will is compatible with determinism.",
+    "The section contrasts two rival conceptions of liberty.",
+    "The relationship between the brothers anchors the narrative.",
+    "The passage meditates on loss and the passage of time.",
+    "The document surveys the historical development of the debate.",
+    "The tone shifts from ironic detachment to tragedy.",
+    "The chapter focuses on the moral psychology of confession.",
+    "The work weaves together political satire and domestic drama.",
+    "The essay traces a recurring motif of surveillance.",
+    "The discussion revolves around the limits of empirical knowledge.",
+]

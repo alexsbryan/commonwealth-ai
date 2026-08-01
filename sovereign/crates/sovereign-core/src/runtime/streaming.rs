@@ -1416,11 +1416,15 @@ impl Runtime {
         // turns can be sealed in alongside the trace — the value-presence
         // check reads `chunks` alone, so an earlier-turn fact is a vp=1.0
         // hard abstain unless it is in there (`seal_conversation_evidence`).
-        let (gate_chunks, gate_chunk_labels, gate_source_labels) = if gate_on {
-            let mut c = crate::runtime::grounding::gate_evidence_chunks(&chunks);
+        let (gate_chunks, gate_chunk_labels, gate_source_labels, gate_chunk_sources) = if gate_on {
+            // T1 P1.4: one builder, one ordering for chunks + labels +
+            // provenance. Late appends (trace, sealed conversation
+            // turns) have no source row and read as Leaf.
+            let parts = crate::runtime::grounding::gate_evidence_with_sources(&chunks);
+            let mut c = parts.chunks;
             // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
             // block appended, or the citation-alignment check mis-maps.
-            let mut cl = crate::runtime::grounding::gate_evidence_chunk_labels(&chunks);
+            let mut cl = parts.chunk_labels;
             let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&chunks);
             if seal_trace {
                 c.push(code_trace.clone());
@@ -1428,14 +1432,15 @@ impl Runtime {
                 sl.extend(trace_labels.iter().cloned());
             }
             crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
-            (c, cl, sl)
+            (c, cl, sl, parts.chunk_sources)
         } else {
-            (Vec::new(), Vec::new(), Vec::new())
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new())
         };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: gate_chunks,
             chunk_labels: gate_chunk_labels,
             source_labels: gate_source_labels,
+            chunk_sources: gate_chunk_sources,
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
@@ -2619,26 +2624,33 @@ impl Runtime {
         // Built ahead of the literal so the conversation's own recalled
         // turns join the universe too — see the KnowledgeQuery sibling
         // above and `seal_conversation_evidence`.
-        let (deep_chunks, deep_chunk_labels, deep_source_labels) = if deep_gate_on {
-            let mut c = crate::runtime::grounding::gate_evidence_chunks(&kc.chunks);
-            // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
-            // block pushed, or citation alignment mis-maps.
-            let mut cl = crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks);
-            let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
-            if deep_seal_trace {
-                c.push(kc.code_trace.clone());
-                cl.push(deep_trace_labels.clone());
-                sl.extend(deep_trace_labels.iter().cloned());
-            }
-            crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
-            (c, cl, sl)
-        } else {
-            (Vec::new(), Vec::new(), Vec::new())
-        };
+        let (deep_chunks, deep_chunk_labels, deep_source_labels, deep_chunk_sources) =
+            if deep_gate_on {
+                // T1 P1.4: one builder, one ordering (see KnowledgeQuery
+                // sibling above). Late appends read as Leaf.
+                let parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
+                let mut c = parts.chunks;
+                // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
+                // block pushed, or citation alignment mis-maps.
+                let mut cl = parts.chunk_labels;
+                let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
+                if deep_seal_trace {
+                    c.push(kc.code_trace.clone());
+                    cl.push(deep_trace_labels.clone());
+                    sl.extend(deep_trace_labels.iter().cloned());
+                }
+                crate::runtime::grounding::seal_conversation_evidence(
+                    &context, &mut c, &mut sl, &mut cl,
+                );
+                (c, cl, sl, parts.chunk_sources)
+            } else {
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+            };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: deep_chunks,
             chunk_labels: deep_chunk_labels,
             source_labels: deep_source_labels,
+            chunk_sources: deep_chunk_sources,
             searcher: if deep_gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(

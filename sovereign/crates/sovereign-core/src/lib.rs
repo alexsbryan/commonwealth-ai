@@ -18,6 +18,7 @@ pub mod models_manifest;
 pub mod quote_verification;
 pub use oicp_types as oicp;
 pub mod archive_classifier;
+pub mod claim_class_classifier;
 pub mod current_info_classifier;
 pub mod effort_classifier;
 pub mod lessons;

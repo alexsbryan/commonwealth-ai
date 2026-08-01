@@ -153,33 +153,127 @@ pub(crate) struct EvidenceContext {
     /// (FTS-only / surfaces that don't thread it) disables the floor → the retry
     /// fires exactly as before. Default behaviour is unchanged.
     pub top_similarity: Option<f32>,
+    /// Per-chunk provenance aligned with `chunks` by index (T1 P1.4).
+    /// May be SHORTER than `chunks`: entries appended after the builder
+    /// ran (sealed conversation evidence, code traces) have no source
+    /// row and default to `Leaf` via [`EvidenceContext::source_of`].
+    /// EMPTY = provenance unknown → the gate behaves exactly as before
+    /// this field existed (additive, mesh-safe).
+    pub chunk_sources: Vec<EvidenceSource>,
 }
 
-/// Fix B — provenance-aware grounding (2026-06-17). Build the gate's evidence
-/// chunk strings from scored chunks, EXCLUDING derived RAPTOR summary chunks
-/// (`metadata["source"]=="raptor"`) by default.
+/// Where an evidence chunk's text came from (T1 P1.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EvidenceSource {
+    /// A real retrieved source chunk — verbatim corpus text.
+    Leaf,
+    /// A derived RAPTOR summary node — LLM prose ABOUT source text.
+    /// May support thematic/structural claims; never factual ones.
+    Summary,
+}
+
+impl EvidenceContext {
+    /// Provenance of chunk `idx`. Indices past `chunk_sources` (late
+    /// appends, or an empty vec entirely) read as `Leaf` — the
+    /// conservative pre-P1.4 degradation.
+    pub(crate) fn source_of(&self, idx: usize) -> EvidenceSource {
+        self.chunk_sources
+            .get(idx)
+            .copied()
+            .unwrap_or(EvidenceSource::Leaf)
+    }
+
+    /// True when any chunk is Summary-class — i.e. the P1.4 policy has
+    /// something to decide. False short-circuits the claim loop to the
+    /// exact pre-P1.4 code path.
+    pub(crate) fn has_summary_evidence(&self) -> bool {
+        self.chunk_sources
+            .iter()
+            .any(|s| *s == EvidenceSource::Summary)
+    }
+}
+
+/// The three per-chunk parallel arrays the gate consumes, built in ONE
+/// ordering so they can never misalign (T1 P1.4).
 ///
-/// A RAPTOR summary is an abstractive, LLM-generated paraphrase: it
-/// legitimately aids retrieval and synthesis (recall), but it must never be
-/// the source-of-truth a factual claim is VERIFIED against. A summary that
-/// inferred an unstated fact (the witnessed "the Russian agent Vladimir", with
-/// "Russian" absent from the source) would otherwise "support" an answer
-/// asserting the same — a fabrication grounding a fabrication. Excluding
-/// derived summaries here keeps the gate anchored to actual source chunks
-/// while leaving summaries in the upstream synthesis context.
+/// History: Fix B (2026-06-17) EXCLUDED derived RAPTOR summaries from
+/// gate evidence wholesale — an abstractive paraphrase must never be
+/// the source-of-truth a factual claim is verified against (witnessed:
+/// "the Russian agent Vladimir" with "Russian" absent from the source
+/// — a fabrication grounding a fabrication). P1.4 keeps that bar for
+/// FACTUAL claims while letting THEMATIC/STRUCTURAL claims use summary
+/// evidence; the builder below owns both behaviors and their env
+/// baselines.
+pub(crate) struct GateEvidenceParts {
+    pub chunks: Vec<String>,
+    pub chunk_sources: Vec<EvidenceSource>,
+    pub chunk_labels: Vec<Vec<String>>,
+}
+
+/// T1 P1.4 refinement of Fix B: instead of DROPPING derived RAPTOR
+/// summaries from the gate's evidence, keep them — marked `Summary`,
+/// appended AFTER every Leaf chunk — and let the claim loop apply the
+/// class policy (factual/specific claims need Leaf support; summary
+/// evidence may support thematic/structural claims). Leaf-first
+/// ordering keeps the leaf window a byte-stable judge-prompt prefix
+/// shared by both claim classes (the pinned-prefix cache survives).
 ///
-/// Set `SOVEREIGN_GATE_EXCLUDE_RAPTOR=0`/`false` to disable (the A/B baseline
-/// that reproduces the pre-fix "summaries are source-equivalent evidence"
-/// behaviour).
-pub(crate) fn gate_evidence_chunks(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
-    let exclude = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
+/// `SOVEREIGN_GATE_SUMMARY_EVIDENCE=0` restores exact Fix B behavior
+/// (summaries dropped, all-Leaf sources). `SOVEREIGN_GATE_EXCLUDE_RAPTOR=0`
+/// (the pre-Fix-B A/B baseline) keeps summaries in retrieval ORDER and
+/// marked Leaf — byte-identical to the historical baseline.
+pub(crate) fn gate_evidence_with_sources(
+    chunks: &[corpus_engine::ScoredChunk],
+) -> GateEvidenceParts {
+    let labels_of = |c: &corpus_engine::ScoredChunk| {
+        let mut labels = Vec::with_capacity(2);
+        if let Some(t) = c.title.as_deref() {
+            let t = t.trim();
+            if !t.is_empty() {
+                labels.push(t.to_string());
+            }
+        }
+        let cid = c.corpus_id.trim();
+        if !cid.is_empty() {
+            labels.push(cid.to_string());
+        }
+        labels
+    };
+    let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
-    chunks
-        .iter()
-        .filter(|c| !(exclude && c.metadata.get("source").map(String::as_str) == Some("raptor")))
-        .map(|c| c.content.clone())
-        .collect()
+    if !exclude_raptor {
+        // Historical pre-Fix-B baseline: summaries are source-equivalent.
+        return GateEvidenceParts {
+            chunks: chunks.iter().map(|c| c.content.clone()).collect(),
+            chunk_sources: vec![EvidenceSource::Leaf; chunks.len()],
+            chunk_labels: chunks.iter().map(labels_of).collect(),
+        };
+    }
+    let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true);
+    let is_summary = |c: &corpus_engine::ScoredChunk| {
+        c.metadata.get("source").map(String::as_str) == Some("raptor")
+    };
+    let mut parts = GateEvidenceParts {
+        chunks: Vec::with_capacity(chunks.len()),
+        chunk_sources: Vec::with_capacity(chunks.len()),
+        chunk_labels: Vec::with_capacity(chunks.len()),
+    };
+    for c in chunks.iter().filter(|c| !is_summary(c)) {
+        parts.chunks.push(c.content.clone());
+        parts.chunk_sources.push(EvidenceSource::Leaf);
+        parts.chunk_labels.push(labels_of(c));
+    }
+    if summary_evidence {
+        for c in chunks.iter().filter(|c| is_summary(c)) {
+            parts.chunks.push(c.content.clone());
+            parts.chunk_sources.push(EvidenceSource::Summary);
+            parts.chunk_labels.push(labels_of(c));
+        }
+    }
+    parts
 }
 
 /// The legitimate citation LABELS for `attribute_citations`: each chunk's title
@@ -206,38 +300,6 @@ pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk])
     out
 }
 
-/// Per-chunk citation labels, PARALLEL to `gate_evidence_chunks` (same raptor
-/// exclusion, same order): `chunk_labels[i]` = the labels (title first, then
-/// corpus id) a `[Source: …]` naming chunk `i` would use. The flat
-/// `source_labels` cannot reconstruct this mapping, and the citation-value
-/// ALIGNMENT check (`align_citation_values`) needs it: WHICH chunk does the
-/// cited label name, so the citing segment's values can be verified against
-/// that chunk specifically.
-pub(crate) fn gate_evidence_chunk_labels(
-    chunks: &[corpus_engine::ScoredChunk],
-) -> Vec<Vec<String>> {
-    let exclude = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
-        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
-        .unwrap_or(true);
-    chunks
-        .iter()
-        .filter(|c| !(exclude && c.metadata.get("source").map(String::as_str) == Some("raptor")))
-        .map(|c| {
-            let mut labels = Vec::with_capacity(2);
-            if let Some(t) = c.title.as_deref() {
-                let t = t.trim();
-                if !t.is_empty() {
-                    labels.push(t.to_string());
-                }
-            }
-            let cid = c.corpus_id.trim();
-            if !cid.is_empty() {
-                labels.push(cid.to_string());
-            }
-            labels
-        })
-        .collect()
-}
 
 /// One audit-failed claim plus the claim-conditioned passages its
 /// targeted search returned — the rewrite's correction material.
@@ -445,7 +507,25 @@ pub(crate) async fn gate_answer_with_progress(
 ) -> GateOutcome {
     use crate::types::NarrationPhase;
     let tau = profile.tau;
-    let chunks: &[String] = &evidence.chunks;
+    // T1 P1.4: the short path audits ONE central FACTUAL claim, and its
+    // citation / value-presence / name checks are all factual-class — so
+    // this whole ladder reads the Leaf view only. A quote or value that
+    // exists solely inside a derived RAPTOR summary is LLM prose quoting
+    // LLM prose and must not ground a release. With no Summary-class
+    // chunks (every pre-P1.4 surface) this is `evidence.chunks` itself.
+    let leaf_owned: Vec<String>;
+    let chunks: &[String] = if evidence.has_summary_evidence() {
+        leaf_owned = evidence
+            .chunks
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Leaf)
+            .map(|(_, c)| c.clone())
+            .collect();
+        &leaf_owned
+    } else {
+        &evidence.chunks
+    };
     let entity_anchored = evidence.entity_anchored;
     // Glassbox: whether the call-graph block reached the sealed universe. A
     // code-intel answer whose caller facts land in the verification note is
@@ -1490,11 +1570,33 @@ async fn gate_longform(
     use crate::types::NarrationPhase;
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
+    // T1 P1.4 — split the evidence by provenance once per turn. With no
+    // Summary-class chunks (the common case, and every pre-P1.4
+    // surface) `leaf_chunks == chunks` and the claim loop below is
+    // byte-identical to its pre-P1.4 self. The deterministic checks
+    // (name veto, specifics scan, batched pre-pass) always read the
+    // Leaf view: they are factual-class by construction.
+    let leaf_chunks: Vec<String> = chunks
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Leaf)
+        .map(|(_, c)| c.clone())
+        .collect();
+    let summary_chunks: Vec<String> = chunks
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Summary)
+        .map(|(_, c)| c.clone())
+        .collect();
     let per_claim_chunks = profile.max_chunks;
     let min_claims = profile.max_claims;
     // Session posture for the judge envelopes, resolved once from the
     // synthesis turn's request; the audit closure captures it by copy.
     let posture = crate::slot_policy::posture_of(base_request);
+    // Reference-shadow so the audit closure (called twice: draft +
+    // rewrite) captures Copy references, not the Vecs themselves.
+    let leaf_chunks = &leaf_chunks;
+    let summary_chunks = &summary_chunks;
     let audit = |text: String, recheck: bool| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
@@ -1517,7 +1619,7 @@ async fn gate_longform(
             // Evidence + labels, lowercased once, for the deterministic
             // in-world attribution veto below.
             let hay_lower = {
-                let mut h = chunks.join(" ").to_lowercase();
+                let mut h = leaf_chunks.join(" ").to_lowercase();
                 for l in &evidence_labels {
                     h.push(' ');
                     h.push_str(&l.to_lowercase());
@@ -1541,7 +1643,7 @@ async fn gate_longform(
                 judge::claims_support_batched(
                     &inference,
                     &claim_texts,
-                    chunks,
+                    &leaf_chunks,
                     per_claim_chunks,
                     posture,
                 )
@@ -1630,7 +1732,26 @@ async fn gate_longform(
                     }
                     None => Vec::new(),
                 };
-                let shared: Vec<String> = chunks.iter().take(per_claim_chunks).cloned().collect();
+                // T1 P1.4 class policy: FACTUAL/SPECIFIC claims verify
+                // against Leaf evidence only (a derived summary must
+                // never be the source-of-truth for a fact); THEMATIC/
+                // STRUCTURAL claims may additionally rest on Summary-
+                // class chunks — appended AFTER the leaf window so the
+                // leaf prefix stays byte-stable across both classes
+                // (mixed prefix declarations cost some pin efficiency,
+                // never correctness). With no summaries in evidence the
+                // window is exactly the pre-P1.4 one.
+                let factual = summary_chunks.is_empty()
+                    || judge::claim_is_factual_specific(&inference, claim).await;
+                let mut shared: Vec<String> =
+                    leaf_chunks.iter().take(per_claim_chunks).cloned().collect();
+                if !factual {
+                    shared.extend(summary_chunks.iter().take(per_claim_chunks).cloned());
+                    dbg(&format!(
+                        "longform claim THEMATIC — {} summary chunk(s) admitted as evidence: {claim:?}",
+                        summary_chunks.len().min(per_claim_chunks)
+                    ));
+                }
                 let seen: HashSet<String> = shared
                     .iter()
                     .map(|c| c.chars().take(120).collect::<String>())
@@ -1718,9 +1839,15 @@ async fn gate_longform(
             // which ALSO self-corrects a false positive: a truly-grounded
             // specific gets its grounding passage back, so the rewrite keeps it.
             if specifics_scan_enabled() {
-                if let Some(specifics) =
-                    scan_unsupported_specifics(&inference, question, &text, chunks, budget, posture)
-                        .await
+                if let Some(specifics) = scan_unsupported_specifics(
+                    &inference,
+                    question,
+                    &text,
+                    &leaf_chunks,
+                    budget,
+                    posture,
+                )
+                .await
                 {
                     for spec in specifics {
                         // Citations are validated by the deterministic snap pass
@@ -2246,6 +2373,7 @@ mod tests {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
             source_labels: Vec::new(),
             chunk_labels: Vec::new(),
+            chunk_sources: Vec::new(),
             searcher: None,
             entity_anchored: false,
             top_similarity: None,

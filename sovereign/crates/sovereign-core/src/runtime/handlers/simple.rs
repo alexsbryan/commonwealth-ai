@@ -177,10 +177,11 @@ impl Runtime {
         let mut gate_claims: Option<Vec<crate::runtime::grounding::GateClaim>> = None;
         let response_text = if gate_surface.enabled() && !want_witness_path && !kc.chunks.is_empty()
         {
+            let gate_parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: crate::runtime::grounding::gate_evidence_chunks(&kc.chunks),
+                chunks: gate_parts.chunks,
                 source_labels: crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks),
-                chunk_labels: crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks),
+                chunk_labels: gate_parts.chunk_labels,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),
@@ -189,6 +190,7 @@ impl Runtime {
                 ) as _),
                 entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(message),
                 top_similarity: None,
+                chunk_sources: gate_parts.chunk_sources,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

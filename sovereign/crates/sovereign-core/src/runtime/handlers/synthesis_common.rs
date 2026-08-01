@@ -120,6 +120,9 @@ pub(crate) fn transcript_gate_evidence(
         searcher,
         entity_anchored,
         top_similarity: None,
+        // Transcript prose is not RAPTOR-derived; empty = all-Leaf
+        // degradation (T1 P1.4).
+        chunk_sources: Vec::new(),
     }
 }
 

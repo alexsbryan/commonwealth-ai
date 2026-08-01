@@ -1534,11 +1534,17 @@ impl Runtime {
             // labels. Without this the gate verified the answer against the
             // prose chunks only and reported every compiler-resolved caller
             // fact as unconfirmed — see `code_trace::trace_source_labels`.
-            let mut gate_chunks = crate::runtime::grounding::gate_evidence_chunks(&plan.chunks);
+            // T1 P1.4: chunks + per-chunk labels + per-chunk provenance
+            // come from ONE builder in one ordering (leaf-first, RAPTOR
+            // summaries appended and marked Summary). Late appends below
+            // (code trace, sealed conversation turns) have no source row
+            // and read as Leaf.
+            let gate_parts = crate::runtime::grounding::gate_evidence_with_sources(&plan.chunks);
+            let mut gate_chunks = gate_parts.chunks;
+            let gate_chunk_sources = gate_parts.chunk_sources;
+            let mut gate_chunk_labels = gate_parts.chunk_labels;
             let mut gate_labels =
                 crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks);
-            let mut gate_chunk_labels =
-                crate::runtime::grounding::gate_evidence_chunk_labels(&plan.chunks);
             if !plan.code_trace.is_empty() {
                 let trace_labels =
                     crate::runtime::code_trace::trace_source_labels(&plan.code_trace);
@@ -1575,6 +1581,7 @@ impl Runtime {
                 chunks: gate_chunks,
                 source_labels: gate_labels,
                 chunk_labels: gate_chunk_labels,
+                chunk_sources: gate_chunk_sources,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),
