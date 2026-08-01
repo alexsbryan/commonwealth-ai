@@ -89,6 +89,9 @@ struct RaptorArgs {
     /// LLM prose with per-cluster extractive fallback on failure) or
     /// `extractive` (LLM-free verbatim sentence selection).
     summary_mode: sovereign_tools::raptor_atlas::SummaryMode,
+    /// T1 P1.2 verification policy override for abstractive builds
+    /// (`on` | `off` | `sample:<p>`). `None` = SP3-adaptive default.
+    verify_summaries: Option<sovereign_tools::summary_verify::VerifyPolicy>,
     /// Restrict the build to a curated set of articles (one slug/title per
     /// line). Overrides the default smallest-first selection — used to pilot
     /// RAPTOR on representative multi-section articles instead of stubs.
@@ -369,16 +372,48 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let resolver: Arc<dyn IndexDirResolver> = Arc::new(StaticIndexDirResolver {
         indexes_root: indexes_dir.clone(),
     });
-    let provider = FolderTieredProvider::new(store, inference)
+    // T1 P1.2 verification policy for abstractive builds. Explicit
+    // flag wins; the default is SP3-adaptive on the corpus scale this
+    // run will touch: full verification up to ~1.5k estimated nodes,
+    // 12% deterministic sampling above (measured SEP density ≈ 17
+    // chunks per node). Extractive builds have nothing to verify.
+    let verify_policy = match (parsed.summary_mode, parsed.verify_summaries) {
+        (sovereign_tools::raptor_atlas::SummaryMode::Extractive, _) => None,
+        (_, Some(policy)) => Some(policy),
+        (sovereign_tools::raptor_atlas::SummaryMode::Abstractive, None) => {
+            let est_nodes = total_chunks / 17;
+            if est_nodes <= 1500 {
+                Some(sovereign_tools::summary_verify::VerifyPolicy::On)
+            } else {
+                Some(sovereign_tools::summary_verify::VerifyPolicy::Sample(0.12))
+            }
+        }
+    };
+    let mut provider = FolderTieredProvider::new(store, inference)
         .with_index_dir_resolver(resolver)
         .with_doc_type(parsed.doc_type.clone())
-        .with_summary_mode(parsed.summary_mode)
-        .into_handle();
+        .with_summary_mode(parsed.summary_mode);
+    if let Some(policy) = verify_policy {
+        provider = provider.with_verify_policy(policy);
+    }
+    let provider = provider.into_handle();
 
     println!(
-        "\nBuilding RAPTOR trees via daemon {} (chat={}, embed={})…\n",
+        "\nBuilding RAPTOR trees via daemon {} (chat={}, embed={})…",
         parsed.daemon_base, parsed.chat_model, parsed.embed_model
     );
+    match verify_policy {
+        Some(sovereign_tools::summary_verify::VerifyPolicy::On) => {
+            println!("Summary verification: ON — every abstractive summary judged against its member texts (T1 P1.2)\n")
+        }
+        Some(sovereign_tools::summary_verify::VerifyPolicy::Sample(p)) => {
+            println!("Summary verification: SAMPLE {:.0}% (SP3 economics — corpus above ~1.5k estimated nodes)\n", p * 100.0)
+        }
+        Some(sovereign_tools::summary_verify::VerifyPolicy::Off) => {
+            println!("Summary verification: OFF (explicit --verify-summaries off)\n")
+        }
+        None => println!(),
+    }
 
     // --refresh-stale compares stored per-node stamps against the
     // CURRENT build config: the prompt version const and the model
@@ -736,6 +771,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
     let mut refresh_stale = false;
     let mut titles_file: Option<String> = None;
     let mut group_by_article = false;
+    let mut verify_summaries: Option<sovereign_tools::summary_verify::VerifyPolicy> = None;
     let mut daemon_base = "http://localhost:9741".to_string();
     let mut chat_model = "primary".to_string();
     let mut embed_model = "embed".to_string();
@@ -783,6 +819,14 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
                 titles_file = Some(args.get(i).ok_or("--titles-file needs a path")?.clone());
             }
             "--group-by-article" => group_by_article = true,
+            "--verify-summaries" => {
+                i += 1;
+                let v = args.get(i).ok_or("--verify-summaries needs a value")?;
+                verify_summaries = Some(
+                    sovereign_tools::summary_verify::VerifyPolicy::parse(v)
+                        .map_err(|e| format!("--verify-summaries: {e}"))?,
+                );
+            }
             "--summary-mode" => {
                 i += 1;
                 let v = args.get(i).ok_or("--summary-mode needs a value")?;
@@ -821,6 +865,7 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
         refresh_stale,
         titles_file,
         group_by_article,
+        verify_summaries,
         daemon_base,
         chat_model,
         embed_model,
@@ -900,6 +945,9 @@ fn print_usage() {
     eprintln!("  --force             Rebuild every document, even ones already built (default: resume/skip them).");
     eprintln!("  --refresh-stale     Rebuild only documents whose stored trees carry an outdated prompt_version or summarizer_model stamp (pre-stamping trees count as stale).");
     eprintln!("  --summary-mode <m>  abstractive (default: LLM prose, extractive fallback on failure) | extractive (LLM-free verbatim sentence selection, T1 P1.1)");
+    eprintln!("  --verify-summaries <p>  Abstractive verification gate (T1 P1.2): on | off | sample:<p>. Default adapts to corpus scale: on up to ~1.5k estimated nodes, sample:0.12 above (SP3).");
+    eprintln!("  --titles-file <path>  Restrict the build to a curated article set (one slug/title per line).");
+    eprintln!("  --group-by-article  Group chunks into per-article documents (SEP-style corpora) instead of per-source-doc.");
     eprintln!("  --daemon <url>      Daemon base URL (default: http://localhost:9741).");
     eprintln!("  --chat-model <id>   Summarizer model id/alias (default: primary).");
     eprintln!("  --embed-model <id>  Embedding model id/alias for summary nodes (default: embed).");

@@ -57,8 +57,19 @@ pub fn build_folder_tiered_provider(
             let indexes_root = data_dir.join("indexes");
             let resolver: Arc<dyn IndexDirResolver> =
                 Arc::new(StaticIndexDirResolver { indexes_root });
-            let prov =
-                FolderTieredProvider::new(store_arc, provider).with_index_dir_resolver(resolver);
+            // Memory corpora (vault notes + imported conversations) build
+            // EXTRACTIVE trees by default (T1 P1.1, flipped 2026-07-31):
+            // summaries are verbatim centroid-ranked member sentences, so
+            // nothing the AI writes into the memory tier can assert what
+            // the source doesn't. Flip condition met by the production-seam
+            // A/B on the sep banks — |B−A| = −0.0125 summarize (band
+            // ±0.025) and 0.0000 obscure (band ±0.0167), rawindex guard
+            // 0.0000 (runs/prodAB, 2026-07-31). Attached documents keep
+            // abstractive (fluency is the product there) — their path pins
+            // the mode explicitly in `document_asset`.
+            let prov = FolderTieredProvider::new(store_arc, provider)
+                .with_index_dir_resolver(resolver)
+                .with_summary_mode(crate::raptor_atlas::SummaryMode::Extractive);
             Some(Arc::new(prov) as Arc<dyn TieredEnrichmentProvider>)
         }
         Err(e) => {

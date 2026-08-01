@@ -34,6 +34,7 @@ pub mod local_corpus;
 pub mod mem_atlas;
 pub mod mem_tree;
 pub mod raptor_atlas;
+pub mod summary_verify;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
 pub use sovereign_tools_base::read_csv;

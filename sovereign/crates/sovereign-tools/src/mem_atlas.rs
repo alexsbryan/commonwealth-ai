@@ -124,12 +124,17 @@ pub async fn build_memory_atlas(
         })
         .collect();
 
+    // Memory-pool trees are EXTRACTIVE by default (T1 P1.1 flip,
+    // 2026-07-31): pool entries are already one-to-two verbatim
+    // sentences, so the tier-summary layer selects rather than
+    // paraphrases — zero fabrication surface in the memory tier.
     let nodes = build_raptor_atlas_with_leaf_target(
         inference,
         &chunks,
         &embeddings,
         DocumentTypeTag::Journal,
         MEM_LEAF_CLUSTER_TARGET,
+        crate::raptor_atlas::SummaryMode::Extractive,
     )
     .await?;
     let rows: Vec<MemRaptorNodeRow> = nodes

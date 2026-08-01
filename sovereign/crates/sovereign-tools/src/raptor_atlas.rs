@@ -204,6 +204,39 @@ pub async fn build_raptor_atlas_with_mode(
     correction_hint: Option<&str>,
     mode: SummaryMode,
 ) -> Result<Vec<RaptorNode>> {
+    build_raptor_atlas_with_verify(
+        inference,
+        chunks,
+        embeddings,
+        doc_type,
+        checkpoint,
+        progress,
+        correction_hint,
+        mode,
+        None,
+    )
+    .await
+}
+
+/// Variant with mode AND a verification gate (T1 P1.2). When `verify`
+/// is `Some`, every abstractive summary the policy selects is
+/// decomposed into claims and judged against its own member texts
+/// before persisting: pass → persist; fail → one faithful-prompt
+/// retry; fail again (or verifier failure) → extractive floor. `None`
+/// preserves the pre-P1.2 behavior exactly. Extractive mode ignores
+/// the gate — verbatim quotes cannot assert what the source doesn't.
+#[allow(clippy::too_many_arguments)]
+pub async fn build_raptor_atlas_with_verify(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    correction_hint: Option<&str>,
+    mode: SummaryMode,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
+) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_impl(
         inference,
         chunks,
@@ -214,6 +247,7 @@ pub async fn build_raptor_atlas_with_mode(
         correction_hint,
         LEAF_TARGET_CLUSTER_SIZE,
         mode,
+        verify,
     )
     .await
 }
@@ -232,6 +266,7 @@ pub async fn build_raptor_atlas_with_leaf_target(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
     leaf_target: usize,
+    mode: SummaryMode,
 ) -> Result<Vec<RaptorNode>> {
     build_raptor_atlas_impl(
         inference,
@@ -242,7 +277,8 @@ pub async fn build_raptor_atlas_with_leaf_target(
         None,
         None,
         leaf_target.max(2),
-        SummaryMode::Abstractive,
+        mode,
+        None,
     )
     .await
 }
@@ -297,6 +333,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
         correction_hint,
         LEAF_TARGET_CLUSTER_SIZE,
         SummaryMode::Abstractive,
+        None,
     )
     .await
 }
@@ -314,6 +351,7 @@ async fn build_raptor_atlas_impl(
     correction_hint: Option<&str>,
     leaf_target: usize,
     mode: SummaryMode,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.len() != embeddings.len() {
         return Err(sovereign_core::error::Error::Storage(format!(
@@ -568,6 +606,7 @@ async fn build_raptor_atlas_impl(
         to_summarize,
         doc_type.clone(),
         mode,
+        verify.clone(),
         checkpoint,
         progress,
         already_cached,
@@ -677,8 +716,14 @@ async fn build_raptor_atlas_impl(
             });
         }
 
-        let next_layer =
-            summarize_clusters_buffered(inference, next_inputs, doc_type.clone(), mode).await;
+        let next_layer = summarize_clusters_buffered(
+            inference,
+            next_inputs,
+            doc_type.clone(),
+            mode,
+            verify.clone(),
+        )
+        .await;
         if next_layer.is_empty() {
             // All summarization failed at this level. Treat the
             // existing layer as the root layer (no parent gets built).
@@ -746,11 +791,13 @@ async fn build_raptor_atlas_impl(
 /// (when provided) immediately on completion + emits a progress tick
 /// through the optional sink. Returns `(cluster_idx, RaptorNode)`
 /// pairs so the caller can place each result back in its slot.
+#[allow(clippy::too_many_arguments)]
 async fn summarize_clusters_buffered_with_checkpoint(
     inference: &Arc<dyn InferenceProvider>,
     inputs: Vec<(usize, ClusterSummarizationInput)>,
     doc_type: DocumentTypeTag,
     mode: SummaryMode,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
     checkpoint: Option<&RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn EnrichmentProgressSink>>,
     already_cached: usize,
@@ -762,8 +809,9 @@ async fn summarize_clusters_buffered_with_checkpoint(
         .map(|(cluster_idx, input)| {
             let inf = Arc::clone(&inference);
             let dt = doc_type.clone();
+            let vf = verify.clone();
             async move {
-                let node = summarize_one_cluster(&inf, input, dt, mode).await;
+                let node = summarize_one_cluster(&inf, input, dt, mode, vf).await;
                 (cluster_idx, node)
             }
         })
@@ -876,6 +924,7 @@ async fn summarize_clusters_buffered(
     inputs: Vec<ClusterSummarizationInput>,
     doc_type: DocumentTypeTag,
     mode: SummaryMode,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
 ) -> Vec<RaptorNode> {
     let doc_type = doc_type.clone();
     let inference = Arc::clone(inference);
@@ -883,7 +932,8 @@ async fn summarize_clusters_buffered(
         .map(|input| {
             let inf = Arc::clone(&inference);
             let dt = doc_type.clone();
-            async move { summarize_one_cluster(&inf, input, dt, mode).await }
+            let vf = verify.clone();
+            async move { summarize_one_cluster(&inf, input, dt, mode, vf).await }
         })
         .buffered(SUMMARIZE_BUFFER)
         .collect()
@@ -901,10 +951,23 @@ async fn summarize_one_cluster(
     input: ClusterSummarizationInput,
     doc_type: DocumentTypeTag,
     mode: SummaryMode,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
 ) -> Option<RaptorNode> {
     if mode == SummaryMode::Extractive {
         return extract_one_cluster(inference, input).await;
     }
+    summarize_one_cluster_abstractive(inference, input, doc_type, verify).await
+}
+
+/// Build the grammar-constrained summarization request. `faithful_retry`
+/// is the P1.2 second attempt after a failed verification: same shape,
+/// with a strict-faithfulness instruction prepended so the regeneration
+/// is steered rather than a blind re-roll (the correction-hint lesson).
+fn build_abstractive_request(
+    input: &ClusterSummarizationInput,
+    doc_type: &DocumentTypeTag,
+    faithful_retry: bool,
+) -> CompletionRequest {
     let body = input
         .member_descriptors
         .iter()
@@ -949,6 +1012,17 @@ async fn summarize_one_cluster(
         _ => String::new(),
     };
 
+    // P1.2 retry steering: the verifier found unsupported claims in the
+    // first attempt — say so, and demand strict grounding.
+    let faithful_block = if faithful_retry {
+        "STRICT FAITHFULNESS RETRY — a verification pass found a previous summary of \
+         these passages asserted content the passages do not support. State ONLY what \
+         the passages explicitly say, staying close to their own wording (without \
+         quotation marks). No interpretation, no outside knowledge.\n\n"
+    } else {
+        ""
+    };
+
     let prompt = format!(
         "You are summarizing a group of related passages from a {doc_type} document.\n\
          Produce a {cue}. The summary is a paraphrase — do NOT include any quotation marks \
@@ -957,7 +1031,7 @@ async fn summarize_one_cluster(
          appear in the passages.\n\n\
          Respond with a single JSON object only:\n\
          {{\"summary\": \"<2-4 sentences, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
-         {correction_block}Passages:\n{body}\n\nJSON:",
+         {faithful_block}{correction_block}Passages:\n{body}\n\nJSON:",
         doc_type = doc_type.label(),
         cue = doc_cue,
     );
@@ -993,13 +1067,22 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
     // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for P1
     // neutrality (bundle is None); P5 confirms.
     req.think_budget = Some(0);
+    req
+}
 
+async fn summarize_one_cluster_abstractive(
+    inference: &Arc<dyn InferenceProvider>,
+    input: ClusterSummarizationInput,
+    doc_type: DocumentTypeTag,
+    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,
+) -> Option<RaptorNode> {
     // Dropped-summary failure modes fall back to extractive instead
     // of thinning the tree (T1 P1.1): a cluster that loses its LLM
     // summary used to vanish from the atlas entirely — silently
     // shrinking retrieval coverage. A verbatim extractive summary is
     // strictly better than no node. The embed-failure path below
     // still drops: extraction needs the same embedder.
+    let req = build_abstractive_request(&input, &doc_type, false);
     let resp = match inference.complete(&req).await {
         Ok(r) => r,
         Err(e) => {
@@ -1012,7 +1095,7 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
         }
     };
 
-    let parsed = match parse_cluster_summary(&resp.text) {
+    let mut parsed = match parse_cluster_summary(&resp.text) {
         Some(p) => p,
         None => {
             tracing::warn!(
@@ -1022,6 +1105,95 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
             return extract_one_cluster(inference, input).await;
         }
     };
+    let mut summarizer_model = resp.model_id;
+
+    // ── Verification gate (T1 P1.2) ──────────────────────────────
+    //
+    // Blocking by policy: a summary the verifier fails (or cannot
+    // verify — judge unreachable is NOT a pass) never persists as
+    // abstractive. One steered retry, then the extractive floor.
+    // Fallback provenance is visible in the node's stamps
+    // (`extractive` summarizer on an abstractive-mode build) plus the
+    // run-level VerifyStats line; a per-node flag field rides in with
+    // D3's `AtomEnvelope::Summary` attributes rather than a contracts
+    // migration here.
+    if let Some(ctx) = verify.as_ref() {
+        use crate::summary_verify::VerifyStats;
+        // Stable per-cluster key → deterministic sampling across
+        // re-runs and checkpoint resumes.
+        let cluster_key = format!("{}:{:?}", input.level, input.evidence_chunk_ids);
+        if ctx.policy.selects(&cluster_key) {
+            VerifyStats::bump(&ctx.stats.verified);
+            match ctx
+                .verifier
+                .verify(&parsed.summary, &input.member_full_texts)
+                .await
+            {
+                Some(v) if v.passed() => VerifyStats::bump(&ctx.stats.passed_first),
+                Some(first) => {
+                    VerifyStats::bump(&ctx.stats.retried);
+                    tracing::info!(
+                        level = input.level,
+                        claims = first.claims_total,
+                        unsupported = first.claims_unsupported,
+                        "raptor_atlas: summary failed verification; retrying with faithful prompt"
+                    );
+                    let retry_req = build_abstractive_request(&input, &doc_type, true);
+                    let retry_parsed = match inference.complete(&retry_req).await {
+                        Ok(r) => parse_cluster_summary(&r.text).map(|p| (p, r.model_id)),
+                        Err(_) => None,
+                    };
+                    match retry_parsed {
+                        Some((p2, m2)) => match ctx
+                            .verifier
+                            .verify(&p2.summary, &input.member_full_texts)
+                            .await
+                        {
+                            Some(v2) if v2.passed() => {
+                                VerifyStats::bump(&ctx.stats.passed_retry);
+                                parsed = p2;
+                                summarizer_model = m2;
+                            }
+                            Some(v2) => {
+                                VerifyStats::bump(&ctx.stats.fell_back);
+                                tracing::warn!(
+                                    level = input.level,
+                                    claims = v2.claims_total,
+                                    unsupported = v2.claims_unsupported,
+                                    "raptor_atlas: retry still unsupported; persisting extractive floor instead"
+                                );
+                                return extract_one_cluster(inference, input).await;
+                            }
+                            None => {
+                                VerifyStats::bump(&ctx.stats.verifier_failed);
+                                tracing::warn!(
+                                    level = input.level,
+                                    "raptor_atlas: verifier unreachable on retry; refusing unverified abstractive — extractive floor"
+                                );
+                                return extract_one_cluster(inference, input).await;
+                            }
+                        },
+                        None => {
+                            VerifyStats::bump(&ctx.stats.fell_back);
+                            tracing::warn!(
+                                level = input.level,
+                                "raptor_atlas: faithful retry failed to generate; extractive floor"
+                            );
+                            return extract_one_cluster(inference, input).await;
+                        }
+                    }
+                }
+                None => {
+                    VerifyStats::bump(&ctx.stats.verifier_failed);
+                    tracing::warn!(
+                        level = input.level,
+                        "raptor_atlas: verifier unreachable; refusing unverified abstractive — extractive floor"
+                    );
+                    return extract_one_cluster(inference, input).await;
+                }
+            }
+        }
+    }
 
     // Embed the summary so query-time matching can hit this node.
     let summary_embedding = match inference.embed(&parsed.summary).await {
@@ -1050,7 +1222,7 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
         cluster_coherence: input.cluster_coherence,
         created_at: chrono::Utc::now(),
         prompt_version: RAPTOR_PROMPT_VERSION.to_string(),
-        summarizer_model: resp.model_id,
+        summarizer_model,
     })
 }
 
@@ -1563,6 +1735,170 @@ mod tests {
         }
     }
 
+    /// LLM returns a valid summary JSON; embeds work. For exercising
+    /// the P1.2 verification gate around a "successful" abstractive
+    /// generation.
+    struct OkLlmEmbedOk;
+
+    #[async_trait]
+    impl InferenceProvider for OkLlmEmbedOk {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            Ok(CompletionResponse {
+                text: r#"{"summary": "The cluster centers on the anchor sentence theme.", "primary_entities": ["Anchor"]}"#.to_string(),
+                tokens_used: 10,
+                prompt_tokens: 5,
+                model_id: "mock-abstractive-llm".into(),
+                latency_ms: 1,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
+            unreachable!("summarize path does not stream")
+        }
+        async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+            Ok(direction_embed(text))
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            mock_caps()
+        }
+    }
+
+    /// Scripted verifier: pops verdicts front-to-back; panics when
+    /// called more often than scripted.
+    struct ScriptedVerifier {
+        verdicts: std::sync::Mutex<Vec<Option<crate::summary_verify::SummaryVerdict>>>,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait]
+    impl crate::summary_verify::SummaryVerifier for ScriptedVerifier {
+        async fn verify(
+            &self,
+            _summary: &str,
+            _member_texts: &[String],
+        ) -> Option<crate::summary_verify::SummaryVerdict> {
+            self.calls
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.verdicts
+                .lock()
+                .unwrap()
+                .pop()
+                .expect("verifier called more often than scripted")
+        }
+    }
+
+    fn verify_ctx(
+        verdicts: Vec<Option<crate::summary_verify::SummaryVerdict>>,
+    ) -> (
+        Arc<crate::summary_verify::VerifyCtx>,
+        Arc<crate::summary_verify::VerifyStats>,
+    ) {
+        // Scripted pops from the back — reverse so the vec reads in
+        // call order at the test site.
+        let mut v = verdicts;
+        v.reverse();
+        let stats = Arc::new(crate::summary_verify::VerifyStats::default());
+        let ctx = Arc::new(crate::summary_verify::VerifyCtx {
+            verifier: Arc::new(ScriptedVerifier {
+                verdicts: std::sync::Mutex::new(v),
+                calls: std::sync::atomic::AtomicUsize::new(0),
+            }),
+            policy: crate::summary_verify::VerifyPolicy::On,
+            stats: Arc::clone(&stats),
+        });
+        (ctx, stats)
+    }
+
+    fn fail_verdict() -> Option<crate::summary_verify::SummaryVerdict> {
+        Some(crate::summary_verify::SummaryVerdict {
+            claims_total: 3,
+            claims_unsupported: 2,
+        })
+    }
+
+    fn pass_verdict() -> Option<crate::summary_verify::SummaryVerdict> {
+        Some(crate::summary_verify::SummaryVerdict {
+            claims_total: 3,
+            claims_unsupported: 0,
+        })
+    }
+
+    #[tokio::test]
+    async fn verify_gate_passes_verified_abstractive_through() {
+        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
+        let (ctx, stats) = verify_ctx(vec![pass_verdict()]);
+        let node = summarize_one_cluster(
+            &inference,
+            extractive_test_input(),
+            DocumentTypeTag::Narrative,
+            SummaryMode::Abstractive,
+            Some(ctx),
+        )
+        .await
+        .expect("verified abstractive summary must persist");
+        assert_eq!(node.summarizer_model, "mock-abstractive-llm");
+        assert_eq!(node.prompt_version, RAPTOR_PROMPT_VERSION);
+        assert_eq!(
+            stats
+                .passed_first
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_gate_retries_then_falls_back_to_extractive() {
+        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
+        // First verdict fails → faithful retry generates again → second
+        // verdict fails → extractive floor.
+        let (ctx, stats) = verify_ctx(vec![fail_verdict(), fail_verdict()]);
+        let node = summarize_one_cluster(
+            &inference,
+            extractive_test_input(),
+            DocumentTypeTag::Narrative,
+            SummaryMode::Abstractive,
+            Some(ctx),
+        )
+        .await
+        .expect("failed verification must fall back to extractive, not drop the node");
+        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
+        assert_eq!(node.prompt_version, EXTRACTIVE_ALGO_VERSION);
+        assert_eq!(stats.retried.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(
+            stats.fell_back.load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_gate_verifier_failure_is_not_a_pass() {
+        let inference: Arc<dyn InferenceProvider> = Arc::new(OkLlmEmbedOk);
+        // Verifier unreachable (None) on the first attempt → extractive
+        // floor immediately, no unverified abstractive persists.
+        let (ctx, stats) = verify_ctx(vec![None]);
+        let node = summarize_one_cluster(
+            &inference,
+            extractive_test_input(),
+            DocumentTypeTag::Narrative,
+            SummaryMode::Abstractive,
+            Some(ctx),
+        )
+        .await
+        .expect("verifier failure must fall back to extractive");
+        assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
+        assert_eq!(
+            stats
+                .verifier_failed
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+    }
+
     fn extractive_test_input() -> ClusterSummarizationInput {
         let anchor =
             "The anchor sentence describes the central theme of this cluster in detail."
@@ -1592,6 +1928,7 @@ mod tests {
             extractive_test_input(),
             DocumentTypeTag::Narrative,
             SummaryMode::Abstractive,
+            None,
         )
         .await
         .expect("LLM failure must fall back to an extractive node, not thin the tree");
@@ -1612,6 +1949,7 @@ mod tests {
             extractive_test_input(),
             DocumentTypeTag::Narrative,
             SummaryMode::Extractive,
+            None,
         )
         .await
         .expect("extractive mode should produce a node");

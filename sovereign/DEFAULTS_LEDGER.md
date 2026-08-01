@@ -30,20 +30,6 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### Extractive summary mode default for memory corpora (T1 P1.1)
-- **Shipped:** 2026-07-31, commit `6acd23b9` — `SummaryMode` seam,
-  `enrich raptor --summary-mode`, per-cluster fallback (fallback IS
-  live by default; only the mode default is dark).
-- **Proof so far:** SP2 retrofit parity |B−A′| = 0.0000 on both sep
-  banks at equal coverage; production seam live-verified LLM-free on
-  chaos (91.3s/novel).
-- **Flip condition:** the *production seam* (not the Python retrofit)
-  holds parity on the sep summarize banks — |B−A| within band
-  (≤0.025 / ≤0.0167), r1–r3 + rawindex guard.
-- **Settled by:** T1 P1.1 remainder (the A/B is the immediate next
-  step of the tranche).
-- **Review by:** 2026-08-07.
-
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (default 0.0)
 - **Shipped:** 2026-05-22 (note `54869b19`), byte-identical baseline
   at weight 0.0, opt-in only. Spec:
@@ -57,8 +43,9 @@ store (ids cited per row).
   cannot separate it, move this row to Rejected — that verdict routes
   to P3.1 golden authoring (T2).
 - **Review by:** 2026-08-14.
-- **Registry gap:** flag is not declared in `quality/env-flags.toml`
-  (predates the gate) — declare it when touched.
+- **Registry gap:** closed 2026-07-31 — declared in
+  `quality/env-flags.toml` (with `SOVEREIGN_DOC_CLUSTER_POOL`) as part
+  of the P0.4 lane landing.
 
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
@@ -111,6 +98,22 @@ store (ids cited per row).
   "fixes" the default.
 
 ## GRADUATED — the pipeline completing, for the record
+
+### Extractive summary mode default for memory corpora (T1 P1.1)
+- **Flip condition met 2026-07-31, same day it was written:** the
+  production seam held parity on the sep banks — both arms rebuilt
+  through `enrich raptor` at identical 14-article scope, |B−A| =
+  −0.0125 on summarize (band ±0.025), 0.0000 on obscure (band
+  ±0.0167), r1–r3 deterministic, rawindex guard 0.0000 both banks
+  (`research/enrichment-spikes/runs/prodAB/`).
+- **Default flipped:** memory corpora (vault notes, imported
+  conversations via `build_folder_tiered_provider`; memory-pool trees
+  via `mem_atlas`; the vault-wide theme synthesis) now build
+  EXTRACTIVE trees. Attached documents keep abstractive — now
+  verifier-gated (T1 P1.2, same push). `enrich raptor` CLI default
+  remains abstractive with explicit `--summary-mode`.
+- **Registry/env:** no env flag — the default is code-level policy at
+  the memory-corpus construction sites, provenance-stamped per node.
 
 ### Caller-directed prefix-cache pin
 - Dark → 180-min soak (restore p90 29ms, TTFT 173→66s) → **default-on

@@ -2375,6 +2375,7 @@ pub(crate) async fn build_atlas_artifacts(
         None,
         None,
         crate::raptor_atlas::SummaryMode::Abstractive,
+        None,
     )
     .await
 }
@@ -2393,6 +2394,10 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     // summarization prompt (the "flag a wrong summary" revision loop).
     correction_hint: Option<&str>,
     summary_mode: crate::raptor_atlas::SummaryMode,
+    // T1 P1.2 override: `None` = the default gate (verify every
+    // abstractive summary). Corpus-scale callers pass `Sample(p)` for
+    // SP3 economics, or `Off` to opt out explicitly.
+    verify_policy: Option<crate::summary_verify::VerifyPolicy>,
 ) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
     if chunks.is_empty() {
         return Ok((Vec::new(), Vec::new()));
@@ -2400,8 +2405,31 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
 
     // RAPTOR tree — the long sub-phase. Errors propagate so callers
     // can transition state to Failed.
+    //
+    // Attached-document abstractive summaries are VERIFIER-GATED
+    // (T1 P1.2): every LLM summary is decomposed into claims and
+    // judged against its own member texts before persisting — pass,
+    // one steered retry, or the extractive floor. Policy `On` because
+    // per-document trees are small (tens of nodes); the SP3 sampling
+    // economics apply to corpus-scale builds, which go through
+    // `enrich raptor --verify-summaries` instead. Extractive builds
+    // skip the gate by construction (quotes need no verification).
+    let policy = verify_policy.unwrap_or(crate::summary_verify::VerifyPolicy::On);
+    let verify = match (summary_mode, policy) {
+        (crate::raptor_atlas::SummaryMode::Extractive, _)
+        | (_, crate::summary_verify::VerifyPolicy::Off) => None,
+        (crate::raptor_atlas::SummaryMode::Abstractive, policy) => {
+            Some(Arc::new(crate::summary_verify::VerifyCtx {
+                verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(Arc::clone(
+                    inference,
+                ))),
+                policy,
+                stats: Arc::new(crate::summary_verify::VerifyStats::default()),
+            }))
+        }
+    };
     let t_tree = std::time::Instant::now();
-    let nodes = crate::raptor_atlas::build_raptor_atlas_with_mode(
+    let nodes = crate::raptor_atlas::build_raptor_atlas_with_verify(
         inference,
         chunks,
         embeddings,
@@ -2410,10 +2438,17 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
         progress,
         correction_hint,
         summary_mode,
+        verify.clone(),
     )
     .await
     .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
     let tree_s = t_tree.elapsed().as_secs_f32();
+    if let Some(ctx) = verify.as_ref() {
+        tracing::info!(
+            stats = %ctx.stats.summary_line(),
+            "document_asset: summary verification gate (T1 P1.2)"
+        );
+    }
 
     // Motif index — best-effort. Convert ChunkInput → TextChunk for
     // the existing motif extractor.

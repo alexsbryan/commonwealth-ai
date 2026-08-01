@@ -266,6 +266,10 @@ pub struct FolderTieredProvider {
     /// centroid-ranked member sentences, LLM-free. Threaded into
     /// `build_folder_artifacts`.
     summary_mode: crate::raptor_atlas::SummaryMode,
+    /// T1 P1.2 gate policy for abstractive builds. `None` = the
+    /// artifact builder's default (verify everything). Corpus-scale
+    /// retrofits set `Sample(p)` for SP3 economics.
+    verify_policy: Option<crate::summary_verify::VerifyPolicy>,
 }
 
 /// Indirection so the provider can locate the per-corpus index dir
@@ -300,6 +304,7 @@ impl FolderTieredProvider {
             index_dir_resolver: None,
             doc_type: DocumentTypeTag::Unknown,
             summary_mode: crate::raptor_atlas::SummaryMode::Abstractive,
+            verify_policy: None,
         }
     }
 
@@ -327,6 +332,13 @@ impl FolderTieredProvider {
     /// sentences — the T1 P1.1 floor.
     pub fn with_summary_mode(mut self, mode: crate::raptor_atlas::SummaryMode) -> Self {
         self.summary_mode = mode;
+        self
+    }
+
+    /// Override the T1 P1.2 verification policy for abstractive builds
+    /// (`None` = verify everything). Extractive builds ignore it.
+    pub fn with_verify_policy(mut self, policy: crate::summary_verify::VerifyPolicy) -> Self {
+        self.verify_policy = Some(policy);
         self
     }
 
@@ -576,7 +588,7 @@ impl FolderTieredProvider {
     ///
     /// Returns the number of themes persisted (or 0 on a no-op skip).
     pub(crate) async fn run_vault_synthesis(&self, corpus_id: &str) -> Result<usize> {
-        use crate::raptor_atlas::{build_raptor_atlas_with_checkpoint, ChunkInput};
+        use crate::raptor_atlas::ChunkInput;
         use sovereign_core::conv_tiered::VaultThemeRow;
 
         // Bound below which synthesis is pointless. 8 = a vault with
@@ -713,7 +725,11 @@ impl FolderTieredProvider {
             None => (None, None),
         };
 
-        let nodes = build_raptor_atlas_with_checkpoint(
+        // The vault-wide theme synthesis follows the provider's summary
+        // mode: under the memory-corpus extractive default (T1 P1.1
+        // flip) themes are verbatim selections too — the whole memory
+        // tier stays quote-only, not just the per-note trees.
+        let nodes = crate::raptor_atlas::build_raptor_atlas_with_verify(
             &self.inference,
             &chunks,
             &embeddings,
@@ -721,6 +737,19 @@ impl FolderTieredProvider {
             checkpoint.as_ref(),
             sink.as_ref(),
             None,
+            self.summary_mode,
+            match self.summary_mode {
+                crate::raptor_atlas::SummaryMode::Abstractive => {
+                    Some(Arc::new(crate::summary_verify::VerifyCtx {
+                        verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(
+                            Arc::clone(&self.inference),
+                        )),
+                        policy: crate::summary_verify::VerifyPolicy::On,
+                        stats: Arc::new(crate::summary_verify::VerifyStats::default()),
+                    }))
+                }
+                crate::raptor_atlas::SummaryMode::Extractive => None,
+            },
         )
         .await
         .map_err(|e| {
@@ -898,6 +927,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         self.inference.clone(),
                         self.doc_type.clone(),
                         self.summary_mode,
+                        self.verify_policy,
                         updated_at,
                         checkpoint_ref,
                         progress_ref,
@@ -1226,6 +1256,7 @@ fn conv_content_hash(chunks: &[EnrichmentChunkRow]) -> String {
 /// (sovereign-tools/src/document_asset.rs Move 3 helper) for both
 /// RAPTOR nodes and TF-IDF motif index, then convert each to the
 /// conv-scoped row shapes for persistence.
+#[allow(clippy::too_many_arguments)]
 async fn build_folder_artifacts(
     corpus_id: &str,
     conv_uuid: &str,
@@ -1234,6 +1265,7 @@ async fn build_folder_artifacts(
     inference: Arc<dyn InferenceProvider>,
     doc_type: DocumentTypeTag,
     summary_mode: crate::raptor_atlas::SummaryMode,
+    verify_policy: Option<crate::summary_verify::VerifyPolicy>,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
@@ -1256,6 +1288,7 @@ async fn build_folder_artifacts(
         progress,
         correction_hint,
         summary_mode,
+        verify_policy,
     )
     .await
     .map_err(|e| {
