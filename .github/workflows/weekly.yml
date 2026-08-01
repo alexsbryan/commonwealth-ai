@@ -54,7 +54,7 @@ jobs:
             protobuf-compiler libprotobuf-dev cmake mold clang \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
       - name: Install cargo-public-api
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.4
         with:
           tool: cargo-public-api
       - run: cargo run -p xtask -- api-gate
@@ -94,7 +94,7 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
       - name: Install cargo-hack
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.4
         with:
           tool: cargo-hack
       # Every feature compiles solo, on the 10 feature-bearing crates.
@@ -128,7 +128,7 @@ jobs:
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y mold clang protobuf-compiler cmake
       - name: Install cargo-modules
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.4
         with:
           tool: cargo-modules
       # Report-only: measure runtime on the 138k-LOC corpus-engine before
