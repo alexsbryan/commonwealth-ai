@@ -731,3 +731,25 @@ good *fast local provider* — just decoupled from the distribution goal.
   a live peer claim (T2-Economics enrichment), so freeing its models is a
   coordination event — atlas claim `e249f3c8` published our intent. Remaining:
   cable → Mac free-up + sysctl → apply → `plan --from-mesh` sanity → bench.
+- **2026-08-01 (night)** — **Wire probe PASSED; blocker list is down to one
+  item.** Timeline: the USB-C direct-link idea died at the cable (partner
+  advertised 0 alt modes, both USB4 controllers `link: none` — a charge-rated
+  USB 2.0 cable, and USB 2.0 has no host-to-host path); operator chose the
+  existing network. Alex restarted BeefyMac's daemon on the latest code
+  (binary Aug 1 21:40) — and the wired-limit sysctl turned out already done:
+  ggml reports the Mac at `total_mb=57344`. But the restart freed nothing
+  durable: the Mac's active agent session re-loaded fast+35B+embed within
+  10 minutes. So the sweep wire probe ran against the *new* binary instead
+  (fits in ~1 GB): discovery → Probationary → Eligible → cache-hit warm
+  (`written=0 already=27`) → child spawned (Mac blocks 0–8, host 9–27) →
+  `serving` → tokens (`model=Sweep-SplitTest…`). The new binary pair is
+  PROVEN; the binary-swap landmine is retired. Also resolved a host-side
+  scare: ggml's probe-time `held_by_others=27 GB` on RuggedFox was our own
+  35B + GTT reclaim lag from the just-stopped daemon (verified: GTT drained
+  28→21 GB live; sole render-node holder is the daemon), so the host fits at
+  load time by construction — the config swap unloads the 35B first.
+  **Sole remaining blocker: BeefyMac's residents** (needs its session quiet;
+  ~30 min idle may auto-unload if its `primary_idle_secs` matches ours).
+  Daily driver restored meanwhile. Wire-probe posture preserved at
+  `~/.sovereign/config.toml.wireprobe-sweep`; DeepSeek posture staged at
+  `~/.sovereign/config.toml.stage2-deepseek`.

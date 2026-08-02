@@ -164,6 +164,31 @@ def describe_environment(torch) -> dict:
             env[mod] = __import__(mod).__version__
         except Exception:  # noqa: BLE001
             env[mod] = None
+
+    # Which gated-deltanet memory path will this run take? On gfx1151 that
+    # single fact decides whether the run survives, and until now NOTHING
+    # recorded it: the only trace in train.log was a transformers warning
+    # string, so reconstructing a past run's path meant grepping for prose.
+    #
+    # transformers gates on `is_fast_path_available = all(...)` over four
+    # symbols. With fla only, three of four resolve -> SEQUENTIAL path,
+    # ~25 GB GTT, survives. Add causal-conv1d and all four resolve ->
+    # CHUNKED path, ~100 GB GTT, killed by the host OOM killer.
+    # See note e643e089. find_spec, not import: no side effects, no CUDA
+    # extension load, no cost to a run that is about to be timed.
+    import importlib.util as _ilu
+
+    for mod in ("fla", "causal_conv1d", "triton"):
+        try:
+            env[mod] = "present" if _ilu.find_spec(mod) else None
+        except Exception:  # noqa: BLE001
+            env[mod] = None
+    env["deltanet_path"] = (
+        "chunked (INFEASIBLE on gfx1151 -- expect ~100 GB GTT and SIGKILL)"
+        if env.get("causal_conv1d") and env.get("fla")
+        else "sequential" if env.get("fla")
+        else "eager-torch (no fla -- ~1.3x slower)"
+    )
     return env
 
 
