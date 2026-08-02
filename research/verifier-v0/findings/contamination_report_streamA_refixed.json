@@ -1,0 +1,300 @@
+{
+  "training_stream": "halluguard",
+  "inputs": [
+    "<HF cache>"
+  ],
+  "training_rows": 76708,
+  "ngram": 13,
+  "test_sets": {
+    "LLM-AggreFact": "test.parquet (29,320 rows)",
+    "FaithBench": "15 release batches"
+  },
+  "unique_test_docs": 8405,
+  "canary_hits": 0,
+  "colliding_training_rows": {
+    "LLM-AggreFact": 34,
+    "FaithBench": 0
+  },
+  "per_group": {
+    "HalluGuard-76k": {
+      "rows": 76708,
+      "doc_collisions": 34,
+      "claim_collisions": 0
+    }
+  },
+  "collision_examples": [
+    {
+      "row": 7130,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Paul was traveling to Jerusalem when the disciples wept and kissed him goodbye.'"
+    },
+    {
+      "row": 7573,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Stephen Peterson filed a 2012 federal lawsuit alleging that his 2011 termination from the Oak Brook Police Department r"
+    },
+    {
+      "row": 8598,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Burren is located in County Clare, Ireland.'"
+    },
+    {
+      "row": 11247,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Acknowledging powerlessness results in possessing the kingdom of heaven as stated in Matthew 5:3.'"
+    },
+    {
+      "row": 11595,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'Cologuard is more effective at detecting colorectal cancer than at detecting polyps that are most likely to become canc"
+    },
+    {
+      "row": 11864,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Betty Ford Center is named after former First Lady Betty Ford.'"
+    },
+    {
+      "row": 15993,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Decatur and Champaign are cities in the state of Illinois.'"
+    },
+    {
+      "row": 18735,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Paul's request for believers to pray for the rapid spread of the Lord's message exemplifies mutual prayer, a practice t"
+    },
+    {
+      "row": 21954,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Community donations following Cleo's attack established a $1,000 reward for information leading to the attacker's ident"
+    },
+    {
+      "row": 26683,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The tax year is the period a business uses to calculate and file its taxes.'"
+    },
+    {
+      "row": 29335,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Reveal",
+      "claim": "'Southern Methodist University is located in Dallas, Texas.'"
+    },
+    {
+      "row": 39435,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "AggreFact-XSum",
+      "claim": "'The two Russian nationals were smuggling 206 green sea turtles.'"
+    },
+    {
+      "row": 40290,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Jacuzzi brand was created by Roy Jacuzzi in 1958.'"
+    },
+    {
+      "row": 44020,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'John Chrysostom's *Homilies on Philippians* specifically identifies the \"flesh\" referenced in Philippians 3:3 as includ"
+    },
+    {
+      "row": 47960,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Without Jesus, we can do many things.'"
+    },
+    {
+      "row": 48194,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Gansbaai is internationally recognized as the great white shark capital of the world.'"
+    },
+    {
+      "row": 48973,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The author contends that internalizing 1 John's message of loving one another, as emphasized through repeated biblical "
+    },
+    {
+      "row": 51180,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The book argues that \"Do unto others as you would have them do unto you\" is irrelevant in the digital age.'"
+    },
+    {
+      "row": 51320,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The Lower Santa Ynez Recreation Area has been open to the public since October 3.'"
+    },
+    {
+      "row": 51567,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Kenneth Stevenson's daughter was diagnosed with cancer when she was 4 years old.'"
+    },
+    {
+      "row": 53633,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'The incident occurred on Fowler Manning Road, near the family's residence.'"
+    },
+    {
+      "row": 54161,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Instead of \u201ceternal life,\u201d I read \u201cexternal life.\u201d'"
+    },
+    {
+      "row": 55633,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The Gospel of John's narrative of the Last Supper includes Jesus washing his disciples' feet and delivering a final mes"
+    },
+    {
+      "row": 59173,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'Red and purple leaves that stay that color all year contain no chlorophyll.'"
+    },
+    {
+      "row": 60408,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The intended session RPE is not consistently achieved due to both deviations in training execution and individual diffe"
+    },
+    {
+      "row": 62763,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'Blessed is the one who trusts in Him.'"
+    },
+    {
+      "row": 63448,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Lifestyle changes increased telomere length without an increase in telomerase activity.'"
+    },
+    {
+      "row": 65002,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ExpertQA",
+      "claim": "'A diagnosis of major depressive disorder can be confirmed with exactly five total symptoms, including depressed mood or"
+    },
+    {
+      "row": 66783,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'In the vicinity of the intersection of 18th Street and Muhammad Ali Boulevard, there have been at least three vehicle c"
+    },
+    {
+      "row": 68111,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Wice",
+      "claim": "'Cleveland Police evidence log #CPD-2012-15873 confirms the home invasion suspects left a handwritten note on Melt Bar a"
+    },
+    {
+      "row": 68577,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "AggreFact-XSum",
+      "claim": "'Georgina Callandar survived the explosion at the Manchester Arena.'"
+    },
+    {
+      "row": 68966,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "Reveal",
+      "claim": "'Chrysler acquired the Dodge Brothers Company in 1927.'"
+    },
+    {
+      "row": 69015,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The Diatessaron of Tatian, as reconstructed from the Dura-Europos fragments, uniquely combines Acts 1:8 and Matthew 3:1"
+    },
+    {
+      "row": 70578,
+      "group": "HalluGuard-76k",
+      "where": "evidence",
+      "benchmark": "LLM-AggreFact",
+      "subset": "ClaimVerify",
+      "claim": "'The May 2020 newsletter from Immanuel Lutheran Church is the only highlighted edition that does not include a direct Bi"
+    }
+  ],
+  "verdict": "COLLISIONS FOUND"
+}

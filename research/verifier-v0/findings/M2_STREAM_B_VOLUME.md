@@ -291,11 +291,32 @@ relabel), at a measured keep rate of 79% (secret-agent) to 90% (saltgrass),
 ~87% on the merged run so far.
 
 ```
-21,831 cases × ~0.87 keep  ≈  ~19,000 pairs
+21,831 cases × 0.871 keep  =  19,019 pairs      (MEASURED, run complete)
 ```
 
-So this run lands **just under the 20k floor**. State that plainly rather than
-rounding up to "20k".
+So this run landed **just under the 20k floor** — short by 981. State that
+plainly rather than rounding up to "20k".
+
+**Final measured run** (22.7 h wall-clock, 0 auto-resumes, 0 malformed rows,
+0 rows with an empty side, 3 transient teacher 503s across 21,831 cases):
+
+| | |
+|---|---|
+| pairs / discards | 19,019 / 2,809 (87.1% keep) |
+| by corpus | SEP 17,007 · secret-agent 1,830 · saltgrass 182 |
+| grounded share | **55.0%** — inside the 45–55% band, but at its edge |
+| A+B mix | 76,674 A + 19,019 B = 95,693 (**19.9% B**) |
+
+Two things to carry forward. The **grounded share drifted to 55.0%** from the
+bank's balanced 50.0%, because discards are asymmetric — `ocr_garble` alone
+contributes 2,001 of the 2,809 discards and is entirely ungrounded (§9). Spec
+§3 asks for ~50/50, so this sits at the edge of tolerance rather than
+comfortably inside it; dropping `ocr_garble` from generation on this substrate
+would return the balance to ~50/50 on its own.
+
+And the **19.9% B share is well-powered for the mix study** — a straight
+A vs A+B comparison no longer needs the equal-size-substitution design that
+would have been required at the handoff's original ~1.9k pairs.
 
 The important part is *why*, because it is no longer the problem it was. We
 harvested **900 of SEP's 93,984 available windows** — about 1%. At the measured

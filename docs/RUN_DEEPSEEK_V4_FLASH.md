@@ -12,7 +12,30 @@ Vulkan) as host and an M2 Max (BeefyMac, 51 GB Metal) as worker.**
 
 ## Status
 
-_Last updated: 2026-07-31 —_ **ACTIVE. Stage 0 step 1 passed; download not started.**
+_Last updated: 2026-08-01 (Stage 2 prep) —_ **ACTIVE. Stage 0 FULLY PASSED
+(0.2 evidence: `rpc-warm … written=27 already=0` — host-only split served to a
+bare worker over iroh byte-ranges, `-ot` distributed load, tokens); model
+verified; RuggedFox-side Stage 2 prep DONE. Bring-up is now blocked only on the
+cable and two Mac-side steps.** Host posture is STAGED, not applied:
+`~/.sovereign/config.toml.stage2-deepseek` (apply recipe in its header; the 35B
+daily driver keeps serving until then). The stale `SOVEREIGN_RPC_BLOCK_SPLIT=12,36`
+pin is REMOVED from the systemd drop-in — its own removal condition ("once the
+fetch path works mdns-free") is exactly what 0.2 proved; re-pin only for a
+cache-aligned 122B rerun. Blockers, in order: (1) **wire RuggedFox** — enp191s0
+NO-CARRIER, Wi-Fi ≈40 Mbps makes the Mac's ~47 GB warm ≈2.6 h; (2) **free
+≈26 GB on BeefyMac** — live ops-channel audit: fast 4.6 GB + 35B 18.5 GB + embed
+resident, daemon RSS 24.3 GB, ~20.5 GB free vs the 46.8 GB worker need @1.08;
+(3) **`sudo sysctl iogpu.wired_limit_mb=57344`** on the Mac. LANDMINE: BeefyMac's
+on-disk daemon binary (Aug 1 20:47, git `823274f3` — NOT on origin) is ~26 h
+newer than its RUNNING daemon; the 0.2-proven wire pair is the *running* one, so
+after any Mac restart re-probe wire compat with the sweep split before the
+155 GB load (a cache-hit warm still proves load + decode). Older gotchas:
+(a) 0.2-style tests need never-distributed content — the worker's
+content-addressed cache absorbs a warm of anything it has seen (`written=0
+already=24` on the 4B cut); (b) daemon logs live in journald
+(`journalctl --user -u sovereign.service`), ~/.sovereign/logs/daemon.log is dead
+since Jul 26. Stage 0 test backup: config.toml.bak-pre-stage02-20260801-203736;
+test posture was role=host + [compute] armed, always together.**
 
 ## Why this came back
 
@@ -110,6 +133,26 @@ No download. This stage exists to protect the download.
    This is the end-to-end test of the multi-shard serving fix (below). **If this
    fails, the DeepSeek run cannot work** — and we learn it for 4 GB.
 
+   **Prepared 2026-07-31 — the artifact is staged, run this when the daemon
+   frees.** `llama-gguf-split --no-tensor-first-split` produced a 3-shard split
+   (426 tensors; shard 1 = **0 tensors / 11 MB**, the same metadata-only first
+   shard the real model has) at
+   `sovereign/models/split-warm-test/Qwen3.5-4B-SplitTest-Q6_K-00001-of-00003.gguf`.
+   The name is deliberately one BeefyMac has never held. Sequence:
+
+   1. Point `[models] primary` at shard `00001` (path above) and restart the
+      host daemon with `SOVEREIGN_RPC_DISCOVER=1`.
+   2. Confirm BeefyMac does **not** hold any `Qwen3.5-4B-SplitTest` file, then
+      (re)start its worker (`SOVEREIGN_RPC_SERVE=0.0.0.0:50052`) — the
+      worker-set change triggers the redistribute.
+   3. `scripts/rpc-distributed-e2e.sh --model commonwealth/primary` watches the
+      warm → `-ot` overrides → tokens chain and verdicts PASS/FAIL. The decisive
+      evidence is BeefyMac fetching shards 2–3 it never had — that is
+      `servable_model_files` under test; before the fix this exact sequence
+      404'd and fell back local-only.
+   4. Revert `[models] primary`, restart. Then re-plan against the real
+      downloaded file: `svrn mesh plan <local 00001> --from-mesh`.
+
 > **The fix Stage 0.2 tests.** Until 2026-07-31 the host advertised **only shard
 > 1** of a split model: `register_local_model_slots` built the servable allowlist
 > straight from the configured slot paths, with no sibling expansion, so
@@ -126,6 +169,13 @@ No download. This stage exists to protect the download.
 ### Stage 1 — download
 
 155 GB to RuggedFox, only once Stage 0 is green.
+
+**Started 2026-07-31, ahead of the gate — operator call.** The daemon was
+saturated for the day so Stage 0.2 couldn't run, and the download is the
+wall-clock long pole; pulling it forward lets both finish together. The risk the
+gate protects against (a serving bug found at 0.2) costs a fix, not the
+download — worst case the bytes wait. **The bring-up gate stays: nothing loads
+before 0.2 passes.** Resumable via the same `hf download` command below.
 
 ### Stage 2 — bring up
 
@@ -630,3 +680,54 @@ good *fast local provider* — just decoupled from the distribution goal.
   headroom is 1.096, so the stock 1.2 would refuse this load — set it deliberately.
   Next: Stage 0 step 2 (host-only split GGUF warms a worker, at 4 GB), then the
   155 GB download.
+- **2026-07-31 (later)** — Work-ahead while the daemon was saturated for the day.
+  **Download started** (operator call, ahead of the 0.2 gate — see Stage 1):
+  UD-Q4_K_XL, 5 shards verified against the HF tree (0.01 + 48.94 + 48.98 +
+  50.00 + 7.17 GB ≈ 155.1 GB), 638 GB free on the volume. **Stage 0.2 artifact
+  staged**: 3-shard Qwen3.5-4B split with a zero-tensor 11 MB first shard
+  (mirrors the real model's metadata-only shard 1) at
+  `sovereign/models/split-warm-test/`; concrete runbook inlined at Stage 0.2.
+  Housekeeping: the July-8 partial (15 GB, `DeepSeek-V4-Flash-GGUF/UD-IQ3_XXS`,
+  2 of 4 shards, superseded release) is dead weight — delete when convenient.
+- **2026-08-01** — **Download COMPLETE and verified.** All 5 shards at
+  `sovereign/models/DeepSeek-V4-Flash-0731-GGUF/UD-Q4_K_XL/` (145 GiB);
+  `svrn mesh plan` against the real file reproduces the header-only plan
+  exactly (worker 0-12 / 43.3 GB, host 13-42 / 100.6 GB, pooled PASS @1.08) —
+  the 22 MB range-read sizing told the truth. The pull itself took ~2 days of
+  wall clock for ~9 h of transfer, and the reasons are recorded in note
+  `8fa49b25`: RuggedFox is on **~40 Mbps effective Wi-Fi** (2.5 GbE port
+  unused — wire it before Stage 2, or BeefyMac's ~47 GB shard-warm rides the
+  same radio at ~2.6 h per cold start); `hf download` **stalls silently** on
+  connection death AND **does not resume** partials across restarts (xet
+  backend). Final ~1 GB was salvaged by range-appending tails onto the
+  abandoned partials and verifying sha256 against the LFS pointers — shards 2
+  and 4 are therefore cryptographically verified, 1/3/5 verified by hf's own
+  finalization. July-8 partial deleted (operator-approved).
+- **2026-08-01 (evening)** — **Stage 0.2 PASSED, on the second attempt.** The
+  first pass was a FALSE PASS: the 4B-based test split warmed instantly because
+  BeefyMac's content-addressed cache already held those tensors from July
+  (`written=0 already=24`). Re-cut from a never-distributed model
+  (`sovereign/models/split-warm-test/Sweep-SplitTest-q8-*`), the test became
+  real: host-only split → BeefyMac warm `written=27 already=0` over iroh
+  byte-ranges (metadata-only first shard included) → `-ot` distributed load
+  under the supervised child → tokens. Evidence in journald
+  2026-08-02T03:52–03:55Z. Config restored from
+  `config.toml.bak-pre-stage02-20260801-203736`; daemon back on the 35B daily
+  driver.
+- **2026-08-01 (Stage 2 prep)** — **RuggedFox side ready; nothing left here but
+  the apply.** Staged `~/.sovereign/config.toml.stage2-deepseek` (primary →
+  DeepSeek shard 00001, role → host, `[compute]` both flags true, headroom 1.08;
+  fast stays the tiny 0.8B eager-alias so primary loads *distributed* on the
+  discovery reload). Removed `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` from
+  `40-toolbox.conf` (removal condition met by 0.2; a DeepSeek load would reject
+  it anyway — 43 ≠ 48 blocks). Live Mac audit over the ops channel
+  (`ssh beefymac-ops http-status`): residents fast 4.6 GB + 35B 18.5 GB + embed,
+  RSS 24.3 GB, ~20.5 GB free vs 46.8 GB worker need — the free-up and the
+  wired-limit bump are both required, as predicted. Two new findings: BeefyMac's
+  running daemon is ~26 h older than its on-disk binary (git `823274f3`, not on
+  origin — the checkouts have diverged), so "same build both nodes" currently
+  means *the proven-running pair*; any Mac daemon-restart swaps binaries and
+  demands a sweep-split wire re-probe before the real load. And BeefyMac carries
+  a live peer claim (T2-Economics enrichment), so freeing its models is a
+  coordination event — atlas claim `e249f3c8` published our intent. Remaining:
+  cable → Mac free-up + sysctl → apply → `plan --from-mesh` sanity → bench.

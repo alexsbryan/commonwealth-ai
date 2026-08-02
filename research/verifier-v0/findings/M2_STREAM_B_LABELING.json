@@ -1,0 +1,65 @@
+{
+  "stage": "M2 Stream B teacher labeling",
+  "pairs": 19019,
+  "discards": 2809,
+  "cases_processed": 21828,
+  "keep_rate": 0.8713,
+  "malformed_rows": 0,
+  "rows_with_empty_side": 0,
+  "pairs_by_corpus": {
+    "sep": 17007,
+    "chaos-secret-agent": 1830,
+    "chaos-saltgrass": 182
+  },
+  "pairs_by_kind": {
+    "verbatim": 3755,
+    "reframe": 3748,
+    "multi_hop_conjunction": 2955,
+    "distractor_absorption": 2326,
+    "unsupported_addition": 2282,
+    "entity_swap": 1838,
+    "cross_chunk_chimera": 828,
+    "number_perturb": 594,
+    "negation_flip": 548,
+    "ocr_garble": 145
+  },
+  "pairs_by_label": {
+    "ungrounded": 8561,
+    "grounded": 10458
+  },
+  "grounded_share": 0.5499,
+  "discards_by_kind": {
+    "ocr_garble": 2043,
+    "multi_hop_conjunction": 297,
+    "entity_swap": 227,
+    "reframe": 83,
+    "verbatim": 74,
+    "negation_flip": 58,
+    "number_perturb": 24,
+    "distractor_absorption": 1,
+    "cross_chunk_chimera": 1,
+    "unsupported_addition": 1
+  },
+  "discards_by_label": {
+    "ungrounded": 2355,
+    "grounded": 454
+  },
+  "keep_rate_by_kind": {
+    "cross_chunk_chimera": 0.9988,
+    "distractor_absorption": 0.9996,
+    "entity_swap": 0.8901,
+    "multi_hop_conjunction": 0.9087,
+    "negation_flip": 0.9043,
+    "number_perturb": 0.9612,
+    "ocr_garble": 0.0663,
+    "reframe": 0.9783,
+    "unsupported_addition": 0.9996,
+    "verbatim": 0.9807
+  },
+  "starved_kinds_keep_below_50pct": {
+    "ocr_garble": 0.0663
+  },
+  "spec_target_pairs": "20000-40000 (VERIFIER_V0.md \u00a73)",
+  "meets_spec_floor": false,
+  "class_balance_ok": true
+}
