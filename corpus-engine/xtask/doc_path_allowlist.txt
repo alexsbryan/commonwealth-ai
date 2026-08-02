@@ -44,3 +44,11 @@ target/
 # Deleted 2026-07-28 (F10: dead benchmark producers); SYSTEM_OVERVIEW cites the
 # path HISTORICALLY ("had zero callers ... both dead producers are deleted").
 sovereign-inference/src/benchmark.rs
+
+# SYSTEM_OVERVIEW §8 "Where to look for what" cites the exo comparative
+# teardown, which lives under `docs/internal/` — a directory gitignored by
+# design (`.gitignore:67`), so the gate can never resolve it. Same structural
+# reason as `target/` and `vendor/` above: intentionally-out-of-repo, not doc
+# rot. Found 2026-08-01: the gate had been RED at HEAD since 40b20d64 added
+# the citation, unrelated to the change that surfaced it.
+docs/internal/EXO_COMPARATIVE_STUDY.md

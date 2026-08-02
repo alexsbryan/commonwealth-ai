@@ -326,11 +326,11 @@ have meant all along. The measurable version:
 | Dimension | Today | End state |
 |---|---|---|
 | Enrichment systems | 4 + the "atlas"/"atlas" collision | 1 pipeline (extractors → graph → renderers); per-corpus profiles |
-| Knowledge-artifact stores | ~9 (atom-store family; `raptor_nodes`; `conv_raptor_nodes`; `raptor_summaries.lance`; `field_skeleton.json`; vestigial `conv_skeletons`; vault themes; `chunk_entities`) | 3 (chunks+FTS; the atom-graph family; build caches) |
+| Knowledge-artifact stores | **11** — measured 2026-08-01, see [`ENRICHMENT_RATCHET.md`](./ENRICHMENT_RATCHET.md) §2. (This row estimated ~9 and missed `mem_raptor_nodes`, `asset_motifs`, `conv_motifs`.) | 3 (chunks+FTS; the atom-graph family; build caches) |
 | Entity-extraction paths | 5 (GLiNER v1; Slow-LLM lark fallback; Phase-1 LLM enumeration; SCIP walk; tabular) | 2 (encoder schemas; structural) — the LLM only judges |
 | Trust model | per-artifact folklore | 1 rule: nothing unverified-abstractive in evidence; provenance end-to-end |
-| Env knobs on these paths | ~12, several dark | ≤ 4, each with a committed A/B behind its default |
-| Incremental mechanisms | 2 + an unwired flag | 1 (content-hash deltas), the only path |
+| Env knobs on these paths | **26** — 15 registered + 11 grandfathered-unregistered; measured 2026-08-01, see [`ENRICHMENT_RATCHET.md`](./ENRICHMENT_RATCHET.md) §5. (This row estimated ~12 and counted registered flags only.) | ≤ 4, each with a committed A/B behind its default |
+| Incremental mechanisms | 2 + a **wired** flag — `SOVEREIGN_ATLAS_INCREMENTAL` is load-bearing at `newsworthy_host.rs:318-340`, not "read but unused" as §P2 states | 1 (content-hash deltas), the only path |
 | "Explain enrichment" | a page + a warning section | the paragraph above |
 
 **The subtraction ledger** — every major addition names what it retires:
@@ -349,6 +349,14 @@ have meant all along. The measurable version:
 at every tranche exit exactly like the `quality/` baselines: a tranche
 that leaves any of them higher than it found them has failed its gate,
 whatever features it shipped.
+
+The measurements live in
+[`ENRICHMENT_RATCHET.md`](./ENRICHMENT_RATCHET.md) — one predicate, one
+enumeration and one command per number, plus an append-only table of
+tranche-exit values. The numbers in the table above were estimates until
+2026-08-01; two of them were wrong, which is why the gate now requires a
+predicate rather than a figure. **T1 exit verdict: PASS** (knobs −1,
+trust model improved, nothing rose).
 
 ### P0 — Make enrichment quality measurable (the gate for everything else)
 
