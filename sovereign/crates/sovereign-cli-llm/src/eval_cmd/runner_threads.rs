@@ -576,9 +576,12 @@ async fn score_thread_coverage(
         });
     }
 
+    // LLM-judge coverage — the judge reads each fact as prose, so
+    // nothing is unscorable the way the keyword tokeniser makes it.
     let coverage_score = FactScore {
         matched: matched_facts,
         missing: missing_facts,
+        unscorable: Vec::new(),
         total_expected: facts.len(),
     };
     let coverage_snap: ScoreSnapshot = coverage_score.into();
@@ -671,6 +674,7 @@ async fn score_thread_coverage_multi(
     let coverage_score = FactScore {
         matched,
         missing,
+        unscorable: Vec::new(),
         total_expected: facts.len(),
     };
     let coverage_snap: ScoreSnapshot = coverage_score.into();
@@ -695,6 +699,7 @@ fn empty_coverage(facts: &[String]) -> ScoreSnapshot {
     FactScore {
         matched: Vec::new(),
         missing: facts.to_vec(),
+        unscorable: Vec::new(),
         total_expected: facts.len(),
     }
     .into()

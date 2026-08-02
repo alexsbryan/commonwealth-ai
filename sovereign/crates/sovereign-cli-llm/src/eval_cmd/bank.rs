@@ -177,7 +177,48 @@ pub fn load_bank(path: &Path) -> Result<EvalBank, String> {
     let bank: EvalBank =
         toml::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
     validate(&bank)?;
+    warn_unscorable_facts(&bank, path);
     Ok(bank)
+}
+
+/// Warn about `expected_facts` the keyword scorer can never match —
+/// every token under 3 alphanumeric chars, so `keyword_tokens` reduces
+/// them to nothing (`"80%"`, `"0.2%"`, `"li"`).
+///
+/// A warning, not a hard error: these are legitimate facts a bank
+/// author meant, and three of the 31 in-repo banks would stop loading
+/// if this rejected them. The scorer excludes them from its denominator
+/// (`score::FactScore::ratio`) rather than counting them as misses, so
+/// the number stays honest — this just makes sure the author finds out
+/// at the moment they can act on it, including under `--format json`
+/// where the run rollup is never printed.
+fn warn_unscorable_facts(bank: &EvalBank, path: &Path) {
+    let offenders: Vec<(&str, &str)> = bank
+        .questions
+        .iter()
+        .flat_map(|q| {
+            q.expected_facts
+                .iter()
+                .filter(|f| crate::eval_cmd::score::is_unscorable_fact(f))
+                .map(move |f| (q.id.as_str(), f.as_str()))
+        })
+        .collect();
+    if offenders.is_empty() {
+        return;
+    }
+    eprintln!(
+        "warning: {} expected_fact(s) in {} cannot be scored by the keyword \
+         scorer and are excluded from every fact ratio:",
+        offenders.len(),
+        path.display()
+    );
+    for (qid, fact) in &offenders {
+        eprintln!("  {qid}: {fact:?}");
+    }
+    eprintln!(
+        "  Every token is under 3 alphanumeric chars. Spell the value out \
+         (\"80 percent\") or add surrounding words to make it matchable."
+    );
 }
 
 /// Multi-turn thread bank. Parallel to `EvalBank` but carries

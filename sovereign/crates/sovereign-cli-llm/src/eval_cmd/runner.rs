@@ -218,9 +218,23 @@ pub struct RetrievedChunk {
 pub struct ScoreSnapshot {
     pub matched: Vec<String>,
     pub missing: Vec<String>,
+    /// Fact dimension only: expected facts the keyword scorer could not
+    /// evaluate at all (every token under 3 alphanumeric chars, e.g.
+    /// `"80%"`). Excluded from `ratio`'s denominator — see
+    /// [`super::score::FactScore::ratio`]. Always empty for sources.
+    ///
+    /// `#[serde(default)]` so baselines written before 2026-08-02 still
+    /// deserialize; they carry an empty list and their `ratio` reflects
+    /// the old `total_expected` denominator, so a pre-2026-08-02
+    /// baseline is NOT ratio-comparable with a run after it on any bank
+    /// that has unscorable facts (`obsidian`, `sep`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unscorable: Vec<String>,
+    /// The bank's declared count, including unscorable entries.
+    /// Provenance — not the `ratio` denominator.
     pub total_expected: usize,
-    /// `None` when `total_expected == 0`. Lets the report distinguish
-    /// "passed perfectly" (1.0) from "nothing to measure" (None).
+    /// `None` when there was nothing scorable. Lets the report
+    /// distinguish "passed perfectly" (1.0) from "nothing to measure".
     pub ratio: Option<f32>,
 }
 
@@ -230,6 +244,7 @@ impl From<SourceScore> for ScoreSnapshot {
         Self {
             matched: s.matched,
             missing: s.missing,
+            unscorable: Vec::new(),
             total_expected: s.total_expected,
             ratio,
         }
@@ -242,6 +257,7 @@ impl From<FactScore> for ScoreSnapshot {
         Self {
             matched: s.matched,
             missing: s.missing,
+            unscorable: s.unscorable,
             total_expected: s.total_expected,
             ratio,
         }

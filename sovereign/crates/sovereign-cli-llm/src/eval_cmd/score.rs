@@ -69,15 +69,44 @@ pub fn score_sources(expected: &[String], retrieved: &[ScoredChunk]) -> SourceSc
 pub struct FactScore {
     pub matched: Vec<String>,
     pub missing: Vec<String>,
+    /// Expected facts [`keyword_tokens`] reduced to nothing, so no
+    /// retriever could ever match them (e.g. `"80%"`, `"0.2%"`, `"li"`
+    /// — every token under 3 alphanumeric chars). Neither matched nor
+    /// missing: they were never scored at all. Kept verbatim so the
+    /// report and the run JSON can name them instead of silently
+    /// swallowing them.
+    pub unscorable: Vec<String>,
+    /// The bank's declared count — `expected.len()`, including
+    /// unscorable entries. Provenance, NOT the ratio denominator.
     pub total_expected: usize,
 }
 
 impl FactScore {
+    /// Facts this scorer was actually able to evaluate. This is the
+    /// ratio denominator.
+    pub fn scorable(&self) -> usize {
+        self.total_expected.saturating_sub(self.unscorable.len())
+    }
+
+    /// Coverage over the facts that could be scored.
+    ///
+    /// Divides by [`Self::scorable`], not `total_expected`. Dividing by
+    /// `total_expected` counted an unscorable fact as a miss, which
+    /// contradicted [`score_facts`]'s own "no-op rather than a miss"
+    /// rule and put a ceiling under 1.0 that no retriever could reach —
+    /// e.g. the obsidian bank was capped at 68/71 = 0.958 by three
+    /// bare-percentage facts (found 2026-08-02). Across the 31 in-repo
+    /// banks this affects 4 of 992 expected facts, in `obsidian` and
+    /// `sep` only.
+    ///
+    /// `None` when nothing was scorable — "nothing to measure",
+    /// distinct from 0.0 "measured and missed everything".
     pub fn ratio(&self) -> Option<f32> {
-        if self.total_expected == 0 {
+        let scorable = self.scorable();
+        if scorable == 0 {
             None
         } else {
-            Some(self.matched.len() as f32 / self.total_expected as f32)
+            Some(self.matched.len() as f32 / scorable as f32)
         }
     }
 }
@@ -99,26 +128,7 @@ pub fn score_facts(expected: &[String], retrieved: &[ScoredChunk]) -> FactScore 
         .join("\n")
         .to_lowercase();
 
-    let mut matched = Vec::new();
-    let mut missing = Vec::new();
-    for fact in expected {
-        let tokens = keyword_tokens(fact);
-        if tokens.is_empty() {
-            // No content tokens — treat as a no-op rather than a miss
-            // (a zero-token fact is a bank bug, not a retrieval miss).
-            continue;
-        }
-        if tokens.iter().all(|t| haystack.contains(t)) {
-            matched.push(fact.clone());
-        } else {
-            missing.push(fact.clone());
-        }
-    }
-    FactScore {
-        matched,
-        missing,
-        total_expected: expected.len(),
-    }
+    partition_facts(expected, &haystack)
 }
 
 /// Same matching rule as [`score_facts`] but against an arbitrary
@@ -128,15 +138,28 @@ pub fn score_facts(expected: &[String], retrieved: &[ScoredChunk]) -> FactScore 
 /// would have scored against the chunks scores the same way against
 /// the answer; the *only* thing that changes is the haystack.
 pub fn score_facts_in_text(expected: &[String], text: &str) -> FactScore {
-    let haystack = text.to_lowercase();
+    partition_facts(expected, &text.to_lowercase())
+}
+
+/// The single matching rule shared by [`score_facts`] and
+/// [`score_facts_in_text`] — only the haystack differs between them.
+/// Splits `expected` three ways: matched, missing, and unscorable
+/// (zero keyword tokens, so unmatchable by construction).
+fn partition_facts(expected: &[String], lowercased_haystack: &str) -> FactScore {
     let mut matched = Vec::new();
     let mut missing = Vec::new();
+    let mut unscorable = Vec::new();
     for fact in expected {
         let tokens = keyword_tokens(fact);
         if tokens.is_empty() {
+            // No content tokens — a bank bug, not a retrieval miss, so
+            // it is neither matched nor missing. Recorded verbatim so
+            // it is visible rather than silently dropped, and excluded
+            // from the ratio denominator (see `FactScore::ratio`).
+            unscorable.push(fact.clone());
             continue;
         }
-        if tokens.iter().all(|t| haystack.contains(t)) {
+        if tokens.iter().all(|t| lowercased_haystack.contains(t)) {
             matched.push(fact.clone());
         } else {
             missing.push(fact.clone());
@@ -145,6 +168,7 @@ pub fn score_facts_in_text(expected: &[String], text: &str) -> FactScore {
     FactScore {
         matched,
         missing,
+        unscorable,
         total_expected: expected.len(),
     }
 }
@@ -173,6 +197,13 @@ pub fn score_sources_titles<S: AsRef<str>>(expected: &[String], titles: &[S]) ->
         missing,
         total_expected: expected.len(),
     }
+}
+
+/// True when [`keyword_tokens`] reduces `fact` to nothing, so no
+/// haystack could ever match it. Lets the bank loader warn the author
+/// at load time about what the scorer will silently skip.
+pub fn is_unscorable_fact(fact: &str) -> bool {
+    keyword_tokens(fact).is_empty()
 }
 
 fn keyword_tokens(s: &str) -> Vec<String> {
@@ -332,9 +363,15 @@ pub async fn score_facts_judge(
         }
     }
 
+    // Always empty here: the judge reads the fact as prose and can rule
+    // on `"80%"` perfectly well. Unscorability is a property of the
+    // keyword tokeniser, not of the fact — so the judge's denominator
+    // stays the full `total_expected` and its ratio is unaffected by
+    // the 2026-08-02 denominator change.
     let score = FactScore {
         matched,
         missing,
+        unscorable: Vec::new(),
         total_expected: expected.len(),
     };
     (score, details)
@@ -981,6 +1018,82 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
         }
+    }
+
+    // ─── unscorable facts (2026-08-02) ───────────────────────────
+    //
+    // Regression cover for the denominator defect: `score_facts`
+    // documented a zero-token fact as "a no-op rather than a miss" but
+    // `ratio()` divided by `total_expected` anyway, so it counted as a
+    // miss. On the obsidian bank three bare percentages ("80%", "0.2%",
+    // "3.0%") held fact recall at 68/71 = 0.958 with a perfect
+    // retriever — an unreachable ceiling that made the bank look like
+    // it had headroom it did not have.
+
+    #[test]
+    fn zero_token_fact_is_unscorable_not_missing() {
+        let retrieved = vec![chunk("PBM", "the top three control the market")];
+        let s = score_facts(&["80%".into(), "market".into()], &retrieved);
+        assert_eq!(s.matched, vec!["market".to_string()]);
+        assert!(s.missing.is_empty(), "an unmatchable fact is not a miss");
+        assert_eq!(s.unscorable, vec!["80%".to_string()]);
+        assert_eq!(s.total_expected, 2, "declared count keeps every entry");
+        assert_eq!(s.scorable(), 1, "but only one could be evaluated");
+        assert_eq!(s.ratio(), Some(1.0), "perfect over what was scorable");
+    }
+
+    #[test]
+    fn all_facts_unscorable_yields_none_not_zero() {
+        let retrieved = vec![chunk("LVT", "rates rise across five-year bands")];
+        let s = score_facts(&["0.2%".into(), "3.0%".into()], &retrieved);
+        assert_eq!(s.unscorable.len(), 2);
+        assert_eq!(s.scorable(), 0);
+        assert_eq!(
+            s.ratio(),
+            None,
+            "nothing to measure is distinct from measured-and-missed"
+        );
+    }
+
+    #[test]
+    fn scorable_facts_still_report_misses() {
+        let retrieved = vec![chunk("Ostrom", "the irrigators elect their own officers")];
+        let s = score_facts(
+            &["irrigators".into(), "cathedral".into(), "80%".into()],
+            &retrieved,
+        );
+        assert_eq!(s.matched, vec!["irrigators".to_string()]);
+        assert_eq!(s.missing, vec!["cathedral".to_string()]);
+        assert_eq!(s.unscorable, vec!["80%".to_string()]);
+        assert_eq!(s.ratio(), Some(0.5), "1 of 2 scorable, the 80% excluded");
+    }
+
+    #[test]
+    fn text_scorer_partitions_identically_to_chunk_scorer() {
+        // The synth path must not disagree with the retrieval path
+        // about which facts are scorable — same rule, different
+        // haystack is the whole contract of `score_facts_in_text`.
+        let facts = vec!["80%".to_string(), "irrigators".to_string()];
+        let text = "the irrigators meet weekly";
+        let from_text = score_facts_in_text(&facts, text);
+        let from_chunks = score_facts(&facts, &[chunk("t", text)]);
+        assert_eq!(from_text.matched, from_chunks.matched);
+        assert_eq!(from_text.missing, from_chunks.missing);
+        assert_eq!(from_text.unscorable, from_chunks.unscorable);
+        assert_eq!(from_text.ratio(), from_chunks.ratio());
+    }
+
+    #[test]
+    fn is_unscorable_fact_matches_the_scorer() {
+        assert!(is_unscorable_fact("80%"));
+        assert!(is_unscorable_fact("0.2%"));
+        assert!(
+            is_unscorable_fact("li"),
+            "short words too, not just numerics"
+        );
+        assert!(!is_unscorable_fact("1974"));
+        assert!(!is_unscorable_fact("6.6 billion"));
+        assert!(!is_unscorable_fact("water court"));
     }
 
     #[test]

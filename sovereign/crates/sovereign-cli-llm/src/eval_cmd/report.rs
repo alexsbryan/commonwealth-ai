@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 
 use crate::eval_cmd::bank::{EvalBank, LatencyBudget};
 use crate::eval_cmd::routing_metrics::RoutingMetrics;
+use crate::eval_cmd::runner::ScoreSnapshot;
 use crate::eval_cmd::runner::{EvalResult, EvalRun};
 
 pub fn print_text(run: &EvalRun, inspect: bool, bank: Option<&EvalBank>) {
@@ -48,7 +49,10 @@ pub fn print_text(run: &EvalRun, inspect: bool, bank: Option<&EvalBank>) {
 
 fn print_question_row(r: &EvalResult, inspect: bool) {
     let src = score_label(&r.source_score.matched.len(), r.source_score.total_expected);
-    let fact = score_label(&r.fact_score.matched.len(), r.fact_score.total_expected);
+    // Scorable denominator, matching the rollups and the JSON `ratio`.
+    // Printing `total_expected` here made a row read `4/5` under a
+    // category rollup that read `14/14` for the same questions.
+    let fact = score_label(&r.fact_score.matched.len(), scorable(&r.fact_score));
 
     if let Some(s) = r.synth.as_ref() {
         // Synth mode: timing column shows total wall + intent. The
@@ -57,7 +61,7 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
         // already contained."
         let chunks_fact = score_label(
             &s.chunks_fact_score.matched.len(),
-            s.chunks_fact_score.total_expected,
+            scorable(&s.chunks_fact_score),
         );
         let intent = s.intent.as_deref().unwrap_or("?");
         let latency_s = s.total_latency_ms.map(|m| m as f64 / 1000.0).unwrap_or(0.0);
@@ -179,6 +183,14 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
     println!();
 }
 
+/// Facts this run could actually evaluate — the denominator every
+/// fact ratio uses. Mirrors `score::FactScore::scorable`; kept here as
+/// a free function because the report only ever sees the serialised
+/// [`ScoreSnapshot`], not the scorer's own type.
+fn scorable(s: &ScoreSnapshot) -> usize {
+    s.total_expected.saturating_sub(s.unscorable.len())
+}
+
 fn print_category_rollup(run: &EvalRun) {
     println!("─── per category ───");
     // (sources_m, sources_t, strict_m, strict_t, judge_m, judge_t,
@@ -206,7 +218,10 @@ fn print_category_rollup(run: &EvalRun) {
         entry.0 += r.source_score.matched.len();
         entry.1 += r.source_score.total_expected;
         entry.2 += r.fact_score.matched.len();
-        entry.3 += r.fact_score.total_expected;
+        // Scorable, not declared: an unscorable fact is excluded from
+        // the denominator here exactly as it is in `FactScore::ratio`,
+        // so the printed rollup and the JSON `ratio` agree.
+        entry.3 += scorable(&r.fact_score);
         if let Some(s) = r.synth.as_ref() {
             if let Some(j) = s.judge_fact_score.as_ref() {
                 entry.4 += j.matched.len();
@@ -241,9 +256,16 @@ fn print_overall(run: &EvalRun) {
             acc.0 + r.source_score.matched.len(),
             acc.1 + r.source_score.total_expected,
             acc.2 + r.fact_score.matched.len(),
-            acc.3 + r.fact_score.total_expected,
+            acc.3 + scorable(&r.fact_score),
         )
     });
+    // Facts the keyword scorer could not evaluate at all. Reported so a
+    // shrinking denominator is never mistaken for an improving score.
+    let unscorable: Vec<&str> = run
+        .results
+        .iter()
+        .flat_map(|r| r.fact_score.unscorable.iter().map(String::as_str))
+        .collect();
     let (jm, jt, jc) = run.results.iter().fold((0usize, 0usize, 0usize), |acc, r| {
         if let Some(s) = r.synth.as_ref() {
             if let Some(j) = s.judge_fact_score.as_ref() {
@@ -303,6 +325,19 @@ fn print_overall(run: &EvalRun) {
     } else {
         println!("  facts   {fm}/{ft}  ({:.0}%)", percent(fm, ft));
     }
+    if !unscorable.is_empty() {
+        println!(
+            "  [!] {n} expected fact(s) UNSCORABLE by the keyword scorer and excluded \
+             from the denominator above: {list}",
+            n = unscorable.len(),
+            list = unscorable.join(", "),
+        );
+        println!(
+            "      Every token is under 3 alphanumeric chars, so no retriever can \
+             match them. Fix the bank entry (spell the number out, or add \
+             surrounding words) — not the retriever."
+        );
+    }
 
     // Synth-only rollups: chunks-vs-answer fact gap (= "how often did
     // retrieval surface the fact but the model failed to use it"), and
@@ -319,7 +354,7 @@ fn print_overall(run: &EvalRun) {
             .fold((0usize, 0usize), |acc, s| {
                 (
                     acc.0 + s.chunks_fact_score.matched.len(),
-                    acc.1 + s.chunks_fact_score.total_expected,
+                    acc.1 + scorable(&s.chunks_fact_score),
                 )
             });
     let total_wall_ms: u64 = run
@@ -570,6 +605,7 @@ mod tests {
         ScoreSnapshot {
             matched: matched.iter().map(|s| s.to_string()).collect(),
             missing: missing.iter().map(|s| s.to_string()).collect(),
+            unscorable: Vec::new(),
             total_expected: total,
             ratio: if total == 0 {
                 None
