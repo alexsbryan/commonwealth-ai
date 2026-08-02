@@ -45,18 +45,101 @@ container has no `ssh`/`scp`/`rsync`/`tailscale` (only `curl`), and its
 `sovereign` CLI is broken there too (`libvulkan.so.1` missing), so the mesh path
 is unavailable from inside as well.
 
-```bash
-# 1. code
-cd ~/dev/commonwealth-ai && git push          # then on the Mac: git pull
+Code is easy:
 
-# 2. data (2.2 GB). --update so a partial earlier copy resumes cleanly.
-rsync -avh --progress --update \
-  ~/dev/commonwealth-ai/research/verifier-v0/data/ \
-  beefymac-ops:dev/commonwealth-ai/research/verifier-v0/data/
+```bash
+cd ~/dev/commonwealth-ai && git push          # then on the Mac: git pull
 ```
 
 Do **not** sync `runs/` — the Halo run dirs are evidence that belongs to this box,
 and `findings/M0_PROBE_HALO.md` already carries their conclusions.
+
+### BLOCKER: there is no file-transfer path to the Mac today
+
+`rsync` over `beefymac-ops` **fails by design**, tried 2026-08-02:
+
+```
+ops-channel: verb not allowed: [rsync --server -vulogDtpre.iLsfxCIvu . dev/...]
+allowed: ping status mesh-status transport http-status mesh-http logs [N]
+         cache-size exe-info git-head daemon-start daemon-stop daemon-restart
+         daemon-kill9 [dry]
+```
+
+`beefymac-ops` is a **sandboxed verb surface** (`docs/OPS_CHANNEL.md`) — port
+2222, dedicated `svrn_ops_ed25519` key, `IdentitiesOnly yes`. The allowlist has no
+file-transfer verb, and `~/.ssh/config` defines **no other route to the Mac**.
+This is a deliberate posture, not a misconfiguration; do not work around it by
+loosening the channel without the owner's say.
+
+### The payload is far smaller than 2.2 GB — reframe before picking a route
+
+Only **Stream B** cannot be rebuilt. `prepare_orpo_data.py` regenerates
+`orpo-76k`, `orpo-probe` **and** `orpo-ab` from the HF source (manifest pins
+`source_sha256` + `seed: 17`) given Stream B's pairs. So the file that actually
+has to cross is:
+
+```
+data/stream_b/all/orpo_pairs.jsonl      19,019 rows, ~180 MB
+```
+
+**~180 MB, not 2.2 GB** — a 12x reduction that makes every option below viable.
+Rebuild the rest on the Mac and verify against §5's manifest checks, which exist
+precisely to catch a divergent rebuild.
+
+### Candidate routes, in the order worth trying
+
+1. ~~A normal sshd on port 22~~ — **RULED OUT** 2026-08-02:
+   `ssh -p 22 alexsbryan@100.104.36.28 true` → `Connection refused`. The Mac runs
+   no general sshd. Do not retry this.
+
+2. **RECOMMENDED — manual pull over Tailscale. No sudo, no new SSH surface.**
+   The ops channel restricts *automation*, not a human at the keyboard, and
+   Tailscale is already the authenticated encrypted path. Serve on the Halo, pull
+   on the Mac:
+
+   ```bash
+   # Halo host shell, in research/verifier-v0/data/stream_b/all/
+   python3 -m http.server 8099
+
+   # Mac Terminal, in the matching directory
+   curl -O http://<halo-tailscale-ip>:8099/orpo_pairs.jsonl
+   ```
+
+   Stdlib only, zero sudo on both ends. Taildrop (`tailscale file cp`) also
+   works but wants `sudo tailscale set --operator=$USER` once on Fedora to reach
+   the daemon socket — so the HTTP route is the more sudo-free of the two.
+
+3. **HF Hub as the transport.** Push Stream B as a private dataset repo and pull
+   it on the Mac. Consistent with how prebuilt corpora already move in this repo.
+
+4. **A `recv-blob` ops verb — only if this becomes recurring.** Not worth it for
+   one 180 MB move; the trigger is the Mac becoming the training box and starting
+   to ship checkpoints *back*.
+
+   **Keeping it sudo-free is a design property, not a configuration trick:** sudo
+   is only needed if you write outside the ops user's own tree, so don't. The
+   forced command already runs as `alexsbryan` — write to `~/svrn-inbox/` and
+   nothing privileged is involved (no system paths, no ports < 1024, no installs).
+
+   ```sh
+   recv-blob)                       # ssh beefymac-ops recv-blob NAME SHA256 < file
+     name=$(basename -- "$2")
+     case "$name" in ""|.*|*/*) exit 2;; esac
+     case "$name" in *[!A-Za-z0-9._-]*) exit 2;; esac
+     dest="$HOME/svrn-inbox/$name"
+     head -c "$MAX_BYTES" > "$dest.part" || exit 3
+     [ "$(shasum -a 256 "$dest.part" | cut -d' ' -f1)" = "$3" ] || { rm -f "$dest.part"; exit 4; }
+     mv "$dest.part" "$dest"
+     ;;
+   ```
+
+   **The client must never supply a destination path** — only a basename, which
+   the server sanitizes; the server picks the directory. That is the exact failure
+   mode already on record against `sovereign-server`, whose
+   `/v1/documents/upload` took an absolute server-side path and let any tenant
+   ingest another tenant's config. Same bug class; do not reintroduce it in a new
+   surface. The byte cap bounds a hostile sender, and the sha256 check makes the
+   verb idempotent and gives a real integrity signal rather than "bytes arrived."
 
 ---
 
