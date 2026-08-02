@@ -147,7 +147,17 @@ fn display_score(c: &ScoredChunk, used_sources: &HashSet<String>) -> f32 {
 pub(crate) fn content_quality_bias(text: &str) -> f32 {
     // Lowercase once, prefix only — we don't need to scan 2000
     // chars to spot "this chapter" at the opener.
-    let head_len = text.len().min(640);
+    //
+    // 640 is a BYTE budget, so walk back to the nearest char
+    // boundary before slicing: prose that hits the cap mid-character
+    // (an em-dash is 3 bytes, and this corpus is full of them) would
+    // otherwise panic on a `str` index. `is_char_boundary(0)` is
+    // always true, so the loop terminates; it runs at most 3 times
+    // for UTF-8.
+    let mut head_len = text.len().min(640);
+    while !text.is_char_boundary(head_len) {
+        head_len -= 1;
+    }
     let head = text[..head_len].to_ascii_lowercase();
 
     let mut bias: f32 = 1.0;
@@ -307,5 +317,49 @@ mod tests {
         assert!(content_quality_bias(thesis) > 1.0);
         // Plain text with no markers stays at the 1.0 baseline.
         assert!((content_quality_bias(plain) - 1.0).abs() < 1e-4);
+    }
+
+    /// The 640-byte scan window is a BYTE budget applied to arbitrary
+    /// prose. A real obsidian-vault ingest died here: byte 640 landed
+    /// inside an em-dash (3 bytes), and `text[..640]` panicked —
+    /// taking down the whole ingest, despite the call site in
+    /// `manager.rs` declaring excerpt failure non-fatal (it handles
+    /// `Err`, not unwinds). Pins every offset where a multi-byte char
+    /// can straddle the cap.
+    #[test]
+    fn content_quality_bias_does_not_panic_on_multibyte_char_at_the_cap() {
+        // Slide an em-dash across the boundary so one of these runs
+        // puts each of its three bytes at index 640 exactly.
+        for pad in 636..644 {
+            let text = format!("{}—{}", "a".repeat(pad), "b".repeat(400));
+            let bias = content_quality_bias(&text);
+            assert!(
+                bias.is_finite(),
+                "pad {pad} produced a non-finite bias instead of a score"
+            );
+        }
+
+        // Multi-byte characters the vault actually contains, each
+        // repeated so the cap always lands mid-character.
+        for probe in ["—", "“", "é", "→", "🙂"] {
+            let text = probe.repeat(500);
+            let bias = content_quality_bias(&text);
+            assert!(
+                bias.is_finite(),
+                "{probe:?} repeated past the cap produced a non-finite bias"
+            );
+        }
+    }
+
+    /// The walk-back must not change scoring for text that was
+    /// already safe — a claim marker inside the window still boosts.
+    #[test]
+    fn multibyte_walk_back_preserves_marker_detection() {
+        let thesis = format!(
+            "The author argues that the conventional view misreads \
+             the evidence — {}",
+            "and the rest is filler. ".repeat(60)
+        );
+        assert!(content_quality_bias(&thesis) > 1.0);
     }
 }
