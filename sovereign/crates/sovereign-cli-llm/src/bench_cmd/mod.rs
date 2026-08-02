@@ -33,6 +33,7 @@ mod atlas;
 // a second on-disk layout for the same job.
 pub(crate) mod baselines;
 mod book_report;
+mod vault_report;
 mod chaos_monkey;
 mod desktop_bridge;
 mod discover;
@@ -104,6 +105,10 @@ const HELP: Help = Help {
                 "Attach Conrad's The Secret Agent (Gutenberg #974) and time ingest + answer quality across 5 question tiers.",
             ),
             (
+                "vault-report",
+                "Raw folder -> queryable-enriched corpus, timed end to end: time_to_rag_ready + time_to_enriched, per-phase spans, per-note accounting, token ledger.",
+            ),
+            (
                 "obsidian",
                 "Score an obsidian-vault corpus against the in-repo fixture golden (correctness, not throughput).",
             ),
@@ -167,6 +172,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "report" => report::cmd_report(&args[1..]),
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
+        "vault-report" => vault_report::cmd_vault_report(&args[1..]).await,
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,
         "routing-replay" => routing_replay::cmd_routing_replay(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
