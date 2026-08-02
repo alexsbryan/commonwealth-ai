@@ -4,6 +4,7 @@ mod approval;
 mod auth;
 mod busy;
 mod config;
+#[cfg(feature = "dev-routes")]
 mod corpus_upload;
 mod iroh_access;
 mod narration;
@@ -11,7 +12,10 @@ mod projection;
 mod reciprocity;
 mod routes;
 mod routes_documents;
+// MCP dispatches through `routes_tdd::TddState`, so the two travel together.
+#[cfg(feature = "dev-routes")]
 mod routes_mcp;
+#[cfg(feature = "dev-routes")]
 mod routes_tdd;
 mod scheduler;
 mod startup;
@@ -40,6 +44,7 @@ use sovereign_inference::hybrid::HybridProvider;
 use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_inference::selector::BackendEntry;
 use sovereign_store::sqlite::SqliteStateStore;
+#[cfg(feature = "dev-routes")]
 use sovereign_tools::shell::ShellTool;
 
 use crate::approval::ServerApprovalChannel;
@@ -378,6 +383,11 @@ async fn main() {
     // per-conversation cache the CLI / desktop bootstrap wire.
     let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
+    // Shell is a developer capability. Its approval grant is cached
+    // store-wide (executor.rs) and a pending approval blocks a scheduler
+    // permit with no timeout, so on a shared box it is both a privilege
+    // and an availability risk. Omitted by `--no-default-features`.
+    #[cfg(feature = "dev-routes")]
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),
@@ -742,8 +752,14 @@ async fn main() {
     // Build Axum router. The `/v1/*` API goes through the auth
     // middleware; the MCP routes do not — MCP is local-only and
     // enforced via `ConnectInfo<SocketAddr>` inside the handlers.
+    //
+    // NOTE for anyone putting a reverse proxy in front of this server:
+    // "local-only" is decided by the peer address, so a proxy on the same
+    // host satisfies it for EVERY caller. That is why `/mcp` rides the
+    // `dev-routes` feature rather than an operator's proxy config.
     let authed = axum::Router::new()
         .route("/v1/conversations", post(routes::create_conversation))
+        // ─ core client surface ─
         .route("/v1/conversations", get(routes::list_conversations))
         .route("/v1/conversations/{id}", get(routes::get_conversation))
         .route(
@@ -763,9 +779,18 @@ async fn main() {
         )
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
-        .merge(routes_documents::document_router())
+        .merge(routes_documents::document_router());
+
+    // Authoring surfaces — corpus path-ingest and the TDD solver. Both
+    // assume the caller owns the box: the solver hands a client-supplied
+    // `test_command` to `sh -c`, and the upload route ingests an absolute
+    // server-side path. Compiled out by `--no-default-features`.
+    #[cfg(feature = "dev-routes")]
+    let authed = authed
         .merge(corpus_upload::corpus_upload_router())
-        .merge(routes_tdd::tdd_router())
+        .merge(routes_tdd::tdd_router());
+
+    let authed = authed
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(Extension(auth_state));
 
@@ -775,12 +800,15 @@ async fn main() {
     // who run an external provider (Anthropic, OpenAI-compat
     // backend) can override via SOVEREIGN_TDD_PROVIDER_URL until
     // the dedicated config section lands.
-    let tdd_provider_url = std::env::var("SOVEREIGN_TDD_PROVIDER_URL")
-        .unwrap_or_else(|_| format!("http://{}", config.server.bind));
-    let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> = Arc::new(
-        commonwealth_tdd::ReqwestChatBackend::new(format!("{tdd_provider_url}/v1")),
-    );
-    let tdd_state = routes_tdd::TddState(Arc::clone(&tdd_backend));
+    #[cfg(feature = "dev-routes")]
+    let tdd_state = {
+        let tdd_provider_url = std::env::var("SOVEREIGN_TDD_PROVIDER_URL")
+            .unwrap_or_else(|_| format!("http://{}", config.server.bind));
+        let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> = Arc::new(
+            commonwealth_tdd::ReqwestChatBackend::new(format!("{tdd_provider_url}/v1")),
+        );
+        routes_tdd::TddState(Arc::clone(&tdd_backend))
+    };
 
     // Bind the HTTP listener BEFORE assembling the router: the iroh
     // access path (and its `/status` surface) needs the bound port to
@@ -803,8 +831,16 @@ async fn main() {
         Arc::new(iroh_access::IrohAccess::start(&config, http_port).await);
     let iroh_for_status = Arc::clone(&iroh_access);
 
-    let app = authed
+    // MCP rides `dev-routes` for two reasons: it sits outside the auth
+    // layer, and its localhost gate is a peer-address check that any
+    // same-host reverse proxy satisfies on behalf of remote callers. It
+    // also carries `TddState`, so the two are removed together.
+    #[cfg(feature = "dev-routes")]
+    let authed = authed
         .merge(routes_mcp::mcp_router())
+        .layer(Extension(tdd_state));
+
+    let app = authed
         // Unauthenticated liveness probe (added at the `app` level so it sits
         // OUTSIDE the `/v1/*` auth layer). A supervisor — the desktop's
         // Mobile-access toggle, the CLI, or systemd — can poll `GET /health`
@@ -828,7 +864,6 @@ async fn main() {
         )
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
-        .layer(Extension(tdd_state))
         .layer(Extension(scheduler))
         .layer(Extension(reciprocity))
         .layer(Extension(narration_tx));

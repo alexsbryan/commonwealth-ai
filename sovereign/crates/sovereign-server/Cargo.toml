@@ -4,6 +4,32 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["dev-routes"]
+# Developer/authoring surfaces. ON by default, so every existing build —
+# desktop, mobile host, dev workstation — behaves exactly as before.
+#
+# Build with `--no-default-features` for a shared deployment where the
+# operator is NOT the developer. That drops five things whose safety rests
+# on the assumption "one person owns this box":
+#
+#   POST /v1/solve, /v1/cycle/bdd   client-supplied `test_command` reaching
+#                                   `sh -c` (commonwealth-tdd), inside the
+#                                   authed router — any tenant key is a shell
+#   POST /v1/documents/upload       ingests an ABSOLUTE server-side path, so
+#   POST /v1/corpora/upload         any tenant can read any file the process
+#                                   can, including this config and its keys
+#   /mcp, /mcp/message, /mcp/stats  outside the auth layer, guarded only by
+#                                   `ip.is_loopback()` — which a loopback
+#                                   reverse proxy satisfies for every caller
+#   ShellTool                       registered on the agent runtime; its
+#                                   approval grant is cached store-wide and a
+#                                   pending approval can wedge a scheduler
+#                                   permit (approval.rs)
+#
+# See sovereign/deploy/onprem/README.md.
+dev-routes = []
+
 [dependencies]
 sovereign-contracts = { workspace = true }
 sovereign-core = { workspace = true }

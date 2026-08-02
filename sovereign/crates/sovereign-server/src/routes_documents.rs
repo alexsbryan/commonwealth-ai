@@ -21,6 +21,7 @@ use crate::auth::TenantId;
 
 // ─── Request/Response types ──────────────────────────────────
 
+#[cfg(feature = "dev-routes")]
 #[derive(serde::Deserialize)]
 pub struct UploadRequest {
     /// Absolute path to the file on the server's filesystem.
@@ -69,12 +70,16 @@ fn api_error(status: StatusCode, msg: &str) -> (StatusCode, Json<ErrorResponse>)
 // ─── Router ──────────────────────────────────────────────────
 
 pub fn document_router() -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/v1/documents", get(list_assets))
-        .route("/v1/documents/upload", post(upload_asset))
         .route("/v1/documents/{id}", get(get_asset).delete(delete_asset))
         .route("/v1/documents/{id}/ask", post(ask_asset))
-        .route("/v1/documents/{id}/state", get(get_asset_state))
+        .route("/v1/documents/{id}/state", get(get_asset_state));
+
+    #[cfg(feature = "dev-routes")]
+    let router = router.route("/v1/documents/upload", post(upload_asset));
+
+    router
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -122,6 +127,12 @@ async fn list_assets(
 }
 
 /// POST /v1/documents/upload
+///
+/// Takes an absolute path on the SERVER's filesystem, so every caller can
+/// read anything the server process can — this config file included. Sound
+/// when the caller is the machine's owner (the desktop case it was written
+/// for); unsound on a shared deployment, hence `dev-routes`.
+#[cfg(feature = "dev-routes")]
 async fn upload_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
     Extension(tenant): Extension<TenantId>,
