@@ -857,8 +857,22 @@ impl SqliteStateStore {
     /// Tear down all tiered-enrichment rows for one corpus. Used by
     /// `LocalCorpusManager::disable_enrichment` to clean up
     /// `conv_raptor_nodes` / `conv_motifs` / `conv_skeletons` /
-    /// `chunk_entities` / `chunk_entity_progress` so re-enabling on
-    /// the same corpus starts from a clean slate.
+    /// `chunk_entities` / `chunk_entity_progress` /
+    /// `chunk_ner_processed` so re-enabling on the same corpus starts
+    /// from a clean slate.
+    ///
+    /// `chunk_ner_processed` was missing here until 2026-08-02, and its
+    /// absence was silent in the worst way. It is the marker table for
+    /// chunks NER ran on and found nothing in, and
+    /// `list_ner_processed_chunk_ids` unions it with `chunk_entities`
+    /// to decide what the delta pass may skip. Clearing every other
+    /// table but leaving this one meant a corpus that had ever been
+    /// NER'd could never be NER'd again: `extract_delta_for_corpus`
+    /// saw every chunk as already processed and returned 0 immediately.
+    /// Nothing failed, so nothing surfaced — the rebuild just quietly
+    /// produced a corpus with no entities. Caught by `bench
+    /// vault-report`, where a cold rebuild reported a 0.0s NER phase
+    /// against a 39.5s one on the same fixture.
     ///
     /// One transaction so partial teardown isn't possible — either
     /// the corpus has tiered data or it doesn't.
@@ -887,6 +901,14 @@ impl SqliteStateStore {
         .map_err(map_db)?;
         tx.execute(
             "DELETE FROM chunk_entity_progress WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        // The processed-but-empty markers. Without this the NER delta
+        // pass treats the corpus as fully covered forever — see the
+        // doc comment.
+        tx.execute(
+            "DELETE FROM chunk_ner_processed WHERE corpus_id = ?1",
             rusqlite::params![corpus_id],
         )
         .map_err(map_db)?;

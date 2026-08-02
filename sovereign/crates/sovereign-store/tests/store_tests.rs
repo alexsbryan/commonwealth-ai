@@ -1017,6 +1017,53 @@ async fn ner_processed_marker_makes_empty_chunks_converge() {
     assert_eq!(again.len(), 3);
 }
 
+// The other half of that marker's contract: it must also be possible to
+// UNDO. `delete_tiered_for_corpus` cleared every tiered table except
+// `chunk_ner_processed`, which made the omission invisible and permanent
+// — `list_ner_processed_chunk_ids` still reported every chunk as done,
+// so `extract_delta_for_corpus` returned 0 instantly and a rebuilt
+// corpus came back with no entities at all. No error, no warning; the
+// NER phase just stopped existing. Found 2026-08-02 when `bench
+// vault-report` timed a cold rebuild's NER phase at 0.0s against 39.5s
+// for the same fixture one run earlier.
+#[tokio::test]
+async fn delete_tiered_clears_the_ner_processed_markers_too() {
+    let store = sqlite_store();
+    store
+        .save_chunk_entities(&[mk_entity_row("corpus-a", 10, "Borges")])
+        .await
+        .unwrap();
+    store
+        .record_ner_processed_chunks("corpus-a", &[10, 11, 12])
+        .await
+        .unwrap();
+    store
+        .record_ner_processed_chunks("corpus-b", &[500])
+        .await
+        .unwrap();
+
+    store.delete_tiered_for_corpus("corpus-a").await.unwrap();
+
+    // Nothing left to skip: a re-enriched corpus must actually re-run NER.
+    let processed = store
+        .list_ner_processed_chunk_ids("corpus-a")
+        .await
+        .unwrap();
+    assert!(
+        processed.is_empty(),
+        "a torn-down corpus still claims {} NER-processed chunk(s); the delta pass \
+         would skip all of them and the rebuild would produce zero entities",
+        processed.len()
+    );
+
+    // Teardown stays scoped — a sibling corpus keeps its markers.
+    let b = store
+        .list_ner_processed_chunk_ids("corpus-b")
+        .await
+        .unwrap();
+    assert!(b.contains(&500), "teardown must not cross corpus boundaries");
+}
+
 // The conversation runner's skip-already-built marker. `record_conv_content_hash`
 // stamps the fingerprint of a conv's last successful enrichment;
 // `get_conv_content_hash` reads it back so a re-import can skip an
