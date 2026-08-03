@@ -210,6 +210,98 @@ pub(super) fn spawn_gate_verdict(
     }
 }
 
+/// Memory reserved for everything that is not this child: the desktop
+/// compositor's GPU allocations, the daemon's own slots, and the OS.
+/// `max(8 GiB, total/8)`, overridable via `SOVEREIGN_LOCAL_FIT_RESERVE_GB`.
+///
+/// Deliberately the SAME shape and the SAME env knob as
+/// `sovereign_inference::embedded::rpc_distribution::local_fit_reserve_bytes`,
+/// which guards the LocalOnly path. One reserve policy, two doors — a host does
+/// not get more or less headroom depending on which placement it landed on.
+pub(super) fn spawn_reserve_bytes(total_bytes: u64) -> u64 {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    std::env::var("SOVEREIGN_LOCAL_FIT_RESERVE_GB")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|&gb| gb >= 0.0)
+        .map(|gb| (gb * GIB as f64) as u64)
+        .unwrap_or_else(|| (total_bytes / 8).max(8 * GIB))
+}
+
+/// What the child will ask THIS host for, given the cut it will actually load.
+///
+/// `local_blocks / total_blocks` of the weights, plus the same KV proxy and
+/// scratch term `local_fit_verdict` uses (`share/8 + 1 GiB`) so the two gates
+/// cannot drift. `None` when the cut is unknown (`total_blocks == 0`, i.e. no
+/// block plan yet) — the caller must then FAIL OPEN, because a guess here is a
+/// guess about whether to run at all.
+///
+/// Conservative on purpose. The `share/8` KV proxy runs high for architectures
+/// whose cache is smaller than dense-f16 implies — measured 2026-08-02 at ~3x
+/// over on one MLA model. Erring toward Hold is the safe direction for a guard
+/// whose failure mode is an unusable machine; `SOVEREIGN_LOCAL_FIT_RESERVE_GB`
+/// and `SOVEREIGN_COMPUTE_SPAWN_GATE=0` are the escape hatches when the estimate
+/// is wrong for a given host.
+pub(super) fn host_share_need_bytes(
+    model_bytes: u64,
+    local_blocks: u32,
+    total_blocks: u32,
+) -> Option<u64> {
+    if total_blocks == 0 || model_bytes == 0 {
+        return None;
+    }
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let share = (model_bytes as u128 * local_blocks as u128 / total_blocks as u128) as u64;
+    Some(share + share / 8 + GIB)
+}
+
+/// Would spawning this child leave the machine with nothing?
+///
+/// Holds when the host's share plus the reserve exceeds available memory. A
+/// `Hold` parks the supervisor's run loop and is re-polled every 2 s WITHOUT
+/// burning crash-loop budget (see [`SpawnVerdict`]), so freeing memory — or a
+/// re-plan that shifts blocks onto a worker — releases it with no operator
+/// action.
+///
+/// WHY THIS EXISTS. A crashed child is restarted with identical argv, so a
+/// footprint that did not fit the first time does not fit the second either —
+/// and the retry runs unattended, seconds after the crash, while the operator is
+/// still using the machine. On a unified-memory host the GPU allocator's own
+/// ceiling can exceed system RAM, so nothing below this gate stops a load from
+/// consuming the last free page; graphics drivers commonly abort a non-robust
+/// client on an out-of-memory submit rather than stall it, which turns "the
+/// model did not fit" into "the user lost their session". Observed twice,
+/// 2026-07-27 and 2026-08-02 (notes 309c841b, 92d55ceb).
+///
+/// The equivalent guard on the LocalOnly path predates this one and never
+/// covered the distributed door — see [`ChildAction::Retire`].
+pub(super) fn memory_headroom_verdict(
+    need_bytes: Option<u64>,
+    available_bytes: u64,
+    reserve_bytes: u64,
+) -> SpawnVerdict {
+    // No cut yet, or a memory sensor that returned zero: never brick a spawn on
+    // a missing measurement. Same fail-open rule as the local-fit gate.
+    let (Some(need), true) = (need_bytes, available_bytes > 0) else {
+        return SpawnVerdict::Allow;
+    };
+    if need.saturating_add(reserve_bytes) <= available_bytes {
+        return SpawnVerdict::Allow;
+    }
+    const MB: u64 = 1024 * 1024;
+    SpawnVerdict::Hold {
+        reason: format!(
+            "host share {} MB + {} MB reserved for the OS and desktop exceeds {} MB available \
+             — spawning would starve the host (2026-08-02 session-kill class). Free memory, or \
+             shift blocks onto a worker. Override: SOVEREIGN_LOCAL_FIT_RESERVE_GB, or \
+             SOVEREIGN_COMPUTE_SPAWN_GATE=0 to disable the gate entirely",
+            need / MB,
+            reserve_bytes / MB,
+            available_bytes / MB,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +545,136 @@ mod tests {
         t.empty_for = Some(Duration::from_secs(120));
         t.child_age = None;
         assert!(matches!(decide_child_action(&t), ChildAction::Retire { .. }));
+    }
+
+    // ─── memory headroom ───────────────────────────────────────
+    //
+    // The rule under test is a relation between three quantities, not a
+    // property of any particular machine. Numbers here are chosen to make the
+    // arithmetic legible; where host SIZE is the thing being tested, the case
+    // sweeps a range rather than naming one box.
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// A share that does not fit alongside the reserve is refused.
+    #[test]
+    fn a_share_that_does_not_fit_beside_the_reserve_is_held() {
+        assert!(matches!(
+            memory_headroom_verdict(Some(60), 70, 20),
+            SpawnVerdict::Hold { .. }
+        ));
+    }
+
+    /// ...and one that does fit is not.
+    #[test]
+    fn a_share_that_fits_beside_the_reserve_is_allowed() {
+        assert_eq!(memory_headroom_verdict(Some(40), 70, 20), SpawnVerdict::Allow);
+    }
+
+    /// Exactly consuming the non-reserved remainder is a fit; one byte more is
+    /// not. Stated because an off-by-one here either wedges a load that fits or
+    /// admits one that does not.
+    #[test]
+    fn the_boundary_is_inclusive() {
+        assert_eq!(memory_headroom_verdict(Some(80), 100, 20), SpawnVerdict::Allow);
+        assert!(matches!(
+            memory_headroom_verdict(Some(81), 100, 20),
+            SpawnVerdict::Hold { .. }
+        ));
+    }
+
+    /// The verdict must not depend on how big the host is. The same RATIO of
+    /// need to capacity resolves the same way from a small board to a large
+    /// server — the rule is scale-free, and a host is whatever shape it is.
+    #[test]
+    fn the_verdict_is_scale_free_across_host_sizes() {
+        for total in [4u64, 16, 64, 128, 512, 2048].map(|g| g * GIB) {
+            let available = total / 2;
+            let reserve = spawn_reserve_bytes(total);
+            // A need that leaves room for the reserve fits at every scale.
+            let fits = available.saturating_sub(reserve);
+            assert_eq!(
+                memory_headroom_verdict(Some(fits), available, reserve),
+                SpawnVerdict::Allow,
+                "total={total} should admit a need of {fits}"
+            );
+            // One byte past it does not, at every scale.
+            assert!(
+                matches!(
+                    memory_headroom_verdict(Some(fits + 1), available, reserve),
+                    SpawnVerdict::Hold { .. }
+                ),
+                "total={total} should refuse a need of {}",
+                fits + 1
+            );
+        }
+    }
+
+    /// The reserve scales with the host and never falls below the floor, so a
+    /// small host keeps a usable absolute margin and a large one keeps a
+    /// proportional share. Skipped when an operator override is in the
+    /// environment — that is the knob working, not a failure.
+    #[test]
+    fn the_reserve_is_proportional_with_an_absolute_floor() {
+        if std::env::var_os("SOVEREIGN_LOCAL_FIT_RESERVE_GB").is_some() {
+            return;
+        }
+        // Proportional above the floor.
+        assert_eq!(spawn_reserve_bytes(128 * GIB), 16 * GIB);
+        assert_eq!(spawn_reserve_bytes(512 * GIB), 64 * GIB);
+        // Floor holds for hosts too small for total/8 to mean anything.
+        assert_eq!(spawn_reserve_bytes(16 * GIB), 8 * GIB);
+        assert_eq!(spawn_reserve_bytes(0), 8 * GIB);
+        // Monotonic: a bigger host never reserves less.
+        let mut prev = 0;
+        for total in [1u64, 8, 32, 64, 256, 1024].map(|g| g * GIB) {
+            let r = spawn_reserve_bytes(total);
+            assert!(r >= prev, "reserve went down from {prev} to {r} at {total}");
+            prev = r;
+        }
+    }
+
+    /// FAIL OPEN on a missing measurement. An unknown cut or a memory sensor
+    /// that returned nothing must never be the reason a model cannot run —
+    /// refusing on absent evidence would brick loads that are perfectly fine.
+    #[test]
+    fn a_missing_measurement_fails_open() {
+        assert_eq!(host_share_need_bytes(1_000, 31, 0), None);
+        assert_eq!(host_share_need_bytes(0, 31, 43), None);
+        assert_eq!(memory_headroom_verdict(None, 100, 20), SpawnVerdict::Allow);
+        assert_eq!(memory_headroom_verdict(Some(u64::MAX), 0, 20), SpawnVerdict::Allow);
+    }
+
+    /// A refusal has to be actionable on its own: what was needed, what was
+    /// held back, what was there, and how to override it.
+    #[test]
+    fn the_hold_reason_states_the_shortfall_and_the_override() {
+        let SpawnVerdict::Hold { reason } = memory_headroom_verdict(Some(60 * GIB), 70 * GIB, 20 * GIB)
+        else {
+            panic!("expected Hold");
+        };
+        assert!(reason.contains("host share"), "{reason}");
+        assert!(reason.contains("available"), "{reason}");
+        assert!(reason.contains("SOVEREIGN_LOCAL_FIT_RESERVE_GB"), "{reason}");
+    }
+
+    /// The need term is the local fraction of the weights plus the shared
+    /// overhead shape. Proportional to the cut, so shifting blocks onto a
+    /// worker is a lever the gate can actually see.
+    #[test]
+    fn the_need_estimate_is_proportional_to_the_local_cut() {
+        // Everything local: whole model + overhead.
+        assert_eq!(host_share_need_bytes(80, 43, 43), Some(80 + 10 + GIB));
+        // Half the blocks: half the weights, half the KV proxy.
+        assert_eq!(host_share_need_bytes(80, 20, 40), Some(40 + 5 + GIB));
+        // Everything lent out: only the scratch term remains.
+        assert_eq!(host_share_need_bytes(80, 0, 43), Some(GIB));
+        // Monotonic in the local cut.
+        let mut prev = 0;
+        for local in 0..=43 {
+            let n = host_share_need_bytes(1_000_000, local, 43).unwrap();
+            assert!(n >= prev, "need went down at local={local}");
+            prev = n;
+        }
     }
 }

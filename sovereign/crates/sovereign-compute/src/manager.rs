@@ -706,10 +706,35 @@ pub struct DynamicChildSlot {
     live_handoff: Mutex<Option<DistributionHandoff>>,
 }
 
-/// A [`SpawnGate`] that has not yet been bound to a worker set: the daemon
-/// supplies the policy, the slot supplies the endpoints of whichever handoff is
+/// What the slot knows about the spawn the supervisor is about to make, handed
+/// to the gate so the policy can judge it.
+///
+/// Everything here comes from the handoff THIS generation was warmed against —
+/// i.e. what the child will actually dial and actually load when it re-reads
+/// that file at startup, not what the discovery loop last planned.
+#[derive(Debug, Clone, Copy)]
+pub struct SpawnContext<'a> {
+    /// Endpoints the live handoff names. The child will dial exactly these.
+    pub pinned: &'a [String],
+    /// Transformer blocks that will stay on THIS host. With `total_blocks`,
+    /// this is the fraction of the weights the spawn will ask the local device
+    /// for — the term a memory precondition needs.
+    pub local_blocks: u32,
+    /// Total blocks the plan apportions. `0` when there is no block plan.
+    pub total_blocks: u32,
+}
+
+/// A [`SpawnGate`] that has not yet been bound to a generation: the daemon
+/// supplies the policy, the slot supplies the facts of whichever handoff is
 /// live when a spawn is attempted.
-pub type PinnedSpawnGate = Arc<dyn Fn(&[String]) -> SpawnVerdict + Send + Sync>;
+///
+/// The context carries the CUT as well as the endpoints because "may we spawn"
+/// has two independent answers. The worker question (are the pinned peers still
+/// there?) was the original one. The memory question — would this spawn starve
+/// the host? — was added after 2026-08-02, when a respawn 7 s after a crash took
+/// the machine to 1.8 GB free and Mesa aborted the desktop compositor on an
+/// ENOMEM submit. Only the slot knows the cut; only the daemon knows the policy.
+pub type PinnedSpawnGate = Arc<dyn Fn(&SpawnContext<'_>) -> SpawnVerdict + Send + Sync>;
 
 impl DynamicChildSlot {
     /// Create the slot WITHOUT spawning anything. The provider is live
@@ -859,7 +884,15 @@ impl DynamicChildSlot {
             .clone()
             .map(|g| {
                 let pinned = handoff.endpoints.clone();
-                Arc::new(move || g(&pinned)) as SpawnGate
+                let (local_blocks, total_blocks) =
+                    (placement.local_blocks, placement.total_blocks);
+                Arc::new(move || {
+                    g(&SpawnContext {
+                        pinned: &pinned,
+                        local_blocks,
+                        total_blocks,
+                    })
+                }) as SpawnGate
             });
         self.swap_generation(spec);
         Ok(())

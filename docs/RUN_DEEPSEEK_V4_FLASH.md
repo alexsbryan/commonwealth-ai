@@ -753,3 +753,39 @@ good *fast local provider* — just decoupled from the distribution goal.
   Daily driver restored meanwhile. Wire-probe posture preserved at
   `~/.sovereign/config.toml.wireprobe-sweep`; DeepSeek posture staged at
   `~/.sovereign/config.toml.stage2-deepseek`.
+- **2026-08-02** — **Host memory blocker solved and measured; blocker moved to
+  the worker.** Three loads, all reached `serving`, none decoded a token.
+  *Host:* `SOVEREIGN_FAST_SHORT_DISABLE=1` cut peak GTT **127.0 → 112.54 GB**
+  (reproduced 112.54 / 112.53 / 112.97), turning an oomd SIGKILL + restart loop
+  into a clean load. Host weights are 100.57 GiB, so non-weight memory fell
+  **19.0 → 4.6 GB (−76%)**. The driver is `n_seq_max=8`, not context length:
+  FastShort is 8×16384 = 131,072 token-slots against the primary's 1×32768, a
+  companion slot that only engages under contention and is pure waste on
+  single-stream work. Confirmed at runtime from the child's own logs both ways
+  (`FastShort slot ready … n_seq_max=8`, then `skipped
+  (SOVEREIGN_FAST_SHORT_DISABLE=1) slot="fast_short"`). **This retires
+  `context_size = 8192` as a lever** — the full 32768 context costs only ~4.6 GB,
+  so 8k would recover ~3 GB while giving up the trained window.
+  *Worker:* BeefyMac loads its 13-block shard (RSS → 51.2 GB) then **drops it
+  while the process stays alive** — 51,237 → 9,447 MB, finishing 4 s *before*
+  any probe was sent. Host GTT stayed flat at 112.54 through the whole request
+  with no oomd entries, so it is not an OOM on either side. Root mechanism
+  (code trace): ggml's `rpc_server` is constructed **per TCP connection**
+  (`ggml-rpc.cpp:1430`) and its destructor frees every buffer (`:1422-1426`);
+  the accept loop is serial (`:1750-1761`); client-side the socket is held
+  **only** by allocated buffer contexts (`:224-228`). So 51 GB of model state is
+  owned by one socket, and run 3 caught the worker printing `Starting RPC server
+  v4.0.2` mid-run — its accept loop restarted, which is itself a full buffer
+  wipe (supervisor at `rpc_distribution.rs:1845-1879`). First inference then hits
+  `ggml-rpc.cpp:498` `GGML_ABORT`. **Fix is first-party code, not a knob.**
+  *Also measured:* the per-device fit gate refused one load by **7 MiB out of
+  47.9 GiB** (`need 47936 / capacity 47929`) — and the 78 MiB that flipped it was
+  our own monitoring inflating the worker's RSS. **Never poll the ops-channel
+  `http-status` verb**: it enumerates 38 corpora / 2.25M chunks per call, and at
+  3 s it starved the Mac's gossip heartbeat past the 60 s threshold, flapping the
+  worker `Eligible → Absent` and stalling a load 17 minutes. *Biggest untouched
+  lever:* the worker holds **9.3–9.4 GiB of its own state** (Qwen3.5-2B as both
+  fast and primary, embed, 38 open LanceDB corpora) while lending memory to a
+  284B shard — 16% of its 60 GiB budget, with no mechanism for an RPC worker to
+  shed it. Raw data: `~/.sovereign/gtt-run1-fastshort-off.log`,
+  `~/.sovereign/mac-rss.log`.
