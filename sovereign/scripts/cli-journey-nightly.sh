@@ -76,14 +76,43 @@ REPORT="$REPORT_DIR/$STAMP.log"
 
 # ── one at a time ────────────────────────────────────────────────────────
 # A timer that fires while the previous run is still going would put two
-# daemons and two cargo builds on the same machine. flock, non-blocking:
-# skipping is the right answer, since the run already in flight covers it.
-LOCK="$REPORT_DIR/.lock"
-exec 9>"$LOCK"
-if ! flock -n 9; then
-  echo "nightly: another run holds $LOCK — skipping this fire" | tee -a "$REPORT"
-  exit 0
+# daemons and two cargo builds on the same machine. Non-blocking: skipping
+# is the right answer, since the run already in flight covers it.
+#
+# `mkdir` and not `flock`, because flock is util-linux and does not exist
+# on macOS — and its absence failed in the worst possible direction. A
+# missing binary makes `if ! flock -n 9` TRUE, so every run on that host
+# printed "another run holds the lock" and exited 0 having tested nothing:
+# a green tick, a plausible reason, and no coverage. That is the precise
+# defect this lane was built to catch, reproduced inside the lane itself
+# (proven 2026-08-03 on the M2 Max, where the lane had never once run).
+# mkdir is POSIX and atomic, so the lock primitive cannot go missing.
+#
+# Three outcomes, never two — a skip has to earn itself:
+#   held by a LIVE pid   → a real concurrent run covers this fire  (exit 0)
+#   held by a DEAD pid   → a crashed run left it behind; say so, take it
+#   cannot create it     → a filesystem problem, not a scheduling one; we
+#                          refuse to run unlocked rather than skip quietly
+LOCK="$REPORT_DIR/.lock.d"
+release_lock() { rm -rf "$LOCK"; }
+
+if ! mkdir "$LOCK" 2>/dev/null; then
+  holder="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+    echo "nightly: pid $holder still running — skipping this fire" | tee -a "$REPORT"
+    exit 0
+  fi
+  echo "nightly: STALE LOCK (pid '${holder:-unknown}' is not running) — a previous" \
+       "fire died without releasing it. Taking the lock." | tee -a "$REPORT"
+  rm -rf "$LOCK"
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    echo "VERDICT: CANNOT CREATE $LOCK — refusing to run unlocked. Nothing is proven." \
+      | tee -a "$REPORT"
+    exit 2
+  fi
 fi
+echo $$ > "$LOCK/pid"
+trap release_lock EXIT
 
 # Everything from here is teed into the report, so the file is the whole
 # story rather than a verdict you have to trust.
@@ -94,7 +123,7 @@ DIRTY="clean"
 [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ] && DIRTY="DIRTY (uncommitted changes present)"
 
 echo "═══ cli-journey nightly ═══"
-echo "  when      $(date -Is)"
+echo "  when      $(date +%Y-%m-%dT%H:%M:%S%z)"  # not `date -Is`: BSD date rejects -I
 echo "  host      $(uname -n)  (toolbox: $([ -f /run/.toolboxenv ] && echo yes || echo no))"
 echo "  commit    $HEAD_SHA"
 echo "  worktree  $DIRTY"
@@ -155,7 +184,12 @@ echo "─── read-only capability lane (operator HOME + real index) ───
 CLI_BIN="${SOVEREIGN_BIN:-$REPO_ROOT/target/debug/sovereign-cli}"
 CAP_DAEMON="${SOVEREIGN_DAEMON_URL:-http://127.0.0.1:9741}"
 CAP_VERDICT="pass"
-mapfile -t CAP_IDS < <(
+# Read loop rather than `mapfile`: mapfile is bash 4+, and macOS ships
+# 3.2.57 as /bin/bash. Same portability rule as the lock above.
+CAP_IDS=()
+while IFS= read -r cap_id; do
+  [ -n "$cap_id" ] && CAP_IDS+=("$cap_id")
+done < <(
   "$CLI_BIN" __journey-plan 2>/dev/null |
     awk -F'\t' '$1=="J" && $6=="live" && $9!="-" && $9!="" {print $2}'
 )

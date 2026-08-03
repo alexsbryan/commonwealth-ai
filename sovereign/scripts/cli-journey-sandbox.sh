@@ -470,7 +470,11 @@ run_one() { # $1 = journey id; remaining = passthrough flags
 # manifest — that number has to be computed here or not at all.
 PLAN="$SANDBOX_HOME/journey-plan.tsv"
 env HOME="$SANDBOX_HOME" SOVEREIGN_NO_STALE_WARN=1 "$CLI_BIN" __journey-plan 2>/dev/null > "$PLAN"
-mapfile -t JOURNEY_IDS < <(awk -F'\t' '$1=="J"{print $2}' "$PLAN")
+# Read loop rather than `mapfile`: mapfile is bash 4+, macOS ships 3.2.
+JOURNEY_IDS=()
+while IFS= read -r journey_id; do
+  [ -n "$journey_id" ] && JOURNEY_IDS+=("$journey_id")
+done < <(awk -F'\t' '$1=="J"{print $2}' "$PLAN")
 MANIFEST_STEPS="$(awk -F'\t' '$1=="S"{n++} END{print n+0}' "$PLAN")"
 if [ "${#JOURNEY_IDS[@]}" = "0" ]; then
   echo "sandbox: __journey-plan emitted no journeys (is sovereign-cli built with --features dev-tools?)" >&2

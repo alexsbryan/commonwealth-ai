@@ -86,6 +86,62 @@ OUT_JSONL="${SOVEREIGN_JOURNEY_OUT:-}"
 declare -a EXCLUDED=()
 declare -a LACKS=()
 
+# ── portable step timeout ────────────────────────────────────────────────
+# GNU coreutils' timeout(1) does not exist on macOS, and its absence was
+# FATAL rather than degraded: every step ran `timeout ...` and got exit 127
+# ("command not found"), so every assertion failed, the runner's own
+# negative controls failed, and the nightly lane refused to run the sandbox
+# lane at all. Proven 2026-08-03 on the M2 Max.
+#
+# Prefer the real binary wherever it exists (Linux, or coreutils on a Mac),
+# and otherwise reproduce its contract in bash: run the command, kill it
+# after `secs`, and report 124 on expiry so callers keep seeing GNU
+# timeout's expiry code instead of a bare signal status.
+TIMEOUT_BIN=""
+for _t in timeout gtimeout; do
+  if command -v "$_t" >/dev/null 2>&1; then TIMEOUT_BIN="$_t"; break; fi
+done
+
+with_timeout() {
+  local secs="$1"; shift
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" "$secs" "$@"
+    return $?
+  fi
+  # A sentinel file, not the exit status, decides whether we timed out: a
+  # command that takes SIGTERM from elsewhere and one the watchdog killed
+  # both exit 143, and only the second is a timeout.
+  #
+  # `set -m` so each background job leads its own PROCESS GROUP, and the
+  # kills below target the group (`-$pid`). Signalling only the direct child
+  # is not enough: callers run through `sh -c`, whose own children survive
+  # and keep the command-substitution pipe open, so `$(with_timeout 2 ...)`
+  # returned 124 but not until the grandchild finished 30s later — a
+  # timeout that reports correctly and still hangs is not a timeout.
+  # The watchdog's output goes to /dev/null for the same reason: anything
+  # holding that pipe delays the capture regardless of who killed what.
+  local fired cmd_pid watchdog rc=0 had_m
+  case "$-" in *m*) had_m=1 ;; *) had_m=0 ;; esac
+  set -m
+  fired="$(mktemp -t journey-timeout)"
+  rm -f "$fired"
+  "$@" &
+  cmd_pid=$!
+  ( sleep "$secs"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      : > "$fired"
+      kill -TERM -"$cmd_pid" 2>/dev/null || kill -TERM "$cmd_pid" 2>/dev/null
+    fi ) >/dev/null 2>&1 &
+  watchdog=$!
+  wait "$cmd_pid" 2>/dev/null || rc=$?
+  kill -TERM -"$watchdog" 2>/dev/null || kill -TERM "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null || true
+  [ "$had_m" = "0" ] && set +m
+  [ -f "$fired" ] && rc=124
+  rm -f "$fired"
+  return $rc
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --tier) MAX_TIER="$2"; shift 2 ;;
@@ -186,37 +242,58 @@ EXCLUDE_REASON="${SOVEREIGN_JOURNEY_EXCLUDE_REASON:-caller passed --exclude}"
 # reported an honest nothing — technically correct, and one fewer executed step
 # on the only lane that CAN run it.
 newest_session_prefix() {
+  # `ls -t` over a glob, not `find -printf`: -printf is a GNU extension that
+  # BSD/macOS find rejects outright. With stderr swallowed that failure was
+  # indistinguishable from "no transcripts", so this quietly returned empty
+  # and the step needing {session_id} skipped itself. The glob is the
+  # -maxdepth 2 equivalent.
   local newest
-  newest="$(find "$HOME/.claude/projects" -maxdepth 2 -name '*.jsonl' -printf '%T@ %f\n' \
-            2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)"
+  newest="$(ls -t "$HOME"/.claude/projects/*/*.jsonl 2>/dev/null | head -1)"
   [ -z "$newest" ] && return 0
+  newest="${newest##*/}"
   printf '%s' "${newest%.jsonl}" | cut -c1-8
 }
 
-declare -A FIX=(
-  [corpus]="${SOVEREIGN_JOURNEY_CORPUS:-}"
-  [question]="${SOVEREIGN_JOURNEY_QUESTION:-what is this corpus about?}"
-  [tool]="${SOVEREIGN_JOURNEY_TOOL:-symbols}"
+# Fixture values, keyed by the `{token}` that appears in a step's argv.
+#
+# A `case` and not `declare -A`: associative arrays are bash 4+, and macOS
+# ships bash 3.2.57 as /bin/bash with no newer one on PATH. `declare -A`
+# there fails with "invalid option", so the array was never created and
+# every lookup below died under `set -u` with "corpus: unbound variable" —
+# which reads as a broken install rather than "this harness needs a newer
+# bash", and took the whole nightly lane down with it. One accessor, one
+# place to add a token (ARCH §10.6). Unknown token → return 1.
+#
+# Computed once here rather than inside the accessor: newest_session_prefix
+# walks the transcript directory, and the array form paid that cost exactly
+# once no matter how many steps interpolate {session_id}.
+SESSION_ID_DEFAULT="$(newest_session_prefix)"
+
+fix_value() {
+  case "$1" in
+  corpus)   printf '%s' "${SOVEREIGN_JOURNEY_CORPUS:-}" ;;
+  question) printf '%s' "${SOVEREIGN_JOURNEY_QUESTION:-what is this corpus about?}" ;;
+  tool)     printf '%s' "${SOVEREIGN_JOURNEY_TOOL:-symbols}" ;;
   # Paired with {tool}: `tools call symbols` needs a name to look up. Default
   # to a symbol this repo actually defines, so the step proves a real lookup
   # rather than argument validation.
-  [symbol]="${SOVEREIGN_JOURNEY_SYMBOL:-ToolRegistry}"
-  [mcp_name]="${SOVEREIGN_JOURNEY_MCP_NAME:-}"
-  [url]="${SOVEREIGN_JOURNEY_MCP_URL:-}"
-  [workflow]="${SOVEREIGN_JOURNEY_WORKFLOW:-}"
-  [folder]="${SOVEREIGN_JOURNEY_FOLDER:-}"
-  [recipe]="${SOVEREIGN_JOURNEY_RECIPE:-}"
-  [repo]="${SOVEREIGN_JOURNEY_REPO:-}"
+  symbol)   printf '%s' "${SOVEREIGN_JOURNEY_SYMBOL:-ToolRegistry}" ;;
+  mcp_name) printf '%s' "${SOVEREIGN_JOURNEY_MCP_NAME:-}" ;;
+  url)      printf '%s' "${SOVEREIGN_JOURNEY_MCP_URL:-}" ;;
+  workflow) printf '%s' "${SOVEREIGN_JOURNEY_WORKFLOW:-}" ;;
+  folder)   printf '%s' "${SOVEREIGN_JOURNEY_FOLDER:-}" ;;
+  recipe)   printf '%s' "${SOVEREIGN_JOURNEY_RECIPE:-}" ;;
+  repo)     printf '%s' "${SOVEREIGN_JOURNEY_REPO:-}" ;;
   # DISTINCT from {corpus}. A knowledge-corpus id and a project/code-corpus id
   # are different namespaces that happen to both be called "corpus id"; sharing
   # one token made `watcher-repair` register the derived id and then assert an
   # id nothing had created. {project_root} is separate because the registry
   # refuses a second name against an already-registered root
   # (ProjectRegistry::nested_conflict), so the journey needs its own repo.
-  [project]="${SOVEREIGN_JOURNEY_PROJECT:-}"
-  [project_root]="${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}"
-  [session_id]="${SOVEREIGN_JOURNEY_SESSION:-$(newest_session_prefix)}"
-  [scope]="${SOVEREIGN_JOURNEY_SCOPE:-ToolRegistry}"
+  project)      printf '%s' "${SOVEREIGN_JOURNEY_PROJECT:-}" ;;
+  project_root) printf '%s' "${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}" ;;
+  session_id)   printf '%s' "${SOVEREIGN_JOURNEY_SESSION:-$SESSION_ID_DEFAULT}" ;;
+  scope)        printf '%s' "${SOVEREIGN_JOURNEY_SCOPE:-ToolRegistry}" ;;
   # ── code-intelligence facts ────────────────────────────────────────────
   # The `code-intel-answer` journey asserts that the index ANSWERS, so each
   # of these is a fact that is TRUE OF THIS REPO TODAY, not a shape. They
@@ -230,37 +307,39 @@ declare -A FIX=(
   # line", but a line moves whenever anything above it is edited, and a
   # fixture that breaks on every unrelated edit gets deleted rather than
   # fixed.
-  [symbol_file]="${SOVEREIGN_JOURNEY_SYMBOL_FILE:-registry.rs}"
-  [function]="${SOVEREIGN_JOURNEY_FUNCTION:-resolve_step}"
-  [caller_file]="${SOVEREIGN_JOURNEY_CALLER_FILE:-cli_contract.rs}"
-  [callee]="${SOVEREIGN_JOURNEY_CALLEE:-StepBinding}"
+  symbol_file) printf '%s' "${SOVEREIGN_JOURNEY_SYMBOL_FILE:-registry.rs}" ;;
+  function)    printf '%s' "${SOVEREIGN_JOURNEY_FUNCTION:-resolve_step}" ;;
+  caller_file) printf '%s' "${SOVEREIGN_JOURNEY_CALLER_FILE:-cli_contract.rs}" ;;
+  callee)      printf '%s' "${SOVEREIGN_JOURNEY_CALLEE:-StepBinding}" ;;
   # Semantic search: none of the query's words appear in the answer's path,
   # so a lexical index cannot satisfy it. Stable across phrasings when
   # measured 2026-07-29.
-  [code_query]="${SOVEREIGN_JOURNEY_CODE_QUERY:-gossip peer selection staleness}"
-  [code_query_hit]="${SOVEREIGN_JOURNEY_CODE_QUERY_HIT:-gossip.rs}"
+  code_query)     printf '%s' "${SOVEREIGN_JOURNEY_CODE_QUERY:-gossip peer selection staleness}" ;;
+  code_query_hit) printf '%s' "${SOVEREIGN_JOURNEY_CODE_QUERY_HIT:-gossip.rs}" ;;
   # ── agent session-boot facts ───────────────────────────────────────────
-  [hours]="${SOVEREIGN_JOURNEY_HOURS:-168}"
-  [doc_query]="${SOVEREIGN_JOURNEY_DOC_QUERY:-conventions and architecture}"
-  [drift_query]="${SOVEREIGN_JOURNEY_DRIFT_QUERY:-daemon}"
+  hours)       printf '%s' "${SOVEREIGN_JOURNEY_HOURS:-168}" ;;
+  doc_query)   printf '%s' "${SOVEREIGN_JOURNEY_DOC_QUERY:-conventions and architecture}" ;;
+  drift_query) printf '%s' "${SOVEREIGN_JOURNEY_DRIFT_QUERY:-daemon}" ;;
   # `enrich build` refuses a legacy (non-atlas) pipeline, and init's default IS
   # legacy — so the atlas journey has to name one. `literary_atlas` suits the
   # markdown fixture corpus; `philosophy_atlas` is the other built-in.
-  [pipeline]="${SOVEREIGN_JOURNEY_PIPELINE:-literary_atlas}"
+  pipeline) printf '%s' "${SOVEREIGN_JOURNEY_PIPELINE:-literary_atlas}" ;;
   # ── spec-to-code ───────────────────────────────────────────────────────
   # {spec} is a markdown spec whose claims describe {project_root}'s code
   # (sections need `## ` headers and >200 chars each to be processed);
   # {claims} is where `enrich spec-intel` writes its output —
   # <data.dir>/specs/<corpus>/<spec-stem>/claims.json — read back by
   # check-spec, so the two values must agree on the spec's file stem.
-  [spec]="${SOVEREIGN_JOURNEY_SPEC:-}"
-  [claims]="${SOVEREIGN_JOURNEY_CLAIMS:-}"
+  spec)   printf '%s' "${SOVEREIGN_JOURNEY_SPEC:-}" ;;
+  claims) printf '%s' "${SOVEREIGN_JOURNEY_CLAIMS:-}" ;;
   # Distinctive and single-token so the read-back assertion survives any
   # column truncation in `notes` output.
-  [content]="${SOVEREIGN_JOURNEY_CONTENT:-journey-roundtrip-probe}"
-  [intent]="${SOVEREIGN_JOURNEY_INTENT:-cli-journey-verify smoke}"
-  [claim_id]="${SOVEREIGN_JOURNEY_CLAIM_ID:-}"
-)
+  content)  printf '%s' "${SOVEREIGN_JOURNEY_CONTENT:-journey-roundtrip-probe}" ;;
+  intent)   printf '%s' "${SOVEREIGN_JOURNEY_INTENT:-cli-journey-verify smoke}" ;;
+  claim_id) printf '%s' "${SOVEREIGN_JOURNEY_CLAIM_ID:-}" ;;
+  *) return 1 ;;
+  esac
+}
 
 # Substitute {tokens} in a plain string (used for assertion text).
 # Returns 1 if any token has no configured fixture value.
@@ -268,7 +347,7 @@ subst_str() {
   local s="$1" tok val
   while [[ "$s" =~ \{([a-z_]+)\} ]]; do
     tok="${BASH_REMATCH[1]}"
-    val="${FIX[$tok]:-}"
+    val="$(fix_value "$tok")"
     [ -z "$val" ] && return 1
     s="${s//\{$tok\}/$val}"
   done
@@ -288,7 +367,7 @@ build_argv() {
   for word in $raw; do
     if [[ "$word" =~ ^\{([a-z_]+)\}$ ]]; then
       tok="${BASH_REMATCH[1]}"
-      val="${FIX[$tok]:-}"
+      val="$(fix_value "$tok")"
       [ -z "$val" ] && return 1
       ARGV+=("$val")
     elif [[ "$word" == *"{"*"}"* ]]; then
@@ -629,7 +708,7 @@ while IFS=$'\t' read -r kind f2 f3 f4 f5 f6 f7 f8 f9 f10 f11; do
       #
       # A journey step must never be able to consume the manifest that drives
       # it. Any command needing input has to declare it, not inherit it.
-      out="$(timeout "$STEP_TIMEOUT" "$BIN" "${ARGV[@]}" 2>"$ERR_FILE" </dev/null)"; code=$?
+      out="$(with_timeout "$STEP_TIMEOUT" "$BIN" "${ARGV[@]}" 2>"$ERR_FILE" </dev/null)"; code=$?
       err="$(cat "$ERR_FILE")"
       why=""
       [ "$want_exit" != "-" ] && [ "$code" != "$want_exit" ] && why="exit $code, want $want_exit"
