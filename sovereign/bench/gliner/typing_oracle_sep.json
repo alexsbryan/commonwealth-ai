@@ -1,0 +1,32 @@
+{
+  "note": "P2.1 typing oracle for the SEP (Stanford Encyclopedia of Philosophy) fixtures. Philosopher surnames must be Person — in an encyclopedia of philosophy this is not a judgement call. BonJour and Sosa lead the list on purpose: they are the two names the 2026-08-02 eyeball found GLiNER2 typing as `Work`, and this file is what turns that anecdote into a check. `never` asserts that abstract nouns and the field's own name are not people — the classic false-Person failure.",
+  "expect": [
+    { "name": "BonJour", "label": "Person", "source": "SP1 eyeball defect 2026-08-02 — Laurence BonJour, coherentist epistemologist" },
+    { "name": "Sosa", "label": "Person", "source": "SP1 eyeball defect 2026-08-02 — Ernest Sosa, virtue epistemologist" },
+    { "name": "Quine", "label": "Person", "source": "SEP corpus" },
+    { "name": "Kant", "label": "Person", "source": "SEP corpus" },
+    { "name": "Hume", "label": "Person", "source": "SEP corpus" },
+    { "name": "Descartes", "label": "Person", "source": "SEP corpus" },
+    { "name": "Aristotle", "label": "Person", "source": "SEP corpus" },
+    { "name": "Plato", "label": "Person", "source": "SEP corpus" },
+    { "name": "Russell", "label": "Person", "source": "SEP corpus" },
+    { "name": "Wittgenstein", "label": "Person", "source": "SEP corpus" },
+    { "name": "Rawls", "label": "Person", "source": "SEP corpus" },
+    { "name": "Chisholm", "label": "Person", "source": "SEP corpus" },
+    { "name": "Goldman", "label": "Person", "source": "SEP corpus — Alvin Goldman, reliabilist" },
+    { "name": "Putnam", "label": "Person", "source": "SEP corpus" },
+    { "name": "Davidson", "label": "Person", "source": "SEP corpus" },
+    { "name": "Hegel", "label": "Person", "source": "SEP corpus" },
+    { "name": "Nietzsche", "label": "Person", "source": "SEP corpus" },
+    { "name": "Locke", "label": "Person", "source": "SEP corpus" },
+    { "name": "Leibniz", "label": "Person", "source": "SEP corpus" }
+  ],
+  "never": [
+    { "name": "epistemology", "label": "Person", "source": "abstract noun" },
+    { "name": "justification", "label": "Person", "source": "abstract noun" },
+    { "name": "empiricism", "label": "Person", "source": "abstract noun" },
+    { "name": "rationalism", "label": "Person", "source": "abstract noun" },
+    { "name": "skepticism", "label": "Person", "source": "abstract noun" },
+    { "name": "knowledge", "label": "Person", "source": "abstract noun" }
+  ]
+}

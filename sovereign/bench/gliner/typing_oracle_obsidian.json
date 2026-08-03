@@ -1,0 +1,23 @@
+{
+  "note": "P2.1 typing oracle for the obsidian vault fixture. Every entry is transcribed from sovereign/bench/obsidian/golden.toml — the operator-reviewed golden — not invented here. `expect` comes from [[expected_person_atoms]]; `never` from [[forbidden_person_atoms]], whose note says 'Org/agency acronyms are Institution atoms (or Concepts), not Persons'. Only the Person axis is asserted, because that is the axis the type-collapse claim is about; everything else is covered by the head-to-head table, which needs no ground truth.",
+  "expect": [
+    { "name": "Elinor Ostrom", "label": "Person", "source": "golden.toml expected_person_atoms" },
+    { "name": "Ostrom", "label": "Person", "source": "golden.toml expected_person_atoms (surname alias)" },
+    { "name": "Garrett Hardin", "label": "Person", "source": "golden.toml expected_person_atoms" },
+    { "name": "Hardin", "label": "Person", "source": "golden.toml expected_person_atoms (surname alias)" },
+    { "name": "Joan Robinson", "label": "Person", "source": "golden.toml expected_person_atoms" },
+    { "name": "Jane Jacobs", "label": "Person", "source": "golden.toml expected_person_atoms" },
+    { "name": "Jacobs", "label": "Person", "source": "golden.toml expected_person_atoms (surname alias)" },
+    { "name": "Keynes", "label": "Person", "source": "golden.toml expected_person_atoms description_keywords (Joan Robinson entry)" }
+  ],
+  "never": [
+    { "name": "NFL", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "PBM", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "ASML", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "TSMC", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "NVIDIA", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "FTC", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "FOMC", "label": "Person", "source": "golden.toml forbidden_person_atoms" },
+    { "name": "ERISA", "label": "Person", "source": "golden.toml forbidden_person_atoms" }
+  ]
+}

@@ -62,6 +62,46 @@ load, so absolute numbers are conservative but the RATIO is fair.
 > residency. Arena tuning becomes an optional optimisation on a 2.4 GB
 > footprint rather than a gate on a claimed 6–7 GB one. Measure the
 > desktop budget against 2.4 GB, not 6–7 GB.
+>
+> ### CORRECTION 2026-08-03 — GLiNER2 does NOT fix type-collapse. It mistypes ~1 mention in 3.
+>
+> SP1 never measured typing; it measured throughput, memory, and schema
+> mechanics, and P2.1's "fixes type-collapse by extracting types jointly"
+> rode on the paper rather than on this stack. Measured now, through the
+> production seam (`LabeledEntityExtractor`, so this is what
+> `chunk_entities` would store), harness
+> `sovereign-gliner/examples/typing_audit.rs`, oracle
+> `sovereign/bench/gliner/typing_oracle_sep.json` (BonJour/Sosa + 17 philosopher surnames
+> that must be `Person`), fixture = the 269 sep chunks that actually
+> mention BonJour or Sosa:
+>
+> | | v1 | GLiNER2 |
+> |---|---|---|
+> | entity level (dominant label) | 17/17 | **17/17** |
+> | **mention level (rows written)** | **293/294 = 99.7%** | **167/248 = 67.3%** |
+>
+> `Sosa` under GLiNER2: 75 `Person`, 33 `Work`, 24 `Organization`, 1
+> `Location`, 1 `Event`. `BonJour`: 22 `Person`, 17 `Work`, 3
+> `Organization`. Under v1 both are `Person` every time.
+>
+> **The entity-level row is the trap.** Take the most common label per
+> name and the two backends look identical — which is what the first
+> pass of this audit reported before it grew a per-mention column. But
+> `chunk_entities` is a MENTION table; a minority mistyping is a wrong
+> row on disk, and one row in three is wrong.
+>
+> Two things this does NOT say. It is not a recall claim — GLiNER2
+> produces *more* mentions overall on the same fixture (1511 vs 1226).
+> And it is not a "v1 is better" verdict on breadth: the extra volume is
+> real, it just lands on other surfaces while these named entities get
+> both under-found (248 vs 294 mentions) and mistyped.
+>
+> **Consequence for P2.1:** the ordering in the plan — "(a) the
+> conversation/vault path, replacing v1, fixing type-collapse by
+> extracting types jointly" — is not supported. The speed and residency
+> case for GLiNER2 stands (2.52×, ~9 GB lighter); the *quality* case for
+> it as a drop-in replacement does not. `SOVEREIGN_GLINER_MODEL_ID` ships
+> default-off with a row in `DEFAULTS_LEDGER.md` for exactly this reason.
 
 ## Method (exact commands)
 
