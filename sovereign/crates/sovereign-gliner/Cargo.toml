@@ -37,16 +37,18 @@ gline-rs = { version = "1" }
 # gline-rs re-exports `orp` (its ONNX runtime params layer) through `gliner::*`
 # for most uses, but `RuntimeParameters` lives in `orp::params`.
 orp = { version = "0.9" }
+# GLiNER2 backend (`gliner2.rs`) drives its ONNX graph on BARE ort — no
+# gline-rs — because the GLiNER2 export has a different input contract
+# (text_positions / schema_positions / span_idx) that the v1 stack does not
+# implement. Same EXACT rc.9 pin orp already resolves, so this is one ORT
+# link, not two (proven in SP1). Promoted from dev-dependencies 2026-08-02
+# when the spike probe became a production module. The in-house bare-ort
+# precedent is `sovereign-tools` local_corpus/ocr/paddle/detect.rs.
+ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
+tokenizers = "0.21"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = { workspace = true }
-# SP1 spike probe (examples/gliner2_probe.rs): drive a GLiNER2 ONNX export
-# on the SAME pinned rc.9 the production stack links (orp's exact pin —
-# see sovereign-tools/Cargo.toml PaddleOCR block for the full rationale).
-# `ndarray` for tensor I/O; versions unify with the existing lockfile
-# (tokenizers 0.21.x already resolved via gline-rs).
-ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
+# `ndarray` for tensor I/O in the SP1 spike probe (examples/gliner2_probe.rs).
 ndarray = "0.16"
-tokenizers = "0.21"
-regex = { workspace = true }

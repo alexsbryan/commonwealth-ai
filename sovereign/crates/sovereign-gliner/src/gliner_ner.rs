@@ -270,7 +270,7 @@ pub struct GlinerExtractor {
 /// Either format must strip so GliNER doesn't tag the literal role word
 /// as a Person. The constructor and the unit tests both build the regex
 /// from here, so the test can never silently diverge from production.
-fn role_marker_regex() -> Regex {
+pub(crate) fn role_marker_regex() -> Regex {
     Regex::new(
         r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
     )
@@ -281,7 +281,7 @@ fn role_marker_regex() -> Regex {
 /// (text, regex) with no model state — which is exactly why it can be
 /// unit-tested directly, without constructing a `GlinerExtractor` (and
 /// thus without fabricating a `GLiNER` model the test never uses).
-fn strip_role_markers(raw: &str, re: &Regex) -> String {
+pub(crate) fn strip_role_markers(raw: &str, re: &Regex) -> String {
     re.replace_all(raw, "").into_owned()
 }
 
