@@ -97,7 +97,7 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage(
             "svrn bench vault-report (--corpus-id <id> | --folder <path>) (--cold | --warm) \
-             [--enrich-model <id>] [--no-gliner] [--allow-watcher] \
+             [--enrich-model <id>] [--no-gliner] [--no-motifs] [--allow-watcher] \
              [--output <path>] [--compare <timings.json>]",
         ),
         HelpSection::Flags(&[
@@ -132,6 +132,13 @@ const HELP: Help = Help {
                 "--no-gliner",
                 "Skip the local NER pass entirely, leaving RAPTOR-only entities. The A/B \
                  partner for measuring what the NER phase actually costs.",
+            ),
+            (
+                "--no-motifs",
+                "Skip the T3 motif index, keeping the RAPTOR tree. Motif extraction is 42.8% \
+                 of a cold build and `conv_motifs` has no reader in the workspace — this arm \
+                 makes that claim falsifiable rather than asserted. Score the same bank with \
+                 and without: a non-zero retrieval delta means something reads them.",
             ),
             (
                 "--allow-watcher",
@@ -248,6 +255,10 @@ pub struct ColdReset {
     pub warnings: Vec<String>,
 }
 
+fn motif_path_built() -> String {
+    "built".to_string()
+}
+
 /// The persisted run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultReportRun {
@@ -267,6 +278,12 @@ pub struct VaultReportRun {
     /// `gliner` · `disabled` · `unavailable`. The routing truth-teller
     /// for the NER phase — trust it over the flag you passed.
     pub entity_path: String,
+    /// `built` · `skipped`. Same contract for the T3 motif index
+    /// (`--no-motifs`). Defaults to `built` so runs recorded before the
+    /// flag existed — the 2026-08-02 cold baseline among them — still
+    /// deserialize under `--compare`.
+    #[serde(default = "motif_path_built")]
+    pub motif_path: String,
 
     pub files_indexed: usize,
     pub chunks_written: u64,
@@ -637,6 +654,7 @@ struct Opts {
     mode: Option<Mode>,
     enrich_model: Option<String>,
     no_gliner: bool,
+    no_motifs: bool,
     allow_watcher: bool,
     output: Option<PathBuf>,
     compare: Option<PathBuf>,
@@ -660,6 +678,7 @@ fn parse_args(args: &[String]) -> std::result::Result<Opts, String> {
             "--warm" => o.mode = Some(Mode::Warm),
             "--enrich-model" => o.enrich_model = Some(need("--enrich-model")?),
             "--no-gliner" => o.no_gliner = true,
+            "--no-motifs" => o.no_motifs = true,
             "--allow-watcher" => o.allow_watcher = true,
             "--output" => o.output = Some(PathBuf::from(need("--output")?)),
             "--compare" => o.compare = Some(PathBuf::from(need("--compare")?)),
@@ -913,13 +932,35 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
 
     let (entity_handle, entity_path) =
         build_entity_extractor(&opts, Arc::clone(&store), Arc::clone(&obs));
+
+    // The motif pass lives four call layers down inside
+    // `document_asset::build_atlas_artifacts_with_checkpoint`, whose
+    // nine positional arguments are already at the limit of what a
+    // reader can hold. An env knob set in-process for this one measured
+    // build is the same shape `bench_cmd::scaffolding_param` uses for
+    // its ablation arms. `motif_path` below is the truth-teller — read
+    // it, not the flag you typed.
+    if opts.no_motifs {
+        std::env::set_var(sovereign_tools::document_asset::SKIP_MOTIFS_ENV, "1");
+    }
+    let motif_path = if sovereign_tools::document_asset::motifs_disabled() {
+        "skipped"
+    } else {
+        "built"
+    }
+    .to_string();
+
     obs.push_phase(
         "enrichment_setup",
         setup_start,
         obs.now_ms(),
-        serde_json::json!({ "entity_path": entity_path.clone() }),
+        serde_json::json!({
+            "entity_path": entity_path.clone(),
+            "motif_path": motif_path.clone(),
+        }),
     );
     eprintln!("      entity path: {entity_path}");
+    eprintln!("      motif path:  {motif_path}");
 
     let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> = Arc::new(
         sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
@@ -975,6 +1016,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
         enrich_model,
         embed_model: session.embed_model.clone(),
         entity_path,
+        motif_path,
         files_indexed: stats.files_indexed,
         chunks_written: stats.chunks_written,
         documents_enriched: plan.total_conversations,
@@ -1353,6 +1395,7 @@ fn print_summary(r: &VaultReportRun) {
     );
     println!("  models:  enrich={} embed={}", r.enrich_model.as_deref().unwrap_or("-"), r.embed_model);
     println!("  ner:     {}", r.entity_path);
+    println!("  motifs:  {}", r.motif_path);
     println!();
     println!("  TIME TO RAG READY   {}", r.time_to_rag_ready_ms.map(secs).unwrap_or_else(|| "-".into()));
     println!("  TIME TO ENRICHED    {}", r.time_to_enriched_ms.map(secs).unwrap_or_else(|| "-".into()));

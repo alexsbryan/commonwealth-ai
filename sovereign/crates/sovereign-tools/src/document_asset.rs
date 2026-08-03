@@ -2481,26 +2481,39 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
         );
     }
 
-    // Motif index — best-effort. Convert ChunkInput → TextChunk for
-    // the existing motif extractor.
+    // Motif index — best-effort, and ablatable (see `motifs_disabled`).
+    // Convert ChunkInput → TextChunk for the existing motif extractor.
+    let skip_motifs = motifs_disabled();
     let t_motifs = std::time::Instant::now();
-    let text_chunks: Vec<TextChunk> = chunks
-        .iter()
-        .map(|c| TextChunk {
-            content: c.content.clone(),
-            index: c.chunk_id as usize,
-        })
-        .collect();
-    // Wider candidate pool (was 100) since the df>=1 floor lets
-    // rare-but-distinctive scene markers reach the LLM classifier.
-    let candidates = extract_motif_candidates(&text_chunks, 200);
-    let motifs = classify_motifs(inference, candidates, doc_type).await;
+    let motifs = if skip_motifs {
+        Vec::new()
+    } else {
+        let text_chunks: Vec<TextChunk> = chunks
+            .iter()
+            .map(|c| TextChunk {
+                content: c.content.clone(),
+                index: c.chunk_id as usize,
+            })
+            .collect();
+        // Wider candidate pool (was 100) since the df>=1 floor lets
+        // rare-but-distinctive scene markers reach the LLM classifier.
+        let candidates = extract_motif_candidates(&text_chunks, 200);
+        classify_motifs(inference, candidates, doc_type).await
+    };
     // [t3-profile] turbocharge-arc phase split (2026-07-24) — stderr on
     // the driving process; promote to allowlisted tracing spans when the
-    // arc lands.
+    // arc lands. A DISABLED pass prints `skipped`, never `0.0s`: an
+    // ablation arm and a suspiciously fast one must not read alike in a
+    // log. (`motifs→` is the classified count; the old label said
+    // `motif_candidates→` and was reading the wrong side of
+    // `classify_motifs`.)
     eprintln!(
-        "      [t3-profile] raptor_tree={tree_s:.1}s motifs={:.1}s (nodes={}, motif_candidates→{})",
-        t_motifs.elapsed().as_secs_f32(),
+        "      [t3-profile] raptor_tree={tree_s:.1}s motifs={} (nodes={}, motifs→{})",
+        if skip_motifs {
+            "skipped".to_string()
+        } else {
+            format!("{:.1}s", t_motifs.elapsed().as_secs_f32())
+        },
         nodes.len(),
         motifs.len(),
     );

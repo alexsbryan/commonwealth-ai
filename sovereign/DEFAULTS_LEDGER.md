@@ -31,6 +31,41 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs`
+- **Shipped:** 2026-08-02, default-off.
+- **Proof so far:** motif extraction is **22.3m of a 52m03s cold vault
+  build — 42.8% of time-to-enriched** (330 notes, first clean cold
+  baseline, `~/.sovereign/bench-runs/vault-report/1785678945/`), and
+  its output table `conv_motifs` has one INSERT, two DELETEs, and **no
+  reader anywhere in the workspace**: no `list_conv_motifs`, no method
+  on `ConvTieredReader`, no SELECT in any file type. The
+  briefing-signposts claim at `conv_tiered_provider.rs:232` traces to
+  `CONV_TIERED_PORT.md:385`, which is future tense.
+- **Flip condition:** none — the census already settles it. The
+  resolution is **delete the `save_conv_motifs` write and this knob with
+  it**, not flip a default. A dedicated confirmation arm was designed
+  and then cancelled (operator, 2026-08-02): a 12-question bank can only
+  *fail to detect* a difference, whereas an absent call site proves none
+  can arise, so the run would have spent 30 minutes to observe a
+  foregone zero. See note `de25ebe9`.
+- **Settled by:** the one build that does run — the candidate production
+  config (`--no-motifs --no-gliner`) scored against the bar. Because
+  motifs are provably read-free, any movement there prices GLiNER, not
+  motifs. The knob survives only until the write is deleted.
+- **Review by:** 2026-08-09.
+- **Corrections to this row, 2026-08-02** (it was written against an
+  inherited premise that did not survive measurement):
+  - The bar is **58/68 facts (85%) / 8/12 sources (67%)**, measured
+    twice on a quiet box, not the 68/68 = 1.000 on record. The banked
+    figure does not reproduce under `--prod-pipeline`. Note `d39af2dc`.
+  - Retrieval therefore is **not** at ceiling on the production path, so
+    this bank's value as a regression gate rests on its
+    *reproducibility* (stable to the fact across repeat runs), not on
+    saturation.
+  - Any scored run against this corpus requires `corpus watch-pause`
+    first. With the sweeper live the same command scores 22/68 at
+    identical latency, with no error and no warning. Note `0b8b6cae`.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not
