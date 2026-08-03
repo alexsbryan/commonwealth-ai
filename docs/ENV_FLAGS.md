@@ -80,6 +80,9 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_MODEL` | unset | shipped | Primary chat model override (sovereign-server config env path). *(shadows `SetupConfig.models.primary`)* |
 | `SOVEREIGN_MTP_DISABLE` | unset | guard | Kill-switch: disable multi-token-prediction speculative decoding. |
 | `SOVEREIGN_MTP_QUARANTINE_DISABLE` | unset | guard | Kill-switch: disable the MTP quarantine (the guard that benches a model before trusting its MTP head). |
+| `SOVEREIGN_PREFIX_STATE` | on | shipped | Caller-directed pinned-prefix full-state cache. Graduated default-on 2026-08-03 on a measured 1.30x through the production answer path (868.4s -> 669.0s, 2 reps/arm); the grounding gate is its only consumer. Opt out with =0. Worth most on archs where prefix_cache_gate vetoes ordinary partial-KV reuse. |
+| `SOVEREIGN_PREFIX_STATE_MAX_MB` | 2048 | shipped | Per-slot byte cap on the pinned-state LRU. State files run ~64KB/token, so a 10K-token pin is ~650MB; this is what bounds the default-on pin's disk cost. |
+| `SOVEREIGN_PREFIX_STATE_MIN` | code default | shipped | Minimum stable-prefix length (tokens) worth pinning. Below it, saving state costs more than the re-prefill it avoids. |
 | `SOVEREIGN_RERANK_MODEL_PATH` | unset | experiment | Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon; one owner decision pending (docs/archive/RERANK_EXPERIMENT.md). *(shadows `SetupConfig.models.extra`)* |
 | `SOVEREIGN_SKIP_LOCAL_FIT_CHECK` | unset | guard | Skip the local fit check before joining a distributed load (rpc_distribution.rs). |
 | `SOVEREIGN_SKIP_PER_DEVICE_FIT` | unset | guard | Skip the per-device fit check in the RPC byte-aware shard split. |

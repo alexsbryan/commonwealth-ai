@@ -224,6 +224,27 @@ status = "experiment"
 purpose = "Include relation atoms in the enumeration."
 
 [[flag]]
+name = "SOVEREIGN_PREFIX_STATE"
+cluster = "inference"
+default = "on"
+status = "shipped"
+purpose = "Caller-directed pinned-prefix full-state cache. Graduated default-on 2026-08-03 on a measured 1.30x through the production answer path (868.4s -> 669.0s, 2 reps/arm); the grounding gate is its only consumer. Opt out with =0. Worth most on archs where prefix_cache_gate vetoes ordinary partial-KV reuse."
+
+[[flag]]
+name = "SOVEREIGN_PREFIX_STATE_MAX_MB"
+cluster = "inference"
+default = "2048"
+status = "shipped"
+purpose = "Per-slot byte cap on the pinned-state LRU. State files run ~64KB/token, so a 10K-token pin is ~650MB; this is what bounds the default-on pin's disk cost."
+
+[[flag]]
+name = "SOVEREIGN_PREFIX_STATE_MIN"
+cluster = "inference"
+default = "code default"
+status = "shipped"
+purpose = "Minimum stable-prefix length (tokens) worth pinning. Below it, saving state costs more than the re-prefill it avoids."
+
+[[flag]]
 name = "SOVEREIGN_RAPTOR_GROUNDING"
 cluster = "retrieval"
 default = "on"

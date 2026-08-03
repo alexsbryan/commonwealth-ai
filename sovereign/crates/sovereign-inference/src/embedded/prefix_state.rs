@@ -39,11 +39,26 @@
 //! `<pid>-*` dirs whose pid is dead (restart-heavy days leaked ~4GB/day
 //! before the sweep).
 //!
-//! **Default OFF (opt-in via `SOVEREIGN_PREFIX_STATE=1`).**
+//! **Default ON since 2026-08-03** (opt out with
+//! `SOVEREIGN_PREFIX_STATE=0`). Measured on the production answer path
+//! via `svrn bench enrichment-ablate --prefix-state`, which is the
+//! committed instrument for this knob:
 //!
-//! Two experiments measured this, nine days apart, on DIFFERENT
-//! workloads — and the paragraph that used to live here cited only the
-//! first, which is not the workload that consumes the pin:
+//!   Qwen3.6-35B-A3B, obsidian bank (12 q), 2 reps/arm
+//!     OFF  901.7s, 835.2s   mean 868.4s   fact 0.4736
+//!     ON   671.1s, 667.0s   mean 669.0s   fact 0.4597
+//!     → 1.30x, -199s/rep, against an OFF spread of 66.5s
+//!     → pin activity OFF: LEARNED=0 HIT=0 · ON: LEARNED=28 HIT=86
+//!
+//! The quality delta (-0.0139 mean fact ratio, ~1 fact in 60) is below
+//! the ablation's 0.02 separation floor and is reported as NOT
+//! SEPARABLE — but it was identical in both reps, so treat it as a
+//! small reproducible difference rather than as noise. If restore is
+//! bit-exact it should be zero; that is the open check.
+//!
+//! Three experiments measured this, on DIFFERENT workloads — and the
+//! paragraph that used to live here cited only the first, which is not
+//! the workload that consumes the pin:
 //!
 //!   * 2026-07-12, one synthesis prefill: worth ≈0 wall-clock.
 //!     Synthesis prefill runs ~800 tok/s, so a ~2.7k-token stable
@@ -150,10 +165,18 @@ pub(crate) struct PrefixStateCache {
     last_seen: HashMap<u64, Vec<LlamaToken>>,
 }
 
+/// Default **ON** since 2026-08-03; opt OUT with
+/// `SOVEREIGN_PREFIX_STATE=0` (also `false` / `off`).
+///
+/// Earned by a controlled A/B on `Qwen3.6-35B-A3B` through the
+/// production answer path: 868.4s → 669.0s (**1.30x**) over the
+/// 12-question obsidian bank, 2 reps per arm, against an OFF-arm spread
+/// of 66.5s — the delta is 3x the noise. Reproduces the 2026-07-21
+/// result (1.35x) on HEAD. See the ledger row for the quality caveat.
 fn env_enabled() -> bool {
-    matches!(
+    !matches!(
         std::env::var("SOVEREIGN_PREFIX_STATE").as_deref(),
-        Ok("1") | Ok("true") | Ok("on")
+        Ok("0") | Ok("false") | Ok("off")
     )
 }
 

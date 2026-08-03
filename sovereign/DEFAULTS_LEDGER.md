@@ -42,33 +42,6 @@ store (ids cited per row).
   tranche claims it by review date, kill or re-scope.
 - **Review by:** 2026-08-14.
 
-### Caller-directed prefix-cache pin — `SOVEREIGN_PREFIX_STATE`
-- **Shipped:** 2026-07-21, dark. Both blocking hardenings landed
-  (stale-pid sweep, byte-capped LRU). Restored to this section
-  2026-08-03 after the GRADUATED row above was found false.
-- **Proof so far:** controlled A/B with this variable as the only
-  delta — **1.35x end-to-end** (786.3s → 584.5s; prefill 140,155 →
-  47,165 tokens), and TTFT p50 **173s → 66s** on a fixed persona mix
-  across a 180-min soak (restore p90 29ms, 76 LEARNED / 253 HIT /
-  0 WARN). `BATCHED_GATE_VERIFY.md` §8-§9 is the experiment of record.
-  The earlier 2026-07-12 "worth ≈0" result is NOT a contradiction: it
-  measured a single synthesis prefill, not the grounding gate's
-  ~35-calls-per-turn fan-out, which is the pin's only consumer.
-- **Flip condition:** reproduce the TTFT delta on the CONFIGURED
-  primary. Every number above was taken on `qwen35moe`; the primary is
-  now dense `Qwen3.5-2B.Q6_K`. Mechanism is unchanged and both
-  architectures are prefix-cache-vetoed (`gates.rs`), so the pin
-  should still be what amortises re-prefill — but that is an inference,
-  not a measurement. Falsifier: TTFT delta inside run-to-run variance
-  on the current primary → the 07-12 result governs and this moves to
-  REJECTED.
-- **Cheapest instrument:** `scripts/desktop-soak.py 40 --mode persona
-  --no-build --no-restart --foreground` (~40 min). The original A/B
-  harness (`scratchpad/arm_runner.py`, `compare.py`) is NOT in the
-  repo — reconstructing it is what a minutes-scale gate would cost.
-- **Settled by:** T1 Phase A item A1.
-- **Review by:** 2026-08-17.
-
 ### Cross-encoder reranker slot
 - **Shipped:** dark (note `10a1b08d`). **Wired into the daemon-server
   and desktop Runtimes 2026-08-03** (T1 A2) — until then the `svrn
@@ -232,14 +205,49 @@ store (ids cited per row).
 - **Registry/env:** no env flag — the default is code-level policy at
   the memory-corpus construction sites, provenance-stamped per node.
 
-### Caller-directed prefix-cache pin
-- **Moved back to DARK 2026-08-03 — this row was false.** It recorded
-  "default-on 2026-07-21", and the flip never happened:
-  `prefix_state.rs` `env_enabled()` still requires
-  `SOVEREIGN_PREFIX_STATE=1`. What landed on 2026-07-21 was the two
-  *preconditions* (stale-pid sweep, byte-capped LRU). The flip was a
-  recommendation in `docs/specs/BATCHED_GATE_VERIFY.md` contingent on
-  them, and this row wrote it up as executed. See the DARK section.
+### Caller-directed prefix-cache pin — `SOVEREIGN_PREFIX_STATE`
+- **Default ON 2026-08-03**, opt out with `=0`. Genuinely flipped this
+  time — `env_enabled()` now defaults true.
+- **This row was FALSE for thirteen days and that is the lesson.** It
+  claimed "default-on 2026-07-21" when the flip had never happened:
+  `BATCHED_GATE_VERIFY.md` *recommended* flipping after two hardenings,
+  those hardenings landed, and the row recorded the recommendation as
+  executed. A false GRADUATED row is worse than no ledger, because it
+  is trusted. Nothing parses this file's review-by dates (T1 B2 is the
+  gate that would have caught it).
+- **Earned by:** controlled A/B through the production answer path,
+  `svrn bench enrichment-ablate sovereign/bench/obsidian/questions.toml
+  --prefix-state --reps 2`, on `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`:
+
+  | arm | reps | mean wall | fact ratio |
+  |---|---|---|---|
+  | off | 901.7s, 835.2s | 868.4s | 0.4736 |
+  | on  | 671.1s, 667.0s | 669.0s | 0.4597 |
+
+  **1.30x, −199s per rep**, against an OFF-arm spread of 66.5s — the
+  delta is 3x the noise. Arms proven distinct by pin telemetry: OFF
+  `LEARNED=0 HIT=0`, ON `LEARNED=28 HIT=86`. Reproduces the 2026-07-21
+  result (1.35x, 786.3s → 584.5s) on HEAD.
+- **The earlier "worth ≈0" result was never a contradiction.** The
+  2026-07-12 A/B measured ONE synthesis prefill; the pin's only
+  consumer is the grounding gate, which issues ~35 judge calls per turn
+  each re-prefilling the same evidence. Two workloads, not two answers.
+- **Open caveat, stated rather than buried:** the quality delta is
+  −0.0139 mean fact ratio (~1 fact in 60). That is below the ablation's
+  0.02 separation floor and reports as NOT SEPARABLE, but it was
+  IDENTICAL in both reps — a small reproducible difference, not noise.
+  If restore is bit-exact it should be zero. Settle it by checking
+  restore bit-exactness, not by adding reps (the eval is deterministic
+  per arm, so more reps of the same config cannot move it).
+- **Model scope:** measured on `qwen35moe`. The pin's value scales with
+  prefill cost, and `prefix_cache_gate` vetoes ordinary partial-KV
+  reuse on both `qwen35moe` and dense `qwen35`, so on those the pin is
+  the ONLY caching available. On a small primary the win will be
+  smaller and the ~64KB/token state cost proportionally larger; the
+  byte-capped LRU (`_MAX_MB`, default 2048) is what bounds it.
+- **Instrument:** `svrn bench enrichment-ablate --prefix-state` is
+  committed and is the template for any daemon-side knob. The original
+  harness (`scratchpad/arm_runner.py`) never was.
 
 ### RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`
 - Default **on**, status shipped (`env-flags.toml`). Summary nodes as

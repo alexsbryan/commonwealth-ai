@@ -257,6 +257,37 @@ fn daemon_lock_path() -> PathBuf {
     dirs_home().join(".svrnmesh").join("daemon.lock")
 }
 
+/// The DISPATCHER binary, which is not the one we are running.
+///
+/// `current_exe()` here is `sovereign-cli-llm`, which owns `eval` and
+/// `bench` but NOT `daemon` — that verb belongs to
+/// `sovereign-cli-daemon`, reached by exec from the `sovereign-cli`
+/// dispatcher. Handing `daemon run` to our own exe fails with
+/// "unknown subcommand 'daemon'" (observed 2026-08-03). Look for the
+/// dispatcher beside us first, then the deployed symlink.
+fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
+    if let Some(dir) = current.parent() {
+        for name in ["sovereign-cli", "svrn"] {
+            let c = dir.join(name);
+            if c.exists() {
+                return Ok(c);
+            }
+        }
+    }
+    for c in [
+        dirs_home().join(".local/bin/sovereign"),
+        dirs_home().join(".local/bin/svrn"),
+    ] {
+        if c.exists() {
+            return Ok(c);
+        }
+    }
+    Err("cannot find the `sovereign-cli` dispatcher (needed for `daemon` — this \
+         binary does not own that verb). Build it: \
+         cargo build -p sovereign-cli --features dev-tools"
+        .to_string())
+}
+
 fn dirs_home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -296,8 +327,8 @@ async fn daemon_reachable() -> bool {
 }
 
 /// Stop whatever daemon is running and wait until the run lock is free.
-async fn quiesce_daemon(exe: &std::path::Path) -> Result<(), String> {
-    let _ = std::process::Command::new(exe)
+async fn quiesce_daemon(dispatcher: &std::path::Path) -> Result<(), String> {
+    let _ = std::process::Command::new(dispatcher)
         .args(["daemon", "stop"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -325,7 +356,7 @@ async fn quiesce_daemon(exe: &std::path::Path) -> Result<(), String> {
 }
 
 /// Restore the service-managed daemon the operator normally runs.
-fn restore_service_daemon(exe: &std::path::Path) {
+fn restore_service_daemon(dispatcher: &std::path::Path) {
     #[cfg(target_os = "macos")]
     {
         let uid = unsafe { libc::getuid() };
@@ -341,7 +372,7 @@ fn restore_service_daemon(exe: &std::path::Path) {
             return;
         }
     }
-    let _ = std::process::Command::new(exe)
+    let _ = std::process::Command::new(dispatcher)
         .args(["daemon", "start"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -350,17 +381,17 @@ fn restore_service_daemon(exe: &std::path::Path) {
 
 /// Bring up a foreground daemon carrying `env`, logging to `log_path`.
 async fn bounce_daemon(
-    exe: &std::path::Path,
+    dispatcher: &std::path::Path,
     env: &[(&'static str, String)],
     log_path: &std::path::Path,
 ) -> Result<ForegroundDaemon, String> {
-    quiesce_daemon(exe).await?;
+    quiesce_daemon(dispatcher).await?;
     let log = std::fs::File::create(log_path)
         .map_err(|e| format!("create {}: {e}", log_path.display()))?;
     let errlog = log
         .try_clone()
         .map_err(|e| format!("clone log handle: {e}"))?;
-    let mut cmd = std::process::Command::new(exe);
+    let mut cmd = std::process::Command::new(dispatcher);
     cmd.args(["daemon", "run"])
         .stdin(std::process::Stdio::null())
         .stdout(log)
@@ -552,6 +583,20 @@ async fn run(rest: &[String]) -> i32 {
             return 1;
         }
     };
+    // `eval` is ours; `daemon` is not. Resolve the dispatcher up front
+    // and only when a daemon-side arm is actually in the matrix, so a
+    // plain retrieval ablation never needs it present.
+    let dispatcher = if arms.iter().any(|a| a.daemon_side) {
+        match dispatcher_exe(&exe) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
     let runs_dir = runs_dir.unwrap_or_else(|| PathBuf::from("target/ci-bench/enrichment-ablate"));
     if let Err(e) = std::fs::create_dir_all(&runs_dir) {
         eprintln!("error: create {}: {e}", runs_dir.display());
@@ -587,7 +632,8 @@ async fn run(rest: &[String]) -> i32 {
                     "  [daemon-side arm {}] bouncing daemon with {:?}",
                     arm.name, arm.env
                 );
-                match bounce_daemon(&exe, &arm.env, &dlog).await {
+                let disp = dispatcher.as_deref().expect("daemon-side arm implies dispatcher resolved above");
+                match bounce_daemon(disp, &arm.env, &dlog).await {
                     Ok(g) => _daemon_guard = Some(g),
                     Err(e) => {
                         // Abort rather than fall through to the ambient
@@ -595,7 +641,7 @@ async fn run(rest: &[String]) -> i32 {
                         // duplicate of its baseline and report "no
                         // effect" for a knob that never changed.
                         eprintln!("error: {} — cannot run arm {}", e, arm.name);
-                        restore_service_daemon(&exe);
+                        if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
                         return 1;
                     }
                 }
@@ -684,7 +730,7 @@ async fn run(rest: &[String]) -> i32 {
                         arm.name,
                         dlog.display()
                     );
-                    restore_service_daemon(&exe);
+                    if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
                     return 1;
                 }
                 if !wants_pin && (learned > 0 || hit > 0) {
@@ -693,7 +739,7 @@ async fn run(rest: &[String]) -> i32 {
                          the env did not reach the daemon; results are not attributable.",
                         arm.name
                     );
-                    restore_service_daemon(&exe);
+                    if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
                     return 1;
                 }
             }
@@ -710,6 +756,15 @@ async fn run(rest: &[String]) -> i32 {
                 .or_default()
                 .insert(arm.name.to_string(), summarize(&rep_results));
         }
+    }
+
+    // Give the operator their normal daemon back before reporting. The
+    // last arm's foreground daemon has dropped by here; without this the
+    // box would be left with NO daemon at all, which is a worse outcome
+    // than the ablation failing.
+    if let Some(d) = dispatcher.as_deref() {
+        eprintln!("  restoring the service-managed daemon");
+        restore_service_daemon(d);
     }
 
     // Verdicts: each arm against the arm it NAMES as its comparison
