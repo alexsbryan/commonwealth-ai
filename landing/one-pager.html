@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" content="#1a0f3a"/>
+<meta name="robots" content="noindex"/>
+
+<title>svrn ai — the one-pager</title>
+<meta name="description" content="Commonwealth AI, explained on one page: a local-first AI stack — enriched knowledge, a verified local agent, and a mesh for models bigger than one machine."/>
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" media="print" onload="this.media='all'"/>
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap"/></noscript>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+.sov-frame { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+@media (max-width: 540px) { .sov-frame { margin: 0; padding: 0; } }
+
+@keyframes seal-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes star-drift { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+
+.sov-page {
+  --sov-purple: oklch(0.32 0.14 295);
+  --sov-purple-deep: oklch(0.16 0.11 290);
+  --sov-purple-night: oklch(0.11 0.06 290);
+  --sov-gold: oklch(0.78 0.16 78);
+  --sov-gold-deep: oklch(0.62 0.14 70);
+  --sov-paper: oklch(0.965 0.014 85);
+  --sov-ink: oklch(0.13 0.02 290);
+  --sov-ink-soft: oklch(0.4 0.04 290);
+  --sov-rule: oklch(0.8 0.02 290);
+  --sov-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --border-radius-md: 6px;
+  --border-radius-lg: 12px;
+  background: var(--sov-paper); color: var(--sov-ink); border-radius: var(--border-radius-lg); padding: 0; font-family: var(--sov-mono); position: relative; overflow: hidden; border: 0.5px solid var(--sov-rule); isolation: isolate;
+}
+
+.sov-hero { position: relative; padding: 32px 36px 48px; background: radial-gradient(circle at 18% 20%, oklch(0.92 0.018 290) 0%, var(--sov-paper) 60%); overflow: hidden; }
+.sov-stars { position: absolute; inset: 0; pointer-events: none; opacity: 0.6; background-image: radial-gradient(1px 1px at 12% 18%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 28% 42%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 47% 22%, var(--sov-gold-deep) 50%, transparent 51%), radial-gradient(1px 1px at 64% 64%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 78% 30%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 84% 78%, var(--sov-gold-deep) 50%, transparent 51%), radial-gradient(1px 1px at 38% 78%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 91% 12%, var(--sov-gold) 50%, transparent 51%), radial-gradient(1px 1px at 8% 88%, var(--sov-purple-deep) 50%, transparent 51%); animation: star-drift 14s ease-in-out infinite; }
+.sov-truth-bar { position: relative; font-size: 11px; font-weight: 500; color: oklch(0.4 0.04 290); letter-spacing: 0.08em; text-transform: uppercase; display: flex; gap: 10px; align-items: center; padding-bottom: 18px; border-bottom: 0.5px solid var(--sov-rule); margin-bottom: 48px; flex-wrap: wrap; }
+.sov-truth-bar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sov-gold-deep); }
+.sov-truth-bar .sep { color: oklch(0.65 0.02 290); }
+.sov-headline { position: relative; font-size: 42px; line-height: 1.04; font-weight: 800; color: var(--sov-purple-deep); max-width: 18ch; margin: 0 0 30px; letter-spacing: -0.05em; text-transform: uppercase; }
+.sov-headline .gold { color: var(--sov-gold-deep); }
+.sov-lede { position: relative; font-size: 14px; font-weight: 400; line-height: 1.85; color: var(--sov-ink-soft); max-width: 62ch; margin: 0; letter-spacing: -0.005em; }
+.sov-lede strong, .sov-body strong { color: var(--sov-purple-deep); font-weight: 700; }
+.sov-body a { color: var(--sov-purple-deep); text-decoration: underline; text-decoration-color: var(--sov-gold-deep); text-underline-offset: 2px; }
+.sov-seal { position: absolute; top: 32px; right: 36px; width: 48px; height: 48px; border-radius: 50%; background: conic-gradient(from 0deg, var(--sov-gold) 0deg, var(--sov-purple) 120deg, var(--sov-purple-deep) 220deg, var(--sov-gold-deep) 320deg, var(--sov-gold) 360deg); display: flex; align-items: center; justify-content: center; animation: seal-rotate 240s linear infinite; z-index: 2; }
+.sov-seal-inner { width: 40px; height: 40px; border-radius: 50%; background: var(--sov-paper); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; color: var(--sov-purple-deep); animation: seal-rotate 240s linear infinite reverse; }
+
+.sov-section { padding: 44px 36px 48px; border-top: 0.5px solid var(--sov-rule); }
+.sov-wash { position: absolute; inset: -6% 0; z-index: -1; pointer-events: none; background: radial-gradient(620px 500px at 85% 4%, oklch(0.94 0.022 290 / 0.4) 0%, transparent 60%), radial-gradient(700px 560px at 6% 22%, oklch(0.945 0.03 80 / 0.24) 0%, transparent 60%), radial-gradient(640px 520px at 92% 46%, oklch(0.94 0.025 78 / 0.2) 0%, transparent 60%), radial-gradient(720px 600px at 10% 70%, oklch(0.94 0.022 290 / 0.32) 0%, transparent 60%), radial-gradient(560px 460px at 80% 92%, oklch(0.945 0.025 80 / 0.2) 0%, transparent 60%); animation: wash-orbit 50s ease-in-out infinite alternate; }
+@keyframes wash-orbit { from { transform: translate3d(-2%, -1%, 0) scale(1.02); } to { transform: translate3d(2%, 1.5%, 0) scale(1.1); } }
+.sov-kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sov-gold-deep); margin: 0 0 10px; }
+.sov-h2 { font-size: 21px; font-weight: 800; letter-spacing: -0.015em; color: var(--sov-purple-deep); margin: 0 0 18px; max-width: 34ch; text-wrap: balance; }
+.sov-body { font-size: 13.5px; line-height: 1.8; color: var(--sov-ink); max-width: 66ch; letter-spacing: -0.005em; }
+.sov-body p { margin: 0 0 16px; }
+.sov-body p:last-child { margin-bottom: 0; }
+.sov-body code { background: oklch(0.93 0.015 290); border-radius: 3px; padding: 1px 5px; font-size: 12.5px; }
+.sov-aside { font-size: 12px; line-height: 1.75; color: var(--sov-ink-soft); max-width: 66ch; border-left: 2px solid var(--sov-gold-deep); padding-left: 14px; margin: 20px 0 0; }
+
+.sov-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 22px 0 0; }
+.sov-card { border: 0.5px solid var(--sov-rule); border-radius: var(--border-radius-md); padding: 14px 16px; background: color-mix(in oklch, var(--sov-paper) 92%, var(--sov-purple)); }
+.sov-card h3 { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--sov-purple-deep); margin: 0 0 6px; }
+.sov-card p { font-size: 11.5px; line-height: 1.65; color: var(--sov-ink-soft); margin: 0; }
+
+.sov-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 22px 0 0; }
+.sov-num { border: 0.5px solid var(--sov-rule); border-radius: var(--border-radius-md); padding: 14px 16px; background: var(--sov-paper); }
+.sov-num .val { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: var(--sov-purple-deep); font-variant-numeric: tabular-nums; }
+.sov-num .val .unit { font-size: 12px; font-weight: 700; color: var(--sov-gold-deep); letter-spacing: 0; }
+.sov-num .lbl { font-size: 11px; line-height: 1.6; color: var(--sov-ink-soft); margin-top: 4px; }
+
+.sov-list { list-style: none; margin: 16px 0 0; padding: 0; max-width: 66ch; }
+.sov-list li { position: relative; padding: 0 0 12px 20px; font-size: 13px; line-height: 1.75; color: var(--sov-ink); }
+.sov-list li::before { content: ""; position: absolute; left: 0; top: 0.65em; width: 8px; height: 2px; background: var(--sov-gold-deep); }
+.sov-list li:last-child { padding-bottom: 0; }
+
+.sov-fine { padding: 44px 36px 48px; border-top: 0.5px solid var(--sov-rule); }
+.sov-fine .sov-body { color: var(--sov-ink-soft); font-size: 12.5px; }
+
+.sov-coda { padding: 56px 36px 36px; background: var(--sov-purple-night); color: oklch(0.78 0.04 80); position: relative; overflow: hidden; }
+.sov-coda-stars { position: absolute; inset: 0; pointer-events: none; opacity: 0.7; background-image: radial-gradient(1px 1px at 8% 18%, oklch(0.85 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 22% 38%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 38% 22%, oklch(0.85 0.10 80) 50%, transparent 51%), radial-gradient(1px 1px at 54% 68%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 71% 30%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 88% 56%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 31% 84%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 64% 88%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(2px 2px at 92% 14%, oklch(0.88 0.12 80) 50%, transparent 51%); animation: star-drift 18s ease-in-out infinite; }
+.sov-coda-text { position: relative; font-size: 13px; line-height: 1.95; max-width: 54ch; color: oklch(0.78 0.04 80); letter-spacing: -0.005em; margin: 0 0 36px; }
+.sov-coda-text strong { color: oklch(0.86 0.14 78); font-weight: 700; }
+.sov-foot { position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-top: 24px; border-top: 0.5px solid oklch(0.32 0.06 290); font-size: 10px; color: oklch(0.62 0.04 80); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 540px) {
+  .sov-page { border-radius: 0; border: 0; }
+  .sov-headline { font-size: 30px; }
+  .sov-lede { font-size: 13px; line-height: 1.75; }
+  .sov-hero { padding: 22px 20px 32px; }
+  .sov-section, .sov-fine { padding: 34px 20px 38px; }
+  .sov-coda { padding: 44px 20px 28px; }
+  .sov-seal { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sov-stars, .sov-coda-stars, .sov-seal, .sov-seal-inner, .sov-wash { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<main class="sov-frame">
+<div class="sov-page">
+
+<div class="sov-wash" aria-hidden="true"></div>
+
+<div class="sov-seal" aria-hidden="true"><div class="sov-seal-inner">S</div></div>
+
+<section class="sov-hero">
+<div class="sov-stars" aria-hidden="true"></div>
+
+<div class="sov-truth-bar">
+<span class="dot"></span>
+<span>commonwealth ai</span>
+</div>
+
+<h1 class="sov-headline">What are we building?</h1>
+
+<p class="sov-lede">One Rust workspace, four projects, one person so far. <strong>svrn</strong> is a local assistant that checks its answers against your own sources before you see them. <strong>cmnwlth</strong> is an optional mesh — machines you trust, pooling knowledge and compute. Under both, a knowledge layer that does more than retrieval. Nothing leaves your network.</p>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">Why</p>
+<h2 class="sov-h2">Five random chunks and a bluff</h2>
+<div class="sov-body">
+<p>After over a decade in software, I quit my job at a startup and wrote a novel. I love Russian literature, so I ended up writing something as long as Anna Karenina. I went as far away from software as possible, but when local AI got interesting, I wanted to play around. I also needed motivation for a fifth revision, so I did everything you were supposed to do: Ollama, OpenWebUI, a RAG pipeline, eight hours of chunking my own book. Then I nervously asked for a summary, the payoff for all the work, the culmination of all the AI hype. It picked five chunks that looked similar, bluffed, then the response cutoff in the middle of a sentence. I think there were some stray Chinese characters. Underwhelming. This project comes from that moment. It's why the knowledge layer builds <strong>RAPTOR</strong> trees — summaries of summaries, climbing from passages to themes — so "what is this book about" is answered from the shape of the whole, not whichever pieces happened to embed nearby.</p>
+<p>Once upon a time, I built music applications for a tens of millions of daily users. That taught me a lot about the importance of the product layer. I couldn't find a satisfying product layer for open weights, one meant to be navigated by humans, so I built what felt right to me. So the stack is opinionated on purpose, and the opinions are the point — they're what lets a zoo of models, Qwen to Gemma to GLM, converge on one behavior. The bet is called <a href="/situated-agent"><strong>the situated agent</strong></a>: don't ask a 27B model to be a genius from a cold start. Assemble what it should already know — who's asking, what the project is, what was decided, what's still open — before the first token, and verify the claims after the last one. Capacity goes to expression, not discovery. The benches exist to keep that bargain honest, model by model.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">The shape</p>
+<h2 class="sov-h2">Four projects, one-way dependencies</h2>
+<div class="sov-body">
+<p>The graph points one way: the knowledge layer doesn't know the assistant exists, the assistant doesn't know the mesh exists, and the eval program gates all three. Each piece stands alone.</p>
+</div>
+<div class="sov-cards">
+<div class="sov-card"><h3>corpus-engine</h3><p>The knowledge layer. Turns raw sources into ranked, cited, <em>enriched</em> search — a library with no ML runtime of its own.</p></div>
+<div class="sov-card"><h3>svrn</h3><p>The assistant. Desktop, CLI, and server on one runtime, with a grounding gate that holds every answer until its claims check out.</p></div>
+<div class="sov-card"><h3>cmnwlth</h3><p>The mesh (crate family <code>commonwealth-*</code>). Symmetric nodes, no master, pooled knowledge and pooled compute by invitation.</p></div>
+<div class="sov-card"><h3>the gates</h3><p>Benches and CI gates that measure honesty, competence, and architectural drift — and fail the build when they slip.</p></div>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">corpus-engine</p>
+<h2 class="sov-h2">A recipe is the unit of knowledge</h2>
+<div class="sov-body">
+<p>Every corpus — Wikipedia, the Stanford Encyclopedia, US Code, your own email — enters through one pipeline: acquire, extract, filter, chunk, embed, index, declared in a TOML <strong>recipe</strong>. A bunch already ship in the catalog. I hope people will contribute many more. One directory per corpus.</p>
+<p>Search is a funnel, not a lookup. IVF-PQ vector search and BM25 full-text — LanceDB and Tantivy — fuse in a single query; a cross-encoder reranks the overfetched pool; the atom graph can join the blend as a third signal, pulling canonical sources up. Rerank is purely additive by contract: if the model fails, order falls back to fusion. Every score lands in chunk metadata, so a bad ranking is inspectable, not a mystery.</p>
+<p>Custody is per-recipe, enforced in separate code paths: <code>query_sharing</code> — may peers search it and get cited snippets; <code>mesh_sharing</code> — may the bytes replicate at all. The philosophy corpus ships queryable, never copied. Structure, not policy.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">Enrichment</p>
+<h2 class="sov-h2">Not retrieval with extra steps — a typed, provenanced knowledge graph</h2>
+<div class="sov-body">
+<p>RAG stops at "here are the passages that look similar." Enrichment keeps going: each document is lifted into <strong>typed atoms</strong> — eleven kinds, Entity through Claim, Position, Opposition — joined by <strong>fifteen edge types</strong> with real argumentative structure: what's evidence for what, what an author conceded, which positions oppose. RAPTOR trees summarize upward, so recall works at the level of themes — ask about the whole book, get the whole book.</p>
+<p><strong>Every edge carries its provenance.</strong> LLM-extracted edges get hedged downstream; deterministic ones don't. Memory trees are extractive only — structurally unable to fabricate — and abstractive summaries persist only after a verifier passes their claims. The trust model is the product.</p>
+<p>It pays: on a Wikipedia probe, the atom graph (constructed from structured links) moved sources-found from 50 of 71 to 79 of 83.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">svrn</p>
+<h2 class="sov-h2">The answer is held until it's checked</h2>
+<div class="sov-body">
+<p>Desktop (Tauri 2 + Svelte), CLI, and server drive one <code>Runtime</code>. A router classifies; a <strong>pure policy function</strong> — no I/O, no model calls — picks a confidence tier and a move: commit, propose, or ask. Simple retrieval on one side, a planner/executor DAG on the other, tools behind permissions.</p>
+</div>
+<ul class="sov-list">
+<li><strong>The grounding gate is on by default.</strong> Every claim checked against the sealed corpus — verification may widen the <em>evidence</em>, never the scope. Failures get one rewrite fed corrective passages, narrated claim-by-claim to the UI. Still unsupported, it abstains.</li>
+<li><strong>The model never originates a number.</strong> A deterministic Rust audit value-matches every figure against what a tool actually emitted. Not a prompt — a backstop.</li>
+<li><strong>Retrieval is data.</strong> An ordered list of named steps, golden tests pinning the sequence. A reorder is a reviewed change, not drift.</li>
+<li><strong>Side effects fire once.</strong> A content-keyed ledger survives crash and replan; a step that died mid-flight halts and says so rather than guessing.</li>
+<li><strong>Memory in tiers</strong>: working memory recompressed each turn, long-term memories that decay, a summary tree for thematic recall.</li>
+<li><strong>47 MCP tools of code intelligence</strong> — symbols, callers, blast radius — that the agents building this use instead of grep.</li>
+</ul>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">cmnwlth</p>
+<h2 class="sov-h2">Chunks travel. Corpora don't. And models outgrow single machines.</h2>
+<div class="sov-body">
+<p>A mesh is founded with a join key and a per-node Ed25519 proof; membership converges by gossip; same code on every node, no master. Routing scores capability claims — an open CC0 protocol we call OICP — and the whole thing speaks the OpenAI API, so existing tools just work. Encrypted mode dials peers by public key over iroh QUIC, fail-closed, relays self-hostable.</p>
+<p>The one to try: <strong>run a model bigger than any machine you own</strong>. Three 64 GB boxes hold what none could alone. The host seeds each worker its slice — no model file on disk — and after first load, kilobytes cross the wire per answer. The split goes by <strong>byte mass, not block count</strong>: MoE layers vary 62x, and counting blocks overflows the small box. A dry-run planner checks the fit per machine before anything loads. A worker drops, the host reloads on what's left; a flapper gets benched on a cooldown.</p>
+</div>
+<div class="sov-numbers">
+<div class="sov-num"><div class="val">8.5 <span class="unit">tok/s</span></div><div class="lbl">122B model split across my two machines. Then split across two cloud containers. Reproducible on whatever you have lying around.</div></div>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">The gates</p>
+<h2 class="sov-h2">Measured, not asserted</h2>
+<div class="sov-body">
+<p>The real asset isn't any subsystem — it's that correctness is measured adversarially, and the measurements gate the work. The chaos bench scores <strong>two red lines separately</strong>: competence when the answer exists, honesty when it doesn't — neither a hallucinator nor a blanket-abstainer can game it. A metamorphic bench asks whether a model reasons or pattern-matches, with a blind control and anytime-valid stopping. An agent-coding battery runs the tool loop end to end. One baseline-diffed CI run; regressions fail. This is what makes the model zoo swappable: the gates define the behavior, and any model that clears them inherits it.</p>
+<p>The discipline points inward too. The docs gate fails the build on a dead path. Layer gates keep the graph one-way. Ratchets only tighten. Anything shipped dark carries a ledger row naming what would turn it on.</p>
+</div>
+</section>
+
+<section class="sov-fine">
+<p class="sov-kicker">The honest fine print</p>
+<h2 class="sov-h2">What doesn't hold yet</h2>
+<div class="sov-body">
+<p>Better from me than from your diligence. Tensor-split traffic is raw TCP — no encryption claim while it's in use; perimeter-only, opt-in. The internal mesh API trusts its perimeter in trusted-network mode; encrypted mode narrows that to loopback plus iroh. Tauri can't yet gate commands per-window, so desktop mesh apps aren't isolated from each other. The chaos honesty scores are mid-flight, not victory laps. And deep enrichment costs days on a big corpus — a structural pass lifts fifty thousand articles in under a minute, which is why the roadmap subtracts rather than adds. It's all in the threat model, in more detail than one page should carry.</p>
+</div>
+</section>
+
+<section class="sov-coda">
+<div class="sov-coda-stars" aria-hidden="true"></div>
+<p class="sov-coda-text">Built by one person, engineered like a team will inherit it: one-way dependencies, machine-checked docs, gates that can actually fail. If you check claims against source — <strong>good. You're in the right place.</strong></p>
+<div class="sov-foot">
+<span>AGPLv3 · bring your own model · nothing leaves your network</span>
+</div>
+</section>
+
+</div>
+</main>
+
+</body>
+</html>

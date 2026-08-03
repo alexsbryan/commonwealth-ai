@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" content="#1a0f3a"/>
+<meta name="robots" content="noindex"/>
+
+<title>svrn ai — the situated agent</title>
+<meta name="description" content="The design principle underlying svrn and cmnwlth: don't ask an open weight model to be a genius from a cold start — situate it first."/>
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" media="print" onload="this.media='all'"/>
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap"/></noscript>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+.sov-frame { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+@media (max-width: 540px) { .sov-frame { margin: 0; padding: 0; } }
+
+@keyframes seal-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes star-drift { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+
+.sov-page {
+  --sov-purple: oklch(0.32 0.14 295);
+  --sov-purple-deep: oklch(0.16 0.11 290);
+  --sov-purple-night: oklch(0.11 0.06 290);
+  --sov-gold: oklch(0.78 0.16 78);
+  --sov-gold-deep: oklch(0.62 0.14 70);
+  --sov-paper: oklch(0.965 0.014 85);
+  --sov-ink: oklch(0.13 0.02 290);
+  --sov-ink-soft: oklch(0.4 0.04 290);
+  --sov-rule: oklch(0.8 0.02 290);
+  --sov-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --border-radius-md: 6px;
+  --border-radius-lg: 12px;
+  background: var(--sov-paper); color: var(--sov-ink); border-radius: var(--border-radius-lg); padding: 0; font-family: var(--sov-mono); position: relative; overflow: hidden; border: 0.5px solid var(--sov-rule); isolation: isolate;
+}
+
+.sov-hero { position: relative; padding: 32px 36px 48px; background: radial-gradient(circle at 18% 20%, oklch(0.92 0.018 290) 0%, var(--sov-paper) 60%); overflow: hidden; }
+.sov-stars { position: absolute; inset: 0; pointer-events: none; opacity: 0.6; background-image: radial-gradient(1px 1px at 12% 18%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 28% 42%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 47% 22%, var(--sov-gold-deep) 50%, transparent 51%), radial-gradient(1px 1px at 64% 64%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 78% 30%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1px 1px at 84% 78%, var(--sov-gold-deep) 50%, transparent 51%), radial-gradient(1px 1px at 38% 78%, var(--sov-purple-deep) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 91% 12%, var(--sov-gold) 50%, transparent 51%), radial-gradient(1px 1px at 8% 88%, var(--sov-purple-deep) 50%, transparent 51%); animation: star-drift 14s ease-in-out infinite; }
+.sov-truth-bar { position: relative; font-size: 11px; font-weight: 500; color: oklch(0.4 0.04 290); letter-spacing: 0.08em; text-transform: uppercase; display: flex; gap: 10px; align-items: center; padding-bottom: 18px; border-bottom: 0.5px solid var(--sov-rule); margin-bottom: 48px; flex-wrap: wrap; }
+.sov-truth-bar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sov-gold-deep); }
+.sov-truth-bar .sep { color: oklch(0.65 0.02 290); }
+.sov-headline { position: relative; font-size: 42px; line-height: 1.04; font-weight: 800; color: var(--sov-purple-deep); max-width: 18ch; margin: 0 0 30px; letter-spacing: -0.05em; text-transform: uppercase; }
+.sov-lede { position: relative; font-size: 14px; font-weight: 400; line-height: 1.85; color: var(--sov-ink-soft); max-width: 62ch; margin: 0; letter-spacing: -0.005em; }
+.sov-lede strong, .sov-body strong { color: var(--sov-purple-deep); font-weight: 700; }
+.sov-lede a, .sov-body a { color: var(--sov-purple-deep); text-decoration: underline; text-decoration-color: var(--sov-gold-deep); text-underline-offset: 2px; }
+.sov-seal { position: absolute; top: 32px; right: 36px; width: 48px; height: 48px; border-radius: 50%; background: conic-gradient(from 0deg, var(--sov-gold) 0deg, var(--sov-purple) 120deg, var(--sov-purple-deep) 220deg, var(--sov-gold-deep) 320deg, var(--sov-gold) 360deg); display: flex; align-items: center; justify-content: center; animation: seal-rotate 240s linear infinite; z-index: 2; }
+.sov-seal-inner { width: 40px; height: 40px; border-radius: 50%; background: var(--sov-paper); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; color: var(--sov-purple-deep); animation: seal-rotate 240s linear infinite reverse; }
+
+.sov-section { padding: 40px 36px 44px; border-top: 0.5px solid var(--sov-rule); }
+.sov-wash { position: absolute; inset: -6% 0; z-index: -1; pointer-events: none; background: radial-gradient(620px 500px at 85% 4%, oklch(0.94 0.022 290 / 0.4) 0%, transparent 60%), radial-gradient(700px 560px at 6% 22%, oklch(0.945 0.03 80 / 0.24) 0%, transparent 60%), radial-gradient(640px 520px at 92% 46%, oklch(0.94 0.025 78 / 0.2) 0%, transparent 60%), radial-gradient(720px 600px at 10% 70%, oklch(0.94 0.022 290 / 0.32) 0%, transparent 60%), radial-gradient(560px 460px at 80% 92%, oklch(0.945 0.025 80 / 0.2) 0%, transparent 60%); animation: wash-orbit 50s ease-in-out infinite alternate; }
+@keyframes wash-orbit { from { transform: translate3d(-2%, -1%, 0) scale(1.02); } to { transform: translate3d(2%, 1.5%, 0) scale(1.1); } }
+.sov-kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sov-gold-deep); margin: 0 0 10px; }
+.sov-h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.015em; color: var(--sov-purple-deep); margin: 0 0 18px; max-width: 38ch; text-wrap: balance; }
+.sov-h3 { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: var(--sov-purple-deep); margin: 24px 0 8px; }
+.sov-body { font-size: 13.5px; line-height: 1.8; color: var(--sov-ink); max-width: 68ch; letter-spacing: -0.005em; }
+.sov-body p { margin: 0 0 16px; }
+.sov-body p:last-child { margin-bottom: 0; }
+
+.sov-list { list-style: none; margin: 16px 0 16px; padding: 0; max-width: 68ch; }
+.sov-list li { position: relative; padding: 0 0 12px 20px; font-size: 13px; line-height: 1.75; color: var(--sov-ink); }
+.sov-list li::before { content: ""; position: absolute; left: 0; top: 0.65em; width: 8px; height: 2px; background: var(--sov-gold-deep); }
+.sov-list li:last-child { padding-bottom: 0; }
+
+.sov-coda { padding: 56px 36px 36px; background: var(--sov-purple-night); color: oklch(0.78 0.04 80); position: relative; overflow: hidden; }
+.sov-coda-stars { position: absolute; inset: 0; pointer-events: none; opacity: 0.7; background-image: radial-gradient(1px 1px at 8% 18%, oklch(0.85 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 22% 38%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 38% 22%, oklch(0.85 0.10 80) 50%, transparent 51%), radial-gradient(1px 1px at 54% 68%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 71% 30%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 88% 56%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 31% 84%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 64% 88%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(2px 2px at 92% 14%, oklch(0.88 0.12 80) 50%, transparent 51%); animation: star-drift 18s ease-in-out infinite; }
+.sov-coda-text { position: relative; font-size: 13px; line-height: 1.95; max-width: 54ch; color: oklch(0.78 0.04 80); letter-spacing: -0.005em; margin: 0 0 36px; }
+.sov-coda-text strong { color: oklch(0.86 0.14 78); font-weight: 700; }
+.sov-coda-text a { color: oklch(0.86 0.14 78); text-decoration: underline; text-decoration-color: oklch(0.62 0.14 70); text-underline-offset: 2px; }
+.sov-foot { position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-top: 24px; border-top: 0.5px solid oklch(0.32 0.06 290); font-size: 10px; color: oklch(0.62 0.04 80); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 540px) {
+  .sov-page { border-radius: 0; border: 0; }
+  .sov-headline { font-size: 30px; }
+  .sov-lede { font-size: 13px; line-height: 1.75; }
+  .sov-hero { padding: 22px 20px 32px; }
+  .sov-section { padding: 32px 20px 36px; }
+  .sov-coda { padding: 44px 20px 28px; }
+  .sov-seal { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sov-stars, .sov-coda-stars, .sov-seal, .sov-seal-inner, .sov-wash { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<main class="sov-frame">
+<div class="sov-page">
+
+<div class="sov-wash" aria-hidden="true"></div>
+
+<div class="sov-seal" aria-hidden="true"><div class="sov-seal-inner">S</div></div>
+
+<section class="sov-hero">
+<div class="sov-stars" aria-hidden="true"></div>
+
+<div class="sov-truth-bar">
+<span class="dot"></span>
+<span>commonwealth ai</span>
+<span class="sep">·</span>
+<span>design principle · foundational</span>
+</div>
+
+<h1 class="sov-headline">The situated agent</h1>
+
+<p class="sov-lede">One of the first design documents written for this system, and still the compass. If you came from <a href="/one-pager">the one-pager</a>, this is the long version of the bet.</p>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">1</p>
+<h2 class="sov-h2">The constraint that points toward better design</h2>
+<div class="sov-body">
+<p>svrn and cmnwlth run on open weight models — Qwen, Gemma, Deepseek — on consumer hardware. Not the frontier. The naive response is to compensate: more tool calls, longer reasoning chains, fancier prompting. You get a system trying to be something it isn't, failing in ways that feel like failure.</p>
+<p>The constraint points somewhere better. Don't ask the model to figure things out from scratch — make sure it arrives <strong>fully situated</strong> before it fields a single query. The engineering goes into context assembly, not into hoping capacity closes the gap.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">2</p>
+<h2 class="sov-h2">What situated means</h2>
+<div class="sov-body">
+<p>An agent is situated when, before the first token, it already knows:</p>
+<ul class="sov-list">
+<li><strong>Who this is</strong> — the person's history, their working style, what they've decided, what's been uncertain for them.</li>
+<li><strong>Where this is</strong> — the project, its phase, the invariants that govern this codebase or this practice.</li>
+<li><strong>What is known</strong> — corpus results, prior decisions, the state of the knowledge layer.</li>
+<li><strong>What is not known</strong> — active gaps, pending questions, contested terrain named but not resolved.</li>
+<li><strong>What the policy is</strong> — the skill in effect, and how this kind of gap gets handled here.</li>
+</ul>
+<p>A model that has all this isn't discovering — it's <strong>expressing</strong>. Translating situated knowledge into language is a task it can do well. And unsituated, the same model does one of two things when it hits something it should already know: it <strong>invents</strong> — confident, plausible, wrong in ways you may not catch — or it <strong>disclaims</strong>, truly and uselessly. Both are failures of assembly, not of the model.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">3</p>
+<h2 class="sov-h2">The two kinds of intelligence</h2>
+<div class="sov-body">
+<p>Raw capacity: reason from first principles, discover the context mid-response. Frontier models optimize for this. Impressive, expensive — and worst exactly where it's most needed: personal, long-running work where the history spans months and the right answer is inseparable from who's asking.</p>
+<p>Situatedness: know everything relevant before you begin. Spend capacity on expression, not discovery. A situated 27B often beats a cold larger model on the work that matters most here — not smarter, just already there. Different in kind, not degree. Not "a genius who figured it out." Someone who was already in the room.</p>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">4</p>
+<h2 class="sov-h2">Where the comparison runs the other way</h2>
+<div class="sov-body">
+<p>The more interesting space: where the situated model beats a frontier model starting fresh.</p>
+<ul class="sov-list">
+<li><strong>Long-running personal context.</strong> A frontier model starts every session cold. A situated one begins six months into the relationship. Not close.</li>
+<li><strong>Codebase-specific reasoning.</strong> "Extend this or create a new one?" is answerable with the invariants, charters, and call graph loaded — not better reasoning, knowing the specific thing.</li>
+<li><strong>Honesty under uncertainty.</strong> Contested gaps stay contested, exactly where confident synthesis is most dangerous. For a frontier model running bare, that isn't on the menu.</li>
+<li><strong>Domain depth from local corpora.</strong> Knowledge that's been processed, clustered, and enriched is a different grounding than a web search.</li>
+</ul>
+</div>
+</section>
+
+<section class="sov-section">
+<p class="sov-kicker">5</p>
+<h2 class="sov-h2">Generative bounds</h2>
+<div class="sov-body">
+<p>Constricting bounds stop the model: hard rules, blocked paths. A capable model feels caged. Generative bounds make good behavior the natural output: the model is situated so thoroughly that honesty isn't a rule it follows, it's the obvious thing to say given what it knows. Note discipline isn't "write notes or fail" — it's "your notes are your memory, and you need your memory."</p>
+<p>Drop a frontier model into this system and it should navigate the same way the 27B does — not held down, but because the design is correct, and correct behavior looks similar at any capacity. <strong>Good architecture, not a compensation mechanism.</strong></p>
+</div>
+</section>
+
+<section class="sov-coda">
+<div class="sov-coda-stars" aria-hidden="true"></div>
+<p class="sov-coda-text">Being smaller, being open weight, isn't inherently a shortcoming. I think it's an invitation to build the right environment for success. <a href="/one-pager">Back to the one-pager</a>.</p>
+<div class="sov-foot">
+<span>AGPLv3 · bring your own model · nothing leaves your network</span>
+</div>
+</section>
+
+</div>
+</main>
+
+</body>
+</html>
