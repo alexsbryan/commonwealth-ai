@@ -217,7 +217,32 @@ policy reuse; incremental cost `M (3-5d)` when scheduled.
 
 ### P2 — Extraction economics
 
-**P2.1 — GLiNER2 generation. `L (8-15d) · Low→Med (SP1 answered 2026-07-30: bare-ort rc.9 runs GLiNER2 2.8x v1 — runtime risk retired; tuple-linked relations PARTIAL, pairing is post-hoc design or stays LLM-judged)`**
+**P2.1 — GLiNER2 generation. `CLOSED 2026-08-03 · step (a) BUILT AND REJECTED · actual cost ~1.5d, not L (8-15d)`**
+
+**Do not size this. It ran, and the answer was no.** Three commits
+(`86f83c1a`, `64eabb9c`, `df4704c2`) built the seam, built the backend,
+measured it against v1 on our own corpora, and rejected it. Details in
+`ENRICHMENT_ROADMAP.md` §P2.1 and `DEFAULTS_LEDGER.md` (REJECTED).
+
+The two numbers that closed it, on all 3,175 obsidian vault chunks:
+**881.9 s (v1) vs 893.2 s (GLiNER2)** — no speedup — and **96.9% vs
+81.8%** per-mention Person accuracy. SP1's 2.8× (later corrected to
+2.52×) was measured on sep chunks at p50 761 chars; vault chunks are
+p50 1,808, and the advantage is a chunk-length artifact, not a model
+property. Notes `dc2e4b5d`, `f42cf7ec`.
+
+**The sizing lesson, since that is what this document is for:** the
+confidence column said `Low→Med` and cited SP1 as having "retired the
+runtime risk". It had — the runtime was never the problem. The spike
+answered *does it run* and was read as *is it better*, and the L (8-15d)
+estimate was carried on that reading for five days. **A spike that
+measures feasibility does not license an adoption estimate.** The
+adoption question needed one more day of measurement on the target
+corpus, and would have cost 1.5 days total instead of a funded L.
+
+<details>
+<summary>Original design, retained for the record — void</summary>
+
 Design (assuming SP1's ONNX path lands): new backend module in
 `sovereign-gliner` driving bare `ort` (dropping the fragile
 gline-rs/orp chain is itself a win), schema-driven API
@@ -236,6 +261,19 @@ Fallback if SP1 fails: v1-family multi-task checkpoints (NuNER/GLiNER
 multi) on the existing runtime — half the benefit, S-M integration.
 Risk drivers: ONNX export fidelity for the multi-task head; `ort` API
 churn (the rc-pin problem transfers).
+
+What actually landed of this: the seam (as
+`LabeledEntityExtractor`, generalising `ChunkEntityExtractor`'s
+extractor slot) and the bare-`ort` backend module. Both are kept — the
+seam is where any future candidate lands and is what made the rejection
+measurable. Nothing downstream of "rollout order" was built, and the
+gline-rs/orp chain is **not** dropped: v1 still needs it, and
+`gliner2.rs` links `ort` directly, so the rc-pin is now load-bearing
+twice.
+
+The named fallback (v1-family multi-task checkpoints, NuNER/GLiNER
+multi) was never exercised and is the only live path left here.
+</details>
 
 **P2.2 — Concept-graph free tier. `L (10-15d) · High (SP5 answered 2026-07-31: G5 pass, adopt leiden-rs + write NP layer)`**
 Design: `corpus-engine/src/enrichment/concept_graph.rs` — noun-phrase
@@ -464,14 +502,21 @@ consumer contract does not move). **Then delete:** `field_engine.rs`,
 params. Also retires D1's stub-and-lossy-resume class wholesale.
 
 **D5 — Entity-graph fold. `M-L (5-8d) · Med · T3 (with P3.2)`**
-GLiNER2 output already lands as entity atoms + edges (P2.1); PPR runs
+~~GLiNER2 output already lands as entity atoms + edges (P2.1)~~ —
+**that premise is void** (P2.1 rejected 2026-08-03). D5 now has to say
+where its entity atoms come from: today they are v1 GLiNER mentions in
+`chunk_entities` plus RAPTOR-derived entities, which is a workable but
+different input than the typed encoder output this was sized against.
+Re-check the size before funding. PPR runs
 over a per-conversation projection read from the CSR (mmap'd, sync —
 the BFS precedent). **Then delete:** the per-query
 `conv_entity_graph.rs` build path; and the planned LRU cache is never
 built (see P3.3). One graph, one traversal surface.
 
-**D6** is P2.1's deletion face (lark path + gline-rs chain) — sized
-there.
+**D6** ~~is P2.1's deletion face (lark path + gline-rs chain) — sized
+there.~~ **VOID 2026-08-03.** P2.1 was rejected, so neither deletion
+happens: v1 keeps `gline-rs → orp`, and the lark path keeps its job.
+D6 has no content until some other extractor earns those deletes.
 
 ---
 
@@ -485,9 +530,9 @@ graph TD
   P03[P0.3 faithfulness scorer] --> P12[P1.2 verified abstractive]
   SP2 --> P11[P1.1 extractive floor]
   P11 --> P12
-  SP1 --> P21[P2.1 GLiNER2]
+  SP1 --> P21[P2.1 GLiNER2 — REJECTED 2026-08-03]
   SP5 --> P22[P2.2 concept graph]
-  P21 --> P32[P3.2 HippoRAG-2 components]
+  P21 -.->|BROKEN: no encoder triples| P32[P3.2 HippoRAG-2 components]
   P22 --> P34[P3.4 community entry]
   P22 --> P51[P5.1 navigator]
   P14[P1.4 provenance evidence] --> P51
@@ -559,8 +604,13 @@ Ratchet at exit: stores 9 → ~5 (`raptor_nodes`, `conv_raptor_nodes`,
 `raptor_summaries.lance` deleted; skeleton writes stopping); extraction
 paths 5 → 2; incremental flags 1 → 0; systems 4 → 3 (System 1
 mid-retirement, KnowledgeView domains served from the graph).
-Kill-points: SP1 fail → GLiNER2 becomes v1-multitask fallback (P2.1
-drops to S-M); SP5 fail → concept graph v1 ships entity-co-occurrence
+Kill-points: ~~SP1 fail → GLiNER2 becomes v1-multitask fallback (P2.1
+drops to S-M)~~ — **this kill-point fired, from the other direction.**
+SP1 *passed* and P2.1 was still rejected on adoption evidence
+(2026-08-03), so the v1-multitask fallback is now the live path, not a
+contingency. The ratchet line above assumed P2.1's deletions
+(`extraction paths 5 → 2`); they do not land, so recount before quoting
+it. SP5 fail → concept graph v1 ships entity-co-occurrence
 only (P2.2 halves); D3 scale check fails → summaries stay a sibling
 table but adopt the atom envelope + evidence contract (half the
 deletion, all of the trust rule).
@@ -594,7 +644,12 @@ designed._
 2. **P2.1 got riskier, explicitly.** gline-rs is v1-only atop a
    self-described fragile `ort` rc-pin; GLiNER2 has no proven Rust
    path in-tree. Hence SP1 as the very first spike, and a named
-   fallback.
+   fallback. **Outcome 2026-08-03: the risk that mattered was not the
+   one named here.** The Rust path was fine (SP1 passed, the backend
+   built in a day); the model was worse on our data. Sizing risk
+   drivers listed *integration* risk and no *efficacy* risk at all,
+   and a spike answering the former was allowed to set confidence for
+   both.
 3. **The checkpoint gap is confirmed exactly as noted**:
    `input_hash` = `(chunk_id, embedding-byte-count)` only
    (`raptor_checkpoint.rs:34`) — P1.3 is small and surgical.
@@ -614,7 +669,7 @@ relevant tranche starts.
 | Extractive floor: default for all new trees, or opt-in per corpus? | Default for memory corpora (vault/conversation) after SP2 parity; abstractive-verified stays default for attached docs where fluency is the product |
 | Verification blocking vs. flagging at persist time | Blocking with extractive fallback (never persist unverified abstractive); sampling rate from SP3 until verifier ships |
 | P2.4 re-embed existing corpora or new-builds-only | New-builds-only + explicit `corpus expand`-style migration verb; never silent re-embed (mesh compat) |
-| GLiNER2 path if SP1 partially succeeds (entities yes, relations no) | Adopt for entities/types; keep relations on the LLM judgment path until the runtime matures |
+| ~~GLiNER2 path if SP1 partially succeeds (entities yes, relations no)~~ **SETTLED 2026-08-03 — no decision needed** | The proposed default was "adopt for entities/types". Measured: **do not adopt for either.** Entities/types is exactly where it loses (per-mention Person accuracy 81.8% vs v1's 96.9%; `Work` absorbing ordinary noun phrases), and it is not faster at our chunk length. Relations were already staying LLM-judged |
 | Where the faithfulness JSONL (Stream B) lives | `sovereign/bench/faithfulness/` next to the other banks, git-tracked sampled subset + full local artifact |
 | D3 migration of existing trees: one-shot row converter vs lazy rebuild-on-next-enrich | Lazy rebuild for conversation/vault corpora (per-note trees are cheap and it exercises the new writer end-to-end); one-shot converter only for the SEP-scale retrofit corpora |
 | D4 endgame: SEP's retained v1 full-corpus params | Dropped when D4 finishes; the full-corpus epistemic flow re-lands as a renderer profile over the graph, not a second system |

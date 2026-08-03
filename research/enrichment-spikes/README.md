@@ -34,6 +34,24 @@ rolls up to `sovereign/docs/archive/` + one NoteStore `decision` note per verdic
 | G9 (P5.2a) | ColModernVBERT page-score separation on a small scanned-PDF fixture + ONNX-export feasibility on ort rc.9 | Report-only: NDCG-ish separation + rc.9 verdict | Same — evidence only |
 | G10 (P5.2b) | MaxSim multi-vector Lance sibling-table prototype | Report-only: storage + query numbers vs RETRIEVAL_REDESIGN.md:261-266 sizing (~3–6 GB / 188k chunks) | Same — evidence only |
 
+**Downstream outcome, appended 2026-08-03 (the table above stays frozen
+as written).** **G1 passed and the work it licensed was still rejected.**
+P2.1 (GLiNER2 adoption) was built and measured against v1 on our own
+corpora, and neither half of the case survived: no throughput win at the
+obsidian vault's chunk length (881.9 s vs 893.2 s over 3,175 chunks) and
+worse per-mention typing (81.8% vs 96.9% Person accuracy). See
+`findings/SP1_gliner2.md` corrections 3–4, `DEFAULTS_LEDGER.md`
+(REJECTED), notes `dc2e4b5d` / `f42cf7ec`.
+
+The gate itself is where the gap is, and it is worth reading before the
+next spike register is frozen: G1's threshold was *"throughput ≥ v1
+measured fresh in the same harness, same chunks"* — **50 sep chunks**.
+It said nothing about the target corpus's chunk-length distribution and
+nothing about extraction *quality*, so a model that is faster on short
+chunks and worse at typing passed cleanly. A feasibility gate is not an
+adoption gate; when the two are conflated, the funded tranche is the
+place it gets discovered.
+
 Interpretation notes, pre-registered:
 
 - **G2 AMENDMENT (2026-07-30, before any arm ran — surface-validity fix).** The original

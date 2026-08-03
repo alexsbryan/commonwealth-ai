@@ -1,5 +1,28 @@
 # Enrichment de-risking spikes — SP1–SP6 + D1 + P5 probes (2026-07-30 → 2026-07-31)
 
+> ## ⚠ SP1's headline is SUPERSEDED — do not quote "2.8× faster" from this document
+>
+> This is a frozen archive of what was measured and believed on
+> 2026-07-31. It is left intact deliberately. Two of SP1's numbers were
+> later falsified, and the work it licensed was rejected:
+>
+> | This document says | Current truth | Where |
+> |---|---|---|
+> | "2.8× faster than v1" | **2.52×** on those sep chunks (loaded box inflated it), and **1.0× on the obsidian vault** — the ratio is a chunk-length artifact, not a model property | notes `abc4fb34`, `dc2e4b5d` |
+> | "~6.7 GB incremental RSS" | **Inverted** — GLiNER2 is 2.4 GB, v1 is 11.5 GB on the same workload; the subtraction compared two different workloads | note `3f47d12e` |
+> | (untested) "fixes type-collapse" | **False** — per-mention Person accuracy 81.8% vs v1's 96.9% on the vault; `Work` becomes a catch-all | note `f42cf7ec` |
+>
+> **P2.1 (GLiNER2 adoption) was built and REJECTED on 2026-08-03.** See
+> `corpus-engine/ENRICHMENT_ROADMAP.md` §P2.1,
+> `sovereign/DEFAULTS_LEDGER.md` (REJECTED), and
+> `research/enrichment-spikes/findings/SP1_gliner2.md`, which carries
+> the corrections inline.
+>
+> The generalisable lesson, recorded because it is about this document's
+> whole genre: **SP1 asked "does it run on our pinned runtime?" and
+> answered yes. That was read as "is it better?", which it never
+> tested.** A feasibility spike does not license an adoption estimate.
+
 **Status: CLOSED 2026-07-31.** All six spikes from
 `corpus-engine/ENRICHMENT_ROADMAP_SIZING.md` §1 answered against the
 pre-registered gate table (frozen in

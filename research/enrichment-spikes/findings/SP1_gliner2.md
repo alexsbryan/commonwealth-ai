@@ -1,11 +1,26 @@
 # SP1 — GLiNER2 in the Rust/ONNX stack (bare ort, pinned rc.9)
 
-**Verdict: YES — the exit criterion is met with room. The pre-exported GLiNER2 monolithic
+> **VERDICT SUPERSEDED 2026-08-03 — the spike passed and the adoption it
+> licensed was REJECTED.** The exit criterion (does it run on our pinned
+> runtime, at ≥ v1 throughput, on 50 sep chunks) was genuinely met. That
+> criterion turned out not to predict adoption: on the corpus P2.1
+> targeted, GLiNER2 is **not faster** (881.9 s vs 893.2 s over 3,175
+> obsidian vault chunks) and **types worse** (81.8% vs 96.9%
+> per-mention Person accuracy). Corrections 1–4 below carry the
+> measurements; the original verdict is preserved beneath for the
+> record. Current truth: `ENRICHMENT_ROADMAP.md` §P2.1 and
+> `DEFAULTS_LEDGER.md` (REJECTED).
+
+**Original verdict, 2026-07-30 — every headline number below was later
+corrected; read the corrections:**
+
+**~~Verdict: YES — the exit criterion is met with room.~~ The pre-exported GLiNER2 monolithic
 ONNX graph loads and runs on the PINNED `ort =2.0.0-rc.9`, driven bare (no gline-rs), and
-is 2.8× FASTER than v1 in the same harness on the same 50 real sep chunks. The
+is ~~2.8×~~ 2.52× FASTER than v1 in the same harness on the same 50 real sep chunks —
+**and 1.0× on vault-length chunks (correction 4)**. The
 relation-style field-group schema also fills typed slots through the same export —
 with one structural caveat (slots, not linked tuples). No second ORT link needed.
-P2.1 confidence: Low → High.**
+~~P2.1 confidence: Low → High.~~ **P2.1 step (a): rejected.**
 
 Measured 2026-07-30, M2 Max, release build. Harness:
 `sovereign-gliner/examples/gliner2_probe.rs` (committed) — both stacks run in ONE binary
@@ -177,14 +192,18 @@ bare-ort pattern (`local_corpus/ocr/paddle/detect.rs`). Load time 716ms.
 
 ## Numbers
 
-| Metric | v1 (gliner_small-v2.1) | GLiNER2 base (bare rc.9) |
-|---|---|---|
-| total wall, 50 chunks | 20.4 s | **7.1 s** |
-| chunks/s | 2.45 | **7.04** (2.8×) |
-| words/s | 416 | **1,195** |
-| mentions/chunk | 3.2 | 8.5 (threshold 0.5, no span-NMS) |
-| model on disk | 591 MB | 795 MB |
-| process max RSS | 1.63 GB (solo, gliner_smoke) | ~6.7 GB incremental (8.3 GB combined run minus v1 solo) |
+**As measured 2026-07-30. Three of these six rows were later corrected —
+the corrected values are in the correction blocks above, and are the
+ones to quote.**
+
+| Metric | v1 (gliner_small-v2.1) | GLiNER2 base (bare rc.9) | Status |
+|---|---|---|---|
+| total wall, 50 chunks | 20.4 s | **7.1 s** | loaded box; quiet-box re-run 17.4 s / 6.9 s |
+| chunks/s | 2.45 | **7.04** (2.8×) | **→ 2.87 / 7.24 = 2.52×**, and **1.0× on vault-length chunks** (corrections 1, 4) |
+| words/s | 416 | **1,195** | same load caveat |
+| mentions/chunk | 3.2 | 8.5 (threshold 0.5, no span-NMS) | holds; on the vault it is 3.15 vs 10.85, and 47% of g2's output is `Work` (correction 4) |
+| model on disk | 591 MB | 795 MB | holds |
+| process max RSS | 1.63 GB (solo, gliner_smoke) | ~6.7 GB incremental (8.3 GB combined run minus v1 solo) | **INVERTED → 11.5 GB v1 vs 2.4 GB g2** when each pass is isolated (correction 2) |
 
 Entity quality eyeball (same chunks): v1 and g2 agree on the clear people
 (Dewey, Bealer, Jackson, Peacocke, Boghossian); g2 adds correct mentions v1 missed

@@ -254,6 +254,15 @@ usage is one generation and several capability classes behind; the
 recipe-declared `[[enrichment.entity_types]]` investigation schema is
 exactly the declarative interface GLiNER2 wants.
 
+> **Measured 2026-08-03 — the frontier reading above held; the
+> *substitution* it implied did not.** The published GLiNER2 export was
+> run against our own corpora through the production extractor seam and
+> **rejected as a v1 replacement**: no throughput win at our vault's
+> chunk length, and worse per-mention typing (§P2.1). "One generation
+> behind" remains a fair description of the literature. It is not
+> evidence that swapping generations improves this system, and this
+> section was read as if it were.
+
 ### F7. Reasoning-based navigation is displacing one-shot top-K for long documents
 PageIndex-style retrieval — build a ToC-shaped tree, let a model
 *navigate* it with bounded reasoning — hits 98.7% on FinanceBench with
@@ -281,7 +290,7 @@ exactly the substrate this bolts onto; it is text-only today.
 | Build-time cost | Deterministic/statistical structure eagerly; LLM deferred behind budgets (F1) | Eager LLM per section/cluster; deterministic paths exist (`structure_first`, TF-IDF motifs, TextTiling) but LLM remains the default spine | **Behind — the biggest lever** |
 | Faithfulness of synthesized artifacts | Verified before citable (F4) | Unverified; provenance stripped at evidence assembly; no faithfulness metric | **Behind — the sharpest risk** |
 | Incremental maintenance | Graph patches on change (F1, LightRAG; Graphiti) | Substrate built (hashes, deltas, checkpoints); production triggers unwired (W4) | **Even on design, behind on wiring** |
-| Entity/relation extraction | Schema-driven 205M encoder, joint NER+RE, CPU (F6) | GLiNER v1 small, entities only, type-collapse; LLM fallbacks | **Behind, cheap to close** |
+| Entity/relation extraction | Schema-driven 205M encoder, joint NER+RE, CPU (F6) | GLiNER v1 small, entities only, type-collapse; LLM fallbacks | **Behind — and NOT cheap to close.** The obvious close (adopt GLiNER2) was measured 2026-08-03 and rejected: no speedup at our chunk length, worse typing (§P2.1). Reopening this needs a different candidate, not a retry |
 | Multi-hop graph retrieval | Dual-node PPR, query-to-triple, recognition filter (F2) | HippoRAG-1-style PPR over co-occurrence graph, w=0.25 unbenched, per-query rebuild | **Behind, but adoption must clear our own prior (TIERED_RETRIEVAL.md:334)** |
 | Temporal validity | Bi-temporal edges, invalidation-not-deletion (F3) | None; State/Event/Transition atoms + timestamps exist as raw material | **Absent; high product fit** |
 | Chunk-context | Contextual/late chunking standard (F5) | Chunk text embedded bare; `topic_context` only on query side | **Absent; cheap** |
@@ -338,7 +347,7 @@ have meant all along. The measurable version:
 | Addition | Retires |
 |---|---|
 | The verification rule (P1) | the unverified-abstractive class; silent cluster-thinning; trust folklore |
-| GLiNER2 schemas (P2.1) | the Slow-LLM lark path; the `gline-rs → orp → ort-rc` chain; LLM enumeration prompts |
+| ~~GLiNER2 schemas (P2.1)~~ **VOID 2026-08-03** — GLiNER2 rejected (§P2.1) | ~~the Slow-LLM lark path; the `gline-rs → orp → ort-rc` chain; LLM enumeration prompts~~ **None of these retire.** v1 stays, so `gline-rs → orp` stays; the lark path and the enumeration prompts lose their replacement. This row was a promised subtraction that did not happen — the ratchet has to find it elsewhere |
 | Summary atoms in the one graph (P2/D3) | `raptor_nodes` + `conv_raptor_nodes` + `raptor_summaries.lance` + the ANN freshness special case + the atlas/atlas collision itself |
 | Graph-rendered digests (P2-P3/D4) | `field_engine.rs` + the `Domain` registry + `field_skeleton.json` |
 | Graph-resident entity PPR (P3/D5) | the per-query `conv_entity_graph` rebuild (and the planned LRU cache — an add this cancels) |
@@ -510,9 +519,11 @@ it replaces folklore, which is the trade this whole roadmap wants.
    failure classes. Evaluate late chunking as the follow-on (needs
    long-context embed batching; no model change).
 5. **Retire measured waste**: the debouncer's v1 pass for atlas-typed
-   views (W5), Phase-1b's serial 4-chunk batching where GLiNER2
-   covers it, and the six stale-doc mismatches in the hygiene table
-   (§6) — each is an hour of work and a trust repair.
+   views (W5), ~~Phase-1b's serial 4-chunk batching where GLiNER2
+   covers it~~ (**void** — GLiNER2 rejected 2026-08-03; the batching
+   stays until something else covers it), and the six stale-doc
+   mismatches in the hygiene table (§6) — each is an hour of work and a
+   trust repair.
 
 **Gate:** end-to-end atlas build on a wiki-class corpus in hours (vs.
 680-day extrapolation); vault/doc enrichment wall-clock halved at equal
@@ -520,9 +531,14 @@ or better atom-F1 (measured by the now-real P0 lane); incremental edit →
 patched atlas with no full rebuild, verified by the upgraded verify-v2.
 
 **Deletes:** this is the tranche where the store count and the system
-count actually drop. (a) The Slow-LLM lark entity path and its batching
-machinery, once GLiNER2 owns extraction. (b) The
-`gline-rs → orp → ort-rc` dependency chain (bare `ort`). (c) The three
+count actually drop. **(a) and (b) are VOID as of 2026-08-03** — they
+were both contingent on GLiNER2 owning extraction, and it does not.
+~~(a) The Slow-LLM lark entity path and its batching machinery, once
+GLiNER2 owns extraction. (b) The `gline-rs → orp → ort-rc` dependency
+chain (bare `ort`).~~ The `ort` rc-pin is now *load-bearing twice* —
+`gline-rs` needs it for v1 and `sovereign-gliner::gliner2` links it
+directly — so that chain is more entrenched than before this phase,
+not less. Any future extractor swap must re-earn both deletes. (c) The three
 RAPTOR sidecar stores — `raptor_nodes`, `conv_raptor_nodes`,
 `raptor_summaries.lance` + its freshness-gate special case — once
 summary nodes are atoms in the one graph (sizing doc D3); this is also
@@ -550,7 +566,11 @@ re-testable; P1 changes the synthesis side it indicted. So:
 2. **Query-to-triple + passage nodes, scoped.** Prototype HippoRAG-2's
    two highest-ablation components on the conversation graph we already
    build (phrase nodes exist as entities; passage nodes = chunks; the
-   "triples" are GLiNER2 relations from P2.1): query-to-triple seeding
+   "triples" **have no encoder source** — SP1 found the GLiNER2 export
+   fills typed slots, not linked tuples, and P2.1 was then rejected
+   outright, so relations stay LLM-judged and this component needs its
+   triples from somewhere else before it can be prototyped):
+   query-to-triple seeding
    replacing surface-form matching, passage-node integration replacing
    the clique fallback. Verifier-v0 doubles as the recognition-memory
    filter (it is a relevance/entailment judge). Adopt only on recall
@@ -657,7 +677,7 @@ spike-gated bet rather than part of the funded core.
 - **No wholesale HippoRAG-2 adoption without clearing our own recorded
   prior** — components enter behind recall-lane evidence (P3.2).
 - **No cloud calls, ever.** Every technique above runs on local
-  encoders (GLiNER2, ColModernVBERT), local SLMs (verifier), or the
+  encoders (GLiNER, ColModernVBERT), local SLMs (verifier), or the
   resident slots. That constraint is the product.
 - **No un-versioned synthesis.** After P1, nothing abstractive persists
   without model id + prompt_version + a verification verdict attached.
