@@ -453,10 +453,11 @@ it replaces folklore, which is the trade this whole roadmap wants.
 
 ### P2 — Extraction economics (structure at 10-100x lower cost, incremental by default)
 
-1. **GLiNER2 adoption.** Upgrade `sovereign-gliner` to the GLiNER2
-   generation: schema-driven multi-task extraction (entities + types +
-   attributes + relations) on CPU/ANE. Targets, in order: (a) the
-   conversation/vault path (replacing v1, fixing type-collapse by
+1. **GLiNER2 adoption. Step (a) is MEASURED AND REJECTED (2026-08-03);
+   (b)–(d) are unevaluated.** The plan was: upgrade `sovereign-gliner` to
+   the GLiNER2 generation — schema-driven multi-task extraction (entities
+   + types + attributes + relations) on CPU/ANE — targeting, in order:
+   (a) the conversation/vault path (replacing v1, fixing type-collapse by
    extracting types jointly); (b) the document T2 (retiring the LLM
    fallback); (c) **typed-atom seeding for System 2** — GLiNER2 output
    becomes deterministic Entity/Relation candidate atoms
@@ -464,6 +465,29 @@ it replaces folklore, which is the trade this whole roadmap wants.
    Phase-1's LLM surface to judgment instead of enumeration; (d) the
    recipe `[[enrichment.entity_types]]` investigation schema compiles
    directly to a GLiNER2 schema — recipe authors get NER for free.
+
+   **What (a) actually measured** (notes `f42cf7ec`, `dc2e4b5d`;
+   `research/enrichment-spikes/findings/SP1_gliner2.md` corrections 3–4;
+   harness `sovereign-gliner/examples/typing_audit.rs`, both backends
+   through the production seam over all 3,175 obsidian vault chunks):
+
+   - **No speedup on the target corpus.** 881.9 s (v1) vs 893.2 s
+     (GLiNER2). The 2.52× is a property of the chunk-length distribution
+     — sep chunks are p50 761 chars, vault chunks p50 1,808 — not of the
+     model. Any "N× faster" figure elsewhere in this doc or in
+     `ENRICHMENT_ROADMAP_SIZING.md` inherits that caveat.
+   - **Type-collapse is not fixed; it is worse.** Mention-level Person
+     accuracy 96.9% (v1) vs 81.8% (GLiNER2) on the vault oracle, 99.7%
+     vs 67.3% on sep. `Work` becomes a catch-all for ordinary noun
+     phrases: 16,053 `Work` mentions against v1's 632.
+   - **What survives:** residency (~9 GB lighter, note `3f47d12e`) and
+     the `LabeledEntityExtractor` seam (commit `86f83c1a`), which is
+     where any future extractor lands. `SOVEREIGN_GLINER_MODEL_ID`
+     selects the generation and defaults to v1.
+
+   Scoring extractors by **entity** rather than by **mention** reported
+   clean parity for a backend getting a third of its rows wrong;
+   `chunk_entities` is a mention table (`bench/gliner/README.md`).
 2. **Concept-graph free tier (LazyGraphRAG's index).** A deterministic
    noun-phrase/co-occurrence concept graph + graph-statistic communities
    as the *universal* baseline enrichment for every corpus — built at

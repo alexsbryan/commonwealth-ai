@@ -98,10 +98,56 @@ load, so absolute numbers are conservative but the RATIO is fair.
 >
 > **Consequence for P2.1:** the ordering in the plan — "(a) the
 > conversation/vault path, replacing v1, fixing type-collapse by
-> extracting types jointly" — is not supported. The speed and residency
-> case for GLiNER2 stands (2.52×, ~9 GB lighter); the *quality* case for
-> it as a drop-in replacement does not. `SOVEREIGN_GLINER_MODEL_ID` ships
-> default-off with a row in `DEFAULTS_LEDGER.md` for exactly this reason.
+> extracting types jointly" — is not supported. `SOVEREIGN_GLINER_MODEL_ID`
+> ships default-off with a row in `DEFAULTS_LEDGER.md` for exactly this
+> reason.
+>
+> ### CORRECTION 2026-08-03 (b) — the speedup is CORPUS-SHAPE-DEPENDENT. On the vault it is **1.0×**.
+>
+> Same harness, same day, same box, run over **all 3,175 chunks of the
+> obsidian vault** — the corpus P2.1 step (a) actually targets:
+>
+> | | v1 | GLiNER2 |
+> |---|---|---|
+> | wall, 3,175 vault chunks | **881.9 s** | **893.2 s** |
+> | chunks/s | 3.60 | 3.55 |
+>
+> **There is no speedup on this corpus.** 2.52× was measured on sep
+> chunks at p50 761 chars; vault chunks are p50 1,808 — 2.4× longer. The
+> v1 stack batches 8 texts per call and amortises; GLiNER2 is one graph
+> call per text and its cost tracks length directly. The ratio is a
+> property of the *chunk-length distribution*, not of the model, and
+> every P2.1 time prediction so far treated it as a constant.
+>
+> **This retires the whole vault-lane economics.** The "NER is 15m17s of
+> the 29m32s ship candidate → 2.52× → saves 9m13s → 1.45× on the ship
+> candidate" chain is void: the multiplier on that workload is 1.0.
+>
+> ### Typing on the vault, for completeness
+>
+> Same 3,175 chunks, oracle `bench/gliner/typing_oracle_obsidian.json`:
+>
+> | | v1 | GLiNER2 |
+> |---|---|---|
+> | mention level | 31/32 = **96.9%** | 27/33 = **81.8%** |
+> | Person anti-tests violated | 0/8 | 0/8 |
+>
+> `Ostrom` — the vault's anchor entity — is `Person` ×6 / `Organization`
+> ×6 under GLiNER2, and `Person` ×10 / other ×1 under v1.
+>
+> The volume table is the louder signal. GLiNER2 emits 34,436 mentions to
+> v1's 10,004 (10.85 vs 3.15 per chunk), of which **16,053 are `Work`
+> against v1's 632** — 47% of its entire output. Of 3,389 surface forms
+> both found, 397 disagree, systematically: ordinary nouns become `Work`
+> (`architecture`, `docs`, `context`, `codebase`, `ai tools`,
+> `academic research`, `acquirers`) and people become `Organization` or
+> `Location` (`adorno`, `marcuse`, `durkheim`, `berkeley`). At threshold
+> 0.5, `Work` is a catch-all for noun phrases.
+>
+> **Bottom line for P2.1(a): do not adopt.** Neither the time case nor
+> the quality case survives on the target corpus. What survives is the
+> residency finding (~9 GB lighter) and the seam
+> (`LabeledEntityExtractor`), which is what made any of this measurable.
 
 ## Method (exact commands)
 

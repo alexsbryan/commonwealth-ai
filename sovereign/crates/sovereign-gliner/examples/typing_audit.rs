@@ -337,6 +337,50 @@ fn main() {
     }
     println!("auditing {} chunk(s)\n", texts.len());
 
+    // Parse the oracle BEFORE loading a single model. It is the cheapest
+    // input and the easiest to get wrong (a moved path, a typo), and
+    // reading it after the inference passes means a bad path costs a
+    // full run — which is exactly what happened on 2026-08-03: 15
+    // minutes of v1 and 15 of GLiNER2, then `No such file or directory`,
+    // and the report never written. Validate what is cheap to validate
+    // first.
+    let oracle = match &args.oracle {
+        None => None,
+        Some(path) => {
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("typing_audit: oracle {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+            };
+            let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "typing_audit: oracle {} is not valid JSON: {e}",
+                        path.display()
+                    );
+                    std::process::exit(1);
+                }
+            };
+            let oracle = match (parse_oracle(&parsed, "expect"), parse_oracle(&parsed, "never")) {
+                (Ok(expect), Ok(never)) => Oracle { expect, never },
+                (Err(e), _) | (_, Err(e)) => {
+                    eprintln!("typing_audit: {e}");
+                    std::process::exit(1);
+                }
+            };
+            println!(
+                "oracle {}: {} positive(s), {} anti-test(s)",
+                path.display(),
+                oracle.expect.len(),
+                oracle.never.len()
+            );
+            Some(oracle)
+        }
+    };
+
     let backends: Vec<(&str, &str)> = vec![("v1", DEFAULT_MODEL_ID), ("g2", GLINER2_MODEL_ID)];
     let mut results: BTreeMap<&str, (LabelCounts, usize)> = BTreeMap::new();
     for (arm, model_id) in &backends {
@@ -424,29 +468,7 @@ fn main() {
 
     // ── 3. Oracle ────────────────────────────────────────────────────
     let mut oracle_report = serde_json::json!(null);
-    if let Some(path) = &args.oracle {
-        let raw = match std::fs::read_to_string(path) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("typing_audit: oracle {}: {e}", path.display());
-                std::process::exit(1);
-            }
-        };
-        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("typing_audit: oracle {} is not valid JSON: {e}", path.display());
-                std::process::exit(1);
-            }
-        };
-        let oracle = match (parse_oracle(&parsed, "expect"), parse_oracle(&parsed, "never")) {
-            (Ok(expect), Ok(never)) => Oracle { expect, never },
-            (Err(e), _) | (_, Err(e)) => {
-                eprintln!("typing_audit: {e}");
-                std::process::exit(1);
-            }
-        };
-
+    if let Some(oracle) = &oracle {
         let mut rows = Vec::new();
         let mut scored = 0usize;
         let (mut v1_ok, mut g2_ok) = (0usize, 0usize);

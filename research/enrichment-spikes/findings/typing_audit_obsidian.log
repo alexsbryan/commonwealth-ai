@@ -1,4 +1,60 @@
 fixture research/enrichment-spikes/data/typing_obsidian_all.jsonl: 3175 chunk(s)
 auditing 3175 chunk(s)
 
-  gliner_small-v2.1 … 400/3175 chunks
+oracle sovereign/bench/gliner/typing_oracle_obsidian.json: 8 positive(s), 8 anti-test(s)
+  gliner_small-v2.1 … 400/3175 chunks  gliner_small-v2.1 … 800/3175 chunks  gliner_small-v2.1 … 1200/3175 chunks  gliner_small-v2.1 … 1600/3175 chunks  gliner_small-v2.1 … 2000/3175 chunks  gliner_small-v2.1 … 2400/3175 chunks  gliner_small-v2.1 … 2800/3175 chunksv1 (gliner_small-v2.1, threshold 0.60): 10004 mentions, 4436 distinct surfaces, 879.6s
+  gliner2-base-v1-onnx … 400/3175 chunks  gliner2-base-v1-onnx … 800/3175 chunks  gliner2-base-v1-onnx … 1200/3175 chunks  gliner2-base-v1-onnx … 1600/3175 chunks  gliner2-base-v1-onnx … 2000/3175 chunks  gliner2-base-v1-onnx … 2400/3175 chunks  gliner2-base-v1-onnx … 2800/3175 chunksg2 (gliner2-base-v1-onnx, threshold 0.50): 34436 mentions, 15542 distinct surfaces, 894.0s
+
+── mentions per label ──
+  label                  v1       g2
+  Event                 509     2636
+  Location             1184     2137
+  Organization         5084     9803
+  Person               2595     3807
+  Work                  632    16053
+  TOTAL               10004    34436
+  per chunk            3.15    10.85
+
+── head-to-head on 3389 shared surface form(s): 2992 agree (88.3%), 397 disagree ──
+  v1 Event          → g2 Organization      1  e.g. time to first intelligence
+  v1 Event          → g2 Work             20  e.g. actionapproval, atos event log, code sessions, commitment, criminal justice reform, follow_up, incidents, labor law reform
+  v1 Location       → g2 Event             8  e.g. alpha, bretton woods, d5, december, installation, ud-q4_k_xl, y5, y7
+  v1 Location       → g2 Organization     51  e.g. barcelona, base, big data centers, carlyle, consumer base, courts, dc circuit, em
+  v1 Location       → g2 Person            3  e.g. host, wall-e, yakumo
+  v1 Location       → g2 Work             21  e.g. candidate space, codebase, context, custody, docs, domain, education, finance
+  v1 Organization   → g2 Event            14  e.g. agora project, altcap accelerator, civil rights movement, cohort 3, foundation partnership, founding sponsor designation, labor movements, laundromat
+  v1 Organization   → g2 Location         36  e.g. aquaculture, archives, atelier, borealis, bridgewater, bungala solar farm, cit, copx etf
+  v1 Organization   → g2 Person           60  e.g. activists, agents, appleton, asset managers, bear stearns, billionaire collectors, brokers, cohere
+  v1 Organization   → g2 Work            108  e.g. abm pipeline, academic research, academic system review, acquirers, agricultural engineering programs, ai tools, architecture, architecture.md
+  v1 Person         → g2 Event             1  e.g. date
+  v1 Person         → g2 Location          4  e.g. berkeley, durkheim, it, marcuse
+  v1 Person         → g2 Organization     24  e.g. adorno, aessedai, amerigo vespucci, angel, arizmendiarrieta, auditors, cto, edgar acquirer
+  v1 Person         → g2 Work             23  e.g. agronomist, ai strategist, carpenter, cody, commissioner, conversationalist, cook, critic
+  v1 Work           → g2 Event             6  e.g. commit, debugging sessions, experiment, parallax demos, refactor, ufo build
+  v1 Work           → g2 Location          2  e.g. gate, settings
+  v1 Work           → g2 Organization     13  e.g. agriculture, cognitive science literature, eval-kit, fable feedback, federation services, harness engineering, herbalpharmacopoeia, hipporag 2
+  v1 Work           → g2 Person            2  e.g. anna karenina, visual regression
+
+── oracle: names with a known-correct label ──
+  surface                    expected     v1           g2            per-mention
+  Elinor Ostrom              Person       Person ✓     Person ✓      mentions v1 2/2 g2 2/2
+  Ostrom                     Person       Person ✓     Organization  mentions v1 10/11 g2 6/12  g2 also: Organization×6
+  Garrett Hardin             Person       Person ✓     Person ✓      mentions v1 1/1 g2 1/1
+  Hardin                     Person       —            —           
+  Joan Robinson              Person       Person ✓     Person ✓      mentions v1 9/9 g2 9/9
+  Jane Jacobs                Person       Person ✓     Person ✓      mentions v1 5/5 g2 5/5
+  Jacobs                     Person       —            —           
+  Keynes                     Person       Person ✓     Person ✓      mentions v1 4/4 g2 4/4
+
+── oracle anti-tests: names that must NOT carry this label ──
+  none violated (of 8 present in the fixture)
+
+── oracle verdict ──
+  positives present in fixture: 6 of 8
+  correct label   v1 6/6   g2 5/6   (entity level, dominant label)
+  correct mention v1 31/32 (96.9%)   g2 27/33 (81.8%)   (row level — what chunk_entities stores)
+  anti-tests present: 8 of 8
+  violations      v1 0/8   g2 0/8
+
+report written: research/enrichment-spikes/findings/typing_audit_obsidian.json
+exit 0

@@ -619,8 +619,11 @@ means one thing.
   `LabeledEntityExtractor` seam, so v1 (gline-rs) and GLiNER2 (bare
   `ort`) share one persistence/dedup/provenance path.
   `SOVEREIGN_GLINER_MODEL_ID` picks which; it defaults to v1
-  (`gliner_small-v2.1`) and GLiNER2 is dark pending the quality gate
-  (`DEFAULTS_LEDGER.md`). The extractor that actually ran is recorded
+  (`gliner_small-v2.1`). GLiNER2 was **measured and rejected** for this
+  path on 2026-08-03 — no speedup at vault chunk lengths and worse
+  per-mention typing (`DEFAULTS_LEDGER.md` REJECTED,
+  `bench/gliner/README.md`); the knob remains as the way to re-test it.
+  The extractor that actually ran is recorded
   per corpus on `chunk_entity_progress` (`model_id`, `threshold`,
   `labels_json`). Used by attached docs, conversations, Obsidian /
   watched folders.

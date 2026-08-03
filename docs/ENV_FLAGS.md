@@ -42,7 +42,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 
 | flag | default | status | purpose |
 |---|---|---|---|
-| `SOVEREIGN_GLINER_MODEL_ID` | gliner_small-v2.1 | experiment | WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. Set to gliner2-base-v1-onnx to route ingest through GLiNER2 (P2.1). Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live. |
+| `SOVEREIGN_GLINER_MODEL_ID` | gliner_small-v2.1 | experiment | WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. gliner2-base-v1-onnx routes ingest through GLiNER2 — MEASURED AND REJECTED for the vault path 2026-08-03 (no speedup on vault-length chunks, worse per-mention typing; DEFAULTS_LEDGER.md REJECTED). The knob stays because it is how that is re-tested. Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live. |
 
 ## grounding
 

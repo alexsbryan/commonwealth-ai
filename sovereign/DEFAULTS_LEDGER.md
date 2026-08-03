@@ -31,27 +31,6 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
-### GLiNER2 on the ingest path (`SOVEREIGN_GLINER_MODEL_ID`)
-- **Shipped:** 2026-08-03, dark. The `LabeledEntityExtractor` seam
-  routes either generation into `GlinerChunkExtractor`; the selector
-  defaults to v1 (`gliner_small-v2.1`), so nothing changes until the
-  env var names `gliner2-base-v1-onnx`.
-- **Proof so far:** backend correctness proven against the real 795 MB
-  graph (7.29 chunks/s, 2.44 GB RSS); 2.52× faster and ~4.8× lighter
-  than v1 on an isolated 50-chunk fixture, three runs per arm, quiet
-  box (notes `abc4fb34`, `3f47d12e`). **Quality is unproven** — the
-  50-chunk eyeball found GLiNER2 typing BonJour and Sosa as `Work`
-  where v1 said `Person`, so P2.1's "fixes type-collapse by extracting
-  types jointly" claim is currently contradicted by the only evidence
-  that exists.
-- **Flip condition:** on the obsidian vault lane, GLiNER2 holds the
-  established bar (58/68 facts, 8/12 sources) at a lower
-  time-to-enriched than 29m32s — AND per-label typing does not regress
-  against v1 on the goldens. Either half failing keeps it dark.
-- **Settled by:** P2.1 (`ENRICHMENT_ROADMAP.md` §P2.1), the run this
-  row was written to gate.
-- **Review by:** 2026-08-17.
-
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not
@@ -75,6 +54,37 @@ store (ids cited per row).
 - **Review by:** 2026-09-01.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)
+- **Shipped and settled the same day, 2026-08-03.** The row was written
+  in the morning against a flip condition — "holds the vault bar at a
+  lower time-to-enriched AND no per-label typing regression" — and the
+  afternoon's run refuted **both halves**. Recording it rather than
+  deleting it, because the seam it rode in on is staying.
+- **Verdict, on all 3,175 obsidian vault chunks**, both backends through
+  the production `LabeledEntityExtractor` seam
+  (`sovereign-gliner/examples/typing_audit.rs`, artifact
+  `research/enrichment-spikes/findings/typing_audit_obsidian.json`):
+  - **Time: 881.9 s v1 vs 893.2 s GLiNER2 — no speedup, marginally
+    slower.** The 2.52× was real but is a property of the chunk-length
+    distribution, not the model (sep p50 761 chars; vault p50 1,808).
+    v1's gline-rs stack batches 8 texts per call and amortises; GLiNER2
+    is one graph call per text. Note `dc2e4b5d`.
+  - **Typing: worse, not fixed.** Mention-level Person accuracy 96.9%
+    (v1) vs 81.8% (GLiNER2) on the vault oracle; 99.7% vs 67.3% on sep.
+    `Ostrom` — the vault's anchor entity — is `Person` ×6 /
+    `Organization` ×6 under GLiNER2. `Work` becomes a catch-all for
+    ordinary noun phrases: 16,053 `Work` mentions to v1's 632, 47% of
+    its entire output. Note `f42cf7ec`.
+- **What is NOT rejected:** the residency finding (GLiNER2 is ~4.8×
+  lighter, note `3f47d12e`) and the seam itself. The knob stays — it is
+  how anyone re-tests this — and P2.1's steps (b)–(d) were never
+  evaluated.
+- **Re-open only if:** a GLiNER2 checkpoint or label/threshold
+  configuration demonstrably stops `Work` absorbing common noun phrases,
+  scored **per mention** on `bench/gliner/` oracles; or a target corpus
+  with sep-shaped chunk lengths makes the throughput win real AND typing
+  holds. Both halves, not either.
 
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
 - **Verdict:** 2026-07-31, per this row's own settling condition — the
