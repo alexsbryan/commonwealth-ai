@@ -546,7 +546,7 @@ pub(crate) fn decode_f32_vec(bytes: &[u8]) -> Vec<f32> {
 // re-exports below let existing call sites keep their import paths.
 
 pub use sovereign_core::conv_tiered::{
-    ConvMotifRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, ConvTieredState,
+    ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, ConvTieredState,
     SummaryCorrectionRow,
 };
 

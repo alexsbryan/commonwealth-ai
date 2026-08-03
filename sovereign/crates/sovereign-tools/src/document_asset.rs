@@ -2345,37 +2345,6 @@ fn parse_segment_title_lines(text: &str) -> Vec<(String, SectionFunction)> {
 /// Errors are logged and swallowed: the T2 skeleton is the durable
 /// retrieval surface, RAPTOR is additive. A RAPTOR build failure
 /// degrades briefing quality at Ready but never breaks attach.
-/// Env knob that skips the T3 motif pass. See [`motifs_disabled`].
-pub const SKIP_MOTIFS_ENV: &str = "SOVEREIGN_SKIP_MOTIFS";
-
-/// Ablation knob: build the RAPTOR tree but skip the motif index.
-///
-/// Motif extraction is **42.8% of time-to-enriched on the folder/vault
-/// path** (measured 2026-08-02: 22.3m of a 52m03s cold build of a
-/// 330-note vault), and its output table `conv_motifs` has one INSERT
-/// and two DELETEs in this workspace and **no reader** — no
-/// `list_conv_motifs`, no method on `ConvTieredReader`, no SELECT in
-/// any file. The `conv_tiered_provider` comment claiming motifs feed
-/// briefing signposts describes `CONV_TIERED_PORT.md:385`, which is
-/// future tense and was never built for the conv/vault side. (The
-/// attached-document briefing DOES render motifs, but from
-/// `asset_motifs` — a different table on a different surface, and it
-/// is not what this flag turns off by default.)
-///
-/// This exists so that claim is **falsifiable** rather than asserted:
-/// build the same vault with the pass off and score the same bank. A
-/// non-zero retrieval delta means something reads them after all and
-/// the 42.8% is not free.
-///
-/// Off by default; `svrn bench vault-report --no-motifs` sets it for
-/// the duration of one measured build.
-pub fn motifs_disabled() -> bool {
-    matches!(
-        std::env::var(SKIP_MOTIFS_ENV).ok().as_deref(),
-        Some("1") | Some("true")
-    )
-}
-
 /// Pure corpus-free RAPTOR + motif builder. Takes pre-fetched chunks
 /// + embeddings and returns the artifacts the persistent variants
 /// (attached-doc `build_and_persist_raptor_atlas`, folder
@@ -2411,10 +2380,23 @@ pub(crate) async fn build_atlas_artifacts(
     .await
 }
 
-/// Checkpoint-aware variant. Most callers should reach this directly
-/// — the legacy wrapper exists only for paths that don't have a
-/// per-corpus index dir to drop the checkpoint into.
-pub(crate) async fn build_atlas_artifacts_with_checkpoint(
+/// RAPTOR tree only — no motif pass.
+///
+/// This is the entry point for the **folder/vault** path, and it is a
+/// separate function rather than a flag on purpose: that path's motif
+/// table (`conv_motifs`) had one INSERT, two DELETEs and no reader
+/// anywhere in the workspace, while the pass itself cost **42.8% of a
+/// cold vault build** (22.3m of 52m03s, 330 notes, measured
+/// 2026-08-02). Deleting the write is only half the fix — as long as a
+/// caller *could* ask this builder for motifs, the expensive pass can
+/// come back by accident. It can't: the folder path calls a function
+/// that has no motif concept in its return type.
+///
+/// The attached-document path keeps motifs and calls
+/// [`build_atlas_artifacts_with_checkpoint`] instead — `asset_motifs`
+/// is a different table with a real reader (`list_asset_motifs`) that
+/// the document briefing renders.
+pub(crate) async fn build_raptor_nodes_with_checkpoint(
     inference: &Arc<dyn InferenceProvider>,
     chunks: &[ChunkInput],
     embeddings: &[Vec<f32>],
@@ -2429,9 +2411,9 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     // abstractive summary). Corpus-scale callers pass `Sample(p)` for
     // SP3 economics, or `Off` to opt out explicitly.
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
-) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
+) -> Result<Vec<RaptorNode>> {
     if chunks.is_empty() {
-        return Ok((Vec::new(), Vec::new()));
+        return Ok(Vec::new());
     }
 
     // RAPTOR tree — the long sub-phase. Errors propagate so callers
@@ -2481,40 +2463,67 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
         );
     }
 
-    // Motif index — best-effort, and ablatable (see `motifs_disabled`).
-    // Convert ChunkInput → TextChunk for the existing motif extractor.
-    let skip_motifs = motifs_disabled();
-    let t_motifs = std::time::Instant::now();
-    let motifs = if skip_motifs {
-        Vec::new()
-    } else {
-        let text_chunks: Vec<TextChunk> = chunks
-            .iter()
-            .map(|c| TextChunk {
-                content: c.content.clone(),
-                index: c.chunk_id as usize,
-            })
-            .collect();
-        // Wider candidate pool (was 100) since the df>=1 floor lets
-        // rare-but-distinctive scene markers reach the LLM classifier.
-        let candidates = extract_motif_candidates(&text_chunks, 200);
-        classify_motifs(inference, candidates, doc_type).await
-    };
     // [t3-profile] turbocharge-arc phase split (2026-07-24) — stderr on
     // the driving process; promote to allowlisted tracing spans when the
-    // arc lands. A DISABLED pass prints `skipped`, never `0.0s`: an
-    // ablation arm and a suspiciously fast one must not read alike in a
-    // log. (`motifs→` is the classified count; the old label said
+    // arc lands.
+    eprintln!("      [t3-profile] raptor_tree={tree_s:.1}s (nodes={})", nodes.len());
+
+    Ok(nodes)
+}
+
+/// RAPTOR tree **plus** the TF-IDF motif index — the attached-document
+/// path, whose `asset_motifs` rows the document briefing actually
+/// renders.
+///
+/// See [`build_raptor_nodes_with_checkpoint`] for why the folder/vault
+/// path deliberately cannot reach this function.
+pub(crate) async fn build_atlas_artifacts_with_checkpoint(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    correction_hint: Option<&str>,
+    summary_mode: crate::raptor_atlas::SummaryMode,
+    verify_policy: Option<crate::summary_verify::VerifyPolicy>,
+) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
+    if chunks.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    let nodes = build_raptor_nodes_with_checkpoint(
+        inference,
+        chunks,
+        embeddings,
+        doc_type.clone(),
+        checkpoint,
+        progress,
+        correction_hint,
+        summary_mode,
+        verify_policy,
+    )
+    .await?;
+
+    // Convert ChunkInput → TextChunk for the existing motif extractor.
+    let t_motifs = std::time::Instant::now();
+    let text_chunks: Vec<TextChunk> = chunks
+        .iter()
+        .map(|c| TextChunk {
+            content: c.content.clone(),
+            index: c.chunk_id as usize,
+        })
+        .collect();
+    // Wider candidate pool (was 100) since the df>=1 floor lets
+    // rare-but-distinctive scene markers reach the LLM classifier.
+    let candidates = extract_motif_candidates(&text_chunks, 200);
+    let motifs = classify_motifs(inference, candidates, doc_type).await;
+    // `motifs→` is the classified count; the old label said
     // `motif_candidates→` and was reading the wrong side of
-    // `classify_motifs`.)
+    // `classify_motifs`.
     eprintln!(
-        "      [t3-profile] raptor_tree={tree_s:.1}s motifs={} (nodes={}, motifs→{})",
-        if skip_motifs {
-            "skipped".to_string()
-        } else {
-            format!("{:.1}s", t_motifs.elapsed().as_secs_f32())
-        },
-        nodes.len(),
+        "      [t3-profile] motifs={:.1}s (motifs→{})",
+        t_motifs.elapsed().as_secs_f32(),
         motifs.len(),
     );
 

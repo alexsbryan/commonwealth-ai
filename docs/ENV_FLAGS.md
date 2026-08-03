@@ -25,7 +25,6 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_CHAOS_TYPED_VERDICT` | on | shipped | Chaos scorer derives answer-vs-abstain from the typed epistemic verdict (parity-proven 43/43 vs the gate-action prefix, 2026-07-19). =0 forces legacy. |
 | `SOVEREIGN_FRONTDOOR` | unset | deprecated | Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named). *(alias of `SOVEREIGN_HARNESS`)* |
 | `SOVEREIGN_HARNESS` | unset | shipped | Bench harness selector. |
-| `SOVEREIGN_SKIP_MOTIFS` | off | experiment | =1 skips the T3 motif index, keeping the RAPTOR tree. Motif extraction is 42.8% of a cold vault build (22.3m of 52m03s, 330 notes, 2026-08-02) and `conv_motifs` has no reader in the workspace; this is the ablation arm that makes that claim falsifiable. Set in-process by `svrn bench vault-report --no-motifs`; the run's `motif_path` field is the truth-teller. |
 
 ## cli-binaries
 

@@ -92,16 +92,9 @@ pub struct ConvRaptorNodeRow {
     pub summarizer_model: String,
 }
 
-/// One row from `conv_motifs` — TF-IDF distinctive term per conv.
-#[derive(Debug, Clone)]
-pub struct ConvMotifRow {
-    pub corpus_id: String,
-    pub conv_uuid: String,
-    pub term: String,
-    pub tf_idf_score: f64,
-    pub occurrence_chunk_ids_json: String,
-    pub is_distinctive: bool,
-}
+// `ConvMotifRow` was deleted 2026-08-02 with the folder-path motif
+// pass. The `conv_motifs` table it mapped had no reader anywhere in
+// the workspace and cost 42.8% of a cold vault build to populate.
 
 /// One per-chunk entity mention from the GliNER NER pass. Persisted
 /// in the `chunk_entities` table (migration:

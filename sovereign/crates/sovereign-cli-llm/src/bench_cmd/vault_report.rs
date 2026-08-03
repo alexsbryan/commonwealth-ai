@@ -97,7 +97,7 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage(
             "svrn bench vault-report (--corpus-id <id> | --folder <path>) (--cold | --warm) \
-             [--enrich-model <id>] [--no-gliner] [--no-motifs] [--allow-watcher] \
+             [--enrich-model <id>] [--no-gliner] [--allow-watcher] \
              [--output <path>] [--compare <timings.json>]",
         ),
         HelpSection::Flags(&[
@@ -132,13 +132,6 @@ const HELP: Help = Help {
                 "--no-gliner",
                 "Skip the local NER pass entirely, leaving RAPTOR-only entities. The A/B \
                  partner for measuring what the NER phase actually costs.",
-            ),
-            (
-                "--no-motifs",
-                "Skip the T3 motif index, keeping the RAPTOR tree. Motif extraction is 42.8% \
-                 of a cold build and `conv_motifs` has no reader in the workspace — this arm \
-                 makes that claim falsifiable rather than asserted. Score the same bank with \
-                 and without: a non-zero retrieval delta means something reads them.",
             ),
             (
                 "--allow-watcher",
@@ -278,9 +271,12 @@ pub struct VaultReportRun {
     /// `gliner` · `disabled` · `unavailable`. The routing truth-teller
     /// for the NER phase — trust it over the flag you passed.
     pub entity_path: String,
-    /// `built` · `skipped`. Same contract for the T3 motif index
-    /// (`--no-motifs`). Defaults to `built` so runs recorded before the
-    /// flag existed — the 2026-08-02 cold baseline among them — still
+    /// `built` · `skipped` · `removed`. The T3 motif index's routing
+    /// truth-teller, and now a historical marker: `built` = a run from
+    /// before 2026-08-02, `skipped` = one of the `--no-motifs` ablation
+    /// arms that settled it, `removed` = the pass no longer exists on
+    /// the folder path. Defaults to `built` so runs recorded before the
+    /// field existed — the 2026-08-02 cold baseline among them — still
     /// deserialize under `--compare`.
     #[serde(default = "motif_path_built")]
     pub motif_path: String,
@@ -654,7 +650,6 @@ struct Opts {
     mode: Option<Mode>,
     enrich_model: Option<String>,
     no_gliner: bool,
-    no_motifs: bool,
     allow_watcher: bool,
     output: Option<PathBuf>,
     compare: Option<PathBuf>,
@@ -678,7 +673,6 @@ fn parse_args(args: &[String]) -> std::result::Result<Opts, String> {
             "--warm" => o.mode = Some(Mode::Warm),
             "--enrich-model" => o.enrich_model = Some(need("--enrich-model")?),
             "--no-gliner" => o.no_gliner = true,
-            "--no-motifs" => o.no_motifs = true,
             "--allow-watcher" => o.allow_watcher = true,
             "--output" => o.output = Some(PathBuf::from(need("--output")?)),
             "--compare" => o.compare = Some(PathBuf::from(need("--compare")?)),
@@ -933,22 +927,17 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
     let (entity_handle, entity_path) =
         build_entity_extractor(&opts, Arc::clone(&store), Arc::clone(&obs));
 
-    // The motif pass lives four call layers down inside
-    // `document_asset::build_atlas_artifacts_with_checkpoint`, whose
-    // nine positional arguments are already at the limit of what a
-    // reader can hold. An env knob set in-process for this one measured
-    // build is the same shape `bench_cmd::scaffolding_param` uses for
-    // its ablation arms. `motif_path` below is the truth-teller — read
-    // it, not the flag you typed.
-    if opts.no_motifs {
-        std::env::set_var(sovereign_tools::document_asset::SKIP_MOTIFS_ENV, "1");
-    }
-    let motif_path = if sovereign_tools::document_asset::motifs_disabled() {
-        "skipped"
-    } else {
-        "built"
-    }
-    .to_string();
+    // `removed`, not a measurement. The ablation this field used to
+    // report ran on 2026-08-02 and settled: the folder path's motif
+    // pass cost 42.8% of a cold build, `conv_motifs` had no reader, and
+    // dropping it was 1.76x faster at per-question-identical scores. So
+    // the pass was deleted rather than flagged — `build_folder_artifacts`
+    // now calls a builder with no motif concept in its return type, and
+    // there is no longer a code path this run could take that would
+    // build one. The field stays because run records from before the
+    // deletion say `built` and the ablation arms say `skipped`; a
+    // `--compare` across that boundary must not silently read alike.
+    let motif_path = "removed".to_string();
 
     obs.push_phase(
         "enrichment_setup",

@@ -325,41 +325,11 @@ impl SqliteStateStore {
         Ok(())
     }
 
-    /// Replace the motif set for one conversation. Same atomicity
-    /// rationale as `save_conv_raptor_nodes`.
-    pub async fn save_conv_motifs(
-        &self,
-        corpus_id: &str,
-        conv_uuid: &str,
-        motifs: &[ConvMotifRow],
-    ) -> Result<()> {
-        let mut conn = self.conn.lock().await;
-        let tx = conn.transaction().map_err(map_db)?;
-        tx.execute(
-            "DELETE FROM conv_motifs WHERE corpus_id = ?1 AND conv_uuid = ?2",
-            rusqlite::params![corpus_id, conv_uuid],
-        )
-        .map_err(map_db)?;
-        for motif in motifs {
-            tx.execute(
-                "INSERT INTO conv_motifs
-                    (corpus_id, conv_uuid, term, tf_idf_score,
-                     occurrence_chunk_ids, is_distinctive)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    motif.corpus_id,
-                    motif.conv_uuid,
-                    motif.term,
-                    motif.tf_idf_score,
-                    motif.occurrence_chunk_ids_json,
-                    if motif.is_distinctive { 1i64 } else { 0i64 },
-                ],
-            )
-            .map_err(map_db)?;
-        }
-        tx.commit().map_err(map_db)?;
-        Ok(())
-    }
+    // `save_conv_motifs` was deleted 2026-08-02 along with the T3 motif
+    // pass on the folder/vault path: `conv_motifs` never had a reader,
+    // and building it cost 42.8% of a cold vault build. The table and
+    // its purge DELETE below are retained so existing databases still
+    // get their legacy rows cleaned up; nothing writes new ones.
 
     /// Read every RAPTOR node for one conversation, ordered by level
     /// descending then by `node_id` so the briefing layer sees root
