@@ -167,12 +167,48 @@ fn gliner2_pass(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().collect();
-    let model_dir = args.get(1).cloned().unwrap_or_else(|| ".".into());
-    let fixture = args
-        .get(2)
-        .cloned()
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+
+    // `--only=v1|g2|rel|all` (default `all`).
+    //
+    // Isolation is what makes max-RSS ATTRIBUTABLE. With every pass in one
+    // process the peak is the union of a gline-rs session, a bare-ort
+    // session and a second schema run over the same session — which is
+    // nobody's production residency. SP1 reported ~6.7 GB "incremental"
+    // by subtracting a v1-solo run from that union; the 2026-08-02 re-run
+    // measured the union at 11.7-12.0 GB and the subtraction is not a
+    // valid attribution either way. `--only=g2` is the number that gates
+    // a default flip.
+    let only = argv
+        .iter()
+        .find_map(|a| a.strip_prefix("--only=").map(str::to_string))
+        .unwrap_or_else(|| "all".into());
+    let (run_v1, run_g2, run_rel) = match only.as_str() {
+        "all" => (true, true, true),
+        "v1" => (true, false, false),
+        "g2" => (false, true, false),
+        "rel" => (false, true, true),
+        other => {
+            // Refuse rather than silently falling back to `all`: a typo'd
+            // mode that quietly ran every pass would report a union RSS
+            // under the name of an isolated one.
+            return Err(format!(
+                "--only={other}: expected one of v1|g2|rel|all"
+            )
+            .into());
+        }
+    };
+
+    let positional: Vec<&String> = argv.iter().filter(|a| !a.starts_with("--")).collect();
+    let model_dir = positional
+        .first()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| ".".into());
+    let fixture = positional
+        .get(1)
+        .map(|s| s.to_string())
         .unwrap_or_else(|| "research/enrichment-spikes/data/chunks_50.jsonl".into());
+    eprintln!("passes: v1={run_v1} g2={run_g2} rel={run_rel} (--only={only})");
 
     let raw = std::fs::read_to_string(&fixture)?;
     let chunks: Vec<String> = raw
@@ -191,7 +227,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ── Pass 1: v1 baseline (gline-rs stack) ──
-    {
+    if run_v1 {
         use sovereign_gliner::gliner_ner::GlinerExtractor;
         eprintln!("[v1] loading gliner_small-v2.1 (gline-rs)…");
         let t = Instant::now();
@@ -212,6 +248,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ms.iter().take(6).map(|m| format!("{}:{}", m.label, m.text)).collect();
             eprintln!("  [v1] chunk {ci}: {sample:?}");
         }
+    }
+
+    // Everything below needs the GLiNER2 session; an early return keeps
+    // `--only=v1` from paying its 795 MB load and polluting the RSS peak.
+    if !run_g2 {
+        return Ok(());
     }
 
     // ── Pass 2: GLiNER2 entities, bare ort rc.9 ──
@@ -246,6 +288,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("g2_mentions_per_chunk {:.1}", mentions as f64 / chunks.len() as f64);
     for s in &samples {
         eprintln!("{s}");
+    }
+
+    if !run_rel {
+        return Ok(());
     }
 
     // ── Pass 3: relation-style field group ──

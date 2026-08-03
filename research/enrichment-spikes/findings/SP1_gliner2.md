@@ -13,6 +13,56 @@ over the same fixture, so the throughput comparison is apples-to-apples. Machine
 concurrently running the SP2 Arm A′ enrich (daemon/GPU busy); both passes shared that
 load, so absolute numbers are conservative but the RATIO is fair.
 
+> ### CORRECTION 2026-08-02 — the ratio is **2.52×**, not 2.8×, and the
+> "ratio is fair under shared load" claim above is FALSIFIED.
+>
+> Re-run on the same M2 Max with the box quiet (nothing >20% CPU), same
+> binary, same fixture, **three consecutive runs with near-zero variance**
+> (v1 17.40/17.41/17.41 s; g2 6.90/6.91/6.90 s):
+>
+> | | 2026-07-30 (loaded box) | 2026-08-02 (quiet box) |
+> |---|---|---|
+> | v1 chunks/s | 2.45 | **2.87** (+17%) |
+> | g2 chunks/s | 7.04 | **7.24** (+3%) |
+> | **ratio** | **2.8×** | **2.52×** |
+>
+> Shared load did NOT affect both passes equally: v1 (gline-rs stack)
+> degraded ~17% under it while g2 (bare ort) degraded ~3%, so the busy
+> box *inflated* the ratio rather than leaving it fair. 2.8× has since
+> propagated into `ENRICHMENT_ROADMAP.md`, the P2.1 plan step and
+> `SIZING:220`; the honest figure for predicting P2.1's delta is **2.52×**.
+> The verdict (YES, adopt) is unchanged — this moves the predicted saving
+> on a 330-note vault build by about one minute, not the decision.
+>
+> ### The RSS finding is INVERTED — GLiNER2 is ~4.8× LIGHTER than v1
+>
+> The "~6–7 GB incremental for GLiNER2, the real blocker for desktop and
+> daemon residency" is an **artifact of an invalid subtraction**, not a
+> property of the model. The probe was rerun with a new `--only=` flag
+> that isolates each pass in its own process (`--only=v1|g2|rel|all`),
+> which is the only way max-RSS is attributable. Three runs each, quiet
+> box, same 50-chunk fixture:
+>
+> | isolated pass | max RSS | chunks/s |
+> |---|---|---|
+> | **GLiNER2 (bare ort)** | **2.39 / 2.40 / 2.44 GB** | 7.16 / 7.22 / 7.23 |
+> | **v1 (gline-rs stack)** | **11.53 / 11.54 / 11.96 GB** | 2.77 / 2.85 / 2.87 |
+>
+> **v1 is the memory hog, and GLiNER2 replacing it is a ~9 GB REDUCTION
+> in peak RSS on this workload.** The original 6.7 GB "incremental" came
+> from subtracting a **1.63 GB `gliner_smoke` run — a different example
+> over a different, smaller workload** — from a union peak that was
+> almost entirely v1's own footprint, then attributing the whole
+> remainder to GLiNER2. Two different workloads on either side of the
+> minus sign.
+>
+> **Consequence for P2.1:** the plan's "arena/session tuning is a
+> prerequisite, not a polish item" and "the real blocker for desktop and
+> daemon residency" are both **retired**. Adopting GLiNER2 improves
+> residency. Arena tuning becomes an optional optimisation on a 2.4 GB
+> footprint rather than a gate on a claimed 6–7 GB one. Measure the
+> desktop budget against 2.4 GB, not 6–7 GB.
+
 ## Method (exact commands)
 
 ```
