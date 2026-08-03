@@ -4,6 +4,51 @@
 anything. It supersedes the sequencing in `MAC_MIGRATION.md` and corrects the
 headline of `findings/M0_PROBE_HALO.md`.
 
+> ## STATUS 2026-08-02, later the same day — §4 PASSED. Read `findings/M2_HALO_GRADCHECK.md`.
+>
+> - **The lane trains.** 186/186 LoRA B matrices nonzero, 24/24 layers, every
+>   gated-deltanet projection included. Vanilla TRL, gfx1151, 16 seconds.
+> - **§3 is descheduled from the critical path.** Unsloth was recommended
+>   because MLX had no deltanet backward; torch has one. It is now a throughput
+>   experiment, and installing it would downgrade a stack that is proven.
+>   Do it in a separate venv, later.
+> - **§4's gate could not have run as written.** `train_orpo_trl.py` set
+>   `save_strategy="no"` and saved nothing after `trainer.train()`, so there was
+>   no adapter to read. Fixed: every run now writes `<out>/adapter/` and prints
+>   its own GATE PASS/FAIL, exit 3 on fail.
+> - **No second container needed.** Training runs inside `sovereign-vulkan`;
+>   the requirement is `/dev/kfd` plus any preloaded HSA runtime, and the host's
+>   at `/run/host/usr/lib64/` works. `launch_gradcheck.sh` detects it.
+> - **§7's `http.server` on :8099 is dead.** Confirmed no listener.
+> - **The gate had a blind spot in the same shape as the bug it was built to
+>   catch.** A 25-step follow-up hit NaN at step 11, and
+>   `check_adapter_trained.py` reported it as `NOT TRAINED -- B is exactly
+>   zero`, because `max(0.0, nan)` is `0.0`. Fixed: finiteness is checked before
+>   any `max()`, and there are now three verdicts — 0 TRAINED, 1 NOT TRAINED,
+>   3 DIVERGED. Note `edbfabb8`.
+> - **§4's own command trips §7's trap, and §7 is the side that is right.**
+>   `--seq-len 1024` sets `max_prompt_length` to 512 and truncates **92.5%** of
+>   `data/orpo-probe` (p50 819, p90 1251, max 1758 tokens); that is what
+>   diverges it — NaN by step 11 at accum 1, by step 2 at accum 8. At seq 4096,
+>   0% truncated, 15 steps clean, gate PASS. **Never gate at seq 1024.**
+>   `launch_gradcheck.sh` now defaults to seq 4096 / 15 iters / checkpointing.
+>   Note `c4851203`. M0 and the mix study are unaffected — both run at 4096.
+> - **Read §4 for what it is: a liveness check, not a stability test.** Five
+>   steps proves B leaves zero. It passed here one step before the config
+>   diverged. Default is now 15.
+> - **§5.2's GTT ratchet: the instrument was wrong and the named mitigation is
+>   dead.** Box-level `mem_info_gtt_used` cannot attribute, and this box has GPU
+>   co-tenants (the daemon's `--compute-child` held 26.9 GB during a probe). The
+>   trainer now records `proc_gtt_gb` from its own drm fdinfo alongside box GTT.
+>   With attribution, over 150 steps at seq 4096 the trainer is **flat at 4.65
+>   GB median** with 7 transient spikes to 25–42.6 GB — and
+>   `--empty-cache-every 10` (the untested mitigation at `M0_PROBE_HALO.md:79`)
+>   changes peak by 0.01 GB for +1% wall clock. **Clean negative; don't adopt
+>   it.** Note `f1e96c88`.
+> - **STILL the only thing between here and the mix study**, because 150 steps
+>   is 13x short of M0's ~1,600-micro-batch onset. A slow ratchet beyond that is
+>   not excluded. Definitive test ~2.5 h at accum 1, attribution on.
+
 ---
 
 ## Bottom line

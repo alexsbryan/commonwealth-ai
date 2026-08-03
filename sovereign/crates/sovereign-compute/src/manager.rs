@@ -793,6 +793,28 @@ impl DynamicChildSlot {
             .map(|h| h.placement())
     }
 
+    /// Context size the child's slot loads with; `None` = the child's own
+    /// default ([`crate::child_main::DEFAULT_CTX`]). The daemon's warm path
+    /// reads this so its memory projection sizes KV for the context the child
+    /// will actually build.
+    pub fn context_size(&self) -> Option<u32> {
+        self.spec.context_size
+    }
+
+    /// The endpoints the LIVE generation's handoff names — what the child is
+    /// actually dialing right now. Empty before the first respawn and once
+    /// retired. Read by the daemon's discovery loop as engagement evidence:
+    /// a child warming/serving across an endpoint vouches for that worker
+    /// while its single-connection RPC server cannot answer probes.
+    pub fn pinned_endpoints(&self) -> Vec<String> {
+        self.live_handoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|h| h.endpoints.clone())
+            .unwrap_or_default()
+    }
+
     /// The stable routing handle. Valid across respawns.
     pub fn provider(&self) -> Arc<ChildProvider> {
         Arc::clone(&self.provider)

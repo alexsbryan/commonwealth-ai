@@ -13,14 +13,24 @@ prompt arrives while context is past threshold.
 
 Behaviour
 ---------
-- ctx >= RED (250k): inject a hard directive every prompt.
+- ctx >= RED (500k): inject a hard directive every prompt.
   - frame fresh (<= FRAME_FRESH_S) AND provenance is self-reported or
     hand-written -> "finish step, final upsert, tell the operator to split".
   - otherwise -> "upsert your frame NOW via session_state, then split".
     (A distilled frame never authorizes a split — provenance, not score.)
-- ctx >= YELLOW (90k): one gentle nudge per session (marker file dedups),
+- ctx >= YELLOW (250k): one gentle nudge per session (marker file dedups),
   reminding the agent to keep the frame current at the next boundary.
 - below thresholds: silent, zero output.
+
+Thresholds raised 90k/250k -> 250k/500k on 2026-08-02 (operator call).
+The old lines were set against a context an order of magnitude smaller,
+and the arithmetic that justified them stopped holding: splitting is only
+a saving when cache-read on the carried context exceeds what the split
+itself costs — the donor's frame write, plus the successor re-acquiring
+by hand what the frame could not carry in 2,150 tokens. Below ~250k that
+overhead dominates, so the protocol was firing on sessions it made more
+expensive, not less. Frequent small splits are the failure mode now; the
+lever still pays at genuinely fat contexts, which is where it now fires.
 
 Every firing appends one JSON line to ~/.sovereign/sessions/split-events.jsonl
 — the split-adoption signal the weekly fleet report reads (did red-crossing
@@ -42,8 +52,8 @@ import sys
 import time
 from pathlib import Path
 
-YELLOW = int(os.environ.get("SPLIT_YELLOW_TOKENS", "90000"))
-RED = int(os.environ.get("SPLIT_RED_TOKENS", "250000"))
+YELLOW = int(os.environ.get("SPLIT_YELLOW_TOKENS", "250000"))
+RED = int(os.environ.get("SPLIT_RED_TOKENS", "500000"))
 # A frame older than this is stale for split purposes: the spec wants the
 # donor's LAST state, and 15 minutes of red-zone work invalidates a frame
 # faster than an hour of steady state.

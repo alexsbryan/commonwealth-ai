@@ -15,7 +15,7 @@
 //! (an encode-time write upgrades a distilled frame — the stronger
 //! evidence wins). The schema-v1 contract is enforced at write time:
 //! all nine sections always present, and the whole document must fit
-//! the 2,100-token budget — an over-budget upsert is REJECTED with
+//! the 2,150-token budget — an over-budget upsert is REJECTED with
 //! per-section token counts so the caller trims instead of shipping a
 //! bloated frame (the spec: "a frame that cannot fit must drop
 //! detail, never sections").
@@ -70,7 +70,13 @@ const WORK_SECTIONS: [&str; 4] = ["Goal", "State", "Next", "Decisions"];
 /// objective got ~150 and `Goal` dropped 100 → ~50, since half its
 /// contract moved out. A hundred tokens per boot is a trivial price
 /// against a session of specious tweaking — the failure this buys off.
-pub const FRAME_TOKEN_BUDGET: usize = 2_100;
+///
+/// Raised 2,100 → 2,150 on 2026-08-02 when `Objective` gained
+/// `Anchored in:` (SESSION_CONTINUITY §2.1 part 4) — the
+/// `ARCH_PRINCIPLES.md` sections the initiative's shape answers to.
+/// Same trade at the same price: fifty tokens per boot against a
+/// lineage that keeps the work and loses the rules it was built under.
+pub const FRAME_TOKEN_BUDGET: usize = 2_150;
 
 /// The session frame's contract, expressed in the shared frame
 /// primitive. Parse / upsert / render / budget mechanics live in
@@ -369,6 +375,9 @@ pub fn upsert_frame(
              \x20 • the outcome, and where it is specified (doc path + section, or plan path)\n\
              \x20 • `Done when:` — a falsifiable test at INITIATIVE altitude\n\
              \x20 • `Not worth continuing if:` — the exit condition\n\
+             \x20 • `Anchored in:` — the ARCH_PRINCIPLES.md sections this initiative's\n\
+             \x20   shape answers to, and where it knowingly deviates. Section numbers,\n\
+             \x20   not prose. Open the section before you cite it.\n\
              \n\
              If you are continuing a predecessor, COPY its `## Objective` verbatim \
              (`sovereign session frames <predecessor-id>`) and edit it only if the \
@@ -564,8 +573,11 @@ impl Tool for SessionStateTool {
                  when continuing a predecessor, copy its `## Objective` verbatim and edit only \
                  if the objective genuinely changed. Must carry the outcome + where it is \
                  specified (doc path/section or plan path), a `Done when:` line that is \
-                 falsifiable at INITIATIVE altitude, and a `Not worth continuing if:` exit \
-                 condition. Never phrase it as a delta from the last frame."
+                 falsifiable at INITIATIVE altitude, a `Not worth continuing if:` exit \
+                 condition, and an `Anchored in:` line naming the ARCH_PRINCIPLES.md \
+                 sections this initiative's shape answers to (section numbers, not prose \
+                 — open the section before citing it). Never phrase it as a delta from \
+                 the last frame."
                     .to_string()
             } else {
                 format!(

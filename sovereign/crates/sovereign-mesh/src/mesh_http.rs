@@ -228,6 +228,16 @@ pub struct DeviceMemoryView {
     pub free_mb: u64,
     /// Physical device memory — the durable hardware fact.
     pub total_mb: u64,
+    /// What the OWNING node keeps for itself and will not lend, already
+    /// reflected in the capacity its own loader plans against.
+    ///
+    /// Travels with the other two for the same reason they travel together: a
+    /// consumer that derives capacity from `free_mb` alone computes a bigger
+    /// device than the loader will actually use, and then previews a cut the
+    /// loader would not make. `0` on a remote row — a peer's reserve is the
+    /// peer's to declare, and this node does not speak for it.
+    #[serde(default)]
+    pub reserve_mb: u64,
 }
 
 impl From<sovereign_inference::embedded::DeviceMemory> for DeviceMemoryView {
@@ -236,6 +246,7 @@ impl From<sovereign_inference::embedded::DeviceMemory> for DeviceMemoryView {
         Self {
             free_mb: m.free_bytes / MIB,
             total_mb: m.total_bytes / MIB,
+            reserve_mb: m.reserve_bytes / MIB,
             endpoint: m.endpoint,
         }
     }

@@ -64,12 +64,12 @@ notes: [<note-id>, ...]         # durable notes written during the session
 ---
 ```
 
-Sections, each with its budget share (total ≤ 2,100 tokens — hard cap,
+Sections, each with its budget share (total ≤ 2,150 tokens — hard cap,
 enforced by writers; a frame that cannot fit must drop detail, never sections):
 
 | Section | Budget | Contract |
 |---|---|---|
-| `## Objective` | ~150 | The STANDING outcome the work serves — see §2.1. **Inherited, not re-authored.** |
+| `## Objective` | ~200 | The STANDING outcome the work serves, plus `Anchored in:` — the `ARCH_PRINCIPLES.md` sections its shape answers to. See §2.1. **Inherited, not re-authored.** |
 | `## Goal` | ~50 | The task this session took on. Just the *what*; the *why* is `## Objective`. |
 | `## State` | ~400 | Done (with proof — test counts, live verification), in-flight, not-started. Facts only; no narrative. |
 | `## Next` | ~250 | Ranked, concrete actions with `file:line`/symbol anchors. The single highest-value section for a successor. |
@@ -118,8 +118,9 @@ Measured over the 67 frames banked on RuggedFox (2026-07-29):
   nobody re-ranked them against the objective. That is the rut: a frame can
   carry a stale backlog forever at zero cost.
 
-**Required content.** Three parts, and the last two are what make this section
-anti-rut rather than merely anti-amnesia:
+**Required content.** Four parts. The middle two are what make this section
+anti-rut rather than merely anti-amnesia; the fourth is what makes it
+anti-*drift*:
 
 1. **The outcome**, stated as what a *user* gets when the initiative lands — not
    the increment, not the mechanism. Plus where it is specified: a doc path and
@@ -133,6 +134,29 @@ anti-rut rather than merely anti-amnesia:
    strong at falsification one altitude down (`## Dead ends`, and verdicts like
    "F10 is a DO-NOT-BUILD"). This applies the same discipline to the initiative,
    so abandoning it is a *legible outcome* rather than an admission.
+4. **`Anchored in:`** — the numbered `ARCH_PRINCIPLES.md` sections this
+   initiative's *shape* is accountable to, and where it knowingly deviates.
+   One line; section numbers, not prose. Added 2026-08-02.
+
+**Why the objective carries the architecture (2026-08-02).** A session boots
+holding a frame and nothing else. Every one of the nine sections is episodic —
+they describe an initiative's progress, never its constraints — so an
+architectural commitment made in one session lands in `## Decisions`, reads to
+the next successor as task trivia, and is dropped. Over a lineage the work
+survives and the rules it was built under do not. That is the same mechanism
+§2.1 already documents for the objective itself, one level down.
+
+The anchor rides `## Objective` rather than a tenth section deliberately.
+§2.2's finding is that unexamined recopying is the dominant frame pathology, and
+a new standing section is one more thing to recopy without reading. `Objective`
+is already the inherited, altitude-setting slot with a guard behind it, and a
+principle that constrains the initiative's shape belongs at initiative altitude.
+Same rule as the rest of the section: **inherited, not re-authored** — copy the
+predecessor's `Anchored in:` verbatim, and if the work has moved under different
+principles, say so in `## Decisions` rather than quietly re-deriving it.
+
+Cheap to satisfy, and it is the *reading* that is the point: naming §4.1 means
+opening §4.1, which is what a successor otherwise never does.
 
 **Inheritance is the load-bearing rule.** When continuing a predecessor, COPY
 its `## Objective` verbatim; edit it only when the objective genuinely changed,
@@ -266,12 +290,24 @@ cooperated:
 **Splitting signal (SHIPPED 2026-07-23):** the statusline
 (`.claude/scripts/read-budget-statusline.py`) renders `ctx <N>k` from the
 last assistant `usage` record (actual context, not a heuristic) — yellow
-"split soon" ≥90k, red "SPLIT" ≥250k (raised from 140k on 2026-07-24;
-operator call — the 140k line fired too early in practice) — plus
-`frame ✓<age>` for this
+"split soon" ≥250k, red "SPLIT" ≥500k — plus `frame ✓<age>` for this
 session's frame freshness. The thresholds are deliberately ABSOLUTE, not
 window-relative: the lever is cache-read cost (≈ avg_ctx × turns), which a
 1M window does not change. Red ctx + fresh frame = split is safe right now.
+
+**Threshold history, and why they moved twice.** Red went 140k → 250k on
+2026-07-24 (operator call: the 140k line fired too early in practice), then
+90k/250k → 250k/500k on 2026-08-02 (operator call: "all the mini frame
+management hasn't earned the keep relative to the overhead"). Both moves
+are the same correction. A split pays only when the cache-read it avoids
+exceeds what it costs, and the cost is not zero: the donor writes a frame,
+and the successor re-derives by hand everything 2,150 tokens could not
+carry. §3a's counterfactual priced the *saving* at ~50% of session cost
+and called it "nearly threshold-insensitive (46.5–51.4% across 100k–200k)"
+— but that analysis never priced the *overhead*, so a threshold-insensitive
+saving was read as a licence to split early and often. Below ~250k the
+overhead dominates and the protocol was charging sessions for a benefit
+they did not receive. The lever is real; it is a fat-context lever.
 
 Storage: `~/.sovereign/sessions/<session_id>/frame.md` (single-writer per
 session; last-write-wins upsert). Mesh gossip + privacy model follow the work
@@ -292,10 +328,11 @@ session cost, nearly threshold-insensitive (46.5–51.4% across 100k–200k).
 
 The protocol:
 
-1. **Statusline red `SPLIT` (ctx ≥250k)** → the operator (or the agent, when
+1. **Statusline red `SPLIT` (ctx ≥500k)** → the operator (or the agent, when
    asked to wrap up) gets a frame written NOW, then forks (`/clear` or new
-   session). Yellow (≥90k) means: write/refresh the frame at the next natural
-   boundary.
+   session). Yellow (≥250k) means: write/refresh the frame at the next natural
+   boundary. Below yellow the protocol is silent on purpose — see §3's
+   threshold history for why splitting a thin session is a net loss.
 2. **Only self-reported or hand-written frames authorize a split.** The agent
    holding the state writes 100%-fidelity frames; distilled frames (88%
    recall as of stage-2 v4, up from 17% — see §5) exist to rescue sessions

@@ -539,12 +539,22 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
         .cloned()
         .unwrap_or_default();
     const MIB_PER_GB: f64 = 1024.0;
+    // Lendable, not raw free: the owning node's reserve is already off the
+    // capacity its loader plans against, so a preview that used raw `free_mb`
+    // would describe a cut the loader would refuse to make.
+    let lendable_mb = |d: &serde_json::Value| -> Option<f64> {
+        let free = d.get("free_mb")?.as_f64()?;
+        let reserve = d
+            .get("reserve_mb")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        Some((free - reserve).max(0.0))
+    };
     let free_by_endpoint: std::collections::HashMap<String, f64> = dev_mem
         .iter()
         .filter_map(|d| {
             let ep = d.get("endpoint")?.as_str()?;
-            let free = d.get("free_mb")?.as_f64()?;
-            Some((ep.to_string(), free / MIB_PER_GB))
+            Some((ep.to_string(), lendable_mb(d)? / MIB_PER_GB))
         })
         .collect();
     // Age of the reading. It is an observation taken when the loader last planned
@@ -567,7 +577,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
         let local: Vec<f64> = dev_mem
             .iter()
             .filter(|d| d.get("endpoint").and_then(|e| e.as_str()).is_none())
-            .filter_map(|d| d.get("free_mb").and_then(|v| v.as_f64()))
+            .filter_map(lendable_mb)
             .collect();
         (!local.is_empty()).then(|| local.iter().sum::<f64>() / MIB_PER_GB)
     };
@@ -902,6 +912,16 @@ async fn cmd_plan(args: &[String]) -> i32 {
         .map(|c| c.models.effective_context_size())
         .unwrap_or(16384);
 
+    // llama.cpp's three-term projection (KV + compute per device) — the SAME
+    // numbers the live fit gate judges with, so the preview's fit column and a
+    // load-time refusal can never disagree about the non-weight terms. The
+    // backend guard must stay alive past the projection call (its Drop frees
+    // the backend); a failed init or projection degrades the preview to
+    // weights-only fit, the same fallback the live gate takes. Measured
+    // ~278 ms warm on a 155 GB set (tests/device_memory_probe.rs).
+    let _backend = sovereign_inference::llama::cpp::llama_backend::LlamaBackend::init();
+    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx);
+
     // What peers have measured. A key pins the exact silicon *and* the exact
     // split, so an operator asking about a configuration they have never run will
     // essentially never get a local hit — which makes the peer half the part most
@@ -940,6 +960,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
             headroom_from_flag,
             mesh: mesh_devices,
             n_ctx,
+            overheads,
         },
         &sovereign_core::mesh_measurements::load(),
         &peers.records,
@@ -1021,6 +1042,13 @@ pub(crate) struct PlanInput {
     /// Context length the plan assumes. Part of the measurement key, because
     /// decode rate is a function of KV size.
     pub(crate) n_ctx: u32,
+    /// llama.cpp's projected non-weight terms (KV + compute per device) for
+    /// this model at `n_ctx` — the SAME projection the live fit gate judges
+    /// with (`projected_overheads`), so the preview's fit column and the
+    /// load's refusal carry identical numbers. `None` when the projection was
+    /// unavailable (no backend in this process, or it failed); the fit is then
+    /// weights-only, exactly like the live gate's own fallback.
+    pub(crate) overheads: Option<sovereign_inference::embedded::PlanOverheads>,
 }
 
 /// What `mesh plan` can honestly say about speed.
@@ -1283,6 +1311,7 @@ pub(crate) fn build_report(
         headroom_from_flag,
         mesh,
         n_ctx,
+        overheads,
     } = input;
 
     // Per-block byte mass + global tensors (output head → last block-holder;
@@ -1341,7 +1370,7 @@ pub(crate) fn build_report(
         // in PLAN order (`order[pos]`), and the display maps back through `order`
         // below — the two index spaces look interchangeable and are not.
         let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
-        let fits = inf::shard_fits(&plan, &capacities, &mass, headroom);
+        let fits = inf::shard_fits(&plan, &capacities, &mass, headroom, overheads.as_ref());
 
         let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
         for (pos, &d) in order.iter().enumerate() {
@@ -1362,6 +1391,7 @@ pub(crate) fn build_report(
                     .unwrap_or(inf::ShardFit {
                         device_index: pos,
                         held_bytes: 0,
+                        overhead_bytes: 0,
                         need_bytes: 0,
                         capacity_bytes: capacities[pos],
                     }),
@@ -3382,6 +3412,9 @@ mod plan_tests {
             // matching a measurement by construction.
             mesh: None,
             n_ctx: 32_768,
+            // No llama backend in these tests — weights-only fit, the same
+            // fallback the live gate takes when the projection is unavailable.
+            overheads: None,
         }
     }
 
@@ -3451,7 +3484,7 @@ mod plan_tests {
             .collect();
         let plan = inf::plan_shards_weighted(48, &weights, &mass.block_bytes, mass.head_bytes);
         let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
-        let fits = inf::shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable");
+        let fits = inf::shard_fits(&plan, &capacities, &mass, 1.2, None).expect("judgeable");
 
         for (pos, &d) in order.iter().enumerate() {
             let row = r.rows.iter().find(|x| x.dev == d).expect("a row per device");

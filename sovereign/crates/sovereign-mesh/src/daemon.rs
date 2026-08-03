@@ -2168,6 +2168,9 @@ impl EmbeddedDaemon {
         crate::worker_eligibility::DiscoveryOutcome {
             workers: out,
             unconfirmed,
+            // Engagement is the CALLER's knowledge (only the discovery loop
+            // knows what its compute child is doing) — folded in there.
+            engaged: Vec::new(),
             polled,
             scanned: true,
         }

@@ -489,6 +489,11 @@ pub(crate) struct DistributionPlan {
     /// count split and the per-device fit check honestly reports that it cannot
     /// judge, rather than clearing every device against zeros.
     pub(crate) mass: Option<ModelMass>,
+    /// llama.cpp's projected non-weight terms (KV + compute per device) at the
+    /// load's context size — see [`projected_overheads`]. `None` when the
+    /// projection failed; the fit gate then judges on weights × headroom
+    /// alone, exactly as it did before 2026-08-02.
+    pub(crate) overheads: Option<PlanOverheads>,
 }
 
 /// Process-wide cache of the shard plan, keyed by `(model_id, sorted RPC
@@ -538,11 +543,22 @@ pub struct DeviceMemory {
     pub endpoint: Option<String>,
     pub free_bytes: u64,
     pub total_bytes: u64,
+    /// What the OWNING node keeps for itself and will not lend — see
+    /// [`host_reserve_bytes`]. Carried on the reading rather than applied by the
+    /// caller so that every consumer of this device (apportioner, per-device fit
+    /// gate, pooled gate, `mesh plan` preview) subtracts the same amount; a
+    /// reserve applied at some call sites and not others is the "apportion from
+    /// one number, check against another" bug this struct exists to prevent.
+    ///
+    /// Populated for THIS node's own devices. Remote devices carry `0` until a
+    /// peer's declared reserve travels over the mesh status channel — the host
+    /// must not invent a reserve on a peer's behalf.
+    pub reserve_bytes: u64,
 }
 
 impl DeviceMemory {
     /// The single number the fit gate judges against: live free when ggml
-    /// reports one, else the device total.
+    /// reports one, else the device total, less the owning node's reserve.
     ///
     /// A backend that declines to report free memory yields 0, and 0 would fail
     /// every device — so total is the only safe fallback. Keep this the ONLY
@@ -550,11 +566,12 @@ impl DeviceMemory {
     /// and a loader that performs it must collapse the two figures identically,
     /// or the preview describes a cut the loader would not make.
     pub fn capacity_bytes(&self) -> u64 {
-        if self.free_bytes > 0 {
+        let raw = if self.free_bytes > 0 {
             self.free_bytes
         } else {
             self.total_bytes
-        }
+        };
+        raw.saturating_sub(self.reserve_bytes)
     }
 
     /// Memory held by work other than the load being planned.
@@ -657,12 +674,20 @@ fn placed_devices() -> Option<Vec<(crate::llama::sys::ggml_backend_dev_t, Device
         .map(|(d, endpoint)| {
             let (mut free, mut total): (usize, usize) = (0, 0);
             unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
+            // Only THIS node's devices carry this node's reserve. A peer's
+            // reserve is the peer's to declare; inventing one here would apportion
+            // against a budget the peer never agreed to.
+            let reserve_bytes = match endpoint {
+                None => host_reserve_bytes_detected(total as u64),
+                Some(_) => 0,
+            };
             (
                 d,
                 DeviceMemory {
                     endpoint,
                     free_bytes: free as u64,
                     total_bytes: total as u64,
+                    reserve_bytes,
                 },
             )
         })
@@ -746,7 +771,108 @@ pub fn last_device_memory() -> Option<DeviceMemorySnapshot> {
         .clone()
 }
 
-fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
+/// llama.cpp's own three-term memory projection (weights / KV / compute) for
+/// this model at the load's context size — the real numbers behind
+/// [`PlanOverheads`], replacing the hand-rolled proxies that either charged
+/// nothing (`shard_fits` had no context or compute term: the 2026-08-02
+/// 0.07 GiB-margin loads reached `serving` and died on first inference) or
+/// charged wrong (`weights/8` over-estimated an MLA model's KV ~5× and
+/// refused loads that fit).
+///
+/// `None` = "could not project", and callers MUST treat it as "judge without
+/// these terms" (the pre-projection behaviour), never as a refusal — a failed
+/// estimate must not brick a load.
+///
+/// Cost: measured ~278 ms warm / <1 s cold on a 155 GB 5-shard GGUF
+/// (`tests/device_memory_probe.rs`) — the model is loaded `no_alloc` and freed
+/// before returning. Successes are cached per `(path, n_ctx, n_ubatch)`
+/// because the projection is deterministic in those inputs; failures are NOT
+/// cached, so a transient error (backend not ready yet) is retried on the
+/// next plan rather than pinning "no projection" for the daemon's life.
+pub fn projected_overheads(model_path: &Path, n_ctx: u32) -> Option<PlanOverheads> {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<HashMap<(PathBuf, u32, u32), PlanOverheads>>,
+    > = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+
+    // The SAME micro-batch the slot will load with — the compute buffer
+    // scales with it, so projecting at a different ubatch would size the
+    // margin for a load that never happens.
+    let n_ubatch = super::prompt_helpers::chat_slot_n_ubatch();
+    let key = (model_path.to_path_buf(), n_ctx, n_ubatch);
+    if let Some(hit) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+        return Some(*hit);
+    }
+
+    let t0 = std::time::Instant::now();
+    let mparams = LlamaModelParams::default().with_n_gpu_layers(999);
+    let cparams = LlamaContextParams::default()
+        .with_n_ctx(NonZeroU32::new(n_ctx.max(1)))
+        .with_n_ubatch(n_ubatch);
+    let report = match crate::llama::cpp::fit::get_device_memory_data(
+        model_path,
+        &mparams,
+        &cparams,
+        crate::llama::sys::GGML_LOG_LEVEL_ERROR,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                model = %model_path.display(),
+                "projected_overheads: device-memory projection failed — fit gates \
+                 will judge without KV/compute terms this plan (not cached; retried \
+                 on the next plan)"
+            );
+            return None;
+        }
+    };
+
+    // Device order is ggml's registry order: accelerators first, the host CPU
+    // buffer last (observed as `Vulkan0, Vulkan_Host` in the probe). The KV
+    // total is distribution-independent (a layer's cache lives wherever the
+    // layer does), so the SUM is chargeable pro-rata by blocks; compute
+    // buffers exist per device, so each plan device is charged the largest
+    // accelerator buffer, and the host additionally its CPU-side scheduler
+    // buffer.
+    let n = report.entries.len();
+    let context_total: u64 = report.entries.iter().map(|e| e.context as u64).sum();
+    let compute_accel = report
+        .entries
+        .iter()
+        .take(n.saturating_sub(1))
+        .map(|e| e.compute as u64)
+        .max()
+        .unwrap_or(0);
+    let compute_host = report.entries.last().map(|e| e.compute as u64).unwrap_or(0);
+    let overheads = PlanOverheads {
+        context_total_bytes: context_total,
+        compute_accel_bytes: compute_accel,
+        compute_host_bytes: compute_host,
+    };
+    const MIB: u64 = 1024 * 1024;
+    tracing::info!(
+        target: "placement",
+        model = %model_path.display(),
+        n_ctx,
+        n_ubatch,
+        elapsed_ms = t0.elapsed().as_millis() as u64,
+        context_total_mb = context_total / MIB,
+        compute_accel_mb = compute_accel / MIB,
+        compute_host_mb = compute_host / MIB,
+        devices = n,
+        "projected_overheads: llama.cpp three-term projection (KV + compute per device)"
+    );
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, overheads);
+    Some(overheads)
+}
+
+fn plan_distribution(model_path: &Path, n_ctx: u32) -> Option<DistributionPlan> {
     // The device set and its live memory — the same oracle `live_device_memory`
     // publishes to the planner, so a preview and this load cannot disagree about
     // how much room each device has.
@@ -792,6 +918,14 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         .collect();
     let eligible_workers = assignments.len();
 
+    // llama.cpp's projection of what the load needs BEYOND the weights. Feeds
+    // two decisions below, and both fall back to the old weights-only
+    // behaviour when it is `None`: the apportioner (which must not fill a
+    // device to a capacity the KV + compute buffers will then fight for) and
+    // the per-device fit gate (which used to pass 0.07 GiB margins that died
+    // on first inference).
+    let overheads = projected_overheads(model_path, n_ctx);
+
     // The model's byte mass — a GGUF header-table parse, no weight load. Read
     // BEFORE the plan-cache branch so a cache hit and a cache miss are judged
     // against the same numbers; a mass that only existed on the miss path would
@@ -834,9 +968,35 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
             // the split be apportioned from one reading and checked against
             // another, so a device could be handed a share it is then refused
             // for, with neither number visible as wrong.
+            //
+            // Apportion against EFFECTIVE capacity: what remains after each
+            // device's projected compute scratch and (pro-rata) KV share.
+            // Without this, the split fills devices to their raw capacity and
+            // the corrected fit gate below then refuses the very plan we just
+            // computed — the fix would have turned "dies at first inference"
+            // into "refuses to load". The KV share is apportioned by capacity
+            // fraction as a first-order stand-in for the block fraction it
+            // becomes; on a 1–2 GiB context total the circularity is not worth
+            // an iteration loop.
+            let total_capacity: u64 = device_vram_bytes.iter().sum();
+            let effective = |i: usize, &b: &u64| -> u64 {
+                let Some(o) = overheads.as_ref() else { return b };
+                let ctx_share = if total_capacity == 0 {
+                    0
+                } else {
+                    (o.context_total_bytes as u128 * b as u128 / total_capacity as u128) as u64
+                };
+                let host_extra = if i + 1 == device_vram_bytes.len() {
+                    o.compute_host_bytes
+                } else {
+                    0
+                };
+                b.saturating_sub(o.compute_accel_bytes + host_extra + ctx_share)
+            };
             let weights: Vec<f32> = device_vram_bytes
                 .iter()
-                .map(|&b| quantize_vram(b) as f32)
+                .enumerate()
+                .map(|(i, b)| quantize_vram(effective(i, b)) as f32)
                 .collect();
             // Byte-mass-aware split: overlay the model's REAL per-block byte mass
             // so a non-uniform (MoE / hybrid) model apportions by BYTES, not block
@@ -908,12 +1068,15 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
             // and the refusal can never describe different numbers.
             if let Some(m) = mass.as_ref() {
                 let total_mass = m.block_bytes.iter().sum::<u64>() + m.head_bytes;
-                if let Some(fits) = shard_fits(&computed, &device_vram_bytes, m, 1.0) {
+                if let Some(fits) =
+                    shard_fits(&computed, &device_vram_bytes, m, 1.0, overheads.as_ref())
+                {
                     for f in &fits {
                         tracing::info!(
                             device = f.device_index,
                             blocks = ?computed.get(f.device_index).and_then(|s| s.blocks),
                             held_gb = f.held_bytes as f64 / 1.073_741_824e9,
+                            overhead_gb = f.overhead_bytes as f64 / 1.073_741_824e9,
                             capacity_gb = f.capacity_bytes as f64 / 1.073_741_824e9,
                             share_pct = if total_mass > 0 { 100.0 * f.held_bytes as f64 / total_mass as f64 } else { 0.0 },
                             vram_weight = weights[f.device_index],
@@ -961,6 +1124,7 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         eligible_workers,
         device_vram_bytes,
         mass,
+        overheads,
     })
 }
 
@@ -999,7 +1163,13 @@ fn first_worker_overflow(dist: &DistributionPlan) -> Option<WorkerOverflow> {
     }
     let mass = dist.mass.as_ref()?;
     let headroom = rpc_headroom_factor();
-    let Some(fits) = shard_fits(&dist.plan, &dist.device_vram_bytes, mass, headroom) else {
+    let Some(fits) = shard_fits(
+        &dist.plan,
+        &dist.device_vram_bytes,
+        mass,
+        headroom,
+        dist.overheads.as_ref(),
+    ) else {
         // Explicitly NOT a pass — say so rather than let silence read as one.
         tracing::warn!(
             devices = dist.device_vram_bytes.len(),
@@ -1075,7 +1245,8 @@ impl WorkerOverflow {
     pub fn refusal(&self) -> String {
         format!(
             "per-device fit gate: {} was assigned {} block(s) — {} MiB of weights, \
-             {} MiB with headroom — but advertises only {} MiB. Not loading; a shard \
+             {} MiB with headroom + projected KV/compute — but advertises only {} MiB. \
+             Not loading; a shard \
              that does not fit fails at load, and a local fallback of a model this \
              size is the 2026-07-27 session-kill. \
              Fixes: give that device more memory, LOWER `[shared_model] headroom` \
@@ -1215,18 +1386,95 @@ fn local_fit_skip() -> bool {
         .unwrap_or(false)
 }
 
-/// Memory reserved for everything that is not this model: the desktop
-/// compositor's GPU allocations (the 2026-07-27 casualty), other daemon
-/// slots, and the OS. `max(8 GiB, total/8)`, overridable via
-/// `SOVEREIGN_LOCAL_FIT_RESERVE_GB`.
-fn local_fit_reserve_bytes(total_bytes: u64) -> u64 {
+/// Is this node also being used interactively for graphics?
+///
+/// The distinction a reserve actually turns on. A headless node can lend nearly
+/// everything it has; a node driving a display must keep enough for a compositor
+/// to GROW into, because a graphics driver that cannot satisfy a submit commonly
+/// aborts its client rather than stalling it — which turns "the model did not
+/// fit" into "the operator lost their session".
+///
+/// Deliberately not a proportion of RAM: whether a machine has a screen is not a
+/// function of how much memory it has.
+fn node_is_graphical() -> bool {
+    // A session type the desktop stack set for us is the strongest signal.
+    if let Ok(t) = std::env::var("XDG_SESSION_TYPE") {
+        let t = t.trim().to_ascii_lowercase();
+        if t == "wayland" || t == "x11" {
+            return true;
+        }
+        if t == "tty" {
+            return false;
+        }
+    }
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some() {
+        return true;
+    }
+    // macOS always runs a window server.
+    if cfg!(target_os = "macos") {
+        return true;
+    }
+    // Fallback for a daemon whose environment was not inherited from a session
+    // (a container, a systemd unit): ask the kernel whether any display is
+    // physically attached. Absent sysfs — not Linux, or a sandbox — assume
+    // graphical, because over-reserving costs capacity while under-reserving
+    // costs the session.
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+        return true;
+    };
+    entries.flatten().any(|e| {
+        std::fs::read_to_string(e.path().join("status"))
+            .map(|s| s.trim() == "connected")
+            .unwrap_or(false)
+    })
+}
+
+/// Memory this node keeps for itself and never lends: the OS, the daemon's own
+/// non-model memory, and — when a display is attached — room for the compositor
+/// to grow into.
+///
+/// ONE reserve policy for this node, consulted wherever a placement decision is
+/// made, so a host cannot get different headroom depending on which door the
+/// load came through. Absolute rather than proportional, because what the rest
+/// of the machine needs does not scale with how much memory the machine has: a
+/// large headless server should lend nearly all of itself, and a small desktop
+/// should not lend the compositor's working set.
+///
+/// Clamped to half of total so a small host is never gated into uselessness.
+/// Declare an explicit value with `SOVEREIGN_LOCAL_FIT_RESERVE_GB` (`0`
+/// disables the reserve entirely).
+pub fn host_reserve_bytes(total_bytes: u64, graphical: bool) -> u64 {
     const GIB: u64 = 1024 * 1024 * 1024;
-    std::env::var("SOVEREIGN_LOCAL_FIT_RESERVE_GB")
+    if let Some(declared) = std::env::var("SOVEREIGN_LOCAL_FIT_RESERVE_GB")
         .ok()
         .and_then(|v| v.trim().parse::<f64>().ok())
         .filter(|&gb| gb >= 0.0)
         .map(|gb| (gb * GIB as f64) as u64)
-        .unwrap_or_else(|| (total_bytes / 8).max(8 * GIB))
+    {
+        return declared.min(total_bytes);
+    }
+    let want = if graphical { 8 * GIB } else { 2 * GIB };
+    if total_bytes == 0 {
+        return want;
+    }
+    want.min(total_bytes / 2)
+}
+
+/// [`host_reserve_bytes`] against this node's detected posture.
+pub fn host_reserve_bytes_detected(total_bytes: u64) -> u64 {
+    host_reserve_bytes(total_bytes, node_is_graphical())
+}
+
+/// This node's system memory as `(available, total)`; `(0, 0)` when the sensor
+/// fails.
+///
+/// One reader, so a reserve derived from `total` and a fit judged against
+/// `available` are always the same sample. Callers must treat `(0, 0)` as
+/// "cannot judge" and fail open — never as "no memory".
+pub fn system_memory_bytes() -> (u64, u64) {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    (sys.available_memory(), sys.total_memory())
 }
 
 /// Shortfall report when a local load would not fit. MiB so the numbers
@@ -1237,17 +1485,25 @@ pub(crate) struct LocalFitShortfall {
     pub(crate) usable_mb: u64,
 }
 
-/// PURE fit verdict: `None` = fits. Estimated footprint is weights +
-/// weights/8 (the KV proxy `capacity.rs` back-fit at 32K context) + 1 GiB
-/// scratch — deliberately the same shape as `estimate_slot_vram` so the
-/// preflight and this runtime gate can't drift far apart.
+/// PURE fit verdict: `None` = fits.
+///
+/// `overhead_bytes` is llama.cpp's own projection of the non-weight footprint
+/// (KV + compute, [`projected_overheads`]) — the real number, replacing the
+/// `weights/8 + 1 GiB` proxy that over-charged an MLA model's KV ~5× and
+/// padded ~11 GB over a measured MoE footprint (2026-07-31 solo-122B
+/// measurement). The proxy remains ONLY as the `None` fallback, so a failed
+/// projection degrades to the old conservative behaviour instead of judging
+/// against nothing. (`capacity.rs`'s boot preflight still uses the proxy
+/// shape wholesale: it runs before the llama backend may be initialized and
+/// double-init is fatal there, so the real projection cannot reach it.)
 pub(crate) fn local_fit_verdict(
     model_bytes: u64,
+    overhead_bytes: Option<u64>,
     available_bytes: u64,
     reserve_bytes: u64,
 ) -> Option<LocalFitShortfall> {
     const MIB: u64 = 1024 * 1024;
-    let need = model_bytes + model_bytes / 8 + 1024 * MIB;
+    let need = model_bytes + overhead_bytes.unwrap_or(model_bytes / 8 + 1024 * MIB);
     let usable = available_bytes.saturating_sub(reserve_bytes);
     (need > usable).then_some(LocalFitShortfall {
         need_mb: need / MIB,
@@ -1260,7 +1516,7 @@ pub(crate) fn local_fit_verdict(
 /// model that doesn't fit resolves to `LocalUnfit` — same no-load,
 /// stay-unavailable, retry-on-worker-change behaviour as
 /// `InsufficientCluster`. Glassbox: every refusal logs the numbers.
-fn gate_local(model_bytes: u64, cpu_only: bool) -> LoadPlacement {
+fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -> LoadPlacement {
     if model_bytes < local_fit_min_bytes() || local_fit_skip() {
         return LoadPlacement::LocalOnly;
     }
@@ -1276,9 +1532,7 @@ fn gate_local(model_bytes: u64, cpu_only: bool) -> LoadPlacement {
         );
         return LoadPlacement::LocalOnly;
     }
-    let mut sys = sysinfo::System::new();
-    sys.refresh_memory();
-    let (available, total) = (sys.available_memory(), sys.total_memory());
+    let (available, total) = system_memory_bytes();
     if available == 0 || total == 0 {
         tracing::warn!(
             model_mb = model_bytes / (1024 * 1024),
@@ -1287,7 +1541,13 @@ fn gate_local(model_bytes: u64, cpu_only: bool) -> LoadPlacement {
         );
         return LoadPlacement::LocalOnly;
     }
-    match local_fit_verdict(model_bytes, available, local_fit_reserve_bytes(total)) {
+    // The SAME node reserve the distributed door uses — see `host_reserve_bytes`.
+    let reserve = host_reserve_bytes_detected(total);
+    // Everything lands locally on this path, so the whole projected overhead
+    // (KV total + accelerator scratch + host scheduler buffer) is the term.
+    let overhead = projected_overheads(model_path, n_ctx)
+        .map(|o| o.context_total_bytes + o.compute_accel_bytes + o.compute_host_bytes);
+    match local_fit_verdict(model_bytes, overhead, available, reserve) {
         None => LoadPlacement::LocalOnly,
         Some(shortfall) => {
             tracing::warn!(
@@ -1295,7 +1555,7 @@ fn gate_local(model_bytes: u64, cpu_only: bool) -> LoadPlacement {
                 need_mb = shortfall.need_mb,
                 usable_mb = shortfall.usable_mb,
                 available_mb = available / (1024 * 1024),
-                reserve_mb = local_fit_reserve_bytes(total) / (1024 * 1024),
+                reserve_mb = reserve / (1024 * 1024),
                 "local-fit gate: refusing local fallback load — model would starve \
                  the host (2026-07-27 session-kill class); staying unavailable until \
                  the cluster re-forms. SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides."
@@ -1420,8 +1680,10 @@ pub(crate) fn resolve_placement(
     model_bytes: u64,
     distributable: bool,
     cpu_only: bool,
+    n_ctx: u32,
 ) -> LoadPlacement {
-    let placement = resolve_placement_inner(model_path, model_bytes, distributable, cpu_only);
+    let placement =
+        resolve_placement_inner(model_path, model_bytes, distributable, cpu_only, n_ctx);
     if distributable {
         let summary = summarize_placement(&placement);
         tracing::info!(
@@ -1449,6 +1711,7 @@ fn resolve_placement_inner(
     model_bytes: u64,
     distributable: bool,
     cpu_only: bool,
+    n_ctx: u32,
 ) -> LoadPlacement {
     let decision = classify_placement(
         distributable,
@@ -1460,7 +1723,9 @@ fn resolve_placement_inner(
     );
 
     let auto_warm = match decision {
-        PlacementDecision::LocalOnly => return gate_local(model_bytes, cpu_only),
+        PlacementDecision::LocalOnly => {
+            return gate_local(model_path, model_bytes, cpu_only, n_ctx)
+        }
         PlacementDecision::StreamSplit => {
             // Publish the workers so the stream path can enumerate + split them.
             register_rpc_workers();
@@ -1469,7 +1734,7 @@ fn resolve_placement_inner(
         PlacementDecision::OwnedOverrides { auto_warm } => auto_warm,
     };
 
-    match plan_and_warm(model_path, model_bytes, auto_warm) {
+    match plan_and_warm(model_path, model_bytes, auto_warm, n_ctx) {
         PlannedDistribution::Ready(dist) => LoadPlacement::OwnedOverrides(dist),
         PlannedDistribution::Insufficient { eligible, quorum } => {
             LoadPlacement::InsufficientCluster { eligible, quorum }
@@ -1482,7 +1747,7 @@ fn resolve_placement_inner(
         // Unplannable and warm-failure are both "never wedge" — load local,
         // fit-gated. A later reload retries once the workers are reachable.
         PlannedDistribution::Unplannable | PlannedDistribution::WarmFailed(_) => {
-            gate_local(model_bytes, cpu_only)
+            gate_local(model_path, model_bytes, cpu_only, n_ctx)
         }
     }
 }
@@ -1516,9 +1781,14 @@ enum PlannedDistribution {
 /// Blocking: the orchestrator bridges to async internally. Call it from a
 /// blocking context (a load thread or `spawn_blocking`), never from a runtime
 /// worker.
-fn plan_and_warm(model_path: &Path, model_bytes: u64, auto_warm: bool) -> PlannedDistribution {
+fn plan_and_warm(
+    model_path: &Path,
+    model_bytes: u64,
+    auto_warm: bool,
+    n_ctx: u32,
+) -> PlannedDistribution {
     register_rpc_workers();
-    let Some(dist) = plan_distribution(model_path) else {
+    let Some(dist) = plan_distribution(model_path, n_ctx) else {
         tracing::warn!(
             model_mb = model_bytes / (1024 * 1024),
             "wanted to distribute a large primary but couldn't plan the shards (no RPC \
@@ -1656,9 +1926,14 @@ pub enum DistributedWarmOutcome {
 /// Blocking — the injected orchestrator bridges to async with `block_on` and a
 /// full warm can take minutes of GGUF transfer. Call from `spawn_blocking`,
 /// never from a runtime worker thread.
-pub fn warm_distributed_primary(model_path: &Path) -> DistributedWarmOutcome {
+///
+/// `n_ctx` is the context size the CHILD will load with (its `--ctx`, or the
+/// child's own default when the spec leaves it unset) — the overhead
+/// projection sizes KV from it, so a wrong value here would size the margin
+/// for a load that never happens.
+pub fn warm_distributed_primary(model_path: &Path, n_ctx: u32) -> DistributedWarmOutcome {
     let model_bytes = super::model_slot::total_model_bytes(model_path);
-    match plan_and_warm(model_path, model_bytes, /* auto_warm */ true) {
+    match plan_and_warm(model_path, model_bytes, /* auto_warm */ true, n_ctx) {
         PlannedDistribution::Ready(dist) => DistributedWarmOutcome::Warm {
             endpoints: dist
                 .assignments
@@ -2107,26 +2382,47 @@ mod rpc_prune_tests {
         // (total/8). Estimated need = 84 + 84/8 + 1 = ~95.5 GiB against
         // 94 GiB usable → REFUSED. This exact load reached ~91 GB RSS and
         // killed the desktop session; the verdict must never let it through.
-        let shortfall = local_fit_verdict(84 * GIB, 110 * GIB, 16 * GIB)
+        let shortfall = local_fit_verdict(84 * GIB, None, 110 * GIB, 16 * GIB)
             .expect("the incident load must be refused");
         assert!(shortfall.need_mb > shortfall.usable_mb);
 
         // The same model on a box with genuine headroom (e.g. a 256 GiB
         // host with 200 GiB available) fits — the gate protects the host,
         // it does not ban big models.
-        assert_eq!(local_fit_verdict(84 * GIB, 200 * GIB, 32 * GIB), None);
+        assert_eq!(local_fit_verdict(84 * GIB, None, 200 * GIB, 32 * GIB), None);
 
         // The canonical 35B primary (~20 GiB) beside a desktop on a 64 GiB
         // box: need ≈ 23.5 GiB vs 40−8 = 32 GiB usable → fits. Existing
         // working configs must not regress.
-        assert_eq!(local_fit_verdict(20 * GIB, 40 * GIB, 8 * GIB), None);
+        assert_eq!(local_fit_verdict(20 * GIB, None, 40 * GIB, 8 * GIB), None);
 
         // Reserve is honoured: same numbers with the reserve eating the
         // margin flips the verdict.
-        assert!(local_fit_verdict(20 * GIB, 25 * GIB, 8 * GIB).is_some());
+        assert!(local_fit_verdict(20 * GIB, None, 25 * GIB, 8 * GIB).is_some());
 
         // Saturating: reserve larger than available must not underflow.
-        assert!(local_fit_verdict(1 * GIB, 2 * GIB, 10 * GIB).is_some());
+        assert!(local_fit_verdict(1 * GIB, None, 2 * GIB, 10 * GIB).is_some());
+    }
+
+    /// The projection REPLACES the proxy: an MLA-class model whose real
+    /// KV + compute is ~3.5 GiB must not be charged the ~11.5 GiB the
+    /// `weights/8 + 1 GiB` proxy invents for it. Measured live 2026-07-31:
+    /// the proxy padded ~11 GB over a 122B MoE's real footprint and the
+    /// solo load had to be forced past the gate by hand.
+    #[test]
+    fn a_real_overhead_projection_replaces_the_kv_proxy() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // 84 GiB weights, 94 GiB usable. The proxy needs 95.5 GiB → refused.
+        assert!(local_fit_verdict(84 * GIB, None, 110 * GIB, 16 * GIB).is_some());
+        // The projection says the real overhead is 4 GiB → 88 GiB fits.
+        assert_eq!(
+            local_fit_verdict(84 * GIB, Some(4 * GIB), 110 * GIB, 16 * GIB),
+            None,
+            "a load that fits by the real numbers must not be refused by a proxy"
+        );
+        // And a projection LARGER than the proxy still refuses — the real
+        // number wins in both directions.
+        assert!(local_fit_verdict(84 * GIB, Some(20 * GIB), 110 * GIB, 16 * GIB).is_some());
     }
 
     #[test]
@@ -2289,5 +2585,120 @@ mod rpc_prune_tests {
             !pruned.contains(&rpc_dev),
             "the pruned device list must exclude the dead RPC worker",
         );
+    }
+}
+
+#[cfg(test)]
+mod node_reserve_tests {
+    use super::*;
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// The reserve is about what the machine is FOR, not how big it is. A large
+    /// headless node lends nearly all of itself; a small desktop keeps room for
+    /// its compositor. Proportional-to-total would get both backwards.
+    #[test]
+    fn the_reserve_tracks_posture_not_size() {
+        if std::env::var_os("SOVEREIGN_LOCAL_FIT_RESERVE_GB").is_some() {
+            return; // an explicit declaration outranks detection — tested below
+        }
+        // A big server: 2 GiB of 512 is a rounding error, as it should be.
+        assert_eq!(host_reserve_bytes(512 * GIB, false), 2 * GIB);
+        // The same server with a display attached keeps a compositor's worth.
+        assert_eq!(host_reserve_bytes(512 * GIB, true), 8 * GIB);
+        // A modest desktop keeps the SAME absolute amount as the big one — the
+        // compositor's needs do not shrink because the box is smaller.
+        assert_eq!(host_reserve_bytes(32 * GIB, true), 8 * GIB);
+    }
+
+    /// A host is never gated into uselessness by its own reserve, however small
+    /// it is. Half of total is the floor on lendability.
+    #[test]
+    fn a_small_host_is_never_reserved_into_uselessness() {
+        if std::env::var_os("SOVEREIGN_LOCAL_FIT_RESERVE_GB").is_some() {
+            return;
+        }
+        assert_eq!(host_reserve_bytes(8 * GIB, true), 4 * GIB);
+        assert_eq!(host_reserve_bytes(2 * GIB, true), GIB);
+        assert_eq!(host_reserve_bytes(2 * GIB, false), GIB);
+        for total in [1u64, 2, 4, 8, 16, 64, 256, 1024].map(|g| g * GIB) {
+            for graphical in [true, false] {
+                assert!(
+                    host_reserve_bytes(total, graphical) * 2 <= total,
+                    "reserve took more than half of a {total}-byte host"
+                );
+            }
+        }
+    }
+
+    /// An explicit declaration outranks detection in both directions, including
+    /// `0` — an operator who says "lend everything" gets that.
+    #[test]
+    fn a_declared_reserve_outranks_detection() {
+        let _guard = EnvGuard::set("SOVEREIGN_LOCAL_FIT_RESERVE_GB", "0");
+        assert_eq!(host_reserve_bytes(512 * GIB, true), 0);
+        let _guard = EnvGuard::set("SOVEREIGN_LOCAL_FIT_RESERVE_GB", "40");
+        assert_eq!(host_reserve_bytes(512 * GIB, false), 40 * GIB);
+        // A declaration larger than the machine is clamped, not honoured.
+        assert_eq!(host_reserve_bytes(16 * GIB, false), 16 * GIB);
+    }
+
+    /// `capacity_bytes` is the single collapse point, so the reserve must come
+    /// off there — and off the TOTAL fallback too, not just the free reading.
+    #[test]
+    fn capacity_subtracts_the_reserve_on_both_branches() {
+        let live = DeviceMemory {
+            endpoint: None,
+            free_bytes: 100 * GIB,
+            total_bytes: 128 * GIB,
+            reserve_bytes: 8 * GIB,
+        };
+        assert_eq!(live.capacity_bytes(), 92 * GIB);
+        // free == 0 means "backend declined to report", so total is the basis.
+        let no_free = DeviceMemory {
+            free_bytes: 0,
+            ..live.clone()
+        };
+        assert_eq!(no_free.capacity_bytes(), 120 * GIB);
+        // A reserve larger than the reading floors at zero rather than wrapping.
+        let tiny = DeviceMemory {
+            free_bytes: GIB,
+            reserve_bytes: 8 * GIB,
+            ..live.clone()
+        };
+        assert_eq!(tiny.capacity_bytes(), 0);
+    }
+
+    /// A peer's device carries no reserve of ours: its budget is its own to
+    /// declare, and inventing one here would apportion against a number the peer
+    /// never agreed to.
+    #[test]
+    fn a_remote_device_carries_no_local_reserve() {
+        let remote = DeviceMemory {
+            endpoint: Some("10.0.0.2:50052".into()),
+            free_bytes: 50 * GIB,
+            total_bytes: 60 * GIB,
+            reserve_bytes: 0,
+        };
+        assert_eq!(remote.capacity_bytes(), 50 * GIB);
+    }
+
+    /// Serialise env mutation within this module so the declaration tests cannot
+    /// race the detection tests.
+    struct EnvGuard(&'static str, Option<String>);
+    impl EnvGuard {
+        fn set(k: &'static str, v: &str) -> Self {
+            let prev = std::env::var(k).ok();
+            unsafe { std::env::set_var(k, v) };
+            Self(k, prev)
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.1 {
+                Some(v) => unsafe { std::env::set_var(self.0, v) },
+                None => unsafe { std::env::remove_var(self.0) },
+            }
+        }
     }
 }

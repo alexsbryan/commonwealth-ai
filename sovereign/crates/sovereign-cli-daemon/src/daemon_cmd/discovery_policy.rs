@@ -210,49 +210,43 @@ pub(super) fn spawn_gate_verdict(
     }
 }
 
-/// Memory reserved for everything that is not this child: the desktop
-/// compositor's GPU allocations, the daemon's own slots, and the OS.
-/// `max(8 GiB, total/8)`, overridable via `SOVEREIGN_LOCAL_FIT_RESERVE_GB`.
-///
-/// Deliberately the SAME shape and the SAME env knob as
-/// `sovereign_inference::embedded::rpc_distribution::local_fit_reserve_bytes`,
-/// which guards the LocalOnly path. One reserve policy, two doors — a host does
-/// not get more or less headroom depending on which placement it landed on.
-pub(super) fn spawn_reserve_bytes(total_bytes: u64) -> u64 {
-    const GIB: u64 = 1024 * 1024 * 1024;
-    std::env::var("SOVEREIGN_LOCAL_FIT_RESERVE_GB")
-        .ok()
-        .and_then(|v| v.trim().parse::<f64>().ok())
-        .filter(|&gb| gb >= 0.0)
-        .map(|gb| (gb * GIB as f64) as u64)
-        .unwrap_or_else(|| (total_bytes / 8).max(8 * GIB))
-}
-
 /// What the child will ask THIS host for, given the cut it will actually load.
 ///
-/// `local_blocks / total_blocks` of the weights, plus the same KV proxy and
-/// scratch term `local_fit_verdict` uses (`share/8 + 1 GiB`) so the two gates
-/// cannot drift. `None` when the cut is unknown (`total_blocks == 0`, i.e. no
-/// block plan yet) — the caller must then FAIL OPEN, because a guess here is a
-/// guess about whether to run at all.
+/// `local_blocks / total_blocks` of the weights, plus the non-weight terms.
+/// With `overheads` (llama.cpp's own projection, `projected_overheads`), those
+/// terms are the host's real KV share plus its accelerator and scheduler
+/// compute buffers — the same three-term accounting the per-device fit gate
+/// uses, so the two gates cannot drift. Without it, the old `share/8 + 1 GiB`
+/// proxy stands in (measured ~3–5× over on MLA models, but conservative in
+/// the direction whose failure mode is an unusable machine).
 ///
-/// Conservative on purpose. The `share/8` KV proxy runs high for architectures
-/// whose cache is smaller than dense-f16 implies — measured 2026-08-02 at ~3x
-/// over on one MLA model. Erring toward Hold is the safe direction for a guard
-/// whose failure mode is an unusable machine; `SOVEREIGN_LOCAL_FIT_RESERVE_GB`
-/// and `SOVEREIGN_COMPUTE_SPAWN_GATE=0` are the escape hatches when the estimate
+/// `None` when the cut is unknown (`total_blocks == 0`, i.e. no block plan
+/// yet) — the caller must then FAIL OPEN, because a guess here is a guess
+/// about whether to run at all. `SOVEREIGN_LOCAL_FIT_RESERVE_GB` and
+/// `SOVEREIGN_COMPUTE_SPAWN_GATE=0` are the escape hatches when the estimate
 /// is wrong for a given host.
 pub(super) fn host_share_need_bytes(
     model_bytes: u64,
     local_blocks: u32,
     total_blocks: u32,
+    overheads: Option<&sovereign_inference::embedded::PlanOverheads>,
 ) -> Option<u64> {
     if total_blocks == 0 || model_bytes == 0 {
         return None;
     }
     const GIB: u64 = 1024 * 1024 * 1024;
     let share = (model_bytes as u128 * local_blocks as u128 / total_blocks as u128) as u64;
-    Some(share + share / 8 + GIB)
+    let overhead = match overheads {
+        // The host is the plan's LAST device by construction, so it carries
+        // its KV share plus BOTH compute terms (accelerator + scheduler).
+        Some(o) => {
+            let ctx = (o.context_total_bytes as u128 * local_blocks as u128
+                / total_blocks as u128) as u64;
+            ctx + o.compute_accel_bytes + o.compute_host_bytes
+        }
+        None => share / 8 + GIB,
+    };
+    Some(share + overhead)
 }
 
 /// Would spawning this child leave the machine with nothing?
@@ -590,7 +584,10 @@ mod tests {
     fn the_verdict_is_scale_free_across_host_sizes() {
         for total in [4u64, 16, 64, 128, 512, 2048].map(|g| g * GIB) {
             let available = total / 2;
-            let reserve = spawn_reserve_bytes(total);
+            // Scaled with the host so the case stays meaningful at every size:
+            // a fixed reserve exceeds a small host's available memory, which
+            // tests the saturating subtraction rather than the rule.
+            let reserve = available / 4;
             // A need that leaves room for the reserve fits at every scale.
             let fits = available.saturating_sub(reserve);
             assert_eq!(
@@ -610,37 +607,13 @@ mod tests {
         }
     }
 
-    /// The reserve scales with the host and never falls below the floor, so a
-    /// small host keeps a usable absolute margin and a large one keeps a
-    /// proportional share. Skipped when an operator override is in the
-    /// environment — that is the knob working, not a failure.
-    #[test]
-    fn the_reserve_is_proportional_with_an_absolute_floor() {
-        if std::env::var_os("SOVEREIGN_LOCAL_FIT_RESERVE_GB").is_some() {
-            return;
-        }
-        // Proportional above the floor.
-        assert_eq!(spawn_reserve_bytes(128 * GIB), 16 * GIB);
-        assert_eq!(spawn_reserve_bytes(512 * GIB), 64 * GIB);
-        // Floor holds for hosts too small for total/8 to mean anything.
-        assert_eq!(spawn_reserve_bytes(16 * GIB), 8 * GIB);
-        assert_eq!(spawn_reserve_bytes(0), 8 * GIB);
-        // Monotonic: a bigger host never reserves less.
-        let mut prev = 0;
-        for total in [1u64, 8, 32, 64, 256, 1024].map(|g| g * GIB) {
-            let r = spawn_reserve_bytes(total);
-            assert!(r >= prev, "reserve went down from {prev} to {r} at {total}");
-            prev = r;
-        }
-    }
-
     /// FAIL OPEN on a missing measurement. An unknown cut or a memory sensor
     /// that returned nothing must never be the reason a model cannot run —
     /// refusing on absent evidence would brick loads that are perfectly fine.
     #[test]
     fn a_missing_measurement_fails_open() {
-        assert_eq!(host_share_need_bytes(1_000, 31, 0), None);
-        assert_eq!(host_share_need_bytes(0, 31, 43), None);
+        assert_eq!(host_share_need_bytes(1_000, 31, 0, None), None);
+        assert_eq!(host_share_need_bytes(0, 31, 43, None), None);
         assert_eq!(memory_headroom_verdict(None, 100, 20), SpawnVerdict::Allow);
         assert_eq!(memory_headroom_verdict(Some(u64::MAX), 0, 20), SpawnVerdict::Allow);
     }
@@ -664,17 +637,40 @@ mod tests {
     #[test]
     fn the_need_estimate_is_proportional_to_the_local_cut() {
         // Everything local: whole model + overhead.
-        assert_eq!(host_share_need_bytes(80, 43, 43), Some(80 + 10 + GIB));
+        assert_eq!(host_share_need_bytes(80, 43, 43, None), Some(80 + 10 + GIB));
         // Half the blocks: half the weights, half the KV proxy.
-        assert_eq!(host_share_need_bytes(80, 20, 40), Some(40 + 5 + GIB));
+        assert_eq!(host_share_need_bytes(80, 20, 40, None), Some(40 + 5 + GIB));
         // Everything lent out: only the scratch term remains.
-        assert_eq!(host_share_need_bytes(80, 0, 43), Some(GIB));
+        assert_eq!(host_share_need_bytes(80, 0, 43, None), Some(GIB));
         // Monotonic in the local cut.
         let mut prev = 0;
         for local in 0..=43 {
-            let n = host_share_need_bytes(1_000_000, local, 43).unwrap();
+            let n = host_share_need_bytes(1_000_000, local, 43, None).unwrap();
             assert!(n >= prev, "need went down at local={local}");
             prev = n;
         }
+    }
+
+    /// With llama.cpp's projection the proxy terms are REPLACED, not added:
+    /// the host's need is its weight share + its pro-rata KV + both compute
+    /// buffers. This is what stops the `share/8` proxy from over-charging an
+    /// MLA model ~5× and refusing a load that fits.
+    #[test]
+    fn the_projection_replaces_the_kv_proxy_when_present() {
+        let o = sovereign_inference::embedded::PlanOverheads {
+            context_total_bytes: 86,
+            compute_accel_bytes: 7,
+            compute_host_bytes: 11,
+        };
+        // Half the blocks: half the weights (40), half the KV (43), both
+        // compute terms — and NO share/8, NO flat GiB.
+        assert_eq!(
+            host_share_need_bytes(80, 20, 40, Some(&o)),
+            Some(40 + 43 + 7 + 11)
+        );
+        // Everything lent out: only the compute terms remain.
+        assert_eq!(host_share_need_bytes(80, 0, 40, Some(&o)), Some(7 + 11));
+        // The unknown-cut guard is unchanged by the projection.
+        assert_eq!(host_share_need_bytes(80, 20, 0, Some(&o)), None);
     }
 }

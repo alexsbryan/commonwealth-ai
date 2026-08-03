@@ -946,8 +946,19 @@ impl EmbeddedLlamaCpp {
         // families (mamba/rwkv/deltanet/ssm) + qwen*moe are vetoed.
         // SOVEREIGN_FAST_SHORT_DISABLE=1 is the catch-all mitigation.
         // [[invariant_fast_short_recurrent_arch]]
-        let gate = fast_short_gate(&fast_arch, |k| std::env::var(k).ok());
-        let (fast_short, fast_short_coalescer) = if gate == FastShortGate::Disabled {
+        let gate = fast_short_gate(&fast_arch, only_slot_distributable, |k| {
+            std::env::var(k).ok()
+        });
+        let (fast_short, fast_short_coalescer) = if gate == FastShortGate::DistributedChild {
+            tracing::info!(
+                slot = "fast_short",
+                "skipped — distributed compute child: this slot IS the sharded \
+                 primary and serves a single stream, so the contention FastShort \
+                 exists for cannot occur; building it anyway cost 14.5 GB of GTT \
+                 (measured 2026-08-02)"
+            );
+            (None, None)
+        } else if gate == FastShortGate::Disabled {
             tracing::info!(
                 slot = "fast_short",
                 "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"

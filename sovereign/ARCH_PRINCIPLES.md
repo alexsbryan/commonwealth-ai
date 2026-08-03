@@ -12,6 +12,45 @@ that deserves its own note.
 
 ---
 
+## The ten
+
+Everything below is lookup. **These ten are held, not looked up** — they are
+what gets injected into every session, and they are the ones a violation of
+should stop you mid-keystroke. Each names the section that carries its
+evidence.
+
+1. **Glassbox, always.** A decision invisible at `tracing=debug` is not
+   finished. *(§0, §9)*
+2. **Don't whack moles.** Instrument, reproduce, understand — *then* fix.
+   *(§0)*
+3. **Write for the next reader,** and land the doc change in the same commit as
+   the code. *(§0, §1)*
+4. **Cite, don't recall.** Verify before you claim it — from `grep`, from
+   `symbols`, or from a run you just did. *(§11)*
+5. **A gate you have not watched fail is not a gate.** Four verdicts, not two:
+   passed, failed, could-not-judge, never-ran. *(§18.1, §18.2)*
+6. **Never silently substitute.** Refuse, or name the substitution in the
+   response. Absence is reported, never defaulted. *(§18.3)*
+7. **Validate the instrument before the result.** One run is not a measurement.
+   *(§18.4, §18.5)*
+8. **One decider, one name.** One implementation per threshold, scorer, schema
+   and key; one accessor per path; identity from essence, never a counter or an
+   address. *(§10.6, §7.5)*
+9. **Closed sets are enums, open sets are registries, open text is a centroid.**
+   *(§2, §4)*
+10. **Make it structural, not remembered.** Encode the invariant so it cannot be
+    forgotten — and never ask a model to guarantee what code can enforce.
+    *(§7, §7.6)*
+
+One through four are the operating ethos this workspace was built on. Five
+through eight were earned: they are what six months of working notes say
+actually goes wrong here, and §18 exists because the failure they describe —
+a plausible, well-formed, exit-0 result that is wrong — is this system's
+characteristic one. Nine and ten are the two structural moves that prevent the
+most rework.
+
+---
+
 ## 0. Operating ethos
 
 Four commitments that underlie every specific rule below.
@@ -133,6 +172,36 @@ fn legacy_view_id_constants_match_view_kind() {
 
 If the set is open (third parties register handlers, the list grows with
 features), use a registry. See §4.
+
+### 2.4 Classifying open text is a centroid, not a keyword list
+
+§2.1 bans stringly-typed *ids*. The same error one level up is a stringly-typed
+*decision procedure*: `looks_like_*`, `.contains("today")`, a lead-word list.
+It works on the examples you had in mind and fails on the ones you didn't.
+
+`needs_current_info` substring-matched "today" inside "…from antiquity to
+today" and put the user's phone into a refusal loop. A locator gated on nine
+literal substrings missed "What was the first thing I asked?" and misrouted it
+on four runs in five. Both were replaced by an embedding axis; `looks_like_*`
+is now deprecated in `router_embed.rs`'s module doc.
+
+The replacement is a calibrated centroid with **both** an abstain gate and a
+margin gate, proven on held-out inputs of both classes. Two cautions that cost
+real measurements:
+
+- **Similarity is topic-dominated, not shape-dominated.** The same exemplar
+  scores 1.000 on its own topic and 0.531 on near-identical phrasing about
+  something else. Adding exemplar rows buys you the topics you add, nothing
+  more — it does not generalise the *shape* you were trying to capture.
+- **After re-filing exemplars between classes, re-check the abstain cases, not
+  just the positives.** Margin is a relative quantity: one re-filing moved a
+  margin 0.043 → 0.128 with `sim_positive` identical at 0.561, creating a false
+  positive that had not existed. "Same winner ⇒ same verdict" is false for any
+  gate with a margin term.
+
+Not this trap: stripping a fixed protocol token (`<think>`, `<tool_code>`).
+That is mechanical removal of a literal, not semantic judgement — keep it in
+code and keep it narrow.
 
 ---
 
@@ -412,6 +481,73 @@ KnowledgeView enforces privacy at *three* layers:
 Any single layer slipping doesn't compromise the invariant. **Defence in
 depth** is the default for anything the user would consider sensitive.
 
+### 7.5 Identity derives from essence; shared paths have one accessor
+
+A key built from a counter, a row count, or a network address will be reused
+or will churn. The failure is never an error — it is a confident wrong answer.
+
+- Chunk ids allocated from `chunk_count()` were reused after any delete.
+  Wikipedia carried **31,432 duplicate rows**, and the citation "2026 Lebanon
+  war" opened "Gold can be used in food and has the E number 175." Retrieval
+  was correct; only the id-keyed read-back was ambiguous.
+- An iroh bridge's loopback port used as peer identity produced 14 rebuilds in
+  21 minutes for one peer that had not moved, and read a single stable worker
+  as a stream of new ones until quarantine compounded to permanent exclusion.
+  When a stable thing is keyed by a volatile address, **move the key** — don't
+  dampen the volatility.
+- Atlas rebuilds re-mint `EdgeId`s sequentially, so edge-id-keyed governance
+  adjudications would have re-opened every settled conflict weekly.
+
+Key on content hash or on a stable id. The address is a mutable *attribute* of
+the thing, never its name.
+
+The same rule applies to paths. A path or id derived by hand in two processes
+is a split-brain, and it presents as "the write succeeded and the read found
+nothing": `lint_status` reported `running` indefinitely against an orphaned DB
+because the reader resolved `indexes/` while the writer used the root, and
+`SOVEREIGN_DATA_DIR` carried four divergent unset-fallbacks across five crates,
+two of them *relative* paths that wrote into the current directory. Resolve
+through one named accessor; `clippy.toml`'s `disallowed-methods` entry for
+`dirs::home_dir` is how that is enforced here.
+
+Store the pre-image beside anything derived. A `MeasurementRecord` kept only a
+`placement_digest`; an exhaustive search over every split, both range orders,
+both head placements and five `total_blocks` values could not reproduce it. The
+number was still on disk and what it was a number *for* was gone. Re-derive at
+the point of use, and treat a witness that fails to explain its digest as
+**absent** rather than quoting it.
+
+### 7.6 Structure over instruction
+
+§7.3 says structural encoding is for threats. Extend it: **a model's behaviour
+belongs in the threat category, not the bug category.** It cannot be fixed by
+asking more firmly, and a prompt imperative relied on for correctness is a
+gamble you re-run on every request.
+
+Instruction-caveat compliance measured **~60%** on the 4B this repo runs
+(honesty 0.64 against a 0.91 counterfactual). Prose prohibitions fare worse:
+"absent-from-reference is NOT a hallucination" was ignored, and the first run
+flagged 11 hallucinations, mostly absence-flags. The structural fixes worked
+where four rounds of prompt language had not:
+
+- Force the output shape. Requiring `{claim, contradicts_item: <ref #>}` and
+  dropping entries with no valid cited item took hallucinations **11 → 2**.
+- Commit the constraint at decode time rather than requesting it. A structural
+  caveat prefix removed the honesty *variance*, which was the actual defect.
+- Enforce mechanically after the fact. Dropping uncited bullets and re-asking
+  once took frame recall **17% → 88%**.
+- Remove the fuel instead of forbidding the use. On zero atlas-atom matches the
+  append round is skipped entirely, so there is nothing to fabricate over.
+
+A bright line is also cheaper than a fuzzy one, and not only for safety. One
+unambiguous clause took hand-confirmed breaches 2 → 0 *and* moved unrelated
+quality: filler-only questions 19.5% → 7.2%, anchoring 75.9% → 85.4%, with the
+curious-read rate flat. The working hypothesis is that the model had been
+spending turns hedging around a limit it could not cleanly obey.
+
+Corollary for agents: adding more imperative language will not beat a model
+that has discovered it can no-op. Reach for a stronger verify gate (§18.1).
+
 ---
 
 ## 8. Dependency hygiene
@@ -547,6 +683,32 @@ If a production code path is so noisy that tests have to special-case its
 logs, the log level is wrong. Dial it down or move the event to a hook so
 tests can observe without grepping stdout.
 
+### 9.5 A probe must not ride the resource it monitors
+
+A health check that contends with the work it is checking reports "dead"
+precisely when the system is busiest — and the failure names the wrong culprit.
+
+`/v1/mesh/status` sampled per-device memory through an FFI call that is a
+register read locally and a **synchronous network round-trip** for an RPC
+device. It tested fine, because it was tested against an idle worker. Under a
+serving 122B the same call went from ~2 ms to hanging past 70 s, and since that
+endpoint is how `mesh bench` identifies the mesh, the bench died with "daemon
+not reachable" **while the daemon was healthy**. The fix — serve the reading
+the loader already captured — was also more correct, because the memory the
+loader saw when it chose a split is precisely what explains that split.
+
+Two consequences worth holding:
+
+- **A status field must never be produced by a call that can block.** Publish a
+  timestamped observation captured where the work already happens.
+- **Absence of a response is not evidence of absence.** ggml's RPC server
+  accepts one connection at a time, so a busy worker is indistinguishable from
+  a dead one: a healthy 284B child was SIGTERM'd mid-load at 223 s, and it
+  presented as "big models don't work distributed" rather than as a timeout.
+  Distinguish "answered: no" from "did not answer", and prefer an independent
+  signal — gossip membership is deliberately the liveness signal here, because
+  the `/status` probe starves under decode load.
+
 ---
 
 ## 10. Refactor discipline
@@ -593,6 +755,35 @@ A refactor that ships without review is a refactor that may have silently
 broken a caller you don't know about. If no reviewer is available, at
 minimum run the full workspace test suite twice (once before, once after)
 and post both outputs to the PR.
+
+### 10.6 Duplicating a *decider* is worse than duplicating code
+
+§10.3 tolerates a little duplication rather than trait gymnastics. That
+allowance stops at anything that **decides**: a threshold, a schema, a scorer,
+a policy table, a measurement key. Duplicated code diverges and you get a
+compile error or a failing test. A duplicated decider diverges and you get a
+plausible number, with nothing red anywhere.
+
+- A third view of the slot-alias policy spelled `vec![stem]` by hand and
+  omitted `commonwealth/primary`. **Every peer request for the shared 122B was
+  answered by the 0.8B fast slot at HTTP 200** — 111 tok/s against ~14.8. Every
+  measurement ever filed for that model was the small one under its name.
+- The chaos bench re-read `SOVEREIGN_GV_THRESHOLD` through a private
+  `.unwrap_or(0.5)` while production ships 0.9, so a gated run was 0.4 stricter
+  than the shipped gate and its verdicts described a system nobody runs.
+- The daemon capped a field in UTF-8 bytes and the client in UTF-16 chars.
+  Either side 400s the request, and the offending unit **stays in the history
+  window poisoning every later prediction, behind a green status bar**.
+- A Python replica of a gate's centroid maths disagreed in the third decimal
+  and returned the wrong verdict at +0.038 against a 0.040 gate.
+  **Re-derive, never re-implement.**
+
+The shape to copy is `sovereign-mesh/src/slot_aliases.rs`: one `const` policy
+table, every derived view computed from it, and tests that pin the views
+against each other. The module doc tells the next author to add a row rather
+than a branch. If two implementations genuinely must exist, share the body and
+add a golden equivalence test — conventional agreement decays, structural
+inseparability does not.
 
 ---
 
@@ -744,6 +935,12 @@ automatically a block.
 | A refactor PR that also "just cleans up some nearby stuff"          | §10.2 |
 | A claim in commit or PR body that a function exists, without a citation | §11.1 |
 | An assertion in English prose rather than in a test                 | §7.2 |
+| A check with no failing input you can name                          | §18.1 |
+| A guard asserting on a field the subject supplies or echoes back    | §18.1 |
+| An `Err` collapsed into a success-shaped value                      | §18.3 |
+| A single-run delta reported as a result                             | §18.5 |
+| Two implementations of one threshold, formula, or key               | §10.6 |
+| A key derived from a row count, sequence number, or network address | §7.5 |
 
 If you see one in your own code while writing it, fix it then. If you see
 one in review, call it out with a link to the relevant section of this file.
@@ -776,3 +973,149 @@ one in review, call it out with a link to the relevant section of this file.
    tomorrow, rewrite it until it does.
 4. Principles replace prose, not the reverse. If a new rule obsoletes an
    old one, delete the old one; don't let them coexist.
+
+---
+
+## 18. Unearned success
+
+This section came out of clustering 818 working notes written across six
+months. It is the single most repeated lesson in them, and it is worth stating
+plainly:
+
+> **This system rarely crashes. It reports success it has not earned.**
+
+A gate that cannot fail, a fallback nobody announced, an instrument nobody
+validated, and a bench measuring a path production never runs are four ways of
+producing the same artifact — a plausible, well-formed, exit-0 result that is
+wrong. Each rule below is cited to notes you can read with
+`sovereign notes list --id <id>`.
+
+### 18.1 A gate must be observed to fail before it is trusted
+
+Before you land a check, name the input that makes it red — then make it red
+and watch. A check that cannot fail is not a check.
+
+- `doctor` asserted that an *unrelated* file existed and reported Passed. Nine
+  test assertions pinned the wrong JSON shape, so for months **the suite
+  defended the bug** (`f6d4c770`).
+- The CLI journey verifier captured `2>&1`, and every `svrn` invocation prints
+  a deprecation banner on stderr — so `stdout_non_empty` was satisfied by *any*
+  command, including one that printed nothing. Every such assertion in the
+  manifest was vacuous. Three controls were added and watched to fail first;
+  three "passing" steps went red immediately (`f496d39e`).
+- **Assert on something the subject cannot author.** An SSE `model` field is a
+  verbatim echo of the client's request, so the wrong-slot guard passed cleanly
+  on the exact failure it existed to catch (`a6ca12aa`).
+- **A zero count is not a positive control.** `canary_hits: 0` is the expected
+  *good* result, so it proves nothing. Planting a real colliding document
+  revealed that the counter incremented on only one of the two paths, and the
+  two halves of the report had been silently disagreeing (`72b3ab47`).
+
+The lint adapter is the cautionary case for gates that are also *narrow*: it
+counted rustc error records only, so build-script failures, bad feature flags
+and link errors were invisible, and it printed `pass: 1 fail: 0` while cargo
+exited 101 (`e752b13a`).
+
+### 18.2 Four verdicts, not two
+
+`passed`, `failed`, `could-not-judge`, `never-ran`. Collapsing the third or
+fourth into either of the first two is how a gate reports the opposite of the
+truth.
+
+The adapter gate reported an **all-NaN diverged training run as "not
+trained"** — Python's `max()` keeps the running value when compared against
+NaN. Diverged and never-started demand opposite responses, and the gate was the
+single artifact the whole handoff rested on (`edbfabb8`). Elsewhere: a strict
+balanced accuracy of 10.88 is below chance *by design*, because a parse failure
+scores the wrong label rather than abstaining — read it as "no measurement",
+never as "worse than a coin" (`e5c02e64`). `shard_fits` returns `None` for
+"cannot judge" specifically so a fit check can never clear every device on the
+strength of a table of zeros (`143acf9f`).
+
+Give each verdict its own exit code. `sovereign-test.sh` exiting 4 on a
+zero-test run is this principle already in force.
+
+### 18.3 Never silently substitute, and never substitute for absence
+
+If you cannot do what was asked, refuse — or name the substitution in the
+response. Degrading quietly is worse than failing, because it spends the
+caller's trust instead of their attention.
+
+- With the distributed primary unavailable, the non-streaming path returned a
+  clean error while **the streaming path, same model string, seconds apart,
+  returned 200** served by a 0.8B. The label, the shape and the finish reason
+  were all correct, so no client could tell (`d45489a3`).
+- The desktop updater collapsed **every** `Err` into `Ok(None)` = "up to date".
+  That mask is why two other update bugs stayed invisible for weeks
+  (`c17ba1ff`).
+- A store that grows and never answers is worse than a refusal, because it
+  looks like it worked (`143f57b8`).
+
+Absence gets reported, never defaulted. A guessed rate is a fabricated fact
+with a unit attached: `Unpredictable` is never collapsed into a number, and
+`Unpredictable` and `Infeasible` point in opposite directions so they must not
+collapse into one `Option` (`963a8d88`). Reading a metric under the wrong key
+and defaulting to 0 returned 0 for *every* historical run and made the current
+one look like a fresh regression from zero (`9345fb89`).
+
+Unknown fields are errors, not no-ops — §4.3 one level down. A wrong parameter
+shape produced `{created: true, sections_updated: []}`; 10 of 111 calls used
+it, and three frames on disk were empty husks, one of them live in the boot
+index (`30251dcf`). A pluralised TOML key silently dropped a threshold while
+validation still passed (`665e8cd5`).
+
+### 18.4 Validate the instrument before the result
+
+When a new harness's first run reports a regression, **suspect the instrument
+before the system.** Diff the harness's parameters and evidence against
+production before you open a bug.
+
+The decisive case: an oracle judged answers against chunks truncated to 1500
+characters and a top-12 slice, while the gate under test grounded on the full
+set. A composite reported at **60% was really ~90%** — 85-90% of the apparent
+gap was the capture artifact, and a re-audit found 14 to 17 of 22 "broken"
+turns were correct behaviours mis-scored (`8bfc177c`). A judge that treats a
+length target as a hard requirement **cannot see honest improvement at all**: a
+length-blind re-judge scored the same change +17.3 points while the live
+composite went down (`d6b55fcc`).
+
+So: **score against the same evidence the system consumed**, and resolve
+thresholds through the shipped resolver rather than a private `.unwrap_or`
+(§10.6). Validate that the path you are measuring actually executed — four days
+of training runs looked healthy while the gradient sum was exactly 0.0, so
+every number came from an unmodified base model, and detecting it cost two
+seconds (`3d9a9ce4`). A bench whose classifier stack is never constructed in
+the served daemon is measuring something else entirely, and that is the
+mechanism behind "the product feels worse even as the benches improve"
+(`762a98c0`).
+
+Corollary: **if a run cannot be re-scored without re-running the model, it is
+not instrumented** (`e5c02e64`). Persist the raw artifact, not just the derived
+verdict — frozen-transcript replay turned a 2-hour iteration into 3-15 minutes
+(`d9fdd15e`).
+
+### 18.5 A single run is not a measurement
+
+Establish the noise floor at the sample size you are using, then decide what
+counts as a delta.
+
+Judge verdicts flipped on **37% of facts (104/284)** across trials on the same
+transcript, and single-trial scoring inflated the result by ~17 points
+(`485f9f05`). Chaos runs are not deterministic at temperature 0. A throughput
+figure ranged 42% under one key on one box with one config (`72b2beaa`). At
+n=2 a two-node comparison read backwards; at n=4 it inverted (`e39fa87d`).
+
+Short runs are liveness checks, not stability tests. A 5-step gate passed one
+step before the identical configuration diverged to NaN at step 11
+(`c4851203`), and a 61-step-clean memory configuration was OOM-killed at step
+63 — so any claim about that stack must name the step count it was measured
+over (`12d363ea`).
+
+Related discipline, which belongs to §10 but is cheapest to state here:
+**measure the bar, and measure the fix as an arm, before building either.**
+Designing four experimental arms against an unverified baseline cost an
+evening; checking the baseline took five minutes and refuted it (`d39af2dc`).
+The obvious scheduler fix, measured as an arm first, was a **235% regression**
+(`5b315c5f`). And when the question is whether a thing is read at all, a static
+census beats an ablation: a bank can only fail to *detect* a difference,
+whereas an absent call site proves none can exist (`de25ebe9`).

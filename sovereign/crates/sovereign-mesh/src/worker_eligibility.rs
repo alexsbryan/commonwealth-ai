@@ -91,6 +91,24 @@ pub struct DiscoveryOutcome {
     pub workers: Vec<DiscoveredWorker>,
     /// Peers we hold worker history for and polled, but could not confirm.
     pub unconfirmed: Vec<NodeId>,
+    /// Endpoints this node's OWN compute child is actively warming against or
+    /// serving across this tick — first-party evidence the probe cannot give.
+    ///
+    /// ggml's RPC server accepts ONE connection at a time (upstream
+    /// ggml-rpc.cpp accept loop), so a worker busy carrying our model cannot
+    /// answer a liveness probe for as long as it does — the busier the worker,
+    /// the deader it looks. The 2026-08-02 incident: a 284B load needed >223 s,
+    /// only `warm_alive_at` vouched for the worker, that hold is bounded at
+    /// `absence_grace`, the eligible set emptied, and the retire path SIGTERMed
+    /// a healthy child mid-load. Every model needing more than ~2 minutes to
+    /// load was unrunnable distributed.
+    ///
+    /// A child moving shard bytes over an endpoint, or holding a live serving
+    /// session across it, is a strictly better probe than the probe — so it is
+    /// graded like presence, not like a bounded benefit-of-the-doubt. Matched
+    /// against each tracked worker's current endpoint; it can vouch for a
+    /// worker discovery already knows, never invent one.
+    pub engaged: Vec<String>,
     /// Gossip-online, dialable, anchor-capable peers considered this tick.
     /// Distinguishes "we polled nobody" from "we polled one and it went quiet" —
     /// the ambiguity that made the incident's `eligible=0 discovered=0` log line
@@ -109,6 +127,7 @@ impl DiscoveryOutcome {
         Self {
             workers,
             unconfirmed: Vec::new(),
+            engaged: Vec::new(),
             polled,
             scanned: true,
         }
@@ -120,6 +139,10 @@ impl DiscoveryOutcome {
 enum Evidence {
     /// Confirmed dialable.
     Present,
+    /// Our own compute child is warming against or serving across this
+    /// worker's endpoint — first-party traffic, graded like presence. See
+    /// [`DiscoveryOutcome::engaged`].
+    Engaged,
     /// No statement either way — freeze this worker's state machine.
     Unconfirmed,
     /// Positive grounds to believe it is gone.
@@ -264,6 +287,11 @@ struct WorkerState {
     /// When this peer last carried a successful multi-gigabyte model transfer.
     /// Out-of-band liveness that is strictly stronger than an 800ms probe.
     warm_alive_at: Option<Instant>,
+    /// The most recent tick graded this worker [`Evidence::Engaged`] — held
+    /// present by our own child's warm/serving traffic rather than by a probe.
+    /// Surfaced on [`WorkerStatusView`] so an operator reading mesh status
+    /// mid-load can see WHY a probe-starved worker is still eligible.
+    engaged: bool,
 }
 
 impl WorkerState {
@@ -331,6 +359,12 @@ pub struct WorkerStatusView {
     /// silent internal hold. `serde(default)` keeps older payloads readable.
     #[serde(default)]
     pub unconfirmed_for_secs: u64,
+    /// This worker is currently vouched for by our own compute child's
+    /// warm/serving traffic (see [`DiscoveryOutcome::engaged`]) — the answer to
+    /// "why is this probe-starved worker still eligible?" during a long load.
+    /// `serde(default)` keeps older payloads readable.
+    #[serde(default)]
+    pub engaged: bool,
 }
 
 /// Classify what this tick says about one tracked worker.
@@ -343,12 +377,23 @@ fn evidence_for(
     st: &WorkerState,
     present: &HashSet<NodeId>,
     unconfirmed: &HashSet<NodeId>,
+    engaged: &HashSet<&str>,
     scanned: bool,
     now: Instant,
     cfg: &EligibilityConfig,
 ) -> Evidence {
     if present.contains(id) {
         return Evidence::Present;
+    }
+    // Positive first-party evidence, NOT benefit of the doubt — so it ranks
+    // above the grace machinery (including the grace-disabled escape below):
+    // our own child is moving bytes over this endpoint right now, which no
+    // starved probe can refute. Unbounded on purpose, unlike `warm_alive_at`:
+    // the caller only asserts engagement while the child is actually warming
+    // or serving, so the vouching ends with the child — a worker that dies
+    // takes the child (and this evidence) down with it.
+    if !st.endpoint.is_empty() && engaged.contains(st.endpoint.as_str()) {
+        return Evidence::Engaged;
     }
     // Grace disabled — every non-present tick is absence, i.e. exactly the
     // pre-2026-07-28 behaviour. Kept as a one-line escape for an operator who
@@ -416,6 +461,7 @@ impl WorkerEligibility {
     pub fn observe_outcome(&self, outcome: &DiscoveryOutcome, now: Instant) {
         let present_ids: HashSet<NodeId> = outcome.workers.iter().map(|w| w.node_id).collect();
         let unconfirmed_ids: HashSet<NodeId> = outcome.unconfirmed.iter().copied().collect();
+        let engaged_eps: HashSet<&str> = outcome.engaged.iter().map(String::as_str).collect();
         let addresses: HashMap<NodeId, &str> = outcome
             .workers
             .iter()
@@ -436,10 +482,12 @@ impl WorkerEligibility {
                 st,
                 &present_ids,
                 &unconfirmed_ids,
+                &engaged_eps,
                 outcome.scanned,
                 now,
                 &self.config,
             );
+            st.engaged = evidence == Evidence::Engaged;
 
             match evidence {
                 // No statement. Freeze the whole state machine: no flap, no
@@ -449,7 +497,14 @@ impl WorkerEligibility {
                 Evidence::Unconfirmed => {
                     st.unconfirmed_since.get_or_insert(now);
                 }
-                Evidence::Present => {
+                // Engaged is presence by another witness: our own child's
+                // traffic. The shared arm gives it the same effects — hold
+                // presence, keep the settle run, clear the unconfirmed hold —
+                // with two built-in differences that need no extra code: the
+                // `addresses` map only lists discovery-confirmed workers, so an
+                // engaged-only tick never rewrites the endpoint; and `status()`
+                // checks the quarantine first, so engagement never lifts one.
+                Evidence::Present | Evidence::Engaged => {
                     st.unconfirmed_since = None;
                     // An address change for a present node is NOT a flap —
                     // update the endpoint in place and leave presence/settle
@@ -589,6 +644,7 @@ impl WorkerEligibility {
                     .unconfirmed_since
                     .map(|s| now.duration_since(s).as_secs())
                     .unwrap_or(0),
+                engaged: st.engaged,
             })
             .collect();
         out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
@@ -645,6 +701,7 @@ mod tests {
         DiscoveryOutcome {
             workers: vec![],
             unconfirmed: ids.iter().map(|n| NodeId::from_u128(*n)).collect(),
+            engaged: vec![],
             polled: ids.len(),
             scanned: true,
         }
@@ -889,6 +946,7 @@ mod tests {
             &DiscoveryOutcome {
                 workers: vec![],
                 unconfirmed: vec![],
+                engaged: vec![],
                 polled: 1,
                 scanned: true,
             },
@@ -971,6 +1029,114 @@ mod tests {
             "a warm must not resurrect a flapping anchor — that is the gate that \
              protects the host"
         );
+    }
+
+    // ── engaged evidence (2026-08-02: the load-duration cliff) ──────────
+
+    /// A confirmed-absent tick during which our own child is engaged with the
+    /// worker's endpoint. `scanned + polled + in neither set` is the harshest
+    /// evidence discovery can produce — engagement must outrank even that.
+    fn engaged_tick(eps: &[&str]) -> DiscoveryOutcome {
+        DiscoveryOutcome {
+            workers: vec![],
+            unconfirmed: vec![],
+            engaged: eps.iter().map(|s| (*s).to_string()).collect(),
+            polled: 1,
+            scanned: true,
+        }
+    }
+
+    /// THE 2026-08-02 INCIDENT. A 284B model needed >223 s of load; the worker
+    /// carrying it could not answer a probe the whole time (ggml's RPC server
+    /// accepts one connection at a time); the grace expired at 120 s and the
+    /// retire path killed a healthy child mid-load. Engagement has no such
+    /// bound: as long as the child is warming/serving, the worker stays
+    /// eligible — however long the load takes.
+    #[test]
+    fn an_engaged_worker_survives_arbitrarily_long_probe_starvation() {
+        let (e, mut t) = settled(120);
+        // 40 ticks × 15 s = 600 s of confirmed-absent probes: 5× the grace,
+        // ~3× the incident's fatal load.
+        for _ in 0..40 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&engaged_tick(&["a:1"]), t);
+        }
+        assert_eq!(
+            e.eligible(t),
+            vec!["a:1".to_string()],
+            "a worker carrying our own model is not dead, no matter how long the load"
+        );
+        let view = &e.status_views(t)[0];
+        assert_eq!(view.flaps_in_window, 0, "no flap may be recorded");
+        assert!(view.engaged, "the hold must be visible to an operator");
+        assert_eq!(view.unconfirmed_for_secs, 0, "engagement is a statement, not a hold");
+    }
+
+    /// The vouching ends with the child. Once engagement stops, absence
+    /// degrades on exactly the normal schedule — a dead worker still leaves.
+    #[test]
+    fn engagement_ending_resumes_normal_degradation() {
+        let (e, mut t) = settled(120);
+        for _ in 0..10 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&engaged_tick(&["a:1"]), t);
+        }
+        assert_eq!(e.eligible(t), vec!["a:1".to_string()], "precondition");
+        // Child gone; confirmed-absent ticks with no engagement.
+        for _ in 0..2 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&engaged_tick(&[]), t);
+        }
+        assert!(
+            e.eligible(t).is_empty(),
+            "confirmed absence without engagement takes effect immediately"
+        );
+        assert!(!e.status_views(t)[0].engaged);
+    }
+
+    /// Engagement matches a tracked worker's endpoint; it can never conjure an
+    /// entry — same never-invent property as `note_alive`.
+    #[test]
+    fn engagement_cannot_invent_a_worker() {
+        let e = WorkerEligibility::new(cfg_with_grace(120));
+        let t = Instant::now();
+        e.observe_outcome(&engaged_tick(&["ghost:1"]), t);
+        assert!(e.status_views(t).is_empty());
+    }
+
+    /// Engagement holds presence; it does not lift a quarantine. A flapping
+    /// anchor that our child happens to be pinned to stays excluded — that is
+    /// the gate that protects the host from GGML_ABORT.
+    #[test]
+    fn engagement_does_not_lift_a_quarantine() {
+        let e = WorkerEligibility::new(cfg_with_grace(120));
+        let mut t = Instant::now();
+        for _ in 0..3 {
+            e.observe(&w("a:1"), t);
+            t += Duration::from_secs(5);
+            e.observe(&w(""), t);
+            t += Duration::from_secs(5);
+        }
+        assert_eq!(e.status_views(t)[0].status, WorkerStatus::Quarantined);
+        e.observe_outcome(&engaged_tick(&["a:1"]), t);
+        assert_eq!(e.status_views(t)[0].status, WorkerStatus::Quarantined);
+        assert!(e.eligible(t).is_empty());
+    }
+
+    /// Recovery after a long engaged stretch is free: the settle run was never
+    /// reset, so the first ordinary present tick keeps the worker eligible with
+    /// no re-settle — the same property the unconfirmed hold guarantees.
+    #[test]
+    fn an_engaged_worker_is_not_re_settled_when_probes_recover() {
+        let (e, mut t) = settled(120);
+        for _ in 0..20 {
+            t += Duration::from_secs(15);
+            e.observe_outcome(&engaged_tick(&["a:1"]), t);
+        }
+        t += Duration::from_secs(15);
+        e.observe(&w("a:1"), t);
+        assert_eq!(e.eligible(t), vec!["a:1".to_string()]);
+        assert!(!e.status_views(t)[0].engaged, "probe confirmation outranks engagement");
     }
 
     #[test]

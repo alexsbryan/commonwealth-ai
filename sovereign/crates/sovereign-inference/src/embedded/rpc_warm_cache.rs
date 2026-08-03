@@ -884,10 +884,65 @@ pub struct ShardFit {
     /// Resident bytes this device would hold: its block range plus the output
     /// head if it carries it.
     pub held_bytes: u64,
-    /// `held_bytes × headroom` — what must actually fit.
+    /// Projected non-weight bytes (KV share + compute scratch) this device
+    /// needs on top of the weights — `0` when no [`PlanOverheads`] was
+    /// supplied and the multiplicative headroom is the only margin.
+    pub overhead_bytes: u64,
+    /// `held_bytes × headroom + overhead_bytes` — what must actually fit.
     pub need_bytes: u64,
     /// What this device has.
     pub capacity_bytes: u64,
+}
+
+/// Non-weight memory a distributed load needs, projected by llama.cpp's own
+/// three-term accountant (`llama_cpp_4::fit::get_device_memory_data` →
+/// `common_device_memory_collect`) rather than guessed from the weights.
+///
+/// Exists because the fit gate used to charge devices for weights only: the
+/// 2026-08-02 loads passed `shard_fits` with a 0.07 GiB margin, reached
+/// `serving`, and died allocating KV + compute buffers on the first inference.
+/// The opposite error was live on the host side, where a `weights/8` KV proxy
+/// over-charged an MLA model ~5× and refused loads that fit. The projection
+/// measured ~278 ms warm on a 155 GB sharded GGUF (`no_alloc` load, freed
+/// before returning — tests/device_memory_probe.rs), so it can sit in the
+/// plan path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlanOverheads {
+    /// KV / recurrent-cache bytes for the WHOLE model at the load's context
+    /// size. Charged to each device in proportion to the blocks it holds.
+    pub context_total_bytes: u64,
+    /// Compute-scratch bytes per accelerator device (the largest projected
+    /// per-device compute buffer). Charged to every device in the plan: each
+    /// backend reserves its own graph workspace.
+    pub compute_accel_bytes: u64,
+    /// The host CPU buffer's compute scratch — the scheduler-side workspace
+    /// that only exists in the process driving the graph. Charged to the plan's
+    /// LAST device (plan order is RPC workers first, host last).
+    pub compute_host_bytes: u64,
+}
+
+impl PlanOverheads {
+    /// Non-weight bytes device `idx` of `n_devices` needs when holding
+    /// `blocks` of `total_blocks`.
+    pub fn device_bytes(
+        &self,
+        idx: usize,
+        n_devices: usize,
+        blocks: u64,
+        total_blocks: u64,
+    ) -> u64 {
+        let ctx = if total_blocks == 0 {
+            0
+        } else {
+            (self.context_total_bytes as u128 * blocks as u128 / total_blocks as u128) as u64
+        };
+        let host_extra = if idx + 1 == n_devices {
+            self.compute_host_bytes
+        } else {
+            0
+        };
+        ctx + self.compute_accel_bytes + host_extra
+    }
 }
 
 impl ShardFit {
@@ -925,6 +980,7 @@ pub fn shard_fits(
     capacities: &[u64],
     mass: &ModelMass,
     headroom: f64,
+    overheads: Option<&PlanOverheads>,
 ) -> Option<Vec<ShardFit>> {
     if plan.is_empty() || capacities.len() != plan.len() {
         return None;
@@ -935,6 +991,7 @@ pub fn shard_fits(
     if !mass.is_known() {
         return None;
     }
+    let total_blocks = mass.block_bytes.len() as u64;
     let mut out = Vec::with_capacity(plan.len());
     for (pos, shard) in plan.iter().enumerate() {
         // The plan's own `device_index` is the authority on which capacity a
@@ -946,7 +1003,9 @@ pub fn shard_fits(
             pos
         };
         let mut held = 0u64;
+        let mut blocks = 0u64;
         if let Some((a, b)) = shard.blocks {
+            blocks = (b - a + 1) as u64;
             for blk in a..=b {
                 // A range past the end of the table means the plan and the mass
                 // describe different models. Refuse rather than under-charge.
@@ -956,10 +1015,19 @@ pub fn shard_fits(
         if shard.holds_output {
             held += mass.head_bytes;
         }
+        // With a projection, need is what the load will actually allocate:
+        // weights (× the operator's safety headroom) plus this device's KV
+        // share and compute scratch. Without one, headroom alone stands in for
+        // the missing terms — the pre-2026-08-02 behaviour, kept as the
+        // fallback so a failed projection can never brick a load.
+        let overhead = overheads
+            .map(|o| o.device_bytes(idx, capacities.len(), blocks, total_blocks))
+            .unwrap_or(0);
         out.push(ShardFit {
             device_index: idx,
             held_bytes: held,
-            need_bytes: (held as f64 * headroom) as u64,
+            overhead_bytes: overhead,
+            need_bytes: (held as f64 * headroom) as u64 + overhead,
             capacity_bytes: capacities[idx],
         });
     }
@@ -1550,7 +1618,7 @@ mod tests {
         let mass = ModelMass::default();
         assert!(!mass.is_known());
         let plan = plan_shards(4, &[1.0, 1.0]);
-        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2), None);
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2, None), None);
     }
 
     #[test]
@@ -1560,7 +1628,7 @@ mod tests {
         // drift this function exists to remove.
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(4, &[1.0, 1.0]);
-        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.2, None).expect("judgeable");
         assert_eq!(fits.len(), 2, "one row per shard, fitting rows included");
         assert!(fits.iter().all(|f| f.fits()));
         // Device 1 holds blocks 2-3 plus the head: 3 GiB, needing 3.6 with headroom.
@@ -1574,7 +1642,7 @@ mod tests {
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(4, &[1.0, 1.0]);
         // Device 0 holds blocks 0-1 = 2 GiB, needing 2.4 GiB; it has 2.
-        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2, None).expect("judgeable");
         assert!(!fits[0].fits());
         assert!(fits[0].slack_bytes() < 0);
         assert!(fits[1].fits(), "one overflow must not condemn the others");
@@ -1591,7 +1659,7 @@ mod tests {
             capacities.iter().sum::<u64>() > (mass.total_bytes() as f64 * 1.2) as u64,
             "the aggregate gate would wave this through"
         );
-        let fits = shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable");
+        let fits = shard_fits(&plan, &capacities, &mass, 1.2, None).expect("judgeable");
         assert!(fits.iter().any(|f| !f.fits()));
     }
 
@@ -1602,11 +1670,79 @@ mod tests {
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(4, &[1.0, 1.0]);
         let capacities = [2 * GIB, 10 * GIB];
-        assert!(!shard_fits(&plan, &capacities, &mass, 1.2).expect("judgeable")[0].fits());
+        assert!(!shard_fits(&plan, &capacities, &mass, 1.2, None).expect("judgeable")[0].fits());
         assert!(
-            shard_fits(&plan, &capacities, &mass, 1.0).expect("judgeable")[0].fits(),
+            shard_fits(&plan, &capacities, &mass, 1.0, None).expect("judgeable")[0].fits(),
             "lowering the headroom must be able to rescue a marginal fit"
         );
+    }
+
+    /// THE 2026-08-02 FAILURE SHAPE. A share whose weights squeeze inside the
+    /// capacity at headroom 1.0 — a 0.07 GiB-class margin — passes a
+    /// weights-only judgement, reaches `serving`, and dies allocating KV +
+    /// compute on the first inference. With the projected overheads the same
+    /// plan is refused BEFORE the minutes-long warm is spent on it.
+    #[test]
+    fn a_weights_only_pass_with_no_room_for_kv_is_refused_with_overheads() {
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        let plan = plan_shards(4, &[1.0, 1.0]);
+        // Device 0 holds blocks 0-1 = 2 GiB and has 2 GiB + a sliver.
+        let capacities = [2 * GIB + GIB / 16, 10 * GIB];
+        assert!(
+            shard_fits(&plan, &capacities, &mass, 1.0, None).expect("judgeable")[0].fits(),
+            "precondition: weights-only judgement passes on the sliver margin"
+        );
+        let o = PlanOverheads {
+            context_total_bytes: GIB,     // 256 MiB/block over 4 blocks
+            compute_accel_bytes: GIB / 2, // every device reserves scratch
+            compute_host_bytes: GIB,      // host-side scheduler buffer
+        };
+        let fits = shard_fits(&plan, &capacities, &mass, 1.0, Some(&o)).expect("judgeable");
+        assert!(
+            !fits[0].fits(),
+            "2 GiB weights + 512 MiB KV share + 512 MiB scratch cannot live in 2.06 GiB"
+        );
+        // Overheads are charged where they land: device 0 gets its KV share +
+        // accel scratch; device 1 (the host, last in plan order) additionally
+        // carries the scheduler buffer.
+        assert_eq!(fits[0].overhead_bytes, GIB / 2 + GIB / 2);
+        assert_eq!(fits[1].overhead_bytes, GIB / 2 + GIB / 2 + GIB);
+        assert_eq!(
+            fits[1].need_bytes,
+            fits[1].held_bytes + fits[1].overhead_bytes,
+            "at headroom 1.0 the need is exactly weights + projected overheads"
+        );
+    }
+
+    /// The KV share follows the blocks, not the device count — a device
+    /// holding no blocks is charged no context (only its compute scratch).
+    #[test]
+    fn overhead_context_is_charged_pro_rata_by_blocks() {
+        let mass = model_mass_from_sizes(&simple_sizes(), 4);
+        // All four blocks on device 1; device 0 idles.
+        let plan = vec![
+            NodeShard {
+                device_index: 0,
+                blocks: None,
+                holds_output: false,
+                fraction: 0.0,
+            },
+            NodeShard {
+                device_index: 1,
+                blocks: Some((0, 3)),
+                holds_output: true,
+                fraction: 1.0,
+            },
+        ];
+        let o = PlanOverheads {
+            context_total_bytes: 4 * GIB,
+            compute_accel_bytes: GIB / 4,
+            compute_host_bytes: 0,
+        };
+        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.0, Some(&o))
+            .expect("judgeable");
+        assert_eq!(fits[0].overhead_bytes, GIB / 4, "no blocks → no KV, scratch only");
+        assert_eq!(fits[1].overhead_bytes, 4 * GIB + GIB / 4, "all blocks → all KV");
     }
 
     #[test]
@@ -1614,17 +1750,17 @@ mod tests {
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(4, &[1.0, 1.0]);
         assert_eq!(
-            shard_fits(&plan, &[GIB], &mass, 1.2),
+            shard_fits(&plan, &[GIB], &mass, 1.2, None),
             None,
             "one capacity for two devices is not a verdict"
         );
-        assert_eq!(shard_fits(&[], &[], &mass, 1.2), None);
+        assert_eq!(shard_fits(&[], &[], &mass, 1.2, None), None);
         assert_eq!(
-            shard_fits(&plan, &[GIB, GIB], &mass, 0.5),
+            shard_fits(&plan, &[GIB, GIB], &mass, 0.5, None),
             None,
             "headroom below 1.0 would ask a device to hold less than it holds"
         );
-        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, f64::NAN), None);
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, f64::NAN, None), None);
     }
 
     #[test]
@@ -1633,7 +1769,7 @@ mod tests {
         // different models. Refusing beats silently under-charging the device.
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(8, &[1.0, 1.0]);
-        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2), None);
+        assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2, None), None);
     }
 
     #[test]
@@ -1641,7 +1777,7 @@ mod tests {
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         // Four blocks across three devices weighted 10:1:0 — the last gets none.
         let plan = plan_shards_weighted(4, &[10.0, 1.0, 0.0], &mass.block_bytes, mass.head_bytes);
-        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB, 0], &mass, 1.2).expect("judgeable");
+        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB, 0], &mass, 1.2, None).expect("judgeable");
         let idle = fits.last().expect("three rows");
         assert_eq!(idle.held_bytes, 0);
         assert!(
@@ -1657,7 +1793,7 @@ mod tests {
         // every row to the wrong machine.
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         let plan = plan_shards(4, &[1.0, 1.0]);
-        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2).expect("judgeable");
+        let fits = shard_fits(&plan, &[2 * GIB, 10 * GIB], &mass, 1.2, None).expect("judgeable");
         for (pos, f) in fits.iter().enumerate() {
             assert_eq!(f.device_index, plan[pos].device_index);
         }

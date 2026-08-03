@@ -35,6 +35,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]  # research/verifier-v0
 DEFAULT_DATA = REPO / "data" / "orpo-probe"
 
+# The B-matrix rule lives in exactly one place. check_adapter_trained.py is the
+# standalone auditor for arbitrary adapter dirs; this trainer applies the SAME
+# rule to its own output, so a run can never again look healthy while having
+# learned nothing (HALO_HANDOFF_2026-08-02.md §1).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_adapter_trained import DIVERGED, TRAINED, report, scan  # noqa: E402
+
 
 # --------------------------------------------------------------------------
 # observability helpers
@@ -51,6 +58,67 @@ def host_rss_gb() -> float:
     except OSError:
         pass
     return float("nan")
+
+
+def host_gtt_gb() -> float:
+    """GTT held by the WHOLE BOX, from sysfs.
+
+    `torch.cuda.max_memory_allocated()` cannot see GTT reserved by the HIP
+    runtime outside PyTorch's allocator. On the M0 probe it read 29.34 GB flat
+    while the box held 103 GB and the trainer was SIGKILLed
+    (findings/M0_PROBE_HALO.md:72). Recording only torch's counter is how a run
+    ratchets to death while its own log reports a steady 29 GB.
+
+    This number is the box's, NOT this process's — see proc_gtt_gb.
+    """
+    try:
+        with open("/sys/class/drm/card1/device/mem_info_gtt_used") as fh:
+            return int(fh.read().strip()) / 1024**3
+    except OSError:
+        return float("nan")
+
+
+def proc_gtt_gb(pid: int | None = None) -> float:
+    """GTT resident for THIS process alone, attributed via drm fdinfo.
+
+    WHY THIS EXISTS. The sysfs counter above is box-wide, and this box has GPU
+    co-tenants: the sovereign daemon and its `--compute-child` hold renderD128
+    open and were measured at 26.9 GB resident while a training probe ran.
+    Attributing that to the trainer would turn a co-tenant's model load into a
+    phantom "leak", and — worse — a real leak into a shrug about the daemon.
+    M0's attribution was done by hand once (`/proc/*/fd`, one pid holding GPU
+    fds); this makes it automatic and per-step.
+
+    Dedupes on drm-client-id: a process opens the render node many times and
+    every fd reports the SAME totals, so summing over fds inflates by the fd
+    count.
+    """
+    pid = pid or os.getpid()
+    seen: dict[str, int] = {}
+    fddir = f"/proc/{pid}/fd"
+    try:
+        fds = os.listdir(fddir)
+    except OSError:
+        return float("nan")
+    for fd in fds:
+        try:
+            if "renderD" not in os.readlink(f"{fddir}/{fd}"):
+                continue
+            client = None
+            kib = 0
+            with open(f"/proc/{pid}/fdinfo/{fd}") as fh:
+                for line in fh:
+                    if line.startswith("drm-client-id:"):
+                        client = line.split()[-1]
+                    elif line.startswith("drm-resident-gtt:"):
+                        kib = int(line.split()[1])
+            if client is not None:
+                seen[client] = max(seen.get(client, 0), kib)
+        except (OSError, ValueError, IndexError):
+            continue
+    if not seen:
+        return float("nan")
+    return sum(seen.values()) / 1024**2
 
 
 def gpu_mem_gb(torch) -> tuple[float, float]:
@@ -219,6 +287,16 @@ def main() -> int:
     ap.add_argument("--attn", default="sdpa", choices=["sdpa", "eager", "flash_attention_2"])
     ap.add_argument("--dtype", default="bfloat16", choices=["bfloat16", "float16", "float32"])
     ap.add_argument("--seed", type=int, default=17, help="matches the data seed")
+    ap.add_argument("--empty-cache-every", type=int, default=0, metavar="N",
+                    help="call torch.cuda.empty_cache() every N optimizer steps "
+                         "(0 = never). The untested GTT-ratchet mitigation from "
+                         "M0_PROBE_HALO.md:79 — measure s/it against a baseline "
+                         "run before adopting it, empty_cache is not free.")
+    ap.add_argument("--gtt-limit-gb", type=float, default=95.0,
+                    help="abort if BOX GTT exceeds this (default 95 of 125 GB, "
+                         "leaving the compositor its reserve). M0 was SIGKILLed "
+                         "at 100.7 GB and took the desktop session with it; a "
+                         "clean stop keeps the adapter, the timings and the log.")
     ap.add_argument("--rss-limit-gb", type=float, default=40.0,
                     help="abort if this process exceeds this RSS (the Mac run's "
                          "tripwire; peak trainer RSS there was ~22 GB)")
@@ -383,6 +461,12 @@ def main() -> int:
             if self.last is not None:
                 self.durations.append(now - self.last)
             self.last = now
+            # The mitigation named as untested in M0_PROBE_HALO.md:79. Runs
+            # BEFORE the memory sample so the sample reports the post-reclaim
+            # figure — otherwise the trace measures the thing we just released.
+            if args.empty_cache_every and state.global_step % args.empty_cache_every == 0:
+                torch.cuda.empty_cache()
+
             alloc, peak = gpu_mem_gb(torch)
             rss = host_rss_gb()
             rec = {
@@ -394,6 +478,8 @@ def main() -> int:
                 "rss_gb": round(rss, 2),
                 "gpu_alloc_gb": round(alloc, 2),
                 "gpu_peak_gb": round(peak, 2),
+                "gtt_gb": round(host_gtt_gb(), 2),      # whole box
+                "proc_gtt_gb": round(proc_gtt_gb(), 2),  # this trainer alone
             }
             self.fh.write(json.dumps(rec) + "\n")
             self.fh.flush()
@@ -406,6 +492,23 @@ def main() -> int:
                 print(f"\nABORT: RSS {rss:.1f}GB exceeded --rss-limit-gb "
                       f"{args.rss_limit_gb}. This tripwire exists because a "
                       f"four-job pileup locked the machine on 2026-07-29.",
+                      file=sys.stderr)
+                control.should_training_stop = True
+
+            # THE TRIPWIRE THAT MATTERS ON THIS BOX. The RSS one above cannot
+            # fire on the failure we actually have: at M0's death host RSS was
+            # under 1 GB while GTT stood at 100.7 GB. Unified memory means GTT
+            # pressure is what SIGKILLs the trainer and what has twice taken the
+            # desktop compositor with it, so the guard has to watch GTT — and
+            # BOX GTT, not this process's, because a co-tenant's model load
+            # counts against the same 125 GB.
+            box = rec["gtt_gb"]
+            if box == box and box > args.gtt_limit_gb:
+                print(f"\nABORT: box GTT {box:.1f}GB exceeded --gtt-limit-gb "
+                      f"{args.gtt_limit_gb} (this process holds "
+                      f"{rec['proc_gtt_gb']:.1f}GB of it). Stopping cleanly so "
+                      f"the adapter and timings survive — an OOM SIGKILL would "
+                      f"take both, and the graphical session with them.",
                       file=sys.stderr)
                 control.should_training_stop = True
             return control
@@ -444,7 +547,29 @@ def main() -> int:
     train_s = time.monotonic() - t_train
     timer.fh.close()
 
+    # -- adapter save + gradient gate ---------------------------------------
+    # UNCONDITIONAL, and it runs even when `status != "ok"`: a run that died at
+    # step 63 still answers "did gradients ever reach the weights?", and that is
+    # the question four days of Mac runs never got asked. An adapter is ~80 MB;
+    # the throughput cost is one save. See HALO_HANDOFF_2026-08-02.md §4.
+    adapter_dir = args.out / "adapter"
+    try:
+        trainer.model.save_pretrained(str(adapter_dir))
+        verdict = scan(adapter_dir)
+    except Exception as exc:  # noqa: BLE001 - never lose the timings over a save
+        verdict = {"saved": False, "verdict": "unusable", "trained": None,
+                   "error": f"{type(exc).__name__}: {exc}"}
+        print(f"\nADAPTER SAVE FAILED: {verdict['error']}", file=sys.stderr)
+
     # -- summary ------------------------------------------------------------
+    step_recs = [json.loads(l) for l in steps_path.read_text().splitlines()]
+
+    def _series(key: str) -> list[float]:
+        return [v for v in (r.get(key) for r in step_recs)
+                if v is not None and v == v]  # drop nulls and NaN
+
+    gtt_series = _series("proc_gtt_gb") or _series("gtt_gb")
+    box_series = _series("gtt_gb")
     d = timer.durations
     # The first optimizer step carries compile/warmup cost; report both so the
     # steady-state number cannot be quietly confused with the overall one.
@@ -488,17 +613,43 @@ def main() -> int:
         },
         "memory": {
             "host_rss_peak_gb": round(max(
-                (json.loads(l)["rss_gb"] for l in steps_path.read_text().splitlines()),
-                default=float("nan")), 2),
+                (r["rss_gb"] for r in step_recs), default=float("nan")), 2),
             "gpu_peak_gb": round(gpu_mem_gb(torch)[1], 2),
+            # GTT first/last/peak/slope, because the FAILURE MODE on this box is
+            # a SLOPE, not a level. A single peak cannot distinguish "held 25 GB
+            # steadily" from "ratcheted 25 -> 103 and got SIGKILLed", and those
+            # are the two outcomes we actually need to tell apart. These are
+            # THIS PROCESS's GTT; box_gtt_peak_gb is the whole machine, and a
+            # gap between them is a co-tenant, not a leak.
+            "gtt_first_gb": gtt_series[0] if gtt_series else None,
+            "gtt_last_gb": gtt_series[-1] if gtt_series else None,
+            "gtt_peak_gb": max(gtt_series) if gtt_series else None,
+            "gtt_growth_mb_per_step": (
+                round((gtt_series[-1] - gtt_series[0]) * 1024 / (len(gtt_series) - 1), 1)
+                if len(gtt_series) > 1 else None),
+            "box_gtt_peak_gb": max(box_series) if box_series else None,
+            "empty_cache_every": args.empty_cache_every,
         },
+        "adapter": verdict,
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
     print("\n=== summary ===")
     print(json.dumps(summary["timing"], indent=2))
     print(json.dumps(summary["memory"], indent=2))
+    print(json.dumps(summary["adapter"], indent=2))
     print(f"\nwrote {summary_path}\nwrote {steps_path}")
+
+    # The gate, stated where nobody can miss it. A timing number from a run that
+    # did not train is not a slower measurement — it is not a measurement.
+    if verdict.get("verdict") == TRAINED:
+        print(f"\nGATE PASS -- adapter TRAINED, max|B| {verdict['max_abs_b']:.6e} "
+              f"({verdict['b_nonzero']}/{verdict['lora_b_tensors']} B tensors nonzero)")
+    else:
+        print("\nGATE FAIL\n" + report(verdict), file=sys.stderr)
+        # Distinct codes: a diverged run needs an LR change, a not-trained run
+        # needs a framework fix. A caller must be able to tell them apart.
+        return 4 if verdict.get("verdict") == DIVERGED else 3
 
     if status != "ok":
         return 1

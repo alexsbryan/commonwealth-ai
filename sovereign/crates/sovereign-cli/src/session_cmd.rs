@@ -650,7 +650,11 @@ fn section_question(heading: &str) -> &'static str {
              user, or the initiative named in a spec or plan document, NOT the increment \
              this session delivered? Quote the doc path and section if one is named. If \
              the transcript never states an objective above the immediate task, answer \
-             exactly `none stated` — do not infer one."
+             exactly `none stated` — do not infer one. Then, if the transcript cites \
+             ARCH_PRINCIPLES.md sections the work is accountable to, add a final \
+             `Anchored in:` line listing just those section numbers. If it cites none, \
+             OMIT the line entirely — an invented anchor is worse than an absent one, \
+             for the same reason `none stated` beats an inferred objective."
         }
         "## Goal" => "What task was this session working on? Answer in 1-2 bullets.",
         "## State" => {

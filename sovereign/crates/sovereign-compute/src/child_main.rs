@@ -81,12 +81,18 @@ fn take_value<'a>(
         .ok_or_else(|| format!("{flag} requires a value"))
 }
 
+/// Context size a child loads with when `--ctx` is not given. Public because
+/// the daemon's warm path must project memory for the SAME context the child
+/// will build — a projection at a different ctx sizes the margin for a load
+/// that never happens.
+pub const DEFAULT_CTX: u32 = 4096;
+
 impl ChildArgs {
     fn parse(args: &[String]) -> std::result::Result<Self, String> {
         let mut role: Option<Role> = None;
         let mut name: Option<String> = None;
         let mut model: Option<PathBuf> = None;
-        let mut ctx: u32 = 4096;
+        let mut ctx: u32 = DEFAULT_CTX;
         let mut gpu_layers: Option<u32> = None;
         let mut bind = "127.0.0.1:0".to_string();
         let mut mock_tokens: usize = 32;

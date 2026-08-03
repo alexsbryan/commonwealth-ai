@@ -100,6 +100,15 @@ pub fn estimate_slot_vram(plan: &SlotPlan) -> std::io::Result<VramEstimate> {
     // similar-architecture transformers (40-80 layers, GQA group ≈
     // 8) land within 30% of this number, and the safety reserve
     // absorbs the rest.
+    //
+    // DELIBERATELY still a proxy, unlike the runtime gates. The load-path
+    // gates (`shard_fits`, `local_fit_verdict`, the spawn gate) now judge
+    // with llama.cpp's own three-term projection (`projected_overheads`),
+    // which measured the /8 figure ~5× over on an MLA model. This preflight
+    // cannot follow them: it runs before `LlamaBackend::init`, and the
+    // binding treats a second init as an error, so an FFI projection here
+    // would poison the engine's own startup. A warn-only boot estimate is
+    // an acceptable place for a ±5× proxy; a load refusal is not.
     let ctx_factor = plan.n_ctx as f32 / 32_768.0;
     let kv_per_seq_mb = ((weights_mb as f32 / 8.0) * ctx_factor).max(64.0) as u64;
     let kv_cache_mb = kv_per_seq_mb * plan.n_seq_max.max(1) as u64;

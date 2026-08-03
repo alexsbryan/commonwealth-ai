@@ -497,11 +497,53 @@ pub(super) fn spawn_rpc_worker_discovery(
             );
         } else if let Some(slot) = &distributed_slot {
             let snap = Arc::clone(&snapshot);
-            slot.set_spawn_gate(Arc::new(move |pinned: &[String]| {
-                let eligible = snap.read().map(|v| v.clone()).unwrap_or_default();
-                let env = env_rpc_workers();
-                discovery_policy::spawn_gate_verdict(pinned, &eligible, &env)
-            }));
+            // Sized once: the GGUF set does not change under a running daemon, and
+            // the gate is re-polled every 2s while held — stat'ing every shard on
+            // each poll would be pure waste.
+            let model_bytes =
+                sovereign_inference::embedded::total_model_bytes(slot.model_path());
+            let gate_model_path = slot.model_path().to_path_buf();
+            let gate_child_ctx = slot
+                .context_size()
+                .unwrap_or(sovereign_compute::child_main::DEFAULT_CTX);
+            slot.set_spawn_gate(Arc::new(
+                move |ctx: &sovereign_compute::manager::SpawnContext<'_>| {
+                    let eligible = snap.read().map(|v| v.clone()).unwrap_or_default();
+                    let env = env_rpc_workers();
+                    // Two independent preconditions. The worker question came
+                    // first; the memory question exists because a respawn into a
+                    // footprint that did not fit is how a contained child crash
+                    // becomes an unusable machine (notes 309c841b, 92d55ceb).
+                    let worker = discovery_policy::spawn_gate_verdict(ctx.pinned, &eligible, &env);
+                    match worker {
+                        sovereign_compute::supervisor::SpawnVerdict::Hold { .. } => worker,
+                        sovereign_compute::supervisor::SpawnVerdict::Allow => {
+                            // One sample for both terms — a reserve sized off one
+                            // reading and a fit judged against another is the
+                            // failure mode this subsystem already has six of.
+                            let (available, total) =
+                                sovereign_inference::embedded::system_memory_bytes();
+                            // llama.cpp's projected KV/compute terms — cached
+                            // after the first success, so the 2s re-poll while
+                            // held does not re-pay the projection.
+                            let overheads = sovereign_inference::embedded::projected_overheads(
+                                &gate_model_path,
+                                gate_child_ctx,
+                            );
+                            discovery_policy::memory_headroom_verdict(
+                                discovery_policy::host_share_need_bytes(
+                                    model_bytes,
+                                    ctx.local_blocks,
+                                    ctx.total_blocks,
+                                    overheads.as_ref(),
+                                ),
+                                available,
+                                sovereign_inference::embedded::host_reserve_bytes_detected(total),
+                            )
+                        }
+                    }
+                },
+            ));
         }
         // Distributed-primary child state, shared with the warm task because a
         // warm can take minutes of GGUF transfer and must never block the 15s
@@ -523,6 +565,10 @@ pub(super) fn spawn_rpc_worker_discovery(
             let child_state = Arc::clone(&child_state);
             let child_busy = Arc::clone(&child_busy);
             async move {
+                // Live child lifecycle, read each tick for engagement evidence.
+                // Subscribed once — the receiver survives every respawn/retire
+                // (the channel is owned by the slot, not a generation).
+                let child_lifecycle_rx = distributed_slot.as_ref().map(|s| s.subscribe());
                 // `last_loaded` = worker set the resident primary was loaded across;
                 // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
                 // to stop changing before paying a reload).
@@ -572,6 +618,38 @@ pub(super) fn spawn_rpc_worker_discovery(
                         // or an allowlist-excluded peer could hold eligibility
                         // state it is never allowed to have.
                         raw.unconfirmed.retain(|n| keep_node(&n.to_hex()));
+                    }
+                    // First-party engagement evidence: a worker carrying our
+                    // own child's warm or serving session cannot answer a probe
+                    // for as long as it does (ggml's RPC server accepts one
+                    // connection at a time) — but that traffic is a better
+                    // probe than the probe. Feeding the engaged endpoints into
+                    // the tick is what makes the eligibility grace independent
+                    // of load duration: before this, every model needing >120s
+                    // to load was killed mid-load by its own absence grace
+                    // (2026-08-02, notes 92d55ceb/16fc9204).
+                    if let (Some(slot), Some(rx)) = (&distributed_slot, &child_lifecycle_rx) {
+                        // A warm in flight is actively moving shard bytes to
+                        // the targets recorded at Respawn time.
+                        if child_busy.load(std::sync::atomic::Ordering::SeqCst) {
+                            if let Ok(st) = child_state.lock() {
+                                raw.engaged.extend(st.attempted.iter().cloned());
+                            }
+                        }
+                        // A live child holds loading/serving RPC sessions
+                        // across its pinned endpoints. Degraded, Restarting and
+                        // Failed deliberately do NOT vouch: those are exactly
+                        // the states where the worker may be the thing that
+                        // died, and discovery must be allowed to see it.
+                        use sovereign_compute::child::ChildLifecycle as Lc;
+                        if matches!(
+                            rx.borrow().lifecycle,
+                            Lc::Starting | Lc::Warming | Lc::Serving
+                        ) {
+                            raw.engaged.extend(slot.pinned_endpoints());
+                        }
+                        raw.engaged.sort();
+                        raw.engaged.dedup();
                     }
                     let now = std::time::Instant::now();
                     eligibility.observe_outcome(&raw, now);
@@ -885,10 +963,15 @@ async fn respawn_distributed_primary(
     );
 
     let model_path = slot.model_path().to_path_buf();
+    // The context the CHILD will load with — the warm path's memory projection
+    // sizes KV from it, so it must be the child's real value, not a guess.
+    let child_ctx = slot
+        .context_size()
+        .unwrap_or(sovereign_compute::child_main::DEFAULT_CTX);
     // Blocking: the warm orchestrator bridges to async with `block_on` and can
     // run for minutes. It must not run on a runtime worker thread.
     let outcome = match tokio::task::spawn_blocking(move || {
-        sovereign_inference::embedded::warm_distributed_primary(&model_path)
+        sovereign_inference::embedded::warm_distributed_primary(&model_path, child_ctx)
     })
     .await
     {

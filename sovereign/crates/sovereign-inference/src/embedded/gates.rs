@@ -104,7 +104,20 @@ pub(crate) fn prefix_cache_gate(
 /// Outcome of the FastShort-companion construction gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FastShortGate {
-    /// Operator opt-out via `SOVEREIGN_FAST_SHORT_DISABLE`.
+    /// This process is a distributed compute child (`load_single_distributed`)
+    /// — its one slot is the mesh's sharded primary, and FastShort would be a
+    /// SECOND full context on those primary weights. FastShort only ever
+    /// engages under call contention, which single-stream distributed serving
+    /// never has, so the context is allocated and never used: measured
+    /// 2026-08-02 at 14.5 GB of peak GTT (127.0 → 112.5 GB; non-weight memory
+    /// −76%). A property of the load, not an operator preference — this veto
+    /// is structural and not overridable by `SOVEREIGN_FAST_SHORT_FORCE`.
+    DistributedChild,
+    /// Operator opt-out via `SOVEREIGN_FAST_SHORT_DISABLE`. Kept as the
+    /// documented step-1 emergency mitigation for the `Decode Error -3`
+    /// class (see the [`fast_short_gate`] "IF THIS BITES AGAIN" playbook) —
+    /// ordinary hosts still need the lever; the distributed child no longer
+    /// does (see [`Self::DistributedChild`]).
     Disabled,
     /// Explicit recurrent arch (mamba / rwkv / deltanet / ssm) that
     /// the 2026-06-11 repro campaign could NOT burst-test (no local
@@ -199,8 +212,17 @@ fn fast_short_qwen_moe_biteback(arch: &str) -> bool {
 ///    its evidence this time.
 pub(crate) fn fast_short_gate(
     arch: &str,
+    distributed_child: bool,
     env_get: impl Fn(&str) -> Option<String>,
 ) -> FastShortGate {
+    // Structural veto, checked before every operator knob: a distributed
+    // child's only slot IS the sharded primary, and its workload is
+    // single-stream, so the contention FastShort exists for cannot occur.
+    // Not overridable by FORCE — there is nothing to diagnose by building
+    // a 14.5 GB context that no call path will ever route to.
+    if distributed_child {
+        return FastShortGate::DistributedChild;
+    }
     if env_flag_truthy(&env_get, "SOVEREIGN_FAST_SHORT_DISABLE") {
         return FastShortGate::Disabled;
     }
@@ -567,17 +589,42 @@ mod tests {
         // must always win, including for archs the repro cleared.
         let disable = env(&[("SOVEREIGN_FAST_SHORT_DISABLE", "1")]);
         assert_eq!(
-            fast_short_gate("qwen3moe", &disable),
+            fast_short_gate("qwen3moe", false, &disable),
             FastShortGate::Disabled
         );
-        assert_eq!(fast_short_gate("qwen3", &disable), FastShortGate::Disabled);
+        assert_eq!(fast_short_gate("qwen3", false, &disable), FastShortGate::Disabled);
     }
 
     // ── fast_short_gate ──────────────────────────────────────────
 
     #[test]
     fn fast_short_safe_for_plain_attention_model() {
-        assert_eq!(fast_short_gate("qwen3", no_env), FastShortGate::Safe);
+        assert_eq!(fast_short_gate("qwen3", false, no_env), FastShortGate::Safe);
+    }
+
+    /// A distributed compute child never builds FastShort — its one slot IS
+    /// the sharded primary, its workload is single-stream, and the second
+    /// full context cost 14.5 GB of GTT for a code path that can never
+    /// engage (2026-08-02 measurement; note 16fc9204). Structural: neither
+    /// the arch verdict nor the FORCE diagnostic override reaches past it,
+    /// because there is nothing to diagnose in a context no call routes to.
+    #[test]
+    fn fast_short_never_built_in_a_distributed_child() {
+        assert_eq!(
+            fast_short_gate("qwen3", true, no_env),
+            FastShortGate::DistributedChild,
+            "safe arch still skips in a child"
+        );
+        assert_eq!(
+            fast_short_gate("deepseek2", true, no_env),
+            FastShortGate::DistributedChild
+        );
+        let force = env(&[("SOVEREIGN_FAST_SHORT_FORCE", "1")]);
+        assert_eq!(
+            fast_short_gate("qwen3", true, &force),
+            FastShortGate::DistributedChild,
+            "FORCE must not build a context nothing will ever use"
+        );
     }
 
     #[test]
@@ -595,7 +642,7 @@ mod tests {
             "Qwen35MoE",
         ] {
             assert_eq!(
-                fast_short_gate(arch, no_env),
+                fast_short_gate(arch, false, no_env),
                 FastShortGate::UnsafeQwenMoeBiteback,
                 "{arch} is qwen*moe — must be re-vetoed (Decode -3 bite-back)"
             );
@@ -604,7 +651,7 @@ mod tests {
         // is narrow to the MoE variants, not all qwen.
         for arch in ["qwen35", "qwen3", "qwen2"] {
             assert_eq!(
-                fast_short_gate(arch, no_env),
+                fast_short_gate(arch, false, no_env),
                 FastShortGate::Safe,
                 "{arch} is dense qwen — must NOT be vetoed"
             );
@@ -617,7 +664,7 @@ mod tests {
         // the veto stays until scripts/gate-repros.sh clears them.
         for arch in ["mamba", "mamba2", "rwkv6", "deltanet", "ssm-hybrid"] {
             assert_eq!(
-                fast_short_gate(arch, no_env),
+                fast_short_gate(arch, false, no_env),
                 FastShortGate::UnsafeRecurrent,
                 "{arch} is uncleared — veto must hold"
             );
@@ -628,21 +675,21 @@ mod tests {
     fn fast_short_force_overrides_remaining_veto_but_not_disable() {
         let force = env(&[("SOVEREIGN_FAST_SHORT_FORCE", "1")]);
         // The clearing lever for an untested recurrent arch.
-        assert_eq!(fast_short_gate("mamba2", &force), FastShortGate::ForcedSafe);
+        assert_eq!(fast_short_gate("mamba2", false, &force), FastShortGate::ForcedSafe);
         // FORCE also overrides the qwen-MoE bite-back veto (diagnostic escape).
         assert_eq!(
-            fast_short_gate("qwen3moe", &force),
+            fast_short_gate("qwen3moe", false, &force),
             FastShortGate::ForcedSafe
         );
         // Force is inert when nothing is vetoed (dense attention model).
-        assert_eq!(fast_short_gate("qwen3", &force), FastShortGate::Safe);
+        assert_eq!(fast_short_gate("qwen3", false, &force), FastShortGate::Safe);
         // Operator disable still wins over the diagnostic force.
         let both = env(&[
             ("SOVEREIGN_FAST_SHORT_FORCE", "1"),
             ("SOVEREIGN_FAST_SHORT_DISABLE", "1"),
         ]);
-        assert_eq!(fast_short_gate("mamba2", &both), FastShortGate::Disabled);
-        assert_eq!(fast_short_gate("qwen3", &both), FastShortGate::Disabled);
+        assert_eq!(fast_short_gate("mamba2", false, &both), FastShortGate::Disabled);
+        assert_eq!(fast_short_gate("qwen3", false, &both), FastShortGate::Disabled);
     }
 
     // ── mtp_dispatch_eligible ────────────────────────────────────

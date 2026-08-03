@@ -46,7 +46,7 @@ use crate::hardware::HardwareProfile;
 /// `set_tensor` send() instead of the warm-cache `OwnedOverrides` path that
 /// avoids the bulk transfer entirely. Falls back to the single-file size for a
 /// non-sharded model or if any sibling shard is missing (never guess).
-pub(crate) fn total_model_bytes(model_path: &Path) -> u64 {
+pub fn total_model_bytes(model_path: &Path) -> u64 {
     let single = std::fs::metadata(model_path)
         .map(|m| m.len())
         .unwrap_or(u64::MAX);
@@ -835,6 +835,7 @@ impl ModelSlot {
             model_bytes,
             distributable,
             effective_gpu_layers == 0,
+            context_size,
         );
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);

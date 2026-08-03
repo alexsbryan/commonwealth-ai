@@ -7,6 +7,95 @@ When developing features you have a high amount of empathy for the end user and 
 Within this project you consult with SYSTEM_OVERVIEW.md to understand the system at a glance and you keep it up to date when you make what feel like major changes to any of the systems in this project. You use ARCH_PRINCIPLES.md as your compass for evaluating technical design tradeoffs and approaches for implementation.
 
 
+## The architectural compass — read this before you decide anything
+
+**This section exists because the compass kept getting lost.** Sessions boot holding a task frame — ranked next-actions, working set, drift posture — and no architecture, then make design calls with nothing to navigate by. The two architecture docs are 299KB together (~74k tokens); injecting them every session is not affordable and would not help anyway. What follows is the distillation: **the ten you hold**, the four commitments they descend from, the sixteen smells that mean *stop*, and the index of which door to open. Hold the ten actively. Open the numbered section when one of them is at stake.
+
+### The ten — hold these; everything else is lookup
+
+`ARCH_PRINCIPLES.md`'s own distillation, and the only part of it you are expected to carry without opening the file. A violation of one of these should stop you mid-keystroke. Each names the section carrying its evidence.
+
+1. **Glassbox, always.** A decision invisible at `tracing=debug` is not finished. *(§0, §9)*
+2. **Don't whack moles.** Instrument, reproduce, understand — *then* fix. *(§0)*
+3. **Write for the next reader,** and land the doc change in the same commit as the code. *(§0, §1)*
+4. **Cite, don't recall.** Verify before you claim it — from `grep`, from `symbols`, or from a run you just did. *(§11)*
+5. **A gate you have not watched fail is not a gate.** Four verdicts, not two: passed, failed, could-not-judge, never-ran. *(§18.1, §18.2)*
+6. **Never silently substitute.** Refuse, or name the substitution in the response. Absence is reported, never defaulted. *(§18.3)*
+7. **Validate the instrument before the result.** One run is not a measurement. *(§18.4, §18.5)*
+8. **One decider, one name.** One implementation per threshold, scorer, schema and key; one accessor per path; identity from essence, never a counter or an address. *(§10.6, §7.5)*
+9. **Closed sets are enums, open sets are registries, open text is a centroid.** *(§2, §4)*
+10. **Make it structural, not remembered.** Encode the invariant so it cannot be forgotten — and never ask a model to guarantee what code can enforce. *(§7, §7.6)*
+
+One through four are this workspace's declared ethos. **Five through eight were earned** — they are what six months of working notes say actually goes wrong here, and the failure they describe (a plausible, well-formed, exit-0 result that is wrong) is this system's characteristic one. Nine and ten prevent the most rework.
+
+### The four commitments (`ARCH_PRINCIPLES.md §0`, verbatim)
+
+1. **Glassbox, always.** The people running this system — the user, the operator, the next engineer — must be able to see *why* the program did what it did without attaching a debugger. If a decision is invisible from `tracing=debug`, the decision isn't finished.
+2. **Empathy for the next reader.** You will not be at the keyboard when someone else has to modify this code. Write for them: name the constraint, surface the non-obvious, don't pun with variable names. A comment that names the *why* survives refactors; a comment that names the *what* is noise.
+3. **Tell the truth in the docs.** `SYSTEM_OVERVIEW.md` is the canonical map and is expected to be up to date on the commit it appears in. When code and docs disagree, code wins at runtime but costs the next engineer a day. Update the doc in the same PR as the code change.
+4. **Don't whack moles.** A failing test means something. Instrument, repro, understand, *then* fix. Disabling a test to get green is a last resort that requires a `todo`-kind note explaining what was deferred and why.
+
+These aren't soft — they're load-bearing. Every numbered principle descends from one or more of them.
+
+### The smell table (`§15`) — any of these in your own diff, fix it now
+
+| Smell | See |
+|---|---|
+| A `match` on string ids with more than 3 arms | §2.1 |
+| A file that crossed 1200 lines since the last split | §3.1 |
+| A trait with more than ~8 methods and no obvious sub-trait shape | §5.1 |
+| A large const string literal in a `.rs` file | §6.2 |
+| Two crates depending on the same third-party crate at different versions | §8.2 |
+| A non-`core` crate taking a direct dep on a re-exported shared type crate | §8.3 |
+| A branch of production code with no tracing event | §9.1 |
+| A refactor PR that also "just cleans up some nearby stuff" | §10.2 |
+| A claim in commit or PR body that a function exists, without a citation | §11.1 |
+| An assertion in English prose rather than in a test | §7.2 |
+| A check with no failing input you can name | §18.1 |
+| A guard asserting on a field the subject supplies or echoes back | §18.1 |
+| An `Err` collapsed into a success-shaped value | §18.3 |
+| A single-run delta reported as a result | §18.5 |
+| Two implementations of one threshold, formula, or key | §10.6 |
+| A key derived from a row count, sequence number, or network address | §7.5 |
+
+### Which door to open
+
+`ARCH_PRINCIPLES.md` is 18 numbered sections. **Read the section, not the file** — each is ~200-600 tokens and a targeted read is always affordable. Never recall a principle from memory when you're about to act on it; §11.1 is the principle that says so.
+
+| Question in front of you | Section |
+|---|---|
+| Am I about to write a doc, or does my change make one wrong? | §1 |
+| Stringly-typed ids, enums, wire-API constants | §2 |
+| Classifying open text — keyword list vs. embedding centroid | §2.4 |
+| This file is getting long / should I split it? | §3 |
+| Pluggable dispatch, unknown-id handling | §4 |
+| Trait surface too wide, pipeline stage coupling | §5 |
+| Config-as-data vs. code — the SICP separation | §6 |
+| A privacy or safety invariant needs to be unforgettable | §7 |
+| Crate deps, feature flags, the layer map (`quality/ARCH_LAYERS.toml`) | §8 |
+| What to trace and at which level | §9 |
+| I'm refactoring — scope, ordering, when to test first | §10 |
+| Am I about to claim something I haven't verified? | §11 |
+| Does this deserve a test, and which kind? | §12 |
+| Which MCP tool instead of grep | §13 |
+| How work lands: PR size, notes, roadmap, ATOS | §14 |
+| Review checklist of known smells | §15 |
+| What this doc is *not* / how to add to it | §16, §17 |
+| Is this green real? Gates, judges, benchmarks, silent fallbacks | §18 |
+| Am I asking a model to guarantee a behaviour? | §7.6 |
+| Health checks, probes, "is the peer alive?" | §9.5 |
+
+### System geography — three tiers, cheapest first
+
+`SYSTEM_OVERVIEW.md` is 265KB and is **not** a document you read. Use it as a lookup surface:
+
+- **New to an area?** `docs/ARCHITECTURE_TOUR.md` — 227 lines, a compressed rendering of the contract. This is the "broad understanding" read when you genuinely have none, and it is the only one of the three that is cheap enough to read whole.
+- **"Where does X live?"** `SYSTEM_OVERVIEW.md §8 "Where to look for what"` (line ~3362), or `§2 Workspace map` (line ~99) for the crate layout. Read the section.
+- **"What does the narrative claim about this symbol?"** `drift_findings(query: "name")` — cheaper and more exact than reading either doc.
+
+If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same commit. That is §1.1 and it is a contract, not a courtesy.
+
+
 ## Reporting to the operator — tech lead briefing a product lead
 
 Everything you report — turn summaries, findings, session wrap-ups, notes — is input to a product decision. Write it the way a tech lead briefs a product lead:
@@ -69,7 +158,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 
 ### Session start — do these before anything else
 
-1. Read `sovereign/SYSTEM_OVERVIEW.md` (and `sovereign/ARCH_PRINCIPLES.md` for non-trivial work) for the system-wide map — do this on every session start, not just when you're unsure. They are the authoritative index of what exists and how the pieces fit together.
+1. **The compass is already loaded** — "The architectural compass" section above carries the ten + `ARCH_PRINCIPLES.md §0` + §15 + the section index, so there is no day-one read to perform. What you owe at session start is *routing*: when the task names a design decision, open the numbered section it maps to (the "Which door to open" table). When the task lands you in an area you have no model of, read `docs/ARCHITECTURE_TOUR.md` (227 lines) — not `SYSTEM_OVERVIEW.md`, which is 265KB and is a lookup surface, not a read.
 2. `recent_changes(hours: 24)` — see which subsystems are active
 3. `project_context("<user's stated task>")` — pull relevant conventions and architecture docs
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
@@ -79,9 +168,17 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 
 ### Session splitting — standing protocol (proven 2026-07-23)
 
-Long sessions pay cache-read ≈ avg_ctx × turns — ~50% of session cost is
-recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
-≥90k, red "SPLIT" ≥250k) and `frame ✓<age>`.
+Long sessions pay cache-read ≈ avg_ctx × turns, and splitting a genuinely fat
+one recovers a large share of that. The statusline shows `ctx <N>k` (yellow
+"split soon" ≥250k, red "SPLIT" ≥500k) and `frame ✓<age>`.
+
+**Splitting is a FAT-context lever — do not split a thin session.** Thresholds
+were raised from 90k/250k on 2026-08-02 (operator call). A split is not free:
+the donor writes a frame, and the successor re-derives by hand whatever 2,150
+tokens could not carry. Below ~250k that overhead exceeds the cache-read it
+avoids, so an eager split makes the work more expensive, not less. Do not
+propose one, and do not treat a long-but-sub-250k session as a problem to
+manage. Everything below applies once you are actually past yellow.
 
 - **As the donor:** keep your frame current AS YOU WORK — call the
   `session_state` MCP tool (or `sovereign tools call session_state`) at
@@ -124,7 +221,13 @@ recoverable by splitting. The statusline shows `ctx <N>k` (yellow "split soon"
   reads one. Do NOT hunt with `grep`/`ls` over `~/.sovereign/sessions`; that
   hunt is the 5,872-token failure this surface replaced. Work from the frame
   plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
-  specs the frame summarizes. After your first work stretch, self-measure:
+  specs the frame summarizes. **This rule is about re-acquiring what you
+  already hold — it does NOT cover `ARCH_PRINCIPLES.md`.** A frame carries
+  task state; it has never summarized a principle, so there is nothing to
+  re-read. Opening `ARCH_PRINCIPLES §N` by number costs ~200-600 tokens and
+  is always in budget. Suppressing it is the mechanism behind the
+  architectural drift this rule accidentally caused (diagnosed 2026-08-02).
+  After your first work stretch, self-measure:
   `sovereign cache-audit --ramp --session <your-id>` — gate ≤5k raw tokens,
   0 repeated reads.
 

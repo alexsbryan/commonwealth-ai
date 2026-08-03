@@ -64,9 +64,15 @@ SOFT_BUDGET_TOKENS = 15_000
 # cheaper every subsequent turn). Context size comes from the LAST
 # assistant `usage` record in the transcript — the actual tokens the
 # previous request carried, not a chars/4 guess. Red raised 140k -> 250k
-# on 2026-07-24 (operator call: the 140k line fired too early in practice).
-CTX_YELLOW = 90_000   # "split at the next natural boundary"
-CTX_RED = 250_000     # "split now — frame is being kept fresh by hooks"
+# on 2026-07-24 (operator call: the 140k line fired too early in practice),
+# then 90k/250k -> 250k/500k on 2026-08-02 for the same reason at a larger
+# scale. A split only pays when the cache-read it avoids exceeds what it
+# costs: the donor's frame write plus the successor re-deriving whatever
+# 2,150 tokens could not carry. Below ~250k that overhead dominates, so
+# the old lines were charging sessions for a saving they did not get.
+# Keep these two in sync with .claude/hooks/split-enforce.py.
+CTX_YELLOW = 250_000   # "split at the next natural boundary"
+CTX_RED = 500_000      # "split now — frame is being kept fresh by hooks"
 
 
 def main() -> int:
