@@ -836,3 +836,12 @@ default = "unset"
 status = "deprecated"
 alias_of = "SOVEREIGN_HARNESS"
 purpose = "Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named)."
+
+# ── enrichment: ingest-time entity extraction ───────────────────────
+
+[[flag]]
+name = "SOVEREIGN_GLINER_MODEL_ID"
+cluster = "enrichment"
+default = "gliner_small-v2.1"
+status = "experiment"
+purpose = "WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. Set to gliner2-base-v1-onnx to route ingest through GLiNER2 (P2.1). Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live."

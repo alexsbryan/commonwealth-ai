@@ -31,6 +31,27 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### GLiNER2 on the ingest path (`SOVEREIGN_GLINER_MODEL_ID`)
+- **Shipped:** 2026-08-03, dark. The `LabeledEntityExtractor` seam
+  routes either generation into `GlinerChunkExtractor`; the selector
+  defaults to v1 (`gliner_small-v2.1`), so nothing changes until the
+  env var names `gliner2-base-v1-onnx`.
+- **Proof so far:** backend correctness proven against the real 795 MB
+  graph (7.29 chunks/s, 2.44 GB RSS); 2.52× faster and ~4.8× lighter
+  than v1 on an isolated 50-chunk fixture, three runs per arm, quiet
+  box (notes `abc4fb34`, `3f47d12e`). **Quality is unproven** — the
+  50-chunk eyeball found GLiNER2 typing BonJour and Sosa as `Work`
+  where v1 said `Person`, so P2.1's "fixes type-collapse by extracting
+  types jointly" claim is currently contradicted by the only evidence
+  that exists.
+- **Flip condition:** on the obsidian vault lane, GLiNER2 holds the
+  established bar (58/68 facts, 8/12 sources) at a lower
+  time-to-enriched than 29m32s — AND per-label typing does not regress
+  against v1 on the goldens. Either half failing keeps it dark.
+- **Settled by:** P2.1 (`ENRICHMENT_ROADMAP.md` §P2.1), the run this
+  row was written to gate.
+- **Review by:** 2026-08-17.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not

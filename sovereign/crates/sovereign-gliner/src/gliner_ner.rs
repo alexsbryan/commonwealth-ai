@@ -380,39 +380,23 @@ impl GlinerExtractor {
             .map_err(|e| Error::Storage(format!("GLiNER::inference: {e}")))?;
         drop(guard);
         let mut mentions: Vec<EntityMention> = Vec::new();
-        let mut seen: std::collections::HashMap<(String, String), usize> =
-            std::collections::HashMap::new();
         for spans in output.spans {
             for span in spans {
                 let prob = span.probability();
                 if prob < threshold {
                     continue;
                 }
-                let text = normalize_mention_text(span.text());
-                if text.is_empty() {
-                    continue;
-                }
-                let label = span.class().to_string();
-                let key = (text.to_lowercase(), label.clone());
                 let (char_start, char_end) = span.offsets();
-                let mention = EntityMention {
-                    text,
-                    label,
+                mentions.push(EntityMention {
+                    text: normalize_mention_text(span.text()),
+                    label: span.class().to_string(),
                     char_start,
                     char_end,
                     score: prob,
-                };
-                match seen.get(&key) {
-                    Some(&idx) if mentions[idx].score >= mention.score => continue,
-                    Some(&idx) => mentions[idx] = mention,
-                    None => {
-                        seen.insert(key, mentions.len());
-                        mentions.push(mention);
-                    }
-                }
+                });
             }
         }
-        Ok(mentions)
+        Ok(crate::labeled::dedupe_strongest(mentions))
     }
 
     /// Extract entities from many chunks at once, returning one
@@ -443,39 +427,49 @@ impl GlinerExtractor {
         // outer vec order ever drifts.
         for (i, spans) in output.spans.iter().enumerate() {
             let mut chunk_mentions: Vec<EntityMention> = Vec::new();
-            let mut seen: std::collections::HashMap<(String, String), usize> =
-                std::collections::HashMap::new();
             for span in spans {
                 let prob = span.probability();
                 if prob < self.threshold {
                     continue;
                 }
-                let text = normalize_mention_text(span.text());
-                if text.is_empty() {
-                    continue;
-                }
-                let label = span.class().to_string();
-                let key = (text.to_lowercase(), label.clone());
                 let (char_start, char_end) = span.offsets();
-                let mention = EntityMention {
-                    text,
-                    label,
+                chunk_mentions.push(EntityMention {
+                    text: normalize_mention_text(span.text()),
+                    label: span.class().to_string(),
                     char_start,
                     char_end,
                     score: prob,
-                };
-                match seen.get(&key) {
-                    Some(&idx) if chunk_mentions[idx].score >= mention.score => continue,
-                    Some(&idx) => chunk_mentions[idx] = mention,
-                    None => {
-                        seen.insert(key, chunk_mentions.len());
-                        chunk_mentions.push(mention);
-                    }
-                }
+                });
             }
-            out[i] = chunk_mentions;
+            out[i] = crate::labeled::dedupe_strongest(chunk_mentions);
         }
         Ok(out)
+    }
+}
+
+/// v1 on the ingest seam. `extract_mentions_batch` is overridden
+/// because gline-rs batches natively — one `inference` call for N
+/// chunks, which is where v1's throughput comes from; the trait's
+/// looping default would forfeit it.
+impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn labels(&self) -> Vec<String> {
+        self.labels.clone()
+    }
+
+    fn threshold(&self) -> f32 {
+        self.threshold
+    }
+
+    fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
+        self.extract(text)
+    }
+
+    fn extract_mentions_batch(&self, texts: &[&str]) -> Result<Vec<Vec<EntityMention>>> {
+        self.extract_batch(texts)
     }
 }
 
@@ -607,7 +601,7 @@ impl sovereign_core::traits::EntityExtractor for LazyGlinerExtractor {
 /// "Jonathan\nSwift") because the model operates on the chunk
 /// character stream including the chat-message internal line
 /// breaks. Stored entity strings should be human-clean.
-fn normalize_mention_text(raw: &str) -> String {
+pub(crate) fn normalize_mention_text(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 

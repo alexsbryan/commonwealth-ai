@@ -155,7 +155,7 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools
+├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools. Two backends (v1 gline-rs, GLiNER2 bare-ort) behind `LabeledEntityExtractor`; `load_labeled_extractor` is the one selector
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process cmnwlth embed
@@ -615,7 +615,15 @@ means one thing.
   `sovereign-tools/src/raptor_atlas.rs` and is injected into `corpus-engine`
   via the `TieredEnrichmentProvider` trait (`enrichment/tiered.rs`) to
   avoid a cyclic dep. GLiNER (real ONNX NER) augments the conversation
-  path. Used by attached docs, conversations, Obsidian / watched folders.
+  path — since 2026-08-03 (P2.1) via the generation-agnostic
+  `LabeledEntityExtractor` seam, so v1 (gline-rs) and GLiNER2 (bare
+  `ort`) share one persistence/dedup/provenance path.
+  `SOVEREIGN_GLINER_MODEL_ID` picks which; it defaults to v1
+  (`gliner_small-v2.1`) and GLiNER2 is dark pending the quality gate
+  (`DEFAULTS_LEDGER.md`). The extractor that actually ran is recorded
+  per corpus on `chunk_entity_progress` (`model_id`, `threshold`,
+  `labels_json`). Used by attached docs, conversations, Obsidian /
+  watched folders.
   `svrn enrich raptor <corpus>` (sovereign-cli-llm) retrofits this
   tier-3 tree onto an already-installed corpus additively — writes
   `conv_raptor_nodes` keyed by `source_doc_id`, reuses the existing

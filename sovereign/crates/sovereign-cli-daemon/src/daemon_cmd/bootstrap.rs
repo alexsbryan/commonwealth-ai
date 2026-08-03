@@ -34,14 +34,19 @@ pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
 }
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model is
-/// ~150 MB; one load only). Returns the raw handle (for the NoteStore T2
-/// `GlinerFn` adapter) alongside the trait-object wrapper (for the engine's
-/// tiered runner and the folder driver). Both `None` when the model isn't
-/// installed — tiered ingest then falls back to RAPTOR-derived entities.
+/// ~150 MB for v1, ~795 MB for GLiNER2; one load only). Returns the raw
+/// handle (for the NoteStore T2 `GlinerFn` adapter) alongside the
+/// trait-object wrapper (for the engine's tiered runner and the folder
+/// driver). Both `None` when the model isn't installed — tiered ingest then
+/// falls back to RAPTOR-derived entities.
+///
+/// Generation is chosen inside the shared builder
+/// (`sovereign_gliner::configured_model_id`); nothing on this side of the
+/// call knows or needs to know which backend it got.
 pub(super) fn load_gliner_extractor(
     data_dir: &Path,
 ) -> (
-    Option<Arc<sovereign_gliner::gliner_ner::GlinerExtractor>>,
+    Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
     Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 ) {
     // Delegated to the shared builder so the desktop's embedded daemon wires
@@ -58,7 +63,7 @@ pub(super) fn build_corpus_engine(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     notes_store: Arc<NoteStore>,
-    gliner_raw: &Option<Arc<sovereign_gliner::gliner_ner::GlinerExtractor>>,
+    gliner_raw: &Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
     config: &SetupConfig,
     self_node_id: NodeId,
     chunk_entity_extractor: &Option<
@@ -126,10 +131,11 @@ pub(super) fn build_corpus_engine(
                 let g = Arc::clone(&gliner_clone);
                 let text = text.to_string();
                 Box::pin(async move {
-                    // GlinerExtractor::extract is sync (Mutex-locked
-                    // ONNX session). Run on the blocking pool so we
-                    // don't park the async runtime for ~tens of ms.
-                    tokio::task::spawn_blocking(move || g.extract(&text))
+                    // `extract_mentions` is sync on both backends
+                    // (Mutex-locked ONNX session). Run on the blocking
+                    // pool so we don't park the async runtime for
+                    // ~tens of ms.
+                    tokio::task::spawn_blocking(move || g.extract_mentions(&text))
                         .await
                         .map_err(|e| {
                             corpus_engine_notes::Error::Io(std::io::Error::other(format!(

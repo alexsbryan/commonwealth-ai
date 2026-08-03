@@ -38,6 +38,12 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_CLI_PATH` | unset | shipped | Desktop supervisor's path to the sovereign CLI. One of THREE names for 'where is the CLI' (with SOVEREIGN_BIN, SOVEREIGN_CLI) — the sibling-binary synonym cluster. |
 | `SOVEREIGN_SERVER_PATH` | unset | shipped | Mobile host's path to the sovereign server binary. |
 
+## enrichment
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_GLINER_MODEL_ID` | gliner_small-v2.1 | experiment | WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. Set to gliner2-base-v1-onnx to route ingest through GLiNER2 (P2.1). Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live. |
+
 ## grounding
 
 | flag | default | status | purpose |

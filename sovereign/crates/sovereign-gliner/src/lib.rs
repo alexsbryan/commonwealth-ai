@@ -29,9 +29,11 @@
 
 pub mod gliner2;
 pub mod gliner_ner;
+pub mod labeled;
 
 mod bootstrap;
 mod chunk_extractor;
 
 pub use bootstrap::load_gliner_extractor;
 pub use chunk_extractor::GlinerChunkExtractor;
+pub use labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};

@@ -45,8 +45,8 @@ use sovereign_core::error::{Error, Result};
 use tokenizers::Tokenizer;
 
 use crate::gliner_ner::{
-    model_spec, resolve_model_paths, role_marker_regex, strip_role_markers, GlinerGeneration,
-    DEFAULT_LABELS, GLINER2_MODEL_ID,
+    model_spec, resolve_model_paths, role_marker_regex, strip_role_markers, EntityMention,
+    GlinerGeneration, DEFAULT_LABELS, GLINER2_MODEL_ID,
 };
 
 /// Score cutoff for GLiNER2.
@@ -388,6 +388,51 @@ impl Gliner2Extractor {
             }
         }
         Ok(hits)
+    }
+}
+
+/// GLiNER2 on the ingest seam.
+///
+/// No `extract_mentions_batch` override: this export is one graph call
+/// per text (the schema is baked into the prompt encoding), so the
+/// trait's looping default IS the batch path. That is what the 7.29
+/// chunks/s figure was measured against, so nothing is forfeited.
+impl crate::labeled::LabeledEntityExtractor for Gliner2Extractor {
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    /// Canonical casing, not the lowercased schema field names the
+    /// model is actually fed — the audit trail should read `Person`,
+    /// matching the `chunk_entities.label` values it explains.
+    fn labels(&self) -> Vec<String> {
+        self.labels
+            .iter()
+            .map(|(_, canonical)| canonical.clone())
+            .collect()
+    }
+
+    fn threshold(&self) -> f32 {
+        self.threshold
+    }
+
+    fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
+        let hits = self.extract(text)?;
+        // Span-NMS has already suppressed the nested-span nest; this
+        // second pass collapses the *repeat* mentions NMS keeps by
+        // design (the same name at two places in the chunk), applying
+        // the identical rule v1 applies — one row per (text, label).
+        Ok(crate::labeled::dedupe_strongest(
+            hits.into_iter()
+                .map(|h| EntityMention {
+                    text: crate::gliner_ner::normalize_mention_text(&h.text),
+                    label: h.label,
+                    char_start: h.char_start,
+                    char_end: h.char_end,
+                    score: h.score,
+                })
+                .collect(),
+        ))
     }
 }
 

@@ -9,67 +9,71 @@ use std::sync::Arc;
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
 
 use crate::chunk_extractor::GlinerChunkExtractor;
-use crate::gliner_ner::GlinerExtractor;
+use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model
-/// is ~150 MB; one load only). Returns the raw handle (for a NoteStore T2
-/// `GlinerFn` adapter, when the caller wires notes) alongside the
-/// trait-object wrapper (for the engine's tiered runner and the folder
-/// driver). Both `None` when the model isn't installed or the state store
-/// can't be opened — tiered ingest then falls back to RAPTOR-derived
-/// entities.
+/// is ~150 MB for v1, ~795 MB for GLiNER2; one load only). Returns the raw
+/// handle (for a NoteStore T2 `GlinerFn` adapter, when the caller wires
+/// notes) alongside the trait-object wrapper (for the engine's tiered
+/// runner and the folder driver). Both `None` when the model isn't
+/// installed or the state store can't be opened — tiered ingest then falls
+/// back to RAPTOR-derived entities.
+///
+/// **Which generation runs is [`configured_model_id`]'s call, not this
+/// function's** (P2.1). The raw handle is the generation-agnostic
+/// [`LabeledEntityExtractor`] for the same reason: typing it as v1's
+/// concrete `GlinerExtractor` would have silently dropped note-side NER
+/// the moment the ingest path moved to GLiNER2.
 pub fn load_gliner_extractor(
     data_dir: &Path,
 ) -> (
-    Option<Arc<GlinerExtractor>>,
+    Option<Arc<dyn LabeledEntityExtractor>>,
     Option<Arc<dyn ChunkEntityExtractor>>,
 ) {
-    let mut gliner_raw: Option<Arc<GlinerExtractor>> = None;
-    let chunk_entity_extractor: Option<Arc<dyn ChunkEntityExtractor>> = {
-        let model_id = crate::gliner_ner::DEFAULT_MODEL_ID;
-        if crate::gliner_ner::probe_model_available(model_id) {
-            let store_path = data_dir.join("sovereign.db");
-            match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
-                Ok(store_for_extractor) => match GlinerExtractor::new_default() {
-                    Ok(ex) => {
-                        tracing::info!(
-                            model = model_id,
-                            "enrichment_bootstrap: GLiNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
-                        );
-                        let ex_arc = Arc::new(ex);
-                        gliner_raw = Some(Arc::clone(&ex_arc));
-                        Some(Arc::new(GlinerChunkExtractor::new(
-                            Arc::new(store_for_extractor),
-                            ex_arc,
-                        )) as Arc<dyn ChunkEntityExtractor>)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            model = model_id,
-                            error = %e,
-                            "enrichment_bootstrap: GLiNER load failed — tiered ingest will fall back to RAPTOR-only entities"
-                        );
-                        None
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!(
-                        store_path = %store_path.display(),
-                        error = %e,
-                        "enrichment_bootstrap: cannot open state store for entity extractor — skipping"
-                    );
-                    None
-                }
-            }
-        } else {
-            let root = crate::gliner_ner::models_root().join(model_id);
-            tracing::info!(
-                model = model_id,
-                expected_path = %root.display(),
-                "enrichment_bootstrap: GLiNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
+    let model_id = configured_model_id();
+    if !crate::gliner_ner::probe_model_available(&model_id) {
+        let root = crate::gliner_ner::models_root().join(&model_id);
+        tracing::info!(
+            model = %model_id,
+            expected_path = %root.display(),
+            "enrichment_bootstrap: GLiNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
+        );
+        return (None, None);
+    }
+
+    let store_path = data_dir.join("sovereign.db");
+    let store = match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            tracing::warn!(
+                store_path = %store_path.display(),
+                error = %e,
+                "enrichment_bootstrap: cannot open state store for entity extractor — skipping"
             );
-            None
+            return (None, None);
         }
     };
-    (gliner_raw, chunk_entity_extractor)
+
+    match load_labeled_extractor(&model_id, None) {
+        Ok(extractor) => {
+            tracing::info!(
+                model = %model_id,
+                generation = ?extractor.generation(),
+                "enrichment_bootstrap: GLiNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
+            );
+            let chunk_entity_extractor = Arc::new(GlinerChunkExtractor::new(
+                store,
+                Arc::clone(&extractor),
+            )) as Arc<dyn ChunkEntityExtractor>;
+            (Some(extractor), Some(chunk_entity_extractor))
+        }
+        Err(e) => {
+            tracing::warn!(
+                model = %model_id,
+                error = %e,
+                "enrichment_bootstrap: GLiNER load failed — tiered ingest will fall back to RAPTOR-only entities"
+            );
+            (None, None)
+        }
+    }
 }

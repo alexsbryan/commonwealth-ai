@@ -12,21 +12,25 @@ use corpus_engine::error::{Error, Result};
 use corpus_engine::index::{CorpusIndex, EnrichmentChunkRow};
 use sovereign_store::sqlite::SqliteStateStore;
 
+use crate::labeled::LabeledEntityExtractor;
+
 /// Concrete `ChunkEntityExtractor` impl for the daemon ingest path.
-/// Wraps a single `GlinerExtractor` + `Arc<SqliteStateStore>` and
+/// Wraps a [`LabeledEntityExtractor`] + `Arc<SqliteStateStore>` and
 /// persists rows into `chunk_entities` per-conversation. Fires
 /// from `corpus_engine::enrichment::tiered::run_tiered_enrichment`
 /// ahead of the LLM-heavy `TieredEnrichmentProvider` call.
+///
+/// **Generation-agnostic since P2.1.** It holds the trait, not
+/// `GlinerExtractor`, so v1 and GLiNER2 reach a corpus over the same
+/// persistence, dedup, and progress-provenance code. Which one runs is
+/// decided once, in [`crate::load_labeled_extractor`] — never here.
 pub struct GlinerChunkExtractor {
     store: Arc<SqliteStateStore>,
-    extractor: Arc<crate::gliner_ner::GlinerExtractor>,
+    extractor: Arc<dyn LabeledEntityExtractor>,
 }
 
 impl GlinerChunkExtractor {
-    pub fn new(
-        store: Arc<SqliteStateStore>,
-        extractor: Arc<crate::gliner_ner::GlinerExtractor>,
-    ) -> Self {
+    pub fn new(store: Arc<SqliteStateStore>, extractor: Arc<dyn LabeledEntityExtractor>) -> Self {
         Self { store, extractor }
     }
 
@@ -114,7 +118,7 @@ impl GlinerChunkExtractor {
             // which is the whole point of the durable marker.
             let delta_ids: Vec<u64> = delta.iter().map(|c| c.id).collect();
             let texts: Vec<&str> = delta.iter().map(|c| c.content.as_str()).collect();
-            let mention_batches = match self.extractor.extract_batch(&texts) {
+            let mention_batches = match self.extractor.extract_mentions_batch(&texts) {
                 Ok(b) => b,
                 Err(e) => {
                     tracing::warn!(
@@ -180,7 +184,7 @@ impl GlinerChunkExtractor {
                 .map(|p| p.state != "incremental" || p.chunks_total != total_chunks as i64)
                 .unwrap_or(false);
         if needs_write {
-            let labels_json = serde_json::to_string(&self.extractor.labels).ok();
+            let labels_json = serde_json::to_string(&self.extractor.labels()).ok();
             let prior_processed = existing.as_ref().map(|p| p.chunks_processed).unwrap_or(0);
             let prior_mentions = existing.as_ref().map(|p| p.mentions_extracted).unwrap_or(0);
             let started_at = existing.as_ref().map(|p| p.started_at).unwrap_or(now);
@@ -200,8 +204,8 @@ impl GlinerChunkExtractor {
                 // auto-updating" via the state field alone.
                 finished_at: None,
                 state: "incremental".to_string(),
-                model_id: Some(self.extractor.model_id.clone()),
-                threshold: Some(self.extractor.threshold as f64),
+                model_id: Some(self.extractor.model_id().to_string()),
+                threshold: Some(self.extractor.threshold() as f64),
                 labels_json,
                 error_msg: None,
             };
@@ -248,7 +252,7 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
         }
         let extracted_at = crate::gliner_ner::now_unix();
         let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
-        let mention_batches = match self.extractor.extract_batch(&texts) {
+        let mention_batches = match self.extractor.extract_mentions_batch(&texts) {
             Ok(b) => b,
             Err(e) => {
                 return Err(Error::Database(format!(

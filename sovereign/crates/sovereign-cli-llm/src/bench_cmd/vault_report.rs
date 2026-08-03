@@ -1033,22 +1033,27 @@ fn build_entity_extractor(
     if opts.no_gliner {
         return (None, "disabled".to_string());
     }
-    let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-    if !sovereign_gliner::gliner_ner::probe_model_available(model_id) {
+    // Same selector the daemon uses (`SOVEREIGN_GLINER_MODEL_ID`), so a
+    // measured run and a production run cannot disagree about which
+    // backend they got — that equality is the whole point of measuring
+    // through this harness rather than a bespoke probe.
+    let model_id = sovereign_gliner::configured_model_id();
+    if !sovereign_gliner::gliner_ner::probe_model_available(&model_id) {
         return (None, format!("unavailable ({model_id} not installed)"));
     }
     // Eager, not lazy: a lazy extractor that isn't warm yet returns
     // empty and the run would silently measure a no-op NER phase.
-    match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
+    match sovereign_gliner::load_labeled_extractor(&model_id, None) {
         Ok(g) => {
-            let base = sovereign_gliner::GlinerChunkExtractor::new(
-                store,
-                Arc::new(g),
-            )
-            .into_handle();
+            // The routing string names the GENERATION, not just the id:
+            // "did this run use GLiNER2?" is the question every P2.1
+            // number is read against, and it must be answerable from
+            // the report alone.
+            let routed = format!("gliner {:?} ({model_id})", g.generation());
+            let base = sovereign_gliner::GlinerChunkExtractor::new(store, g).into_handle();
             let metered: ChunkEntityExtractorHandle =
                 Arc::new(MeteredEntityExtractor { inner: base, obs });
-            (Some(metered), format!("gliner ({model_id})"))
+            (Some(metered), routed)
         }
         Err(e) => (None, format!("unavailable (load failed: {e})")),
     }
