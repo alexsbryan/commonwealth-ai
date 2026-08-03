@@ -255,6 +255,18 @@ run_lane() {
   local regressed; regressed=$(grep -oE "[0-9]+ regressed" "$out" 2>/dev/null | grep -oE "^[0-9]+" | tail -1)
   if (( rc == 124 )); then
     status="TIMEOUT"
+  elif (( rc == 4 )); then
+    # COULD-NOT-JUDGE, not FAILED — the lane ran and had nothing to verify.
+    # Exit 4 means exactly this and nothing else in the bench family (both
+    # sites are bench_cmd/faithfulness.rs: "no RAPTOR nodes" and "zero claims
+    # judged — nothing verified is not a pass"). Distinguishing it matters
+    # now that the faithfulness lane discovers every enriched corpus: a corpus
+    # whose nodes are all sentinel-filtered would otherwise post a red FAIL(4)
+    # every run and train everyone to ignore the lane.
+    #
+    # A HARD lane still fails on it, via the PASS* test below — for a gated
+    # corpus, "suddenly nothing to judge" is a regression signal, not a pass.
+    status="SKIP(no-data)"
   elif [[ -n "$regressed" ]]; then
     if (( regressed == 0 )); then
       if grep -qE "[1-9][0-9]* (stale|first-run)" "$out" 2>/dev/null; then
@@ -363,38 +375,74 @@ fi
 # extract/support registers); the gate fails ONLY on unsupported-claim-rate
 # regression vs sovereign/bench/faithfulness/baselines/<corpus>/.
 #
-# Default corpus = the chaos corpus: recipe-installed
-# (scripts/setup-chaos-corpus.sh), byte-identical on every box, and already a
-# dependency of this script — NEVER default to a personal / machine-local
-# corpus here, its baseline id would be meaningless off this machine.
-# Override with FAITHFULNESS_CORPUS for local extras (e.g. a private vault).
+# EVERY ENRICHED CORPUS, not one (T1 A5 — P0.3's gate reads "reports a number
+# for every enriched corpus in CI"; until 2026-08-03 this lane ran exactly one
+# and the other half of the gate was unmet). The set is DISCOVERED from the
+# state db — every distinct corpus_id with RAPTOR nodes — so enriching a corpus
+# is what enrols it. Nothing to remember, nothing to edit here.
 #
-# Availability gate: the lane needs the corpus's RAPTOR tier, built once per
-# box with `svrn enrich raptor --corpus <id>` (cached in the state db
-# thereafter). Probe the tier directly — an index-presence check alone would
-# HARD-fail freshly-provisioned boxes on the gate twin's missing artifact.
-FAITHFULNESS_CORPUS="${FAITHFULNESS_CORPUS:-$CHAOS_CORPUS}"
-faith_nodes=0
+# FAITHFULNESS_CORPUS still pins the lane to a single corpus when set; that is
+# the local-iteration escape hatch, not the CI path.
+#
+# A box with no RAPTOR tier at all skips the lane, as before. Per-corpus, a
+# first run has no committed baseline and the gate PASSES by contract
+# ("First-run (no baseline) passes" — bench gate --help), so discovering a new
+# corpus reports its number without turning CI red on a baseline nobody has
+# captured yet. Capture with --update-baseline.
+#
+# NEVER hardcode a personal / machine-local corpus here: its baseline id is
+# meaningless off the box that has it. Discovery keeps that property — each box
+# gates the corpora it actually has, and only committed baselines are shared.
+faith_db=""
 if command -v sqlite3 >/dev/null 2>&1; then
   for db in "$HOME/.svrnmesh/svrnmesh.db" "$HOME/.svrnmesh/sovereign.db" \
             "$HOME/.sovereign/svrnmesh.db" "$HOME/.sovereign/sovereign.db"; do
     [[ -f "$db" ]] || continue
-    faith_nodes=$(sqlite3 "$db" \
-      "SELECT COUNT(*) FROM conv_raptor_nodes WHERE corpus_id='$FAITHFULNESS_CORPUS';" \
-      2>/dev/null || echo 0)
-    [[ "$faith_nodes" -gt 0 ]] && break
+    if [[ "$(sqlite3 "$db" "SELECT COUNT(*) FROM conv_raptor_nodes;" 2>/dev/null || echo 0)" -gt 0 ]]; then
+      faith_db="$db"
+      break
+    fi
   done
 fi
-if [[ "$faith_nodes" -gt 0 ]]; then
-  run_lane "faithfulness:$FAITHFULNESS_CORPUS" TRACKED \
-    "$BIN" bench faithfulness run --corpus "$FAITHFULNESS_CORPUS" \
-      --out "$REPORT_DIR/faithfulness-$FAITHFULNESS_CORPUS.jsonl"
-  run_lane "faithfulness-gate:$FAITHFULNESS_CORPUS" HARD \
-    "$BIN" bench gate faithfulness \
-      --report "$REPORT_DIR/faithfulness-$FAITHFULNESS_CORPUS.jsonl" \
-      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+FAITHFULNESS_CORPORA=()
+if [[ -n "${FAITHFULNESS_CORPUS:-}" ]]; then
+  FAITHFULNESS_CORPORA=("$FAITHFULNESS_CORPUS")
+elif [[ -n "$faith_db" ]]; then
+  while IFS= read -r c; do
+    [[ -n "$c" ]] && FAITHFULNESS_CORPORA+=("$c")
+  done < <(sqlite3 "$faith_db" \
+    "SELECT DISTINCT corpus_id FROM conv_raptor_nodes ORDER BY corpus_id;" 2>/dev/null || true)
+fi
+if [[ ${#FAITHFULNESS_CORPORA[@]} -eq 0 ]]; then
+  echo "[skip] faithfulness: no corpus has a RAPTOR tier — build one with: svrn enrich raptor --corpus $CHAOS_CORPUS"
 else
-  echo "[skip] faithfulness: no RAPTOR tier for '$FAITHFULNESS_CORPUS' — build once with: svrn enrich raptor --corpus $FAITHFULNESS_CORPUS"
+  echo "[info] faithfulness: ${#FAITHFULNESS_CORPORA[@]} enriched corpus/corpora — ${FAITHFULNESS_CORPORA[*]}"
+  # REPORTING and GATING are deliberately separated.
+  #
+  # Every enriched corpus gets a NUMBER (TRACKED) — that is the P0.3 gate.
+  # Only a corpus with a COMMITTED baseline gets the HARD regression gate, plus
+  # the chaos corpus, which is portable by construction and always gated.
+  #
+  # Why not gate everything: discovery on a real workstation finds vaults,
+  # watched folders and hash-suffixed local corpora that exist on exactly one
+  # box. Under --update-baseline those would commit baselines nobody else can
+  # reproduce, into a directory `svrn posture` counts. Enrolling a corpus into
+  # the shared gate stays a deliberate human act: run the gate for it once with
+  # --update-baseline and commit the result. Until then it reports and does not
+  # vote.
+  for fc in "${FAITHFULNESS_CORPORA[@]}"; do
+    run_lane "faithfulness:$fc" TRACKED \
+      "$BIN" bench faithfulness run --corpus "$fc" \
+        --out "$REPORT_DIR/faithfulness-$fc.jsonl"
+    if [[ -f "$BENCH_ROOT/faithfulness/baselines/$fc/latest.json" || "$fc" == "$CHAOS_CORPUS" ]]; then
+      run_lane "faithfulness-gate:$fc" HARD \
+        "$BIN" bench gate faithfulness \
+          --report "$REPORT_DIR/faithfulness-$fc.jsonl" \
+          --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+    else
+      echo "[info] faithfulness-gate:$fc — reported, not gated (no committed baseline). Enrol with: $BIN bench gate faithfulness --report $REPORT_DIR/faithfulness-$fc.jsonl --bench-root $BENCH_ROOT --update-baseline"
+    fi
+  done
 fi
 
 # ── Lane 5b: FR-9 governance — detector (Lane A) + Q&A (Lane B) ──
