@@ -42,10 +42,50 @@ store (ids cited per row).
   tranche claims it by review date, kill or re-scope.
 - **Review by:** 2026-08-14.
 
+### Caller-directed prefix-cache pin — `SOVEREIGN_PREFIX_STATE`
+- **Shipped:** 2026-07-21, dark. Both blocking hardenings landed
+  (stale-pid sweep, byte-capped LRU). Restored to this section
+  2026-08-03 after the GRADUATED row above was found false.
+- **Proof so far:** controlled A/B with this variable as the only
+  delta — **1.35x end-to-end** (786.3s → 584.5s; prefill 140,155 →
+  47,165 tokens), and TTFT p50 **173s → 66s** on a fixed persona mix
+  across a 180-min soak (restore p90 29ms, 76 LEARNED / 253 HIT /
+  0 WARN). `BATCHED_GATE_VERIFY.md` §8-§9 is the experiment of record.
+  The earlier 2026-07-12 "worth ≈0" result is NOT a contradiction: it
+  measured a single synthesis prefill, not the grounding gate's
+  ~35-calls-per-turn fan-out, which is the pin's only consumer.
+- **Flip condition:** reproduce the TTFT delta on the CONFIGURED
+  primary. Every number above was taken on `qwen35moe`; the primary is
+  now dense `Qwen3.5-2B.Q6_K`. Mechanism is unchanged and both
+  architectures are prefix-cache-vetoed (`gates.rs`), so the pin
+  should still be what amortises re-prefill — but that is an inference,
+  not a measurement. Falsifier: TTFT delta inside run-to-run variance
+  on the current primary → the 07-12 result governs and this moves to
+  REJECTED.
+- **Cheapest instrument:** `scripts/desktop-soak.py 40 --mode persona
+  --no-build --no-restart --foreground` (~40 min). The original A/B
+  harness (`scratchpad/arm_runner.py`, `compare.py`) is NOT in the
+  repo — reconstructing it is what a minutes-scale gate would cost.
+- **Settled by:** T1 Phase A item A1.
+- **Review by:** 2026-08-17.
+
 ### Cross-encoder reranker slot
-- **Shipped:** dark (note `10a1b08d`).
-- **Cost of on:** ~500MB resident, ~1.7s/query at k=50, OICP wire
-  work for peer routing.
+- **Shipped:** dark (note `10a1b08d`). **Wired into the daemon-server
+  and desktop Runtimes 2026-08-03** (T1 A2) — until then the `svrn
+  chat` CLI was the only surface that installed one, so both shipping
+  surfaces ran baseline fusion and `SOVEREIGN_PPR_EXPAND` logged "lane
+  dark" for want of the same `rerank_fn`. Still opt-in via
+  `SOVEREIGN_RERANK_MODEL_PATH`; the row stays DARK until the A/B.
+- **Cost of on:** the ~500MB / ~1.7s-per-query figures below are
+  SUPERSEDED and were measured on the broken jina GGUF. SP4
+  (2026-07-31, note `d43fb03b`) adopted the official
+  `Qwen3-Reranker-0.6B-Q8_0` GGUF: 639MB, **22.7ms/pair batched**
+  (~470ms for top-20), 2.57ms/pair on short titles. The
+  `jina-reranker-v3-Q8_0.gguf` finding that read as "rerankers are
+  unusable" was a conversion defect in that one artifact — it dropped
+  the scoring head — not a property of the capability.
+- **Superseded cost figures:** ~500MB resident, ~1.7s/query at k=50,
+  OICP wire work for peer routing.
 - **Flip condition:** residual contribution (+1 SEP source, +5 wiki
   sources, +12 wiki facts) survives after cap-N chunks-per-article +
   vector-distance dedup are measured *combined* — the cheap fixes
@@ -193,9 +233,13 @@ store (ids cited per row).
   the memory-corpus construction sites, provenance-stamped per node.
 
 ### Caller-directed prefix-cache pin
-- Dark → 180-min soak (restore p90 29ms, TTFT 173→66s) → **default-on
-  2026-07-21** after stale-pid sweep + byte-capped LRU. The template
-  this ledger holds every dark row to.
+- **Moved back to DARK 2026-08-03 — this row was false.** It recorded
+  "default-on 2026-07-21", and the flip never happened:
+  `prefix_state.rs` `env_enabled()` still requires
+  `SOVEREIGN_PREFIX_STATE=1`. What landed on 2026-07-21 was the two
+  *preconditions* (stale-pid sweep, byte-capped LRU). The flip was a
+  recommendation in `docs/specs/BATCHED_GATE_VERIFY.md` contingent on
+  them, and this row wrote it up as executed. See the DARK section.
 
 ### RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`
 - Default **on**, status shipped (`env-flags.toml`). Summary nodes as

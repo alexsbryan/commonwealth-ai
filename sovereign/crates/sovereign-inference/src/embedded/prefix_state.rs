@@ -39,14 +39,50 @@
 //! `<pid>-*` dirs whose pid is dead (restart-heavy days leaked ~4GB/day
 //! before the sweep).
 //!
-//! **Default OFF (opt-in via `SOVEREIGN_PREFIX_STATE=1`).** The
-//! 2026-07-12 prefill A/B measured the mechanism correct and safe but
-//! worth ≈0 wall-clock at current turn anatomy: synthesis prefill runs
-//! ~800 tok/s, so the ~2.7k-token stable prefix is ~3.4s inside 40-180s
-//! turns owned by retrieval fan-out and housekeeping. Not worth 172MB
-//! state saves in production. The mechanism is kept (spike-verified
-//! 116-145x restore-vs-prefill on both DeltaNet hybrids) as the
-//! foundation for cartridges, where pinned prefixes are 10k+ tokens.
+//! **Default OFF (opt-in via `SOVEREIGN_PREFIX_STATE=1`).**
+//!
+//! Two experiments measured this, nine days apart, on DIFFERENT
+//! workloads — and the paragraph that used to live here cited only the
+//! first, which is not the workload that consumes the pin:
+//!
+//!   * 2026-07-12, one synthesis prefill: worth ≈0 wall-clock.
+//!     Synthesis prefill runs ~800 tok/s, so a ~2.7k-token stable
+//!     prefix is ~3.4s inside 40-180s turns owned by retrieval fan-out
+//!     and housekeeping. Not worth 172MB state saves.
+//!   * 2026-07-21, the grounding gate: **1.35x end-to-end** (786.3s →
+//!     584.5s, prefill 140,155 → 47,165 tokens) in a controlled A/B
+//!     whose only delta was this variable, and TTFT p50 173s → 66s on
+//!     a fixed persona mix over a 180-min soak (restore p90 29ms).
+//!     `SOVEREIGN_GATE_BATCH_VERIFY` is off on merit, so the gate
+//!     still issues one judge call per claim (~35/turn), each
+//!     re-prefilling the same ~10k-token evidence prefix.
+//!
+//! The gate is the pin's **only** consumer (`judge.rs` passes
+//! `stable_prefix_len`; ~20 other construction sites pass `None`), so
+//! the 07-21 number is the one that governs. These are not in
+//! conflict — the pin is worth ≈0 on a single prefill and ~1.35x when
+//! the same prefix is re-prefilled 35 times.
+//!
+//! **Why it is still OFF:** the flip was recommended
+//! (`docs/specs/BATCHED_GATE_VERIFY.md`) contingent on two hardenings,
+//! both of which shipped (stale-pid sweep, byte-capped LRU) — and then
+//! nobody executed it. `DEFAULTS_LEDGER.md` recorded the
+//! recommendation as though it had been. Both measurements above ran
+//! on `qwen35moe`; the configured primary is now dense Qwen3.5, so the
+//! flip is gated on reproducing the soak there rather than on the
+//! mechanism, which is unchanged. See the ledger row for the
+//! falsifiable flip condition.
+//!
+//! Note the pin matters MOST on models where the ordinary prefix cache
+//! is vetoed: `prefix_cache_gate` (`gates.rs`) refuses partial-KV
+//! reuse on recurrent/hybrid architectures — including both
+//! `qwen35moe` and dense `qwen35` — so on those models every gate call
+//! re-prefills from zero and whole-context restore is the only thing
+//! that can amortise it.
+//!
+//! The mechanism is kept regardless (spike-verified 116-145x
+//! restore-vs-prefill on both DeltaNet hybrids) as the foundation for
+//! cartridges, where pinned prefixes are 10k+ tokens.
 //! Pin floor override: `SOVEREIGN_PREFIX_STATE_MIN=<tokens>`.
 //!
 //! Decision logic is pure and unit-tested weight-free below; all file
