@@ -76,9 +76,90 @@ pub const CONCEPT_LABELS: &[&str] = &["Concept"];
 /// for a concept that has a canonical article.
 pub const CONCEPT_THRESHOLD: f32 = 0.5;
 
-/// Default model id. Maps to a directory inside `MODELS_ROOT`
-/// containing `tokenizer.json` + `onnx/model.onnx`.
+/// Default model id. Maps to a directory inside `MODELS_ROOT`; the
+/// files inside it depend on the generation — see [`model_spec`].
 pub const DEFAULT_MODEL_ID: &str = "gliner_small-v2.1";
+
+/// The GLiNER2 base export evaluated in SP1 — a monolithic
+/// encoder+span-head graph, driven bare on `ort` (no gline-rs).
+pub const GLINER2_MODEL_ID: &str = "gliner2-base-v1-onnx";
+
+/// Which GLiNER generation a model id belongs to.
+///
+/// This is a closed set on purpose (ARCH_PRINCIPLES §2): each variant
+/// implies a different input contract and a different loader, so a
+/// generation the code cannot drive must not be nameable in config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlinerGeneration {
+    /// gline-rs stack, entities only.
+    V1,
+    /// Bare-`ort` schema-driven export: entities, types, typed slots.
+    V2,
+}
+
+/// Where a GLiNER model lives on HuggingFace and how its files are laid
+/// out on disk.
+///
+/// Both varied across generations and both were hardcoded to v1 before
+/// 2026-08-02: the org was fixed to `onnx-community` and the graph to
+/// `onnx/model.onnx`, so a GLiNER2 export (`lion-ai/…`, monolithic
+/// `model.onnx` at the root) could not be fetched or resolved at all.
+#[derive(Debug, Clone, Copy)]
+pub struct GlinerModelSpec {
+    /// HuggingFace org that owns the repo.
+    pub hf_org: &'static str,
+    /// Tokenizer path, relative to both the HF repo and the local dir.
+    pub tokenizer_rel: &'static str,
+    /// ONNX graph path, relative to both the HF repo and the local dir.
+    pub onnx_rel: &'static str,
+    pub generation: GlinerGeneration,
+}
+
+const V1_LAYOUT: GlinerModelSpec = GlinerModelSpec {
+    hf_org: "onnx-community",
+    tokenizer_rel: "tokenizer.json",
+    onnx_rel: "onnx/model.onnx",
+    generation: GlinerGeneration::V1,
+};
+
+const V2_LAYOUT: GlinerModelSpec = GlinerModelSpec {
+    hf_org: "lion-ai",
+    tokenizer_rel: "tokenizer.json",
+    onnx_rel: "model.onnx",
+    generation: GlinerGeneration::V2,
+};
+
+/// Model ids whose layout is known exactly.
+const KNOWN_MODELS: &[(&str, &GlinerModelSpec)] = &[
+    (DEFAULT_MODEL_ID, &V1_LAYOUT),
+    (GLINER2_MODEL_ID, &V2_LAYOUT),
+];
+
+/// Resolve a model id to its HF coordinates + on-disk layout.
+///
+/// Unknown ids fall back to the v1 layout — which is exactly the
+/// behaviour every caller had before this table existed, so a
+/// hand-passed `--model-id` for some other `onnx-community` GLiNER v1
+/// export keeps working. The fallback is **announced, not silent**
+/// (`tracing::warn!`): a GLiNER2-generation export resolved as v1 fails
+/// later with a confusing missing-file error, and the warning is what
+/// points at the real cause.
+pub fn model_spec(model_id: &str) -> &'static GlinerModelSpec {
+    for (id, spec) in KNOWN_MODELS {
+        if *id == model_id {
+            return spec;
+        }
+    }
+    tracing::warn!(
+        model_id,
+        assumed_org = V1_LAYOUT.hf_org,
+        assumed_onnx = V1_LAYOUT.onnx_rel,
+        known = ?KNOWN_MODELS.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        "gliner: unknown model id — assuming the v1 layout. If this is a \
+         GLiNER2-generation export, add it to KNOWN_MODELS instead."
+    );
+    &V1_LAYOUT
+}
 
 /// Returns the configured models root, falling back to
 /// `~/.sovereign/models/gliner` when the env var is unset.
@@ -96,25 +177,31 @@ pub fn models_root() -> PathBuf {
 /// not what gline-rs expects — gives the operator a clear "go
 /// download this model" message rather than a cryptic ort error.
 pub fn resolve_model_paths(model_id: &str) -> Result<(PathBuf, PathBuf)> {
+    let spec = model_spec(model_id);
     let root = models_root().join(model_id);
-    let tokenizer = root.join("tokenizer.json");
-    let model = root.join("onnx").join("model.onnx");
+    let tokenizer = root.join(spec.tokenizer_rel);
+    let model = root.join(spec.onnx_rel);
     if !tokenizer.is_file() {
         return Err(Error::Storage(format!(
             "GliNER tokenizer not found at {}\n\
-             Download model files from huggingface.co/onnx-community/{} into\n\
-             {}/ — must contain tokenizer.json + onnx/model.onnx",
+             Download model files from huggingface.co/{}/{} into\n\
+             {}/ — must contain {} + {}",
             tokenizer.display(),
+            spec.hf_org,
             model_id,
             root.display(),
+            spec.tokenizer_rel,
+            spec.onnx_rel,
         )));
     }
     if !model.is_file() {
         return Err(Error::Storage(format!(
             "GliNER ONNX model not found at {}\n\
-             Expected {}/onnx/model.onnx — see huggingface.co/onnx-community/{}",
+             Expected {}/{} — see huggingface.co/{}/{}",
             model.display(),
             root.display(),
+            spec.onnx_rel,
+            spec.hf_org,
             model_id,
         )));
     }
@@ -208,6 +295,22 @@ impl GlinerExtractor {
     /// Custom construction. `labels` is the set passed to GliNER at
     /// inference; `threshold` is the per-span score cutoff.
     pub fn new(model_id: &str, labels: &[&str], threshold: f32) -> Result<Self> {
+        // `resolve_model_paths` can now FIND a GLiNER2 export, but this
+        // constructor drives gline-rs, which implements v1's input
+        // contract only (a GLiNER2 graph wants
+        // `text_positions`/`schema_positions`/`span_idx`). Handing one to
+        // `GLiNER::<SpanMode>::new` fails deep inside ort with a shape
+        // error that reads like a corrupt download. Refuse by generation
+        // instead, and name the replacement.
+        let spec = model_spec(model_id);
+        if spec.generation == GlinerGeneration::V2 {
+            return Err(Error::Storage(format!(
+                "{model_id} is a GLiNER2-generation export; GlinerExtractor \
+                 drives the gline-rs v1 stack and cannot run it. Use the \
+                 bare-ort GLiNER2 backend (see \
+                 sovereign-gliner/examples/gliner2_probe.rs, SP1)."
+            )));
+        }
         let (tokenizer_path, model_path) = resolve_model_paths(model_id)?;
         let model = GLiNER::<SpanMode>::new(
             Parameters::default(),
@@ -518,9 +621,10 @@ pub fn probe_model_available(model_id: &str) -> bool {
 }
 
 /// Download model files for a given GliNER model id from
-/// `huggingface.co/onnx-community/<model_id>`. Writes into
-/// `models_root().join(model_id)`. Skip files already present at
-/// the expected size — idempotent.
+/// `huggingface.co/<org>/<model_id>`, where the org and the file layout
+/// both come from [`model_spec`] — they are per-generation, not
+/// constants. Writes into `models_root().join(model_id)`. Skips files
+/// already present — idempotent.
 ///
 /// Reports progress via the `on_progress` callback (bytes downloaded,
 /// total bytes). The desktop wires this to a status pill; the CLI
@@ -530,14 +634,22 @@ pub async fn download_model(
     model_id: &str,
     on_progress: impl Fn(&str, u64, u64) + Send + Sync,
 ) -> Result<()> {
+    let spec = model_spec(model_id);
     let root = models_root().join(model_id);
-    std::fs::create_dir_all(root.join("onnx"))
-        .map_err(|e| Error::Storage(format!("create_dir_all {}: {e}", root.display())))?;
 
     let files = [
-        ("tokenizer.json", root.join("tokenizer.json")),
-        ("onnx/model.onnx", root.join("onnx").join("model.onnx")),
+        (spec.tokenizer_rel, root.join(spec.tokenizer_rel)),
+        (spec.onnx_rel, root.join(spec.onnx_rel)),
     ];
+    // Create each file's parent rather than a hardcoded `onnx/` — the
+    // GLiNER2 export puts the graph at the root, so that directory does
+    // not exist for every generation.
+    for (_, local_path) in &files {
+        if let Some(parent) = local_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::Storage(format!("create_dir_all {}: {e}", parent.display())))?;
+        }
+    }
 
     let client = reqwest::Client::builder()
         .user_agent("sovereign-tools/gliner-fetch (maintainer@example.com)")
@@ -550,8 +662,10 @@ pub async fn download_model(
             on_progress(remote_rel, 0, 0);
             continue;
         }
-        let url =
-            format!("https://huggingface.co/onnx-community/{model_id}/resolve/main/{remote_rel}");
+        let url = format!(
+            "https://huggingface.co/{}/{model_id}/resolve/main/{remote_rel}",
+            spec.hf_org
+        );
         let mut resp = client
             .get(&url)
             .send()
@@ -654,5 +768,122 @@ mod tests {
         let msg = format!("{}", err.unwrap_err());
         assert!(msg.contains("tokenizer.json"), "msg = {msg}");
         std::env::remove_var("SOVEREIGN_GLINER_MODEL_DIR");
+    }
+
+    #[test]
+    fn model_spec_maps_generation_org_and_layout() {
+        let v1 = model_spec(DEFAULT_MODEL_ID);
+        assert_eq!(v1.generation, GlinerGeneration::V1);
+        assert_eq!(v1.hf_org, "onnx-community");
+        assert_eq!(v1.onnx_rel, "onnx/model.onnx");
+
+        let v2 = model_spec(GLINER2_MODEL_ID);
+        assert_eq!(v2.generation, GlinerGeneration::V2);
+        assert_eq!(v2.hf_org, "lion-ai");
+        assert_eq!(v2.onnx_rel, "model.onnx");
+
+        // Unknown ids keep the behaviour every caller had before the
+        // table existed — v1 org + v1 layout, announced via `warn!`.
+        let unknown = model_spec("some-other-gliner-export");
+        assert_eq!(unknown.generation, GlinerGeneration::V1);
+        assert_eq!(unknown.hf_org, "onnx-community");
+    }
+
+    /// The regression the spec table exists to prevent: before
+    /// 2026-08-02 the ONNX path was hardcoded to `onnx/model.onnx`, so a
+    /// correctly-installed GLiNER2 export — whose graph sits at the root
+    /// — resolved to a missing file and was unusable.
+    #[test]
+    fn gliner2_resolves_root_level_onnx_not_the_v1_subdir() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let root = std::env::temp_dir().join(format!(
+            "sovereign-gliner-v2-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let model_dir = root.join(GLINER2_MODEL_ID);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        std::fs::write(model_dir.join("tokenizer.json"), b"{}").unwrap();
+        std::fs::write(model_dir.join("model.onnx"), b"onnx").unwrap();
+
+        std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", &root);
+        let resolved = resolve_model_paths(GLINER2_MODEL_ID);
+        std::env::remove_var("SOVEREIGN_GLINER_MODEL_DIR");
+
+        let (tokenizer, onnx) = resolved.expect("GLiNER2 layout should resolve");
+        assert_eq!(onnx, model_dir.join("model.onnx"));
+        assert_eq!(tokenizer, model_dir.join("tokenizer.json"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The other half: v1's layout must NOT be loosened to accept a
+    /// root-level graph, or a half-installed v1 dir would look valid.
+    #[test]
+    fn v1_still_requires_its_onnx_subdir() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let root = std::env::temp_dir().join(format!(
+            "sovereign-gliner-v1-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let model_dir = root.join(DEFAULT_MODEL_ID);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        std::fs::write(model_dir.join("tokenizer.json"), b"{}").unwrap();
+        // Graph at the ROOT — the GLiNER2 shape, wrong for v1.
+        std::fs::write(model_dir.join("model.onnx"), b"onnx").unwrap();
+
+        std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", &root);
+        let resolved = resolve_model_paths(DEFAULT_MODEL_ID);
+        std::env::remove_var("SOVEREIGN_GLINER_MODEL_DIR");
+
+        assert!(
+            resolved.is_err(),
+            "v1 must still demand onnx/model.onnx, got {resolved:?}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A GLiNER2 graph must be refused BY GENERATION, before gline-rs
+    /// gets it — otherwise the failure surfaces as an ort shape error
+    /// that reads like a corrupt download. Uses a fully-installed v2
+    /// layout so the refusal cannot be confused with a missing file.
+    #[test]
+    fn gliner_extractor_refuses_a_v2_model_by_generation() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let root = std::env::temp_dir().join(format!(
+            "sovereign-gliner-refuse-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let model_dir = root.join(GLINER2_MODEL_ID);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        std::fs::write(model_dir.join("tokenizer.json"), b"{}").unwrap();
+        std::fs::write(model_dir.join("model.onnx"), b"onnx").unwrap();
+
+        std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", &root);
+        let built = GlinerExtractor::new(GLINER2_MODEL_ID, DEFAULT_LABELS, DEFAULT_THRESHOLD);
+        std::env::remove_var("SOVEREIGN_GLINER_MODEL_DIR");
+
+        let err = format!("{}", built.err().expect("v2 model must be refused"));
+        assert!(err.contains("GLiNER2"), "err = {err}");
+        assert!(
+            !err.contains("GLiNER::new"),
+            "must refuse before reaching gline-rs: {err}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn missing_gliner2_error_names_its_own_org_not_v1s() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", "/tmp/definitely-not-here");
+        let err = resolve_model_paths(GLINER2_MODEL_ID).unwrap_err();
+        std::env::remove_var("SOVEREIGN_GLINER_MODEL_DIR");
+        let msg = format!("{err}");
+        assert!(msg.contains("lion-ai"), "msg = {msg}");
+        assert!(
+            !msg.contains("onnx-community"),
+            "error must not send the operator to the v1 org: {msg}"
+        );
     }
 }
