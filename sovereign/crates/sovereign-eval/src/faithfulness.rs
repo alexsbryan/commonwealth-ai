@@ -213,36 +213,45 @@ pub fn plan_judge_sample(
 }
 
 // ---------------------------------------------------------------------------
-// Forest grouping (P5.1 caveat)
+// Forest grouping (P5.1 caveat) — REMOVED 2026-08-03, see below
 // ---------------------------------------------------------------------------
-
-/// Group nodes into trees by walking each node up to its parentless
-/// top. RAPTOR output is a FOREST (P5.1): grouping "the tree" by
-/// max-level silently merges roots. Input is `(node_id, parent_id)`;
-/// output maps each root id to its member node ids (root included).
-/// Nodes whose parent chain dangles (parent id absent from the input)
-/// are rooted at the last resolvable ancestor rather than dropped.
-pub fn group_by_parentless_top(
-    nodes: &[(String, Option<String>)],
-) -> BTreeMap<String, Vec<String>> {
-    let parent: BTreeMap<&str, Option<&str>> = nodes
-        .iter()
-        .map(|(id, p)| (id.as_str(), p.as_deref()))
-        .collect();
-    let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (id, _) in nodes {
-        let mut cur = id.as_str();
-        // Bounded by node count; a parent cycle would otherwise hang us.
-        for _ in 0..nodes.len() {
-            match parent.get(cur) {
-                Some(Some(p)) if parent.contains_key(p) => cur = p,
-                _ => break,
-            }
-        }
-        groups.entry(cur.to_string()).or_default().push(id.clone());
-    }
-    groups
-}
+//
+// `group_by_parentless_top` lived here from the P5.1 spike until
+// 2026-08-03. It is deleted rather than wired, because the defect it
+// was written to fix does not exist in any code path that runs.
+//
+// P5.1 observed a FOREST — 42 of 271 nodes parentless (2 at level 2,
+// 40 at level 1) — and warned that consumers selecting "the tree top"
+// via `level == max_level` would see 2 trees and silently drop 40.
+// Three consumers do exactly that (`conv_tiered_provider.rs`
+// vault-theme selection, `attached_doc.rs` briefing layer,
+// `atlas_commands.rs` conv detail). Wiring the helper at those three
+// sites was a funded plan item.
+//
+// It was wrong. A SINGLE RAPTOR build cannot produce a forest: the
+// level loop is `while current_layer.len() > ROOT_BRANCHING_CEILING`
+// (`sovereign-tools/src/raptor_atlas.rs:629`, ceiling = 4 at `:63`),
+// so a build terminates with 1-4 nodes at ONE level and every lower
+// node gets a k-means parent. Recomputed from the spike's own data
+// (`research/enrichment-spikes/data/p51_nodes.jsonl`): zero parentless
+// LEAVES, which is the signature of pooling, not of orphaning. P5.1
+// read the corpus-wide pooled export of `enrich raptor
+// --group-by-article`, which runs one build PER ARTICLE — 42 roots
+// because 42 builds. All three consumers read a single build.
+//
+// The one population where the defect would be real is the pooled
+// reader `list_conv_raptor_nodes_for_corpus`
+// (`sovereign-store/.../conv_tiered.rs`), which as of 2026-08-03 has
+// ZERO consumers. A helper with no correct caller is not
+// infrastructure — it is a standing claim that a bug exists, and that
+// claim already cost one plan item. If a pooled consumer is ever
+// written, restore this from git history (it was ~20 lines and
+// tested) rather than re-deriving it.
+//
+// Residual, unmeasured: `extract_one_cluster` can drop a cluster whose
+// LLM and extractive fallback both fail (`raptor_atlas.rs:1305-1311`),
+// which WOULD orphan children below max_level. Never observed; the
+// "dropping cluster" warn is the thing to watch on a real vault build.
 
 #[cfg(test)]
 mod tests {
@@ -373,22 +382,4 @@ mod tests {
         assert_ne!(a.selected, d.selected);
     }
 
-    #[test]
-    fn forest_groups_by_parentless_top_not_level() {
-        // Two roots — max-level grouping would see one tree.
-        let nodes = vec![
-            ("r1".to_string(), None),
-            ("a".to_string(), Some("r1".to_string())),
-            ("b".to_string(), Some("a".to_string())),
-            ("r2".to_string(), None),
-            ("c".to_string(), Some("r2".to_string())),
-            ("dangling".to_string(), Some("ghost".to_string())),
-        ];
-        let groups = group_by_parentless_top(&nodes);
-        assert_eq!(groups.len(), 3);
-        assert_eq!(groups["r1"], vec!["r1", "a", "b"]);
-        assert_eq!(groups["r2"], vec!["r2", "c"]);
-        // A dangling parent roots the node at itself, never drops it.
-        assert_eq!(groups["dangling"], vec!["dangling"]);
-    }
 }
