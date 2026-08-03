@@ -318,6 +318,7 @@ pub(crate) struct AggregatedReport {
     relation_atoms: PhaseSummary,
     question_atoms: PhaseSummary,
     claim_atoms: PhaseSummary,
+    edges: PhaseSummary,
     fault_lines: PhaseSummary,
     open_questions: PhaseSummary,
     configurations: PhaseSummary,
@@ -391,6 +392,7 @@ fn aggregate(runs: &[EvalReport]) -> AggregatedReport {
         push_phase(&mut a.relation_atoms, r.relation_atoms.as_ref());
         push_phase(&mut a.question_atoms, r.question_atoms.as_ref());
         push_phase(&mut a.claim_atoms, r.claim_atoms.as_ref());
+        push_phase(&mut a.edges, r.edges.as_ref());
         push_phase(&mut a.fault_lines, r.fault_lines.as_ref());
         push_phase(&mut a.open_questions, r.open_questions.as_ref());
         push_phase(&mut a.configurations, r.configurations.as_ref());
@@ -429,6 +431,7 @@ fn aggregate_f1(r: &EvalReport) -> Option<f32> {
         r.relation_atoms.as_ref().and_then(|s| s.f1()),
         r.question_atoms.as_ref().and_then(|s| s.f1()),
         r.claim_atoms.as_ref().and_then(|s| s.f1()),
+        r.edges.as_ref().and_then(|s| s.f1()),
         r.fault_lines.as_ref().and_then(|s| s.f1()),
         r.open_questions.as_ref().and_then(|s| s.f1()),
         r.configurations.as_ref().and_then(|s| s.f1()),
@@ -524,6 +527,7 @@ fn print_text_report(a: &AggregatedReport, durations: &[Duration]) {
     print_phase_row("relation atoms", &a.relation_atoms);
     print_phase_row("question atoms", &a.question_atoms);
     print_phase_row("claim atoms", &a.claim_atoms);
+    print_phase_row("edges (Phase 3b)", &a.edges);
     print_phase_row("fault lines (Phase 6)", &a.fault_lines);
     print_phase_row("open questions (P7)", &a.open_questions);
     print_phase_row("configurations (P8)", &a.configurations);

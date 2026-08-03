@@ -63,7 +63,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--phase <id>",
-                "Restrict scoring to one phase. Default: all. Phases: positions (Phase 1 skeleton), atoms (Phase 3a/3b entities + concepts + questions + claims), fault-lines (Phase 6 Tension edges), gaps (Phase 7 open questions), configurations (Phase 8).",
+                "Restrict scoring to one phase. Default: all. Phases: positions (Phase 1 skeleton), atoms (Phase 3a/3b entities + concepts + questions + claims), edges (Phase 3b typed edges, directed), fault-lines (Phase 6 Tension edges between positions), gaps (Phase 7 open questions), configurations (Phase 8).",
             ),
             (
                 "--report <path>",
@@ -151,6 +151,7 @@ pub(crate) enum PhaseFilter {
     All,
     Positions,
     Atoms,
+    Edges,
     FaultLines,
     Gaps,
     Configurations,
@@ -162,11 +163,12 @@ impl PhaseFilter {
             "all" => Ok(Self::All),
             "positions" | "skeleton" => Ok(Self::Positions),
             "atoms" => Ok(Self::Atoms),
+            "edges" => Ok(Self::Edges),
             "fault-lines" | "fault_lines" | "tensions" => Ok(Self::FaultLines),
             "gaps" | "open-questions" | "open_questions" => Ok(Self::Gaps),
             "configurations" | "config" => Ok(Self::Configurations),
             other => Err(format!(
-                "unknown --phase: {other:?} (allowed: positions, atoms, fault-lines, gaps, configurations, all)"
+                "unknown --phase: {other:?} (allowed: positions, atoms, edges, fault-lines, gaps, configurations, all)"
             )),
         }
     }
@@ -280,16 +282,15 @@ pub(crate) struct GoldenSet {
     expected_configurations: Vec<ExpectedConfiguration>,
     #[serde(default)]
     forbidden_configurations: Vec<ForbiddenName>,
-    // `expected_edges` and `forbidden_edges` — accepted in the TOML
-    // for forward compatibility with future scoring; not yet wired
-    // into the report. The fault-line section already covers the
-    // load-bearing edge case (Tension edges between positions).
+    // Phase 3b edges, scored under `PhaseFilter::Edges` against
+    // `edges.json` across ALL edge types. `score_fault_lines` scores
+    // the same file but only its `Tension` slice against position
+    // pairs; this axis is the general one (`Grounds`, `Causes`,
+    // `EvidenceFor`, …) and shares one endpoint resolver with it.
     #[serde(default)]
-    #[allow(dead_code)]
-    expected_edges: Vec<toml::Value>,
+    expected_edges: Vec<ExpectedEdge>,
     #[serde(default)]
-    #[allow(dead_code)]
-    forbidden_edges: Vec<toml::Value>,
+    forbidden_edges: Vec<ForbiddenEdge>,
 
     // ─── v2 typed-extension axes (Argumentative discourse mode) ───
     //
@@ -583,6 +584,50 @@ struct ForbiddenFaultLine {
     #[serde(default)]
     #[allow(dead_code)]
     reason: Option<String>,
+}
+
+/// A Phase 3b edge the golden asserts should exist. `edge_type` is the
+/// PascalCase [`EdgeType`] tag (`"Tension"`, `"Grounds"`, …) or `"*"`
+/// for "any type". Endpoints match by keyword against the resolved
+/// endpoint NAME, not the raw `AtomId` — see
+/// [`resolve_endpoint_name`].
+///
+/// Direction is load-bearing here and is NOT symmetric, unlike
+/// [`ExpectedFaultLine`]: `Grounds(frankfurt case → compatibilism)`
+/// and its reverse are different assertions about the argument.
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedEdge {
+    #[serde(default = "any_edge_type")]
+    edge_type: String,
+    source_contains_any: Vec<String>,
+    target_contains_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+/// An edge the golden asserts must NOT exist — the anti-test half of
+/// the axis. Same matching rules as [`ExpectedEdge`].
+#[derive(Debug, Clone, Deserialize)]
+struct ForbiddenEdge {
+    #[serde(default = "any_edge_type")]
+    edge_type: String,
+    source_contains_any: Vec<String>,
+    target_contains_any: Vec<String>,
+    /// Author's intent tag (e.g. `"proponent_of"`). The edge model has
+    /// no such field, so this is NOT evaluated — `score_edges` reports
+    /// the fact in its notes rather than silently matching on the
+    /// remaining criteria as though the constraint had been checked.
+    #[serde(default)]
+    relation_kind: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    reason: Option<String>,
+}
+
+/// Wildcard for a golden that constrains endpoints but not type.
+fn any_edge_type() -> String {
+    "*".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1587,6 +1632,7 @@ pub(crate) struct EvalReport {
     pub question_atoms: Option<PhaseScore>,
     pub claim_atoms: Option<PhaseScore>,
     pub discourse_act_distribution: Option<DiscourseActReport>,
+    pub edges: Option<PhaseScore>,
     pub fault_lines: Option<PhaseScore>,
     pub open_questions: Option<PhaseScore>,
     pub configurations: Option<PhaseScore>,
@@ -1678,6 +1724,14 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
         report.evidence_atoms = report.axis_scores.get("evidence").cloned();
         report.opposition_atoms = report.axis_scores.get("opposition").cloned();
         report.concession_atoms = report.axis_scores.get("concession").cloned();
+    }
+    // Phase 3b edges. Scored only when the golden authors the axis —
+    // an absent axis means "no signal here", not "expected zero", so
+    // a golden that omits edges must not read as 0% recall.
+    if phase.includes(PhaseFilter::Edges)
+        && (!golden.expected_edges.is_empty() || !golden.forbidden_edges.is_empty())
+    {
+        report.edges = Some(score_edges(golden, snap));
     }
     // Phase 6 fault lines
     if phase.includes(PhaseFilter::FaultLines) {
@@ -2281,6 +2335,202 @@ fn score_discourse_acts(golden: &GoldenSet, snap: &AtlasSnapshot) -> DiscourseAc
     report
 }
 
+/// Resolve an edge endpoint to a keyword-matchable name.
+///
+/// The atlas pipeline's deterministic enumerator pairs Claim and State
+/// atoms — not the position-typed Concept atoms the goldens name in
+/// `*_contains_any`. Chase the endpoint:
+///   - Claim → its `attributed_to` entity's canonical name
+///   - State → its `entity_id`'s canonical name
+///   - Entity → its own canonical name
+///   - other → the `AtomId` string (which won't match a golden
+///     keyword, so misses get reported honestly rather than hidden)
+///
+/// Without this chase every edge appears to the matcher as
+/// "claim-NNNN ↔ state-MMMM", which never pairs against
+/// `compatibilism`/`hard incompatibilism` keywords, and the eval reads
+/// as zero even when the classifier produced solid edges.
+///
+/// Shared by [`score_fault_lines`] and [`score_edges`] — one resolver,
+/// so the two axes can never disagree about what an endpoint is named.
+fn resolve_endpoint_name(snap: &AtlasSnapshot, id: &AtomId) -> String {
+    if let Some(name) = snap.entity_name_by_id(id) {
+        return name.to_string();
+    }
+    if let Some(file) = snap.atoms.as_ref() {
+        for atom in &file.atoms {
+            match atom {
+                AtomEnvelope::Claim(c) if c.id == *id => {
+                    if let Some(attr) = &c.attributed_to {
+                        if let Some(name) = snap.entity_name_by_id(attr) {
+                            return name.to_string();
+                        }
+                    }
+                    return id.as_str().to_string();
+                }
+                AtomEnvelope::State(st) if st.id == *id => {
+                    if let Some(name) = snap.entity_name_by_id(&st.entity_id) {
+                        return name.to_string();
+                    }
+                    return id.as_str().to_string();
+                }
+                _ => {}
+            }
+        }
+    }
+    id.as_str().to_string()
+}
+
+/// Parse a golden's `edge_type` string into an [`EdgeType`].
+///
+/// Deliberately routed through serde rather than a hand-written match:
+/// [`EdgeType`] already carries `#[serde(rename_all = "PascalCase")]`,
+/// and a second string→enum table here would be a second decider that
+/// drifts the first time an edge type is added (ARCH_PRINCIPLES §10.6).
+/// Returns `None` for `"*"` and for unrecognised tags; callers
+/// distinguish the two.
+fn parse_edge_type(s: &str) -> Option<EdgeType> {
+    serde_json::from_value::<EdgeType>(serde_json::Value::String(s.to_string())).ok()
+}
+
+/// Score Phase 3b edges (P0.5 edge-F1).
+///
+/// Complements [`score_fault_lines`], which scores the `Tension` slice
+/// of the same `edges.json` against *position pairs* and treats the
+/// pair as unordered. This axis covers every edge type and is
+/// DIRECTED: `Grounds(frankfurt case → compatibilism)` asserts
+/// something its reverse does not.
+fn score_edges(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_edges.len();
+    s.forbidden_total = golden.forbidden_edges.len();
+
+    let edges_file = match &snap.edges {
+        Some(e) => e,
+        None => {
+            s.notes
+                .push("edges.json not present — skipping edge scoring".to_string());
+            return s;
+        }
+    };
+    let edges: Vec<&Edge> = edges_file.edges.iter().collect();
+    if edges.is_empty() {
+        s.notes
+            .push("edges.json contains 0 edges — Phase 3b may not have run".to_string());
+    }
+
+    // An unrecognised `edge_type` is a golden-authoring error, not a
+    // model failure. Report it instead of letting the entry match
+    // nothing and read as a recall miss (ARCH_PRINCIPLES §18.3 — a
+    // check that cannot be evaluated is never silently a failure).
+    let mut unknown_types: Vec<String> = Vec::new();
+    let mut type_of = |tag: &str| -> Option<EdgeType> {
+        if tag == "*" {
+            return None;
+        }
+        match parse_edge_type(tag) {
+            Some(t) => Some(t),
+            None => {
+                if !unknown_types.iter().any(|u| u == tag) {
+                    unknown_types.push(tag.to_string());
+                }
+                None
+            }
+        }
+    };
+
+    // Directed endpoint match, with the type constraint applied only
+    // when the golden names a real one.
+    let matches_edge = |e: &Edge, want: Option<EdgeType>, src: &[String], tgt: &[String]| -> bool {
+        if let Some(t) = want {
+            if e.edge_type != t {
+                return false;
+            }
+        }
+        let a = resolve_endpoint_name(snap, &e.source);
+        let b = resolve_endpoint_name(snap, &e.target);
+        matches_any_with_morphology(&a, src) && matches_any_with_morphology(&b, tgt)
+    };
+
+    for ee in &golden.expected_edges {
+        let want = type_of(&ee.edge_type);
+        let hit = edges
+            .iter()
+            .any(|e| matches_edge(e, want, &ee.source_contains_any, &ee.target_contains_any));
+        if hit {
+            s.matched += 1;
+        } else {
+            let src = ee.source_contains_any.first().cloned().unwrap_or_default();
+            let tgt = ee.target_contains_any.first().cloned().unwrap_or_default();
+            s.misses.push(format!("{}({src} → {tgt})", ee.edge_type));
+        }
+    }
+
+    let mut unevaluated_relation_kinds = 0usize;
+    for fb in &golden.forbidden_edges {
+        if fb.relation_kind.is_some() {
+            unevaluated_relation_kinds += 1;
+        }
+        let want = type_of(&fb.edge_type);
+        if edges
+            .iter()
+            .any(|e| matches_edge(e, want, &fb.source_contains_any, &fb.target_contains_any))
+        {
+            s.forbidden_hit += 1;
+            let src = fb.source_contains_any.first().cloned().unwrap_or_default();
+            let tgt = fb.target_contains_any.first().cloned().unwrap_or_default();
+            s.forbidden_hits.push(format!("{}({src} → {tgt})", fb.edge_type));
+        }
+    }
+    if unevaluated_relation_kinds > 0 {
+        s.notes.push(format!(
+            "{unevaluated_relation_kinds} forbidden edge(s) declare `relation_kind`, which the \
+             edge model has no field for — matched on type + endpoints only, so the \
+             relation_kind constraint was NOT checked"
+        ));
+    }
+    if !unknown_types.is_empty() {
+        s.notes.push(format!(
+            "golden names {} unknown edge_type(s) ({}) — treated as \"*\" (any type); \
+             fix the golden, these are not model misses",
+            unknown_types.len(),
+            unknown_types.join(", ")
+        ));
+    }
+
+    let explained = |e: &Edge| -> bool {
+        golden.expected_edges.iter().any(|ee| {
+            matches_edge(
+                e,
+                parse_edge_type(&ee.edge_type),
+                &ee.source_contains_any,
+                &ee.target_contains_any,
+            )
+        }) || golden.forbidden_edges.iter().any(|fb| {
+            matches_edge(
+                e,
+                parse_edge_type(&fb.edge_type),
+                &fb.source_contains_any,
+                &fb.target_contains_any,
+            )
+        })
+    };
+    tally_unmatched(
+        &mut s,
+        &edges,
+        |e| {
+            format!(
+                "{:?}({} → {})",
+                e.edge_type,
+                resolve_endpoint_name(snap, &e.source),
+                resolve_endpoint_name(snap, &e.target)
+            )
+        },
+        |e| explained(e),
+    );
+    s
+}
+
 fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
     let mut s = PhaseScore::default();
     s.expected = golden.expected_fault_lines.len();
@@ -2307,49 +2557,7 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             ));
     }
 
-    // Resolve a Tension-edge endpoint to a position-readable name.
-    // The atlas pipeline's deterministic enumerator pairs Claim and
-    // State atoms (not the position-typed Concept atoms the goldens
-    // name in `position_a_contains_any`). Chase the endpoint:
-    //   - Claim → its `attributed_to` entity's canonical name
-    //   - State → its `entity_id`'s canonical name
-    //   - Entity → its own canonical name
-    //   - other → the AtomId string (which won't match a position
-    //     keyword, so misses get reported honestly)
-    //
-    // Without this chase, every accepted Tension edge appears as
-    // "claim-NNNN ↔ state-MMMM" to the matcher, which will never
-    // pair against `compatibilism`/`hard incompatibilism` keywords,
-    // and the eval reads as 0 fault lines even when the classifier
-    // produced solid edges.
-    let resolve_endpoint = |id: &AtomId| -> String {
-        if let Some(name) = snap.entity_name_by_id(id) {
-            return name.to_string();
-        }
-        if let Some(file) = snap.atoms.as_ref() {
-            for atom in &file.atoms {
-                match atom {
-                    AtomEnvelope::Claim(c) if c.id == *id => {
-                        if let Some(attr) = &c.attributed_to {
-                            if let Some(name) = snap.entity_name_by_id(attr) {
-                                return name.to_string();
-                            }
-                        }
-                        return id.as_str().to_string();
-                    }
-                    AtomEnvelope::State(st) if st.id == *id => {
-                        if let Some(name) = snap.entity_name_by_id(&st.entity_id) {
-                            return name.to_string();
-                        }
-                        return id.as_str().to_string();
-                    }
-                    _ => {}
-                }
-            }
-        }
-        id.as_str().to_string()
-    };
-    let lookup_name = resolve_endpoint;
+    let lookup_name = |id: &AtomId| resolve_endpoint_name(snap, id);
 
     // Match policy: position pair is the load-bearing signal.
     // `crux_keywords_any`, when specified, is informational — a
@@ -2663,6 +2871,7 @@ fn print_text_report(r: &EvalReport) {
     print_phase_row("evidence atoms (typed)", r.evidence_atoms.as_ref());
     print_phase_row("opposition atoms", r.opposition_atoms.as_ref());
     print_phase_row("concession atoms", r.concession_atoms.as_ref());
+    print_phase_row("edges (Phase 3b)", r.edges.as_ref());
     print_phase_row("fault lines (Phase 6)", r.fault_lines.as_ref());
     print_phase_row("open questions (P7)", r.open_questions.as_ref());
     print_phase_row("configurations (P8)", r.configurations.as_ref());
@@ -3104,6 +3313,7 @@ pub(crate) fn collect_unmatched_atoms(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine::enrichment::atlas::edges::{EdgeId, EdgeProvenance};
 
     #[test]
     fn unmatched_rate_is_none_on_empty_pool_and_fraction_otherwise() {
@@ -3367,5 +3577,200 @@ mod tests {
             .join(format!("{name}.toml"));
             GoldenSet::load(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
+    }
+
+    // ── P0.5 edge-F1 ────────────────────────────────────────────────
+    //
+    // Before this axis landed, `expected_edges`/`forbidden_edges` were
+    // `Vec<toml::Value>` behind `#[allow(dead_code)]`: the goldens
+    // carried the data and the scorer never read it. These tests fail
+    // against that state — the first because the fields had no typed
+    // shape to assert on, the rest because `score_edges` didn't exist.
+
+    fn edge(id: usize, ty: EdgeType, source: &str, target: &str) -> Edge {
+        Edge {
+            id: EdgeId::new(id),
+            edge_type: ty,
+            source: AtomId::from_raw(source),
+            target: AtomId::from_raw(target),
+            evidence: Vec::new(),
+            trigger_event: None,
+            sub_question: None,
+            confidence: 0.9,
+            provenance: EdgeProvenance::LlmPairwise,
+        }
+    }
+
+    /// Endpoints are raw ids that resolve to themselves (no atoms
+    /// file), so these tests exercise the MATCHING rules; endpoint
+    /// name resolution is covered through the fault-line path.
+    fn snap_with_edges(edges: Vec<Edge>) -> AtlasSnapshot {
+        AtlasSnapshot {
+            skeleton: None,
+            atoms: None,
+            edges: Some(EdgesFile::new(edges)),
+            gaps: None,
+            configurations: None,
+        }
+    }
+
+    fn golden_with_edges(expected: Vec<ExpectedEdge>, forbidden: Vec<ForbiddenEdge>) -> GoldenSet {
+        let mut g: GoldenSet = toml::from_str("").expect("empty golden is valid");
+        g.expected_edges = expected;
+        g.forbidden_edges = forbidden;
+        g
+    }
+
+    fn expect_edge(ty: &str, source: &str, target: &str) -> ExpectedEdge {
+        ExpectedEdge {
+            edge_type: ty.to_string(),
+            source_contains_any: vec![source.to_string()],
+            target_contains_any: vec![target.to_string()],
+            note: None,
+        }
+    }
+
+    #[test]
+    fn committed_golden_carries_typed_edges() {
+        let path = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../bench/philosophy/free-will-debate.toml"
+        ));
+        let g = GoldenSet::load(path).expect("free-will-debate golden should parse");
+        assert_eq!(g.expected_edges.len(), 2, "goldens already author the data");
+        let grounds = g
+            .expected_edges
+            .iter()
+            .find(|e| e.edge_type == "Grounds")
+            .expect("the Grounds edge is authored");
+        assert_eq!(grounds.source_contains_any, vec!["frankfurt case"]);
+        assert_eq!(grounds.target_contains_any, vec!["compatibilism"]);
+        // The anti-test carries a wildcard type and an intent tag the
+        // edge model cannot express — see `relation_kind`.
+        let fb = &g.forbidden_edges[0];
+        assert_eq!(fb.edge_type, "*");
+        assert_eq!(fb.relation_kind.as_deref(), Some("proponent_of"));
+    }
+
+    #[test]
+    fn edge_scoring_is_directed_unlike_fault_lines() {
+        // Fault lines match a position PAIR either way round. An edge
+        // asserts an arrow: `Grounds(a → b)` is a different claim from
+        // `Grounds(b → a)`, and scoring must not credit the reverse.
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "compatibilism", "frankfurt")]);
+        let g = golden_with_edges(
+            vec![expect_edge("Grounds", "frankfurt", "compatibilism")],
+            vec![],
+        );
+        let s = score_edges(&g, &snap);
+        assert_eq!(s.expected, 1);
+        assert_eq!(s.matched, 0, "the reverse arrow must not count as a hit");
+        assert_eq!(s.misses, vec!["Grounds(frankfurt → compatibilism)"]);
+        // The reverse edge is real output that no golden entry
+        // explains — it belongs in the unmatched tally, not nowhere.
+        assert_eq!(s.candidates, 1);
+        assert_eq!(s.unmatched_count, 1);
+    }
+
+    #[test]
+    fn edge_scoring_respects_edge_type_and_wildcard() {
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Causes, "a", "b")]);
+
+        let typed = score_edges(&golden_with_edges(vec![expect_edge("Grounds", "a", "b")], vec![]), &snap);
+        assert_eq!(typed.matched, 0, "endpoints match but the type does not");
+
+        let wild = score_edges(&golden_with_edges(vec![expect_edge("*", "a", "b")], vec![]), &snap);
+        assert_eq!(wild.matched, 1, "`*` matches any edge type");
+    }
+
+    #[test]
+    fn forbidden_edge_that_exists_is_a_hit() {
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "frankfurt", "hard incompatibilism")]);
+        let g = golden_with_edges(
+            vec![],
+            vec![ForbiddenEdge {
+                edge_type: "*".to_string(),
+                source_contains_any: vec!["frankfurt".to_string()],
+                target_contains_any: vec!["hard incompatibilism".to_string()],
+                relation_kind: None,
+                reason: None,
+            }],
+        );
+        let s = score_edges(&g, &snap);
+        assert_eq!(s.forbidden_total, 1);
+        assert_eq!(s.forbidden_hit, 1);
+        assert_eq!(s.forbidden_hits, vec!["*(frankfurt → hard incompatibilism)"]);
+    }
+
+    #[test]
+    fn unknown_edge_type_is_reported_not_charged_to_the_model() {
+        // A golden naming an edge type that doesn't exist is an
+        // authoring bug. Scoring it as a silent recall miss blames the
+        // extractor for the golden's typo (ARCH_PRINCIPLES §18.3).
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "a", "b")]);
+        let g = golden_with_edges(vec![expect_edge("Groundz", "a", "b")], vec![]);
+        let s = score_edges(&g, &snap);
+        assert_eq!(s.matched, 1, "falls back to any-type rather than missing");
+        assert!(
+            s.notes.iter().any(|n| n.contains("Groundz") && n.contains("not model misses")),
+            "the golden's bad type must be named in the notes, got {:?}",
+            s.notes
+        );
+    }
+
+    #[test]
+    fn unevaluable_relation_kind_is_declared_not_assumed() {
+        // The golden constrains `relation_kind`; the edge model has no
+        // such field. Matching on the remaining criteria and reporting
+        // a clean verdict would assert a check that never ran.
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "frankfurt", "hard incompatibilism")]);
+        let g = golden_with_edges(
+            vec![],
+            vec![ForbiddenEdge {
+                edge_type: "*".to_string(),
+                source_contains_any: vec!["frankfurt".to_string()],
+                target_contains_any: vec!["hard incompatibilism".to_string()],
+                relation_kind: Some("proponent_of".to_string()),
+                reason: None,
+            }],
+        );
+        let s = score_edges(&g, &snap);
+        assert_eq!(s.forbidden_hit, 1);
+        assert!(
+            s.notes.iter().any(|n| n.contains("relation_kind") && n.contains("NOT checked")),
+            "the unevaluated constraint must be declared, got {:?}",
+            s.notes
+        );
+    }
+
+    #[test]
+    fn absent_edges_file_is_skipped_not_scored_zero() {
+        let snap = AtlasSnapshot {
+            skeleton: None,
+            atoms: None,
+            edges: None,
+            gaps: None,
+            configurations: None,
+        };
+        let g = golden_with_edges(vec![expect_edge("Grounds", "a", "b")], vec![]);
+        let s = score_edges(&g, &snap);
+        assert_eq!(s.matched, 0);
+        assert_eq!(s.candidates, 0);
+        assert!(s.notes.iter().any(|n| n.contains("edges.json not present")));
+    }
+
+    #[test]
+    fn golden_without_edges_axis_is_not_scored_at_all() {
+        // Absence of the axis means "no signal here", not "expected
+        // zero" — a golden that omits edges must not read as 0% recall.
+        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "a", "b")]);
+        let g = golden_with_edges(vec![], vec![]);
+        let report = score(&g, &snap, PhaseFilter::All);
+        assert!(report.edges.is_none());
+    }
+
+    #[test]
+    fn edges_phase_filter_parses() {
+        assert_eq!(PhaseFilter::parse("edges").unwrap(), PhaseFilter::Edges);
     }
 }
