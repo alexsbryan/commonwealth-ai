@@ -60,17 +60,33 @@
   let loadError = $state<string | null>(null);
   let unlistenDrop: UnlistenFn | null = null;
 
-  // `lcList()` returns EVERY registered config — including watched folders,
-  // which the same LocalCorpusManager also serves to `lcWatchList()`. Those
-  // have their own dedicated "Watched folders" section (with the correct
-  // detail panel + sweep/enrich lifecycle), so they must NOT also appear in
-  // the one-shot "Folders" list, where they showed up mislabeled as Obsidian
-  // vaults. Keep only the one-shot sources here.
+  // `lcList()` returns EVERY registered config — including everything the
+  // daemon RECONCILES, which the same LocalCorpusManager also serves to
+  // `lcWatchList()`. Those have their own dedicated "Watched folders"
+  // section (with the correct detail panel + sweep/enrich lifecycle), so
+  // they must NOT also appear in the one-shot "Folders" list.
+  //
+  // Exclude by id from the watched list itself rather than re-deriving
+  // source-type rules here. The reconciled set is watched folders AND
+  // obsidian vaults; when this filter knew only about `WatchedFolder`, a
+  // vault fell through into "Folders" while the scheduler swept it like a
+  // watched one. Deriving from the served list means the two views cannot
+  // drift apart again. The source-type check stays as a fallback for when
+  // `lcWatchList()` errored and handed back an empty list.
   function isWatchedSource(c: LocalCorpusConfig): boolean {
     const st = c.source_type;
-    return !!st && typeof st === "object" && "WatchedFolder" in st;
+    return (
+      !!st &&
+      typeof st === "object" &&
+      ("WatchedFolder" in st || "ObsidianVault" in st)
+    );
   }
-  let folderCorpora = $derived(corpora.filter((c) => !isWatchedSource(c)));
+  let reconciledIds = $derived(
+    new Set(watchedCorpora.map((w) => w.corpus_id)),
+  );
+  let folderCorpora = $derived(
+    corpora.filter((c) => !reconciledIds.has(c.id) && !isWatchedSource(c)),
+  );
 
   // Periodic refresh while idle so a sweep state change (Idle →
   // Sweeping → Idle, or Idle → PausedAwaitingConfirmation) shows up

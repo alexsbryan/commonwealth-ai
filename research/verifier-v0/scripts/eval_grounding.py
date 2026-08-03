@@ -37,6 +37,22 @@ ANSWER_RE = re.compile(
     re.DOTALL,
 )
 
+# Tolerant fallbacks, tried in order after ANSWER_RE misses. Rationale: the
+# measurement is "did the model reach a verdict", not "did it close every tag".
+# Measured 2026-08-02 on the 0.8B probe: it emitted
+#   <classification>GROUNDED</classification> ... </justivation>   (typo, no </answer>)
+# and with thinking disabled
+#   <answer>{"classification":"GROUNDED", ...}                     (JSON body)
+# Both are correct verdicts that ANSWER_RE discards wholesale. On the 4B
+# baseline the same all-or-nothing rule cost 8.6% of rows and ~6 BAcc points
+# (BASELINES.md: strict 70.77 vs excl-pf 76.76).
+#
+# Deliberately NOT tolerant of a bare class token in prose -- a model that
+# writes "CATEGORY must be ONE of: GROUNDED, ..." has not answered. A tag or a
+# JSON key is required, and (like ANSWER_RE) the LAST match wins.
+CLASSIFICATION_TAG_RE = re.compile(r"<classification>\s*(\w+)\s*</?classification>", re.DOTALL)
+CLASSIFICATION_JSON_RE = re.compile(r"[\"']classification[\"']\s*:\s*[\"'](\w+)[\"']", re.DOTALL)
+
 # The exact instruction block from HalluGuard-Preferences-76k (its training
 # distribution). Kept verbatim -- do not "improve" it.
 INSTRUCTIONS = [
@@ -73,7 +89,12 @@ def build_prompt(doc: str, claim: str) -> str:
 
 def parse_verdict(text: str):
     """Return 1 (grounded), 0 (hallucinated), or None. Reads only after the
-    last </think> because models quote the format template while thinking."""
+    last </think> because models quote the format template while thinking.
+
+    STRICT: requires a fully well-formed <answer> block. This is the historical
+    parser and the one BASELINES.md's headline column was measured with -- do
+    not loosen it. Use parse_verdict_tolerant for the format-forgiving read.
+    """
     tail = text.rsplit("</think>", 1)[-1]
     cls = None
     for m in ANSWER_RE.finditer(tail):
@@ -84,15 +105,40 @@ def parse_verdict(text: str):
     return (1 if cls == "GROUNDED" else 0), cls
 
 
-def chat(base_url, model, prompt, max_tokens, timeout):
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0,
-            "max_tokens": max_tokens,
-        }
-    ).encode()
+def parse_verdict_tolerant(text: str):
+    """Return (pred, cls, how) where how is 'strict' | 'tag' | 'json' | None.
+
+    Same reading window as parse_verdict -- only after the last </think> -- so
+    a model reasoning about the template still cannot leak a verdict. The
+    difference is only in how much malformed markup around a valid
+    classification is forgiven. See the regex block above for why.
+    """
+    pred, cls = parse_verdict(text)
+    if cls is not None:
+        return pred, cls, "strict"
+    tail = text.rsplit("</think>", 1)[-1]
+    for how, rx in (("tag", CLASSIFICATION_TAG_RE), ("json", CLASSIFICATION_JSON_RE)):
+        cls = None
+        for m in rx.finditer(tail):
+            if m.group(1) in CLASSES:
+                cls = m.group(1)
+        if cls is not None:
+            return (1 if cls == "GROUNDED" else 0), cls, how
+    return None, None, None
+
+
+def chat(base_url, model, prompt, max_tokens, timeout, extra=None):
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens": max_tokens,
+    }
+    # Sampling/template controls the caller wants recorded as part of the
+    # protocol (repeat_penalty, enable_thinking, ...). Empty by default so the
+    # historical baseline protocol is unchanged unless a flag asks for it.
+    payload.update(extra or {})
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{base_url}/chat/completions",
         data=body,
@@ -200,10 +246,27 @@ def main() -> int:
     ap.add_argument("--max-tokens", type=int, default=2560)
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--repeat-penalty", type=float, default=None,
+                    help="llama-server repeat_penalty. Small models degenerate into "
+                         "repetition loops under greedy decoding and never emit a verdict.")
+    ap.add_argument("--no-think", action="store_true",
+                    help="disable the thinking block (chat_template_kwargs.enable_thinking=false). "
+                         "Measured 25-30x faster on the 0.8B and immune to the think-loop, but it "
+                         "is a DIFFERENT protocol from the committed baselines -- label runs accordingly.")
+    ap.add_argument("--no-save-responses", action="store_true",
+                    help="skip responses.jsonl. Default is to save: without the raw text a run "
+                         "cannot be re-scored offline, which is what forced a re-run on 2026-08-02.")
     args = ap.parse_args()
+
+    sampling = {}
+    if args.repeat_penalty is not None:
+        sampling["repeat_penalty"] = args.repeat_penalty
+    if args.no_think:
+        sampling["chat_template_kwargs"] = {"enable_thinking": False}
 
     os.makedirs(args.run_dir, exist_ok=True)
     results_path = os.path.join(args.run_dir, "results.jsonl")
+    responses_path = os.path.join(args.run_dir, "responses.jsonl")
     done = set()
     if os.path.exists(results_path):
         with open(results_path) as f:
@@ -218,24 +281,40 @@ def main() -> int:
 
     lock = threading.Lock()
     out_f = open(results_path, "a")
-    stats = {"done": 0, "parse_fail": 0, "errors": 0, "t0": time.time(), "completion_tokens": 0}
+    resp_f = None if args.no_save_responses else open(responses_path, "a")
+    stats = {"done": 0, "parse_fail": 0, "parse_fail_strict": 0, "rescued": 0,
+             "errors": 0, "t0": time.time(), "completion_tokens": 0, "truncated": 0}
 
     def work(item):
         prompt = build_prompt(item["doc"], item["claim"])
         try:
-            text, usage = chat(args.base_url, args.model, prompt, args.max_tokens, args.timeout)
+            text, usage = chat(args.base_url, args.model, prompt, args.max_tokens,
+                               args.timeout, sampling)
         except Exception as e:  # network/backend error: record, don't crash the run
             with lock:
                 stats["errors"] += 1
                 out_f.write(json.dumps({**{k: item[k] for k in ("id", "subset", "label")}, "pred": None, "error": str(e)[:200]}) + "\n")
                 out_f.flush()
             return
+        # `pred` stays STRICT so this column remains comparable with every
+        # committed baseline; the tolerant read is recorded alongside it.
         pred, cls = parse_verdict(text)
+        pred_t, cls_t, how = parse_verdict_tolerant(text)
+        ctoks = usage.get("completion_tokens") or 0
         with lock:
             stats["done"] += 1
-            stats["completion_tokens"] += usage.get("completion_tokens", 0)
+            stats["completion_tokens"] += ctoks
             if pred is None:
+                stats["parse_fail_strict"] += 1
+            if pred_t is None:
                 stats["parse_fail"] += 1
+            elif pred is None:
+                stats["rescued"] += 1
+            # Hitting the cap means the model never finished -- the repetition-loop
+            # signature. Counted separately from parse failure so the two causes
+            # stay distinguishable in the summary.
+            if ctoks >= args.max_tokens:
+                stats["truncated"] += 1
             out_f.write(
                 json.dumps(
                     {
@@ -244,17 +323,25 @@ def main() -> int:
                         "label": item["label"],
                         "pred": pred,
                         "cls": cls,
+                        "pred_tolerant": pred_t,
+                        "cls_tolerant": cls_t,
+                        "parse_mode": how,
                         "completion_tokens": usage.get("completion_tokens"),
                     }
                 )
                 + "\n"
             )
             out_f.flush()
+            if resp_f is not None:
+                resp_f.write(json.dumps({"id": item["id"], "text": text}) + "\n")
+                resp_f.flush()
             if stats["done"] % 25 == 0:
                 dt = time.time() - stats["t0"]
                 print(
                     f"{stats['done']}/{len(items)} | {stats['done']/dt*60:.1f} items/min | "
-                    f"parse_fail {stats['parse_fail']} | errors {stats['errors']}",
+                    f"parse_fail {stats['parse_fail']} (strict {stats['parse_fail_strict']}, "
+                    f"rescued {stats['rescued']}) | truncated {stats['truncated']} | "
+                    f"errors {stats['errors']}",
                     flush=True,
                 )
 
@@ -263,34 +350,63 @@ def main() -> int:
     with cf.ThreadPoolExecutor(max_workers=args.concurrency) as ex:
         list(ex.map(work, items))
     out_f.close()
+    if resp_f is not None:
+        resp_f.close()
 
     # summarize everything on disk (including prior resumed rows)
-    rows = []
-    with open(results_path) as f:
-        for line in f:
-            try:
-                r = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if "error" not in r:
-                # parse failure scores as incorrect: pred forced to wrong label
-                if r["pred"] is None:
-                    r = {**r, "pred": 1 - r["label"]}
-                rows.append(r)
-    by_subset = collections.defaultdict(list)
-    for r in rows:
-        by_subset[r["subset"]].append(r)
+    rows, rows_t = [], []
+    for line in open(results_path):
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if "error" in r:
+            continue
+        # A parse failure scores as incorrect: pred forced to the wrong label.
+        # In production an unparseable verdict IS a failed verification, so the
+        # strict column stays the floor the fleet actually experiences.
+        rows.append({**r, "pred": 1 - r["label"]} if r["pred"] is None else r)
+        # Older results.jsonl rows predate the tolerant parser and carry no
+        # pred_tolerant key; fall back to strict so resumed runs still summarize.
+        pt = r.get("pred_tolerant", r["pred"])
+        rows_t.append({**r, "pred": 1 - r["label"] if pt is None else pt})
+
+    def by_sub(rs):
+        d = collections.defaultdict(list)
+        for r in rs:
+            d[r["subset"]].append(r)
+        return {ds: bacc(v) for ds, v in sorted(d.items())}
+
+    def macro(sub):
+        return round(sum(v["bacc"] for v in sub.values()) / max(len(sub), 1), 2)
+
     summary = {
         "base_url": args.base_url,
         "source": args.source,
         "per_subset": args.per_subset,
         "seed": args.seed,
-        "subsets": {ds: bacc(v) for ds, v in sorted(by_subset.items())},
+        # The protocol is part of the result. A run with --no-think or a
+        # repeat_penalty is NOT comparable to one without; record it so a future
+        # reader never has to infer it from a shell history.
+        "protocol": {
+            "model": args.model,
+            "max_tokens": args.max_tokens,
+            "temperature": 0.0,
+            "sampling_overrides": sampling or None,
+        },
+        "subsets": by_sub(rows),
     }
-    summary["macro_avg_bacc"] = round(
-        sum(v["bacc"] for v in summary["subsets"].values()) / max(len(summary["subsets"]), 1), 2
-    )
-    summary["parse_failures"] = stats["parse_fail"]
+    summary["macro_avg_bacc"] = macro(summary["subsets"])
+    summary["subsets_tolerant"] = by_sub(rows_t)
+    summary["macro_avg_bacc_tolerant"] = macro(summary["subsets_tolerant"])
+    summary["parse"] = {
+        "failures_strict": stats["parse_fail_strict"],
+        "failures_tolerant": stats["parse_fail"],
+        "rescued_by_tolerant": stats["rescued"],
+        "hit_max_tokens": stats["truncated"],
+        "scored": len(rows),
+    }
+    summary["parse_failures"] = stats["parse_fail_strict"]  # back-compat key
     summary["errors"] = stats["errors"]
     with open(os.path.join(args.run_dir, "summary.json"), "w") as f:
         json.dump(summary, f, indent=2)

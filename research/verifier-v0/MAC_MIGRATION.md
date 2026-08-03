@@ -9,6 +9,35 @@ trains, Halo serves.** This document is the move.
 §4 assumed 10–25 sustained TFLOPS on gfx1151; measured is 2.7 (Mac 9.0). The spec
 has not been edited — that is the spec owner's call.
 
+> **DONE 2026-08-02 — all five §5 checks pass. Read
+> `findings/M2_MAC_MIGRATION_OUTCOME.md` before acting on §0, §1, or §4;
+> it corrects all three from measurement.**
+>
+> - **§0 is wrong for this box.** The Mac's `orpo-76k` was never stale or
+>   contaminated: the pre-re-fix and re-fixed contamination reports flag the
+>   *identical* 34 rows, and a rebuild came out byte-identical. §0's own check
+>   (`train == 74674`) could not have detected either outcome — the stale build
+>   reported the same numbers. Compare report row-id *sets* instead.
+> - **§1's transfer blocker is resolved.** Route 2 works; the recipe was just
+>   missing that `http.server`'s CWD is the URL root. The Halo served the repo
+>   root, so `curl -O .../orpo_pairs.jsonl` saved a 404 page under the dataset's
+>   filename — 460 bytes that `wc -l` happily reported as 18 lines. Real path:
+>   `/research/verifier-v0/data/stream_b/all/orpo_pairs.jsonl`, 101 MB (not
+>   ~180 MB). Verified against `findings/M2_STREAM_B_LABELING.json` on rows,
+>   corpus, kind and label. **Stop the Halo's `http.server` — rooted at the repo
+>   it serves `.git/` and `.sovereign/` to the tailnet unauthenticated.**
+> - **§4's `max_prompt_length` re-check is complete and closed.**
+>   mlx-lm-lora has no such knob; it tail-truncates at `max_seq_length`, cutting
+>   the completion rather than the evidence. Measured at seq 4096: A 0.02%,
+>   B 0.00%. Carry one number forward instead: **Stream B runs 6x hotter than
+>   Stream A against a 2048 prompt cap (1.65% vs 0.28%)** — inert on MLX, live
+>   the moment M3 runs on TRL, where it would cut evidence out of B rows at six
+>   times A's rate and bias the mix study against B.
+>
+> Also settled: `data/orpo-ab` is built (93,693 / 1,000 / 1,000, B share
+> 0.1988); §5 check 5 reproduced at 40.82 s/it against M0's 54.79 (use 54.79
+> for planning — it is the only full-run measurement).
+
 ---
 
 ## 0. Read this first — the correctness trap

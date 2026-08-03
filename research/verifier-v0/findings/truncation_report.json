@@ -1,0 +1,49 @@
+{
+  "model": "Qwen/Qwen3.5-0.8B",
+  "max_seq_length": 4096,
+  "max_prompt_length": 2048,
+  "sample_per_stream": 6000,
+  "seed": 17,
+  "streams": {
+    "A (orpo-76k train)": {
+      "rows_total": 74674,
+      "rows_measured": 6000,
+      "prompt_tokens": {
+        "p50": 835,
+        "p90": 1235,
+        "p99": 1710,
+        "max": 2761
+      },
+      "prompt_plus_completion_tokens": {
+        "p50": 1816,
+        "p90": 2564,
+        "p99": 3200,
+        "max": 4212
+      },
+      "over_max_prompt": 17,
+      "over_max_prompt_pct": 0.283,
+      "over_max_seq": 1,
+      "over_max_seq_pct": 0.017
+    },
+    "B (stream_b pairs)": {
+      "rows_total": 19019,
+      "rows_measured": 6000,
+      "prompt_tokens": {
+        "p50": 823,
+        "p90": 1415,
+        "p99": 2481,
+        "max": 2637
+      },
+      "prompt_plus_completion_tokens": {
+        "p50": 985,
+        "p90": 1571,
+        "p99": 2648,
+        "max": 3134
+      },
+      "over_max_prompt": 99,
+      "over_max_prompt_pct": 1.65,
+      "over_max_seq": 0,
+      "over_max_seq_pct": 0.0
+    }
+  }
+}

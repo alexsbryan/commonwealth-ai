@@ -1783,9 +1783,16 @@ impl LocalCorpusManager {
 
     // ─── Watched-folder shims ────────────────────────────────────────
 
-    /// Snapshot of every registered `WatchedFolder` corpus. Used by
-    /// the daemon at startup (auto-resume) and by the
-    /// `corpus watch-list` CLI.
+    /// Snapshot of every registered `WatchedFolder` corpus — the
+    /// NARROW set, excluding obsidian vaults.
+    ///
+    /// Neither daemon auto-resume nor `corpus watch-list` uses this
+    /// (both take `list_reconcilable`, which also covers vaults); an
+    /// earlier version of this comment claimed they did, and acting
+    /// on that claim is how a swept-but-unlisted vault went unnoticed
+    /// for six days. Reach for this only when you specifically mean
+    /// "WatchedFolder source type" — e.g. an affordance that needs
+    /// `watched_config()` to exist.
     pub async fn list_watched(&self) -> Vec<LocalCorpusConfig> {
         self.corpora
             .read()
@@ -1818,7 +1825,7 @@ impl LocalCorpusManager {
     pub async fn pause_watched(&self, corpus_id: &str, reason: String) -> Result<()> {
         use super::watched::state::WatchedFolderState;
         use super::watched::status::WatchedFolderStatus;
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let state_dir = self.engine_index_dir().join(corpus_id);
         let mut state = WatchedFolderState::load(&state_dir)?
             .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
@@ -1839,7 +1846,7 @@ impl LocalCorpusManager {
     pub async fn resume_watched(&self, corpus_id: &str) -> Result<()> {
         use super::watched::state::WatchedFolderState;
         use super::watched::status::WatchedFolderStatus;
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let state_dir = self.engine_index_dir().join(corpus_id);
         let mut state = WatchedFolderState::load(&state_dir)?
             .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
@@ -1964,7 +1971,7 @@ impl LocalCorpusManager {
         doc_id: &str,
         preview_chars: usize,
     ) -> Result<(usize, Option<String>)> {
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let info = self
             .engine
             .installed_indexes()
@@ -2033,7 +2040,7 @@ impl LocalCorpusManager {
     pub async fn confirm_pending_deletion(&self, corpus_id: &str) -> Result<()> {
         use super::watched::state::WatchedFolderState;
         use super::watched::status::WatchedFolderStatus;
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let state_dir = self.engine_index_dir().join(corpus_id);
         let mut state = WatchedFolderState::load(&state_dir)?
             .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
@@ -2069,7 +2076,7 @@ impl LocalCorpusManager {
         corpus_id: &str,
     ) -> Result<super::watched::status::WatchedFolderStatus> {
         use super::watched::state::WatchedFolderState;
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let state_dir = self.engine_index_dir().join(corpus_id);
         let state = WatchedFolderState::load(&state_dir)?
             .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
@@ -2085,7 +2092,7 @@ impl LocalCorpusManager {
         corpus_id: &str,
     ) -> Result<super::watched::state::WatchedFolderState> {
         use super::watched::state::WatchedFolderState;
-        let _cfg = self.require_watched(corpus_id).await?;
+        let _cfg = self.require_reconcilable(corpus_id).await?;
         let state_dir = self.engine_index_dir().join(corpus_id);
         Ok(WatchedFolderState::load(&state_dir)?
             .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id)))
@@ -2132,6 +2139,37 @@ impl LocalCorpusManager {
         if !cfg.source_type.is_watched() {
             return Err(Error::Execution(format!(
                 "corpus '{corpus_id}' is not a watched folder"
+            )));
+        }
+        Ok(cfg)
+    }
+
+    /// Like `require_watched`, but gates on `should_reconcile()` — the
+    /// set the sweep worker actually dispatches, which is watched
+    /// folders *and* obsidian vaults.
+    ///
+    /// Every surface that REPORTS ON or CONTROLS sweeping must use
+    /// this, not `require_watched`. A vault is swept by the same
+    /// worker on the same cadence, so answering "corpus 'X' is not a
+    /// watched folder" for one is not a type distinction — it is a
+    /// lie about a corpus the scheduler is touching every two
+    /// minutes. On 2026-08-02 that answer hid an obsidian vault that
+    /// had been sitting in a tripped deletion guard since 2026-07-27:
+    /// `watch-status` denied it existed and `watch-list` omitted it,
+    /// so every operator-facing surface reported "nothing here" while
+    /// the corpus was stuck.
+    ///
+    /// `request_manual_sync` deliberately keeps `require_watched` —
+    /// sync_mode is a `WatchedFolderConfig` field and vaults are
+    /// always Continuous, so there is nothing for it to toggle.
+    async fn require_reconcilable(&self, corpus_id: &str) -> Result<LocalCorpusConfig> {
+        let cfg = self
+            .get(corpus_id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{corpus_id}' not registered")))?;
+        if !cfg.source_type.should_reconcile() {
+            return Err(Error::Execution(format!(
+                "corpus '{corpus_id}' is not a watched folder or vault"
             )));
         }
         Ok(cfg)

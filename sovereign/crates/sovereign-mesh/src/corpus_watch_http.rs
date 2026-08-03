@@ -526,7 +526,16 @@ async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoRe
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
 
-    let corpora = manager.list_watched().await;
+    // `list_reconcilable`, NOT `list_watched`: this endpoint answers
+    // "what is the daemon keeping in sync?", and the scheduler seeds
+    // itself from the reconcilable set (watched folders + obsidian
+    // vaults) in `watched_folder_setup::WatchedSubsystem::install`.
+    // Listing the narrower set meant an actively-swept vault never
+    // appeared here — including one parked in a tripped deletion
+    // guard for six days (2026-08-02). The listing surface and the
+    // dispatch surface must read the same set or the operator view
+    // is fiction.
+    let corpora = manager.list_reconcilable().await;
     let mut entries = Vec::with_capacity(corpora.len());
     for cfg in corpora {
         let status = manager

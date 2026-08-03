@@ -229,6 +229,13 @@ fn walk_one_root(
     prior_meta: &HashMap<String, EntryRecord>,
     exclude_globs: &[String],
 ) -> std::io::Result<WalkOutcome> {
+    // A sweep must PROVE it can list this root before it walks it.
+    // `PreScanner` swallows traversal errors per-entry, so a root the
+    // process cannot read yields a successful walk that found
+    // nothing — and `compute_diff` reads "nothing" as "the user
+    // deleted every file". See `preflight_root_listable`.
+    preflight_root_listable(root_path)?;
+
     let scanner = PreScanner::with_root(config, root_path);
     let raw = scanner.run_blocking(|_, _| {});
     let visited = raw.total_visited as usize;
@@ -392,6 +399,74 @@ pub fn build_sovereignignore_matcher(root: &Path) -> Option<ignore::gitignore::G
     }
 }
 
+/// Prove a watched root can actually be LISTED, before any code is
+/// allowed to draw a conclusion from what the walk did or didn't find.
+///
+/// The failure this exists to stop: on macOS, TCC denies `read_dir`
+/// on `~/Documents` to a process whose responsible app holds no
+/// grant. `exists()` and `is_dir()` both still answer `true` — only
+/// the listing fails. `PreScanner` handles traversal errors per-entry
+/// and keeps going, so the walk returns `Ok` with an empty snapshot,
+/// `compute_diff` sees every known doc missing, and the sweep reports
+/// `removed: N / live_before: N`. On 2026-08-02 an obsidian vault of
+/// 321 live docs did exactly this; only the deletion guard's absolute
+/// threshold stopped the index being wiped, and a host configured
+/// with `--no-deletion-guard` would have lost it outright.
+///
+/// The same shape covers an unmounted external drive or a network
+/// share that dropped — "the folder is unreachable" must never be
+/// mistaken for "the user deleted its contents".
+///
+/// Deliberately NOT a check for zero entries: an empty folder is a
+/// legitimate state and a real deletion must still flow through the
+/// guard. Listing success is precisely the axis on which a permission
+/// failure and a genuine deletion differ.
+/// Tuned to fire ONLY on the "cannot list this at all" signature, so
+/// the working path is untouched: any single readable entry proves
+/// the listing works and returns `Ok` immediately, and a genuinely
+/// empty directory is `Ok` too. It errors only when the listing
+/// yielded no readable entry AND at least one hard error — which a
+/// dangling symlink or one odd file cannot produce.
+fn preflight_root_listable(root: &Path) -> std::io::Result<()> {
+    let with_context = |e: std::io::Error| {
+        std::io::Error::new(
+            e.kind(),
+            format!(
+                "cannot list watched root {}: {e}. The sweep was stopped rather than \
+                 treating an unreadable folder as an emptied one. Common causes: the \
+                 folder was moved or its drive unmounted, or (macOS) the process \
+                 holds no TCC grant for this location — a grant is attached to the \
+                 responsible GUI app, so a daemon started from a terminal has its \
+                 own, separate from the desktop app's.",
+                root.display()
+            ),
+        )
+    };
+
+    // `read_dir` opens the handle; on some platforms a denial only
+    // surfaces when entries are actually read. Check both.
+    let iter = std::fs::read_dir(root).map_err(with_context)?;
+    let mut first_error = None;
+    for entry in iter {
+        match entry {
+            // One readable entry is proof enough — stop here rather
+            // than paying a full directory scan every sweep.
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+        }
+    }
+    match first_error {
+        Some(e) => Err(with_context(e)),
+        // Genuinely empty: a legitimate state. Let the diff and the
+        // deletion guard handle it as a real deletion.
+        None => Ok(()),
+    }
+}
+
 fn read_metadata(path: &Path) -> std::io::Result<(i64, u64)> {
     let m = std::fs::metadata(path)?;
     let mtime = m
@@ -450,6 +525,76 @@ mod tests {
             Some("sub/a.md")
         );
         assert_eq!(doc_id_for(&r, &PathBuf::from("/elsewhere/x")), None);
+    }
+
+    /// The load-bearing one: an unreadable root must ERROR, never
+    /// return an empty snapshot. An empty snapshot is what
+    /// `compute_diff` turns into "every known doc was removed" — the
+    /// 2026-08-02 obsidian vault reported `removed: 321 /
+    /// live_before: 321` from exactly this path, with the source
+    /// files untouched on disk the whole time.
+    #[cfg(unix)]
+    #[test]
+    fn walk_errors_rather_than_reporting_an_unreadable_root_as_empty() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("vault");
+        write(&root.join("a.md"), "hello");
+        write(&root.join("b.md"), "world");
+
+        // Sanity: readable root walks normally.
+        let cfg = watched_cfg(&root);
+        let prior = HashMap::new();
+        assert_eq!(walk_folder(&cfg, &prior, &[]).unwrap().snapshot.len(), 2);
+
+        // Strip read permission — the closest local analogue of a
+        // macOS TCC denial, where the files remain present and the
+        // listing is what fails.
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o000)).unwrap();
+        let result = walk_folder(&cfg, &prior, &[]);
+        // Restore before asserting so a failure can't leave an
+        // undeletable temp dir behind.
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Matched rather than `expect_err` — `WalkOutcome` is not
+        // `Debug`, and deriving it on a production type just to
+        // phrase a test assertion is the wrong trade.
+        let err = match result {
+            Ok(out) => panic!(
+                "an unreadable root must be an error — returning Ok with {} entries is what \
+                 makes a permission failure indistinguishable from a mass deletion",
+                out.snapshot.len()
+            ),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("cannot list watched root"),
+            "error should name the unreadable root, got: {err}"
+        );
+    }
+
+    #[test]
+    fn preflight_accepts_a_genuinely_empty_directory() {
+        // An empty folder is a LEGITIMATE state — the user really may
+        // have deleted everything. The deletion guard, not this
+        // check, is what adjudicates that.
+        let dir = tempdir().unwrap();
+        assert!(preflight_root_listable(dir.path()).is_ok());
+
+        let cfg = watched_cfg(dir.path());
+        let out = walk_folder(&cfg, &HashMap::new(), &[]).unwrap();
+        assert!(out.snapshot.is_empty());
+    }
+
+    #[test]
+    fn preflight_rejects_a_root_that_does_not_exist() {
+        // A moved folder or an unmounted drive is "unreachable", not
+        // "emptied by the user".
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("never-existed");
+        let err = preflight_root_listable(&missing).expect_err("missing root must error");
+        assert!(err.to_string().contains("cannot list watched root"));
     }
 
     #[test]

@@ -2345,6 +2345,37 @@ fn parse_segment_title_lines(text: &str) -> Vec<(String, SectionFunction)> {
 /// Errors are logged and swallowed: the T2 skeleton is the durable
 /// retrieval surface, RAPTOR is additive. A RAPTOR build failure
 /// degrades briefing quality at Ready but never breaks attach.
+/// Env knob that skips the T3 motif pass. See [`motifs_disabled`].
+pub const SKIP_MOTIFS_ENV: &str = "SOVEREIGN_SKIP_MOTIFS";
+
+/// Ablation knob: build the RAPTOR tree but skip the motif index.
+///
+/// Motif extraction is **42.8% of time-to-enriched on the folder/vault
+/// path** (measured 2026-08-02: 22.3m of a 52m03s cold build of a
+/// 330-note vault), and its output table `conv_motifs` has one INSERT
+/// and two DELETEs in this workspace and **no reader** — no
+/// `list_conv_motifs`, no method on `ConvTieredReader`, no SELECT in
+/// any file. The `conv_tiered_provider` comment claiming motifs feed
+/// briefing signposts describes `CONV_TIERED_PORT.md:385`, which is
+/// future tense and was never built for the conv/vault side. (The
+/// attached-document briefing DOES render motifs, but from
+/// `asset_motifs` — a different table on a different surface, and it
+/// is not what this flag turns off by default.)
+///
+/// This exists so that claim is **falsifiable** rather than asserted:
+/// build the same vault with the pass off and score the same bank. A
+/// non-zero retrieval delta means something reads them after all and
+/// the 42.8% is not free.
+///
+/// Off by default; `svrn bench vault-report --no-motifs` sets it for
+/// the duration of one measured build.
+pub fn motifs_disabled() -> bool {
+    matches!(
+        std::env::var(SKIP_MOTIFS_ENV).ok().as_deref(),
+        Some("1") | Some("true")
+    )
+}
+
 /// Pure corpus-free RAPTOR + motif builder. Takes pre-fetched chunks
 /// + embeddings and returns the artifacts the persistent variants
 /// (attached-doc `build_and_persist_raptor_atlas`, folder

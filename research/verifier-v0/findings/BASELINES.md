@@ -52,6 +52,24 @@ verification, so strict is the floor the fleet actually experiences.
 (Strict is also *harsher* than production, which would map parse failures to
 one consistent side rather than adversarially to the wrong label.)
 
+> **AMENDED 2026-08-02 — most "parse failures" were correct verdicts.**
+> `M2_MAC_MIGRATION_OUTCOME.md §7` traced the failure mode: `ANSWER_RE`
+> demanded a fully well-formed `<answer>` block, so a right classification
+> wrapped in a typo'd closing tag was discarded. On the 0.8B probe **only 19%
+> of responses were strictly well-formed**, and a tolerant parser recovered
+> 130 of 132 strict failures. The excl-pf column above therefore *excluded*
+> rows that should have been *scored* — meaning 76.76 is a mix of "the model
+> was right" and "the model was unreadable", and the true 4B number sits at
+> or above it.
+>
+> **These 4B numbers were not re-derived**, because `results.jsonl` stored
+> only parsed verdicts and not the raw text, so re-scoring needs a ~6 h
+> re-run rather than an offline re-parse. `eval_grounding.py` now persists
+> `responses.jsonl` by default so this is never true again. Treat the table
+> above as a floor for the 4B, and do not compare it to any run made with
+> `--no-think` — that is a different protocol, and `summary.json` now records
+> which one a run used.
+
 Not a contributor: contamination (0 canaries, 34 shared-source rows dropped
 from Stream A — `findings/contamination_report.json`).
 
