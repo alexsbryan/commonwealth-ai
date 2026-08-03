@@ -497,13 +497,53 @@ it replaces folklore, which is the trade this whole roadmap wants.
    Scoring extractors by **entity** rather than by **mention** reported
    clean parity for a backend getting a third of its rows wrong;
    `chunk_entities` is a mention table (`bench/gliner/README.md`).
-2. **Concept-graph free tier (LazyGraphRAG's index).** A deterministic
+2. **Concept-graph free tier (LazyGraphRAG's index). FEASIBILITY
+   MEASURED AND PASSED 2026-07-31 — NOT BUILT.** A deterministic
    noun-phrase/co-occurrence concept graph + graph-statistic communities
    as the *universal* baseline enrichment for every corpus — built at
    ingest for roughly embedding cost, feeding: community entry points
    for retrieval, seed vocabulary for Phase-1, and the lazy query tier
    (P5). `structure_first` proved the pattern for code (51K articles,
    <1 min, no LLM); this is its text-corpus sibling.
+
+   **What SP5 measured** (note `889908e9`;
+   `research/enrichment-spikes/findings/SP5_concept_graph.md`; probe
+   `corpus-engine/examples/concept_graph_probe.rs`, committed — and it
+   IS the first draft of the layer). Pipeline: RAKE-style noun-phrase
+   candidates + capitalization runs → df-band/tf-idf top-5k vocabulary →
+   df-normalized chunk co-occurrence edges → Leiden.
+
+   - **5.2 s wall for 10,000 wikipedia chunks** (337 articles), debug
+     build, single core, against a <5 min exit gate — **57x headroom**.
+   - **68 communities** at resolution 2.0; **17 of the 20 largest**
+     eyeball-cohere against article titles, 3 mixed.
+   - **Adopt-or-write verdict is both.** Adopt `leiden-rs` 0.8.1
+     (MIT/Apache-2.0, dependency-tiny core, takes a CSR edge list via
+     `GraphDataBuilder`; skip its petgraph adapter, which wants ^0.8
+     against our 0.6 pin). Write the noun-phrase/co-occurrence layer
+     ourselves — roughly 250 lines.
+   - **Two tunings were load-bearing.** The motif single-doc df band
+     (0.3) admits corpus-generic vocabulary at 10k scale, so 0.05 cap +
+     a calendar-term stoplist; and raw co-occurrence counts let hubs
+     dominate modularity, so df normalization — which is what sharpened
+     13 coarse communities into the 68 clean ones.
+   - Confidence Med → High. The entity-co-occurrence-only fallback is
+     **not** needed.
+
+   **Provenance caveat before production:** `leiden-rs` is hosted on a
+   gitcode.com mirror (~9.2k downloads) — vendor or pin-audit it. A
+   hand-rolled Louvain (~200 lines) stays the fallback, and the probe's
+   edge-list-in / partition-out seam keeps that swap local. Currently a
+   `corpus-engine` **dev-dependency only**.
+
+   **Before funding the build, answer what a USER gets.** A concept
+   graph is machinery. Its three declared consumers are retrieval entry
+   points (speculative), Phase-1 seed vocabulary (internal), and the P5
+   lazy query tier — whose only tested component **failed its gate**
+   (§P5.1). Cheap-and-proven-fast is not the same as connected. The
+   defensible reason to build it now is narrower and worth stating
+   plainly: it is the missing prerequisite for testing the query half in
+   its real form at all.
 3. **Wire the incremental machinery** (W4): flip
    `SOVEREIGN_ATLAS_INCREMENTAL` from read-but-unused to the default
    path via `apply_atom_delta`; route watched-folder deltas through the

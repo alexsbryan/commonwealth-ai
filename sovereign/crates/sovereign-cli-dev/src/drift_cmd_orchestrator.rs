@@ -272,6 +272,74 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         println!();
         println!("  ── narrative `{nid}` ──");
 
+        // ── source-change invalidation ───────────────────────────────
+        // Every stage below — corpus chunks (4b), enrichment config +
+        // chapters (4c), the narrative atlas (4d), the cross-corpus edges
+        // (4e) — is cached on EXISTENCE alone. Not one of them ever asked
+        // whether the narrative document still says what it said when they
+        // were built, so a drift run over an edited document silently
+        // re-reported the previous run's conclusions.
+        //
+        // Measured 2026-08-03: the atlas for SYSTEM_OVERVIEW.md was built
+        // 2026-05-23 and reused through 65 days of edits, and the rendered
+        // findings section was BYTE-IDENTICAL across that whole span —
+        // while `write_fingerprint` at the end of each run recorded the
+        // CURRENT document hash. Claiming a document was analysed when it
+        // was skipped is ARCH §18.3 (never silently substitute), sitting
+        // inside the one tool whose entire job is catching stale claims.
+        //
+        // Invalidate the chain in ONE place rather than teaching four cache
+        // guards to hash: each stage already knows how to build itself when
+        // its artifacts are absent, so removing them is what makes all four
+        // honest. The two directories are exactly the pair this file's own
+        // partial-extract remediation already tells operators to wipe.
+        let atlas_source = narrative_source_hash_path(&nid);
+        let current_hash = sovereign_tools::hash_file(narrative_path).ok();
+        let built_from = std::fs::read_to_string(&atlas_source)
+            .ok()
+            .map(|s| s.trim().to_string());
+        let source_changed = match (&current_hash, &built_from) {
+            (Some(now), Some(then)) => now != then,
+            // Artifacts from before this check existed carry no provenance.
+            // We cannot show they came from today's text, so we do not get
+            // to assume it: rebuild once, and the chain stamps itself.
+            (Some(_), None) => true,
+            // The document cannot be hashed. Refuse to certify the cache.
+            (None, _) => true,
+        };
+        if source_changed && (corpus_exists(&nid) || atlas_has_content(&nid)) {
+            info!(
+                narrative_id = %nid,
+                narrative_path = %narrative_path.display(),
+                had_provenance = built_from.is_some(),
+                "drift_orchestrator:narrative_source_changed"
+            );
+            println!(
+                "    · `{}` changed since this narrative was built{} — \
+                 rebuilding corpus, chapters, atlas and cross-corpus edges",
+                narrative_path.display(),
+                if built_from.is_some() {
+                    ""
+                } else {
+                    " (no recorded source hash)"
+                }
+            );
+            for dir in [index_root(&nid), enrichment_root(&nid)] {
+                if dir.exists() {
+                    if let Err(e) = std::fs::remove_dir_all(&dir) {
+                        warn!(narrative_id = %nid, dir = %dir.display(), error = %e, "drift_orchestrator:narrative_invalidate_failed");
+                        eprintln!("✗ could not remove stale {} : {e}", dir.display());
+                        eprintln!(
+                            "  Remove it by hand and re-run; reporting against it would \
+                             describe the document as it was, not as it is."
+                        );
+                        return 1;
+                    }
+                }
+            }
+            let _ = std::fs::remove_file(cross_corpus_path(&nid));
+        }
+
         // 4a: stamp recipe (idempotent).
         if !ensure_recipe(&nid, narrative_path) {
             warn!(narrative_id = %nid, "drift_orchestrator:narrative_recipe_stamp_failed");
@@ -340,6 +408,11 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         }
 
         // 4d: build atlas (with auto-recovery for partial extract).
+        //
+        // `source_changed` is decided once, above, for the whole derived
+        // chain — see the source-change invalidation block. By the time we
+        // get here a changed document has already had its artifacts
+        // removed, so this reads as an ordinary cold build.
         if !atlas_has_content(&nid) {
             info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_start");
             println!("    → building narrative atlas (LLM, ~5-30 min)…");
@@ -405,9 +478,20 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             } else {
                 info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_done");
             }
+            // Stamp what this atlas was built FROM, so the next run can TELL
+            // staleness rather than assume freshness. Failing to write is not
+            // fatal: it costs one extra rebuild next run, which is the safe
+            // direction for this check to fail in.
+            if let Some(h) = &current_hash {
+                if let Err(e) = std::fs::write(&atlas_source, h) {
+                    warn!(narrative_id = %nid, error = %e, "drift_orchestrator:narrative_source_hash_write_failed");
+                    eprintln!("⚠ could not record the narrative source hash for {nid}: {e}");
+                    eprintln!("  The next run will rebuild this atlas rather than trust it.");
+                }
+            }
         } else {
             debug!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_cached");
-            println!("    · narrative atlas exists (cached)");
+            println!("    · narrative atlas exists (cached, doc unchanged)");
         }
         narrative_atlas_ids.push(nid.clone());
 
@@ -851,6 +935,33 @@ fn atlas_atoms_path(corpus_id: &str) -> PathBuf {
         .join(corpus_id)
         .join("atlas")
         .join("atoms.json")
+}
+
+/// Per-corpus index directory: chunks, LanceDB index, `chapters.json`
+/// and the `atlas/` subtree.
+fn index_root(corpus_id: &str) -> PathBuf {
+    sovereign_root().join("indexes").join(corpus_id)
+}
+
+/// Per-corpus enrichment directory: `config.json`, chapter cache, runs.
+fn enrichment_root(corpus_id: &str) -> PathBuf {
+    sovereign_root().join("enrichment").join(corpus_id)
+}
+
+/// Where a narrative atlas records the SHA-256 of the document it was
+/// built from.
+///
+/// Provenance, not a cache key for its own sake: without it the only
+/// question the orchestrator could ask was "does an atlas exist", which
+/// is why one built on 2026-05-23 was still being reported against a
+/// document edited 65 days later. Lives beside `atoms.json` so it is
+/// removed by the same `rm -rf` that wipes the atlas.
+fn narrative_source_hash_path(corpus_id: &str) -> PathBuf {
+    sovereign_root()
+        .join("indexes")
+        .join(corpus_id)
+        .join("atlas")
+        .join(".source_sha256")
 }
 
 /// True only when the atlas has actually been BUILT, not just

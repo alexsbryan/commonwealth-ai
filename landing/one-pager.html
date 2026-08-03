@@ -67,6 +67,9 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 .sov-body code { background: oklch(0.93 0.015 290); border-radius: 3px; padding: 1px 5px; font-size: 12.5px; }
 .sov-aside { font-size: 12px; line-height: 1.75; color: var(--sov-ink-soft); max-width: 66ch; border-left: 2px solid var(--sov-gold-deep); padding-left: 14px; margin: 20px 0 0; }
 
+.sov-demo { margin: 0; max-width: 800px; }
+.sov-demo video { display: block; width: 100%; height: auto; border-radius: var(--border-radius-md); border: 1px solid var(--sov-purple-deep); box-shadow: 0 12px 40px oklch(0.16 0.11 290 / 0.18); }
+.sov-demo figcaption { font-size: 11.5px; line-height: 1.65; color: var(--sov-ink-soft); margin-top: 12px; max-width: 66ch; }
 .sov-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 22px 0 0; }
 .sov-card { border: 0.5px solid var(--sov-rule); border-radius: var(--border-radius-md); padding: 14px 16px; background: color-mix(in oklch, var(--sov-paper) 92%, var(--sov-purple)); }
 .sov-card h3 { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--sov-purple-deep); margin: 0 0 6px; }
@@ -135,6 +138,13 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 <p>After over a decade in software, I quit my job at a startup and wrote a novel. I love Russian literature, so I ended up writing something as long as Anna Karenina. I went as far away from software as possible, but when local AI got interesting, I wanted to play around. I also needed motivation for a fifth revision, so I did everything you were supposed to do: Ollama, OpenWebUI, a RAG pipeline, eight hours of chunking my own book. Then I nervously asked for a summary, the payoff for all the work, the culmination of all the AI hype. It picked five chunks that looked similar, bluffed, then the response cutoff in the middle of a sentence. I think there were some stray Chinese characters. Underwhelming. This project comes from that moment. It's why the knowledge layer builds <strong>RAPTOR</strong> trees — summaries of summaries, climbing from passages to themes — so "what is this book about" is answered from the shape of the whole, not whichever pieces happened to embed nearby.</p>
 <p>Once upon a time, I built music applications for a tens of millions of daily users. That taught me a lot about the importance of the product layer. I couldn't find a satisfying product layer for open weights, one meant to be navigated by humans, so I built what felt right to me. So the stack is opinionated on purpose, and the opinions are the point — they're what lets a zoo of models, Qwen to Gemma to GLM, converge on one behavior. The bet is called <a href="/situated-agent"><strong>the situated agent</strong></a>: don't ask a 27B model to be a genius from a cold start. Assemble what it should already know — who's asking, what the project is, what was decided, what's still open — before the first token, and verify the claims after the last one. Capacity goes to expression, not discovery. The benches exist to keep that bargain honest, model by model.</p>
 </div>
+</section>
+
+<section class="sov-section">
+<figure class="sov-demo">
+<video src="/demo/b1-determinism.mp4" autoplay loop muted playsinline width="1000" height="625" aria-label="The svrn desktop app answering a philosophy question end to end, sped up: the question is typed, sources are retrieved from local corpora, the answer streams with inline source tags on each claim, and it closes on an honest 'partly verified — mixed sources' verdict"></video>
+<figcaption>One question, end to end, at 8x: typed, retrieved from local corpora, streamed with a source tag on every claim — and when the evidence is mixed, it says <em>partly verified</em> instead of pretending.</figcaption>
+</figure>
 </section>
 
 <section class="sov-section">

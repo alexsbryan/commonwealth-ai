@@ -16,8 +16,20 @@
         "baseURL": "http://localhost:9741/v1"
       },
       "models": {
-        "auto": {
-          "name": "Commonwealth (auto-routed)"
+        "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL": {
+          "name": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+        },
+        "commonwealth/primary": {
+          "name": "commonwealth/primary"
+        },
+        "primary": {
+          "name": "primary"
+        },
+        "commonwealth/fast": {
+          "name": "commonwealth/fast"
+        },
+        "fast": {
+          "name": "fast"
         }
       }
     }

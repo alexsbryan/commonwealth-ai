@@ -218,7 +218,16 @@ pub fn write_fingerprint(
     Ok(out)
 }
 
-fn hash_file(path: &Path) -> std::io::Result<String> {
+/// SHA-256 of a file's bytes, hex-encoded.
+///
+/// Public because the drift orchestrator needs the SAME hash to decide
+/// whether a cached narrative atlas was built from the document it is
+/// about to be reported against. Two implementations of one key is the
+/// §10.6 smell, and here it would be worse than untidy: the fingerprint
+/// written at the end of a run and the staleness check made at the start
+/// must agree on what "this document changed" means, or the report can
+/// assert it analysed a document it skipped.
+pub fn hash_file(path: &Path) -> std::io::Result<String> {
     let bytes = std::fs::read(path)?;
     let mut h = Sha256::new();
     h.update(&bytes);

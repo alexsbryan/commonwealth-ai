@@ -104,8 +104,8 @@ pub use code::SpecTool;
 pub use code::SymbolLookupTool;
 #[cfg(feature = "treesitter")]
 pub use code::{
-    compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
-    PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
+    compute_posture, hash_file, write_fingerprint, DriftFingerprint, DriftPosture,
+    DriftPostureTool, PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
 pub use code::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
 #[cfg(feature = "treesitter")]

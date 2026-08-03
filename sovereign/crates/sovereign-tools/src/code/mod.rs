@@ -235,8 +235,8 @@ pub use capability_posture::CapabilityPostureTool;
 pub use drift::DriftTool;
 #[cfg(feature = "treesitter")]
 pub use drift_posture::{
-    compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
-    PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
+    compute_posture, hash_file, write_fingerprint, DriftFingerprint, DriftPosture,
+    DriftPostureTool, PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
 #[cfg(feature = "treesitter")]
 pub use get_lint_output::GetLintOutputTool;
