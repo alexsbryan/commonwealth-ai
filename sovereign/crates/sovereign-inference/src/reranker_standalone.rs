@@ -54,6 +54,44 @@ pub struct StandaloneReranker {
     slot: Arc<RerankSlot>,
 }
 
+/// Load the reranker named by `SOVEREIGN_RERANK_MODEL_PATH`, if any.
+///
+/// **One loader for every shipping surface.** The CLI, the desktop and
+/// the hub server all reach the reranker through here, so "is a
+/// reranker installed?" has one answer per process instead of three
+/// (ARCH_PRINCIPLES §10.6). Pair the result with
+/// `sovereign_tools::corpus::rerank_config_from_env()`, which resolves
+/// the matching `SOVEREIGN_RERANK_*` knobs.
+///
+/// Soft-fail by contract: an unset variable returns `None` quietly (a
+/// reranker is opt-in), and a set-but-unloadable path returns `None`
+/// after a `warn`. Neither may block startup — retrieval simply runs
+/// the baseline fusion path. The failure IS logged, though: a
+/// misconfigured path that silently reads as "no reranker configured"
+/// is the ambiguity this function exists to remove.
+pub fn load_from_env() -> Option<Arc<dyn InferenceProvider>> {
+    let raw = std::env::var("SOVEREIGN_RERANK_MODEL_PATH").ok()?;
+    let path = std::path::PathBuf::from(&raw);
+    match StandaloneReranker::load(&path, ModelFamily::Reranker, None) {
+        Ok(reranker) => {
+            tracing::info!(
+                path = %path.display(),
+                "reranker loaded from SOVEREIGN_RERANK_MODEL_PATH"
+            );
+            Some(Arc::new(reranker) as Arc<dyn InferenceProvider>)
+        }
+        Err(e) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %e,
+                "SOVEREIGN_RERANK_MODEL_PATH is set but the reranker failed to load — \
+                 running baseline retrieval without rerank"
+            );
+            None
+        }
+    }
+}
+
 impl StandaloneReranker {
     /// Load a reranker GGUF and wrap it in an `InferenceProvider`.
     ///

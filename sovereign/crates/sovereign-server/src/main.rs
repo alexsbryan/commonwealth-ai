@@ -634,6 +634,19 @@ async fn main() {
             );
         }
     }
+    // Cross-encoder reranker (T1 A2). Until 2026-08-03 the ONLY
+    // surface that installed one was the `svrn chat` CLI, so the hub
+    // server and the desktop shipped baseline fusion ordering while
+    // the ledger recorded the capability as available — and
+    // `SOVEREIGN_PPR_EXPAND` logged "lane dark" here because its
+    // admission gate needs the same `rerank_fn`. Opt-in via
+    // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
+    if let Some(reranker) = sovereign_inference::reranker_standalone::load_from_env() {
+        runtime_builder = runtime_builder.with_rerank(
+            sovereign_tools::corpus::inference_to_rerank_fn(reranker),
+            sovereign_tools::corpus::rerank_config_from_env(),
+        );
+    }
     // Install the landscape-digest provider only when KnowledgeView
     // is enabled. When disabled, the splice path stays a no-op —
     // identical to pre-KnowledgeView behaviour.

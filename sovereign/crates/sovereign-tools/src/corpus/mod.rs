@@ -33,6 +33,102 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
     })
 }
 
+/// Allow-list of `corpus_id`s eligible for the per-article dedup pass,
+/// read from `SOVEREIGN_RERANK_DEDUP_CORPORA`.
+///
+/// An explicitly empty string means "no filter" (apply to all corpora,
+/// the original cross-corpus ablation behaviour); an unset variable
+/// means the shipped default of `{sep}`. Those are different answers,
+/// which is why this cannot collapse to `unwrap_or_default`.
+pub fn rerank_dedup_filter_from_env() -> Option<std::collections::HashSet<String>> {
+    match std::env::var("SOVEREIGN_RERANK_DEDUP_CORPORA") {
+        Ok(s) if s.is_empty() => None,
+        Ok(s) => Some(
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect(),
+        ),
+        Err(_) => Some(["sep".to_string()].into_iter().collect()),
+    }
+}
+
+/// Which chunk wins per article during dedup: `fused` (default, RRF /
+/// blended-score order) or `vector` (cosine distance to the query).
+pub fn rerank_dedup_picker_from_env() -> corpus_engine::DedupPicker {
+    match std::env::var("SOVEREIGN_RERANK_DEDUP_PICKER")
+        .as_deref()
+        .unwrap_or("fused")
+    {
+        "vector" | "vector_distance" => corpus_engine::DedupPicker::VectorDistance,
+        _ => corpus_engine::DedupPicker::FusedScore,
+    }
+}
+
+/// Resolve the full `SOVEREIGN_RERANK_*` environment into a
+/// [`corpus_engine::RerankConfig`].
+///
+/// **One decider for the rerank knobs.** The CLI, the daemon and the
+/// desktop all resolve them here, so the three surfaces cannot answer
+/// "what is `candidates_k`?" differently (ARCH_PRINCIPLES §10.6). It
+/// traces the resolved config at `info` so an operator can see what a
+/// running process actually decided without attaching a debugger —
+/// previously only the CLI printed this, and only to stderr.
+///
+/// `SOVEREIGN_RERANK_GATE_ONLY=1` installs the rerank *function* for
+/// consumers like the PPR admission gate (`SOVEREIGN_PPR_EXPAND`)
+/// while leaving `enabled = false`, so the leaf search stays
+/// byte-identical to baseline.
+pub fn rerank_config_from_env() -> corpus_engine::RerankConfig {
+    let mut cfg = corpus_engine::RerankConfig::default();
+    let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    cfg.enabled = !gate_only;
+    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
+        if let Ok(n) = s.parse::<usize>() {
+            cfg.candidates_k = n;
+        }
+    }
+    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_MIN_SCORE") {
+        if let Ok(f) = s.parse::<f32>() {
+            cfg.min_score = Some(f);
+        }
+    }
+    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ALPHA") {
+        if let Ok(f) = s.parse::<f32>() {
+            cfg.alpha = f;
+        }
+    }
+    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_PER_ARTICLE") {
+        cfg.per_article = s == "1" || s.eq_ignore_ascii_case("true");
+    }
+    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ATLAS_WEIGHT") {
+        if let Ok(f) = s.parse::<f32>() {
+            cfg.atlas_weight = f;
+        }
+    }
+    cfg.dedup_corpus_filter = rerank_dedup_filter_from_env();
+    cfg.dedup_picker = rerank_dedup_picker_from_env();
+    tracing::info!(
+        enabled = cfg.enabled,
+        gate_only,
+        candidates_k = cfg.candidates_k,
+        alpha = cfg.alpha,
+        per_article = cfg.per_article,
+        atlas_weight = cfg.atlas_weight,
+        min_score = ?cfg.min_score,
+        dedup_picker = ?cfg.dedup_picker,
+        dedup_corpora = ?cfg.dedup_corpus_filter.as_ref().map(|s| {
+            let mut v: Vec<&String> = s.iter().collect();
+            v.sort();
+            v
+        }),
+        "rerank config resolved from environment"
+    );
+    cfg
+}
+
 /// Create a corpus-engine `RerankFn` from Sovereign's `InferenceProvider`.
 /// Uses the provider's `rerank_batch` method which, on `EmbeddedLlamaCpp`,
 /// dispatches to the installed `RerankSlot` (cross-encoder reranker).

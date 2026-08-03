@@ -537,29 +537,8 @@ pub async fn build_session_with_skills(
     // Per-corpus dedup allowlist. Empirically (RERANK_EXPERIMENT.md):
     // SEP gains +10 sources from dedup; wiki LOSES 3. Default is
     // SEP-only when nothing is set, but the operator can override.
-    // Empty string ("") explicitly = no filter (apply to all corpora;
-    // matches the original cross-corpus ablation behaviour).
-    let dedup_filter = match std::env::var("SOVEREIGN_RERANK_DEDUP_CORPORA") {
-        Ok(s) if s.is_empty() => None,
-        Ok(s) => Some(
-            s.split(',')
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect::<std::collections::HashSet<_>>(),
-        ),
-        Err(_) => Some(["sep".to_string()].into_iter().collect()),
-    };
-
-    // Dedup picker: `fused` (default, RRF/blended-score order) or
-    // `vector` (cosine distance to query — tests whether RRF noise
-    // inside an article is what hurts wiki dedup).
-    let dedup_picker = match std::env::var("SOVEREIGN_RERANK_DEDUP_PICKER")
-        .as_deref()
-        .unwrap_or("fused")
-    {
-        "vector" | "vector_distance" => corpus_engine::DedupPicker::VectorDistance,
-        _ => corpus_engine::DedupPicker::FusedScore,
-    };
+    let dedup_filter = sovereign_tools::corpus::rerank_dedup_filter_from_env();
+    let dedup_picker = sovereign_tools::corpus::rerank_dedup_picker_from_env();
 
     if dedup_only {
         let mut cfg = corpus_engine::RerankConfig::default();
@@ -593,40 +572,7 @@ pub async fn build_session_with_skills(
             Ok(reranker) => {
                 let reranker: Arc<dyn InferenceProvider> = Arc::new(reranker);
                 let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
-                let mut cfg = corpus_engine::RerankConfig::default();
-                // GATE_ONLY: install the rerank_fn (for consumers like
-                // the PPR admission gate, SOVEREIGN_PPR_EXPAND) WITHOUT
-                // enabling the full-pool search_with_rerank pass — the
-                // leaf search stays byte-identical to baseline.
-                let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
-                    .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false);
-                cfg.enabled = !gate_only;
-                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
-                    if let Ok(n) = s.parse::<usize>() {
-                        cfg.candidates_k = n;
-                    }
-                }
-                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_MIN_SCORE") {
-                    if let Ok(f) = s.parse::<f32>() {
-                        cfg.min_score = Some(f);
-                    }
-                }
-                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ALPHA") {
-                    if let Ok(f) = s.parse::<f32>() {
-                        cfg.alpha = f;
-                    }
-                }
-                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_PER_ARTICLE") {
-                    cfg.per_article = s == "1" || s.eq_ignore_ascii_case("true");
-                }
-                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ATLAS_WEIGHT") {
-                    if let Ok(f) = s.parse::<f32>() {
-                        cfg.atlas_weight = f;
-                    }
-                }
-                cfg.dedup_corpus_filter = dedup_filter.clone();
-                cfg.dedup_picker = dedup_picker;
+                let cfg = sovereign_tools::corpus::rerank_config_from_env();
                 eprintln!(
                     "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?})",
                     path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),

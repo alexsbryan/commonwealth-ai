@@ -1511,6 +1511,18 @@ pub async fn bootstrap_with_progress(
     .with_atlas_context_provider(
         Arc::clone(&atlas_ctx_mgr) as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>
     );
+    // Cross-encoder reranker (T1 A2). Until 2026-08-03 the ONLY
+    // surface that installed one was the `svrn chat` CLI — the desktop
+    // had zero rerank references, so it shipped baseline fusion
+    // ordering and `SOVEREIGN_PPR_EXPAND` logged "lane dark" here for
+    // want of the same `rerank_fn`. Opt-in via
+    // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
+    if let Some(reranker) = sovereign_inference::reranker_standalone::load_from_env() {
+        runtime = runtime.with_rerank(
+            sovereign_tools::corpus::inference_to_rerank_fn(reranker),
+            sovereign_tools::corpus::rerank_config_from_env(),
+        );
+    }
     // Discover + register each corpus's atlas dir (and warm any cached
     // contexts) so the atom-enum path's `graph()` can lazy-load a corpus's
     // atoms on first use — `graph()` only parses dirs this scan registered.
