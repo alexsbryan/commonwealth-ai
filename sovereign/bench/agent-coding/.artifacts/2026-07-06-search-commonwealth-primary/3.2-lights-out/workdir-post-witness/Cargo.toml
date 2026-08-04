@@ -1,8 +1,0 @@
-[package]
-name = "lights_out"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-name = "lights_out"
-path = "src/lib.rs"

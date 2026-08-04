@@ -1,3 +1,0 @@
-{"turn":0,"request":{"search_round":0,"candidates":["patch 1-50@T0.9=err","rewrite __init__.py@T0.7=err","patch 1-50@T0.4=err","patch 1-9@T0.2=1p/7f"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}
-{"turn":1,"request":{"search_round":1,"candidates":["patch 1-50@T0.6=err","rewrite evaluate_ast@T0.3=err","<parse-failed>@T1.1=err","patch 1-30@T0.9=err"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}
-{"turn":2,"request":{"search_round":2,"candidates":["rewrite tokenize@T0.6=err","patch 1-50@T0.9=err","rewrite evaluate_ast@T0.3=err","rewrite parse@T1.1=err"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}

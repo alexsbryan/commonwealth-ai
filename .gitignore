@@ -127,6 +127,9 @@ __pycache__/
 # sub-repo (e.g. sovereign/test-artifacts/ when a harness runs with CWD there).
 test-artifacts/
 # Generated research/bench artifacts — keep source scripts, ignore heavy outputs
+# Bench run outputs (.artifacts/ next to any bench bank: agent transcripts,
+# judge trials, per-run report JSONs). The bank sources stay tracked.
+sovereign/bench/**/.artifacts/
 research/**/out/
 research/**/out-v2/
 *.npz

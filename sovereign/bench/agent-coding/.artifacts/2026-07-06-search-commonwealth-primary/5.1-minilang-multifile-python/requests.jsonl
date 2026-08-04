@@ -1,3 +1,0 @@
-{"turn":0,"request":{"search_round":0,"candidates":["<parse-failed>@T0.7=err","rewrite tokenizer@T0.9=err","patch 1-50@T0.2=err","patch 1-999@T0.4=err"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}
-{"turn":1,"request":{"search_round":1,"candidates":["rewrite evaluate@T0.6=1p/7f","patch 1-999@T1.1=err","rewrite tokenizer@T0.9=err","rewrite tokenize@T0.3=err"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}
-{"turn":2,"request":{"search_round":2,"candidates":["rewrite tokenize@T0.3=err","rewrite tokenize@T0.9=err","rewrite tokenize@T1.1=err","rewrite tokenize@T0.6=err"]},"response":{"winner":null,"passing_after":1,"failed_after":7},"elapsed_ms":0}
