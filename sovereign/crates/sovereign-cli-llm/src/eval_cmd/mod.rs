@@ -804,7 +804,9 @@ async fn cmd_run(args: &[String]) -> i32 {
                  pipeline owns its own atlas grounding)."
             );
         }
-        match runner::run_bank_prod(&session, &bank, a.limit, a.isolate).await {
+        match runner::run_bank_prod(&session, &bank, a.limit, a.isolate, a.loose_source_judge)
+            .await
+        {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");

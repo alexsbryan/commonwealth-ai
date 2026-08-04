@@ -1119,6 +1119,7 @@ pub async fn run_bank_prod(
     bank: &EvalBank,
     limit: usize,
     isolate: bool,
+    loose_source_judge: bool,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1131,7 +1132,16 @@ pub async fn run_bank_prod(
     };
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        results.push(run_question_prod(session, q, limit, isolate_corpora.as_deref()).await);
+        results.push(
+            run_question_prod(
+                session,
+                q,
+                limit,
+                isolate_corpora.as_deref(),
+                loose_source_judge,
+            )
+            .await,
+        );
     }
     Ok(EvalRun {
         bank_name: bank.bank.name.clone(),
@@ -1147,6 +1157,7 @@ async fn run_question_prod(
     q: &Question,
     limit: usize,
     isolate_corpora: Option<&[String]>,
+    loose_source_judge: bool,
 ) -> EvalResult {
     // Fresh conversation per question — same seeding pattern as the synth
     // path so `build_context` + the personal-scope filter see a real row,
@@ -1230,8 +1241,37 @@ async fn run_question_prod(
             })
             .collect()
     };
-    let source_score: ScoreSnapshot = score_sources(&q.expected_sources, &hits_for_scoring).into();
+    let rigid_source = score_sources(&q.expected_sources, &hits_for_scoring);
+    let source_score: ScoreSnapshot = rigid_source.clone().into();
     let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &hits_for_scoring).into();
+
+    // Loose-judge source scoring, same contract as the non-prod path in
+    // `run_question`: a strict superset of the rigid score that credits a
+    // missing expected_source when the retrieved chunks materially cover it.
+    //
+    // This path used to hardcode `loose_source_score: None` and drop the
+    // flag on the floor — `--prod-pipeline --loose-source-judge` parsed,
+    // threaded this far, then produced a rigid-only result with exit 0 and
+    // no warning (note 890823ac). That made the ONE question the flag
+    // exists to answer unanswerable on the only surface worth asking it
+    // on, which is what has kept the GLiNER deletion (L0, up to 2.07x on
+    // time-to-enriched) unresolved. §18.3: never silently substitute.
+    let (loose_source_score, loose_source_evidence): (
+        Option<ScoreSnapshot>,
+        Vec<JudgeSourceDetail>,
+    ) = if loose_source_judge && !q.expected_sources.is_empty() {
+        let (loose, details) = score_sources_loose(
+            &q.question,
+            &rigid_source,
+            &hits_for_scoring,
+            session.inference.as_ref(),
+        )
+        .await;
+        (Some(loose.into()), details)
+    } else {
+        (None, Vec::new())
+    };
+
     let corpora_hit: Vec<String> = {
         let mut s: Vec<String> = all_hits.iter().map(|c| c.corpus_id.clone()).collect();
         s.sort();
@@ -1262,8 +1302,8 @@ async fn run_question_prod(
         corpora_hit,
         vector_eligible: true,
         synth: None,
-        loose_source_score: None,
-        loose_source_evidence: Vec::new(),
+        loose_source_score,
+        loose_source_evidence,
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),

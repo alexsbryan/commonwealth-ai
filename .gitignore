@@ -73,6 +73,13 @@ docs/internal/
 # stay in the tree; they no-op without this local data.
 sovereign/bench/obsidian/
 sovereign-recipes/alignment/
+# Answer-keys over the author's real imported Anthropic conversation history.
+# The committed scaffold at sovereign/bench/conversation/ stays public and
+# stays fictional; this is the one with real conversation titles in it, so it
+# never leaves the box. Added 2026-08-03 because the scaffold cannot score
+# (its expected_sources name conversations the corpus does not contain, so
+# the control arm reads 0/12 at exit 0).
+sovereign/bench/conversation-private/
 
 # ── macOS noise ───────────────────────────────────────────────────────────
 .DS_Store
