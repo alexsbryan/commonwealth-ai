@@ -215,19 +215,142 @@ fn bench_baselines_row(repo: Option<&Path>) -> PostureRow {
     }
     let oldest = latest.iter().map(|(_, t)| *t).min().expect("non-empty");
     let newest = latest.iter().map(|(_, t)| *t).max().expect("non-empty");
+
+    // COVERAGE, not just age. Until 2026-08-04 this row counted every
+    // `latest.json` on disk and called them all "committed" — so a
+    // baseline a bench run had just written locally, in a gitignored
+    // directory, was indistinguishable from one peers can reproduce.
+    // Both gaps below are invisible to an mtime-only view, and together
+    // they are what let a conversation-retrieval default ship ungated
+    // (note d2af7720): the only bank that could have measured it was
+    // gitignored, and the run that "checked" it silently minted its own
+    // reference from the very change under test.
+    let paths: Vec<PathBuf> = latest.iter().map(|(p, _)| p.clone()).collect();
+    let ignored = git_ignored(repo, &paths);
+    let local_only = paths.iter().filter(|p| ignored.contains(*p)).count();
+    let committed = latest.len() - local_only;
+    let unmeasured = banks_without_baselines(&bench_root);
+
+    let mut detail = format!("{committed} committed baseline(s)");
+    if local_only > 0 {
+        detail.push_str(&format!(
+            ", {local_only} LOCAL-ONLY (gitignored — gates nothing for peers)"
+        ));
+    }
+    if !unmeasured.is_empty() {
+        // Name a few; the count carries the rest. A bank with no
+        // baseline can only ever report `first-run`, which is a
+        // could-not-judge, not a pass.
+        const SHOWN: usize = 4;
+        let head = unmeasured
+            .iter()
+            .take(SHOWN)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let more = unmeasured.len().saturating_sub(SHOWN);
+        detail.push_str(&format!(
+            "; {} bank(s) with NO baseline (first-run only): {head}{}",
+            unmeasured.len(),
+            if more > 0 {
+                format!(", +{more} more")
+            } else {
+                String::new()
+            }
+        ));
+    }
+    detail.push_str("; recapture via `svrn bench gate <lane> --update-baseline`");
+
     PostureRow {
         name: "bench-baselines",
-        verdict: "present".into(),
+        verdict: if local_only > 0 || !unmeasured.is_empty() {
+            "present (gaps)".into()
+        } else {
+            "present".into()
+        },
         age: Some(format!(
             "{}..{}",
             human_age(age_of(newest)),
             human_age(age_of(oldest))
         )),
-        detail: format!(
-            "{} committed baseline(s); recapture via `svrn bench gate <lane> --update-baseline`",
-            latest.len()
-        ),
+        detail,
     }
+}
+
+/// Which of `paths` git ignores, as one batched `git check-ignore
+/// --stdin` call. The row's whole point is telling a baseline peers can
+/// reproduce apart from a local artifact that exists only here, and
+/// mtime cannot distinguish them.
+///
+/// Any failure (git absent, not a checkout) yields an empty set, so the
+/// row degrades to the filesystem view it has always shown rather than
+/// inventing a verdict. `check-ignore` exits 1 for "nothing ignored" —
+/// that is a normal result, not an error.
+fn git_ignored(repo: &Path, paths: &[PathBuf]) -> std::collections::HashSet<PathBuf> {
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
+
+    let Ok(mut child) = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["check-ignore", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return std::collections::HashSet::new();
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        for p in paths {
+            let _ = writeln!(stdin, "{}", p.display());
+        }
+        // Dropped here: check-ignore reads to EOF before exiting.
+    }
+    let Ok(out) = child.wait_with_output() else {
+        return std::collections::HashSet::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| PathBuf::from(l.trim()))
+        .collect()
+}
+
+/// Bank directories under `sovereign/bench` that carry a question bank
+/// (`*.toml`) but no baseline at all. A run against one of these can
+/// only report `first-run` — and `bench all` then WRITES a baseline
+/// from that same run, so the next run compares the change against
+/// itself. Surfacing them here is what makes that structural rather
+/// than something each engineer has to notice.
+fn banks_without_baselines(bench_root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let Ok(lanes) = std::fs::read_dir(bench_root) else {
+        return out;
+    };
+    for lane in lanes.flatten() {
+        let dir = lane.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let has_bank = std::fs::read_dir(&dir)
+            .map(|es| {
+                es.flatten()
+                    .any(|e| e.path().extension().is_some_and(|x| x == "toml"))
+            })
+            .unwrap_or(false);
+        if !has_bank {
+            continue;
+        }
+        let mut found = Vec::new();
+        collect_latest_json(&dir.join("baselines"), &mut found);
+        if found.is_empty() {
+            if let Some(n) = dir.file_name().and_then(|n| n.to_str()) {
+                out.push(n.to_string());
+            }
+        }
+    }
+    out.sort();
+    out
 }
 
 /// `<dir>/**/latest.json`, one level of nesting (lane/baselines/<key>/latest.json).

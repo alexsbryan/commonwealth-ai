@@ -1,5 +1,23 @@
 # `sovereign/bench/conversation/` — conversation-history retrieval bank
 
+> **STATUS: SCAFFOLD — do not read a number from this bank as coverage.**
+> Verified 2026-08-04. The questions are still the authored stubs
+> (`questions.toml:12-14` says so itself) and `expected_sources` are
+> placeholders like `"conv:runway-discussion"`. Worse, the committed
+> `baselines/questions-synth/latest.json` was captured against corpus
+> `conversations-personal` while the bank today declares
+> `conversations-anthropic`, with retrieved items scoring 0.0 against
+> unrelated content — so a diff against it is meaningless in both
+> directions.
+>
+> The practical consequence: **conversation retrieval has no working
+> gate anywhere in this repo** (note `d2af7720`). The sibling
+> `conversation-private/` bank has real questions but is gitignored
+> wholesale, so it can never carry a shareable baseline. Populating
+> this bank per the derive-from-corpus flow below, then adding its
+> corpus to a `sovereign-ci-bench.sh` retrieval lane, is what would
+> close that.
+
 Bench coverage for the conversation-history retrieval surface — the use
 case where the user asks "what did I discuss with the CFO about runway
 in Q3", "how has my view on X shifted", "have I ever talked about Y".

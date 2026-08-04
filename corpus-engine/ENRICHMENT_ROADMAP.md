@@ -609,11 +609,44 @@ Our own prior (TIERED_RETRIEVAL.md:334-374) declined HippoRAG-2 because
 observed failures were synthesis-side. P0's lanes make that claim
 re-testable; P1 changes the synthesis side it indicted. So:
 
-1. **Settle the dark knobs by measurement, not archaeology**: the PPR
+1. **Settle the dark knobs by measurement, not archaeology. Two of the
+   four are SETTLED (2026-07-31, 2026-08-04); RAPTOR dedupe and
+   chunk-neighbour expansion remain unevaluated.** The plan was: the PPR
    weight sweep (0.0/0.15/0.25/0.4 — explicitly requested, never run),
    the T3 cluster-score blend (spec'd at 0.25, shipped dark at 0.0),
    RAPTOR dedupe, chunk-neighbour expansion. Each becomes one entry in
    the P0.4 A/B lane; defaults flip only on wins.
+
+   **What settled** (rows in `sovereign/DEFAULTS_LEDGER.md`; notes
+   `6a957b47`, `f4150097`):
+
+   - **T3 cluster-score blend — DELETED** (2026-07-31). Measured a
+     **0.0000** delta across 3 sep banks × 3 weights, so the knob and
+     its code went with it. This is the P3 *Deletes* contract below
+     executing as written.
+   - **Conversation entity PPR — DEFAULT FLIPPED TO 0.0, code kept**
+     (2026-08-04). 180-question paired bank on `conversations-anthropic`,
+     two-sided sign test on reciprocal rank: 49–31 alone (p=0.0567),
+     64–43 under the strongest retrieval config (p=0.0527). Never
+     reached p<0.05, and structurally it cannot add — it re-ranks in
+     place, and `B-in-pool` (87.8%) and `source_ratio` (0.9028) were
+     identical to four decimals with it on and off. A deliberate
+     departure from *Deletes*, operator-directed: the measurement says
+     *marginal*, not *wrong*, so a one-line default is cheaper to
+     reverse than 1,325 tested lines are to rebuild. Its second-order
+     value is larger than its first — turning it off is what removes the
+     query-path read of `chunk_entities`, and so what makes deferred
+     NER safe (`sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md`).
+
+   **What shipped alongside them, and is the one P3 change a user can
+   name: per-article dedup** (`dedup_by_source = true` on both
+   conversation recipes, 2026-08-04). Measured on the same 180-question
+   bank: mean RR 0.2631 → **0.3362** (+28%), both@10 26.7% → **50.6%**
+   (+24pp), source_ratio 0.744 → **0.856**, at +0.7 s search. In user
+   terms: fewer near-duplicate citations drawn from one conversation, so
+   an answer that needs two different conversations actually gets both.
+   **It is inert on an already-built index** — the flag stamps at
+   ingest, so a corpus must re-ingest before a user sees any of this.
 2. **Query-to-triple + passage nodes, scoped.** Prototype HippoRAG-2's
    two highest-ablation components on the conversation graph we already
    build (phrase nodes exist as entities; passage nodes = chunks; the
@@ -628,7 +661,20 @@ re-testable; P1 changes the synthesis side it indicted. So:
    lane wins — the honest re-litigation our prior deserves.
 3. **Persist the entity graph** (per-query rebuild + LRU today) and
    add the Qwen3-Reranker as an optional final stage on the hybrid
-   scorer path, A/B'd on notes_tiered failure classes.
+   scorer path, A/B'd on notes_tiered failure classes. **The reranker
+   half is MEASURED AND REJECTED (2026-08-04) — on latency, after its
+   quality condition passed.** It beat everything else tried (mean RR
+   0.3968, both@10 75.6%, source_ratio 0.903) and is rejected anyway:
+   search p50 goes 557 ms → **4,566 ms** *synchronously inside the
+   turn*, so the whole cost lands on TTFT; it needs a fourth resident
+   slot on a ~29 GB daemon; and it degraded ~60× (4.3 s → >280 s per
+   query) under memory pressure. Dedup buys ~60% of the quality for
+   ~20% of the latency, and is what shipped instead. The lesson worth
+   keeping: the flip condition was written about *quality*, and quality
+   was never the binding constraint. Ledger row moved DARK → REJECTED.
+   The persistence half is separately **cancelled** by the *Deletes*
+   contract below, since the PPR flip retires the per-query rebuild it
+   was meant to optimise.
 4. **Community entry points for local search** (DRIFT's lesson): route
    entity-poor queries through concept-graph communities (P2.2) before
    leaf retrieval on LanceDB corpora, which today have no tiered path

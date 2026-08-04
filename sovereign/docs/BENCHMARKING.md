@@ -1,4 +1,12 @@
-# Embed benchmarking
+# Embed benchmarking (THROUGHPUT — not answer quality)
+
+> **Looking for "did my change regress answer quality?" — this is the
+> wrong doc.** This one measures decode throughput in tokens/sec. For
+> retrieval / routing / synthesis / enrichment quality, the suite is
+> `scripts/sovereign-ci-bench.sh` (start at
+> [`sovereign/bench/README.md`](../bench/README.md); read a verdict with
+> [`RUNBOOK.md`](./RUNBOOK.md) §6). This file is the top grep hit for
+> "benchmarking", which is why the pointer is here.
 
 Runbook for measuring `EmbedSlot` decode throughput across GPU
 backends (Metal / Vulkan / ROCm). Started 2026-04-24 after the

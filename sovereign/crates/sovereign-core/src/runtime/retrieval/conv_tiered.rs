@@ -20,9 +20,35 @@ impl Runtime {
     ///   first.
     ///
     /// `SOVEREIGN_CONV_PPR_WEIGHT` env var overrides the default
-    /// `0.25` weight (range `[0.0, 1.0]`). `0.0` short-circuits the
-    /// entire path (no LLM, no graph builds) so production can be
-    /// switched off without a recompile.
+    /// weight (range `[0.0, 1.0]`). `0.0` short-circuits the entire
+    /// path (no LLM, no graph builds) so production can be switched
+    /// on or off without a recompile.
+    ///
+    /// **DEFAULT IS `0.0` — OFF — SINCE 2026-08-04.** Measured, not
+    /// assumed: a 180-question paired bank on `conversations-anthropic`
+    /// (`eval run --prod-pipeline`, notes `6a957b47` / `f4150097`)
+    /// could not separate this prior from off. Alone it went 49–31
+    /// against the off arm (p=0.0567); under the strongest retrieval
+    /// config it went 64–43 (p=0.0527). Both fail a two-sided sign
+    /// test at p<0.05.
+    ///
+    /// The reason the ceiling is low is structural, and it is visible
+    /// in the numbers: this pass **re-ranks in place and never adds a
+    /// document**, so `B-in-pool` (87.8%) and `source_ratio` (0.9028)
+    /// were *identical to four decimals* with the prior on and off.
+    /// It can only reorder what retrieval already found.
+    ///
+    /// Against that: it rebuilds a per-conversation entity graph from
+    /// SQL on EVERY query, and — because it reads `chunk_entities` on
+    /// the query path — it is the reason the GLiNER NER pass has to
+    /// complete eagerly at ingest before a corpus is fully useful.
+    /// Marginal, unproven benefit for a hot-path rebuild and an
+    /// ingest-ordering constraint.
+    ///
+    /// THE CODE IS DEPRECATED, NOT DELETED (operator call 2026-08-04).
+    /// It is correct, tested, and cheap to re-enable if a bank ever
+    /// shows it separating — set the env var. See `DEFAULTS_LEDGER.md`
+    /// § "Conversation entity PPR" for the re-open conditions.
     pub(crate) async fn rerank_conv_chunks_via_ppr(
         &self,
         query: &str,
@@ -33,7 +59,11 @@ impl Runtime {
             .ok()
             .and_then(|s| s.parse::<f32>().ok())
             .map(|w| w.clamp(0.0, 1.0))
-            .unwrap_or(0.25_f32);
+            // 0.0 = OFF by default since 2026-08-04 (was 0.25). See the
+            // doc comment above for the measurement. Everything below
+            // this guard — the SQL reads, the per-conv graph build, the
+            // PageRank iterations — is skipped entirely when off.
+            .unwrap_or(0.0_f32);
         if weight <= 0.0 {
             return;
         }

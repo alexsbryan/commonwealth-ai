@@ -20,9 +20,12 @@ content-hash ids, hash-ordered stratified selection — same upstream
 data reproduces the same bank byte-for-byte). Do not hand-edit
 criteria text; fix the converter and regenerate.
 
-The checked-in subset: 24 scenarios / 554 criteria, stratified across
-the split's dilemma sources (daily_dilemmas 8, ai_risk_dilemmas 8,
-expert-written 8) with advisor/agent role framings interleaved.
+The checked-in subset: 56 scenarios / 1,257 criteria, stratified across
+the split's dilemma sources with advisor/agent role framings
+interleaved, sized so the thinnest dimension (harmless outcome, 90
+criteria) can support a real delta. Per-dimension criterion counts:
+identifying 437, logical process 314, helpful outcome 231, clear
+process 176, harmless outcome 90, other 9.
 
 ## Scoring contract (mirrors the MoReBench reference implementation)
 

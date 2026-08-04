@@ -235,6 +235,47 @@ store (ids cited per row).
   would take the diversifier with it. What must not persist is the
   *expectation* that this becomes a default — hence this row.
 
+### Conversation entity PPR — `SOVEREIGN_CONV_PPR_WEIGHT` (0.25 → **0.0**)
+- **Verdict:** 2026-08-04. Default flipped OFF. Notes `6a957b47`,
+  `f4150097`; artifact
+  `target/overnight/20260803-225051/block1/VERDICT-with-ppr0.txt`.
+- **Measured, on the corpus where it actually fires:** 180-question
+  paired bank on `conversations-anthropic`, `eval run --prod-pipeline`,
+  two-sided sign test on reciprocal rank. Alone: 49–31 vs the off arm,
+  **p=0.0567**. Under the strongest retrieval config: 64–43,
+  **p=0.0527**. Neither reaches p<0.05. The arm was NOT vacuous — it
+  changed ordering on 146/180 questions — so this is "measured and did
+  not separate", not "never engaged". (An earlier 2026-07 attempt WAS
+  vacuous: it ran on SEP, where this path never fires.)
+- **Why the ceiling is low, structurally:** it re-ranks in place and
+  never adds a document. `B-in-pool` (87.8%) and `source_ratio`
+  (0.9028) were **identical to four decimals** with it on and off —
+  only the ordering moved. `bench/conversation-bridge/GATE_FINDINGS.md`
+  predicted exactly this before the run ("PPR re-ranks in place and
+  never adds"), which is also why that doc pre-registered this A/B.
+- **Cost of on:** a per-conversation entity graph rebuilt from SQL on
+  EVERY query, plus — because it reads `chunk_entities` on the query
+  path — it is the sole reason the GLiNER NER pass must complete
+  eagerly at ingest before a corpus is fully useful. Turning it off is
+  what makes deferred/late NER safe (`PROGRESSIVE_ENRICHMENT.md`).
+- **CODE KEPT, NOT DELETED — operator call 2026-08-04.** ~1,325 lines
+  (`conv_entity_graph.rs` + `rerank_conv_chunks_via_ppr` + 23 unit
+  tests) were sized for removal and deliberately retained: the code is
+  correct and tested, the measurement says *marginal*, not *wrong*, and
+  a one-line default is cheaper to reverse than a deletion is to
+  rebuild. This is a deliberate departure from the cluster-score row
+  below, which was deleted — that one had a measured **0.0000** delta;
+  this one has a real-but-unprovable effect.
+- **What a user loses:** the "bridge" badge on promoted sources
+  (`ppr_seed` / `ppr_mass_norm` → `SourceAttribution.svelte`,
+  `EpistemicFooter.svelte`) simply never fires. The UI degrades
+  silently and correctly; no dead controls.
+- **Re-open only if:** a bank shows it separating at p<0.05 — most
+  plausibly one built on *cross-conversation* questions where in-pool
+  reordering is the whole game, since this bank's own headroom analysis
+  showed 66% of target conversations were already in the pool. Set a
+  non-zero `SOVEREIGN_CONV_PPR_WEIGHT`; nothing else is needed.
+
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
 - **Verdict:** 2026-07-31, per this row's own settling condition — the
   T1 P0.4 knob matrix (`bench enrichment-ablate`, 3 sep banks × 3

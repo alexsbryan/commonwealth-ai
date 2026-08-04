@@ -520,7 +520,12 @@ fn print_summary(outcomes: &[BenchOutcome]) {
         .collect();
     if !stale.is_empty() {
         println!(
-            "  ⚠ stale baselines (> {}d): {} — re-mint with --update-baseline once adjudicated (see RUNBOOK)",
+            // Name the RUNBOOK by PATH. There are four `RUNBOOK*` files in
+            // this repo and the two physically nearest the benches
+            // (search-gym, knowledge-gym) are both the wrong ones — a bare
+            // "see RUNBOOK" sends the reader to a doc that never mentions
+            // re-minting. §11.1: cite, don't allude.
+            "  ⚠ stale baselines (> {}d): {} — re-mint with --update-baseline once adjudicated (see sovereign/docs/RUNBOOK.md §6)",
             super::baselines::baseline_max_age_days(),
             stale.join(", ")
         );

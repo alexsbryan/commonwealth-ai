@@ -12,6 +12,17 @@ scripts/sovereign-ci-bench.sh --update-baseline   # re-capture baselines after a
 
 `--quick` down-samples the slow lanes (`--sample-questions` on synth, one agent-coding problem, `--max-turns` on the multi-turn bank) to a stratified, whole-unit subset — high signal-per-minute for local iteration. Lanes: deterministic ones (recall, atom-F1, routing) are **hard** (build-breaking); synth answer-equiv is **soft**; chaos/mechanism/multi-turn/governance are **tracked** runs each paired with a **hard `bench gate <lane>`** that fails only on regression vs a committed baseline. **Invariant:** a sampled lane's baseline is *cap-specific* (it covers a different subset than the full run) — change a sample size or `MULTITURN_MAX_TURNS` and you must re-capture that lane's baseline or its hard gate false-fires. Lane structure + the corrected-stack config live in [`CI_GATE_HANDOFF.md`](CI_GATE_HANDOFF.md).
 
+### What this gate does NOT cover (read before trusting a green)
+
+A gate is only as honest about its edges as someone writes down. Current known gaps, each with the file that defines it:
+
+- **Conversation retrieval is not gated at all.** `sovereign-ci-bench.sh:159` sets `RETRIEVAL_CORPORA=(sep wikipedia)`; `:164` sets `ENRICHMENT_CORPORA=(literary/bk-book-1)`. No conversation corpus appears in any lane, HARD or SOFT. Neither of the two banks that look like they cover it does: `conversation-private/` is gitignored wholesale (`.gitignore:82`) so it can never hold a shareable baseline, and `conversation/` is a **scaffold** — stub questions, placeholder `expected_sources`, and a committed baseline captured against a corpus id the bank no longer declares. Two conversation-retrieval defaults shipped in 2026-08 with this suite blind to both (note `d2af7720`).
+- **A bank with no baseline reports `first-run`, and `bench all` then writes one from that same run.** That is a could-not-judge, not a pass, and the reference it leaves behind was minted from the change under test. `svrn posture` (`bench-baselines` row) lists banks in this state, and flags baselines that exist only locally.
+- **Baseline age is not model-attributed.** A baseline records no model id, so a regression against a months-old baseline is a lead to investigate, not proof — see [`../docs/RUNBOOK.md`](../docs/RUNBOOK.md) §6 for the noise bands.
+- **Per-lane wall-clock caps need a `timeout` binary** (`sovereign-ci-bench.sh:167-170`). macOS ships none; without `brew install coreutils` only the coarse inter-lane budget guard bounds a run.
+
+Closing a gap means adding the corpus to a lane and committing a baseline — not adding another bench. The suite composes; it does not want a sibling.
+
 ## Rollup surface for drilling a flagged lane
 
 One command:

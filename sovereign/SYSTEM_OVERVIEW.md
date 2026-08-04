@@ -3450,6 +3450,8 @@ Default ports:
 | Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
 
 | Is any quality subsystem's posture stale? | **`svrn posture`** (dev-tools) — one read-only table: artifact age + verdict for drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines; each row names its refresh command. Added 2026-07-30 because drift and arch had both been weeks stale with nothing aggregating that fact |
+| Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh --quick`** (~35-40m) — the ONE comprehensive bench; it composes every lane rather than reinventing one. Lane semantics + tiers at §"Bench harnesses" above; entry point `sovereign/bench/README.md`. The workspace lint/test scripts are the *build* gate and never run a model against a question bank |
+| A bench says regressed — is that real, or noise? | `sovereign/docs/RUNBOOK.md` §6 — per-lane noise bands, baseline-age semantics, and the legitimate `--update-baseline` re-mint path |
 
 ### 8.1 Where configuration and state live
 

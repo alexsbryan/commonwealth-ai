@@ -310,9 +310,9 @@ purpose = "Cross-corpus bridge boost: question entities matching a bridge topic 
 [[flag]]
 name = "SOVEREIGN_CONV_PPR_WEIGHT"
 cluster = "retrieval"
-default = "see helper"
-status = "shipped"
-purpose = "Post-pipeline PPR rerank weight for conversation-corpus chunks."
+default = "off (0.0)"
+status = "deprecated"
+purpose = "Post-pipeline PPR rerank weight for conversation-corpus chunks. DEFAULT FLIPPED 0.25 -> 0.0 (OFF) 2026-08-04: a 180-question paired bank could not separate it from off (49-31 p=0.0567 alone; 64-43 p=0.0527 under the strongest retrieval config). It re-ranks in place and never adds a document — B-in-pool and source_ratio were identical to 4dp with it on and off — while rebuilding a per-conversation entity graph from SQL on every query and forcing GLiNER to run eagerly at ingest. Code kept and working; set a non-zero weight to re-enable. See DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_SUMMARY_EVIDENCE"

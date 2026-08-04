@@ -336,6 +336,9 @@ need the conclusion:
 | "Code intel is down and I need a broad sweep" | `Explore` subagent — keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock/env gates) |
 | "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench), each row names its refresh command |
+| "Did my change regress retrieval / routing / synthesis / enrichment?" | `./scripts/sovereign-ci-bench.sh --quick` — the ONE comprehensive bench; see "Measuring quality" below |
+| "A bench says regressed — is that real or noise?" | `sovereign/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
+| "What does bench lane X measure, and how do I run just it?" | `sovereign/bench/README.md`, then `sovereign/bench/<lane>/README.md` |
 | "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
@@ -472,6 +475,42 @@ Both exit non-zero on failure and both write a raw cargo log for triage, so a fa
 
 **If you want the watchers back** (`lint_status`, `test_status`, `run_tests`, `build`, and per-file `--changed` queries): set `[watchers] enabled = true` in `.sovereign/sovereign.toml`, uncomment the `[lint_runner]`/`[test_runner]` sections, and restart the daemon. Then read the `watcher` health object on every response *before* `status` — `watcher.live == false` means the results are orphaned and `status` reports `watcher_down` rather than a stale `fresh_*`. Note the surfaces differ: `lint_status` and `get_lint_output` are on MCP and can be called directly, while `test_status` and `run_tests` are CLI-only (`sovereign tools call test_status`). Nothing else in this file depends on that path.
 
+### Measuring quality — the bench suite
+
+**Lint and test are the BUILD gate. Neither says anything about whether the system still answers well.** A retrieval, routing, synthesis, enrichment or inference change can leave both scripts green and still regress answer quality — neither script ever runs a model against a question bank. This section exists because a session in 2026-08 did exactly that, then built its own ad-hoc bench without knowing the suite below already existed.
+
+**There is ONE comprehensive bench: `scripts/sovereign-ci-bench.sh`.** It does not reinvent measurement — it *composes* the ~20 `svrn bench` subcommands, the two gyms and `sovereign-agent-bench` into lanes with a single PASS/FAIL. Three tiers:
+
+```bash
+./scripts/sovereign-ci-bench.sh --quick      # ~35-40m — the pre-push tier
+./scripts/sovereign-ci-bench.sh --no-synth   # HARD lanes only; skips ~55m of judge lanes
+./scripts/sovereign-ci-bench.sh              # full run, 4h budget
+```
+
+**Read the lane KIND before you read the verdict** (gate policy at `scripts/sovereign-ci-bench.sh:10-30`):
+
+- **HARD** — deterministic, baseline-diffed: enrichment atom-F1, retrieval recall, `retrieval-prod`, routing, plus the paired `*-gate` lanes. These break the build.
+- **SOFT** — the synthesis answer-equiv judge lane. Tracked with a band, *never* gated, because judge variance must not cause flaky red builds.
+- **TRACKED** — chaos-monkey, mechanism-fidelity, faithfulness, governance, the gyms. Their absolute verdicts are true findings about the present system, not regression signals, so each pairs with a HARD `*-gate` twin that re-scores the same artifact against a committed baseline.
+
+**Pick the lane that matches your change.** A retrieval or pipeline change is measured by Lane 2b `retrieval-prod` (`--prod-pipeline --isolate`, `sovereign-ci-bench.sh:321-325`) — HARD, deterministic, diffs the composed evidence pool with no synthesis and no judge. Reaching for `--synth` puts an LLM judge between you and the answer, on the one axis that is explicitly non-gating.
+
+**Confirm a bank's baseline exists BEFORE arming a long run.** `bench all` reports `first-run` for a bank that has none — and *writes* one from the run you just did. A first-run tally is a could-not-judge, not a pass, and the baseline it leaves behind will bless whatever you just changed. `svrn posture` (`bench-baselines` row) is the coverage check.
+
+**Where the docs are.** They exist and they are good; finding them has been the whole problem:
+
+| Question | Doc |
+|---|---|
+| How do I run the gate, or drill into a flagged lane? | `sovereign/bench/README.md` — the canonical entry point |
+| A bench says regressed — is it real? Noise bands, baseline age, the legitimate re-mint path | `sovereign/docs/RUNBOOK.md` §6 |
+| How do I re-baseline every CI lane from scratch? | `sovereign/bench/CI_GATE_HANDOFF.md` |
+| How do I iterate a prompt or scorer without overfitting the golden? | `sovereign/bench/BENCH_LOOP.md` |
+| What does lane X actually measure? | `sovereign/bench/<lane>/README.md` (24 of 42 banks carry one) |
+
+`sovereign/docs/BENCHMARKING.md` is **throughput** (embed/decode across Metal/Vulkan/ROCm), not answer quality. It is the top grep hit for "benchmarking" and is not what you want here.
+
+**On this host:** neither `timeout` nor `gtimeout` is installed, so the per-lane caps at `sovereign-ci-bench.sh:167-170` are inert — only the coarse inter-lane budget guard bounds a run. `brew install coreutils` restores them.
+
 ### Definition of done — every feature push
 
 Before declaring a feature complete, **both must exit 0**, run in the `sovereign-vulkan` toolbox (drop the prefix if the boot hook says you are already inside it — see "Compilation and test feedback"):
@@ -496,6 +535,8 @@ Scoping flags for iteration, not for the final gate:
 Both scripts write adapter logs (`target/sovereign-test/latest/`, `target/sovereign-lint/latest/`) including the raw cargo output, so triaging a failure never requires re-running cargo.
 
 The two runners are meant to exercise the same `cargo --workspace` surface — when one passes and the other fails, the discrepancy is the bug, not the runner. One known, deliberate exception: lint checks `sovereign-mesh/mesh-sim` and the test run does not, so the scheduler simulator is compiled but never exercised.
+
+**If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `./scripts/sovereign-ci-bench.sh --quick` (~35-40m).** The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. Gate on the suite's VERDICT line, and read lane KIND before you read a number (see "Measuring quality" above): a HARD lane breaks the build, a SOFT synth lane never does. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane.
 
 **If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
