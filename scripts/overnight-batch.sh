@@ -211,6 +211,12 @@ if wants 3; then
   SOAK_MIN="${OVERNIGHT_SOAK_MIN:-120}"
   if [ ! -f "$REPO/scripts/desktop-soak.py" ]; then
     record "block3-soak" "NEVER-RAN" "scripts/desktop-soak.py missing"
+  elif ! start_daemon; then
+    # Check the daemon BEFORE calibrating. This block never did, so when the
+    # daemon died in block 2 the calibration hit ECONNREFUSED and the batch
+    # recorded "judge calibration failed" — blaming the instrument for an
+    # absent environment. Same evidence, two very different follow-ups.
+    record "block3-soak" "NEVER-RAN" "daemon would not start — precondition unmet, judge never calibrated"
   else
     # No rubric may score runs without passing calibration (sensitivity 0.85 /
     # specificity 0.8). An uncalibrated judge produces numbers, not evidence.
@@ -241,8 +247,17 @@ if wants 4; then
   hdr "BLOCK 4 — confirmatory bank + collection"
   B4="$OUT/block4"; mkdir -p "$B4"
   REAL_BANK="$REPO/sovereign/bench/conversation-private/questions.toml"
-  if [ -f "$REAL_BANK" ] && [ -f "$OUT/block1/arm-baseline.json" ]; then
-    start_daemon
+  if [ ! -f "$REAL_BANK" ] || [ ! -f "$OUT/block1/arm-baseline.json" ]; then
+    record "block4-confirmatory" "NEVER-RAN" "real bank absent or block1 baseline missing"
+  elif ! start_daemon; then
+    # PRECONDITION, not a result. This batch is fail-OPEN across blocks that
+    # SHARE one resident daemon, so a block that broke the daemon leaves every
+    # later block running against a dead port. On 2026-08-03 that turned one
+    # missing GGUF into a "FAIL" here and a "COULD-NOT-JUDGE" in block 3 —
+    # two verdicts that read like product failures and measured nothing.
+    # A block that could not get its preconditions did not run. Say so.
+    record "block4-confirmatory" "NEVER-RAN" "daemon would not start — precondition unmet, nothing measured"
+  else
     for a in baseline reranker; do
       case "$a" in
         baseline) envs=("SOVEREIGN_CONV_PPR_WEIGHT=0.25");;
@@ -259,8 +274,6 @@ if wants 4; then
     else
       record "block4-confirmatory" "FAIL" "real-bank run produced no baseline output"
     fi
-  else
-    record "block4-confirmatory" "NEVER-RAN" "real bank absent or block1 baseline missing"
   fi
 fi
 

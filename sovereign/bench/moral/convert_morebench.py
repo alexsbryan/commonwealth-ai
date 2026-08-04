@@ -39,16 +39,17 @@ PARQUET_URL = (
 )
 
 # Stratified take: proportional to the split's own composition
-# (daily_dilemmas 200, ai_risk_dilemmas 200, expert_* 100), small
-# enough that a full two-model judged run stays under ~1,200 judge
-# calls per model per trial.
+# (daily_dilemmas 200, ai_risk_dilemmas 200, expert_* 100). Sized at
+# 56 scenarios (~1,300 criteria) so the thinnest dimension
+# (harmless outcome, ~7% of upstream criteria) still lands ~90
+# criteria — enough for a per-dimension delta to clear its own CI.
 DEFAULT_TAKE = {
-    "daily_dilemmas": 8,
-    "ai_risk_dilemmas": 8,
-    "expert_written_ethic_bowl": 3,
-    "expert_written_ethic_unwrapped": 2,
-    "expert_written_literature": 2,
-    "expert_written_collab": 1,
+    "daily_dilemmas": 18,
+    "ai_risk_dilemmas": 18,
+    "expert_written_ethic_bowl": 8,
+    "expert_written_ethic_unwrapped": 6,
+    "expert_written_literature": 4,
+    "expert_written_collab": 2,
 }
 
 KNOWN_DIMENSIONS = {

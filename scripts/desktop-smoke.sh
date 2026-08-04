@@ -55,7 +55,12 @@ cd "$REPO_ROOT"
 DESKTOP_DIR="$REPO_ROOT/sovereign/crates/sovereign-desktop"
 CLI="$REPO_ROOT/target/debug/sovereign-cli-llm"
 DESKTOP_BIN="$REPO_ROOT/target/debug/sovereign-desktop"
-SHIPPED_PRIMARY="$REPO_ROOT/sovereign/models/Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf"
+# NOTE: this is a real filename on this host, not a family name — the `_XL`
+# suffix is load-bearing. It was missing until 2026-08-04, which cost an
+# overnight run (see ensure_target_primary). ensure_config_primary now
+# refuses a path that is not on disk, so a future rename fails loudly at the
+# bounce instead of bricking the operator's daemon.
+SHIPPED_PRIMARY="$REPO_ROOT/sovereign/models/Qwen3.6-35B-A3B-MTP-UD-Q6_K_XL.gguf"
 DAEMON_URL="http://localhost:9741"
 BRIDGE_PORT=9745
 BRIDGE_URL="http://127.0.0.1:${BRIDGE_PORT}"
@@ -162,16 +167,23 @@ ensure_target_primary() {
   local cur; cur="$(daemon_primary)"
   if [[ "$cur" == *"$want"* ]]; then log "daemon already on target primary ($want)"; return 0; fi
   log "bouncing daemon onto target primary '$want' (was: ${cur:-down})"
-  if ! grep -q "^primary = \"$TARGET_PRIMARY\"" "$SVR/config.toml" 2>/dev/null; then
-    cp "$SVR/config.toml" "$SVR/config.toml.bak-smoke-$STAMP" 2>/dev/null || true
-    # rewrite the primary= line to the target model
-    python3 - "$SVR/config.toml" "$TARGET_PRIMARY" <<'PY'
-import sys,re
-p,model=sys.argv[1],sys.argv[2]
-s=open(p).read()
-s=re.sub(r'(?m)^primary = ".*"$', f'primary = "{model}"', s, count=1)
-open(p,"w").write(s)
-PY
+  # ONE decider for "rewrite config.toml's primary=" — ensure_config_primary.
+  # This used to be a second, unguarded inline copy of that rewrite, and on
+  # 2026-08-03 it repointed the operator's LIVE config at a GGUF that is not
+  # on disk (SHIPPED_PRIMARY was missing its `_XL` suffix), SIGTERM'd the
+  # daemon, and left the workstation with no daemon for ~14h. Phases 1,2,3,5
+  # and the two downstream overnight blocks then "failed" against a dead
+  # port. The existence check lived in ensure_config_primary the whole time
+  # — it was simply not on this path (ARCH_PRINCIPLES §10.6, §15 "two
+  # implementations of one operation").
+  #
+  # A missing model is NOT a degraded run: refuse the bounce and leave the
+  # resident daemon exactly as found. Return 2 so the caller can record a
+  # precondition SKIP rather than a product FAIL.
+  if ! ensure_config_primary "$TARGET_PRIMARY"; then
+    err "refusing to bounce onto a primary that is not on disk: $TARGET_PRIMARY"
+    err "leaving the resident daemon untouched (still on: ${cur:-down})"
+    return 2
   fi
   rm -f "$SVR/supervised.stop"
   local pid; pid="$(pgrep -f 'sovereign-cli-daemon daemon run' | head -1)"
@@ -461,8 +473,11 @@ phase4() {
   [ -n "$DRY_RUN" ] && { record "4 real-e2e" "DRY" 0 "free :9741 → npm test:e2e:real + test:e2e:faults (managed) → restore daemon"; return 0; }
   [ -x "$DESKTOP_BIN" ] || { record "4 real-e2e" "SKIP" 0 "desktop binary missing (run --build)"; return 0; }
   local t0 fail=0 detail=""; t0=$(date +%s)
-  # auto-xvfb if headless.
-  local xvfb=""; [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && xvfb="1"
+  # auto-xvfb if headless — LINUX ONLY. Xvfb does not exist on darwin, where
+  # DISPLAY/WAYLAND_DISPLAY are always empty, so the bare emptiness test
+  # asked macOS to run under a display server it has no way to provide.
+  local xvfb=""
+  [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && xvfb="1"
 
   # Real-mode's governance overlay HARD-assumes the daemon's data dir == the
   # harness's scratch HOME (global-setup.ts:285), and the faults suite spins its
@@ -477,14 +492,29 @@ phase4() {
     record "4 real-e2e" "SKIP" "$(( $(date +%s)-t0 ))" "could not free :9741 (--no-daemon-manage)"; return 0
   fi
 
-  ( cd "$DESKTOP_DIR" && ${xvfb:+export SOVEREIGN_REAL_XVFB=1;} \
-      run_capped "$SMOKE_P4_SECS" npm run test:e2e:real ) > "$ART/p4-real.log" 2>&1 \
+  # `${xvfb:+export FOO=1;}` DOES NOT WORK: the `;` is inside the parameter
+  # expansion, so it is a WORD, not a command separator. The line collapsed to
+  # a single `export` command that swallowed `run_capped 3000 npm run
+  # test:e2e:real` as its arguments — p4-real.log contained nothing but
+  # "export: `3000': not a valid identifier" and npm never ran. Because
+  # `xvfb` is set whenever DISPLAY and WAYLAND_DISPLAY are both empty (always
+  # true on darwin), this phase had NEVER executed on this host while
+  # reporting a product FAIL every time. Assign the env inline on the command
+  # instead — no subshell `export`, no separator to lose.
+  (
+    cd "$DESKTOP_DIR" || exit 1
+    [ -n "$xvfb" ] && export SOVEREIGN_REAL_XVFB=1
+    run_capped "$SMOKE_P4_SECS" npm run test:e2e:real
+  ) > "$ART/p4-real.log" 2>&1 \
     && log "  real-mode invariant pack: PASS" \
     || { fail=1; detail+="invariant-pack "; err "  real-mode e2e FAILED (see p4-real.log)"; }
 
   if [ "$(remaining)" -gt 900 ]; then
-    ( cd "$DESKTOP_DIR" && ${xvfb:+export SOVEREIGN_REAL_XVFB=1;} \
-        run_capped 1200 npm run test:e2e:faults ) > "$ART/p4-faults.log" 2>&1 \
+    (
+      cd "$DESKTOP_DIR" || exit 1
+      [ -n "$xvfb" ] && export SOVEREIGN_REAL_XVFB=1
+      run_capped 1200 npm run test:e2e:faults
+    ) > "$ART/p4-faults.log" 2>&1 \
       && log "  fault suite: PASS" \
       || { fail=1; detail+="faults "; err "  fault suite FAILED"; }
   else
@@ -617,7 +647,20 @@ fi
 phase0
 if [ -z "$DRY_RUN" ]; then
   if phase_enabled 1 || phase_enabled 2 || phase_enabled 3 || phase_enabled 5; then
-    ensure_target_primary || warn "daemon not on target primary — model-dependent phases may be unrepresentative"
+    # Distinguish the two failures. rc=2 means the target primary is not on
+    # disk, so the bounce was refused and NOTHING was touched — every
+    # model-dependent phase after this would measure a machine we declined to
+    # configure. That is a precondition failure, not five product failures:
+    # HARD STOP with exit 2, which the overnight wrapper records as
+    # COULD-NOT-JUDGE rather than FAIL (ARCH_PRINCIPLES §18.1/§18.2 — four
+    # verdicts, and "never ran" must never render as "failed").
+    ensure_target_primary; etp_rc=$?
+    if [ "$etp_rc" -eq 2 ]; then
+      err "PHASE PRECONDITION failed — target primary missing; HARD STOP"
+      err "  fix \$TARGET_PRIMARY (or pass --primary <path>) and re-run"
+      print_scoreboard; exit 2
+    fi
+    [ "$etp_rc" -ne 0 ] && warn "daemon not on target primary — model-dependent phases may be unrepresentative"
     wait_daemon 30 || warn "daemon not responding on :9741"
   fi
 fi

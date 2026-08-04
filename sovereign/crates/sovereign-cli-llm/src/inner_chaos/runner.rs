@@ -69,6 +69,13 @@ pub struct RunOptions {
     pub temperature: Option<f32>,
 }
 
+/// Minimum turns before the zero-success circuit breaker may trip.
+///
+/// Large enough that a genuinely unlucky opening cannot fire it, small
+/// enough that a broken environment costs seconds rather than the whole
+/// time budget.
+const ERROR_BREAKER_MIN_TURNS: usize = 50;
+
 pub async fn run(opts: &RunOptions) -> Result<ChaosReport, String> {
     let bench_dir = resolve_bench_dir(opts.bench_dir.as_ref())?;
     let mut personas = load_personas(&bench_dir.join("personas.toml"))?;
@@ -131,6 +138,33 @@ pub async fn run(opts: &RunOptions) -> Result<ChaosReport, String> {
             )
             .await;
             thread_idx += 1;
+
+            // CIRCUIT BREAKER. A soak that has never once succeeded is
+            // measuring its environment, not the product. On 2026-08-03 this
+            // loop ran its full 40-minute cap against a daemon that had died
+            // before it started: 633,641 turns, 633,641 errors, zero judged,
+            // `safety_number: null`, and ~496 MB of journal written to say
+            // so. Nothing downstream could tell that from a real result.
+            //
+            // "Zero successes after a real sample" is deliberately the only
+            // predicate we trip on — an error *ratio* breaker could kill an
+            // honestly-bad run, which is a result we want to keep. Erroring
+            // out (rather than returning a report) keeps this a
+            // could-not-judge, never a safety number nobody earned.
+            if records.len() >= ERROR_BREAKER_MIN_TURNS
+                && records.iter().all(|r| r.error.is_some())
+            {
+                return Err(format!(
+                    "aborting soak after {} turns: every single turn errored, \
+                     so this run can verify nothing (is the daemon up on \
+                     :9741?). First error: {}",
+                    records.len(),
+                    records
+                        .iter()
+                        .find_map(|r| r.error.as_deref())
+                        .unwrap_or("(none recorded)")
+                ));
+            }
         }
         // No time budget and no explicit cap = exactly one pass
         // through the persona bank.
