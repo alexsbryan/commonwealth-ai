@@ -1910,6 +1910,24 @@ pub(super) async fn setup_watched_folders(
                          in-process tiered driver"
                 );
             }
+            // Headless OCR. `corpus watch --ocr` sets `with_ocr: true` on
+            // the folder config, but the sweep only takes the OCR path when
+            // an `OcrCtx` is also installed here — otherwise scanned PDFs
+            // are reported as `scanned_no_text` and never indexed
+            // (`watched/worker.rs`). Until now only the desktop installed
+            // one, so a server could enable OCR and get nothing.
+            //
+            // `cleanup_model` is the same chat-slot file stem the
+            // enrichment defaults use: the daemon registers each loaded
+            // slot under its file stem, so a slot ALIAS like "fast" would
+            // 503 and silently degrade every page to raw OCR text.
+            super::ocr_install::install_ocr_ctx(
+                &manager,
+                data_dir,
+                format!("http://127.0.0.1:{}", config.daemon.client_port),
+                id_from_path(&config.models.primary),
+            )
+            .await;
             // Living trigger: workflows attached to a watched folder
             // (`run_on_changes`) run on the daemon when a sweep changes files.
             // Routed back through the daemon's own loopback so `model:`/`embed:`

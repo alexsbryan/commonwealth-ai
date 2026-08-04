@@ -583,6 +583,32 @@ default = "under data root"
 status = "shipped"
 purpose = "Session-frame storage override (session continuity; read dynamically with both prefixes)."
 
+# OCR asset paths. Promoted out of the shrink-only baseline 2026-08-03:
+# the on-prem kit stages these assets by hand on an air-gapped box, so
+# they are now part of a documented install contract rather than
+# dev-machine convenience, and the runbook cites docs/ENV_FLAGS.md.
+
+[[flag]]
+name = "SOVEREIGN_PADDLE_OCR_MODEL_DIR"
+cluster = "infra-paths"
+default = "~/.sovereign/models/paddle-ocr (NOT rebrand-aware)"
+status = "shipped"
+purpose = "PaddleOCR models ROOT — the dir holding <model_id>/{det.onnx,rec.onnx,dict.txt}. The built-in fallback in paddle::models_root() is a hardcoded ~/.sovereign path that a ~/.svrnmesh install never hits, so any rebranded or staged deployment must set this. The daemon's ocr_install probes <data_dir>/models/paddle-ocr first and sets the var for the engine."
+
+[[flag]]
+name = "SOVEREIGN_PADDLE_OCR_MODEL"
+cluster = "infra-paths"
+default = "ppocr-en-v4v5"
+status = "shipped"
+purpose = "PaddleOCR model-set id — the subdirectory under the models root. Read by the bake-off and ocr_images harnesses; the production engine uses paddle::DEFAULT_MODEL_ID."
+
+[[flag]]
+name = "SOVEREIGN_PDFIUM_LIB"
+cluster = "infra-paths"
+default = "unset (pdfium-render bundled/system search)"
+status = "shipped"
+purpose = "Absolute path to libpdfium (.so/.dylib/.dll). Without it no PDF can be rasterized, so OCR silently yields nothing on a box with no system pdfium — which is every air-gapped Linux install. The daemon probes <data_dir>/lib first and warns naming every path it tried."
+
 # ── bench ───────────────────────────────────────────────────────────
 
 [[flag]]

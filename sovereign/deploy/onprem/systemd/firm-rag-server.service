@@ -1,0 +1,87 @@
+[Unit]
+# The front door. This — NOT the daemon — is what nginx proxies to.
+#
+# The daemon's /v1/chat/completions is a raw OpenAI passthrough onto the
+# llama.cpp slot: no retrieval, no grounding gate, no citations. The
+# grounded runtime is built in exactly three places (the desktop app,
+# `svrn chat`, and this binary's main.rs) and only this one is headless
+# and multi-user. An acceptance test that POSTs the daemon and expects an
+# abstention CANNOT pass — it is asking the wrong process.
+Description=firm-rag grounded RAG server — the client-facing API
+Documentation=file:/opt/firm-rag/README.md
+
+# Ordering only, not a readiness guarantee: systemd considers the daemon
+# "started" the moment the process execs, long before the GGUFs are
+# loaded. The server tolerates a not-yet-ready backend and retries, and
+# acceptance.sh check 1 is what actually proves the slots are resident.
+After=firm-rag-daemon.service
+Requires=firm-rag-daemon.service
+
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=firmrag
+Group=firmrag
+
+# `--config` is REQUIRED and has no default. It must be space-separated:
+# `--config=/path` is not parsed. The schema here is ServerConfig, which
+# is a DIFFERENT schema from the daemon's SetupConfig — do not copy keys
+# between the two files.
+ExecStart=/opt/firm-rag/bin/sovereign-server --config /etc/firm-rag/server-config.toml
+
+Environment=SOVEREIGN_DATA_DIR=/var/lib/firm-rag
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# ── Sandbox ──────────────────────────────────────────────────────────
+# Tighter than the daemon's: this process holds no GPU and no model
+# weights, so it needs no device access at all.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# ── Egress: denied by the kernel, not by configuration ───────────────
+# EGRESS.md accounts for every outbound call in the source and concludes
+# there are none left in this build. This is what holds if that analysis
+# is wrong somewhere.
+#
+# It is not theoretical. Three agent tools — `search`'s web fallback,
+# `web_fetch`, and `wikipedia_fetch` — reached the open internet on
+# ordinary chat turns, were governed by no config key or env var, and
+# were NOT removed by --no-default-features until the `net-tools` feature
+# was added. A code-level audit found them; a kernel-level deny would
+# have caught them without one.
+#
+# Loopback only: this process talks to the daemon on 127.0.0.1:9741 and
+# accepts from nginx on 127.0.0.1:8080. Nothing else.
+#
+# A denial shows up in the audit log rather than as silent traffic. If
+# you must widen this, add a specific IPAddressAllow rather than
+# removing the deny.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+ReadWritePaths=/var/lib/firm-rag
+# Read-only: the config holds every tenant's API key. A process that can
+# rewrite its own key list is a process that can grant itself tenants.
+ReadOnlyPaths=/etc/firm-rag
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=firm-rag-server
+
+[Install]
+WantedBy=multi-user.target

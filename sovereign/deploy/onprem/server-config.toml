@@ -1,0 +1,171 @@
+# sovereign-server config for the on-prem legal pilot.
+# Installed to /etc/firm-rag/server-config.toml.
+#
+#   sovereign-server --config /etc/firm-rag/server-config.toml
+#
+# `--config` is REQUIRED and has no default. It must be SPACE-separated:
+# `--config=/path` is a single argv token, never matches the parser's exact
+# `== "--config"` comparison, and the binary prints usage and exits 1.
+#
+# ── THIS IS NOT THE DAEMON'S CONFIG ──────────────────────────────────
+# Two config files, two different schemas. This one is `ServerConfig`;
+# the daemon's ~/.svrnmesh/config.toml is `SetupConfig`. They share almost
+# no key names. Copying a section from one to the other produces a file
+# that parses fine and does nothing.
+#
+# ── NO UNKNOWN-KEY REJECTION ─────────────────────────────────────────
+# Not one struct in this schema sets `deny_unknown_fields`. A misspelled
+# key, a mis-nested section, a key that used to exist — all are dropped in
+# silence. The repo's own shipped example proves the hazard: it sets
+# `[store] mode = "sqlite"`, and `StoreSection` has no `mode` field.
+#
+# Because of that, `acceptance.sh` re-reads the values that matter from
+# the running server rather than trusting that this file was applied.
+
+[server]
+# Loopback ONLY. nginx is the only thing that talks to this port, and it
+# is on the same host. Binding this to 0.0.0.0 would put the API on the
+# firm's network with no TLS.
+#
+# One combined "host:port" string — there is no separate `port` key.
+bind = "127.0.0.1:8080"
+
+# How many turns run at once. Sized to the box, not to the user count:
+# every turn contends for ONE model slot and ONE SQLite connection, so
+# raising this past what the GPU can hold buys queueing, not throughput.
+# REST callers get no queue signal while they wait — only the WebSocket
+# route emits QueuePosition — so an over-set value shows up to a lawyer as
+# an answer that takes a very long time for no stated reason.
+#
+# Revisit once the target box's VRAM is known (PLAN.md open question 1).
+max_concurrent_turns = 4
+
+# Seconds in the `Retry-After` header on a 503 when the queue is full.
+retry_after_secs = 2
+
+# Per-user concurrency. 1 means one lawyer cannot occupy two slots while
+# a colleague waits.
+max_per_user = 1
+
+max_queue_depth = 32
+
+# "auto" = permissive only when auth is enabled. Since auth IS enabled
+# below, "auto" resolves to permissive — which is correct here because
+# nginx, not the browser origin policy, is the boundary.
+cors = "auto"
+
+# Left at its default `false` deliberately. It is the startup guard that
+# ABORTS if `bind` is non-loopback while auth is off. Setting it true to
+# "make an error go away" disables the one check that catches the worst
+# possible misconfiguration of this file.
+# allow_unauthenticated_remote = false
+
+# ── Authentication ───────────────────────────────────────────────────
+# v1 is static bearer tokens. No SSO, no ACLs, ONE shared tenant:
+# everyone sees every document AND every conversation. That is a stated
+# pilot cut, not an oversight — see README.md "Honest limits".
+#
+# ⚠ THE TRAP: auth is on only when `mode == "api_key"` AND `keys` is
+# NON-EMPTY. `mode = "api_key"` with an empty map does not fail, does not
+# warn — it serves every /v1/* route unauthenticated as tenant "default".
+# Because `bind` is loopback, the startup exposure guard does not fire
+# either. `acceptance.sh` check 0b is the only thing that catches this:
+# it sends a request with NO token and requires a 401.
+#
+# The map is { secret = tenant_id }. install.sh generates the secrets;
+# they are never committed.
+[auth]
+mode = "api_key"
+
+# install.sh replaces the marker line below with the generated key(s).
+# It is a MARKER and not an append-at-EOF because this file continues
+# with more sections: appending would land the key inside `[iroh]`,
+# where it would parse fine, be silently dropped as an unknown key, and
+# leave `[auth.keys]` empty — which is the exact silent-auth-disable
+# this file warns about two paragraphs up.
+#
+# Format is { secret = tenant_id }. To add a key by hand, add a line
+# here and restart firm-rag-server. To revoke one, delete its line.
+[auth.keys]
+# __INSTALL_KEYS__
+
+# ── Inference: delegate to the daemon, do not load weights here ──────
+# Both binaries load GGUFs in-process by default, so running both naively
+# pays for the weights TWICE and neither fits. A single `type = "remote"`
+# backend pointed at the daemon's loopback port pays once.
+#
+# This is the shape `sovereign_core::mobile_host::generate_server_toml`
+# already emits — reused, not invented.
+[inference]
+# ⚠ REQUIRED even though nothing loads it. The parser has no default for
+# this field, so the file fails to parse without it; but because
+# `backends` below is non-empty, the embedded engine is never constructed
+# and this path is never opened. It survives only as the label used in
+# the embed-model-mismatch message. Point it at the real primary GGUF so
+# that message is not a lie.
+model = "/var/lib/firm-rag/models/Qwen3.5-35B-A3B-Q4_K_M.gguf"
+
+# Retrieval embeddings. Must be the SAME model that built the corpus
+# snapshot — `snapshot restore` hard-errors on an embedding-dimension
+# mismatch, which is the good outcome; a same-dimension DIFFERENT model
+# would restore cleanly and quietly return bad neighbours forever.
+embed_model = "/var/lib/firm-rag/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+
+context_size = 16384
+max_tokens = 2048
+
+[[inference.backends]]
+name = "daemon"
+type = "remote"
+priority = 1
+# A BASE url. The client appends `/chat/completions` and `/embeddings`,
+# so this must end at `/v1` and not carry a full route.
+endpoint = "http://127.0.0.1:9741/v1"
+model_id = "default"
+# ⚠ Does NOT inherit `[inference] context_size`. Omit it and this backend
+# silently runs at 2048 while the file above says 16384.
+context_size = 16384
+# No api_key: the daemon admits every loopback caller with no token.
+
+[store]
+# Conversations and messages. This file is the pilot's entire memory of
+# who asked what — it is the backup target (README.md "Backup").
+path = "/var/lib/firm-rag/sovereign.db"
+
+# ── Retrieval scope ──────────────────────────────────────────────────
+# An explicit allow-list, not the default empty. Empty means "search every
+# installed corpus", which on this box would silently include anything
+# anyone ever indexed. Naming the corpora also scopes what GET /v1/corpora
+# reports, so the client UI cannot offer a source the answer path won't use.
+[retrieval]
+corpora = ["us-code", "firm-docs"]
+
+# ── Zero egress ──────────────────────────────────────────────────────
+# `enabled` DEFAULTS TO TRUE here, including when the whole section is
+# omitted — the section has a hand-written Default that returns true, so
+# leaving it out does not give you `false`. On means the server
+# background-ingests every conversation into corpora. Off for the pilot:
+# a shared-tenant box must not fold one matter's conversation into a
+# corpus another matter can retrieve.
+[knowledge_view]
+enabled = false
+
+# `enabled` already defaults to FALSE in this crate — stated explicitly
+# anyway, because the sibling `MobileHostConfig` in another file defaults
+# the same-named key to TRUE, and the two are easy to confuse. On, this
+# tunnels the local HTTP port to the public internet via third-party n0
+# relays. `discovery = "none"` severs n0 DNS/pkarr contact even if
+# `enabled` is ever flipped by accident.
+[iroh]
+enabled = false
+discovery = "none"
+
+# `[commonwealth] url` is intentionally ABSENT. Setting it turns on
+# activity reporting to the mesh port; unset disables it entirely.
+
+# `[mcp]` is intentionally ABSENT. The MCP routes are compiled out of this
+# build anyway (`--no-default-features`), and an outbound MCP server here
+# would be an egress path.
+
+# `[skills] dir` is intentionally ABSENT — no skills are loaded. A
+# non-existent dir is skipped in silence, so absence and typo look alike.

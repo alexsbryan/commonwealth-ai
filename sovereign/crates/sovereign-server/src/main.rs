@@ -397,12 +397,37 @@ async fn main() {
         Arc::clone(&store),
         Arc::clone(&inference),
     )));
+    // Search over installed corpora. The `net-tools` build additionally
+    // gives it a web fallback that fires whenever the top local score is
+    // below SCORE_SUFFICIENT — POST html.duckduckgo.com, then
+    // www.google.com if that is bot-blocked, then lite.duckduckgo.com.
+    //
+    // `--no-default-features` keeps the tool and drops the fallback:
+    // corpus search IS the product; reaching the open web is a separate
+    // capability that a zero-egress deployment cannot have.
+    #[cfg(feature = "net-tools")]
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
+    #[cfg(not(feature = "net-tools"))]
+    tools.register(Box::new(sovereign_tools::search::SearchTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
+    )));
+    // `web_fetch` retrieves ANY url the model emits — validation is
+    // scheme-only, there is no host allowlist, and it follows up to 5
+    // redirects. `wikipedia_fetch` reaches en.wikipedia.org.
+    //
+    // Neither is gated by `Permission::Network` in practice: that check
+    // lives at exactly one call site, in the plan executor
+    // (`sovereign-core/src/executor.rs`), and the chat/agent path calls
+    // `tool.execute()` directly without consulting it. So the cargo
+    // feature is the only in-process switch these have.
+    #[cfg(feature = "net-tools")]
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    #[cfg(feature = "net-tools")]
     tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
         Arc::clone(&corpus_engine),
     )));

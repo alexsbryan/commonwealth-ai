@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["dev-routes"]
+default = ["dev-routes", "net-tools"]
 # Developer/authoring surfaces. ON by default, so every existing build —
 # desktop, mobile host, dev workstation — behaves exactly as before.
 #
@@ -29,6 +29,38 @@ default = ["dev-routes"]
 #
 # See sovereign/deploy/onprem/README.md.
 dev-routes = []
+
+# Agent tools that reach the open internet. ON by default, so every
+# existing build behaves exactly as before. `--no-default-features`
+# drops them, which is what makes a zero-egress deployment TRUE rather
+# than merely intended.
+#
+#   search's web fallback   POST html.duckduckgo.com, then
+#                           www.google.com when that is bot-blocked,
+#                           then lite.duckduckgo.com. Fires on any chat
+#                           turn where the top LOCAL retrieval score is
+#                           below SCORE_SUFFICIENT — i.e. exactly when
+#                           the corpus is thin, which is often.
+#   web_fetch               ANY url the model emits. Scheme-only
+#                           validation, no host allowlist, follows 5
+#                           redirects.
+#   wikipedia_fetch         en.wikipedia.org.
+#
+# Deliberately SEPARATE from `dev-routes`: those are developer surfaces
+# whose risk is privilege (a shell, an arbitrary file read). These are
+# ordinary product features whose risk is egress. One flag for two
+# unrelated decisions would mean neither name is true.
+#
+# Note what is NOT a switch for these: `Permission::Network`. WebFetchTool
+# declares it, but the permission is consulted at exactly one call site —
+# the plan executor — and the chat/agent path calls `tool.execute()`
+# directly. Without this feature there is no in-process control at all,
+# which is why the on-prem systemd units also carry IPAddressDeny.
+#
+# Under `--no-default-features`, `search` is still registered — over the
+# INSTALLED CORPORA only. Corpus search is the product; the web fallback
+# is a different capability that happens to share a tool id.
+net-tools = []
 
 [dependencies]
 sovereign-contracts = { workspace = true }

@@ -1,0 +1,167 @@
+# svrnmesh daemon config for the on-prem legal pilot.
+# Installed to /etc/firm-rag/daemon-config.toml, loaded explicitly:
+#
+#   svrn daemon run --config /etc/firm-rag/daemon-config.toml
+#
+# ── Why --config and not the canonical path ──────────────────────────
+# The canonical path is `$HOME/.svrnmesh/config.toml`, resolved through
+# the rebrand layer. Under a systemd service user with ProtectHome, that
+# resolution is fragile and its result is not obvious from the unit file.
+# `--config` makes the load deterministic and puts the file where an
+# operator expects to find it. This also lets /etc/firm-rag be mounted
+# read-only: the auto-generated client token is written under the DATA
+# dir, not back into this file.
+#
+# ── THIS IS NOT THE SERVER'S CONFIG ──────────────────────────────────
+# This is `SetupConfig`. /etc/firm-rag/server-config.toml is
+# `ServerConfig` — a different schema. Keys do not transfer. In
+# particular `max_concurrent_turns` belongs to the SERVER and is
+# silently dropped if written here.
+#
+# ── NO UNKNOWN-KEY REJECTION ─────────────────────────────────────────
+# No struct in this schema sets `deny_unknown_fields`. A typo'd key is
+# ignored without a word — and worse, if anything ever re-saves this
+# file the typo'd key is dropped from disk too. `acceptance.sh` re-reads
+# the values that matter from the running daemon rather than trusting
+# that this file was applied.
+#
+# Names commonly guessed wrong: it is `context_size`, NOT `n_ctx`. There
+# is no `host` key (`client_bind` + `client_port`). There is no
+# `[logging]` section. There is no `n_gpu_layers` under `[models]` — GPU
+# offload for the embedded engine is the `SOVEREIGN_GPU_LAYERS` env var
+# only.
+#
+# TOML ordering matters: a section's scalar keys must precede its
+# subtables. `[[mcp_servers]]`, if ever added, goes last.
+
+# ── Models ───────────────────────────────────────────────────────────
+# `primary` and `embed` are the only REQUIRED keys in this file.
+#
+# Absolute paths everywhere. `~` is expanded for these keys, but a
+# service user's home is not a place model weights should live, and the
+# expansion does NOT cover every path key in the schema.
+[models]
+primary = "/var/lib/firm-rag/models/Qwen3.5-35B-A3B-Q4_K_M.gguf"
+
+# The small model that serves cheap internal calls (the grounding-gate
+# judge, title generation, OCR cleanup). Sized so it can be resident
+# alongside the primary. Omit it and the primary subsumes the role,
+# which makes every gate judgement cost a 35B forward pass.
+fast = "/var/lib/firm-rag/models/Qwen3.5-4B-Q6_K.gguf"
+
+# ⚠ Must be the SAME embedding model that built the `us-code` snapshot.
+# `snapshot restore` hard-errors on a dimension mismatch, which is the
+# good outcome; a same-dimension DIFFERENT model restores cleanly and
+# then returns quietly wrong neighbours forever.
+embed = "/var/lib/firm-rag/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+
+context_size = 16384
+
+# ── Data ─────────────────────────────────────────────────────────────
+# ⚠ Set explicitly, on purpose. Two things make the default dangerous
+# here:
+#   1. Omitted, it resolves DYNAMICALLY at each load — `~/.svrnmesh` if
+#      populated, else `~/.sovereign` if it exists, else `~/.svrnmesh`.
+#      The answer can change as directories come and go.
+#   2. This key does NOT honour SOVEREIGN_DATA_DIR. Its default calls
+#      `rebrand::svrnmesh_root()` directly and bypasses the env-honouring
+#      accessor that other subsystems use. The env var is still set in
+#      the systemd unit for those subsystems; this key is what the daemon
+#      itself uses, and the two must agree by hand.
+#
+# Everything the daemon owns lives under here: indexes/, recipes/,
+# notes.db, client-token, node_key, models/paddle-ocr/, lib/.
+# This directory IS the backup target.
+[data]
+dir = "/var/lib/firm-rag"
+
+# ── Daemon ports and binds ───────────────────────────────────────────
+[daemon]
+# The client API. nginx never touches this — only sovereign-server does,
+# over loopback. Note that loopback callers are admitted with NO token,
+# by design, which is why nothing but loopback may reach it.
+client_bind = "127.0.0.1"
+client_port = 9741
+
+# ⚠ THE SINGLE MOST LOAD-BEARING LINE IN THIS FILE.
+#
+# :9742 is the internal mesh API. It has NO authentication at all — not
+# "weak auth", none — and it serves `/internal/v1/models/file/{name}`
+# (raw GGUF bytes), corpus mutation, and model load/unload. Its default
+# bind is 0.0.0.0. On a firm's network that is an unauthenticated remote
+# model-management and corpus-write endpoint.
+#
+# (The default is 0.0.0.0 but not unconditionally: an encrypted mesh
+# forces it to loopback regardless of what is written here. This box
+# runs no mesh, so that override never fires and this line is the only
+# thing holding it.)
+internal_bind = "127.0.0.1"
+internal_port = 9742
+
+# Keep the primary slot pinned for the daemon's lifetime. The default
+# 300s evicts after five idle minutes and re-pays a 10-90s model load on
+# the next question — which on a shared box is "the system is slow in
+# the mornings". It also makes acceptance check 1 (`resident: true`)
+# flap depending on how long ago someone last asked something.
+# Cost: the primary's VRAM stays pinned. That is the intent.
+primary_idle_secs = 86400
+
+# This node serves no peers — there is no mesh. 0 opts out of peer
+# inference admission entirely rather than admitting one at a time.
+max_peer_inflight = 0
+
+# ⚠ ZERO-EGRESS. Default is TRUE, and true spawns a Wikipedia MediaWiki
+# poller against https://en.wikipedia.org/w/api.php AT DAEMON STARTUP,
+# plus its Wikimedia stream. On an air-gapped box it does not fail
+# quietly at install time — it spawns, ticks, and fails on every tick
+# forever, filling the journal with outbound-connection errors that the
+# firm's security team will find before you do.
+freshness_watchers_enabled = false
+
+# ── Watched folders ──────────────────────────────────────────────────
+# The firm's document share is ingested through `svrn corpus watch`.
+[watched_folders]
+# 1, not the default 2. A sweep runs extraction + embedding, which
+# contends with live queries for the same embed slot. One at a time
+# keeps an overnight re-index from making the morning's questions slow.
+max_concurrent_sweeps = 1
+
+# 300s, not 120s. A discovery share does not change every two minutes,
+# and each sweep walks the whole tree.
+default_sweep_interval_secs = 300
+
+# ── Zero egress ──────────────────────────────────────────────────────
+
+# ⚠ `enabled` is Option<bool> and the default is None = AUTO, which
+# means "on iff this node participates in a mesh" — and the daemon
+# ALWAYS creates a solo mesh at boot. So the default is effectively ON.
+# It must be written false explicitly; there is no "leave it out and get
+# off".
+#
+# `discovery = "none"` is not redundant. Setting `relay_urls` alone does
+# NOT stop the n0 DNS/pkarr lookup; only this key does. It is stated
+# here so that if `enabled` is ever flipped for a mesh pilot, the
+# third-party DNS path stays severed by default.
+[iroh]
+enabled = false
+discovery = "none"
+
+# ⚠ Default is TRUE, and this one fails LOUDLY rather than quietly: the
+# multicast socket bind is FATAL at boot. On a hardened or containerized
+# host where multicast is unavailable, leaving this at its default means
+# the daemon exits 1 with "mDNS register failed" and never starts. It is
+# the most likely cause of a first-boot failure on a locked-down VM.
+#
+# `seed_addrs` and `join_key` are deliberately absent: with both unset
+# the daemon forms a silent solo mesh. Setting `join_key` with an empty
+# `seed_addrs` is a hard exit 1.
+[discovery]
+mdns = false
+
+# `[compute]` is intentionally ABSENT — `enabled` defaults false. This
+# box does no distributed inference.
+#
+# `[shared_model]` is intentionally ABSENT — inert without a `model_id`.
+#
+# `[[mcp_servers]]` is intentionally ABSENT. An MCP server here would be
+# an outbound network path, and there is nothing on this box to reach.

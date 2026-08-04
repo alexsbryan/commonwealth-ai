@@ -46,6 +46,7 @@ mod lane_baseline;
 mod live_runner;
 mod mechanism_fidelity;
 mod model_resolve;
+mod moral;
 mod obsidian;
 mod parity_compare;
 mod promote;
@@ -107,6 +108,10 @@ const HELP: Help = Help {
             (
                 "vault-report",
                 "Raw folder -> queryable-enriched corpus, timed end to end: time_to_rag_ready + time_to_enriched, per-phase spans, per-note accounting, token ledger.",
+            ),
+            (
+                "moral",
+                "Process-focused moral-reasoning lane (MoReBench-derived): per-criterion rubric judging of HOW a model reasons about dilemmas, per-dimension fulfillment, judge-pinned A/B via --report/--diff, judge calibration via --calibrate.",
             ),
             (
                 "obsidian",
@@ -181,6 +186,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "proxy" => proxy_bench::cmd_proxy_bench(&args[1..]).await,
         "promote" => promote::cmd_promote(&args[1..]).await,
         "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
+        "moral" => moral::cmd_moral(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,

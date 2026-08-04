@@ -42,6 +42,11 @@ mod discovery_policy;
 // mid-flow would break the one-command promise and leave the verify
 // ladder below with nothing to verify.
 pub(crate) mod lifecycle;
+// Headless OCR install. Compiled unconditionally — the module carries both
+// cfg arms of `install_ocr_ctx` so the single call site in `bootstrap` never
+// grows a `#[cfg]`, and a build without `--features ocr` still logs WHY OCR
+// is unavailable instead of doing nothing.
+mod ocr_install;
 mod solve_http;
 mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by

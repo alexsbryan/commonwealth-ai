@@ -15,7 +15,12 @@ use axum::Router;
 
 use sovereign_core::runtime::Runtime;
 use sovereign_core::types::*;
-use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
+use sovereign_tools::document_asset::DocumentAssetManager;
+// Only the upload handler reports ingest progress, and that route is
+// `dev-routes`-only — so the import has to follow the route, or the
+// hardened build carries an unused-import warning that reads like rot.
+#[cfg(feature = "dev-routes")]
+use sovereign_tools::document_asset::IngestProgress;
 
 use crate::auth::TenantId;
 

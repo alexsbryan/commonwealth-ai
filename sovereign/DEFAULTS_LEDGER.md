@@ -66,6 +66,84 @@ store (ids cited per row).
 - **Settled by:** unowned.
 - **Review by:** 2026-09-01.
 
+### Hardened `sovereign-server` — `dev-routes` + `net-tools` (both default **ON**)
+- **Shipped:** `dev-routes` 2026-08-02, `net-tools` 2026-08-03. Both
+  default ON. The *hardened* build is the opt-in one:
+  `cargo build -p sovereign-server --no-default-features`.
+- **What is dark:** not a capability — a *posture*. Default-on keeps
+  every existing build (desktop, mobile host, dev workstation)
+  byte-identical, so the row records why the safe configuration is the
+  one you have to ask for.
+- **`dev-routes` gates PRIVILEGE:** `POST /v1/solve` + `/v1/cycle/bdd`
+  (client-supplied `test_command` reaches `sh -c` inside the
+  *authenticated* router — any tenant key is a shell);
+  `POST /v1/documents/upload` + `/v1/corpora/upload` (ingest an
+  absolute server-side path — any tenant can read any file the process
+  can, including the config holding every other tenant's key);
+  `/mcp`, `/mcp/message`, `/mcp/stats` (outside the auth layer, gated
+  only by `ip.is_loopback()`, which a same-host reverse proxy
+  satisfies for every remote caller); `ShellTool`.
+- **`net-tools` gates EGRESS**, and it exists because an audit found
+  three agent tools reaching the open internet on **ordinary chat
+  turns** with no config key, no env var, and no removal by
+  `--no-default-features`: the `search` tool's web fallback
+  (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top LOCAL
+  retrieval score is thin), `web_fetch` (any URL the model emits,
+  scheme-only validation, 5 redirects), and `wikipedia_fetch`. They sit
+  three lines below `ShellTool`, which *is* gated. `Permission::Network`
+  is not a control: it is consulted at exactly one call site, in the
+  plan executor, and the chat path calls `tool.execute()` directly.
+  Under `--no-default-features`, `search` survives built local-only.
+- **Why they are two flags, not one:** privilege and egress are
+  unrelated decisions. One flag for both would make neither name true
+  (§10.6, one decider one name).
+- **Proof so far:** both configurations compile clean; under
+  `--no-default-features` the dead-code count drops 47 → 2, confirming
+  the modules are excluded from the binary rather than merely
+  unreachable. `acceptance.sh` check 0c enumerates `GET /v1/tools` on
+  the running box and fails if either egress tool is present *or* if
+  `search` went missing with them.
+- **Flip condition (falsifiable):** `dev-routes` is **deleted and the
+  hardened surface becomes unconditional** once all four are true —
+  (a) upload routes path-jail to a per-tenant root instead of taking
+  an absolute server path; (b) `/mcp` moves inside the auth layer and
+  stops trusting peer address; (c) `test_command` is an allowlist, not
+  free text; (d) `ShellTool` registration is gated on an explicit
+  config key. `net-tools` flips only when the three tools gain a
+  runtime allowlist that the chat path actually consults — a cargo
+  feature is the wrong granularity for a product capability, and is
+  here only because no runtime control exists.
+- **Settled by:** the on-prem pilot
+  (`sovereign/deploy/onprem/PLAN.md`). If the pilot does not proceed,
+  the items above are the standing debt regardless — this crate is
+  reachable from the desktop's embedded host too.
+- **Review by:** 2026-09-15.
+
+### Headless OCR in the daemon — the `ocr` cargo feature (default **OFF**)
+- **Shipped:** 2026-08-03, off by default
+  (`sovereign-cli-daemon/Cargo.toml`, `ocr = ["sovereign-tools/paddle-ocr"]`).
+- **What is dark:** the daemon can install an `OcrCtx` at boot so
+  `svrn corpus watch --ocr` reads scanned PDFs headlessly. Without the
+  feature, a scanned PDF lands in `WatchedFolderState.failed_files`
+  with reason `scanned_no_text` — reported, not silent, but the
+  document does not enter the index.
+- **Cost of on:** pulls `ort` + `ndarray` + `imageproc` + `i_overlay`
+  into every daemon build, and the runtime needs ~20 MB of staged
+  assets (`det.onnx` + `rec.onnx` + `dict.txt` = 12.6 MB, `libpdfium`
+  = 7.6 MB) that a default install does not fetch. Off-by-default
+  keeps dev builds and the standard release set unchanged;
+  `sovereign/deploy/onprem/package.sh` turns it on.
+- **Flip condition (falsifiable):** default-on when (a) the added
+  clean-build wall time for `-p sovereign-cli-daemon` is measured at
+  under 60 s, **and** (b) the OCR assets ship in the standard release
+  artifact so the feature is not compiled-in-but-unusable — a build
+  that has the code and no models fails `build_engine` at ingest,
+  which is worse than not having it.
+- **Settled by:** the on-prem pilot's `package.sh`; the general
+  release path (`scripts/release-cli-local.sh`) does not stage OCR
+  assets today.
+- **Review by:** 2026-09-15.
+
 ## REJECTED — measured no; do not re-litigate without new evidence
 
 ### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)

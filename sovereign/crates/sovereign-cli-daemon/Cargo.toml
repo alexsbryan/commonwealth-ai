@@ -82,5 +82,20 @@ atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
 # Bench/measurement-only: see sovereign-mesh's feature of the same name.
 iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
 
+# Headless OCR. OFF by default: it pulls `ort` + `ndarray` + `imageproc` +
+# `i_overlay` into every daemon build, and the engine additionally needs
+# ~20 MB of staged assets (det.onnx + rec.onnx + dict.txt, libpdfium) that
+# the standard release path does not fetch — so compiling it in without
+# staging them would only move the failure from "no OCR" to "OCR fails at
+# ingest".
+#
+# When ON, `daemon_cmd::ocr_install` installs an `OcrCtx` on the
+# LocalCorpusManager at boot, which is what makes `svrn corpus watch --ocr`
+# read scanned PDFs on a headless box. Without it, a scanned PDF lands in
+# `WatchedFolderState.failed_files` with reason `scanned_no_text`.
+#
+# See sovereign/deploy/onprem/README.md and the DEFAULTS_LEDGER row.
+ocr = ["sovereign-tools/paddle-ocr"]
+
 [lints]
 workspace = true
