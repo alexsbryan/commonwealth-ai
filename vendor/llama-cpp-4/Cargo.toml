@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "llama-cpp-4"
-version = "0.4.2"
+version = "0.5.1"
 authors = ["Eugene Hauptmann"]
 build = false
 autolib = false
@@ -115,17 +115,30 @@ path = "tests/test_q1.rs"
 name = "test_sampler"
 path = "tests/test_sampler.rs"
 
+[[bench]]
+name = "decode_hooks"
+path = "benches/decode_hooks.rs"
+harness = false
+
+[[bench]]
+name = "tensor_transactions"
+path = "benches/tensor_transactions.rs"
+harness = false
+
 [dependencies.enumflags2]
 version = "0.7.12"
 
 [dependencies.llama-cpp-sys-4]
-version = "0.4.2"
+version = "0.5.1"
 
 [dependencies.thiserror]
 version = "2.0.18"
 
 [dependencies.tracing]
 version = "0.1"
+
+[dev-dependencies.criterion]
+version = "0.8.2"
 
 [dev-dependencies.encoding_rs]
 version = "0.8.35"

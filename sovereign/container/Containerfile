@@ -125,13 +125,38 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY commonwealth/        ./commonwealth/
 COPY corpus-engine/       ./corpus-engine/
+# The corpus-engine decomposition (DECOMPOSITION.md) split these out of
+# corpus-engine/ into sibling top-level crates. They are workspace members
+# named by the root manifest, so cargo fails to load the workspace without
+# them — this is not an optional trim.
+COPY corpus-engine-scip/        ./corpus-engine-scip/
+COPY corpus-engine-atos/        ./corpus-engine-atos/
+COPY corpus-engine-notes/       ./corpus-engine-notes/
+COPY corpus-engine-archaeology/ ./corpus-engine-archaeology/
+COPY corpus-engine-yield/       ./corpus-engine-yield/
+COPY corpus-engine-watchers/    ./corpus-engine-watchers/
 COPY oicp-types/          ./oicp-types/
-# corpus-engine/build.rs reads bundled `vital_articles_*.txt` from
-# the sibling `sovereign-recipes/` repo; without these the build
-# panics. We copy only the data subtree the build script reads to
-# keep the build context lean (sovereign-recipes is ~600 MB total,
-# mostly unrelated corpora data).
-COPY sovereign-recipes/wikipedia/data/   ./sovereign-recipes/wikipedia/data/
+COPY oicp-client/         ./oicp-client/
+COPY studio/crates/       ./studio/crates/
+COPY quality/arch-layers/ ./quality/arch-layers/
+# [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
+# and lance-linalg at vendor/. Omitting this does not degrade gracefully:
+# cargo fails the workspace load outright on a patch whose path is missing.
+#
+# vendor/llama-cpp-sys-4 is ~35 MB because it carries llama.cpp itself. We
+# vendor it to hold the llama.cpp revision one commit ahead of what the
+# published crate bundles (upstream 1464c62d88 — the Metal DSv4 Lightning
+# Indexer kernel); see vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT. Resolving the
+# unpatched registry crates would build a DIFFERENT llama.cpp — wrong RPC wire
+# version, and a Metal worker that aborts mid-graph on DeepSeek-V4.
+COPY vendor/              ./vendor/
+# Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
+# OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
+# This used to be narrowed to wikipedia/data/ back when multi-GB bench
+# gyms lived under sovereign-recipes/; those moved to sovereign/bench in
+# the recipes single-source-of-truth refactor, so the subset is now both
+# unnecessary and insufficient. Matches Containerfile.cuda.
+COPY sovereign-recipes/      ./sovereign-recipes/
 # Only copy the parts of sovereign/ that cargo actually needs. Skipping
 # container/, scripts/, docs/, bench/, etc. means edits to those don't
 # invalidate the cargo-build layer (which is the slow one). Workspace
@@ -144,6 +169,11 @@ COPY sovereign/models.toml ./sovereign/models.toml
 COPY sovereign/crates/    ./sovereign/crates/
 COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
+# sovereign-core include_str!s the router exemplar TOMLs + embed cache.
+COPY sovereign/router/    ./sovereign/router/
+# sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
+# do NOT copy all of sovereign/bench (44 MB of gyms/eval banks).
+COPY sovereign/bench/book-report/bench.toml ./sovereign/bench/book-report/bench.toml
 
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for

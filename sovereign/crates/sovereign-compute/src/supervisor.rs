@@ -36,11 +36,17 @@
 //!   configurable cadence.
 //! - On child exit, **or** after N consecutive heartbeat failures,
 //!   restart with the configured exponential backoff.
-//! - If the daemon crashes more than `crash_loop_max` times within
-//!   `crash_loop_window`, stop auto-restarting and surface a `Failed`
-//!   state. Only an explicit `request_reconnect()` from the UI wakes
-//!   the supervisor back up — auto-relaunch never silently burns CPU
-//!   in a tight crash loop.
+//! - If the daemon crashes more than `crash_loop_max` times in a row —
+//!   with no generation staying healthy for `healthy_reset_after` in
+//!   between — stop auto-restarting and surface a `Failed` state. Only
+//!   an explicit `request_reconnect()` from the UI wakes the supervisor
+//!   back up — auto-relaunch never silently burns CPU in a tight crash
+//!   loop. The counter resets on PROOF (a generation that served), not
+//!   on elapsed time; a wall-clock window is unreachable for any child
+//!   that takes longer to load than the window is wide.
+//! - Back off at least as long as the last generation took to load, so
+//!   an expensive child cannot re-enter a multi-minute load immediately
+//!   after failing one.
 //! - Drain child stderr into a bounded ring buffer. On each restart,
 //!   persist the buffer to `<crash_log_dir>/daemon-<unix-ts>.log` so
 //!   the user (or a "send report" action) can attach the trailing
@@ -158,8 +164,29 @@ pub struct SupervisorConfig {
     /// Schedule of delays before successive restart attempts. After
     /// the last entry, restarts use the final entry indefinitely
     /// (until the crash-loop ceiling triggers `Failed`).
+    ///
+    /// The schedule is a FLOOR, not the whole story: a generation that
+    /// took `t` to load waits at least `t` before the next attempt, so
+    /// an expensive child can never re-enter a load back-to-back. See
+    /// [`GenerationCost`].
     pub backoff_schedule: Vec<Duration>,
-    pub crash_loop_window: Duration,
+    /// How long a generation must stay healthy to PROVE that restarting
+    /// worked. A generation that serves at least this long resets the
+    /// consecutive-crash counter; anything shorter does not.
+    ///
+    /// This is the reset condition for [`Self::crash_loop_max`], and it
+    /// is deliberately not a wall-clock window. A wall-clock window is
+    /// unreachable for any child whose spawn→crash cycle is longer than
+    /// the window: crashes age out faster than they accumulate and the
+    /// ceiling never trips. Measured live 2026-08-03 — a 148 GB
+    /// distributed primary took 4m36s to load and died 13s into serving,
+    /// so the old 600s window held at most two crashes against a ceiling
+    /// of five, and the breaker could not fire at all while each cycle
+    /// re-mapped 148 GB of GTT. Two cycles exhausted the host's GPU
+    /// address space and took the desktop down with it.
+    pub healthy_reset_after: Duration,
+    /// Consecutive crashes — with no generation proving itself healthy
+    /// in between — before auto-restart stops and `Failed` is published.
     pub crash_loop_max: u32,
     pub stderr_ring_lines: usize,
 }
@@ -227,6 +254,32 @@ pub type SpawnGate = Arc<dyn Fn() -> SpawnVerdict + Send + Sync>;
 /// How often a held gate is re-polled. Short enough that recovery is prompt,
 /// long enough that holding costs nothing.
 const SPAWN_GATE_POLL: Duration = Duration::from_secs(2);
+
+/// What one spawn→exit generation cost, and what it proved.
+///
+/// Both numbers feed decisions the supervisor cannot make from the exit
+/// status alone: `healthy_for` answers "did restarting actually work?"
+/// (the circuit breaker's reset condition) and `load` answers "how
+/// expensive is it to try again?" (the backoff floor). A child that
+/// takes minutes and tens of GB to load is not the same restart risk as
+/// one that binds a port in 200 ms, and the supervisor has no other way
+/// to tell them apart.
+#[derive(Debug, Clone, Copy, Default)]
+struct GenerationCost {
+    /// spawn → first successful health probe. `None` if the generation
+    /// died or was killed before it ever answered one.
+    load: Option<Duration>,
+    /// first successful health probe → exit. `ZERO` when the generation
+    /// never became healthy.
+    healthy_for: Duration,
+}
+
+impl GenerationCost {
+    /// Did this generation run long enough to prove the restart worked?
+    fn proved_healthy(&self, threshold: Duration) -> bool {
+        self.healthy_for >= threshold
+    }
+}
 
 /// Internal reason a supervise-loop iteration ended. Used to decide
 /// whether to count toward the crash-loop ceiling and what reason to
@@ -447,8 +500,14 @@ impl Supervisor {
             }
         };
 
-        let mut crash_times: VecDeque<Instant> = VecDeque::new();
+        // Crashes since the last generation that PROVED itself (see
+        // `GenerationCost::proved_healthy`). Not a sliding window —
+        // see `SupervisorConfig::healthy_reset_after` for why.
+        let mut consecutive_crashes: u32 = 0;
         let mut attempt: u32 = 0;
+        // What the previous generation cost to load. Floors the backoff
+        // so an expensive child never re-enters a load back-to-back.
+        let mut last_cost = GenerationCost::default();
 
         loop {
             // Before anything else: may we spawn at all? A respawn into a
@@ -473,9 +532,10 @@ impl Supervisor {
                     if !self
                         .handle_crash(
                             &mut attempt,
-                            &mut crash_times,
+                            &mut consecutive_crashes,
                             ExitOutcome::WaitError(reason.clone()),
                             None,
+                            last_cost,
                             &mut reconnect_rx,
                         )
                         .await
@@ -498,12 +558,19 @@ impl Supervisor {
                 None => {
                     let outcome = ExitOutcome::WaitError("child did not announce its port".into());
                     let crash_log = self.persist_crash_log(pid, &outcome).await;
+                    // A generation that never announced a port never
+                    // became healthy — it proves nothing and resets
+                    // nothing. `last_cost` stays as the previous
+                    // generation left it, so an expensive child that
+                    // starts failing early still pays the load-sized
+                    // backoff floor it earned.
                     if !self
                         .handle_crash(
                             &mut attempt,
-                            &mut crash_times,
+                            &mut consecutive_crashes,
                             outcome,
                             crash_log,
+                            last_cost,
                             &mut reconnect_rx,
                         )
                         .await
@@ -514,7 +581,7 @@ impl Supervisor {
                 }
             };
 
-            let outcome = self
+            let (outcome, cost) = self
                 .supervise_until_exit(
                     &mut child,
                     pid,
@@ -527,6 +594,8 @@ impl Supervisor {
                 .await;
             let crash_log = self.persist_crash_log(pid, &outcome).await;
 
+            last_cost = cost;
+
             match outcome {
                 ExitOutcome::Shutdown | ExitOutcome::Terminated => {
                     // Channel closed, or a graceful terminate — nothing
@@ -537,16 +606,32 @@ impl Supervisor {
                 ExitOutcome::ManualReconnect => {
                     info!("supervisor: manual reconnect; resetting backoff");
                     attempt = 0;
-                    crash_times.clear();
+                    consecutive_crashes = 0;
                     // Loop back to Starting immediately.
                 }
                 _ => {
+                    // A generation that served for `healthy_reset_after`
+                    // is PROOF that restarting this child works, and is
+                    // the only thing that clears the breaker. Elapsed
+                    // wall-clock is not proof — see
+                    // `SupervisorConfig::healthy_reset_after`.
+                    if cost.proved_healthy(self.config.healthy_reset_after) {
+                        info!(
+                            healthy_for_secs = cost.healthy_for.as_secs_f32(),
+                            threshold_secs = self.config.healthy_reset_after.as_secs_f32(),
+                            prior_consecutive_crashes = consecutive_crashes,
+                            "supervisor: generation proved healthy — crash breaker reset"
+                        );
+                        attempt = 0;
+                        consecutive_crashes = 0;
+                    }
                     if !self
                         .handle_crash(
                             &mut attempt,
-                            &mut crash_times,
+                            &mut consecutive_crashes,
                             outcome,
                             crash_log,
+                            cost,
                             &mut reconnect_rx,
                         )
                         .await
@@ -564,28 +649,29 @@ impl Supervisor {
     async fn handle_crash(
         &self,
         attempt: &mut u32,
-        crash_times: &mut VecDeque<Instant>,
+        consecutive_crashes: &mut u32,
         outcome: ExitOutcome,
         crash_log: Option<PathBuf>,
+        cost: GenerationCost,
         reconnect_rx: &mut mpsc::UnboundedReceiver<()>,
     ) -> bool {
-        let now = Instant::now();
-        crash_times.retain(|t| now.duration_since(*t) < self.config.crash_loop_window);
-        crash_times.push_back(now);
+        *consecutive_crashes = consecutive_crashes.saturating_add(1);
 
-        if crash_times.len() as u32 > self.config.crash_loop_max {
+        if *consecutive_crashes > self.config.crash_loop_max {
             warn!(
-                recent_crashes = crash_times.len(),
+                consecutive_crashes = *consecutive_crashes,
                 ceiling = self.config.crash_loop_max,
-                window_secs = self.config.crash_loop_window.as_secs(),
+                healthy_reset_after_secs = self.config.healthy_reset_after.as_secs(),
+                last_healthy_for_secs = cost.healthy_for.as_secs_f32(),
+                last_load_secs = cost.load.map(|d| d.as_secs_f32()),
                 "supervisor: crash-loop ceiling exceeded; awaiting manual reconnect"
             );
             self.broadcast(SupervisorState::Failed {
                 reason: format!(
-                    "{} — daemon crashed {} times in {}s",
+                    "{} — {} consecutive crashes, none serving {}s",
                     outcome.reason(),
-                    crash_times.len(),
-                    self.config.crash_loop_window.as_secs()
+                    *consecutive_crashes,
+                    self.config.healthy_reset_after.as_secs()
                 ),
                 last_crash_log: crash_log,
             });
@@ -593,17 +679,34 @@ impl Supervisor {
                 return false;
             }
             *attempt = 0;
-            crash_times.clear();
+            *consecutive_crashes = 0;
             return true;
         }
 
-        let delay = self
+        let scheduled = self
             .config
             .backoff_schedule
             .get(*attempt as usize)
             .copied()
             .or_else(|| self.config.backoff_schedule.last().copied())
             .unwrap_or(Duration::from_secs(30));
+        // The schedule assumes a restart is cheap. For a child whose
+        // load costs minutes and tens of GB of unified memory, going
+        // back in after 1s means the host is loading a model nearly
+        // 100% of the time — which is how a worker-side crash escalated
+        // into a host-wide GPU-memory exhaustion on 2026-08-03. Waiting
+        // at least as long as the last load took bounds that duty cycle
+        // to ~50% and gives whatever failed (a peer, the operator, the
+        // spawn gate) room to change the answer.
+        let floor = cost.load.unwrap_or_default();
+        let delay = scheduled.max(floor);
+        if delay > scheduled {
+            info!(
+                scheduled_secs = scheduled.as_secs_f32(),
+                load_floor_secs = floor.as_secs_f32(),
+                "supervisor: backoff raised to the last generation's load cost"
+            );
+        }
         self.broadcast(SupervisorState::Restarting {
             attempt: *attempt + 1,
             after_secs: delay.as_secs(),
@@ -777,7 +880,7 @@ impl Supervisor {
         http: &reqwest::Client,
         reconnect_rx: &mut mpsc::UnboundedReceiver<()>,
         terminate_rx: &mut mpsc::UnboundedReceiver<()>,
-    ) -> ExitOutcome {
+    ) -> (ExitOutcome, GenerationCost) {
         let mut consecutive_failures: u32 = 0;
         let mut ticker = tokio::time::interval(self.config.heartbeat_interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -786,22 +889,29 @@ impl Supervisor {
         // probe always reads as a failure.
         ticker.tick().await;
         let mut last_health: Option<bool> = None;
-        // Once the child answers ONE probe, the startup grace no longer
-        // applies — a later stall is a real failure, not slow loading.
-        let mut ever_healthy = false;
+        // When the child answered its FIRST probe. `Some` doubles as
+        // "ever healthy" — once set, the startup grace no longer applies
+        // (a later stall is a real failure, not slow loading) — and it
+        // is the origin for both halves of `GenerationCost`.
+        let mut first_healthy: Option<Instant> = None;
+        let cost = |first_healthy: Option<Instant>| GenerationCost {
+            load: first_healthy.map(|t| t.duration_since(spawn_instant)),
+            healthy_for: first_healthy.map(|t| t.elapsed()).unwrap_or_default(),
+        };
 
         loop {
             tokio::select! {
                 exit = child.wait() => {
-                    return match exit {
+                    let outcome = match exit {
                         Ok(status) => ExitOutcome::ChildExited { code: status.code() },
                         Err(e) => ExitOutcome::WaitError(e.to_string()),
                     };
+                    return (outcome, cost(first_healthy));
                 }
                 _ = terminate_rx.recv() => {
                     info!(pid, "supervisor: graceful terminate requested");
                     Self::graceful_kill(child, pid).await;
-                    return ExitOutcome::Terminated;
+                    return (ExitOutcome::Terminated, cost(first_healthy));
                 }
                 msg = reconnect_rx.recv() => {
                     let _ = child.kill().await;
@@ -813,10 +923,10 @@ impl Supervisor {
                         // keeps the outer loop from spinning on a
                         // closed channel — see `run()`.
                         info!(pid, "supervisor: reconnect channel closed; shutting down");
-                        return ExitOutcome::Shutdown;
+                        return (ExitOutcome::Shutdown, cost(first_healthy));
                     }
                     info!(pid, "supervisor: reconnect requested; killing child");
-                    return ExitOutcome::ManualReconnect;
+                    return (ExitOutcome::ManualReconnect, cost(first_healthy));
                 }
                 _ = ticker.tick() => {
                     let ok = http.get(health_url).send().await
@@ -832,8 +942,18 @@ impl Supervisor {
                         }
                         consecutive_failures = 0;
                         last_health = Some(true);
-                        ever_healthy = true;
-                    } else if !ever_healthy && spawn_instant.elapsed() < self.config.ready_deadline {
+                        if first_healthy.is_none() {
+                            let now = Instant::now();
+                            first_healthy = Some(now);
+                            info!(
+                                pid,
+                                load_secs = now.duration_since(spawn_instant).as_secs_f32(),
+                                "supervisor: child answered its first probe — load cost recorded"
+                            );
+                        }
+                    } else if first_healthy.is_none()
+                        && spawn_instant.elapsed() < self.config.ready_deadline
+                    {
                         // Startup grace: the child is still loading its
                         // model. A failed probe here is expected — don't
                         // count it toward the crash threshold. `Warming`
@@ -854,7 +974,10 @@ impl Supervisor {
                             );
                             let _ = child.kill().await;
                             let _ = child.wait().await;
-                            return ExitOutcome::HeartbeatFailed { consecutive_failures };
+                            return (
+                                ExitOutcome::HeartbeatFailed { consecutive_failures },
+                                cost(first_healthy),
+                            );
                         }
                         if last_health != Some(false) || consecutive_failures > 1 {
                             self.broadcast(SupervisorState::Unhealthy {
@@ -983,7 +1106,11 @@ mod tests {
                 Duration::from_millis(40),
                 Duration::from_millis(60),
             ],
-            crash_loop_window: Duration::from_secs(60),
+            // Long relative to these tests' millisecond timings: the
+            // default fixture never resets the breaker, which is what
+            // the crash-loop tests want. Tests that need a reset lower
+            // it explicitly.
+            healthy_reset_after: Duration::from_secs(60),
             crash_loop_max: 3,
             stderr_ring_lines: 64,
         }
@@ -1004,6 +1131,198 @@ mod tests {
             }
         }
         out
+    }
+
+    /// A health server that 503s for `unhealthy_for`, then 200s. Lets a
+    /// test give a generation a *measurable load cost* — the input to
+    /// the backoff floor — without spawning a real model.
+    async fn spawn_slow_health_server(
+        unhealthy_for: Duration,
+    ) -> (u16, tokio::task::JoinHandle<()>) {
+        use axum::{http::StatusCode, routing::get, Router};
+        let up_at = Instant::now() + unhealthy_for;
+        let app = Router::new().route(
+            "/v1/models",
+            get(move || async move {
+                if Instant::now() < up_at {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::OK
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
+        (port, handle)
+    }
+
+    /// THE REGRESSION. A child that loads, serves *briefly*, and dies —
+    /// over and over — must trip the breaker.
+    ///
+    /// This is the shape that took the host down on 2026-08-03: a 148 GB
+    /// distributed primary loaded in 4m36s, served 13s, and aborted when
+    /// its remote RPC worker died. The old ceiling was "N crashes inside
+    /// a 600s sliding window", which that child could never reach —
+    /// crashes aged out of the window faster than a 4.5-minute cycle
+    /// could accumulate them — so the supervisor re-mapped 148 GB of
+    /// unified memory indefinitely until amdgpu ran out of address space
+    /// and the desktop died. The reset condition must be PROOF (a
+    /// generation that served), never elapsed time.
+    #[tokio::test]
+    async fn brief_healthy_stretches_do_not_reset_the_breaker() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        // Becomes healthy on the first probe, serves ~200ms, then dies —
+        // the "loads fine, dies on first real work" signature.
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 0.2\nexit 1\n");
+        let mut config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+        config.backoff_schedule = vec![Duration::from_millis(20)];
+        config.crash_loop_max = 2;
+        // A full second of serving would prove the restart worked. 200ms
+        // does not.
+        config.healthy_reset_after = Duration::from_secs(1);
+
+        let supervisor = Arc::new(Supervisor::new(config));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        let observed = drain_states(&mut states, 40, Duration::from_millis(1500)).await;
+        assert!(
+            observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Healthy { .. })),
+            "the child must actually reach Healthy — otherwise this test \
+             proves nothing about brief-healthy generations: {observed:?}"
+        );
+        assert!(
+            observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Failed { .. })),
+            "a child that keeps dying shortly after serving must trip the \
+             breaker, got {observed:?}"
+        );
+
+        run_handle.abort();
+    }
+
+    /// The other half of the same decider: a generation that DOES serve
+    /// long enough clears the counter, so an occasional crash in a
+    /// long-running child never parks it. Fails on the old wall-clock
+    /// ceiling, which would reach `Failed` on the second crash here
+    /// regardless of how long the child had been up.
+    #[tokio::test]
+    async fn a_proven_healthy_generation_resets_the_breaker() {
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 0.5\nexit 1\n");
+        let mut config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+        config.backoff_schedule = vec![Duration::from_millis(20)];
+        // One crash would be enough to park it if nothing ever reset.
+        config.crash_loop_max = 1;
+        // ~400ms of serving per generation clears this bar.
+        config.healthy_reset_after = Duration::from_millis(150);
+
+        let supervisor = Arc::new(Supervisor::new(config));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        let observed = drain_states(&mut states, 40, Duration::from_millis(1200)).await;
+        let restarts = observed
+            .iter()
+            .filter(|s| matches!(s, SupervisorState::Restarting { .. }))
+            .count();
+        assert!(
+            restarts >= 2,
+            "expected repeated restarts to exercise the reset, got {restarts} in {observed:?}"
+        );
+        assert!(
+            !observed
+                .iter()
+                .any(|s| matches!(s, SupervisorState::Failed { .. })),
+            "a generation that served past healthy_reset_after must clear \
+             the breaker — got {observed:?}"
+        );
+
+        run_handle.abort();
+    }
+
+    /// The backoff floor. A generation that cost 400ms to load must not
+    /// be retried on the 20ms schedule — otherwise an expensive child
+    /// spends nearly all its wall-clock inside a load, which is what
+    /// turned one worker-side crash into host-wide GPU-memory
+    /// exhaustion. Measured as the gap between the crash and the next
+    /// spawn.
+    #[tokio::test]
+    async fn backoff_is_floored_by_the_last_generation_s_load_cost() {
+        let dir = TempDir::new().unwrap();
+        const LOAD: Duration = Duration::from_millis(400);
+        let (port, _server) = spawn_slow_health_server(LOAD).await;
+        let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 0.6\nexit 1\n");
+        let mut config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+        // Generous grace so the slow health server reads as loading, not
+        // as failing heartbeats.
+        config.ready_deadline = Duration::from_secs(5);
+        config.backoff_schedule = vec![Duration::from_millis(20)];
+        config.crash_loop_max = 5;
+        config.healthy_reset_after = Duration::from_secs(60);
+
+        let supervisor = Arc::new(Supervisor::new(config));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+
+        // Walk to the first Restarting, then time how long until the
+        // supervisor actually spawns again (the next Starting).
+        let mut restarting_at = None;
+        let mut gap = None;
+        for _ in 0..40 {
+            match tokio::time::timeout(Duration::from_secs(3), states.recv()).await {
+                Ok(Ok(SupervisorState::Restarting { .. })) => {
+                    restarting_at = Some(Instant::now());
+                }
+                Ok(Ok(SupervisorState::Starting)) => {
+                    if let Some(t) = restarting_at {
+                        gap = Some(t.elapsed());
+                        break;
+                    }
+                }
+                Ok(Ok(_)) => {}
+                _ => break,
+            }
+        }
+
+        let gap = gap.expect("supervisor never restarted");
+        assert!(
+            gap >= Duration::from_millis(300),
+            "backoff should have been floored at the ~{}ms load cost, but the \
+             next spawn came after only {gap:?} (the 20ms schedule)",
+            LOAD.as_millis()
+        );
+
+        run_handle.abort();
     }
 
     /// A gate that is always closed must park the supervisor: no spawns, and —

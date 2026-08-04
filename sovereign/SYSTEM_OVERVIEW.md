@@ -2823,7 +2823,21 @@ work pins the GPU while the user is chatting. Components:
   (`sovereign-desktop/src-tauri/src/supervisor.rs`) — Tauri-free,
   broadcast-driven, heartbeat, exponential backoff
   (1s→5s→30s→2min), crash-loop ceiling, bounded stderr buffer,
-  crash-log persistence to `<data_dir>/crash-logs/`. **Default ON
+  crash-log persistence to `<data_dir>/crash-logs/`. The
+  implementation actually lives in `sovereign-compute/src/supervisor.rs`
+  and is re-exported here (moved 2026-07-20) so the daemon's
+  compute-child manager shares one state machine.
+  **The crash-loop ceiling counts CONSECUTIVE crashes and resets only
+  on proof — a generation that stayed healthy for
+  `healthy_reset_after` (60s in both production configs). It is not a
+  sliding wall-clock window** (changed 2026-08-03): a window is
+  unreachable for any child whose spawn→crash cycle is longer than the
+  window is wide, which is exactly what let a 148 GB distributed
+  primary — 4m36s to load, 13s serving, dead — respawn without limit
+  until amdgpu ran out of GPU address space and took the desktop with
+  it. Backoff is additionally floored at the previous generation's
+  measured load time, so an expensive child can never re-enter a load
+  back-to-back. **Default ON
   since the 2026-07-18 flip** (DAEMON_RESILIENCE.md P0.1):
   `supervisor_setup.rs` spawns **this very desktop binary** as
   `current_exe() --daemon-child` — the argv arm calls

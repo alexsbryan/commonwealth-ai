@@ -166,9 +166,17 @@ COPY oicp-types/          ./oicp-types/
 COPY oicp-client/         ./oicp-client/
 COPY studio/crates/       ./studio/crates/
 COPY quality/arch-layers/ ./quality/arch-layers/
-# [patch.crates-io] in the root manifest points llama-cpp-4 and
-# lance-linalg at vendor/ — without it cargo resolves the unpatched
+# [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
+# and lance-linalg at vendor/ — without it cargo resolves the unpatched
 # registry crates (wrong llama.cpp = wrong RPC wire version).
+#
+# llama-cpp-sys-4 joined the patch set on 2026-08-03 and takes this COPY from
+# ~1 MB to ~35 MB, because that crate carries llama.cpp itself. It is vendored
+# for exactly one reason: to hold the llama.cpp revision one commit ahead of
+# what the published crate bundles (upstream 1464c62d88, the Metal DSv4
+# Lightning Indexer kernel). Provenance and the re-pin procedure are in
+# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT, and
+# ./scripts/verify-vendored-llama-cpp.sh checks the tree against upstream.
 COPY vendor/              ./vendor/
 # Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
 # OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.

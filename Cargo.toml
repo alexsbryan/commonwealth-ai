@@ -360,26 +360,50 @@ codegen-units = 1
 # releases and CI build plain --release and keep the shipping settings.
 
 # ── Patches ──────────────────────────────────────────────────────────────
-# Vendored `llama-cpp-4` (currently 0.4.2) carries TWO sovereign divergences
+# Vendored `llama-cpp-4` (currently 0.5.1) carries TWO sovereign divergences
 # from the published crate. When re-vendoring a newer upstream version, re-apply
-# both — `diff` stock-vs-vendored to confirm none were dropped (the upstream
-# deltas to these files have so far been doc-comment-only, so the patches port
-# cleanly, but verify rather than trust a fuzzy `patch`):
+# both, then `diff -rq vendor/llama-cpp-4 <stock>` and confirm those two files
+# are the ONLY ones listed:
 #   1. `LlamaModelParams::{with_tensor_split, with_devices,
-#      with_tensor_buft_overrides}` (+ their backing-storage fields) in
-#      src/model/params.rs — the explicit device list + `-ot` per-tensor
-#      placement the RPC distributed-inference path drives from
-#      embedded/model_slot.rs. Dropping these silently breaks distribution.
-#      (src/model/params.rs was byte-identical 0.3.1→0.4.2, so this ports
-#      verbatim — keep the whole file across re-vendors.)
+#      with_tensor_buft_overrides}` (+ their backing-storage fields, + their
+#      initializers in `impl Default`) in src/model/params.rs — the explicit
+#      device list + `-ot` per-tensor placement the RPC distributed-inference
+#      path drives from embedded/model_slot.rs. Dropping these silently breaks
+#      distribution.
+#      DO NOT copy our whole params.rs across a re-vendor. That advice held
+#      while the file was byte-identical 0.3.1→0.4.2; it stopped being true at
+#      0.5.1, which reworked the file around the new `LlamaLoadMode` enum
+#      (`params.use_mmap`/`use_mlock` became `params.load_mode`, and
+#      `with_load_mode`/`with_load_mtp` were added). Copying the old file
+#      forward would have silently reverted all of that. PORT THE THREE METHODS
+#      ONTO THE NEW FILE.
 #   2. `dynamic-link` removed from the crate's `default` features in Cargo.toml,
 #      so ggml/llama static-link and every sovereign binary is self-contained
 #      (the daemon's relocatability + the desktop .deb/.rpm/AppImage). See
 #      RELEASING.md and [[project_desktop_linux_build_deps]].
-# RETIRED divergence (do NOT re-add): `LlamaContextParams::with_n_seq_max`
-# (+ getter) was re-introduced UPSTREAM in 0.4.0 (context/params/mod.rs), so
-# the 0.2.x/0.3.x sovereign patch is now redundant. The 0.4.x module split
-# moved context/params.rs → context/params/{mod,advanced,types}.rs.
+# RETIRED divergences (do NOT re-add):
+#   - `LlamaContextParams::with_n_seq_max` (+ getter) was re-introduced UPSTREAM
+#     in 0.4.0 (context/params/mod.rs). The 0.4.x module split moved
+#     context/params.rs → context/params/{mod,advanced,types}.rs.
+#   - src/quantize.rs's `as c_char` in place of `.cast_signed()` (c_char is i8
+#     on x86_64 but u8 on aarch64/Android). Upstream landed the equivalent
+#     `as _` in 0.5.1. This one was never recorded here when it was applied,
+#     which is why it is called out now: an undocumented divergence is one a
+#     re-vendor drops by accident.
+#
+# Vendored `llama-cpp-sys-4` (0.5.1) carries NO sovereign divergence — it is the
+# published crate verbatim, with ONE exception that is itself pure upstream: its
+# bundled llama.cpp is fast-forwarded from the 221f0f63 the crate ships to
+# 1464c62d88 ("metal: implement DSv4 Lightning Indexer", the direct child
+# commit). Without it, Metal's supports_op rejects GGML_OP_LIGHTNING_INDEXER
+# while the RPC backend's supports_op unconditionally returns true, so a
+# distributed DeepSeek-V4 run hands the Metal worker an op it cannot execute and
+# aborts mid-graph. Provenance and the re-pin procedure are in
+# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT; the claim is checkable with
+# `./scripts/verify-vendored-llama-cpp.sh` (1552/1552 files identical as of
+# 2026-08-03). We vendor the sys crate at all ONLY to hold that pin: the moment
+# a published llama-cpp-rs bundles llama.cpp at or past 1464c62d88, this whole
+# directory can be deleted and the crates.io dependency restored.
 # Vendored `lance-linalg` (4.0.0) carries ONE divergence: build.rs compiles the
 # AVX-512 dist_table kernel with -march=x86-64-v4 instead of upstream's
 # -march=native. Upstream's flag breaks cross-compiles (arm64 host → x86_64
@@ -393,4 +417,5 @@ codegen-units = 1
 # cfgs per kernel.
 [patch.crates-io]
 llama-cpp-4 = { path = "vendor/llama-cpp-4" }
+llama-cpp-sys-4 = { path = "vendor/llama-cpp-sys-4" }
 lance-linalg = { path = "vendor/lance-linalg" }

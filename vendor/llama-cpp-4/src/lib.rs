@@ -99,6 +99,7 @@ pub mod mtp;
 pub mod prelude;
 pub mod quantize;
 pub mod sampling;
+pub mod speculative;
 pub mod token;
 pub mod token_type;
 
@@ -177,12 +178,20 @@ pub enum LlamaContextLoadError {
 /// Failed to decode a batch.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum DecodeError {
+    /// A Rust tensor callback failed or unwound after native execution began.
+    #[error(transparent)]
+    TensorCallback(#[from] context::TensorCallbackFailure),
     /// No kv cache slot was available.
     #[error("Decode Error 1: NoKvCacheSlot")]
     NoKvCacheSlot,
     /// The number of tokens in the batch was 0.
     #[error("Decode Error -1: n_tokens == 0")]
     NTokensZero,
+    /// A decode lifecycle hook vetoed the decode (native returned `-4`). The
+    /// specific cause is normally surfaced via [`DecodeError::TensorCallback`];
+    /// this is the fallback when no Rust-side failure was recorded.
+    #[error("Decode Error -4: vetoed by a decode lifecycle hook")]
+    VetoedByDecodeHook,
     /// An unknown error occurred.
     #[error("Decode Error {0}: unknown")]
     Unknown(c_int),
@@ -222,6 +231,7 @@ impl From<NonZeroI32> for DecodeError {
         match value.get() {
             1 => DecodeError::NoKvCacheSlot,
             -1 => DecodeError::NTokensZero,
+            -4 => DecodeError::VetoedByDecodeHook,
             i => DecodeError::Unknown(i),
         }
     }
@@ -340,6 +350,17 @@ pub enum TokenToStringError {
     /// There was insufficient buffer space to convert the token to a string.
     #[error("Insufficient Buffer Space {0}")]
     InsufficientBufferSpace(c_int),
+    /// Caller-owned storage exceeds llama.cpp's signed buffer-length type.
+    #[error("piece buffer capacity {0} exceeds the native c_int bound")]
+    BufferCapacityExceeded(usize),
+    /// llama.cpp reported a positive piece length outside the supplied buffer.
+    #[error("native piece length {returned} exceeds buffer capacity {capacity}")]
+    NativePieceLength {
+        /// Positive length returned by llama.cpp.
+        returned: c_int,
+        /// Supplied caller-owned capacity.
+        capacity: usize,
+    },
     /// The token was not valid utf8.
     #[error("FromUtf8Error {0}")]
     FromUtf8Error(#[from] FromUtf8Error),
@@ -351,9 +372,20 @@ pub enum StringToTokenError {
     /// the string contained a null byte and thus could not be converted to a c string.
     #[error("{0}")]
     NulError(#[from] NulError),
+    /// The string contained an interior NUL at the reported byte.
+    #[error("input contains an interior NUL at byte {0}")]
+    InteriorNul(usize),
     #[error("{0}")]
     /// Failed to convert a provided integer to a [`c_int`].
     CIntConversionError(#[from] std::num::TryFromIntError),
+    /// llama.cpp reported a positive token count outside the supplied buffer.
+    #[error("native token count {returned} exceeds buffer capacity {capacity}")]
+    NativeTokenCount {
+        /// Positive count returned by llama.cpp.
+        returned: c_int,
+        /// Supplied caller-owned capacity.
+        capacity: usize,
+    },
 }
 
 /// Failed to apply model chat template.
@@ -617,12 +649,43 @@ pub unsafe fn opt_param_filter_all(
 pub use context::params::LlamaContextParams;
 /// One captured intermediate tensor from [`TensorCapture`].
 pub use context::CapturedTensor;
+/// Typed retained storage from an owned tensor transaction.
+pub use context::CapturedTensorData;
 /// An inference context tied to a model.
 pub use context::LlamaContext;
 /// Per-buffer memory usage entry from [`LlamaContext::memory_breakdown`].
 pub use context::MemoryBreakdownEntry;
+/// Access granted to an exact tensor selector.
+pub use context::TensorAccess;
+/// Exact sequence and causal-position metadata for one tensor row.
+pub use context::TensorBatchRow;
+/// A contained tensor callback failure.
+pub use context::TensorCallbackFailure;
 /// Hook `cb_eval` during decode to copy named graph tensors (layer hidden states, …).
 pub use context::TensorCapture;
+/// Typed Rust-owned tensor storage supplied to a transaction handler.
+pub use context::TensorDataMut;
+/// Element representation required by an exact tensor selector.
+pub use context::TensorElementType;
+pub use context::TensorFiniteValidation;
+/// Mapping between selected tensor rows and the decode batch.
+pub use context::TensorRowMapping;
+/// Exact bounded graph-node contract.
+pub use context::TensorSelector;
+/// Validated tensor dimensions.
+pub use context::TensorShape;
+/// One synchronous owned tensor transaction.
+pub use context::TensorTransaction;
+/// Error returned by a transaction handler or selector validator.
+pub use context::TensorTransactionError;
+/// Safe synchronous tensor transaction handler.
+pub use context::TensorTransactionHandler;
+/// Owned pinned tensor callback program.
+pub use context::TensorTransactions;
+/// Native write-back decision returned by a transaction handler.
+pub use context::TensorWriteback;
+/// Complete retained tensor from one transaction.
+pub use context::TransactionalTensorCapture;
 /// Initialise the llama.cpp backend and hardware drivers.
 pub use llama_backend::LlamaBackend;
 /// Micro-batch submitted to [`LlamaContext::decode`].
@@ -637,5 +700,7 @@ pub use model::LlamaModel;
 pub use model::Special;
 /// Sampler chain for token selection.
 pub use sampling::LlamaSampler;
+/// Failure while capturing or restoring versioned speculative state.
+pub use speculative::SpeculativeStateError;
 /// A single vocabulary token id.
 pub use token::LlamaToken;

@@ -146,7 +146,9 @@ pub async fn maybe_start(
             Duration::from_secs(30),
             Duration::from_secs(120),
         ],
-        crash_loop_window: Duration::from_secs(3600),
+        // A generation that serves a full minute proves the restart worked.
+        // Reset condition for the crash breaker — see the field docs.
+        healthy_reset_after: Duration::from_secs(60),
         crash_loop_max: 5,
         stderr_ring_lines: 500,
     };

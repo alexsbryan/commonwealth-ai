@@ -22,6 +22,11 @@ Two corrections to the handoff fall out of this, one of them blocking:
 2. **The long-run blocker is memory, not correctness.** The gate says nothing
    about the GTT ratchet that killed the M0 run at step 63, and that ratchet
    still bounds the mix study. See "What is still blocked".
+   > **Revised 2026-08-03.** There is no ratchet. It is sequence-shape churn in
+   > torch's allocator reserve — at a fixed shape the trainer reaches steady
+   > state and stops growing — and arm A was killed by a tripwire set *below*
+   > this workload's normal transient. Bucket the shapes and single-process 400
+   > steps is possible. Notes `20d4d096`, `dc253479`.
 
 ---
 
@@ -233,12 +238,275 @@ a big model resident in the daemon — and no allocator knob addresses it.
 
 ### What is still not settled
 
+> **Settled 2026-08-03** — see "What stopped it" below. The two probes never
+> disagreed: arms run at `--grad-accum 32`, so arm A's 118 optimizer steps are
+> **3,776 micro-batches** while this probe's 150 steps at accum 1 are 150. The
+> 175 s/it vs 5.24 s/it gap is exactly the factor of 32. There is no slow
+> ratchet: at a fixed sequence shape the reserve reaches steady state and stops.
+> The 2.5 h confirmation run described here was never needed and should not be
+> run.
+
 **M0's onset was ~1,600 micro-batches; this probe ran 150.** Thirteen times
 short. A slow ratchet beyond 150 steps is *not* excluded, and nothing here
-licenses starting a 2,334-iteration epoch. The definitive test is ~2.5 h at
-accum 1 (1,700 steps × 5.24 s) with attribution on — worth asking before
-running, since the compositor reserve guard has killed the graphical session
-twice on this box.
+licenses starting a 2,334-iteration epoch.
+
+---
+
+## The scoring leg is proven too — and the GGUF tokenizer trap is fixed upstream
+
+Verified **before** arm A finished, which is the entire point: `5b181d3c`'s
+failure mode only surfaces after hours of training have already been spent.
+
+**The trap is gone.** `convert_hf_to_gguf_update.py:186` now registers chkhsh
+`1444df51289cfa8063b96f0e62b1125440111bc79a52003ea14b6eac7016fd5f` as `qwen35`.
+That is exactly the hash the Mac's transformers 5.14.1 produced and which the
+converter then rejected with `BPE pre-tokenizer was not recognized`. Our
+training venv runs the same 5.14.1 and hashes to the same value — checked
+against the table, not assumed. **So the separate transformers-4.x
+`.venv-bespoke` that `run_mix_study.sh` requires is not needed here**; one venv
+does training and conversion.
+
+Each step run for real, not inspected:
+
+| step | result |
+|---|---|
+| `convert_hf_to_gguf.py --outtype bf16` | 335 tensors, 1.55 GB |
+| `convert_lora_to_gguf.py --base <model> --outtype f16` | 372 tensors, 43.3 MB |
+| `llama-server -m base.gguf --lora adapter.gguf` | `/lora-adapters` reports scale 1.0, generation coherent |
+| `eval_grounding.py` | speaks OpenAI-compatible chat, drives the above unmodified |
+
+**Use `--lora`, not fuse.** The Mac fused only because `mlx_lm fuse` was its
+sole option — and that path corrupts Qwen3.5 (drops `mtp.*`, §7). Serving the
+adapter against the *same* base GGUF the 54.2 control was measured on means arm
+and control differ by the adapter alone: no re-quantisation, no merged-model
+conversion. Strictly better comparability than what was planned.
+
+**Watch the refactor.** llama.cpp moved model definitions out of the monolithic
+`convert_hf_to_gguf.py` into a `conversion/` package; Qwen3.5 is at
+`conversion/qwen.py:623`. Grepping the old file for `qwen35` now returns 0 and
+means nothing. Shallow clone lives at `~/dev/llama.cpp` — script only, nothing
+was compiled, since `llama-server` is already at `/usr/bin`.
+
+`--no-think` remains mandatory for the 0.8B: the smoke test with thinking on
+returned `content: ''`, a full `reasoning_content`, and `finish_reason: length`
+at 60 tokens — the documented "55/55 token-cap hits, zero verdicts". Inline
+`/no_think` in the user turn does **not** suppress it; the chat template gates
+on `enable_thinking`, so it has to be a template kwarg.
+
+---
+
+## Arm A, 118 steps: the training works. +13.96 BAcc, 11 of 11 subsets.
+
+**This is the first number this project has produced from a checkpoint that is
+not the base model.** Every prior figure — 54.2, 55.03 — was untrained
+Qwen3.5-0.8B.
+
+Arm A was stopped by the GTT tripwire at step 118 of 400 (below). The adapter
+survived, passed the gate (`max|B|` 6.613e-03, 186/186 nonzero), and was scored
+on the full 2,200-item card against a base control measured **on this box,
+through this stack**, so no cross-machine confound is folded in.
+
+| | base | arm A @118 | delta |
+|---|---|---|---|
+| macro BAcc | 54.79 | **68.75** | **+13.96** |
+| mean `tpr_supported` | 22.0% | 57.3% | +35.3 |
+| subsets improved | — | **11 of 11** | — |
+
+Biggest movers: Lfqa +26.6, ClaimVerify +23.9, TofuEval-MeetB +16.8, RAGTruth
++16.4. The base's pathology was answering "not supported" almost always
+(`tpr_supported` 2.0–11% on six subsets); training largely corrects it.
+
+For scale: `BASELINES.md` puts HalluGuard-Qwen3-4B at 70.77 strict. A 0.8B, 30%
+through leg 1, is in that neighbourhood — but see the caveat, these are not
+measured the same way.
+
+### The caveat, stated plainly: the harness score is 0.05, not 68.75
+
+The 68.75 is a **diagnostic**, not a score. Under the harness's own parsers arm A
+scores `macro_avg_bacc_tolerant` **0.05** with 2,186 of 2,200 parse failures,
+because it emits *malformed markup*:
+
+```
+<answer>HALLUCINATED_INTRINSIC</justification>The document states...
+        ^ opens <answer>, closes </classification> — no opening <classification>
+```
+
+The verdicts and justifications are correct; the nesting is not. The tolerant
+parser requires an opening `<classification>` and correctly refuses.
+
+> **Corrected 2026-08-03.** This paragraph previously concluded "so this is
+> under-training… at 118 of 400 steps the model has learned the task vocabulary
+> but not the structure." **It is not under-training, and more steps will not fix
+> it.** The model emits *one deterministic template* on 2,185 of 2,200 items — a
+> model wandering toward a format produces varied malformations; a model emitting
+> a single wrong template has **converged**. Note `dc253479`.
+>
+> **Corrected again, same day, after re-running it.** The 0.05 is real and
+> reproduces *exactly* — 1/2,186, five hours apart, identical failure counts. But
+> it is **not a property of the weights.** The same adapter on the same items
+> scored at `--per-subset 20` instead of `200` emits well-formed markup **32–48%**
+> of the time (70, 105, 102 of 217 across three runs), and on the 217 shared items
+> the format disagrees on **69** — with the *verdict* changing too, not just the
+> nesting. So "converged on one template" describes the **serving regime at 2,200
+> items**, not the checkpoint. See note `255a1819`: this harness is scale-sensitive,
+> and a number is only comparable to another measured at the same `--per-subset`.
+> It is not drift accumulating mid-run either — the full card is malformed from
+> item 0 and flat at 0/100 for twenty consecutive chunks.
+
+Three candidate causes, each checked rather than assumed:
+
+- **The data is clean.** All 74,674 `chosen` fields carry every one of
+  `<answer>`, `<classification>`, `</classification>`, `<justification>`.
+  1,997 of 2,000 sampled continue from `</think>` with exactly
+  `"</think>\n\n<answer>\n  <classification>"`.
+- **The prompts match.** `build_prompt` emits the same
+  `json.dumps({"instructions": […], "document":…, "claim":…})` structure as the
+  training `prompt` field, instruction lines byte-identical.
+- **The think prefix matches.** The chat template's `enable_thinking=False`
+  branch injects `"<think>\n\n</think>\n\n"`, exactly what the targets continue
+  from. It injects an *empty* think block where training always had a full one —
+  that is the remaining off-distribution candidate, and it is **untested**.
+
+**The score gap is mostly a ruler fitted to the control.** From the two
+`summary.json` parse blocks:
+
+| | `failures_strict` | `failures_tolerant` | rescued | tolerant macro |
+|---|---|---|---|---|
+| base | 1,859 | **57** | 1,802 | 53.19 |
+| arm A | 2,186 | **2,185** | 1 | 0.05 |
+
+`CLASSIFICATION_TAG_RE` requires an opening `<classification>`, and its own
+comment block enumerates the failure modes it forgives — all of them the *base
+model's*. Arm A invented a new one, so the tolerant path rescues 82% of the
+control and 0.05% of the arm.
+
+**The fix is structural, not more steps** (`ARCH_PRINCIPLES §7.6`).
+`eval_grounding.py` now carries `ANSWER_GBNF` and `--grammar`, constraining
+llama-server's decoding to the answer schema so *any* checkpoint emits parseable
+output. Widening the parser instead means re-fitting the ruler to every future
+checkpoint's novel malformation — and a parser re-fitted per arm cannot compare
+arms.
+
+**VERIFIED 2026-08-03, and the shipping gate is cleared at 118 steps.** The
+grammar was proven end to end before it was trusted: llama-server accepts
+`ANSWER_GBNF` over the OpenAI-compat endpoint, 6/6 strict-parse on real card
+items, no truncation (peak 252 of 512 tokens). Then the full 2,200-item card:
+
+| full card (2,186 scored) | strict | tolerant | well-formed |
+|---|---|---|---|
+| arm A + `--grammar` | 64.88 | **64.97** | 2,186/2,186 |
+| base + `--grammar` | 49.74 | 50.00 | 2,186/2,186 |
+| arm A free-decode | 0.00 | 0.05 | 1/2,186 |
+| base free-decode | 5.93 | 53.19 | 1,411/2,186 |
+
+**Arm A is +11.78 over the base's *best* protocol** (53.19 free-decode) and
++10.8 over the spec's 54.2 reference. Matched-protocol is +14.97, but do not
+lead with it: **the base degenerates under grammar** — 2,104 of 2,186 answers
+are `HALLUCINATED_EXTRINSIC`, `tpr_supported` 0.0%, balanced accuracy exactly
+50.00. That is a floor, not a comparison. Note that 64.97 and 53.19 come from
+*different protocols*; say so whenever the number is quoted.
+
+Arm A is not degenerate — 1,256 `HALLUCINATED_INTRINSIC` / 547 `GROUNDED` /
+383 `HALLUCINATED_EXTRINSIC` — but it is **biased toward "hallucinated"**:
+`tpr_supported` 39.5% against `tnr_hallucinated` 90.5%. As a gate that means it
+catches hallucinations well and false-alarms on grounded claims often. That
+asymmetry, not the macro number, is the next quality target.
+
+**What the grammar costs.** ~6% throughput (250 vs 266 tok/s) plus ~9% more
+tokens generated ≈ 17% wall — so a faster grammar engine is not worth chasing.
+The real cost is accuracy: on matched 220 items arm A is 62.48 free-decode vs
+59.32 constrained, `tpr_supported` 44.6% → 25.9%, because the grammar forces
+`<answer>\n  <classification>` — tokens this checkpoint learned *not* to emit —
+at the exact point the verdict is decided. A grammar shaped to the checkpoint's
+own template would score higher and would be fitting the ruler to the arm.
+
+**If this ships behind the daemon it must use llguidance, not native GBNF.**
+`LlamaSampler::grammar` crashes long-lived daemons (`GGML_ASSERT(!stacks.empty())`,
+`llama-grammar.cpp:940`, Vulkan *and* ROCm, triggered by process state across
+requests). The research harness is safe only because each `score_arm.sh` run
+tears its `llama-server` down.
+
+`scripts/diagnose_verdicts.py` reads the verdict token out with a permissive
+regex and applies **the same regex to every run compared**, because applying a
+permissive read to one model and the harness parser to another manufactures a
+difference out of parser strictness. Recovery rate is comparable across both
+(base 97.8%, arm A 94.7%), so the delta is not an artifact of one side being
+easier to read.
+
+**A verifier that cannot emit parseable output is not shippable**, so the
+harness number remains the one that counts for shipping. What the diagnostic
+establishes is narrower and still decisive: the ORPO recipe moves the model
+hard in the right direction, and the remaining gap is format convergence.
+
+### What stopped it: shape churn in torch's reserve, and a tripwire set too low
+
+> **Superseded 2026-08-03.** This section previously read "the GTT ratchet is
+> real, and it is ours", extrapolated ~0.6 GB/step to ~250 GB for 400 steps, and
+> concluded arm A **cannot complete in one process**. That is wrong, and the
+> evidence against it was already in `runs/mix-A/steps.jsonl` when it was
+> written. Corrected below. Note `20d4d096` supersedes `74d80f17`.
+
+Arm A ran on an **empty box** — daemon stopped, GTT at launch 620 MiB — with
+per-process attribution on. `proc_gtt_gb` reads `drm-resident-gtt`, sampled
+**once per optimizer step**, and it is bimodal. Three facts in that trace do not
+fit a leak:
+
+- **`gpu_peak_gb` (`max_memory_allocated`) is pinned at 32.56 GB from step 2 to
+  step 118.** Torch's peak demand never grows.
+- **The floor never rises.** Step 113 reads 5.7 GB — after ~3,616 micro-batches
+  — and step 118 reads 101.3. A leak raises the floor; this does not.
+- In `runs/ab-baseline` torch's peak stops growing at step 62 (23.88 GB), yet
+  every GTT spike lands at step 93 or later and reaches 42.6 GB — 1.8x torch's
+  own all-time peak, appearing without torch allocating anything new.
+
+What rises over a run is the **frequency of high samples**, not the baseline.
+The "0.6 GB/step" figure was a rising *median of a bimodal variable*.
+
+**The controlled test.** `scripts/shape_ratchet_probe.py` — same model, same
+LoRA targets, same dtype, same gradient checkpointing — 60 iterations per arm,
+one variable: the sequence length fed each iteration.
+
+| arm | shapes | reserved | `alloc_peak` | proc GTT max | tokens | wall |
+|---|---|---|---|---|---|---|
+| `vary` | 37 | 3.48 → **82.88 GB**, 18 drops >1 GB | 28.661 | 82.88 | 319,744 | 521 s |
+| `fixed` | 1 | **37.91 GB, then flat for all 60** | 28.661 | 38.56 | 491,520 | 1002 s |
+
+**The control is the result.** At a single fixed shape the allocator reaches its
+working set in the first few iterations and never grows again — zero drops,
+59/59 iterations rose-or-held, min-after-iteration-30 identical to the peak.
+`alloc_peak` is *identical* in both arms, so live-memory demand is the same and
+only the reserve differs. The fixed arm did **more** work (1.54x tokens, 1.92x
+wall) and reserved **less than half**. Compute does not explain it; shape
+variety does.
+
+**GTT is torch's reserve, full stop.** Across all 120 iterations
+`proc_gtt − reserved` is a constant ≤1.24 GB with exactly **one** drm client —
+so nothing grows outside torch (no HIP-runtime creep, no Triton kernel-cache
+accumulation). `num_alloc_retries` is 0 and segment count is flat (277–306) in
+both arms, so it is not fragmentation or allocator thrash either. It is reserve
+sized to whatever shape just arrived.
+
+**What actually killed arm A.** `train_orpo_trl.py:506` trips on a *single
+instantaneous sample* (`if box == box and box > args.gtt_limit_gb`) with no
+sustained-level requirement, and `launch_arm.sh` passes `--gtt-limit-gb 95`. The
+shape-churn transient runs to ~2.9x `alloc_peak` (82.88/28.661 here;
+101.3/32.56 = 3.11x in arm A) — a ceiling of ~95–100 GB for this workload.
+**The limit was set below the workload's normal transient**, so it was certain
+to fire eventually; step 118 is merely when the once-per-step sampler caught
+one. Nothing was accumulating and nothing was near OOM.
+
+**Consequence.** Bucket or pad sequence lengths so shapes repeat
+(`group_by_length=True`, or pad up to a small set of buckets). Predicted steady
+reserve for arm A is ~1.32x `alloc_peak` ≈ **43 GB** against 125 GB of unified
+memory, so **single-process 400 steps is possible** and the ≤100-step leg
+structure, per-leg seed rotation and `--resume` wrapper are all unnecessary.
+Fix the tripwire to require N consecutive samples and raise the limit above
+~3x `alloc_peak`. Try `group_by_length` before full padding: it was 1.92x wall
+clock here, matching the ~2.2x predicted from p50 1,825.
+
+The one thing the old section got right: we kept everything. The tripwire fired
+at 102.0 GB, stopped cleanly, saved the adapter, ran the gate, exited 0. M0 was
+SIGKILLed at the same wall and lost the run, the summary, and the desktop.
 
 ## Assets
 
@@ -252,8 +520,13 @@ twice on this box.
 | Trainer, now saving + self-gating | `scripts/train_orpo_trl.py` |
 
 | A/B on the GTT mitigation | `/home/alexbryan/dev/train-env/runs/ab-{baseline,empty10}/` |
+| **Shape-variety A/B (settles the ratchet)** | `scripts/shape_ratchet_probe.py`, `runs/shape-{vary,fixed}/`, `launch_shape_probe.sh` |
+| **Decoder-enforced answer schema** | `ANSWER_GBNF` + `--grammar` in `scripts/eval_grounding.py` |
 
 Notes: `0d3804bd` (the lane trains), `978a8583` (no second container needed),
 `edbfabb8` (the gate's NaN blind spot), `c4851203` (seq 1024 truncates 92.5%),
-`f1e96c88` (GTT is co-tenancy + `empty_cache` is a clean negative — supersedes
-`5780c214` and `8de0d918`, both of which reasoned off unattributable box GTT).
+`20d4d096` (**the ratchet is shape churn in torch's reserve; supersedes
+`74d80f17`**), `dc253479` (**arm A's 0.05 is a converged malformed template,
+not under-training**), `f1e96c88` (GTT is co-tenancy + `empty_cache` is a clean
+negative — supersedes `5780c214` and `8de0d918`, both of which reasoned off
+unattributable box GTT).

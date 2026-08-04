@@ -121,12 +121,25 @@ def proc_gtt_gb(pid: int | None = None) -> float:
     return sum(seen.values()) / 1024**2
 
 
-def gpu_mem_gb(torch) -> tuple[float, float]:
+def gpu_mem_gb(torch) -> tuple[float, float, float]:
+    """(allocated, max_allocated, RESERVED) in GB.
+
+    RESERVED is the one that matters and the one this trainer spent two
+    sessions not logging. `memory_allocated` is what the tensors need and it
+    sits FLAT while the process dies: arm A's trace pinned `gpu_peak_gb` at
+    32.56 from step 2 to 118 while box GTT climbed past 100 GB. The growth is
+    torch's allocator RESERVE, which is what actually occupies unified memory,
+    and it grows when the allocator is handed a new sequence shape every step
+    (probe: 3.48 -> 82.88 GB over 60 varying-shape iters, FLAT at 37.91 for 60
+    fixed-shape iters, identical alloc_peak). Without this column the ratchet
+    was misdiagnosed twice -- as co-tenancy, then as a leak.
+    """
     if not torch.cuda.is_available():
-        return (float("nan"), float("nan"))
+        return (float("nan"), float("nan"), float("nan"))
     return (
         torch.cuda.memory_allocated() / 1024**3,
         torch.cuda.max_memory_allocated() / 1024**3,
+        torch.cuda.memory_reserved() / 1024**3,
     )
 
 
@@ -292,11 +305,46 @@ def main() -> int:
                          "(0 = never). The untested GTT-ratchet mitigation from "
                          "M0_PROBE_HALO.md:79 — measure s/it against a baseline "
                          "run before adopting it, empty_cache is not free.")
-    ap.add_argument("--gtt-limit-gb", type=float, default=95.0,
-                    help="abort if BOX GTT exceeds this (default 95 of 125 GB, "
-                         "leaving the compositor its reserve). M0 was SIGKILLed "
-                         "at 100.7 GB and took the desktop session with it; a "
-                         "clean stop keeps the adapter, the timings and the log.")
+    ap.add_argument("--gtt-limit-gb", type=float, default=112.0,
+                    help="abort if BOX GTT exceeds this for --gtt-limit-consecutive "
+                         "samples in a row (default 112 of ~125 GB). M0 was "
+                         "SIGKILLed at 100.7 GB and took the desktop session with "
+                         "it; a clean stop keeps the adapter, the timings and the "
+                         "log. RAISED FROM 95 on 2026-08-03: this workload's "
+                         "ORDINARY transient is ~95-100 GB (about 3x alloc_peak), "
+                         "so 95 sat below normal operation and killed arm A at "
+                         "step 118. Keep this ABOVE ~3x your measured alloc_peak "
+                         "and below the box total.")
+    ap.add_argument("--save-every", type=int, default=25, metavar="N",
+                    help="write a resumable checkpoint every N optimizer steps "
+                         "(default 25 ~= 71 min at the measured 171 s/step). "
+                         "Checkpoints land in <out>/hf/checkpoint-<step> and "
+                         "carry optimizer, scheduler, RNG and step count.")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue from the newest checkpoint under <out>/hf "
+                         "instead of starting over. REFUSES if there is none — "
+                         "silently restarting a 19-hour run from step 0 while "
+                         "the operator believes it resumed is the failure this "
+                         "flag exists to prevent.")
+    ap.add_argument("--no-group-by-length", dest="group_by_length",
+                    action="store_false", default=True,
+                    help="disable length bucketing. ON by default: the allocator "
+                         "reserve grows when it is handed a NEW sequence shape "
+                         "every step, and that reserve — not the tensors — is "
+                         "what fills unified memory. Measured on the synthetic "
+                         "probe: 37 varying shapes reserved 3.48 -> 82.88 GB over "
+                         "60 iters, ONE fixed shape reserved 37.91 GB and stayed "
+                         "flat for 60, at identical alloc_peak. Bucketing puts "
+                         "similar lengths next to each other so the allocator can "
+                         "reuse blocks. Turn it off only to reproduce a pre-"
+                         "2026-08-03 run.")
+    ap.add_argument("--gtt-limit-consecutive", type=int, default=3, metavar="N",
+                    help="how many CONSECUTIVE over-limit samples abort the run "
+                         "(default 3). One instantaneous sample is not a "
+                         "measurement — a transient spike and a runaway look "
+                         "identical for exactly one reading, and the run that "
+                         "died at step 118 died on a single one. The streak is "
+                         "logged per step as gtt_over_consecutive.")
     ap.add_argument("--rss-limit-gb", type=float, default=40.0,
                     help="abort if this process exceeds this RSS (the Mac run's "
                          "tripwire; peak trainer RSS there was ~22 GB)")
@@ -423,6 +471,58 @@ def main() -> int:
     load_s = time.monotonic() - t_load
     print(f"model loaded in {load_s:.1f}s")
 
+    # -- length bucketing ---------------------------------------------------
+    # HF's LengthGroupedSampler needs a length column it can READ. It cannot
+    # derive one from ORPO's prompt/chosen/rejected text columns, and when it
+    # cannot find lengths it falls back to a random sampler with a log line and
+    # NO error — the exact silent-substitution shape §18.3 forbids. So compute
+    # the column here, and verify below that the setting survived.
+    LENGTH_COL = "length"
+    if args.group_by_length:
+        t_len = time.monotonic()
+        # CACHED BY HAND. `datasets.map` does NOT reuse its cache here (measured
+        # 2026-08-03: 118.7s on the first run, 118.7s on the second), and a
+        # 2-minute tax on every arm is 2 minutes nobody chose to spend. The key
+        # is the data file's identity, so editing the data invalidates it.
+        st = train_file.stat()
+        cache = train_file.parent / f".lengths-{st.st_size}-{int(st.st_mtime)}.json"
+        lens = None
+        if cache.exists():
+            try:
+                lens = json.loads(cache.read_text())
+                if len(lens) != len(ds):
+                    print(f"NOTE: length cache has {len(lens)} rows, dataset has "
+                          f"{len(ds)} — recomputing.")
+                    lens = None
+            except (OSError, ValueError):
+                lens = None
+
+        if lens is None:
+            def _lengths(batch):
+                # prompt+chosen is the sequence that sets the step's shape; the
+                # rejected branch is the same order of magnitude and the sampler
+                # only needs a sort key, not an exact count.
+                return {LENGTH_COL: [
+                    len(tokenizer(p + c, add_special_tokens=False)["input_ids"])
+                    for p, c in zip(batch["prompt"], batch["chosen"])
+                ]}
+
+            ds = ds.map(_lengths, batched=True, batch_size=256,
+                        desc="measuring sequence lengths")
+            lens = list(ds[LENGTH_COL])
+            try:
+                cache.write_text(json.dumps(lens))
+            except OSError as e:
+                print(f"NOTE: could not write length cache ({e}); "
+                      f"the next run pays the tokenisation again.")
+        else:
+            ds = ds.add_column(LENGTH_COL, lens)
+
+        print(f"length bucketing on: {len(lens)} rows in "
+              f"{time.monotonic() - t_len:.1f}s ({cache.name})  "
+              f"min={min(lens)} p50={sorted(lens)[len(lens) // 2]} max={max(lens)}",
+              flush=True)
+
     # -- config -------------------------------------------------------------
     cfg_kwargs = dict(
         output_dir=str(args.out / "hf"),
@@ -434,7 +534,14 @@ def main() -> int:
         max_length=args.seq_len,
         max_prompt_length=args.seq_len // 2,
         logging_steps=1,
-        save_strategy="no",
+        # CHECKPOINT SO A RUN CAN BE PAUSED AND RESUMED. At the measured 171 s/step
+        # a 400-step arm is ~19 HOURS; "one process, start to finish" is not a
+        # posture that survives a box that is also someone's workstation. HF
+        # checkpoints carry optimizer + scheduler + RNG + step count, so
+        # --resume continues rather than restarts.
+        save_strategy="steps",
+        save_steps=args.save_every,
+        save_total_limit=2,  # keep the last two; adapters are small, disk is not free
         report_to=[],
         disable_tqdm=True,  # the bars flood a captured log with 100+ KB of \r frames
         seed=args.seed,
@@ -443,18 +550,50 @@ def main() -> int:
         gradient_checkpointing=args.grad_checkpointing,
         remove_unused_columns=False,
     )
+    if args.group_by_length:
+        # NOT `group_by_length` — transformers 5.14's ORPOConfig does not have
+        # it, and setting it here only produces a dropped-kwarg NOTE. Bucketing
+        # is applied via the sampler override at trainer construction.
+        cfg_kwargs["length_column_name"] = LENGTH_COL
     # TRL has churned on this field name; keep both spellings working.
     sig = inspect.signature(ORPOConfig.__init__).parameters
+    dropped = sorted(set(cfg_kwargs) - set(sig))
     cfg_kwargs = {k: v for k, v in cfg_kwargs.items() if k in sig}
     cfg = ORPOConfig(**cfg_kwargs)
+
+    # THE SIGNATURE FILTER ABOVE IS A SILENT DROPPER. It exists so a TRL rename
+    # does not crash the run, but that means a setting can vanish and the run
+    # still exits 0 having trained something OTHER than what was asked for —
+    # and the trace would look like the fix simply did not work. Name what was
+    # dropped, and REFUSE if the one the operator explicitly asked for is gone.
+    if dropped:
+        print(f"NOTE: ORPOConfig does not accept {dropped} on this TRL — dropped.")
+    # Bucketing rides on LengthGroupedSampler. If that import is gone, training
+    # would silently run UNBUCKETED and the trace would read as "the fix did not
+    # work" rather than "the fix never ran" — four verdicts, not two (§18.1).
+    if args.group_by_length:
+        try:
+            from transformers.trainer_pt_utils import LengthGroupedSampler  # noqa: F401
+        except ImportError as e:
+            print(f"FATAL: --group-by-length needs transformers' "
+                  f"LengthGroupedSampler and it is unavailable ({e}). Re-run "
+                  f"with --no-group-by-length to train unbucketed on purpose.",
+                  file=sys.stderr)
+            return 2
 
     # -- per-step instrumentation ------------------------------------------
     class StepTimer(TrainerCallback):
         def __init__(self) -> None:
             self.last = None
             self.durations: list[float] = []
-            self.fh = open(steps_path, "w")
+            # APPEND when resuming. Opening "w" on a resumed leg silently
+            # truncates the previous leg's trace, so a 19-hour run paused three
+            # times would end with only its last leg measured — and the memory
+            # trajectory the trace exists to show is exactly the thing that
+            # spans legs.
+            self.fh = open(steps_path, "a" if args.resume else "w")
             self.t0 = time.monotonic()
+            self.gtt_over = 0  # consecutive over-limit GTT samples; see the tripwire
 
         def on_step_end(self, targs, state, control, **kw):  # noqa: ANN001
             now = time.monotonic()
@@ -467,8 +606,15 @@ def main() -> int:
             if args.empty_cache_every and state.global_step % args.empty_cache_every == 0:
                 torch.cuda.empty_cache()
 
-            alloc, peak = gpu_mem_gb(torch)
+            alloc, peak, reserved = gpu_mem_gb(torch)
             rss = host_rss_gb()
+            box = host_gtt_gb()
+            # Counted BEFORE the record is written, so the streak is in
+            # steps.jsonl. A guard whose state is invisible in the trace cannot
+            # be debugged after the fact -- which is how arm A's abort came to
+            # be read as a memory leak.
+            over = box == box and box > args.gtt_limit_gb
+            self.gtt_over = self.gtt_over + 1 if over else 0
             rec = {
                 "step": state.global_step,
                 "elapsed_s": round(now - self.t0, 3),
@@ -478,8 +624,10 @@ def main() -> int:
                 "rss_gb": round(rss, 2),
                 "gpu_alloc_gb": round(alloc, 2),
                 "gpu_peak_gb": round(peak, 2),
-                "gtt_gb": round(host_gtt_gb(), 2),      # whole box
+                "gpu_reserved_gb": round(reserved, 2),  # see gpu_mem_gb: THE column
+                "gtt_gb": round(box, 2),                # whole box
                 "proc_gtt_gb": round(proc_gtt_gb(), 2),  # this trainer alone
+                "gtt_over_consecutive": self.gtt_over,
             }
             self.fh.write(json.dumps(rec) + "\n")
             self.fh.flush()
@@ -487,7 +635,8 @@ def main() -> int:
                 s = rec["step_s"]
                 print(f"  step {rec['step']:4d}  {s if s is None else f'{s:6.2f}'}s/it"
                       f"  loss={rec['loss']}  rss={rec['rss_gb']}GB"
-                      f"  gpu={rec['gpu_alloc_gb']}/{rec['gpu_peak_gb']}GB", flush=True)
+                      f"  gpu={rec['gpu_alloc_gb']}/{rec['gpu_peak_gb']}GB"
+                      f"  reserved={rec['gpu_reserved_gb']}GB", flush=True)
             if rss == rss and rss > args.rss_limit_gb:
                 print(f"\nABORT: RSS {rss:.1f}GB exceeded --rss-limit-gb "
                       f"{args.rss_limit_gb}. This tripwire exists because a "
@@ -502,10 +651,25 @@ def main() -> int:
             # desktop compositor with it, so the guard has to watch GTT — and
             # BOX GTT, not this process's, because a co-tenant's model load
             # counts against the same 125 GB.
-            box = rec["gtt_gb"]
-            if box == box and box > args.gtt_limit_gb:
+            # ONE SAMPLE IS NOT A MEASUREMENT (ARCH_PRINCIPLES §18.5). Arm A was
+            # killed at step 118 by a SINGLE instantaneous reading, with the
+            # limit set at 95 GB -- BELOW this workload's ordinary transient of
+            # ~95-100 GB (roughly 3x alloc_peak). That abort was certain to fire
+            # eventually; surviving to 118 was luck, and it cost the run. A guard
+            # that trips on normal operation is not a safety net, it is a
+            # scheduled failure. So require N CONSECUTIVE over-limit samples: a
+            # real runaway stays over, a transient does not.
+            if over and self.gtt_over < args.gtt_limit_consecutive:
+                # Visible BEFORE it fires -- the operator sees pressure building
+                # rather than only learning about it from the abort.
+                print(f"  WARN: box GTT {box:.1f}GB over --gtt-limit-gb "
+                      f"{args.gtt_limit_gb} for {self.gtt_over} consecutive "
+                      f"sample(s); aborting at {args.gtt_limit_consecutive}.",
+                      flush=True)
+            if self.gtt_over >= args.gtt_limit_consecutive:
                 print(f"\nABORT: box GTT {box:.1f}GB exceeded --gtt-limit-gb "
-                      f"{args.gtt_limit_gb} (this process holds "
+                      f"{args.gtt_limit_gb} on {self.gtt_over} CONSECUTIVE "
+                      f"samples (this process holds "
                       f"{rec['proc_gtt_gb']:.1f}GB of it). Stopping cleanly so "
                       f"the adapter and timings survive — an OOM SIGKILL would "
                       f"take both, and the graphical session with them.",
@@ -526,7 +690,38 @@ def main() -> int:
     tsig = inspect.signature(ORPOTrainer.__init__).parameters
     trainer_kwargs["processing_class" if "processing_class" in tsig else "tokenizer"] = tokenizer
 
-    trainer = ORPOTrainer(**trainer_kwargs)
+    # LENGTH BUCKETING GOES THROUGH THE SAMPLER, NOT THE CONFIG. transformers
+    # 5.14's ORPOConfig has `length_column_name` but NO `group_by_length` (123
+    # params, checked — not recalled), so setting it via the config is a no-op
+    # the signature filter drops on the floor. Overriding the sampler hook does
+    # the same job and does not depend on a flag TRL may or may not expose.
+    #
+    # WHY IT HELPS AT MICRO-BATCH 1, where there is no intra-batch padding to
+    # save: LengthGroupedSampler shuffles, chunks into megabatches, and sorts
+    # WITHIN each chunk, so CONSECUTIVE STEPS see similar sequence lengths. That
+    # is what lets torch's caching allocator reuse blocks instead of reserving a
+    # new segment per novel shape — the mechanism the probe isolated (varying
+    # shapes reserved 82.88 GB, one fixed shape 37.91 GB and flat).
+    trainer_cls = ORPOTrainer
+    if args.group_by_length:
+        from transformers.trainer_pt_utils import LengthGroupedSampler
+
+        _lens = list(ds[LENGTH_COL])
+
+        class LengthBucketedORPOTrainer(ORPOTrainer):
+            def _get_train_sampler(self, train_dataset=None):  # noqa: ANN001
+                # Announced, because a sampler that silently failed to engage
+                # would look exactly like "bucketing did not help".
+                print(f"  sampler: LengthGroupedSampler over {len(_lens)} rows "
+                      f"(batch_size={cfg.per_device_train_batch_size})", flush=True)
+                return LengthGroupedSampler(
+                    batch_size=cfg.per_device_train_batch_size,
+                    lengths=_lens,
+                )
+
+        trainer_cls = LengthBucketedORPOTrainer
+
+    trainer = trainer_cls(**trainer_kwargs)
 
     adapted = [n for n, _ in trainer.model.named_parameters() if "lora_" in n]
     print(f"LoRA tensors: {len(adapted)}  "
@@ -537,10 +732,34 @@ def main() -> int:
           f"{args.batch_size * args.grad_accum}, seq {args.seq_len} ===", flush=True)
     t_train = time.monotonic()
     status = "ok"
+
+    # RESUME IS EITHER REAL OR IT IS AN ERROR — never a silent restart (§18.3).
+    # `resume_from_checkpoint=True` raises if none exists, but the operator
+    # deserves the step number BEFORE a 19-hour run, not a stack trace.
+    resume_from = None
+    if args.resume:
+        ckpt_root = args.out / "hf"
+        ckpts = sorted(ckpt_root.glob("checkpoint-*"),
+                       key=lambda p: int(p.name.split("-")[-1])) if ckpt_root.exists() else []
+        if not ckpts:
+            print(f"FATAL: --resume was given but no checkpoint exists under "
+                  f"{ckpt_root}. Drop --resume to start from step 0 deliberately.",
+                  file=sys.stderr)
+            return 2
+        resume_from = str(ckpts[-1])
+        done = int(ckpts[-1].name.split("-")[-1])
+        print(f"RESUMING from {ckpts[-1].name}: {done} of {args.iters} steps "
+              f"already done, {args.iters - done} to go.", flush=True)
+
     try:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=resume_from)
     except KeyboardInterrupt:
+        # A pause is a first-class outcome, not a crash. The adapter save and
+        # the gate below run regardless of `status`, so a Ctrl-C keeps the
+        # weights AND leaves a checkpoint to resume from.
         status = "interrupted"
+        print("\nPAUSED (KeyboardInterrupt). Resume with the same command "
+              "plus --resume.", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 - we want the partial timings
         status = f"error: {type(exc).__name__}: {exc}"
         print(f"\nTRAINING FAILED: {status}", file=sys.stderr)

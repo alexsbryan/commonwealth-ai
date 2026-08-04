@@ -59,16 +59,32 @@ llguidance = { workspace = true }
 # and bypasses the buggy ROCm+MoE path entirely. Revisit once #20176
 # lands a fix in a llama-cpp-2 release we can pin to.
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-# llama-cpp-4 0.4.2 bundles llama.cpp 99f3dc3 / tag b9982 (bumped from
-# 0.3.1's 94a220cd6 on 2026-07-16, ~250 upstream commits). Retains MTP
-# single-file self-speculation (PR #22673 — our original reason for moving
-# off llama-cpp-2 0.1.146) and the GLM-5 long-context dense-mask fix
-# (#23610); ADDS the two-model `draft-mtp` path + Gemma-4
-# Gemma4AssistantForCausalLM drafter support (#23398) that lets a separate
-# `mtp-*.gguf` head drive speculation. The vendored crate carries TWO
-# sovereign divergences now (n_seq_max was upstreamed in 0.4.x): the
-# tensor-split/devices/-ot model-param builders and the static-link default.
-# See `crate::llama` for the migration shim that absorbs API shape changes.
+# llama-cpp-4 0.5.1 (bumped from 0.4.2 on 2026-08-03). The crate bundles
+# llama.cpp 221f0f63, 253 commits past 0.4.2's 99f3dc3 / tag b9982; our
+# vendored copy is fast-forwarded one further commit to 1464c62d88 — see
+# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT.
+#
+# WHY THIS BUMP. Metal's supports_op rejected the F16 `csa_top_k_mask` ADD
+# that DeepSeek-V4's build_top_k_mask emits, so a distributed DSv4 run aborted
+# on the Metal worker. Upstream #26465 ("metal : add F16 support for bin ops",
+# 2026-08-02) widened the ADD/SUB/MUL/DIV/ADD_ID predicate from F32-only to
+# F32-or-F16-with-matching-src-types, which is exactly that node. Landing with
+# it: #26459 (Metal kernels for GGML_OP_DSV4_HC_{PRE,POST,COMB}) and, via the
+# one-commit fast-forward, #25893 (Metal GGML_OP_LIGHTNING_INDEXER).
+#
+# Retains everything 0.4.2 was pinned for — MTP single-file self-speculation
+# (PR #22673, our original reason for leaving llama-cpp-2 0.1.146), the GLM-5
+# long-context dense-mask fix (#23610), and the two-model `draft-mtp` path with
+# Gemma-4 drafter support (#23398).
+#
+# API SHAPE CHANGE at 0.5.1: `llama_model_params.{use_mmap,use_mlock}` collapsed
+# into `load_mode` (`LlamaLoadMode`), and `with_load_mtp` arrived for DSv4 MTP
+# weights. `LlamaModelParams::{use_mmap,use_mlock}()` survive as derived getters.
+# The vendored crate still carries exactly TWO sovereign divergences — the
+# tensor-split/devices/-ot model-param builders and the static-link default —
+# and the aarch64 `c_char` cast we used to carry is now upstream. Root Cargo.toml
+# holds the full ledger. See `crate::llama` for the migration shim that absorbs
+# API shape changes.
 #
 # default-features = false drops the vendored default `openmp` on macOS.
 # Apple clang ships no OpenMP runtime, so the `openmp` feature makes
@@ -110,25 +126,25 @@ llguidance = { workspace = true }
 # form of that, so no user has to know an env var exists.
 #
 # Apple Silicon is untouched below. Nothing outside macOS-x86_64 changes.
-llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["metal", "mtmd"] }
+llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["metal", "mtmd"] }
 # RPC distributed inference: enable the sys crate's `rpc` feature directly
 # (builds ggml with GGML_RPC=ON + binds ggml_backend_rpc_add_server) rather
 # than llama-cpp-4's `rpc` feature, whose binding module targets an older
 # llama.cpp API (ggml_backend_rpc_add_device / 1-arg init) that no longer
 # exists in the pinned llama.cpp. We call the sys symbols directly from
 # embedded/model_slot.rs instead.
-llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
+llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
 
 # macOS x86_64 (Intel). Same as the aarch64 leg MINUS `metal` — see the block
 # above for why registering that backend here is fatal, not merely wasteful.
 # CPU via ggml's pthread pool + Accelerate, which is what these hosts already ran.
 [target.'cfg(all(target_os = "macos", not(target_arch = "aarch64")))'.dependencies]
-llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["mtmd"] }
-llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
+llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
+llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-4 = { version = "0.4.2", features = ["vulkan"] }
-llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
+llama-cpp-4 = { version = "0.5.1", features = ["vulkan"] }
+llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
 
 # Windows is the first OS that wants more than one backend, so unlike macOS
 # (metal) / Linux (vulkan) — which hardcode their single backend above — the
@@ -139,8 +155,8 @@ llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
 # hunt); keeps the sys `rpc` feature so embedded/model_slot.rs's direct
 # ggml_backend_rpc_add_server FFI links here too.
 [target.'cfg(target_os = "windows")'.dependencies]
-llama-cpp-4 = { version = "0.4.2", default-features = false, features = ["mtmd"] }
-llama-cpp-sys-4 = { version = "0.4.2", features = ["rpc"] }
+llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
+llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
 
 # Windows GPU backends layer onto the CPU baseline; the release matrix builds
 # one variant per leg via `--features`. No-ops on macOS/Linux (which never pass

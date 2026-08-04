@@ -80,6 +80,30 @@ INSTRUCTIONS = [
 ]
 
 
+# Decoder-enforced answer schema. ARCH_PRINCIPLES §7.6: never ask a model to
+# guarantee what code can enforce.
+#
+# WHY THIS EXISTS. Arm A @118 steps emits `<answer>VERDICT</classification>` --
+# it opens <answer>, skips <classification> entirely, then closes
+# </classification>. It does this on 2,185 of 2,200 items, i.e. it has CONVERGED
+# on a stable malformed template rather than wandered toward a correct one. Its
+# verdicts and justifications are sound; only the nesting is wrong. Under the
+# tolerant parser (which requires an OPENING <classification>) that is 0.05 macro
+# BAcc against the base model's 53.19 -- a 3-point-worse-than-chance score for a
+# model that is actually 14 points BETTER on the underlying judgment.
+#
+# The tolerant parser was fitted to the BASE model's failure modes (see the
+# comment block above it). Widening it to admit arm A's new one would be fitting
+# the ruler to the arm -- and would have to be re-fitted for every future
+# checkpoint's novel malformation. Constraining the decoder is the fix that does
+# not need redoing: any checkpoint, trained or not, emits parseable output.
+ANSWER_GBNF = r"""
+root ::= "<answer>\n  <classification>" cls "</classification>\n  <justification>" just "</justification>\n</answer>"
+cls  ::= "GROUNDED" | "HALLUCINATED_INTRINSIC" | "HALLUCINATED_EXTRINSIC"
+just ::= [^<>]+
+"""
+
+
 def build_prompt(doc: str, claim: str) -> str:
     return json.dumps(
         {"instructions": INSTRUCTIONS, "document": doc, "claim": claim},
@@ -256,6 +280,10 @@ def main() -> int:
     ap.add_argument("--no-save-responses", action="store_true",
                     help="skip responses.jsonl. Default is to save: without the raw text a run "
                          "cannot be re-scored offline, which is what forced a re-run on 2026-08-02.")
+    ap.add_argument("--grammar", action="store_true",
+                    help="constrain decoding to the <answer> schema (llama-server GBNF). "
+                         "A format the parser MUST accept is enforced by the decoder rather "
+                         "than hoped for from training -- see ANSWER_GBNF.")
     args = ap.parse_args()
 
     sampling = {}
@@ -263,6 +291,8 @@ def main() -> int:
         sampling["repeat_penalty"] = args.repeat_penalty
     if args.no_think:
         sampling["chat_template_kwargs"] = {"enable_thinking": False}
+    if args.grammar:
+        sampling["grammar"] = ANSWER_GBNF
 
     os.makedirs(args.run_dir, exist_ok=True)
     results_path = os.path.join(args.run_dir, "results.jsonl")

@@ -40,12 +40,48 @@ test posture was role=host + [compute] armed, always together.**
 ## Why this came back
 
 **Reason 1 — "llama.cpp support is a WIP branch, not in our binding." Gone.**
-`llama-cpp-sys-4` moved `0.3.1` → **`0.4.2`**, which `Cargo.lock` already pins. That
+`llama-cpp-sys-4` moved `0.3.1` → `0.4.2` → **`0.5.1`**, which `Cargo.lock` pins. That
 tree carries first-class `deepseek4`: a dedicated `llama_model_deepseek4`
 (`llama-model.cpp:185`), a raised graph-node budget (`llama-context.cpp:2310`), and
 Hadamard rotation tensors for the lightning indexers (`llama-kv-cache.cpp:326`).
 MXFP4 kernels exist on **Vulkan, Metal, and CPU** — every backend this split needs.
 No fork, no sidecar, no WIP branch. It is simply in the binding we already ship.
+
+**Reason 1b — the Metal half of that claim was false until 2026-08-03, and the
+fix came from upstream, not from us.** At `0.4.2` (llama.cpp `99f3dc32`) three
+DSv4 graph nodes had no Metal kernel or failed Metal's `supports_op`, so a
+distributed run aborted on the Mac worker mid-graph. All three landed upstream
+within 48 hours, and the pin now clears every one:
+
+| upstream | what it added | in `0.5.1`'s `221f0f63`? |
+|---|---|---|
+| `9d21b57f2e` (#26465) | Metal `ADD/SUB/MUL/DIV/ADD_ID` widened from F32-only to F32-or-F16 with matching src types — the `csa_top_k_mask` node | yes |
+| `fffbcbdb9d` (#26459) | Metal kernels for `GGML_OP_DSV4_HC_{PRE,POST,COMB}` — the `hc_*_pre` nodes | yes |
+| `1464c62d88` (#25893) | Metal `GGML_OP_LIGHTNING_INDEXER` — `deepseek4.cpp:671` calls it unconditionally | **no** — merged one commit later |
+
+That last row is why `vendor/llama-cpp-sys-4` exists at all: its bundled llama.cpp
+is fast-forwarded one commit past what `0.5.1` ships, to `1464c62d88`. See
+`vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`; `./scripts/verify-vendored-llama-cpp.sh`
+checks the tree against upstream (1552/1552 files identical).
+
+**Reason 1c — the bump also made MTP weights opt-in, and missing the flag aborts
+the process.** Upstream #25784 gates every NextN tensor behind a new
+`llama_model_params.load_mtp` that defaults to **false**; `hparams.n_layer_nextn`
+still reads non-zero from gguf metadata, so the model looks MTP-capable, the draft
+context still asks for `LLM_GRAPH_TYPE_DECODER_MTP`, and llama.cpp hits
+`GGML_ASSERT(layer.nextn.eh_proj)` — `ggml_abort`, not an `Err` the speculative
+upgrade can fall back from. Caught 2026-08-03 on Qwen3.5-4B-MTP; fixed by passing
+`with_load_mtp(true)` at the `LlamaModelParams` build in `model_slot.rs`. DSv4 ships
+MTP weights too, so this is on the DeepSeek path as much as the Qwen one. Regression
+harness: `cargo run -p sovereign-inference --example mtp_smoke -- --model <mtp.gguf>`.
+
+**The underlying class is still open upstream.** `ggml_backend_rpc_device_supports_op`
+is an unconditional `return true` with a `//TODO: call the remote backend and cache
+the results`. The scheduler therefore believes an RPC worker can execute *any* op,
+and discovers otherwise by aborting. Every row above is one instance. We are riding
+upstream's op coverage rather than negotiating capability, so a future DSv4 graph
+change can reopen this without warning — the symptom is always a worker-side abort
+on a named op, and the diagnostic is `GGML_SCHED_DEBUG=2` + `SOVEREIGN_LLAMA_LOGS=1`.
 
 **Reason 2 — "at q2 (~81 GB) it fits the Strix solo, so it never exercises a
 split." Inverted.** There is no q2. unsloth publishes exactly two files, and the

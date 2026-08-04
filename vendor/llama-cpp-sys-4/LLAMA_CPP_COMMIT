@@ -1,0 +1,56 @@
+1464c62d88f699ec9700c8010bbfdbc603a9efd6
+
+# What this file is
+#
+# `llama.cpp/` in this directory is a plain vendored copy with NO sovereign
+# divergence. This file names the upstream commit it equals, because the
+# bundled tree carries no marker of its own: llama.cpp fills BUILD_COMMIT at
+# build time from a `.git` that does not exist here, so without this file the
+# only way to identify the revision is to diff whole trees.
+#
+# The claim is checkable, not asserted:
+#
+#     ./scripts/verify-vendored-llama-cpp.sh
+#
+# It fetches the upstream tarball at the SHA on line 1 and compares every
+# vendored file byte-for-byte. Verified 2026-08-03: 1552/1552 identical,
+# 0 differing, 0 files absent upstream.
+#
+# Why this commit and not the one the crate ships
+#
+# llama-cpp-sys-4 0.5.1 bundles llama.cpp 221f0f6356efe2260023208365705ec5d5a7c8f5.
+# 1464c62d88 is its DIRECT CHILD — exactly one commit ahead:
+#
+#     1464c62d88  metal: implement DSv4 Lightning Indexer (#25893)  2026-08-03
+#
+# That commit is load-bearing for distributed DeepSeek-V4. deepseek4.cpp:671
+# calls ggml_lightning_indexer unconditionally on the DSv4 path, and at
+# 221f0f63 GGML_OP_LIGHTNING_INDEXER is absent from Metal's supports_op. The
+# RPC backend's supports_op is an unconditional `return true` (ggml-rpc.cpp,
+# still a //TODO upstream), so the scheduler hands the Metal worker an op it
+# cannot run and the worker aborts mid-graph. Shipping 221f0f63 would trade
+# yesterday's csa_top_k_mask abort for a lightning-indexer abort.
+#
+# The commit touches 8 files; 7 are under ggml/src/ggml-metal/ and are shipped
+# by the crate, the 8th is tests/test-backend-ops.cpp which the published crate
+# strips. None overlap the three patches build.rs requires (0003/0004/0005 touch
+# common/speculative.*, include/llama.h, src/llama-context.cpp,
+# src/llama-cparams.h), so patch application is unaffected.
+#
+# How to move this pin
+#
+# Do NOT hand-edit files under llama.cpp/. Two reasons. First, build.rs's
+# `llama_src_version` keys its re-copy cache on CMakeLists.txt's MTIME for a
+# non-git tree, so an in-place edit elsewhere may not trigger a rebuild. Second,
+# an edited tree matches no upstream commit and the verify script can no longer
+# tell you what you are building.
+#
+# Instead: re-extract the whole tree at the new SHA, update line 1, and re-run
+# the verify script. Adding a `patches/NNNN-*.patch` file is NOT a route either
+# — build.rs:stage_active_patches copies only a HARDCODED allowlist
+# (0003/0004/0005, plus 0001 under the `q1` feature) into the staged dir, and
+# only staged patches are applied. A new patch file is silently ignored.
+#
+# When a llama-cpp-rs release ships a submodule at or past this SHA, this whole
+# fast-forward becomes redundant: re-vendor the stock crate and set line 1 to
+# whatever that release bundles.

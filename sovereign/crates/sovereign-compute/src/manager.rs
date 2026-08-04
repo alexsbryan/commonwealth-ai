@@ -482,7 +482,12 @@ fn spawn_managed(
             Duration::from_secs(10),
             Duration::from_secs(60),
         ],
-        crash_loop_window: Duration::from_secs(600),
+        // A generation that serves a full minute proves the restart
+        // worked; anything shorter leaves the breaker armed. Deliberately
+        // NOT a wall-clock window — a 148 GB distributed primary takes
+        // minutes to load, so a window-based ceiling could never trip
+        // (2026-08-03; see `SupervisorConfig::healthy_reset_after`).
+        healthy_reset_after: Duration::from_secs(60),
         crash_loop_max: 5,
         stderr_ring_lines: 200,
     };

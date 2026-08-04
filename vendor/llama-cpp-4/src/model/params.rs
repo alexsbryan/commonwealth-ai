@@ -8,6 +8,26 @@ use std::ptr::null;
 
 pub mod kv_overrides;
 
+/// Exact model-file loading strategy exposed by llama.cpp.
+///
+/// The `llama_load_mode` constants are `u32` under the Itanium ABI (Linux/macOS)
+/// but `i32` under MSVC, so each discriminant uses `as _` to coerce to the
+/// `#[repr(u32)]` type on every target (matching [`token_type`](crate::token_type)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum LlamaLoadMode {
+    /// No memory mapping, locking, or direct I/O.
+    None = llama_cpp_sys_4::LLAMA_LOAD_MODE_NONE as _,
+    /// Memory-map model files when supported.
+    Mmap = llama_cpp_sys_4::LLAMA_LOAD_MODE_MMAP as _,
+    /// Read model files normally and lock loaded pages in memory.
+    Mlock = llama_cpp_sys_4::LLAMA_LOAD_MODE_MLOCK as _,
+    /// Memory-map model files and lock mapped pages in memory.
+    MmapMlock = llama_cpp_sys_4::LLAMA_LOAD_MODE_MMAP_MLOCK as _,
+    /// Use direct I/O when supported.
+    DirectIo = llama_cpp_sys_4::LLAMA_LOAD_MODE_DIRECT_IO as _,
+}
+
 /// A safe wrapper around `llama_model_params`.
 #[allow(clippy::module_name_repetitions)]
 pub struct LlamaModelParams {
@@ -39,8 +59,8 @@ impl Debug for LlamaModelParams {
             .field("n_gpu_layers", &self.params.n_gpu_layers)
             .field("main_gpu", &self.params.main_gpu)
             .field("vocab_only", &self.params.vocab_only)
-            .field("use_mmap", &self.params.use_mmap)
-            .field("use_mlock", &self.params.use_mlock)
+            .field("load_mode", &self.load_mode())
+            .field("load_mtp", &self.load_mtp())
             .field("kv_overrides", &"vec of kv_overrides")
             .finish()
     }
@@ -144,16 +164,45 @@ impl LlamaModelParams {
         self.params.vocab_only
     }
 
+    /// Returns the exact model-file loading strategy.
+    #[must_use]
+    pub fn load_mode(&self) -> LlamaLoadMode {
+        match self.params.load_mode {
+            llama_cpp_sys_4::LLAMA_LOAD_MODE_MMAP => LlamaLoadMode::Mmap,
+            llama_cpp_sys_4::LLAMA_LOAD_MODE_MLOCK => LlamaLoadMode::Mlock,
+            llama_cpp_sys_4::LLAMA_LOAD_MODE_MMAP_MLOCK => LlamaLoadMode::MmapMlock,
+            llama_cpp_sys_4::LLAMA_LOAD_MODE_DIRECT_IO => LlamaLoadMode::DirectIo,
+            _ => LlamaLoadMode::None,
+        }
+    }
+
+    /// Whether the model's MTP (multi-token prediction) layers will be loaded.
+    ///
+    /// MTP layers drive multi-token-prediction speculative decoding for models
+    /// that ship them (e.g. `DeepSeek V4`). Once loaded, the speculative state is
+    /// captured and restored through [`crate::speculative`]. Defaults to `false`
+    /// because most models carry no MTP weights.
+    #[must_use]
+    pub fn load_mtp(&self) -> bool {
+        self.params.load_mtp
+    }
+
     /// use mmap if possible
     #[must_use]
     pub fn use_mmap(&self) -> bool {
-        self.params.use_mmap
+        matches!(
+            self.load_mode(),
+            LlamaLoadMode::Mmap | LlamaLoadMode::MmapMlock
+        )
     }
 
     /// force system to keep model in RAM
     #[must_use]
     pub fn use_mlock(&self) -> bool {
-        self.params.use_mlock
+        matches!(
+            self.load_mode(),
+            LlamaLoadMode::Mlock | LlamaLoadMode::MmapMlock
+        )
     }
 
     /// sets the number of gpu layers to offload to the GPU.
@@ -219,20 +268,6 @@ impl LlamaModelParams {
         self
     }
 
-    /// sets `vocab_only`
-    #[must_use]
-    pub fn with_vocab_only(mut self, vocab_only: bool) -> Self {
-        self.params.vocab_only = vocab_only;
-        self
-    }
-
-    /// sets `use_mlock`
-    #[must_use]
-    pub fn with_use_mlock(mut self, use_mlock: bool) -> Self {
-        self.params.use_mlock = use_mlock;
-        self
-    }
-
     /// Sets explicit per-tensor device placement via name-regex overrides — the
     /// `--override-tensor` (`-ot`) mechanism. Each `(pattern, buft)` pins every
     /// tensor whose name matches the regex `pattern` (llama.cpp uses
@@ -276,15 +311,57 @@ impl LlamaModelParams {
         self
     }
 
+    /// sets `vocab_only`
+    #[must_use]
+    pub fn with_vocab_only(mut self, vocab_only: bool) -> Self {
+        self.params.vocab_only = vocab_only;
+        self
+    }
+
+    /// Sets the exact model-file loading strategy.
+    #[must_use]
+    pub fn with_load_mode(mut self, load_mode: LlamaLoadMode) -> Self {
+        self.params.load_mode = load_mode as llama_cpp_sys_4::llama_load_mode;
+        self
+    }
+
+    /// Sets whether to load the model's MTP (multi-token prediction) layers.
+    ///
+    /// Enable this for models that ship MTP weights (e.g. `DeepSeek V4`) when you
+    /// intend to use MTP-based speculative decoding, then drive the speculative
+    /// state via [`crate::speculative`]. For models without MTP layers the flag
+    /// has no effect. Corresponds to `llama_model_params.load_mtp`, added
+    /// upstream in llama.cpp PR #25784 (`DeepSeek V4` MTP + `DSpark`).
+    ///
+    /// ```
+    /// # use llama_cpp_4::model::params::LlamaModelParams;
+    /// let params = LlamaModelParams::default().with_load_mtp(true);
+    /// assert!(params.load_mtp());
+    /// ```
+    #[must_use]
+    pub fn with_load_mtp(mut self, load_mtp: bool) -> Self {
+        self.params.load_mtp = load_mtp;
+        self
+    }
+
+    /// sets `use_mlock`
+    #[must_use]
+    pub fn with_use_mlock(mut self, use_mlock: bool) -> Self {
+        let load_mode = match (self.use_mmap(), use_mlock) {
+            (true, true) => LlamaLoadMode::MmapMlock,
+            (true, false) => LlamaLoadMode::Mmap,
+            (false, true) => LlamaLoadMode::Mlock,
+            (false, false) => LlamaLoadMode::None,
+        };
+        self.params.load_mode = load_mode as llama_cpp_sys_4::llama_load_mode;
+        self
+    }
 }
 
 /// Default parameters for `LlamaModel`. (as defined in llama.cpp by `llama_model_default_params`)
 /// ```
 /// # use llama_cpp_4::model::params::LlamaModelParams;
 /// let params = LlamaModelParams::default();
-/// #[cfg(not(target_os = "macos"))]
-/// assert_eq!(params.n_gpu_layers(), 0, "n_gpu_layers should be 0");
-/// #[cfg(target_os = "macos")]
 /// assert_eq!(params.n_gpu_layers(), -1, "n_gpu_layers should be -1 (all layers)");
 /// assert_eq!(params.main_gpu(), 0, "main_gpu should be 0");
 /// assert_eq!(params.vocab_only(), false, "vocab_only should be false");
