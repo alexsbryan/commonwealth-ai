@@ -199,6 +199,17 @@ build, ~85% fewer tokens, fully deterministic. (Caveat: benchmarked at
 38-205 chunks; extractive summaries read less fluently and run ~1.8x
 longer.)
 
+**Where we actually landed against F1 (measured 2026-07-31).** The two
+halves of LazyGraphRAG came out opposite ways. Its **index** half passed
+with 57x headroom — a concept graph over 10k chunks in 5.2 s (§P2.2,
+`SP5_concept_graph.md`) — and is specified but **unbuilt**. The only
+**query**-half component tested, RAPTOR tree descent under an LLM
+relevance budget, **lost** to one-shot cosine top-K at equal evidence
+budget (§P5.1, `P51_tree_descent.md`). Note the asymmetry before
+quoting the 700x figure above: it describes a community-ranking query
+tier that we have not tested, and cannot test until the index half
+exists.
+
 ### F2. Retrieval graphs converged on dual-node PPR + query-to-triple
 HippoRAG 2 (ICML 2025) is the reference upgrade of our T2: phrase nodes
 from OpenIE triples + synonym edges, **plus passage nodes** via
@@ -287,7 +298,7 @@ exactly the substrate this bolts onto; it is text-only today.
 
 | Theme | Frontier position | Us today | Verdict |
 |---|---|---|---|
-| Build-time cost | Deterministic/statistical structure eagerly; LLM deferred behind budgets (F1) | Eager LLM per section/cluster; deterministic paths exist (`structure_first`, TF-IDF motifs, TextTiling) but LLM remains the default spine | **Behind — the biggest lever** |
+| Build-time cost | Deterministic/statistical structure eagerly; LLM deferred behind budgets (F1) | Eager LLM per section/cluster; deterministic paths exist (`structure_first`, TF-IDF motifs, TextTiling) but LLM remains the default spine | **Behind — the biggest lever, and the cheapest close is already measured.** The concept-graph free tier ran 10k chunks in 5.2 s, 57x under gate, with an adopt-or-write verdict and a committed probe (§P2.2) — proven feasible, still unbuilt. The *deferral* half is the unproven one: §P5.1 failed its gate |
 | Faithfulness of synthesized artifacts | Verified before citable (F4) | Unverified; provenance stripped at evidence assembly; no faithfulness metric | **Behind — the sharpest risk** |
 | Incremental maintenance | Graph patches on change (F1, LightRAG; Graphiti) | Substrate built (hashes, deltas, checkpoints); production triggers unwired (W4) | **Even on design, behind on wiring** |
 | Entity/relation extraction | Schema-driven 205M encoder, joint NER+RE, CPU (F6) | GLiNER v1 small, entities only, type-collapse; LLM fallbacks | **Behind — and NOT cheap to close.** The obvious close (adopt GLiNER2) was measured 2026-08-03 and rejected: no speedup at our chunk length, worse typing (§P2.1). Reopening this needs a different candidate, not a retry |
@@ -671,17 +682,60 @@ unbounded fact accumulation as the memory-growth story.
 
 ### P5 — Frontier bets (product-defining, evidence-gated)
 
-1. **The navigator (F7).** A bounded agentic loop over structures we
-   already ship: concept-graph communities → RAPTOR tree descent →
-   atom-graph traversal → leaf chunks, with the LazyGraphRAG budget
-   controlling relevance tests, every hop logged as a MatchTrace-style
-   trail (glassbox by construction). This becomes the DeepQuery spine
-   for big corpora and the "lazy atlas": claims extracted at query time
-   are **written back** as verified atoms via `apply_atom_delta`, so the
-   corpus densifies where users actually look — eager enrichment only
-   where it provably pays, permanent value from every expensive query.
-   The mesh compounds it: Blanket peer-assist can pre-warm hot
-   communities during idle windows.
+1. **The navigator (F7). ONE HOP MEASURED AND FAILED 2026-07-31; the
+   navigator as specified is UNTESTED.** A bounded agentic loop over
+   structures we already ship: concept-graph communities → RAPTOR tree
+   descent → atom-graph traversal → leaf chunks, with the LazyGraphRAG
+   budget controlling relevance tests, every hop logged as a
+   MatchTrace-style trail (glassbox by construction). This becomes the
+   DeepQuery spine for big corpora and the "lazy atlas": claims
+   extracted at query time are **written back** as verified atoms via
+   `apply_atom_delta`, so the corpus densifies where users actually look
+   — eager enrichment only where it provably pays, permanent value from
+   every expensive query. The mesh compounds it: Blanket peer-assist can
+   pre-warm hot communities during idle windows.
+
+   **What P5.1 (gate G8) measured**
+   (`research/enrichment-spikes/findings/P51_tree_descent.md`; harness
+   `sovereign-inference/examples/p51_descent.rs` +
+   `research/enrichment-spikes/scripts/p51_dump.py`, both committed; raw
+   logs `runs/p51/`). LLM tree-descent vs one-shot cosine top-K at an
+   equal ~3,000-token evidence budget, 14-question summarize banks,
+   Qwen3.6-35B-A3B, temperature 0, on the 271-node scoped sep tree:
+
+   | Bank | descent | one-shot top-K |
+   |---|---|---|
+   | `summarize` (n=8) | 19/80 = 0.238 | 16/80 = 0.200 |
+   | `summarize_obscure` (n=6) | 12/60 = 0.200 | **23/60 = 0.383** |
+   | overall | 31/140 = 0.221 | **39/140 = 0.279** |
+
+   - Cost: 2–3 LLM calls and ~19.1 s/question vs 1 call and ~15.6 s.
+   - **The loss is evidence assembly, not navigation.** Hop logs show the
+     model picking the on-topic subtree tops; descent's leaf pools carry
+     a mean **2.07** expected facts vs **3.57** for cosine top-K, and
+     `facts_in_evidence` is ≤ one-shot on 11 of 14 questions. Committing
+     the whole budget to two picked subtrees is worse than corpus-wide
+     chunk cosine at the same budget.
+   - **This IS the gate below**, run early against the middle hop alone.
+
+   **Scope — do NOT read this as "LazyGraphRAG's query tier is
+   rejected."** P5.1 descended a RAPTOR tree. LazyGraphRAG ranks
+   **communities**, which is this navigator's *first* hop — and that hop
+   does not exist, because §P2.2 is unbuilt. The 700x-at-parity claim in
+   §F1 is a claim about a tier we have not yet been able to test. The
+   real experiment is re-running G8 with concept-graph communities in
+   front of the descent.
+
+   **Two findings with value beyond the score.** (1) The
+   `--group-by-article` RAPTOR output is a **forest** — 42 parentless
+   tops (2 level-2 + 40 article-level-1) — invisible to production
+   because both consumers fetch-all-then-filter; any future descent
+   consumer must start from parentless nodes, not max-level. (2)
+   `preferred_speed: Slow` requests fail outright when the 35B primary
+   is not resident, and the first run's harness swallowed all 56 such
+   failures via `unwrap_or_default()` — scores were vacuously zero and
+   the "descents" were pure first-2 fallback. An instrument-validation
+   failure of exactly the ARCH §18.4 kind: the run was green and empty.
 2. **Visual assets (F8).** A ColModernVBERT-class (~250M) late-
    interaction index over asset-store page images, feature-gated like
    GLiNER, starting with the described-asset PDF verticals where OCR
