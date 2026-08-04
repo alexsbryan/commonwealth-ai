@@ -240,6 +240,42 @@ thesis holds: **model size is a memory problem, not a speed problem.** The main
 uncertainty is expert-gather cost — 6-of-256 routing is far sparser than the 122B's,
 and scattered reads cost more than the arithmetic suggests.
 
+> ### ❌ MEASURED 2026-08-04 — THE PREDICTION IS REFUTED. 1.56 tok/s, 5–8× off.
+>
+> ```
+> Decode        1.56 tok/s   median of 3 (1.51–1.56)
+> TTFT          12,649 ms
+> Inter-token   p50 505.1 ms · p95 825.8 ms
+> Prefill       2 tok/s
+> Placement     30 local + 13 @BeefyMac, 2 nodes, 1 hop/token · direct link · vulkan
+> ```
+>
+> `svrn mesh bench` exit 0 — all nine validity guards passed. Filed to
+> `~/.sovereign/mesh-measurements.json`, published as `1785817085/1bb25672fffc350e`,
+> key `pd2:272a0ed92d87e2b2`. Full record: note `0b6ffd3b`.
+>
+> **The memory half of the thesis holds; the speed half does not.** A 145 GB model
+> that fits on neither box ran correctly across two — host GTT held 110.1 of its
+> 124.0 GB, so the balance was provably resident on BeefyMac, and the first decode
+> returned a correct answer. That is the capability claim, and it is earned. But
+> 505 ms per token at a single hop is not a configuration a person waits on, and
+> the objective's own exit condition ("below single digits a user would tolerate")
+> is met.
+>
+> **The suspect is upstream's brand-new Metal DSv4 kernels, not this plumbing.**
+> PR #25893 — the very commit this doc's §Reason 1b vendors for — describes itself
+> as "the first of a series of changes that target improving DSv4 performance on
+> Apple Silicon", and reports single-box M1 Ultra tg128 of 8.91 t/s on master
+> against 23.59 t/s on the author's full `dsv4-improvements` branch. That 2.6× is
+> not upstream yet. DSv4 also builds a much heavier graph than the working
+> Qwen3.6-35B control: 5,003 nodes on RPC0 vs 3,565.
+>
+> **Not yet decomposed, and this is the next measurement worth taking:** we have
+> not separated Mac-side compute time from link latency. Run DSv4 single-box on
+> BeefyMac at a quant that fits. If that also lands near 1.5–2 tok/s, the link is
+> innocent and this is entirely Metal kernel maturity — in which case the fix is
+> upstream's and the right move is to wait, not to optimize here.
+
 ### Known non-goals
 
 - **MTP will not help.** The model ships a speculative-decoding module, but the

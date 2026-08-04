@@ -22,6 +22,7 @@ Usage:
 import argparse
 import collections
 import json
+import math
 import os
 import random
 import re
@@ -104,6 +105,72 @@ just ::= [^<>]+
 """
 
 
+def branch_prob(logprobs, marker="<classification>"):
+    """P(GROUNDED) at the token that decides the verdict, or None.
+
+    WHY THIS EXISTS. A hard label is one point on an operating curve, and two
+    checkpoints compared at one point each cannot be told apart from ONE
+    checkpoint at two thresholds -- which is exactly the ambiguity that arms A
+    and AB landed in (A's grounded set is a strict SUBSET of AB's; `AND`
+    reproduced A exactly and `OR` reproduced AB exactly across 2,186 items).
+    Recovering the decision distribution turns each scoring run into the whole
+    curve, so the question becomes whether one arm DOMINATES the other rather
+    than which arm sits at a friendlier threshold.
+
+    The grammar pins the output to
+    `<classification>GROUNDED|HALLUCINATED_INTRINSIC|HALLUCINATED_EXTRINSIC`,
+    so the first token after the marker is the branch. We do not assume its
+    tokenization: walk the emitted tokens, accumulate text, and take the
+    alternatives at the first token that lands past the marker. Then split the
+    candidates on whether they start G or H and renormalise over just those
+    two -- other candidates are grammar-illegal continuations whose mass is not
+    ours to interpret.
+
+    Returns (p_grounded, decision_token, n_candidates_used) or (None, None, 0).
+    """
+    if not logprobs:
+        return None, None, 0
+    toks = logprobs.get("content") or []
+    prefix = ""  # text emitted BEFORE the token under consideration
+    for t in toks:
+        tok_s = t.get("token", "")
+        seen = prefix + tok_s
+        if marker not in seen:
+            prefix = seen
+            continue
+        # First token whose emission carries us PAST the marker. If the marker
+        # ended exactly at this token's boundary the branch is the NEXT token,
+        # so require some text beyond it before deciding.
+        if seen.split(marker, 1)[1] == "":
+            prefix = seen
+            continue
+        cands = t.get("top_logprobs") or []
+        if not cands:
+            return None, tok_s, 0
+        g = h = 0.0
+        used = 0
+        for c in cands:
+            # Judge each candidate by the text it would leave AFTER the marker,
+            # not by its own first character. The marker and the label can land
+            # in ONE token, and then every candidate starts with '<' -- which
+            # matched neither branch and silently returned None for every item.
+            full = prefix + (c.get("token") or "")
+            if marker not in full:
+                continue
+            s = full.split(marker, 1)[1].strip().lstrip('"').upper()
+            if not s:
+                continue
+            p = math.exp(c.get("logprob", -99))
+            if s.startswith("G"):
+                g += p; used += 1
+            elif s.startswith("H"):
+                h += p; used += 1
+        if g + h <= 0:
+            return None, tok_s, used
+        return g / (g + h), tok_s, used
+    return None, None, 0
+
+
 def build_prompt(doc: str, claim: str) -> str:
     return json.dumps(
         {"instructions": INSTRUCTIONS, "document": doc, "claim": claim},
@@ -170,8 +237,13 @@ def chat(base_url, model, prompt, max_tokens, timeout, extra=None):
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         out = json.load(r)
-    msg = out["choices"][0]["message"]
+    choice = out["choices"][0]
+    msg = choice["message"]
     usage = out.get("usage", {})
+    # Carried through so the caller can recover the DECISION distribution, not
+    # just the sampled label. None unless --logprobs asked for it.
+    usage = dict(usage)
+    usage["_logprobs"] = choice.get("logprobs")
     # llama-server (thinking-aware templates) splits reasoning into its own
     # field; other backends leave <think> inline. Concatenate so the parser
     # sees one stream either way.
@@ -284,9 +356,23 @@ def main() -> int:
                     help="constrain decoding to the <answer> schema (llama-server GBNF). "
                          "A format the parser MUST accept is enforced by the decoder rather "
                          "than hoped for from training -- see ANSWER_GBNF.")
+    ap.add_argument("--logprobs", type=int, default=0, metavar="N",
+                    help="request the top-N alternatives per token and record "
+                         "`p_grounded` -- the model's probability of GROUNDED at "
+                         "the token the grammar makes decisive. Off by default: "
+                         "it changes the response payload, and every committed "
+                         "baseline was measured without it. With it, ONE run "
+                         "yields a whole tpr/tnr curve instead of the single "
+                         "point a hard label gives, which is what distinguishes "
+                         "'this arm discriminates better' from 'this arm sits at "
+                         "a friendlier threshold'. 8-10 is plenty; the grammar "
+                         "leaves few legal continuations.")
     args = ap.parse_args()
 
     sampling = {}
+    if args.logprobs:
+        sampling["logprobs"] = True
+        sampling["top_logprobs"] = args.logprobs
     if args.repeat_penalty is not None:
         sampling["repeat_penalty"] = args.repeat_penalty
     if args.no_think:
@@ -330,6 +416,7 @@ def main() -> int:
         # committed baseline; the tolerant read is recorded alongside it.
         pred, cls = parse_verdict(text)
         pred_t, cls_t, how = parse_verdict_tolerant(text)
+        p_g, dec_tok, n_cand = branch_prob(usage.get("_logprobs"))
         ctoks = usage.get("completion_tokens") or 0
         with lock:
             stats["done"] += 1
@@ -357,6 +444,12 @@ def main() -> int:
                         "cls_tolerant": cls_t,
                         "parse_mode": how,
                         "completion_tokens": usage.get("completion_tokens"),
+                        # None unless --logprobs. p_grounded is the sweepable
+                        # score; the other two are here so a curve that looks
+                        # wrong can be audited without re-running the card.
+                        "p_grounded": p_g,
+                        "decision_token": dec_tok,
+                        "branch_candidates": n_cand,
                     }
                 )
                 + "\n"

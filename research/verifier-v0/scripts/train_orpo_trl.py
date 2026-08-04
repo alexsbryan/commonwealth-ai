@@ -143,6 +143,46 @@ def gpu_mem_gb(torch) -> tuple[float, float, float]:
     )
 
 
+def _decile(series: list[float], agg) -> list[float] | None:
+    """`agg` applied to each tenth of `series`, in order.
+
+    Ten numbers instead of one slope. Reading them left to right answers the
+    only memory question that has ever mattered on this box: is the process
+    holding more than it did, or is it briefly touching more?
+    """
+    if not series:
+        return None
+    n = len(series)
+    k = max(1, n // 10)
+    return [round(agg(series[i:i + k]), 2) for i in range(0, n, k)][:10]
+
+
+def _batch_fingerprint(inputs) -> str:
+    """A stable identity for one batch, for answering 'did resume re-feed?'.
+
+    Hashes the token ids rather than reporting a row index because the index
+    is exactly what we do not have: by the time a batch reaches training_step
+    it has been through the sampler and the collator and carries no row id.
+    The ids ARE the row, so two legs printing the same digest are training on
+    the same examples -- which after a resume means the dataloader skip did
+    not happen.
+    """
+    import hashlib
+
+    keys = sorted(k for k, v in inputs.items()
+                  if k.endswith("input_ids") and hasattr(v, "detach"))
+    if not keys:
+        return f"UNFINGERPRINTABLE (no *input_ids in {sorted(inputs)})"
+    h = hashlib.blake2b(digest_size=8)
+    shapes = []
+    for k in keys:
+        t = inputs[k].detach().to("cpu")
+        h.update(k.encode())
+        h.update(t.numpy().tobytes())
+        shapes.append(f"{k}{tuple(t.shape)}")
+    return f"{h.hexdigest()}  {' '.join(shapes)}"
+
+
 VISION_HINTS = ("visual", "vision", "image", "vit", "patch_embed", "merger")
 
 
@@ -338,6 +378,20 @@ def main() -> int:
                          "similar lengths next to each other so the allocator can "
                          "reuse blocks. Turn it off only to reproduce a pre-"
                          "2026-08-03 run.")
+    ap.add_argument("--stop-at-step", type=int, default=0, metavar="N",
+                    help="stop cleanly once step N completes (0 = run to "
+                         "--iters). The LR SCHEDULE IS UNAFFECTED: it still "
+                         "spans --iters, so a run stopped at N sits at exactly "
+                         "the schedule position a full run passes through at N. "
+                         "That is what makes two arms comparable when neither "
+                         "reaches the horizon. Lowering --iters instead would "
+                         "re-fit the decay to the shorter run and compare two "
+                         "different schedules (ARCH_PRINCIPLES §10.6). Added "
+                         "2026-08-03 to match arm AB to arm A, which the old "
+                         "95 GB tripwire cut at step 117 of a 400-step "
+                         "schedule; Ctrl-C cannot land on a named step and the "
+                         "GTT tripwire fires wherever the data happens to "
+                         "spike.")
     ap.add_argument("--gtt-limit-consecutive", type=int, default=3, metavar="N",
                     help="how many CONSECUTIVE over-limit samples abort the run "
                          "(default 3). One instantaneous sample is not a "
@@ -675,6 +729,19 @@ def main() -> int:
                       f"take both, and the graphical session with them.",
                       file=sys.stderr)
                 control.should_training_stop = True
+
+            # The planned stop, checked LAST so a tripwire abort on the same
+            # step still reports its own reason. This is a normal end of run,
+            # not a failure: the exit code stays 0 and the adapter is saved by
+            # the same path a full run uses.
+            if args.stop_at_step and state.global_step >= args.stop_at_step:
+                print(f"\nSTOP-AT-STEP: reached step {state.global_step} of the "
+                      f"{args.iters}-step schedule (--stop-at-step "
+                      f"{args.stop_at_step}). Stopping cleanly. The scheduler "
+                      f"horizon was NOT shortened, so this checkpoint sits at "
+                      f"the same LR-schedule position a full {args.iters}-step "
+                      f"run passes through here.", flush=True)
+                control.should_training_stop = True
             return control
 
     timer = StepTimer()
@@ -720,6 +787,33 @@ def main() -> int:
                 )
 
         trainer_cls = LengthBucketedORPOTrainer
+
+    # THE INSTRUMENT FOR THE RESUME QUESTION, which was inferred and never
+    # observed. transformers 5.14 DOES fast-forward the dataloader past
+    # consumed batches -- trainer.py:1690 calls `skip_first_batches`, guarded
+    # by `ignore_data_skip`, which defaults False (training_args.py:1227). But
+    # it announces that through `logger.info` (trainer.py:1496), which is
+    # invisible at our verbosity, so the line was looked for and not found and
+    # the behaviour was written down as unverified.
+    #
+    # Reading the source settles the code path; it does NOT settle what this
+    # dataset and sampler actually hand back. A leg that correctly skipped
+    # 3,744 rows and one that silently re-fed them from row 0 produce identical
+    # logs today. The fingerprint distinguishes them: if the resumed leg prints
+    # the SAME value as the leg that started from step 0, the skip did not
+    # happen and every pause is repeating data.
+    class _FirstBatchFingerprint:
+        _fp_printed = False
+
+        def training_step(self, model, inputs, *a, **kw):  # noqa: ANN001
+            if not self._fp_printed:
+                self._fp_printed = True
+                print(f"  first batch this leg: {_batch_fingerprint(inputs)}",
+                      flush=True)
+            return super().training_step(model, inputs, *a, **kw)
+
+    trainer_cls = type("InstrumentedORPOTrainer",
+                       (_FirstBatchFingerprint, trainer_cls), {})
 
     trainer = trainer_cls(**trainer_kwargs)
 
@@ -803,6 +897,20 @@ def main() -> int:
             "data": str(args.data),
             "train_rows": len(ds),
             "iters_requested": args.iters,
+            # The schedule horizon and the stop are separate facts. Recording
+            # only steps_timed leaves a reader unable to tell a planned stop
+            # from a tripwire abort from a crash — and that distinction is the
+            # whole basis of comparing two arms cut at the same step.
+            "stop_at_step": args.stop_at_step or None,
+            "group_by_length": args.group_by_length,
+            # BOTH, because they differ by one and the difference has already
+            # cost a wrong plan. `steps_timed` counts INTER-STEP DURATIONS, so
+            # it is always one short: step 1 has no predecessor to time against.
+            # Arm A reported steps_timed 117 and had trained 118 optimizer
+            # steps, and "arm A was cut at 117" was carried into a session frame
+            # and used to size a matching run. The step a checkpoint actually
+            # sits at is the last one in the trace.
+            "steps_completed": (step_recs[-1]["step"] if step_recs else 0),
             "steps_timed": len(d),
             "batch_size": args.batch_size,
             "grad_accum": args.grad_accum,
@@ -843,9 +951,20 @@ def main() -> int:
             "gtt_first_gb": gtt_series[0] if gtt_series else None,
             "gtt_last_gb": gtt_series[-1] if gtt_series else None,
             "gtt_peak_gb": max(gtt_series) if gtt_series else None,
-            "gtt_growth_mb_per_step": (
-                round((gtt_series[-1] - gtt_series[0]) * 1024 / (len(gtt_series) - 1), 1)
-                if len(gtt_series) > 1 else None),
+            # FLOOR AND ENVELOPE, NOT A SINGLE SLOPE. Until 2026-08-03 this
+            # reported `gtt_growth_mb_per_step` as (last - first)/steps, and on
+            # arm A that printed 847.9 MB/step -- which reads as a steady leak
+            # and is not what the series does. The run's LAST sample was its
+            # single worst excursion (101.97 GB, the one the tripwire caught),
+            # so the estimator was measuring one spike and dividing it across
+            # 117 steps. The floor never moved: arm A's per-20-step minimum sat
+            # between 4.4 and 6.3 GB from step 1 to step 118 while its maximum
+            # climbed 37 -> 60 -> 80 -> 102. A leak raises the FLOOR; growing
+            # transients raise only the ENVELOPE, and only the second one is
+            # fixed by length bucketing. One number could not tell them apart,
+            # so report both.
+            "gtt_floor_by_decile_gb": _decile(gtt_series, min),
+            "gtt_envelope_by_decile_gb": _decile(gtt_series, max),
             "box_gtt_peak_gb": max(box_series) if box_series else None,
             "empty_cache_every": args.empty_cache_every,
         },
