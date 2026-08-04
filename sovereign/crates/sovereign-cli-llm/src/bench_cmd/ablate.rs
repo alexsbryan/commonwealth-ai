@@ -22,11 +22,40 @@
 //! golden-authoring decision (P3.1), it is not padded into a win.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
+
+/// Identify a bank in the results map and in run-artifact filenames.
+///
+/// MUST BE UNIQUE PER BANK. This used to be a bare `file_stem()`, which
+/// is `"questions"` for EVERY bank in this repo — the convention is
+/// `sovereign/bench/<corpus>/questions.toml`. Results are keyed by this
+/// label (`results.entry(stem).or_default().insert(arm, …)`), so a
+/// two-bank run silently overwrote the first bank's summaries with the
+/// second's, cell for cell, and printed ONE row-set under a label that
+/// looked like it covered both. Found 2026-08-04 running the `sep` and
+/// `wikipedia` banks together: every row was wikipedia's, SEP's numbers
+/// were discarded, and nothing said so. That is the multi-bank feature
+/// — this lane's headline — silently wrong for the repo's own layout.
+///
+/// Qualifying with the parent directory makes it `sep-questions` /
+/// `wikipedia-questions`. A separator that is filesystem-safe matters:
+/// the label is interpolated into run-artifact paths
+/// (`{stem}-{arm}-r{r}.json`), so a `/` would try to write into a
+/// subdirectory that does not exist.
+fn bank_label(bank: &Path) -> String {
+    let stem = bank
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| bank.display().to_string());
+    match bank.parent().and_then(|p| p.file_name()) {
+        Some(dir) if !dir.is_empty() => format!("{}-{stem}", dir.to_string_lossy()),
+        _ => stem,
+    }
+}
 
 /// Minimum |Δ| that can count as separation even when rep spread is
 /// tiny — the SP2 parity band on the summarize banks (1 fact / 8 q ×
@@ -40,6 +69,28 @@ const MATRIX_ENV: &[&str] = &[
     "SOVEREIGN_RAPTOR_GROUNDING",
     "SOVEREIGN_CONV_PPR_WEIGHT",
     "SOVEREIGN_PREFIX_STATE",
+    // The whole rerank family, not just the two the `--rerank` arms set.
+    // `rerank_config_from_env` (sovereign-tools/src/corpus/mod.rs:82)
+    // resolves ALL of these, so an operator who exported, say,
+    // SOVEREIGN_RERANK_CANDIDATES_K in their shell would have it silently
+    // applied to the baseline as well as the arms — and the delta would be
+    // measured against a contaminated reference.
+    //
+    // NOTE the asymmetry that makes clearing (not blanking) the right move
+    // for DEDUP_CORPORA: unset means the shipped default {"sep"}, while an
+    // explicitly EMPTY string means "no filter, all corpora". Those are
+    // different answers (see rerank_dedup_filter_from_env), so the baseline
+    // must see the variable ABSENT, which is what env_remove gives us.
+    "SOVEREIGN_RERANK_MODEL_PATH",
+    "SOVEREIGN_RERANK_DEDUP_ONLY",
+    "SOVEREIGN_RERANK_DEDUP_CORPORA",
+    "SOVEREIGN_RERANK_DEDUP_PICKER",
+    "SOVEREIGN_RERANK_PER_ARTICLE",
+    "SOVEREIGN_RERANK_ALPHA",
+    "SOVEREIGN_RERANK_GATE_ONLY",
+    "SOVEREIGN_RERANK_CANDIDATES_K",
+    "SOVEREIGN_RERANK_MIN_SCORE",
+    "SOVEREIGN_RERANK_ATLAS_WEIGHT",
 ];
 
 /// Which pipeline an arm drives.
@@ -72,7 +123,7 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage(
             "svrn bench enrichment-ablate <bank.toml> [<bank2.toml> ...] \
-             [--reps N] [--limit N] [--atlas <ids>] [--prefix-state] \
+             [--reps N] [--limit N] [--atlas <ids>] [--rerank <gguf>] [--prefix-state] \
              [--runs-dir <dir>] [--output <json>]",
         ),
         HelpSection::Notes(
@@ -83,7 +134,16 @@ const HELP: Help = Help {
              per question (default 30 — the SP2 bench register; NOT a question \
              cap, and starving it changes scores). Prints one joined table — \
              mean fact ratio per (bank, arm), Δ vs baseline, and a SEPARABLE / not \
-             separable verdict per knob — and writes the full JSON artifact. A knob \
+             separable verdict per knob — and writes the full JSON artifact. \
+             --rerank <gguf> adds the cross-encoder PAIR: `dedup_only` (per-article \
+             dedup, no model — the cheap fix) and `reranker` (dedup + cross-encoder). \
+             Two arms, not one, because DEFAULTS_LEDGER's flip condition is a \
+             COMPARISON: the cheap fix must FAIL to close the gap before the slot \
+             earns it, and `reranker` vs `baseline` alone conflates them. Both set \
+             DEDUP_CORPORA empty (= all corpora); note the shipped default is {sep}, \
+             so on the SEP bank dedup is ALREADY on in baseline and a `dedup_only` \
+             row reading `not separable` there means \"already in the reference\", \
+             not \"dedup does nothing\". A knob \
              the banks cannot separate is reported as exactly that (the honest \
              negative feeds T2's golden-authoring decision). Machine-heavy: budget \
              ~1 min per rep per bank. Wall-clock is reported per arm alongside the \
@@ -470,6 +530,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut reps: usize = 3;
     let mut limit: usize = 30;
     let mut atlas: Option<String> = None;
+    let mut rerank_gguf: Option<PathBuf> = None;
     let mut prefix_state = false;
     let mut runs_dir: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
@@ -504,6 +565,7 @@ async fn run(rest: &[String]) -> i32 {
                 }
             },
             "--atlas" => atlas = Some(val!("--atlas")),
+            "--rerank" => rerank_gguf = Some(PathBuf::from(val!("--rerank"))),
             "--prefix-state" => prefix_state = true,
             "--runs-dir" => runs_dir = Some(PathBuf::from(val!("--runs-dir"))),
             "--output" => output = Some(PathBuf::from(val!("--output"))),
@@ -530,12 +592,91 @@ async fn run(rest: &[String]) -> i32 {
             return 2;
         }
     }
+    // Refuse a duplicate label rather than silently merging two banks into
+    // one row-set. `bank_label` disambiguates the repo's usual layout, but
+    // two banks with the same parent AND stem (or the same bank listed
+    // twice) would still collide, and a collision here does not fail — it
+    // quietly discards one bank's numbers. Absence must be reported, never
+    // defaulted (ARCH_PRINCIPLES §18.3).
+    {
+        let mut seen: BTreeMap<String, PathBuf> = BTreeMap::new();
+        for b in &banks {
+            let label = bank_label(b);
+            if let Some(prev) = seen.insert(label.clone(), b.clone()) {
+                eprintln!(
+                    "error: banks `{}` and `{}` both label as `{label}` — their results \
+                     would overwrite each other in the joined table. Rename one, or run \
+                     them in separate invocations.",
+                    prev.display(),
+                    b.display()
+                );
+                return 2;
+            }
+        }
+    }
 
     let mut arms: Vec<ArmSpec> = vec![
         ArmSpec::retrieval("baseline", vec![]),
         ArmSpec::retrieval("raptor_off", vec![("SOVEREIGN_RAPTOR_GROUNDING", "0".into())]),
         ArmSpec::retrieval("conv_ppr_off", vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())]),
     ];
+    // The cross-encoder pair. Opt-in via `--rerank <gguf>` for the same
+    // reason `--atlas` is: the arm needs an artifact the repo does not
+    // vendor, and an arm whose knob does nothing is the worst outcome an
+    // A/B can have (it reports "no effect" for a config that never
+    // applied). A missing file is refused up front rather than silently
+    // producing a duplicate of baseline.
+    //
+    // TWO arms, not one, because DEFAULTS_LEDGER.md:62-65 pre-registered
+    // the flip condition as a COMPARISON, not a threshold: the cheap fix
+    // (per-article dedup, no model) must FAIL to close the gap before the
+    // expensive slot earns it. Measuring only `reranker` vs `baseline`
+    // cannot answer that — it conflates the two. `dedup_only` is the
+    // control that separates them.
+    //
+    // DEDUP_CORPORA is set to the EMPTY STRING on both arms, which means
+    // "no filter — every corpus" (rerank_dedup_filter_from_env treats unset
+    // and empty as different answers). Empty rather than a named corpus
+    // because these banks span sep / wikipedia / obsidian / enron with
+    // different corpus_ids, and naming one would make the arm a no-op on
+    // every other bank.
+    //
+    // READ THE SEP ROW CAREFULLY. The shipped default is {"sep"}, so on the
+    // SEP bank per-article dedup is ALREADY ON in `baseline`. `dedup_only`
+    // will therefore land close to baseline there and may report "not
+    // separable" — that means "already enabled in the reference", NOT "dedup
+    // does nothing". On SEP the `reranker` delta is consequently the PURE
+    // cross-encoder increment on top of dedup, which is exactly what
+    // DEFAULTS_LEDGER's "residual contribution" wording asks for. On the
+    // other banks dedup is off in baseline and `dedup_only` measures it.
+    if let Some(gguf) = &rerank_gguf {
+        if !gguf.exists() {
+            eprintln!(
+                "error: --rerank GGUF not found: {}\n       \
+                 refusing to add a rerank arm that would silently duplicate baseline",
+                gguf.display()
+            );
+            return 2;
+        }
+        let gguf_s = gguf.display().to_string();
+        arms.push(ArmSpec::retrieval(
+            "dedup_only",
+            vec![
+                ("SOVEREIGN_RERANK_DEDUP_ONLY", "1".into()),
+                ("SOVEREIGN_RERANK_DEDUP_CORPORA", String::new()),
+                ("SOVEREIGN_RERANK_PER_ARTICLE", "1".into()),
+            ],
+        ));
+        arms.push(ArmSpec::retrieval(
+            "reranker",
+            vec![
+                ("SOVEREIGN_RERANK_MODEL_PATH", gguf_s),
+                ("SOVEREIGN_RERANK_DEDUP_CORPORA", String::new()),
+                ("SOVEREIGN_RERANK_PER_ARTICLE", "1".into()),
+                ("SOVEREIGN_RERANK_ALPHA", "0.7".into()),
+            ],
+        ));
+    }
     if let Some(ids) = &atlas {
         arms.push(ArmSpec {
             name: "with_atlas",
@@ -615,10 +756,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut failures = 0usize;
     let mut done = 0usize;
     for bank in &banks {
-        let stem = bank
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| bank.display().to_string());
+        let stem = bank_label(bank);
         for arm in &arms {
             let mut rep_results: Vec<RepResult> = Vec::new();
             // Bounce ONCE per arm, not per rep — a daemon restart costs
@@ -894,6 +1032,40 @@ mod tests {
             output_path: String::new(),
             wall_secs,
         }
+    }
+
+    #[test]
+    fn every_repo_bank_is_named_questions_so_labels_must_qualify_by_directory() {
+        // THE REGRESSION THIS PINS: `bank_label` was a bare `file_stem()`,
+        // and this repo names every bank `bench/<corpus>/questions.toml`.
+        // Results are keyed by the label, so a two-bank run overwrote the
+        // first bank's summaries with the second's and printed one row-set
+        // as though it covered both. The bug was invisible in the output.
+        let sep = bank_label(Path::new("sovereign/bench/sep/questions.toml"));
+        let wiki = bank_label(Path::new("sovereign/bench/wikipedia/questions.toml"));
+        assert_ne!(
+            sep, wiki,
+            "two banks must never share a label — they key the results map"
+        );
+        assert_eq!(sep, "sep-questions");
+        assert_eq!(wiki, "wikipedia-questions");
+    }
+
+    #[test]
+    fn bank_label_is_filesystem_safe_because_it_is_interpolated_into_run_paths() {
+        // The label goes into `{stem}-{arm}-r{r}.json` under --runs-dir. A
+        // path separator would silently target a directory that does not
+        // exist, so the qualifier must not introduce one.
+        let label = bank_label(Path::new("sovereign/bench/notes_tiered/questions.toml"));
+        assert!(
+            !label.contains('/') && !label.contains('\\'),
+            "label `{label}` must not contain a path separator"
+        );
+    }
+
+    #[test]
+    fn bank_label_falls_back_to_the_stem_when_there_is_no_parent_directory() {
+        assert_eq!(bank_label(Path::new("questions.toml")), "questions");
     }
 
     #[test]

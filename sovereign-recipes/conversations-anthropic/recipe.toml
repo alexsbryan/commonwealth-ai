@@ -57,3 +57,21 @@ icon = "chat-bubble"
 # also matches, but the stamp is the authoritative signal).
 [retrieval]
 personal_scope = true
+
+# Per-article (per-conversation) dedup of the retrieved set. MEASURED on this
+# corpus 2026-08-04 over a 180-question paired bank (note 6a957b47): mean
+# reciprocal rank 0.2631 -> 0.3362, both-conversations-in-top-10 26.7% ->
+# 50.6%, source ratio 0.744 -> 0.856, for +0.7s of retrieval latency.
+#
+# Chosen INSTEAD of the cross-encoder reranker, which scored higher still
+# (0.3968 / 75.6% / 0.903) but costs +3.5s mean and +4.0s p50 on a path that
+# runs synchronously inside the turn — 0.56s -> 4.6s on the median turn — and
+# needs a FOURTH resident model slot on a daemon already holding ~29 GB. That
+# is the trade `docs/archive/RERANK_EXPERIMENT.md` predicted ("the big win is
+# the dedup... don't add the slot, add the diversifier"); dedup takes ~60% of
+# the quality gain for ~20% of the cost.
+#
+# Per-corpus, NOT global: the same doc measured Wikipedia REGRESSING under
+# blind one-chunk-per-article truncation, which is why sep/recipe.toml:57-60
+# carries the same warning. Do not promote this to a global default.
+dedup_by_source = true

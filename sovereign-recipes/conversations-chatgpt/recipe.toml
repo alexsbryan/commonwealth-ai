@@ -57,3 +57,13 @@ icon = "chat-bubble"
 # also matches, but the stamp is the authoritative signal).
 [retrieval]
 personal_scope = true
+
+# Per-conversation dedup of the retrieved set — see the measured rationale in
+# `sovereign-recipes/conversations-anthropic/recipe.toml`.
+#
+# HONEST SCOPE: the 180-question A/B ran on `conversations-anthropic`, not
+# here. This corpus is the same SHAPE (a personal conversation archive, same
+# recipe form, same `personal_scope`), so the finding is expected to carry —
+# but it is inference by shape, not a measurement on this bank. If a
+# chatgpt-archive bank ever exists, run it before treating this as settled.
+dedup_by_source = true

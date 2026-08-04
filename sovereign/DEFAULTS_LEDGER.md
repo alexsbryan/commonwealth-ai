@@ -63,8 +63,11 @@ store (ids cited per row).
   sources, +12 wiki facts) survives after cap-N chunks-per-article +
   vector-distance dedup are measured *combined* — the cheap fixes
   must fail to close the gap before the expensive slot earns it.
-- **Settled by:** unowned.
-- **Review by:** 2026-09-01.
+- **SETTLED 2026-08-04 — the flip condition PASSED on quality and the
+  slot was REJECTED ANYWAY, on latency.** See the REJECTED section
+  below; this row is kept here only so the flip condition and its
+  answer sit together. Notes `6a957b47`, `f4150097`.
+- **Review by:** closed.
 
 ### Hardened `sovereign-server` — `dev-routes` + `net-tools` (both default **ON**)
 - **Shipped:** `dev-routes` 2026-08-02, `net-tools` 2026-08-03. Both
@@ -176,6 +179,61 @@ store (ids cited per row).
   scored **per mention** on `bench/gliner/` oracles; or a target corpus
   with sep-shaped chunk lengths makes the throughput win real AND typing
   holds. Both halves, not either.
+
+### Cross-encoder reranker slot — `SOVEREIGN_RERANK_MODEL_PATH` (stays unset)
+- **Verdict:** 2026-08-04. **The flip condition PASSED and the slot is
+  still rejected** — it was a quality condition, and quality was never
+  the binding constraint. Rejected on TTFT plus a fourth resident model
+  slot. Notes `6a957b47`, `f4150097`; artifacts
+  `target/overnight/20260803-225051/block1/`.
+- **The condition, answered:** 180-question paired bank on
+  `conversations-anthropic` via `eval run --prod-pipeline`. The cheap
+  fix measured alone (`dedup-only`, per-article dedup, no model) moved
+  the number a lot and still LOST to the cross-encoder 42–89
+  (p=0.0000). Gap not closed ⇒ by the letter of the condition, earned.
+
+  | arm | mean RR | both@10 | src ratio | **search p50** |
+  |---|---|---|---|---|
+  | baseline | 0.2631 | 26.7% | 0.744 | **557 ms** |
+  | dedup-only | 0.3362 | 50.6% | 0.856 | **1,240 ms** |
+  | reranker | 0.3968 | 75.6% | 0.903 | **4,566 ms** |
+
+- **What killed it:** corpus search runs SYNCHRONOUSLY inside the turn,
+  so retrieval latency lands on TTFT. The median turn goes 0.56 s →
+  4.6 s **before the model emits a token**. The reranker's margin over
+  free dedup is +18% mean RR / +25pp both@10 for **+2.8 s of TTFT** —
+  and it needs a 4th resident slot on a daemon already at ~29 GB
+  (35B + 2B + embed + a 7.85M-edge wiki graph). `RERANK_EXPERIMENT.md`
+  §"Resident-weight cost" predicted exactly this in May.
+- **And it is fragile, not merely slow:** the same arm cost 4.3 s/query
+  on a quiet box and **>280 s/query** the next day under memory
+  pressure (~5 GB free, compressor holding ~5.4 GB of RAM). A ~60×
+  degradation with headroom is not a knob you ship behind a default.
+- **What shipped instead:** `[retrieval] dedup_by_source = true` on
+  `conversations-anthropic` (measured) and `conversations-chatgpt`
+  (same shape, inferred — labelled as such in the recipe). ~60% of the
+  quality gain for ~20% of the latency, no model, no slot, no VRAM.
+  This is `RERANK_EXPERIMENT.md`'s own pre-registered call — "the big
+  win is the dedup… don't add the slot, add the diversifier" — decided
+  by the arm that doc asked for.
+- **NOT rejected:** per-article dedup itself, and the reranker as an
+  OFFLINE/batch tool where TTFT is irrelevant (bench scoring, index
+  build). The rejection is specifically *a resident slot on the
+  interactive path*.
+- **Re-open only if:** retrieval moves off the critical path (streamed
+  or speculative retrieval), OR a rerank pass lands somewhere TTFT
+  cannot see it, OR an `x:rerank` peer capability serves it from a node
+  with headroom — the OICP route `RERANK_EXPERIMENT.md` §"Mesh contract
+  surface" sketched. Not on a faster GGUF alone: 610 MB was never the
+  problem, the 4th slot and the synchronous path were.
+- **Code NOT deleted, deliberately** — unlike the cluster-score row
+  below. The rerank stack has live non-interactive consumers (the bench
+  param-loop drives `SOVEREIGN_RERANK_DEDUP_*` via
+  `scaffolding_param.rs::RerankSettings::set_env` +
+  `promote.rs:389`, and `bench enrichment-ablate --rerank` scores it),
+  and the dedup path that DID ship shares that code. Deleting the slot
+  would take the diversifier with it. What must not persist is the
+  *expectation* that this becomes a default — hence this row.
 
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
 - **Verdict:** 2026-07-31, per this row's own settling condition — the
