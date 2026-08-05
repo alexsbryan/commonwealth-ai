@@ -31,6 +31,34 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### Corpus relevance prefilter — `SOVEREIGN_CORPUS_PREFILTER_TOPK` (unset)
+- **Shipped:** dark, pre-2026-08; row added 2026-08-05 on first real
+  measurement.
+- **What it does:** on an UNSCOPED turn, prunes the eligible corpus set
+  to the top-K by query↔centroid cosine before the fan-out.
+- **Proof so far:** measured at `K=5` on
+  `bench sep/summarize --prod-pipeline` (14 questions, 420 chunks,
+  deterministic): off-topic evidence 11.0% → **10.2%**, no change to
+  fact recall (0.7500 / 0.7833). The centroid ranking is genuinely
+  discriminating — sep 0.59 and wikipedia 0.59 against
+  conversations-anthropic 0.39 — so the mechanism works.
+- **Why it under-delivers, and this is the actionable part:** the trace
+  shows `kept=9` at `top_k=5` — five corpora earned a slot on relevance
+  and **four more were admitted by the "always keep `personal_scope`
+  regardless of score" carve-out**. Those four are the entire residual
+  (31 of 43 off-topic chunks). The prefilter cannot fix what it is
+  required to exempt.
+- **Flip condition:** a run on a bank that contains BOTH reference-corpus
+  and personal-corpus questions shows top-K pruning holding personal
+  recall flat while cutting off-topic share. Flipping it on today's
+  evidence would be tuning against a bank that can only see one side.
+- **Settled by:** the personal-corpus bench bank (see
+  `docs/RETRIEVAL_AUDIT_2026-08-04.md` §D1-residual) — unowned. If no
+  tranche claims that bank by the review date, kill this row rather than
+  re-dating it a third time.
+- **Review by:** 2026-09-05.
+- **Notes:** `8758759a`, `c9aa59c6`.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not
@@ -146,6 +174,50 @@ store (ids cited per row).
   release path (`scripts/release-cli-local.sh`) does not stage OCR
   assets today.
 - **Review by:** 2026-09-15.
+
+## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
+
+**How this section came about.** Cross-referencing
+`quality/env-flags.toml` against this file found **31 retrieval flags, 12
+default-off or `status = experiment`, and only 2 with a ledger row**. The
+contract in the preamble says a dark ship adds a row in the same commit; these
+predate the contract, so nobody broke it — but they are exactly the withering
+this file exists to stop, and they were invisible until someone counted.
+
+Stripping out what is not ledger material — `SOVEREIGN_FORENSIC` (debug),
+`SOVEREIGN_COMPACTION_DISABLE` (escape hatch), and `ATOM_ENUM_RANK` / `_POOL` /
+`DECOMP_DECAY` (tuning params, not on/off capabilities) — **six genuine dark
+capabilities are owed a row**. They are listed here rather than given
+fabricated flip conditions: a row whose "proof so far" was invented is worse
+than no row, because it reads as settled.
+
+Each needs one measurement before it can graduate to a real row. The instrument
+already exists and is deterministic (~9 min per arm):
+`svrn bench all --bench-root sovereign/bench --filter <bank> --prod-pipeline`.
+
+| flag | capability | measurement owed |
+|---|---|---|
+| `SOVEREIGN_ATOM_ENUM` | entity-typed atom enumeration for enumeration-class questions | an A/B on a bank with enumeration questions ("which X were involved") — the Enron counterparty case its doc comment cites |
+| `SOVEREIGN_ATOM_ENUM_RELATIONS` | relation atoms in the same path | same bank, as a second arm on top of `ATOM_ENUM=1` |
+| `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | wikipedia graph-neighbour expansion | A/B on a wikipedia bank; watch corpus-mix drift, not just recall |
+| `SOVEREIGN_META_BRIDGE` | meta-atlas bridge boost | A/B on a multi-corpus bank |
+| `SOVEREIGN_QUERY_DECOMP` | question decomposition + fan-out | A/B on a multi-hop bank; cost is extra retrieval round-trips |
+| `SOVEREIGN_TITLE_EXPAND` | LLM question→title expansion | A/B on any retrieval bank; cost is one LLM call per turn |
+
+**One live inconsistency found in the same audit, and it is not cosmetic.**
+`SOVEREIGN_ATOM_ENUM` is default-**off** with `status = experiment`, while
+`SOVEREIGN_ATOM_ENUM_OVERVIEW` — a sibling path in the same module, reached
+through the same `enumerate_typed_atom_chunks` entry point — is default-**on**
+and runs in production on every overview-shaped question. That is how audit D1
+happened: a production path whose parent feature is nominally an experiment,
+so nobody was measuring it. Either the overview path is a shipped capability
+(then `ATOM_ENUM`'s `experiment` status is wrong and its own row is overdue) or
+it is an experiment (then it should not be default-on). Resolve it with the
+`SOVEREIGN_ATOM_ENUM` measurement above.
+
+- **Review by:** 2026-09-05 — the whole section. If a flag has no measurement
+  by then, the right move is to DELETE the capability, not re-date it. Six
+  unmeasured flags is a labyrinth; six measured ones is a feature set.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
 

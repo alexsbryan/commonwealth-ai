@@ -44,13 +44,14 @@
 //! | 3 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP=1` | `decompose_question` → `fan_out_decomposed_queries` |
 //! | 4 | `title_expand` | `SOVEREIGN_TITLE_EXPAND=1` | `expand_question_to_titles` → fan-out; titles kept for reserve |
 //! | 5 | `noise_floor` | — | `drop_no_overlap_chunks` |
-//! | 6 | `atom_enum` | `SOVEREIGN_ATOM_ENUM=1` | `enumerate_typed_atom_chunks` (post-floor by design) |
+//! | 6 | `searched_corpora_snapshot` | — | records the corpora SEARCH reached, for the bleed audit; must precede every injector |
 //! | 7 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` on AND `SOVEREIGN_RAPTOR_LATE=0` | `apply_raptor_grounding` |
 //! | 8 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` (default on) | `apply_atlas_grounding` + per-corpus trace |
 //! | 9 | `reweight_and_sort` | — | `reweight_by_query_relevance` + `cross_corpus_sort_cmp` |
-//! | 10 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND=1` | `expand_via_wikipedia_graph` (+ re-reweight/sort) |
-//! | 11 | `dedupe_merged` | — | retain on first `(corpus_id, content)` |
-//! | 12 | `cap_and_reserve` | — | `cap_chunks_per_article` + comparison (KQ-only) / title / atom-enum / raptor reserves |
+//! | 10 | `atom_enum` | `SOVEREIGN_ATOM_ENUM=1` | `enumerate_typed_atom_chunks`. AFTER the reweight on purpose (2026-08-05, audit D1): this is the first stage whose ranking separates on-topic (~0.70) from off-topic (~0.035), and the injector scopes itself from it. Ahead of it, scope came from RRF-fused noise where everything scored ~0.03 |
+//! | 11 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND=1` | `expand_via_wikipedia_graph` (+ re-reweight/sort) |
+//! | 12 | `dedupe_merged` | — | retain on first `(corpus_id, content)` |
+//! | 13 | `cap_and_reserve` | — | `cap_chunks_per_article` + comparison (KQ-only) / title / atom-enum / raptor reserves |
 //!
 //! On attached-document turns the deep pipeline drops the two grounding
 //! steps from the core (no query embedding exists) along with its head.
@@ -783,7 +784,13 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         step("query_decomp", Some(FLAG_QUERY_DECOMP), step_query_decomp),
         step("title_expand", Some(FLAG_TITLE_EXPAND), step_title_expand),
         step("noise_floor", None, step_noise_floor),
-        step("atom_enum", Some(FLAG_ATOM_ENUM), step_atom_enum),
+        // The bleed-audit baseline: the last point at which every chunk
+        // arrived via SEARCH. Must stay ahead of every injector.
+        step(
+            "searched_corpora_snapshot",
+            None,
+            step_searched_corpora_snapshot,
+        ),
         step(
             "raptor_grounding_early",
             Some(FLAG_RAPTOR_GROUNDING),
@@ -795,6 +802,11 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
             step_atlas_grounding,
         ),
         step("reweight_and_sort", None, step_reweight_and_sort),
+        // AFTER the reweight, deliberately (2026-08-05, audit D1). This is the
+        // first stage at which the pool carries a relevance signal that
+        // separates on-topic from off-topic, and atom-enum scopes itself from
+        // that ranking. Ahead of it, scope was drawn from RRF-fused noise.
+        step("atom_enum", Some(FLAG_ATOM_ENUM), step_atom_enum),
         step(
             "graph_neighbor_expand",
             Some(FLAG_GRAPH_NEIGHBOR_EXPAND),
@@ -1134,33 +1146,85 @@ fn step_noise_floor<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
     })
 }
 
+/// Snapshot the corpora that SEARCH reached, for `step_scope_audit`.
+///
+/// Runs at the last point in the pipeline at which every chunk arrived via
+/// search — before any injector — so anything beyond these corpora downstream
+/// came from an injection path. Split out of `step_atom_enum` on 2026-08-05
+/// when the injection moved after `reweight_and_sort`: the audit baseline has to
+/// stay HERE (pre-injector) while the injection itself needs a RANKED pool.
+fn step_searched_corpora_snapshot<'a, 'ctx>(
+    _rt: &'a Runtime,
+    st: &'a mut PipelineState<'ctx>,
+) -> StepFuture<'a> {
+    Box::pin(async move {
+        let mut seen = std::collections::BTreeSet::new();
+        st.searched_corpora = st
+            .chunks
+            .iter()
+            .map(|c| c.corpus_id.clone())
+            .filter(|c| !c.is_empty())
+            .filter(|c| seen.insert(c.clone()))
+            .collect();
+        StepOutcome::default()
+    })
+}
+
+/// How many RANKED chunks define "what this turn is about" for atom-enum scope.
+///
+/// The injection asks a corpus for its key points, so it must first know which
+/// corpora this turn is actually about — and the honest answer is "the ones
+/// supplying the evidence the answer will be built from", i.e. roughly the
+/// final pool. Set to the merged-pool budget for exactly that reason.
+///
+/// Measured rationale (audit D1): the previous scope was "every corpus with at
+/// least one chunk anywhere in the pool", taken BEFORE `reweight_and_sort`.
+/// That pool is 533 chunks in which everything scores ~0.03, so presence was a
+/// near-vacuous predicate and `commonwealth-ai-arch-principles` qualified on
+/// chunks that never came close to the final evidence. After ranking, its
+/// chunks sit at ~0.035 against ~0.70 for the on-topic article and fall far
+/// outside this window — so the corpus is out of scope structurally, with no
+/// threshold involved.
+const ATOM_ENUM_SCOPE_TOP_CHUNKS: usize = 30;
+
 fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Entity-typed atom enumeration (opt-in SOVEREIGN_ATOM_ENUM=1).
-        // Injected POST noise-floor on purpose: the chunks are metadata
-        // (no query-token overlap) and the floor would drop them.
         //
-        // That exemption is exactly why the SCOPE has to be tight: nothing
-        // downstream can reject an irrelevant claim once injected, and the
-        // injected chunks are pinned ahead of the real pool. On an unscoped
-        // turn `st.enabled_corpora` is `None`, so we hand the enumerator the
-        // corpora this turn actually REACHED rather than letting it fall back
-        // to every corpus installed (audit `RETRIEVAL_AUDIT_2026-08-04.md` D1:
-        // 43-80% of an evidence pool arriving from unrelated corpora).
+        // POSITION IS LOAD-BEARING (moved here 2026-08-05). This step used to
+        // run immediately after the noise floor — three steps BEFORE
+        // `reweight_and_sort`, the only stage that produces a relevance signal
+        // able to tell an on-topic chunk (~0.70) from an off-topic one
+        // (~0.035). Selecting what to amplify before that signal exists is the
+        // root of audit D1, and no predicate bolted onto the selector could
+        // recover it: an aboutness gate on the sibling expansion path was
+        // built, measured byte-identical, and reverted (note `de441e7c`).
+        // Running AFTER the reweight means the scope below is drawn from a
+        // pool that has actually been ranked.
+        //
+        // The injected chunks are still metadata with no query-token overlap,
+        // so they must stay downstream of the noise floor — which they now are
+        // by a wider margin. Nothing downstream can reject an irrelevant claim
+        // once injected (`merge_demand_select` pins `source=atom-enum`), so the
+        // scope here remains the only place topicality is decided.
         let pool_corpora: Vec<String> = {
             let mut seen = std::collections::BTreeSet::new();
             st.chunks
                 .iter()
+                .take(ATOM_ENUM_SCOPE_TOP_CHUNKS)
                 .map(|c| c.corpus_id.clone())
                 .filter(|c| !c.is_empty())
                 .filter(|c| seen.insert(c.clone()))
                 .collect()
         };
-        // Snapshot for `step_scope_audit`. This is the last point in the
-        // pipeline at which every chunk arrived via SEARCH — atom_enum is the
-        // first injector, so anything beyond these corpora downstream came
-        // from an injection path.
-        st.searched_corpora = pool_corpora.clone();
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "atom_enum_scope",
+            ranked_window = ATOM_ENUM_SCOPE_TOP_CHUNKS,
+            pool_total = st.chunks.len(),
+            scope = ?pool_corpora,
+            "retrieval_audit: atom_enum scope drawn from the RANKED pool"
+        );
         if let Some(atom_chunks) = rt
             .enumerate_typed_atom_chunks(
                 st.message,
@@ -2179,10 +2243,14 @@ mod tests {
                 "query_decomp",
                 "title_expand",
                 "noise_floor",
-                "atom_enum",
+                "searched_corpora_snapshot",
                 "raptor_grounding_early",
                 "atlas_grounding",
                 "reweight_and_sort",
+                // atom_enum sits AFTER reweight_and_sort deliberately — the
+                // first stage whose ranking can tell on-topic from off-topic.
+                // Audit D1; moving it back re-opens that defect.
+                "atom_enum",
                 "graph_neighbor_expand",
                 "ppr_struct_expand",
                 "dedupe_merged",
@@ -2214,10 +2282,14 @@ mod tests {
                 "query_decomp",
                 "title_expand",
                 "noise_floor",
-                "atom_enum",
+                "searched_corpora_snapshot",
                 "raptor_grounding_early",
                 "atlas_grounding",
                 "reweight_and_sort",
+                // atom_enum sits AFTER reweight_and_sort deliberately — the
+                // first stage whose ranking can tell on-topic from off-topic.
+                // Audit D1; moving it back re-opens that defect.
+                "atom_enum",
                 "graph_neighbor_expand",
                 "ppr_struct_expand",
                 "dedupe_merged",
@@ -2238,17 +2310,22 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 18-step core (the last core step is
+        // Shared 3-step head + shared 19-step core (the last core step is
         // `readiness_disclosure` — inert when retrieval found anything;
         // `demand_plan` is the new first core step, I4-A); the pipelines
         // differ ONLY in their tails (KQ: audited truncate; deep: plain
         // truncate + strategy-driven top-sources expansion).
-        assert_eq!(&kq[..21], &deep[..21]);
-        assert_eq!(kq.len(), 23);
-        assert_eq!(deep.len(), 24);
-        assert_eq!(&kq[21..], &["truncate_merged", "scope_audit"]);
+        //
+        // The core gained `searched_corpora_snapshot` on 2026-08-05 when
+        // `atom_enum` moved after `reweight_and_sort` (audit D1): the
+        // bleed-audit baseline has to stay ahead of every injector, so the
+        // snapshot stayed put while the injection moved down.
+        assert_eq!(&kq[..22], &deep[..22]);
+        assert_eq!(kq.len(), 24);
+        assert_eq!(deep.len(), 25);
+        assert_eq!(&kq[22..], &["truncate_merged", "scope_audit"]);
         assert_eq!(
-            &deep[21..],
+            &deep[22..],
             &["truncate_merged", "top_sources_expand", "scope_audit"]
         );
         // BOTH tails must END with the audit: it audits the final pool, so a

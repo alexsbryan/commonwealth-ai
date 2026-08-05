@@ -33,18 +33,19 @@ dated convergence/divergence log.
 | 9 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
 | 10 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
 | 11 | `noise_floor` | — |
-| 12 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 12 | `searched_corpora_snapshot` | — |
 | 13 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
 | 14 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
 | 15 | `reweight_and_sort` | — |
-| 16 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 17 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
-| 18 | `dedupe_merged` | — |
-| 19 | `cap_and_reserve` | — |
-| 20 | `governance_active_set` | — |
-| 21 | `readiness_disclosure` | — |
-| 22 | `truncate_merged` | — |
-| 23 | `scope_audit` | — |
+| 16 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 17 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 18 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 19 | `dedupe_merged` | — |
+| 20 | `cap_and_reserve` | — |
+| 21 | `governance_active_set` | — |
+| 22 | `readiness_disclosure` | — |
+| 23 | `truncate_merged` | — |
+| 24 | `scope_audit` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -61,19 +62,20 @@ dated convergence/divergence log.
 | 9 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
 | 10 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
 | 11 | `noise_floor` | — |
-| 12 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 12 | `searched_corpora_snapshot` | — |
 | 13 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
 | 14 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
 | 15 | `reweight_and_sort` | — |
-| 16 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 17 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
-| 18 | `dedupe_merged` | — |
-| 19 | `cap_and_reserve` | — |
-| 20 | `governance_active_set` | — |
-| 21 | `readiness_disclosure` | — |
-| 22 | `truncate_merged` | — |
-| 23 | `top_sources_expand` | — |
-| 24 | `scope_audit` | — |
+| 16 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 17 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 18 | `ppr_struct_expand` | `SOVEREIGN_PPR_EXPAND` |
+| 19 | `dedupe_merged` | — |
+| 20 | `cap_and_reserve` | — |
+| 21 | `governance_active_set` | — |
+| 22 | `readiness_disclosure` | — |
+| 23 | `truncate_merged` | — |
+| 24 | `top_sources_expand` | — |
+| 25 | `scope_audit` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -85,16 +87,17 @@ dated convergence/divergence log.
 | 4 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
 | 5 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
 | 6 | `noise_floor` | — |
-| 7 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 7 | `searched_corpora_snapshot` | — |
 | 8 | `reweight_and_sort` | — |
-| 9 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 10 | `dedupe_merged` | — |
-| 11 | `cap_and_reserve` | — |
-| 12 | `governance_active_set` | — |
-| 13 | `readiness_disclosure` | — |
-| 14 | `truncate_merged` | — |
-| 15 | `top_sources_expand` | — |
-| 16 | `scope_audit` | — |
+| 9 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 10 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 11 | `dedupe_merged` | — |
+| 12 | `cap_and_reserve` | — |
+| 13 | `governance_active_set` | — |
+| 14 | `readiness_disclosure` | — |
+| 15 | `truncate_merged` | — |
+| 16 | `top_sources_expand` | — |
+| 17 | `scope_audit` | — |
 
 ## Env-knob registry
 

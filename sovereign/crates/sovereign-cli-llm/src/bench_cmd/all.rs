@@ -989,15 +989,104 @@ fn classify_enrichment(
     }
 }
 
+/// Share of the evidence pool each corpus supplied, across the whole bank.
+///
+/// Derived from `results[].retrieved[].corpus_id`, which EVERY retrieval
+/// baseline already stores — so this metric works against baselines captured
+/// long before it existed, and adding it required no schema change and no
+/// re-mint.
+pub(crate) fn corpus_mix(run: &EvalRun) -> std::collections::BTreeMap<String, f32> {
+    let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut total = 0usize;
+    for r in &run.results {
+        for c in &r.retrieved {
+            *counts.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            total += 1;
+        }
+    }
+    if total == 0 {
+        return Default::default();
+    }
+    counts
+        .into_iter()
+        .map(|(k, n)| (k, n as f32 / total as f32))
+        .collect()
+}
+
+/// Largest single-corpus share move between two runs, as
+/// `(corpus_id, prev_share, cur_share)`. `None` when nothing moved.
+///
+/// Sign matters to the caller, not here: this reports the biggest absolute
+/// change in composition, and the caller decides what to do about it.
+pub(crate) fn worst_corpus_mix_drift(
+    prev: &EvalRun,
+    cur: &EvalRun,
+) -> Option<(String, f32, f32)> {
+    let (p, c) = (corpus_mix(prev), corpus_mix(cur));
+    let mut ids: std::collections::BTreeSet<&String> = p.keys().collect();
+    ids.extend(c.keys());
+    ids.into_iter()
+        .map(|id| {
+            let (pv, cv) = (
+                p.get(id).copied().unwrap_or(0.0),
+                c.get(id).copied().unwrap_or(0.0),
+            );
+            (id.clone(), pv, cv)
+        })
+        .max_by(|a, b| {
+            (a.2 - a.1)
+                .abs()
+                .partial_cmp(&(b.2 - b.1).abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .filter(|(_, pv, cv)| (cv - pv).abs() > 0.0)
+}
+
+/// Composition-drift band for a retrieval lane, in share-of-pool.
+///
+/// A single corpus moving more than this much of the evidence pool between
+/// two runs is a COMPOSITION change, not a scoring wobble, and the lane says
+/// so. 8 points is chosen to sit well below the failure this exists to catch
+/// and well above nothing: audit D1 put `commonwealth-ai-arch-principles` at
+/// **21%** of the pool (89 of 420 chunks, 14 of 14 questions) while
+/// source/fact recall stayed inside the noise band, so the lane was green
+/// throughout. These lanes are deterministic — `fact_score` was identical on
+/// 14/14 questions across two runs at different HEADs — so a band this wide
+/// cannot fire on run-to-run noise.
+const CORPUS_MIX_DRIFT_BAND: f32 = 0.08;
+
 /// Classify a retrieval bench's run. Compares per-question
 /// source_score.ratio + fact_score.ratio averaged across all
-/// questions in the bank.
+/// questions in the bank, AND the composition of the evidence pool.
+///
+/// **Why composition is gated at all** (2026-08-05): recall scores answer
+/// "did the facts arrive", never "what else came with them". Audit D1 is the
+/// worked example — one corpus supplied a fifth of the evidence pool on every
+/// question in the bank, including a personal Obsidian vault and the user's
+/// chat archive, and this lane stayed green because the expected facts still
+/// arrived. A bench that gates SEP could not see a defect reproducing on SEP.
+/// The data was already in the baseline; nothing scored it.
 fn classify_retrieval(
     prev: &EvalRun,
     cur: &EvalRun,
     threshold: f32,
     use_answer_equiv: bool,
 ) -> BenchStatus {
+    // Composition first: a pool that changed WHAT IT IS made of is a finding
+    // regardless of which way the recall means moved, and reporting it as
+    // "improved" because recall ticked up is how D1 hid.
+    if let Some((id, pv, cv)) = worst_corpus_mix_drift(prev, cur) {
+        if (cv - pv).abs() > CORPUS_MIX_DRIFT_BAND {
+            tracing::warn!(
+                corpus = %id,
+                baseline_share = pv,
+                current_share = cv,
+                band = CORPUS_MIX_DRIFT_BAND,
+                "bench: evidence-pool composition drift — one corpus's share of the pool moved past the band"
+            );
+            return BenchStatus::Regressed;
+        }
+    }
     let prev_mean = mean_score(prev, use_answer_equiv);
     let cur_mean = mean_score(cur, use_answer_equiv);
     let delta = cur_mean - prev_mean;
@@ -1262,6 +1351,133 @@ mod tests {
     fn baseline_required_is_enrichment_only() {
         assert!(BenchSurface::Enrichment.baseline_required());
         assert!(!BenchSurface::RetrievalJudge.baseline_required());
+    }
+
+    /// Build a retrieval run whose evidence pool has the given per-corpus
+    /// chunk counts, spread over `n_questions`. Scores are held CONSTANT so
+    /// these tests isolate composition from recall.
+    fn run_with_mix(mix: &[(&str, usize)], n_questions: usize) -> EvalRun {
+        use crate::eval_cmd::runner::{EvalResult, RetrievedChunk, ScoreSnapshot};
+        let chunk = |cid: &str| RetrievedChunk {
+            corpus_id: cid.to_string(),
+            title: None,
+            url: None,
+            score: 0.5,
+            snippet: String::new(),
+            source: None,
+        };
+        let mut pool: Vec<RetrievedChunk> = Vec::new();
+        for (cid, n) in mix {
+            for _ in 0..*n {
+                pool.push(chunk(cid));
+            }
+        }
+        let per_q = pool.len().div_ceil(n_questions.max(1));
+        let score = || ScoreSnapshot {
+            matched: vec!["a".into()],
+            missing: vec![],
+            unscorable: vec![],
+            total_expected: 1,
+            ratio: Some(1.0),
+        };
+        let results = pool
+            .chunks(per_q.max(1))
+            .enumerate()
+            .map(|(i, c)| EvalResult {
+                question_id: format!("q{i}"),
+                category: "summarize".into(),
+                question: "q".into(),
+                retrieved: c.to_vec(),
+                source_score: score(),
+                fact_score: score(),
+                embed_ms: 0,
+                search_ms: 0,
+                corpora_hit: vec![],
+                vector_eligible: true,
+                synth: None,
+                loose_source_score: None,
+                loose_source_evidence: vec![],
+                essay_readiness: None,
+                atlas_navigation: vec![],
+                meta_atlas_hits: vec![],
+            })
+            .collect();
+        EvalRun {
+            bank_name: "test".into(),
+            corpus: "sep".into(),
+            limit: 30,
+            started_at_unix: 0,
+            results,
+        }
+    }
+
+    /// THE FAILING INPUT THIS GATE EXISTS FOR (ARCH §18.1). Audit D1: one
+    /// corpus took 89 of 420 chunks (21% of the pool) across 14 of 14
+    /// questions, while source and fact recall stayed pinned at 1.0. The old
+    /// classifier saw only the recall means and called it Green. It must red.
+    #[test]
+    fn d1_composition_takeover_reds_even_with_recall_unchanged() {
+        let clean = run_with_mix(&[("sep", 192), ("wikipedia", 182)], 14);
+        let contaminated = run_with_mix(
+            &[
+                ("sep", 175),
+                ("wikipedia", 129),
+                ("commonwealth-ai-arch-principles", 89),
+            ],
+            14,
+        );
+        // Recall is identical in both arms by construction.
+        assert_eq!(mean_score(&clean, false), mean_score(&contaminated, false));
+        assert!(
+            matches!(
+                classify_retrieval(&clean, &contaminated, 0.02, false),
+                BenchStatus::Regressed
+            ),
+            "a corpus seizing 21% of the evidence pool must red the lane"
+        );
+    }
+
+    /// And symmetrically: sliding BACK to the contaminated mix from a clean
+    /// baseline is what a future regression actually looks like. Both
+    /// directions are composition changes and both are reported.
+    #[test]
+    fn composition_drift_is_caught_in_either_direction() {
+        let clean = run_with_mix(&[("sep", 192), ("wikipedia", 182)], 14);
+        let contaminated = run_with_mix(
+            &[("sep", 175), ("wikipedia", 129), ("arch-principles", 89)],
+            14,
+        );
+        assert!(matches!(
+            classify_retrieval(&contaminated, &clean, 0.02, false),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// The gate must not fire on ordinary movement. A few chunks trading
+    /// between two corpora that were already there is not a composition
+    /// change, and a lane that reds on it is a lane people learn to ignore.
+    #[test]
+    fn small_mix_movement_stays_green() {
+        let a = run_with_mix(&[("sep", 190), ("wikipedia", 180)], 14);
+        let b = run_with_mix(&[("sep", 200), ("wikipedia", 170)], 14);
+        let (_, pv, cv) = worst_corpus_mix_drift(&a, &b).expect("some drift");
+        assert!(
+            (cv - pv).abs() < CORPUS_MIX_DRIFT_BAND,
+            "fixture must sit inside the band: {pv} -> {cv}"
+        );
+        assert!(matches!(
+            classify_retrieval(&a, &b, 0.02, false),
+            BenchStatus::Green
+        ));
+    }
+
+    /// An unchanged pool has no drift at all — guards against the detector
+    /// manufacturing a finding from float noise.
+    #[test]
+    fn identical_pools_show_no_drift() {
+        let a = run_with_mix(&[("sep", 100), ("wikipedia", 50)], 10);
+        let b = run_with_mix(&[("sep", 100), ("wikipedia", 50)], 10);
+        assert!(worst_corpus_mix_drift(&a, &b).is_none());
     }
 
     fn phase(expected: usize, matched: usize) -> PhaseScore {
